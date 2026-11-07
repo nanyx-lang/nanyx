@@ -126,6 +126,13 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     let hasCommentsIn start finish = not (List.isEmpty (unplacedIn start finish))
 
+    /// A new id for a `NamedGroup`.
+    let nextGroupId =
+        let last = ref 0
+        fun () ->
+            last.Value <- last.Value + 1
+            last.Value
+
     /// The offset of the end of the line `offset` is on.
     let lineEnd offset =
         let line = lineOf offset
@@ -138,30 +145,21 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// that come before it, so that comments stay in order.
     ///
     /// With `blankLines`, for where the parser allows blank lines between children (the top level, a module block and
-    /// a block of statements, but not a list of imports): a child that spans more than one line gets a
-    /// blank line before it (and its leading comments) and after it, except at the start and end and between two
-    /// imports; between children that each fit on one line, a blank line (however many there were) is kept, and none
-    /// is added.
+    /// a block of statements, but not a list of imports): a child that spans more than one line gets a blank line
+    /// before it (and its leading comments) and after it, except at the start and end and between two imports;
+    /// between children that each fit on one line, a blank line (however many there were) is kept, and none is added.
+    /// Which children span lines is decided when the document is laid out (see `Doc.Stack`), so a child that breaks
+    /// because it is long counts too.
     let rec sequence (blankLines: bool) (start: int) (finish: int) (children: (int * int * (unit -> Doc)) list) : Doc =
         sequenceOf blankLines start finish (children |> List.map (fun (childStart, childEnd, build) -> childStart, childEnd, false, build))
 
     /// `sequence`, with each child saying whether it is an import.
     and sequenceOf (blankLines: bool) (start: int) (finish: int) (children: (int * int * bool * (unit -> Doc)) list) : Doc =
-        let parts = ResizeArray<Doc>()
-        let mutable empty = true
-        let mutable blank = false
+        let entries = ResizeArray<StackEntry>()
 
-        let emit (doc: Doc) =
-            if not empty then
-                parts.Add hard
-                if blank then parts.Add hard
-            parts.Add doc
-            empty <- false
-            blank <- false
-
-        let placeComment i =
+        let placeComment leading i =
             placed[i] <- true
-            emit (text (fst comments[i]))
+            entries.Add(StackComment(fst comments[i], leading))
 
         // The comments, and the author's blank lines, between the offsets `a` and `b`, in order.
         let between a b =
@@ -171,22 +169,16 @@ let format (options: Options) (parsed: SourceModule) : string =
                 else
                     []
             let inBetween = unplacedIn a b |> List.map (fun i -> (snd comments[i]).Start, Some i)
-            List.sortBy fst (blanks @ inBetween) |> List.map snd
-
-        let emitBetween entries (separate: bool) =
-            if blankLines && separate && not empty then blank <- true
-            for entry in entries do
+            for _, entry in List.sortBy fst (blanks @ inBetween) do
                 match entry with
-                | Some i -> placeComment i
-                | None -> if not empty then blank <- true
+                | Some i -> placeComment true i
+                | None -> entries.Add StackBlank
 
         let mutable previous = start
-        let mutable previousMultiLine = false
-        let mutable previousImport = false
         for childStart, childEnd, isImport, build in children do
             let childStart = max childStart previous
             let childEnd = max childEnd childStart
-            let leading = between previous childStart
+            between previous childStart
             let placedBefore = Array.copy placed
             let doc = build ()
             let firstPlacedByChild =
@@ -194,25 +186,24 @@ let format (options: Options) (parsed: SourceModule) : string =
                 |> Seq.fold min Int32.MaxValue
             let orphans = unplacedIn childStart childEnd
             let before, after = orphans |> List.partition (fun i -> (snd comments[i]).Start < firstPlacedByChild)
-            let multiLine = Doc.hasHardLine doc || not after.IsEmpty
-            emitBetween leading ((multiLine || previousMultiLine) && not (isImport && previousImport))
             for i in before do
-                placeComment i
-            emit doc
-            for i in after do
-                placeComment i
-            if childEnd > childStart then
-                match unplacedIn childEnd (lineEnd (childEnd - 1) + 1) with
-                | i :: _ when after.IsEmpty ->
-                    placed[i] <- true
-                    parts.Add(Doc.lineSuffix (fst comments[i]))
-                | i :: _ -> placeComment i
-                | [] -> ()
+                placeComment true i
+            let trailing =
+                match unplacedIn childEnd (lineEnd (max childStart (childEnd - 1)) + 1) with
+                | i :: _ when childEnd > childStart -> Some i
+                | _ -> None
+            match trailing with
+            | Some i when after.IsEmpty ->
+                placed[i] <- true
+                entries.Add(StackItem(cat [ doc; Doc.lineSuffix (fst comments[i]) ], isImport))
+            | _ ->
+                entries.Add(StackItem(doc, isImport))
+                for i in after do
+                    placeComment false i
+                trailing |> Option.iter (placeComment false)
             previous <- childEnd
-            previousMultiLine <- multiLine
-            previousImport <- isImport
-        emitBetween (between previous finish) previousMultiLine
-        cat (List.ofSeq parts)
+        between previous finish
+        Stack(blankLines, List.ofSeq entries)
 
     /// The runs of top-level items or statements that make up one def each: a destructuring `def (a, b) = value` is
     /// parsed as a def of a temporary and one def per name, all with the same span. Each run is its first index, its
@@ -374,21 +365,69 @@ let format (options: Options) (parsed: SourceModule) : string =
             | FloatLit f -> text (f.ToString("R", CultureInfo.InvariantCulture))
             | BoolLit b -> text (if b then "true" else "false")
 
-    and binary (position: Position) (op: string) (l: Expression) (r: Expression) : Doc =
-        let p = precedence op
-        let leftPrec, rightPrec = if op = "++" then p + 1, p else p, p + 1
-        // `&&` and `||` build the same tree as `and` and `or`; the source says which was written.
+    /// An operator as written: `&&` and `||` build the same tree as `and` and `or`, and the source says which it was.
+    and writtenOperator (op: string) (l: Expression) (r: Expression) =
         let between =
             if valid l.Span && valid r.Span && l.Span.End <= r.Span.Start then
                 source.Substring(l.Span.End, r.Span.Start - l.Span.End).Trim(' ', '\t', '\n', '(', ')')
             else
                 ""
-        let written =
-            match op with
-            | "and" when between = "&&" -> "&&"
-            | "or" when between = "||" -> "||"
-            | _ -> op
-        cat [ expr { position with Tail = false; Prec = leftPrec } l; text $" {written} "; expr { position with Prec = rightPrec } r ]
+        match op with
+        | "and" when between = "&&" -> "&&"
+        | "or" when between = "||" -> "||"
+        | _ -> op
+
+    /// A chain of operators of one precedence, `a ++ b ++ c`, as its operands and the operators between them. In a
+    /// position that may cross lines, as many operands go on a line as fit, each line ending in an operator (the
+    /// parser takes a line break after an operator, not before one), and the lines after the first indented once.
+    and binary (position: Position) (op: string) (l: Expression) (r: Expression) : Doc =
+        let p = precedence op
+        let rightAssociative = op = "++"
+        // A node of the chain: same precedence, needing no brackets where it is, and not a list with spreads.
+        let continues (x: Expression) =
+            match x.Kind with
+            | BinaryOp(op', _, _) ->
+                precedence op' = p
+                && (op' = "++") = rightAssociative
+                && not (position.Inline && not (inlineOperators.Contains op'))
+                && (spreadSegments x).IsNone
+            | _ -> false
+        let rec flattenLeft (x: Expression) =
+            match x.Kind with
+            | BinaryOp(op', a, b) when continues x ->
+                let operands, operators = flattenLeft a
+                operands @ [ b ], operators @ [ writtenOperator op' a b ]
+            | _ -> [ x ], []
+        let rec flattenRight (x: Expression) =
+            match x.Kind with
+            | BinaryOp(op', a, b) when continues x ->
+                let operands, operators = flattenRight b
+                a :: operands, writtenOperator op' a b :: operators
+            | _ -> [ x ], []
+        let operands, operators =
+            if rightAssociative then
+                let rest, operators = flattenRight r
+                l :: rest, writtenOperator op l r :: operators
+            else
+                let first, operators = flattenLeft l
+                first @ [ r ], operators @ [ writtenOperator op l r ]
+        let count = operands.Length
+        let operandDoc index operand =
+            let isLast = index = count - 1
+            let prec =
+                if rightAssociative then (if isLast then p else p + 1)
+                else (if index = 0 then p else p + 1)
+            expr { position with Tail = isLast && position.Tail; Prec = prec } operand
+        let docs = List.mapi operandDoc operands
+        if position.Inline then
+            List.zip (List.take (count - 1) docs) operators
+            |> List.collect (fun (doc, operator) -> [ doc; text $" {operator} " ])
+            |> fun parts -> cat (parts @ [ List.last docs ])
+        else
+            let items =
+                List.zip (List.take (count - 1) docs) operators
+                |> List.collect (fun (doc, operator) -> [ cat [ doc; text $" {operator}" ]; Doc.line ])
+            nest (Fill(items @ [ List.last docs ]))
 
     /// `[a, ...xs, b]` is parsed as `[a] ++ xs ++ [b]`, the list runs spanning the whole literal. The segments, each a
     /// run of elements or a list spread, when `e` is such a literal.
@@ -416,23 +455,30 @@ let format (options: Options) (parsed: SourceModule) : string =
         let itemDoc index (spread, item: Expression) =
             cat [ (if spread then text "..." else Doc.empty); expr { full with Tail = (index = count - 1) } item ]
         if valid span && hasCommentsIn span.Start span.End then
-            // One item per line; the `]` cannot start a line, so it follows the last item.
             let children =
                 items
-                |> List.mapi (fun index ((_, item: Expression) as entry) ->
-                    item.Span.Start, item.Span.End, fun () -> cat [ itemDoc index entry; (if index < count - 1 then text "," else Doc.empty) ])
-            cat [ text "["; nest (cat [ hard; sequence false span.Start span.End children ]); text "]" ]
+                |> List.mapi (fun index ((_, item: Expression) as entry) -> item.Span.Start, item.Span.End, fun () -> itemDoc index entry)
+            cat [ text "["; nest (cat [ hard; sequence false span.Start span.End children ]); hard; text "]" ]
         else
-            cat [ text "["; commaJoin (List.mapi itemDoc items); text "]" ]
+            bracketed "[" "]" (List.mapi itemDoc items)
 
-    /// Fields in brackets: a record, a tuple, or a call's arguments. With a comment among them, or a field that spans
-    /// lines (a lambda with a block), one field per line, without commas, and the closing bracket on a line of its own:
+    /// Items between brackets, on one line separated by commas if they fit, or else one per line, separated by line
+    /// breaks, with the closing bracket on a line of its own (as a record's fields or a list's items may be written):
     ///
     ///   use Log(
     ///     log = { message ->
     ///       println(message)
     ///     }
     ///   )
+    and bracketed (opening: string) (closing: string) (items: Doc list) : Doc =
+        match items with
+        | [] -> text (opening + closing)
+        | _ ->
+            let separator = cat [ IfBreak(Doc.empty, text ","); Doc.line ]
+            Doc.group (cat [ text opening; nest (cat [ Doc.softLine; Doc.join separator items ]); Doc.softLine; text closing ])
+
+    /// Fields in brackets: a record, a tuple, or a call's arguments, laid out by `bracketed`, or one per line when there
+    /// is a comment among them.
     and fieldsDoc (start: int) (finish: int) (fields: RecordField list) : Doc =
         let count = fields.Length
         let fieldDoc index field =
@@ -451,13 +497,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                     let value = valueOf field
                     value.Span.Start, value.Span.End, fun () -> build index field)
             cat [ text "("; nest (cat [ hard; sequence false start finish children ]); hard; text ")" ]
-        if hasCommentsIn start finish then
-            onePerLine fieldDoc
-        else
-            // With no comments among them, building the fields places none, so they can be built before choosing.
-            let docs = List.mapi fieldDoc fields
-            if List.exists Doc.hasHardLine docs then onePerLine (fun index _ -> docs[index])
-            else cat [ text "("; commaJoin docs; text ")" ]
+        // With a comment among them, the fields are built inside the sequence, which places the comments.
+        if hasCommentsIn start finish then onePerLine fieldDoc else bracketed "(" ")" (List.mapi fieldDoc fields)
 
     /// A call's or a tag's single bracketed argument, between the offsets `start` (after the name) and `finish`:
     /// several values are a tuple, named ones a record.
@@ -629,17 +670,28 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text "if"; nest (cat [ hard; sequence false e.Span.Start e.Span.End (conditionArms @ elseArm) ]) ]
         else
             let isBlock (x: Expression) = match x.Kind with Block _ -> true | _ -> false
-            let thenDoc =
-                if isBlock thenBranch then cat [ text " then"; nest (cat [ hard; block thenBranch ]) ]
-                else cat [ text " then "; expr { full with Tail = elseBranch.IsNone } thenBranch ]
-            let elseDoc =
-                match elseBranch with
-                | None -> Doc.empty
-                | Some elseBranch ->
-                    let keyword = if isBlock thenBranch then cat [ hard; text "else" ] else text " else"
-                    if isBlock elseBranch then cat [ keyword; nest (cat [ hard; block elseBranch ]) ]
-                    else cat [ keyword; text " "; expr full elseBranch ]
-            cat [ text "if "; ifHead head; thenDoc; elseDoc ]
+            let anyBlock = isBlock thenBranch || (elseBranch |> Option.exists isBlock)
+            // Two expressions go on the `if`'s line if they fit, or else `then` and `else` start lines of their own,
+            // indented once, which parses the same.
+            if not anyBlock then
+                let thenPart = cat [ Doc.line; text "then "; expr { full with Tail = elseBranch.IsNone } thenBranch ]
+                let elsePart =
+                    match elseBranch with
+                    | Some elseBranch -> cat [ Doc.line; text "else "; expr full elseBranch ]
+                    | None -> Doc.empty
+                Doc.group (cat [ text "if "; ifHead head; nest (cat [ thenPart; elsePart ]) ])
+            else
+                let thenDoc =
+                    if isBlock thenBranch then cat [ text " then"; nest (cat [ hard; block thenBranch ]) ]
+                    else cat [ text " then "; expr { full with Tail = elseBranch.IsNone } thenBranch ]
+                let elseDoc =
+                    match elseBranch with
+                    | None -> Doc.empty
+                    | Some elseBranch ->
+                        let keyword = if isBlock thenBranch then cat [ hard; text "else" ] else text " else"
+                        if isBlock elseBranch then cat [ keyword; nest (cat [ hard; block elseBranch ]) ]
+                        else cat [ keyword; text " "; expr full elseBranch ]
+                cat [ text "if "; ifHead head; thenDoc; elseDoc ]
 
     /// `for xs | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the element.
     and forDoc (iterable: Expression) (loop: Expression) : Doc =
@@ -697,15 +749,22 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ExprStatement value -> expr statementPosition value
 
     and defDoc (isExport: bool) (keyword: string) (name: string) (typeOpt: TypeExpr option) (value: Expression) : Doc =
+        let name = cat [ (if isExport then text "export " else Doc.empty); text $"{keyword} {name}" ]
+        // A signature that does not fit on the def's line goes on the next one, as does the `=`, and the value is
+        // indented under them:
+        //
+        //   def priceLine
+        //     : list(Product), OrderLine -> #some(Priced) | #unknownSku(string)
+        //     = { products, line ->
+        //       ...
+        //     }
+        let signatureGroup = nextGroupId ()
         let head =
-            cat [
-                (if isExport then text "export " else Doc.empty)
-                text $"{keyword} {name}"
-                (match typeOpt with
-                 | Some t -> cat [ text ": "; signature t ]
-                 | None -> Doc.empty)
-                text " ="
-            ]
+            match typeOpt with
+            | Some t ->
+                NamedGroup(signatureGroup, cat [ name; nest (cat [ Doc.softLine; text ": "; signature t; Doc.line; text "=" ]) ])
+            | None -> cat [ name; text " =" ]
+        let underHead doc = IfGroupBroken(signatureGroup, nest doc, doc)
         // A def with a type annotation whose value is a lambda keeps the signature's line to itself: the body goes on
         // the next line, unless it is only a name or a literal (`def id: a -> a = { x -> x }`).
         let isTrivial (body: Expression) =
@@ -716,10 +775,10 @@ let format (options: Options) (parsed: SourceModule) : string =
             | TagExpr(_, None) -> true
             | _ -> false
         match value.Kind with
-        | Block _ -> cat [ head; nest (cat [ hard; block value ]) ]
+        | Block _ -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
         | Lambda(parameters, body) when typeOpt.IsSome && not (isTrivial body) ->
-            cat [ head; text " "; lambdaDoc value parameters body true ]
-        | _ -> cat [ head; text " "; expr full value ]
+            cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
+        | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]
 
     and destructuringDef (group: Def list) (span: SourceSpan) : Doc =
         let _, _, _, value = List.head group

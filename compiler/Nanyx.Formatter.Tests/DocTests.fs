@@ -144,3 +144,35 @@ let ``Rendering a deeply nested document takes time in proportion to its size`` 
 
     Assert.EndsWith(")\n", rendered)
     Assert.True(stopwatch.Elapsed.TotalSeconds < 5.0, $"Rendering took {stopwatch.Elapsed}")
+
+[<Fact>]
+let ``IfBreak follows its group`` () =
+    let doc = Doc.group (Doc.concat [ Doc.text "a"; IfBreak(Doc.empty, Doc.text ","); Doc.line; Doc.text "b" ])
+    Assert.Equal("a, b\n", Doc.render 80 doc)
+    Assert.Equal("a\nb\n", Doc.render 2 doc)
+
+[<Fact>]
+let ``IfGroupBroken follows the named group laid out before it`` () =
+    let head = NamedGroup(1, Doc.concat [ Doc.text "head"; Doc.nest 2 (Doc.concat [ Doc.softLine; Doc.text ": long" ]) ])
+    let doc = Doc.concat [ head; IfGroupBroken(1, Doc.text " broken", Doc.text " flat") ]
+    Assert.Equal("head: long flat\n", Doc.render 80 doc)
+    Assert.Equal("head\n  : long broken\n", Doc.render 8 doc)
+
+[<Fact>]
+let ``A fill puts as many items on a line as fit`` () =
+    let doc = Fill [ Doc.text "aaa"; Doc.line; Doc.text "bbb"; Doc.line; Doc.text "ccc"; Doc.line; Doc.text "ddd" ]
+    Assert.Equal("aaa bbb\nccc ddd\n", Doc.render 7 doc)
+    Assert.Equal("aaa bbb ccc ddd\n", Doc.render 80 doc)
+
+[<Fact>]
+let ``A stack sets apart the items that take more than one line, measured where they are`` () =
+    let item s = StackItem(Doc.text s, false)
+    let long = StackItem(Doc.group (Doc.concat [ Doc.text "long("; Doc.nest 2 (Doc.concat [ Doc.softLine; Doc.text "argument" ]); Doc.softLine; Doc.text ")" ]), false)
+    let doc = Stack(true, [ item "a"; long; item "b" ])
+    Assert.Equal("a\nlong(argument)\nb\n", Doc.render 80 doc)
+    Assert.Equal("a\n\nlong(\n  argument\n)\n\nb\n", Doc.render 10 doc)
+
+[<Fact>]
+let ``A stack keeps the author's blank lines and puts the separating one before leading comments`` () =
+    let doc = Stack(true, [ StackItem(Doc.text "a", false); StackBlank; StackItem(Doc.text "b", false); StackComment("-- c", true); StackItem(Doc.concat [ Doc.text "x"; Doc.hardLine; Doc.text "y" ], false) ])
+    Assert.Equal("a\n\nb\n\n-- c\nx\ny\n", Doc.render 80 doc)
