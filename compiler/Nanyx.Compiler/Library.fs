@@ -866,6 +866,9 @@ module Compiler =
                             | None, ModuleImport moduleName -> moduleName
                             | None, PathImport path -> path
                         let import = { Id = SymbolId.next (); Name = name; Kind = ImportedModule; Declaration = item.Span; IsExported = false }
+                        // Only an alias is written as a name: an import without one has no name to write.
+                        if item.Alias.IsSome then
+                            state <- { state with Scopes = state.Scopes |> Map.add import.Id (Scope.wholeModule item.Span.File) }
                         Map.ofList [ import.Id, import ],
                         exportedSymbols |> Map.fold (fun acc id _ -> acc |> Map.add id import.Id) state.ImportedThrough
                 // A type an explicit import exports replaces the prelude's type of the same name.
@@ -954,6 +957,25 @@ module Compiler =
                                 | _ -> true)
                             |> distinctDefinitions
                             |> reachedItems own
+                        // The names the imports and the prelude bring in unqualified, each meaning the definition the
+                        // environment settled on (an explicit import's over the prelude's), less the names the module
+                        // declares at the top level itself. A qualified import's names have a dot (`m.foo`).
+                        let declaredHere =
+                            state.Scopes
+                            |> Map.keys
+                            |> Seq.map (fun id -> state.Symbols.[id])
+                            |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
+                            |> Seq.map (fun symbol -> symbol.Name)
+                            |> Set.ofSeq
+                        let scopes =
+                            env
+                            |> Map.toSeq
+                            |> Seq.choose (fun (name, scheme) ->
+                                match scheme.Symbol with
+                                | Some id when state.Symbols.ContainsKey id && not (name.Contains '.') && not (declaredHere.Contains name) ->
+                                    Some (id, Scope.wholeModule (sourceFileName origin))
+                                | _ -> None)
+                            |> Seq.fold (fun acc (id, scope) -> acc |> Map.add id scope) state.Scopes
                         Ok { Typed =
                                 { Module = inlined @ own
                                   // The types of the imported definitions inlined for the backend, then the module's own.
@@ -967,7 +989,8 @@ module Compiler =
                                   Symbols = state.Symbols
                                   AnnotatedSymbols = state.AnnotatedSymbols
                                   References = state.References
-                                  ImportReferences = state.ImportReferences }
+                                  ImportReferences = state.ImportReferences
+                                  Scopes = scopes }
                              Own = own
                              Inlined = inlined
                              Name = declaredModuleName desugared
