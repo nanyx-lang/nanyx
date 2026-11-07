@@ -55,13 +55,20 @@ what the compiler keeps: exact spans, resolved names and types.
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). Like hover, they come from the last good compile, so
   while the file is broken only the def being edited loses its lens.
-- **No find-references or completion.** Each is one handler in `Handlers/`. Find-references can read the same
-  `References` table, though only of the open document's own compile. For completion, inference records where
-  each name can be written (`TypedModule.Scopes`, [#211](https://github.com/nanyx-lang/nanyx/issues/211)): a
-  local from its def to the end of its block, a parameter to the end of its lambda, a pattern variable to the end
-  of its arm, and a top-level def, an import's alias and a name an import or the prelude brings in throughout the
-  module. `NyxCompiler.Completion.namesInScope` gives the one symbol each name means at an offset, the nearest
-  declaration winning.
+- **Completion of the names in scope** ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), with their
+  types, and the keywords. Inference records where each name can be written (`TypedModule.Scopes`,
+  [#211](https://github.com/nanyx-lang/nanyx/issues/211)): a local from its def to the end of its block, a
+  parameter to the end of its lambda, a pattern variable to the end of its arm, and a top-level def, an import's
+  alias and a name an import or the prelude brings in throughout the module.
+  `NyxCompiler.Completion.namesInScope` gives the one symbol each name means at an offset, the nearest declaration
+  winning. The handler reads the last good compile at the place nearest the cursor
+  (`OpenDocument.NearestInLastGood`): a cursor in text edited since moves to where the edit starts, so a name
+  declared since that compile is not offered until the text type-checks again. Whether the cursor is in a comment
+  or a string, after a dot, or naming a new def is read from the characters alone (`CompletionContext`), since the
+  text being typed rarely parses. Members after a dot are [#213](https://github.com/nanyx-lang/nanyx/issues/213),
+  import paths [#214](https://github.com/nanyx-lang/nanyx/issues/214).
+- **No find-references.** It is one handler in `Handlers/`, and can read the same `References` table, though only
+  of the open document's own compile.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*.
@@ -89,10 +96,10 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    way to open standard-library source (a virtual document, say).
 4. **Document symbols.** The outline view, from top-level definitions.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
-   compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)). Filed: record where each symbol is in scope
-   ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); then names in scope
-   ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), record fields, module exports and attached definitions
-   after a dot ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
+   compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
+   ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
+   ([#212](https://github.com/nanyx-lang/nanyx/issues/212)). Filed: record fields, module exports and attached
+   definitions after a dot ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
    ([#214](https://github.com/nanyx-lang/nanyx/issues/214)).
 6. **Code actions.** From diagnostic fixes.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
