@@ -74,6 +74,36 @@ public sealed class CompletionContextTests
     public void There_is_no_path_where_the_word_follows_no_dot_or_no_name(string marked) =>
         Assert.Null(MemberPathAt(marked));
 
+    /// <summary>The names piped into the word at <c>|</c> in <paramref name="marked"/>, dot-separated.</summary>
+    private static string? PipedPathAt(string marked)
+    {
+        var cursor = marked.IndexOf('|');
+        var text = marked.Remove(cursor, 1);
+        return CompletionContext.PipedPath(text, CompletionContext.WordStart(text, cursor)) is { } path
+            ? string.Join('.', path)
+            : null;
+    }
+
+    [Theory]
+    [InlineData("def a = s \\|", "s")]
+    [InlineData("def a = s\\tr|", "s")]
+    [InlineData("def a = s \\ tr|", "s")]
+    [InlineData("def a = p.inner \\|", "p.inner")]
+    [InlineData("def a = xs\n  \\|", "xs")]
+    [InlineData("def a = f(x) \\|", "")]
+    [InlineData("def a = \"s\" \\|", "")]
+    [InlineData("def a = 12 \\|", "")]
+    public void The_value_piped_is_read_from_the_names_before_the_pipe(string marked, string path) =>
+        Assert.Equal(path, PipedPathAt(marked));
+
+    [Theory]
+    [InlineData("def a = s|")]
+    [InlineData("def a = s \\split(o|")]
+    [InlineData("def a = \"s \\|\"")]
+    [InlineData("def a = 1 -- s \\|")]
+    public void There_is_no_piped_value_where_the_word_follows_no_pipe(string marked) =>
+        Assert.Null(PipedPathAt(marked));
+
     private static ImportPath? ImportPathAt(string marked)
     {
         var cursor = marked.IndexOf('|');

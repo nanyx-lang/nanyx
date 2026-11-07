@@ -675,9 +675,29 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Completion_is_triggered_by_a_dot_and_by_the_start_of_an_import_paths_next_part()
+    public void Completion_is_triggered_by_a_dot_a_pipe_and_the_start_of_an_import_paths_next_part()
     {
-        Assert.Equal([".", "/", "\""], _client.ServerSettings.Capabilities.CompletionProvider?.TriggerCharacters ?? []);
+        Assert.Equal([".", "\\", "/", "\""], _client.ServerSettings.Capabilities.CompletionProvider?.TriggerCharacters ?? []);
+    }
+
+    [Fact]
+    public async Task Completion_after_a_pipe_just_typed_offers_what_is_attached_to_the_values_type_first()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-5");
+
+        Open(uri, "import nanyx/text\ndef s = \"abc\"\ndef double = { n -> n * 2 }\ndef r = s\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // The `\` was just typed, so the text does not parse.
+        Change(uri, version: 2, "import nanyx/text\ndef s = \"abc\"\ndef double = { n -> n * 2 }\ndef r = s \\\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        var items = (await CompletionsAt(uri, 3, 11)).OrderBy(item => item.SortText).ToList();
+        Assert.Contains(items, item => item.Label == "startsWith" && item.Kind == CompletionItemKind.Function && item.SortText![0] == '0');
+        Assert.Contains(items, item => item.Label == "double" && item.Detail == "int -> int" && item.SortText![0] == '1');
+        Assert.DoesNotContain(items, item => item.Kind == CompletionItemKind.Keyword);
+        Assert.True(
+            items.FindIndex(item => item.Label == "startsWith") < items.FindIndex(item => item.Label == "double"));
     }
 
     [Fact]

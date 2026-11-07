@@ -62,6 +62,11 @@ public sealed class CompletionHandler : CompletionHandlerBase
             return Members(document, path, wordStart - 1 - string.Join('.', path).Length);
         }
 
+        if (CompletionContext.PipedPath(text, wordStart) is { } piped)
+        {
+            return PipeTargets(document, piped, wordStart);
+        }
+
         if (!CompletionContext.OffersNames(text, wordStart))
         {
             return new CompletionList();
@@ -175,6 +180,28 @@ public sealed class CompletionHandler : CompletionHandlerBase
     }
 
     /// <summary>
+    /// What a pipe can call (see <see cref="Completion.pipeTargetsAt"/>): the definitions attached to the type of
+    /// the value <paramref name="piped"/> names, then the functions in scope.
+    /// </summary>
+    private CompletionList PipeTargets(OpenDocument document, IReadOnlyList<string> piped, int wordStart)
+    {
+        if (document.LastGood?.Compiled is not { } compiled || document.NearestInLastGood(wordStart) is not { } offset)
+        {
+            return new CompletionList();
+        }
+
+        return new CompletionList(
+            Completion.pipeTargetsAt(_settings.TypeVarNames, compiled, offset, ListModule.OfSeq(piped))
+                .Select(target => new CompletionItem
+                {
+                    Label = target.Name,
+                    Kind = target.IsFunction ? CompletionItemKind.Function : CompletionItemKind.Variable,
+                    Detail = target.Type?.Value,
+                    SortText = $"{(target.IsAttached ? 0 : 1)}{target.Name}"
+                }));
+    }
+
+    /// <summary>
     /// The item for a name. Names sort nearest first: locals, parameters and pattern variables, then the file's
     /// top-level defs and import aliases, then what imports and the prelude bring in.
     /// </summary>
@@ -203,8 +230,9 @@ public sealed class CompletionHandler : CompletionHandlerBase
         {
             DocumentSelector = TextDocumentSyncHandler.Selector,
             ResolveProvider = false,
-            // Members are offered as soon as the dot is typed, and the next part of an import path as soon as its
-            // `/` or opening quote is; names as soon as a name is started, by the editor.
-            TriggerCharacters = new Container<string>(".", "/", "\"")
+            // Members are offered as soon as the dot is typed, what a pipe can call as soon as its `\` is, and the
+            // next part of an import path as soon as its `/` or opening quote is; names as soon as a name is started,
+            // by the editor.
+            TriggerCharacters = new Container<string>(".", "\\", "/", "\"")
         };
 }
