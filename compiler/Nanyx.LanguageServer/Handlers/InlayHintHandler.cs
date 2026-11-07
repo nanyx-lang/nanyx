@@ -8,8 +8,9 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Shows the inferred type after the name of each local def, lambda parameter and pattern variable that does not
-/// write its own, read from the document's last compile, as <c>: int</c>; with <see cref="TopLevelTypeHints.Inlay"/>,
-/// after each such top-level def too. Nothing is shown in a document that did not type-check.
+/// write its own, read from the document's last compile that type-checked, as <c>: int</c>; with
+/// <see cref="TopLevelTypeHints.Inlay"/>, after each such top-level def too. Nothing is shown in a top-level item edited
+/// since that compile.
 /// </summary>
 public sealed class InlayHintHandler : InlayHintsHandlerBase
 {
@@ -32,21 +33,22 @@ public sealed class InlayHintHandler : InlayHintsHandlerBase
     private InlayHintContainer? Compute(InlayHintParams request)
     {
         var document = _documents.TryGet(request.TextDocument.Uri);
-        if (document?.Compiled is not { } compiled)
+        if (document?.LastGood?.Compiled is not { } compiled)
         {
             return null;
         }
 
-        var positions = document.Positions;
         var hints = _settings.TopLevelTypeHints == TopLevelTypeHints.Inlay
-            ?TypeHints.inlayHintsWithTopLevel(_settings.TypeVarNames, document.FileName, compiled)
+            ? TypeHints.inlayHintsWithTopLevel(_settings.TypeVarNames, document.FileName, compiled)
             : TypeHints.inlayHints(_settings.TypeVarNames, document.FileName, compiled);
         return new InlayHintContainer(
             hints
-                .Select(hint => new InlayHint
+                .Select(hint => (hint, span: document.FromLastGood(hint.Span.Start, hint.Span.End)))
+                .Where(mapped => mapped.span is not null)
+                .Select(mapped => new InlayHint
                 {
-                    Position = positions.ToPosition(hint.Span.End),
-                    Label = new StringOrInlayHintLabelParts($": {hint.Type}"),
+                    Position = document.Positions.ToPosition(mapped.span!.Value.End),
+                    Label = new StringOrInlayHintLabelParts($": {mapped.hint.Type}"),
                     Kind = InlayHintKind.Type
                 })
                 .Where(hint => Contains(request.Range, hint.Position)));

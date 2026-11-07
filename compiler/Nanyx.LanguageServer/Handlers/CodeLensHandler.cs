@@ -7,8 +7,9 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Shows the inferred type above each top-level def that does not write its own, read from the document's last
-/// compile. Where one def declares several names (a destructuring def), each lens says which name it is for. Nothing
-/// is shown in a document that did not type-check, nor unless <see cref="ServerSettings.TopLevelTypeHints"/> is
+/// compile that type-checked, so the lenses stay while the user is typing and the code does not move. Where one def
+/// declares several names (a destructuring def), each lens says which name it is for. Nothing is shown for a def
+/// edited since that compile, nor unless <see cref="ServerSettings.TopLevelTypeHints"/> is
 /// <see cref="TopLevelTypeHints.Lens"/>.
 /// </summary>
 public sealed class CodeLensHandler : CodeLensHandlerBase
@@ -32,26 +33,32 @@ public sealed class CodeLensHandler : CodeLensHandlerBase
     private CodeLensContainer? Compute(CodeLensParams request)
     {
         var document = _documents.TryGet(request.TextDocument.Uri);
-        if (_settings.TopLevelTypeHints != TopLevelTypeHints.Lens || document?.Compiled is not { } compiled)
+        if (_settings.TopLevelTypeHints != TopLevelTypeHints.Lens || document?.LastGood?.Compiled is not { } compiled)
         {
             return null;
         }
 
-        var lenses = TypeHints.typeLenses(_settings.TypeVarNames, document.FileName, compiled).ToList();
+        var lenses = TypeHints.typeLenses(_settings.TypeVarNames, document.FileName, compiled)
+            .Select(lens => (lens, span: document.FromLastGood(lens.Span.Start, lens.Span.End)))
+            .Where(mapped => mapped.span is not null)
+            .Select(mapped => (mapped.lens, span: mapped.span!.Value))
+            .ToList();
         var sharedLines = lenses
-            .GroupBy(lens => lens.Span.StartLine)
+            .GroupBy(mapped => mapped.lens.Span.StartLine)
             .Where(line => line.Count() > 1)
             .Select(line => line.Key)
             .ToHashSet();
 
-        return new CodeLensContainer(lenses.Select(lens => new CodeLens
+        return new CodeLensContainer(lenses.Select(mapped => new CodeLens
         {
-            Range = document.Positions.ToRange(lens.Span.Start, lens.Span.End),
+            Range = document.Positions.ToRange(mapped.span.Start, mapped.span.End),
             // A command with no name is a label: VS Code shows its title and does nothing when it is clicked.
             Command = new Command
             {
                 Name = "",
-                Title = sharedLines.Contains(lens.Span.StartLine) ? $"{lens.Name}: {lens.Type}" : lens.Type
+                Title = sharedLines.Contains(mapped.lens.Span.StartLine)
+                    ? $"{mapped.lens.Name}: {mapped.lens.Type}"
+                    : mapped.lens.Type
             }
         }));
     }
