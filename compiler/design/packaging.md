@@ -131,8 +131,8 @@ package there is one JSON file listing its versions, each with the artifact URL,
 its minimum compiler version and whether it is yanked. Because the protocol is just files, what serves them can
 change without the client noticing.
 
-**At launch**, the index is a GitHub repository, `nanyx-lang/packages`, in the style of Julia's General registry,
-Homebrew and our own Scoop bucket:
+**At launch** (decided in [#207](https://github.com/nanyx-lang/nanyx/issues/207)), the index is a GitHub
+repository, `nanyx-lang/packages`, in the style of Julia's General registry, Homebrew and our own Scoop bucket:
 
 1. `nanyx publish` builds the `.nyxpkg`, runs the checks locally, and opens a pull request against the index
    repository adding the new version. (It uploads the artifact to a release on the package's own repository, or
@@ -211,8 +211,9 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 
 ## Open questions
 
-- **Hosting.** Is the static index on GitHub, with pull-request publishing and project-owned artifact storage,
-  the right launch setup? Is `packages.nanyx.dev` the address, and who holds the domain?
+- **Index address and artifact storage.** The static index on GitHub is decided. Is `packages.nanyx.dev` the
+  address, and who holds the domain? Are artifacts kept in object storage (Cloudflare R2) or as release assets on
+  a project-owned repository?
 - **Name ownership.** Is tying namespaces to GitHub accounts acceptable at launch, or do we need our own accounts
   from the start?
 - **Resolution.** PubGrub (newest compatible) or minimal version selection (Go: oldest that satisfies, no
