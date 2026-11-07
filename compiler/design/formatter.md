@@ -110,9 +110,24 @@ issue):
 
 - A lambda with match cases puts each case on its own line, the `|`s aligned under the first.
 - A pipeline that does not fit puts each stage on its own line, indented once.
-- A record, list or tuple that does not fit puts each element on its own line, separated by newlines instead of
-  commas, as the docs write them; trailing commas therefore never arise. Where the parser does not yet accept newlines
-  as separators for some form, that form keeps its commas until it does.
+- A record, list, tuple or call's arguments that does not fit puts each element on its own line, separated by newlines
+  instead of commas, as the docs write them, with the closing bracket on a line of its own; trailing commas therefore
+  never arise. The outermost brackets break first.
+- An `if` with expressions for branches that does not fit puts `then` and `else` at the start of lines of their own,
+  indented once (decided 2026-11-07):
+
+  ```nanyx
+  if line.qty > p.stock
+    then #outOfStock(p.name)
+    else #some(Priced(name = p.name, qty = line.qty, each = p.price, cost = p.price * line.qty))
+  ```
+
+- A chain of operators of one precedence that does not fit puts as many operands on a line as fit, each line ending in
+  an operator and the lines after the first indented once. The parser takes a line break after an operator but not
+  before one, and not at all in a statement, an arm's body or a top-level expression, where a chain stays on one line
+  unless it is inside brackets.
+- A signature that does not fit on the def's line goes on the next line after the name, as does the `=`, and the value
+  is indented under them (shown above).
 - A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
   body is only a name or a literal (decided 2026-11-07):
 
@@ -173,9 +188,9 @@ Blank lines inside an expression (between a lambda's match cases, between record
 Two exceptions. Imports in a row stay together, however many lines a bracketed `import (...)` takes, and an
 attribute such as `@entry` stays on the line before its item.
 
-Whether a construct spans more than one line depends on its layout, which depends on where it starts. The printer
-knows its indent before printing it, so it decides by measuring: a construct is multi-line if it contains a comment on
-its own line, a hard line, or a group that does not fit flat in the remaining width.
+Whether a construct spans more than one line depends on its layout, which depends on where it starts, so the renderer
+decides it (`Doc.Stack`): a construct is multi-line if it always breaks, or if it does not fit flat in the width left at
+its indent.
 
 ### Sorting imports
 
