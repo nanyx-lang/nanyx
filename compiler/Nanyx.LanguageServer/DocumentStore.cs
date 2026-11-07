@@ -78,6 +78,28 @@ public sealed record OpenDocument(
         return InEditedItem(lastGood, start, end, edits) ? null : edits.ToAfter(start, end);
     }
 
+    /// <summary>
+    /// The offset in <see cref="LastGood"/>'s text nearest to <paramref name="offset"/> in this one, for asking
+    /// which names are in scope there rather than what anything's type is: an offset in text edited since maps to
+    /// where the edit starts, which is in the same scope unless the edit opened or closed one. <c>null</c> if no
+    /// text of the document has type-checked.
+    /// </summary>
+    public int? NearestInLastGood(int offset)
+    {
+        if (LastGood is not { } lastGood)
+        {
+            return null;
+        }
+
+        if (ReferenceEquals(lastGood, this))
+        {
+            return offset;
+        }
+
+        var edits = EditsSinceLastGood(lastGood);
+        return edits.ToBefore(offset) ?? edits.Start;
+    }
+
     private EditedRegion EditsSinceLastGood(OpenDocument lastGood) =>
         _editsSinceLastGood ??= EditedRegion.Between(lastGood.Positions.NormalizedText, Positions.NormalizedText);
 

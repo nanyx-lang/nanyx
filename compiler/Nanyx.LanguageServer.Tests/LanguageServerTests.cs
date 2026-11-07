@@ -517,6 +517,80 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Equal([new Range(0, 4, 0, 6)], (await CodeLenses(uri)).Select(lens => lens.Range));
     }
 
+    [Fact]
+    public void Server_advertises_completion()
+    {
+        Assert.NotNull(_client.ServerSettings.Capabilities.CompletionProvider);
+    }
+
+    [Fact]
+    public async Task Completion_offers_the_names_in_scope_with_their_types_nearest_first()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion.nyx"));
+
+        Open(uri, "def scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset\r\n}\r\ndef later = 3\r\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var items = await CompletionsAt(uri, 2, 2);
+        var names = items.Where(item => item.Kind != CompletionItemKind.Keyword).OrderBy(item => item.SortText).ToList();
+        Assert.Equal(
+            [
+                ("factor", CompletionItemKind.Variable, "int"),
+                ("offset", CompletionItemKind.Variable, "int"),
+                ("later", CompletionItemKind.Variable, "int"),
+                ("scale", CompletionItemKind.Function, "int -> int")
+            ],
+            names.Where(item => item.SortText![0] != '2').Select(item => (item.Label, item.Kind, item.Detail)));
+        // The prelude's names come after the file's own, and keywords last.
+        Assert.Contains(names, item => item.Label == "proc" && item.SortText![0] == '2');
+        Assert.Contains(items, item => item.Label == "match" && item.Kind == CompletionItemKind.Keyword);
+
+        // Outside the lambda, its parameter and locals are not in scope.
+        Assert.DoesNotContain(await CompletionsAt(uri, 4, 12), item => item.Label is "factor" or "offset");
+    }
+
+    [Fact]
+    public async Task Completion_reads_the_last_good_compile_while_the_text_does_not_type_check()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-last-good.nyx"));
+
+        Open(uri, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + offset\n}\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // Typing a name that does not exist yet, inside the lambda: a type error.
+        Change(uri, version: 2, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + off\n}\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+        var inLambda = await CompletionsAt(uri, 2, 18);
+        Assert.Contains(inLambda, item => item.Label == "offset" && item.Detail == "int");
+        Assert.Contains(inLambda, item => item.Label == "factor");
+
+        // An unclosed bracket at the end of the file: a parse error.
+        Change(uri, version: 3, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + offset\n}\ndef later = (sc");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+        var atEnd = await CompletionsAt(uri, 4, 15);
+        Assert.Contains(atEnd, item => item.Label == "scale" && item.Detail == "int -> int");
+        Assert.DoesNotContain(atEnd, item => item.Label == "factor");
+    }
+
+    [Fact]
+    public async Task Completion_offers_nothing_in_a_comment_a_string_or_after_a_dot()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-nothing.nyx"));
+
+        Open(uri, "def a = 1 -- about a\ndef b = \"text {a} more\"\ndef p = (x = 1, y = 2)\ndef c = p.x\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Empty(await CompletionsAt(uri, 0, 19));
+        Assert.Empty(await CompletionsAt(uri, 1, 11));
+        Assert.Contains(await CompletionsAt(uri, 1, 15), item => item.Label == "a");
+        Assert.Empty(await CompletionsAt(uri, 3, 11));
+    }
+
+    private async Task<List<CompletionItem>> CompletionsAt(DocumentUri uri, int line, int character) =>
+        (await _client.TextDocument.RequestCompletion(
+            new CompletionParams { TextDocument = new TextDocumentIdentifier(uri), Position = new Position(line, character) },
+            _cancellation.Token)).ToList();
+
     private async Task<List<CodeLens>> CodeLenses(DocumentUri uri) =>
         (await _client.TextDocument.RequestCodeLens(
             new CodeLensParams { TextDocument = new TextDocumentIdentifier(uri) },

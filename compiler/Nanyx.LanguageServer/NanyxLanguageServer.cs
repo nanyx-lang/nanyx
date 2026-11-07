@@ -11,15 +11,11 @@ namespace Nanyx.LanguageServer;
 /// </summary>
 /// <remarks>
 /// The server publishes diagnostics, shows inferred types on hover, in lenses above unannotated top-level defs and
-/// in inlay hints after other unannotated names, and goes to definitions. Each editor feature
-/// is one handler class in <c>Handlers/</c>, registered in <see cref="Configure"/>, reading the document's last
-/// compile from <see cref="DocumentStore"/>. To add a feature, add a handler that derives from the matching
-/// OmniSharp base class and register it:
-/// <list type="bullet">
-///   <item><c>textDocument/references</c> — a <c>ReferencesHandlerBase</c>.</item>
-///   <item><c>textDocument/completion</c> — a <c>CompletionHandlerBase</c>.</item>
-/// </list>
-/// These are not implemented yet (#113).
+/// in inlay hints after other unannotated names, goes to definitions, and completes the names in scope. Each editor
+/// feature is one handler class in <c>Handlers/</c>, registered in <see cref="Configure"/>, reading the document's
+/// last compile from <see cref="DocumentStore"/>. To add a feature, add a handler that derives from the matching
+/// OmniSharp base class and register it: <c>textDocument/references</c>, for one, would be a
+/// <c>ReferencesHandlerBase</c>. It is not implemented yet (#113).
 /// </remarks>
 public static class NanyxLanguageServer
 {
@@ -63,5 +59,6 @@ public static class NanyxLanguageServer
             .WithHandler<HoverHandler>()
             .WithHandler<DefinitionHandler>()
             .WithHandler<CodeLensHandler>()
-            .WithHandler<InlayHintHandler>();
+            .WithHandler<InlayHintHandler>()
+            .WithHandler<CompletionHandler>();
 }

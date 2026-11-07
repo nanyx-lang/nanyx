@@ -26,3 +26,27 @@ let namesInScope (result: CompileResult) (offset: int) : Symbol list =
         |> Seq.sortBy (fun symbol -> symbol.Name)
         |> List.ofSeq
     | _ -> []
+
+/// A name `namesInScope` finds, with its type as hover writes it (with made-up type variables named by `names`), if
+/// it has one, and whether that type is a function's.
+type NameInScope = { Symbol: Symbol; Type: string option; IsFunction: bool }
+
+/// The names of `namesInScope`, with their types: a declaration of the module's own has the type inference recorded
+/// for it, and a name an import brings in has the type its module gave it. An import's alias has none.
+let typedNamesInScope (names: TypeVarNames) (result: CompileResult) (offset: int) : NameInScope list =
+    match result.Typed with
+    | Some typed ->
+        namesInScope result offset
+        |> List.map (fun symbol ->
+            let ty =
+                match typed.SymbolTypes |> Map.tryFind symbol.Id with
+                | Some ty -> Some ty
+                | None when symbol.Kind = TopLevelValue -> typed.Types |> Map.tryFind symbol.Name
+                | None -> None
+            { Symbol = symbol
+              Type = ty |> Option.map (Unifier.tyToDisplayString names)
+              IsFunction =
+                match ty |> Option.map Unifier.unalias with
+                | Some (TyFunc _) -> true
+                | _ -> false })
+    | None -> []
