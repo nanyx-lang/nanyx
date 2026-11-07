@@ -56,7 +56,12 @@ what the compiler keeps: exact spans, resolved names and types.
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). Like hover, they come from the last good compile, so
   while the file is broken only the def being edited loses its lens.
 - **No find-references or completion.** Each is one handler in `Handlers/`. Find-references can read the same
-  `References` table, though only of the open document's own compile.
+  `References` table, though only of the open document's own compile. For completion, inference records where
+  each name can be written (`TypedModule.Scopes`, [#211](https://github.com/nanyx-lang/nanyx/issues/211)): a
+  local from its def to the end of its block, a parameter to the end of its lambda, a pattern variable to the end
+  of its arm, and a top-level def, an import's alias and a name an import or the prelude brings in throughout the
+  module. `NyxCompiler.Completion.namesInScope` gives the one symbol each name means at an offset, the nearest
+  declaration winning.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*.

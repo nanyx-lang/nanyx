@@ -30,6 +30,18 @@ type Symbol =
       Declaration: SourceSpan
       IsExported: bool }
 
+/// Where a name can be written and mean a symbol: the text from its declaration to the end of what declares it.
+module Scope =
+    /// The scope of a name visible throughout a module, wherever it is declared: a top-level def or an import.
+    let wholeModule (file: string) : SourceSpan =
+        { File = file; Start = 0; End = System.Int32.MaxValue; StartLine = 0; StartColumn = 0 }
+
+    /// The scope of a name declared at `declaration` and visible until `scopeEnd`: the end of the block for a local,
+    /// of the lambda for a parameter, of the arm for a pattern variable. A local def is in scope in its own value, so
+    /// it can call itself.
+    let until (scopeEnd: int) (declaration: SourceSpan) : SourceSpan =
+        { declaration with End = max scopeEnd declaration.End }
+
 /// Internal types used during type inference.
 type TyVar =
     { Id: int
@@ -91,7 +103,9 @@ type TypeDefInfo = { Parameters: TyVar list; Underlying: Ty; IsPrivate: bool }
 /// `Symbols` holds what the module declares and the imported definitions it refers to. `References` says which
 /// symbol each name resolved to, by the node of the identifier, call, pipe or qualified name; `ImportReferences`
 /// says which import a name brought in by an import came through. `AnnotatedSymbols` are the declarations that
-/// write their own type: an annotated def or lambda parameter.
+/// write their own type: an annotated def or lambda parameter. `Scopes` says where each name can be written
+/// unqualified (see `Scope`): the module's own declarations, the aliases of its imports, and the names its imports
+/// and the prelude bring in unqualified, less those the module declares itself.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -103,4 +117,5 @@ type TypedModule =
       Symbols: Map<SymbolId, Symbol>
       AnnotatedSymbols: Set<SymbolId>
       References: Map<NodeId, SymbolId>
-      ImportReferences: Map<NodeId, SymbolId> }
+      ImportReferences: Map<NodeId, SymbolId>
+      Scopes: Map<SymbolId, SourceSpan> }

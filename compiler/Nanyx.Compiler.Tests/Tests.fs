@@ -2350,6 +2350,94 @@ let ``Imported names refer to the imported definition and the import`` () =
         let toUpper = (symbolAt (fun typed -> typed.References) (Compiler.compile source) (offsetOf source "t.String.uppercase" 0 2)).Value
         Assert.Equal("nanyx/text.nyx", toUpper.Declaration.File))
 
+// Names in scope: what completion offers at a position.
+
+/// The names in scope at `offset` in `result`, as each name's kind and the file it is declared in.
+let private namesIn (result: CompileResult) (offset: int) =
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Completion.namesInScope result offset |> List.map (fun symbol -> symbol.Name, (symbol.Kind, symbol.Declaration.File))
+
+/// The names in scope at `offset` that `source` declares itself, with their kinds: the prelude's are left out.
+let private ownNamesAt (source: string) (offset: int) =
+    namesIn (Compiler.compile source) offset
+    |> List.filter (fun (_, (_, file)) -> file = "")
+    |> List.map (fun (name, (kind, _)) -> name, kind)
+
+[<Fact>]
+let ``Locals are in scope from their def, parameters in their lambda and top-level defs everywhere`` () =
+    let source =
+        "def scale = { factor ->\n" +
+        "  def before = 1\n" +
+        "  def offset = before\n" +
+        "  factor * 2 + offset\n" +
+        "}\n" +
+        "def later = 3\n"
+    // A top-level def written later is in scope; a local written later is not.
+    Assert.Equal<(string * SymbolKind) list>(
+        [ "before", LocalValue; "factor", Parameter; "later", TopLevelValue; "scale", TopLevelValue ],
+        ownNamesAt source (offsetOf source "def offset" 0 0))
+    Assert.Equal<(string * SymbolKind) list>(
+        [ "before", LocalValue; "factor", Parameter; "later", TopLevelValue; "offset", LocalValue; "scale", TopLevelValue ],
+        ownNamesAt source (offsetOf source "factor * 2" 0 0))
+    // Outside the lambda, only the top-level defs.
+    Assert.Equal<(string * SymbolKind) list>(
+        [ "later", TopLevelValue; "scale", TopLevelValue ],
+        ownNamesAt source (offsetOf source "def later" 0 0))
+
+[<Fact>]
+let ``A pattern variable is in scope in its own arm only`` () =
+    let source =
+        "def rest = { items -> match items\n" +
+        "  | [_, ...tail] -> tail\n" +
+        "  | _ -> items }\n"
+    let inArm = ownNamesAt source (offsetOf source "-> tail" 0 3)
+    Assert.Contains(("tail", PatternVariable), inArm)
+    let inNextArm = ownNamesAt source (offsetOf source "-> items" 0 3)
+    Assert.DoesNotContain(("tail", PatternVariable), inNextArm)
+    Assert.Contains(("items", Parameter), inNextArm)
+
+[<Fact>]
+let ``The nearest declaration of a name is the one in scope`` () =
+    let source =
+        "def x = 1\n" +
+        "def f = { x -> x }\n" +
+        "def g = {\n" +
+        "  def x = 2\n" +
+        "  x\n" +
+        "}\n" +
+        "def h = x\n"
+    let x offset = ownNamesAt source offset |> List.filter (fun (name, _) -> name = "x")
+    Assert.Equal<(string * SymbolKind) list>([ "x", Parameter ], x (offsetOf source "-> x" 0 3))
+    Assert.Equal<(string * SymbolKind) list>([ "x", LocalValue ], x (offsetOf source "  x\n" 0 2))
+    Assert.Equal<(string * SymbolKind) list>([ "x", TopLevelValue ], x (offsetOf source "def h = x" 0 8))
+
+[<Fact>]
+let ``A qualified import is in scope by its alias, an unqualified one by the names it exports`` () =
+    withTempDir (fun dir ->
+        let modulePath = Path.Combine(dir, "mod.nyx")
+        File.WriteAllText(modulePath, "module mod\nexport def foo = 1\ndef hidden = 2")
+        let mainPath = Path.Combine(dir, "main.nyx")
+        let namesWith (mainSource: string) =
+            File.WriteAllText(mainPath, mainSource)
+            namesIn (Compiler.compileFile mainPath) (offsetOf mainSource "def value" 0 0)
+            |> List.filter (fun (_, (_, file)) -> not (file.StartsWith "nanyx/"))
+        Assert.Equal<(string * (SymbolKind * string)) list>(
+            [ "m", (ImportedModule, mainPath); "value", (TopLevelValue, mainPath) ],
+            namesWith "module main\nimport \"mod.nyx\" as m\ndef value = m.foo")
+        Assert.Equal<(string * (SymbolKind * string)) list>(
+            [ "foo", (TopLevelValue, modulePath); "value", (TopLevelValue, mainPath) ],
+            namesWith "module main\nimport \"mod.nyx\"\ndef value = foo"))
+
+[<Fact>]
+let ``The prelude's names are in scope until the module declares its own`` () =
+    let proc (source: string) (offset: int) =
+        namesIn (Compiler.compile source) offset |> List.filter (fun (name, _) -> name = "proc")
+    let fromPrelude = proc "def value = 1\n" 0
+    Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (TopLevelValue, "nanyx/prelude.nyx") ], fromPrelude)
+    Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (TopLevelValue, "") ], proc "def proc = 1\n" 0)
+    let source = "def value = {\n  def proc = 2\n  proc\n}\n"
+    Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (LocalValue, "") ], proc source (offsetOf source "  proc\n" 0 2))
+
 // Type hints: the inferred types shown for declarations that do not write theirs.
 
 /// Each hint as its name, type and where its name starts.
