@@ -1921,6 +1921,36 @@ let private latinHoverType source offset =
     hoverWith Latin source offset |> Option.map (fun info -> info.Type)
 
 [<Fact>]
+let ``Reading fields of a parameter makes it a record with at least those fields`` () =
+    let source =
+        "def name = { p -> p.name }\n" +
+        "def label = { p -> p.name ++ \" \" ++ p.city }\n"
+    Assert.Equal(Some "(name: α, ...ω) -> α", hoverType source (offsetOf source "{ p -> p.name }" 0 0))
+    Assert.Equal(Some "(city: string, name: string, ...ω) -> string", hoverType source (offsetOf source "{ p -> p.name ++" 0 0))
+
+[<Fact>]
+let ``A function reading fields takes any record that has them`` () =
+    let source =
+        "def label = { p -> p.name ++ p.city }\n" +
+        "def show = {\n" +
+        "  | #some(p), n -> p.name ++ n\n" +
+        "  | _, _ -> \"none\"\n" +
+        "}\n" +
+        "def a = label((name = \"a\", city = \"b\"))\n" +
+        "def b = label((city = \"b\", name = \"a\", age = 3))\n" +
+        "def c = show(#some((name = \"pat\", age = 3)), \"!\")\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal(Some "string", hoverType source (offsetOf source "a = " 0 0))
+    Assert.Equal(Some "string", hoverType source (offsetOf source "c = " 0 0))
+
+[<Fact>]
+let ``A function reading a field rejects a record without it`` () =
+    let result = Compiler.compile "def name = { p -> p.name }\ndef a = name((age = 3))\n"
+    Assert.False(result.Diagnostics.IsEmpty)
+    Assert.Contains("Record field mismatch: {name} vs {age}", (result.Diagnostics |> List.head).Message)
+
+[<Fact>]
 let ``Expressions at a position are innermost first`` () =
     let source = "def value = 1 + 2 * 3"
     let syntax =

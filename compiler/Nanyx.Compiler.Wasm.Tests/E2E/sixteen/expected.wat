@@ -46,22 +46,27 @@
   (elem (i32.const 0) $__lambda_0 $__lambda_1)
 
   (func $main (result i32) (local $ctx i32) (local $__use_f_2 i32) (local $__use_g_3 i32)
-    i32.const 8
+    i32.const 12
     call $__nanyx_alloc
+    i32.const 1
+    i32.const 0
+    call $__nanyx_record_set
     i32.const 4
     call $__nanyx_alloc
     i32.const 0
     i32.const 0
     call $__nanyx_record_set
-    i32.const 0
+    i32.const 4
     call $__nanyx_record_set
     i32.const 4
     call $__nanyx_alloc
     i32.const 1
     i32.const 0
     call $__nanyx_record_set
-    i32.const 4
+    i32.const 8
     call $__nanyx_record_set
+    i32.const 4
+    i32.add
     local.set $ctx
     local.get $ctx
     i32.const 0

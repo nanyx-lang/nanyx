@@ -18,6 +18,15 @@ type private FunctionTable =
       /// The arities of every indirect call made through a local, so a `$ctx_fn_N` type exists for each.
       IndirectArities: System.Collections.Generic.HashSet<int> }
 
+/// The record layouts the module allocates and the fields it reads from open records (whose layout is only known
+/// at run time), each numbered as the functions are lowered. Every record carries its layout's number, and the
+/// open-field helper is generated from both tables once every function has been lowered.
+type private RecordTable =
+    { /// Field names in storage order -> the layout's number.
+      LayoutIds: System.Collections.Generic.Dictionary<string list, int>
+      /// Field name -> its number, for the fields read from open records.
+      OpenFieldIds: System.Collections.Generic.Dictionary<string, int> }
+
 type private TranspileEnv =
     { KnownFunctions: Set<string>
       FunctionArities: Map<string, int>
@@ -53,6 +62,7 @@ type private TranspileEnv =
       /// The runtime helpers (see `runtimeHelpers`) the lowered code calls; shared by every function of a module.
       UsedHelpers: System.Collections.Generic.HashSet<string>
       FunctionTable: FunctionTable
+      RecordTable: RecordTable
       /// How many `for` loops enclose the expression being lowered; loop locals are named by this depth.
       ForDepth: int }
 
@@ -67,6 +77,8 @@ module private Helpers =
     let listConcat = "__nanyx_list_concat"
     let recordSet = "__nanyx_record_set"
     let recordCopy = "__nanyx_record_copy"
+    /// Generated per module rather than kept in `runtimeHelpers`: see `renderOpenFieldHelper`.
+    let openField = "__nanyx_open_field"
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
@@ -83,7 +95,9 @@ module private Helpers =
 /// and the allocator they share. Only the helpers a module uses are emitted.
 ///
 /// Memory model: a string is a pointer to its UTF-8 bytes, with its byte length in the 4 bytes before the
-/// pointer and a 0 byte after; a list is 0 (empty) or a pointer to an 8-byte cell of (head, tail). The heap is
+/// pointer and a 0 byte after; a list is 0 (empty) or a pointer to an 8-byte cell of (head, tail); a record (or
+/// tuple) is a pointer to a 4-byte slot per field in field-name order, with its layout's number (see
+/// `RecordTable`) in the 4 bytes before the pointer. The heap is
 /// a bump allocator from `$heap_ptr` that grows the memory when it runs out; nothing is ever freed.
 let private runtimeHelpers : Map<string, string> =
     let lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
@@ -1149,7 +1163,11 @@ let rec private tryExprTy (env: TranspileEnv) (expr: Expression) : Ty option =
     match expr.Kind with
     | IdentifierExpr name -> env.ValueTys |> Map.tryFind name
     | MemberAccess(inner, fieldName, _) ->
-        tryExprTy env inner |> Option.bind tryRecordFieldTys |> Option.bind (Map.tryFind fieldName)
+        let fieldTys ty =
+            match Unifier.unalias ty with
+            | TyOpenRecord(fields, _) -> Some fields
+            | _ -> tryRecordFieldTys ty
+        tryExprTy env inner |> Option.bind fieldTys |> Option.bind (Map.tryFind fieldName)
     | FunctionCall("__with", _, baseExpr :: _) -> tryExprTy env baseExpr  // a record update has the record's type
     | FunctionCall(name, _, _)
     | Pipe(_, name, _, _) ->
@@ -1167,6 +1185,69 @@ let private tryRecordLayoutOfExpr (env: TranspileEnv) (expr: Expression) : strin
     tryExprTy env expr
     |> Option.bind tryRecordFieldTys
     |> Option.map (fun fields -> fields |> Map.toList |> List.map fst)
+
+/// The number of the record layout with `fieldNames` (in storage order), numbering it if it is new.
+let private recordLayoutId (env: TranspileEnv) (fieldNames: string list) =
+    let layouts = env.RecordTable.LayoutIds
+    match layouts.TryGetValue fieldNames with
+    | true, id -> id
+    | _ ->
+        let id = layouts.Count + 1
+        layouts.[fieldNames] <- id
+        id
+
+/// The number of `fieldName` as a field read from open records, numbering it if it is new.
+let private openFieldId (env: TranspileEnv) (fieldName: string) =
+    let fields = env.RecordTable.OpenFieldIds
+    match fields.TryGetValue fieldName with
+    | true, id -> id
+    | _ ->
+        let id = fields.Count + 1
+        fields.[fieldName] <- id
+        id
+
+/// Whether `expr` is an open record: one known only to have certain fields, as a parameter is that a function
+/// reads fields of, so where a field is depends on the record it is given.
+let private isOpenRecordExpr (env: TranspileEnv) (expr: Expression) =
+    match tryExprTy env expr |> Option.map Unifier.unalias with
+    | Some (TyOpenRecord _) -> true
+    | _ -> false
+
+/// `$__nanyx_open_field(record, field)`: the value of a field of an open record, found from the layout number the
+/// record carries. It knows every layout the module allocates that has a field read from an open record.
+let private renderOpenFieldHelper (table: RecordTable) =
+    let cases =
+        [ for KeyValue(fieldNames, layoutId) in table.LayoutIds do
+            for index, fieldName in List.indexed fieldNames do
+                match table.OpenFieldIds.TryGetValue fieldName with
+                | true, fieldId ->
+                    yield
+                        [ "    local.get $layout"
+                          $"    i32.const {layoutId}"
+                          "    i32.eq"
+                          "    local.get $field"
+                          $"    i32.const {fieldId}"
+                          "    i32.eq"
+                          "    i32.and"
+                          "    if"
+                          "      local.get $record"
+                          $"      i32.const {index * 4}"
+                          "      i32.add"
+                          "      i32.load"
+                          "      return"
+                          "    end" ]
+                | _ -> () ]
+    [ $"  (func ${Helpers.openField} (param $record i32) (param $field i32) (result i32)"
+      "    (local $layout i32)"
+      "    local.get $record"
+      "    i32.const 4"
+      "    i32.sub"
+      "    i32.load"
+      "    local.set $layout"
+      yield! List.concat cases
+      "    unreachable"
+      "  )" ]
+    |> String.concat "\n"
 
 /// The simple type ("string", "int" or "bool") of an expression, when the backend can tell. Strings matter most:
 /// `+` and `==` are lowered differently when an operand is known to be a string.
@@ -1898,6 +1979,23 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                 $"{transpileExpression env value}\n    i32.const {index * 4}\n    call ${Helpers.recordSet}")
         ($"i32.const {values.Length * 4}\n    call ${Helpers.alloc}" :: stores) |> String.concat "\n    "
 
+    /// Allocates a record with `fields` (name and value, in storage order): a slot for its layout's number, then a
+    /// slot per field, leaving a pointer to the first field on the stack. The layout's number lets a field be found
+    /// when only the record's having it is known (see `Helpers.openField`).
+    let allocateRecord (fields: (string * Expression) list) =
+        env.UsedHelpers.Add Helpers.alloc |> ignore
+        env.UsedHelpers.Add Helpers.recordSet |> ignore
+        let layoutId = recordLayoutId env (fields |> List.map fst)
+        let stores =
+            fields
+            |> List.mapi (fun index (_, value) ->
+                $"{transpileExpression env value}\n    i32.const {(index + 1) * 4}\n    call ${Helpers.recordSet}")
+        [ $"i32.const {(fields.Length + 1) * 4}\n    call ${Helpers.alloc}"
+          $"i32.const {layoutId}\n    i32.const 0\n    call ${Helpers.recordSet}"
+          yield! stores
+          "i32.const 4\n    i32.add" ]
+        |> String.concat "\n    "
+
     // A call through a function value: `closureCode` pushes the closure block, whose first slot is the
     // function's table slot. The block is passed as the environment, ahead of the arguments.
     let callClosure (closureCode: string) (argsCode: string list) =
@@ -2161,8 +2259,8 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
         let elseCode = transpileExpression env elseExpr
         $"{condCode}\n    (if (result i32)\n      (then\n        {thenCode}\n      )\n      (else\n        {elseCode}\n      )\n    )"
     | TupleExpr items ->
-        // A tuple is a block of one 4-byte slot per item, in order.
-        allocateSlots items
+        // A tuple is a record whose fields are its positions.
+        allocateRecord (items |> List.mapi (fun index item -> string index, item))
     | RecordExpr fields ->
         // Sort fields alphabetically by name, store in that order on heap
         let sortedFields =
@@ -2173,7 +2271,10 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                 | PositionalField expr -> (string i, expr))
             |> List.sortBy fst
         // A record is a block of one 4-byte slot per field, in field-name order.
-        allocateSlots (sortedFields |> List.map snd)
+        allocateRecord sortedFields
+    | MemberAccess(recordExpr, fieldName, _) when isOpenRecordExpr env recordExpr ->
+        // Where the field is depends on the record: look it up by the layout the record carries.
+        $"{transpileExpression env recordExpr}\n    i32.const {openFieldId env fieldName}\n    call ${Helpers.openField}"
     | MemberAccess(recordExpr, fieldName, _) ->
         // Support both numeric indices (t.0, t.1) and named fields (r.name)
         match System.Int32.TryParse(fieldName) with
@@ -2441,8 +2542,9 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
     | FunctionCall("not", _, [ operand ]) ->
         $"{transpileExpression env operand}\n    i32.eqz"
     | FunctionCall("__with", _, [ baseExpr; Kind (RecordExpr updates) ]) ->
-        // `record with f = v, ...`: copy the record's block, then overwrite the updated fields in place. The
-        // record is evaluated once and the copy's pointer stays on the stack, so the values may allocate.
+        // `record with f = v, ...`: copy the record's block, layout slot and all, then overwrite the updated fields
+        // in place. The record is evaluated once and the copy's pointer stays on the stack, so the values may
+        // allocate.
         let layout =
             tryRecordLayoutOfExpr env baseExpr
             |> Option.orElseWith (fun () ->
@@ -2459,10 +2561,12 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                 |> List.map (function
                     | NamedField(fieldName, value) ->
                         match fieldNames |> List.tryFindIndex ((=) fieldName) with
-                        | Some index -> $"{transpileExpression env value}\n    i32.const {index * 4}\n    call ${Helpers.recordSet}"
+                        | Some index -> $"{transpileExpression env value}\n    i32.const {(index + 1) * 4}\n    call ${Helpers.recordSet}"
                         | None -> failwith $"Unknown field '{fieldName}' in record update"
                     | PositionalField _ -> failwith "Unsupported for WASM MVP backend: positional field in a record update")
-            ($"{transpileExpression env baseExpr}\n    i32.const {fieldNames.Length * 4}\n    call ${Helpers.recordCopy}" :: stores)
+            [ $"{transpileExpression env baseExpr}\n    i32.const 4\n    i32.sub\n    i32.const {(fieldNames.Length + 1) * 4}\n    call ${Helpers.recordCopy}"
+              yield! stores
+              "i32.const 4\n    i32.add" ]
             |> String.concat "\n    "
     | FunctionCall("__range", _, _) ->
         failwith "Unsupported for WASM MVP backend: a range is only supported as the iterable of a for loop"
@@ -2574,7 +2678,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                         | NamedField(fieldName, expr) -> (fieldName, expr)
                         | PositionalField expr -> (string i, expr))
                     |> List.sortBy fst
-                allocateSlots (sortedFields |> List.map snd)
+                allocateRecord sortedFields
             | _ ->
                 failwith $"Type constructor {name} expects a record expression as argument"
         | None ->
@@ -3443,6 +3547,10 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
           NextSlot = 0
           IndirectArities = System.Collections.Generic.HashSet<int>() }
 
+    let recordTable: RecordTable =
+        { LayoutIds = System.Collections.Generic.Dictionary<string list, int>()
+          OpenFieldIds = System.Collections.Generic.Dictionary<string, int>() }
+
     // The result types the backend can read off definitions' annotations, plus what inference told it.
     let functionReturnTypes =
         let fromAnnotations =
@@ -3681,6 +3789,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   ValueTys = valueTys
                   UsedHelpers = usedHelpers
                   FunctionTable = functionTable
+                  RecordTable = recordTable
                   ForDepth = 0 }
             let fn = sanitizeIdentifier name
             
@@ -3850,6 +3959,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   ValueTys = typedTopLevelTys
                   UsedHelpers = usedHelpers
                   FunctionTable = functionTable
+                  RecordTable = recordTable
                   ForDepth = 0 }
             let bodyCode =
                 topLevelExprs
@@ -3907,6 +4017,9 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         |> List.map fst
         |> List.filter usedHelperSet.Contains
         |> List.map (fun name -> runtimeHelpers |> Map.find name)
+        |> fun helpers ->
+            // Every function has been lowered by now, so the layouts and open fields are all known.
+            if recordTable.OpenFieldIds.Count = 0 then helpers else helpers @ [ renderOpenFieldHelper recordTable ]
         |> String.concat "\n"
 
     // The `dbg` helpers: `$dbg` prints an integer, `$dbg_str` a string, each prefixed with "dbg: ".

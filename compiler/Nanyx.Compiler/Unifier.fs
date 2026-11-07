@@ -102,6 +102,12 @@ module Unifier =
                 |> List.map (fun (name, fieldTy) -> $"{name}: {grouped fieldTy}")
                 |> String.concat ", "
                 |> fun inner -> $"({inner})"
+        // An open record's other fields are written as a spread of its row: `(name: string, ...ω)`.
+        | TyOpenRecord(fields, row) ->
+            let rowText = $"...{printTy false (TyVar row)}"
+            match printTy false (TyRecord fields) with
+            | "()" -> $"({rowText})"
+            | closed -> $"{closed.Substring(0, closed.Length - 1)}, {rowText})"
         // Tags are written with their `#`, as in source: `#some(int) | #notFound`. A record payload's fields are
         // in the tag's own brackets: `#pair(int, string)`, `#authenticated(username: string)`.
         | TyTag(name, payloadOpt) ->
@@ -138,6 +144,7 @@ module Unifier =
                 | Some tupleItems, namedFields ->
                     (tupleItems |> List.collect collect) @ (namedFields |> List.sortBy fst |> List.collect (snd >> collect))
                 | None, _ -> fields |> Map.toList |> List.collect (snd >> collect)
+            | TyOpenRecord(fields, row) -> collect (TyRecord fields) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | TyApply(_, args) -> args |> List.collect collect
             | TyUnion items -> items |> List.collect collect
@@ -218,6 +225,17 @@ module Unifier =
         | TyFunc(arg, ret) -> TyFunc(apply subst arg, apply subst ret)
         | TyRecord fields ->
             fields |> Map.map (fun _ v -> apply subst v) |> TyRecord
+        // A solved row adds its fields: to a record when it was solved to one, still open when to an open one.
+        | TyOpenRecord(fields, row) ->
+            let applied = fields |> Map.map (fun _ v -> apply subst v)
+            let withFields more = more |> Map.fold (fun acc key fieldTy -> acc |> Map.add key fieldTy) applied
+            match unalias (apply subst (TyVar row)) with
+            | TyVar solved -> TyOpenRecord(applied, solved)
+            | TyRecord more -> TyRecord (withFields more)
+            | TyOpenRecord(more, rest) -> TyOpenRecord(withFields more, rest)
+            // Renamed for a reader (see `displayRenaming`): the row takes the name.
+            | TyPrimitive name -> TyOpenRecord(applied, { row with Name = Some name })
+            | _ -> TyOpenRecord(applied, row)
         | TyTag(name, payload) -> TyTag(name, payload |> Option.map (apply subst))
         | TyApply(name, args) -> TyApply(name, args |> List.map (apply subst))
         // A rest variable solved to a union (`r` := `#notFound`) is spliced into the union it is the rest of. One
@@ -245,7 +263,8 @@ module Unifier =
 
     let private latinLetters = "abcdefghijklmnopqrstuvwxyz"
 
-    /// The ids of the variables in `ty` that stand for the rest of a union: `r` in `#some(a) | r`.
+    /// The ids of the variables in `ty` that stand for the rest of a union or record: `r` in `#some(a) | r` and
+    /// in `(name: a, ...r)`.
     let private restVarIds (ty: Ty) : Set<int> =
         let rec collect ty =
             match ty with
@@ -255,6 +274,7 @@ module Unifier =
             | TyAlias(_, args, _) -> args |> List.map collect |> Set.unionMany
             | TyFunc(arg, ret) -> Set.union (collect arg) (collect ret)
             | TyRecord fields -> fields |> Map.toList |> List.map (snd >> collect) |> Set.unionMany
+            | TyOpenRecord(fields, row) -> collect (TyRecord fields) |> Set.add row.Id
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue Set.empty
             | TyApply(_, args) -> args |> List.map collect |> Set.unionMany
             | TyUnion items ->
@@ -334,6 +354,8 @@ module Unifier =
             | TyAlias(_, _, underlying) -> collect input underlying
             | TyFunc(arg, ret) -> collect (not input) arg @ collect input ret
             | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect input)
+            // A record's row is not a union's rest: it is never solved to the empty union.
+            | TyOpenRecord(fields, row) -> collect input (TyRecord fields) @ [ row, false, input ]
             | TyTag(_, payload) -> payload |> Option.map (collect input) |> Option.defaultValue []
             | TyApply(_, args) -> args |> List.collect (collect input)
             | TyUnion items ->
@@ -354,6 +376,7 @@ module Unifier =
         | TyAlias(_, _, underlying) -> occurs varId underlying
         | TyFunc(arg, ret) -> occurs varId arg || occurs varId ret
         | TyRecord fields -> fields |> Map.exists (fun _ v -> occurs varId v)
+        | TyOpenRecord(fields, row) -> row.Id = varId || fields |> Map.exists (fun _ v -> occurs varId v)
         | TyTag(_, payload) -> payload |> Option.exists (occurs varId)
         | TyApply(_, args) -> args |> List.exists (occurs varId)
         | TyUnion items -> items |> List.exists (occurs varId)
@@ -371,6 +394,7 @@ module Unifier =
                 | TyAlias(_, args, underlying) -> List.fold (fun acc arg -> max acc (maxId arg)) (maxId underlying) args
                 | TyFunc(arg, ret) -> max (maxId arg) (maxId ret)
                 | TyRecord fields -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) 0
+                | TyOpenRecord(fields, row) -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) row.Id
                 | TyTag(_, payload) -> payload |> Option.map maxId |> Option.defaultValue 0
                 | TyApply(_, args)
                 | TyUnion args -> List.fold (fun acc arg -> max acc (maxId arg)) 0 args
@@ -434,6 +458,35 @@ module Unifier =
                     loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: rest)
                 | TyRecord lFields, TyRecord rFields ->
                     unifyRecordFields origin lFields rFields rest l r
+                // An open record is a record with at least its fields: the record must have each of them, and the
+                // row is the fields it has besides.
+                | TyOpenRecord(openFields, row), TyRecord fields
+                | TyRecord fields, TyOpenRecord(openFields, row) ->
+                    let openKeys = keySet openFields
+                    if Set.isSubset openKeys (keySet fields) then
+                        let pairs = openKeys |> Seq.map (fun key -> (openFields.[key], fields.[key], Equal, origin)) |> Seq.toList
+                        let others = fields |> Map.filter (fun key _ -> not (openKeys.Contains key))
+                        loop subst (pairs @ [ (TyVar row, TyRecord others, Equal, origin) ] @ rest)
+                    else
+                        Error (recordKeyMessage openKeys (keySet fields) l r, origin)
+                // Two open records: each row is the other's extra fields and a row they share, as with two open unions.
+                | TyOpenRecord(lFields, lRow), TyOpenRecord(rFields, rRow) ->
+                    let lKeys = keySet lFields
+                    let rKeys = keySet rFields
+                    let pairs =
+                        Set.intersect lKeys rKeys
+                        |> Seq.map (fun key -> (lFields.[key], rFields.[key], Equal, origin))
+                        |> Seq.toList
+                    if lRow.Id = rRow.Id then
+                        if lKeys = rKeys then loop subst (pairs @ rest)
+                        else Error (recordKeyMessage lKeys rKeys l r, origin)
+                    else
+                        let shared = match freshRest () with TyVar v -> v | _ -> failwith "unreachable"
+                        let rowOf (extras: Map<string, Ty>) =
+                            if extras.IsEmpty then TyVar shared else TyOpenRecord(extras, shared)
+                        let extraRight = rFields |> Map.filter (fun key _ -> not (lKeys.Contains key))
+                        let extraLeft = lFields |> Map.filter (fun key _ -> not (rKeys.Contains key))
+                        loop subst (pairs @ [ (TyVar lRow, rowOf extraRight, Equal, origin); (TyVar rRow, rowOf extraLeft, Equal, origin) ] @ rest)
                 | TyTag(lName, lPayload), TyTag(rName, rPayload) when lName = rName ->
                     match lPayload, rPayload with
                     | None, None -> loop subst rest

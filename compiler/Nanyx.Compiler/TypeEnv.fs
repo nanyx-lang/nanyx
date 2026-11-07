@@ -40,6 +40,7 @@ module TypeEnv =
             |> Map.values
             |> Seq.map freeTyVars
             |> Seq.fold Set.union Set.empty
+        | TyOpenRecord(fields, row) -> freeTyVars (TyRecord fields) |> Set.add row.Id
         | TyTag(_, payloadOpt) ->
             payloadOpt |> Option.map freeTyVars |> Option.defaultValue Set.empty
         | TyApply(_, args) ->

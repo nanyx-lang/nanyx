@@ -700,6 +700,29 @@ let private resolveSoFar (state: InferState) (ty: Ty) : Ty =
         | Ok subst -> Unifier.apply subst ty
         | Error _ -> ty
 
+/// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
+/// value of no known type yet is taken to be a record with at least that field, and an open record without it
+/// to have it among its others: reading `p.name` makes `p` a `(name: a, ...r)`. `None` when `ty` is known not to
+/// have the field.
+let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty * InferState) option =
+    let openWith (row: Ty) (next: InferState) =
+        let fieldTy, next = freshVar next
+        let rest, next = freshVar next
+        match rest with
+        | TyVar restVar -> Some (fieldTy, addConstraint row (TyOpenRecord(Map.ofList [ fieldName, fieldTy ], restVar)) next)
+        | _ -> None
+    let resolved = resolveSoFar state ty
+    match recordFieldsOf resolved with
+    | Some fields -> fields |> Map.tryFind fieldName |> Option.map (fun fieldTy -> fieldTy, state)
+    | None ->
+        match Unifier.unalias resolved with
+        | TyVar _ -> openWith resolved state
+        | TyOpenRecord(fields, row) ->
+            match fields |> Map.tryFind fieldName with
+            | Some fieldTy -> Some (fieldTy, state)
+            | None -> openWith (TyVar row) state
+        | _ -> None
+
 /// A def's type `ty` generalised against `env`, both resolved against the constraints gathered so far. Unresolved,
 /// a local bound to a call's result is a type variable, and generalising that would make every later use a fresh,
 /// unrelated variable (and let a match on it skip the exhaustiveness check, #61); a variable `env` only has once
@@ -1656,17 +1679,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match inferExpr env state baseExpr with
                 | Error err -> Error err
                 | Ok (typedBase, next) ->
-                    let fieldTypeOpt = recordFieldsSoFar next typedBase.Type |> Option.bind (Map.tryFind memberName)
-                    match fieldTypeOpt with
-                    | Some fieldTy -> Ok (mkTypedExpr expr fieldTy None None None, next)
+                    match fieldTySoFar next typedBase.Type memberName with
+                    | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
                     | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownMember memberSpan $"Record '{baseName}' has no member '{memberName}'" ]
         | _ ->
             match inferExpr env state baseExpr with
             | Error err -> Error err
             | Ok (typedBase, next) ->
-                let fieldTypeOpt = recordFieldsSoFar next typedBase.Type |> Option.bind (Map.tryFind memberName)
-                match fieldTypeOpt with
-                | Some fieldTy -> Ok (mkTypedExpr expr fieldTy None None None, next)
+                match fieldTySoFar next typedBase.Type memberName with
+                | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
                 | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownMember memberSpan $"Unknown member '{memberName}'" ]
     | ContextMemberAccess(ctxType, memberName) ->
         // TODO: Look up the context type and find the member's type
