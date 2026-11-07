@@ -103,6 +103,31 @@ let ``Text cannot contain a line break`` () =
     Assert.Throws<System.ArgumentException>(fun () -> Doc.render 80 (Text "a\nb") |> ignore) |> ignore
 
 [<Fact>]
+let ``Verbatim text keeps its line breaks, with no indent added after them`` () =
+    let doc = Doc.nest 4 (Doc.concat [ Doc.hardLine; Doc.text "s = "; Doc.Verbatim "\"one\n  two\""; Doc.text ";" ])
+    Assert.Equal("\n    s = \"one\n  two\";\n", Doc.render 80 doc)
+
+[<Fact>]
+let ``A group with verbatim line breaks in it cannot be flat`` () =
+    let doc = Doc.group (Doc.concat [ Doc.text "a"; Doc.line; Doc.Verbatim "\"x\ny\"" ])
+    Assert.Equal("a\n\"x\ny\"\n", Doc.render 80 doc)
+
+[<Fact>]
+let ``A line suffix goes at the end of its line, after whatever follows it there`` () =
+    let doc = Doc.concat [ Doc.text "a"; Doc.lineSuffix "-- note"; Doc.text " }"; Doc.hardLine; Doc.text "b" ]
+    Assert.Equal("a } -- note\nb\n", Doc.render 80 doc)
+
+[<Fact>]
+let ``Two line suffixes on one line get a line each`` () =
+    let doc = Doc.nest 2 (Doc.concat [ Doc.text "a"; Doc.lineSuffix "-- one"; Doc.lineSuffix "-- two"; Doc.hardLine; Doc.text "b" ])
+    Assert.Equal("a -- one\n  -- two\n  b\n", Doc.render 80 doc)
+
+[<Fact>]
+let ``A line suffix takes no width`` () =
+    let doc = Doc.group (Doc.concat [ Doc.text "f("; Doc.lineSuffix "-- a long comment that does not fit"; Doc.softLine; Doc.text "x)" ])
+    Assert.Equal("f(x) -- a long comment that does not fit\n", Doc.render 10 doc)
+
+[<Fact>]
 let ``Rendering a deeply nested document takes time in proportion to its size`` () =
     let depth = 20_000
 

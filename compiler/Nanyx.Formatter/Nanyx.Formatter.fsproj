@@ -8,6 +8,12 @@
 
   <ItemGroup>
     <Compile Include="Doc.fs" />
+    <Compile Include="Syntax.fs" />
+    <Compile Include="Formatter.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
   </ItemGroup>
 
 </Project>
