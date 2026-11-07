@@ -1307,3 +1307,28 @@ let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
         "def three = Option.mapOr(name, 0, { s -> 3 })\n" +
         "println(\"{seven} {three}\")\n"
     runSource source |> assertRan "some 2\nerror ERR: odd\nsome 20\n0\nabc!\n7 3\n"
+
+[<Fact>]
+let ``Run - fields of a record bound by a match pattern`` () =
+    // The pattern's `a` shadows the top-level `a`, whose type is a tag rather than a record.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def a = #some((x = \"ax\", y = \"ay\"))\n" +
+        "def b: typeof(a) = #some((x = \"bx\", y = \"by\"))\n" +
+        "\n" +
+        "match b\n" +
+        "| #some(a) ->\n" +
+        "    def x = a.x\n" +
+        "    println(\"x = {x}, y = {a.y}\")\n" +
+        "| _ -> println(\"none\")\n" +
+        "\n" +
+        "def main = {\n" +
+        "  def person = #some((name = \"pat\", age = 3))\n" +
+        "  match person, 1\n" +
+        "  | #some(p), n -> println(\"{p.name} {n}\")\n" +
+        "  | _, _ -> println(\"none\")\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "x = bx, y = by\npat 1\n"

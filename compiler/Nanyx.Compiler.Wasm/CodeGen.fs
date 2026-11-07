@@ -1022,33 +1022,34 @@ let private lambdaParameterTys (parameters: (Identifier * TypeExpr option) list)
         | _ -> []
     | _ -> []
 
-/// The simple types of the identifiers a typed pattern binds: `#some(n)` binds `n` at the tag's payload
-/// type, `[x, ...rest]` binds `x` at the element type and `rest` as a list, and a bare `n` binds at the
-/// scrutinee's type.
+/// The inferred types of the identifiers `pattern` binds when matched against a value of type `ty`:
+/// `#some(n)` binds `n` at the tag's payload type, `[x, ...rest]` binds `x` at the element type and `rest`
+/// at the list's type, and a bare `n` binds at `ty` itself.
+let rec private patternBoundTys (pattern: Pattern) (ty: Ty) : (string * Ty) list =
+    let under (tyOpt: Ty option) (inner: Pattern) =
+        tyOpt |> Option.map (patternBoundTys inner) |> Option.defaultValue []
+    match pattern.Kind with
+    | IdentifierPattern ident -> [ ident, ty ]
+    | TagPattern(tagName, Some payload) -> under (tryTagPayloadType tagName ty) payload
+    | ListPattern(elements, restOpt) ->
+        let elementTy = tryListElementType ty
+        let elementBindings = elements |> List.collect (under elementTy)
+        let restBinding =
+            match restOpt with
+            | Some rest -> patternBoundTys rest ty
+            | None -> []
+        elementBindings @ restBinding
+    | TuplePattern patterns ->
+        let fieldTys = tryRecordFieldTys ty
+        patterns
+        |> List.mapi (fun index element -> under (fieldTys |> Option.bind (Map.tryFind (string index))) element)
+        |> List.concat
+    | _ -> []
+
+/// The simple types of the identifiers a typed pattern binds (see `patternBoundTys`).
 let private patternBoundValueTypes (typedPattern: TypedPattern) : (string * string) list =
-    let rec boundTypes (pattern: Pattern) (ty: Ty) : (string * string) list =
-        let under (tyOpt: Ty option) (inner: Pattern) =
-            tyOpt |> Option.map (boundTypes inner) |> Option.defaultValue []
-        match pattern.Kind with
-        | IdentifierPattern ident ->
-            trySimpleTypeName ty |> Option.map (fun tyName -> ident, tyName) |> Option.toList
-        | TagPattern(tagName, Some payload) -> under (tryTagPayloadType tagName ty) payload
-        | ListPattern(elements, restOpt) ->
-            let elementTy = tryListElementType ty
-            let elementBindings = elements |> List.collect (under elementTy)
-            let restBinding =
-                match restOpt with
-                | Some (Kind (IdentifierPattern ident)) -> [ ident, "list" ]
-                | Some rest -> boundTypes rest ty
-                | None -> []
-            elementBindings @ restBinding
-        | TuplePattern patterns ->
-            let fieldTys = tryRecordFieldTys ty
-            patterns
-            |> List.mapi (fun index element -> under (fieldTys |> Option.bind (Map.tryFind (string index))) element)
-            |> List.concat
-        | _ -> []
-    boundTypes typedPattern.Pattern typedPattern.Type
+    patternBoundTys typedPattern.Pattern typedPattern.Type
+    |> List.choose (fun (ident, ty) -> trySimpleTypeName ty |> Option.map (fun tyName -> ident, tyName))
 
 /// The typed expression for `target` (an expression as written, ranges and all) within `typedExpr`.
 let rec private tryFindTypedExpr (target: Expression) (typedExpr: TypedExpr) : TypedExpr option =
@@ -2243,6 +2244,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
         let envForNested = { env with NextMatchTemp = env.NextMatchTemp + values.Length }
 
         let scrutineeCodes = values |> List.map (transpileExpression envForNested)
+        let scrutineeTys = values |> List.map (tryExprTy env)
         let setScrutineeLocals =
             List.zip matchTempNames scrutineeCodes
             |> List.map (fun (name, code) -> $"{code}\n    local.set ${name}")
@@ -2371,6 +2373,29 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                         match pat.Kind with
                         | IdentifierPattern ident -> { acc with Locals = acc.Locals |> Map.add ident temp }
                         | _ -> acc) envWithPayloadLocals
+                // The names the patterns bind take their types from the scrutinees', so `a.x` works on a
+                // record bound by `#some(a)`. A name whose type is unknown must still shadow an outer value
+                // of the same name.
+                let boundTys =
+                    List.zip patterns scrutineeTys
+                    |> List.collect (fun (pat, tyOpt) ->
+                        match tyOpt with
+                        | Some ty -> patternBoundTys pat ty
+                        | None -> [])
+                    |> Map.ofList
+                let envWithPayloadLocals =
+                    patterns
+                    |> List.collect patternBoundIdentifiers
+                    |> List.fold (fun acc ident ->
+                        match boundTys |> Map.tryFind ident with
+                        | Some ty ->
+                            { acc with
+                                ValueTys = acc.ValueTys |> Map.add ident ty
+                                ValueTypes =
+                                    match trySimpleTypeName ty with
+                                    | Some tyName -> acc.ValueTypes |> Map.add ident tyName
+                                    | None -> acc.ValueTypes |> Map.remove ident }
+                        | None -> { acc with ValueTys = acc.ValueTys |> Map.remove ident }) envWithPayloadLocals
                 let payloadLocal ident =
                     match envWithPayloadLocals.Locals |> Map.tryFind ident with
                     | Some localName -> localName
