@@ -382,6 +382,11 @@ module Unifier =
         | TyUnion items -> items |> List.exists (occurs varId)
         | TyPrimitive _ -> false
 
+    /// Whether `var` is a rest variable `unify` made up when widening a union. Its number depends on the
+    /// constraints it was given, so a later `unify` of more constraints may give the same rest another, and a
+    /// constraint naming it may name nothing then.
+    let isMadeUpRest (var: TyVar) = var.Id >= 1_000_000_000
+
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
         // Widening a union (below) makes up rest variables. They are numbered past every variable in the
         // constraints, and far past where inference numbers its own, so that they are new to both.

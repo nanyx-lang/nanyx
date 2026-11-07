@@ -2099,6 +2099,25 @@ let ``A rest variable nothing can add tags to is empty`` () =
     Assert.Equal(Some "#some(α) | ω -> #some(α) | ω", hoverType inLambda (offsetOf inLambda "{ o" 0 0))
 
 [<Fact>]
+let ``A rest variable a closed union widened into is empty`` () =
+    // `getCustomer` gives out three tags and no more, so `mapOption` gives back those three and no more.
+    let source =
+        "def mapOption = { | #some(a), f -> #some(f(a))\n" +
+        "                  | other, _ -> other }\n" +
+        "type Customer = (name: string)\n" +
+        "def getCustomer = { name ->\n" +
+        "  if true then #some(Customer(name = name))\n" +
+        "  else if false then #none\n" +
+        "  else #err\n" +
+        "}\n" +
+        "def main: () -> () = {\n" +
+        "  def a = getCustomer(\"foo\") \\mapOption { c: Customer -> \"Mapped: {c.name}\" }\n" +
+        "  dbg(a)\n" +
+        "  ()\n" +
+        "}\n"
+    Assert.Equal(Some "#some(string) | #err | #none", hoverType source (offsetOf source "a =" 0 0))
+
+[<Fact>]
 let ``A record type is written in brackets, as in source`` () =
     let fields = [ "name", TyPrimitive "string"; "age", TyPrimitive "int" ] |> Map.ofList
     Assert.Equal("(age: int, name: string)", Unifier.tyToString (TyRecord fields))

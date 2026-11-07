@@ -732,7 +732,9 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// `#some(5) \mapOption f` is a `#some(string)`, not a `#some(string) | r`. Such a variable is in no function's
 /// input (see `Unifier.outputOnlyRestVars`), was not named in an annotation, and is not shared with `env`, where a
 /// later constraint could still give it tags. The constraint solving it is added to the state, so the types
-/// recorded for the def's expressions lose it too.
+/// recorded for the def's expressions lose it too. A rest the unifier made up, as it does when a closed union is
+/// given where an open one is expected, may be numbered differently the next time the constraints are solved, so
+/// rather than it, each of inference's own variables solved to a type with it is constrained to that type without it.
 let private generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
     match Unifier.unify state.Constraints with
     | Error _ -> TypeEnv.generalize env ty, state
@@ -746,11 +748,25 @@ let private generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSche
             Unifier.outputOnlyRestVars resolved
             |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
         let bottom = TyUnion []
-        let closedTy = Unifier.apply (closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList) resolved
+        let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList
+        let closedTy = Unifier.apply closing resolved
+        let madeUp, own = closed |> List.partition Unifier.isMadeUpRest
+        let solvedWithMadeUp =
+            if madeUp.IsEmpty then []
+            else
+                let madeUpIds = madeUp |> List.map (fun v -> v.Id) |> Set.ofList
+                subst
+                |> Map.toList
+                |> List.choose (fun (id, _) ->
+                    let var = { Id = id; Name = None }
+                    let solved = Unifier.apply subst (TyVar var)
+                    if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
+                    else Some (TyVar var, Unifier.apply closing solved))
         { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
           Type = closedTy
           Symbol = None },
-        closed |> List.fold (fun st v -> addConstraint (TyVar v) bottom st) state
+        (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
+        |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
 
 /// Arithmetic and ordering work on `int` and `float`. Without numeric type classes yet, an operation is on
 /// floats when either operand is already known to be one, and defaults to `int` otherwise.
