@@ -425,8 +425,14 @@ let format (options: Options) (parsed: SourceModule) : string =
         else
             cat [ text "["; commaJoin (List.mapi itemDoc items); text "]" ]
 
-    /// Fields in brackets: a record, a tuple, or a call's arguments. With a comment among them, one field per line,
-    /// without commas.
+    /// Fields in brackets: a record, a tuple, or a call's arguments. With a comment among them, or a field that spans
+    /// lines (a lambda with a block), one field per line, without commas, and the closing bracket on a line of its own:
+    ///
+    ///   use Log(
+    ///     log = { message ->
+    ///       println(message)
+    ///     }
+    ///   )
     and fieldsDoc (start: int) (finish: int) (fields: RecordField list) : Doc =
         let count = fields.Length
         let fieldDoc index field =
@@ -438,15 +444,20 @@ let format (options: Options) (parsed: SourceModule) : string =
             match field with
             | NamedField(_, value)
             | PositionalField value -> value
-        if hasCommentsIn start finish then
+        let onePerLine (build: int -> RecordField -> Doc) =
             let children =
                 fields
                 |> List.mapi (fun index field ->
                     let value = valueOf field
-                    value.Span.Start, value.Span.End, fun () -> fieldDoc index field)
+                    value.Span.Start, value.Span.End, fun () -> build index field)
             cat [ text "("; nest (cat [ hard; sequence false start finish children ]); hard; text ")" ]
+        if hasCommentsIn start finish then
+            onePerLine fieldDoc
         else
-            cat [ text "("; commaJoin (List.mapi fieldDoc fields); text ")" ]
+            // With no comments among them, building the fields places none, so they can be built before choosing.
+            let docs = List.mapi fieldDoc fields
+            if List.exists Doc.hasHardLine docs then onePerLine (fun index _ -> docs[index])
+            else cat [ text "("; commaJoin docs; text ")" ]
 
     /// A call's or a tag's single bracketed argument, between the offsets `start` (after the name) and `finish`:
     /// several values are a tuple, named ones a record.

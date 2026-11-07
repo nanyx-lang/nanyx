@@ -113,6 +113,16 @@ issue):
 - A record, list or tuple that does not fit puts each element on its own line, separated by newlines instead of
   commas, as the docs write them; trailing commas therefore never arise. Where the parser does not yet accept newlines
   as separators for some form, that form keeps its commas until it does.
+- So does a record, tuple or call's arguments with an element that spans lines (a lambda with a block), with the
+  closing bracket on a line of its own:
+
+  ```nanyx
+  use Log(
+    log = { message ->
+      println(message)
+    }
+  )
+  ```
 
 ### Blank lines
 

@@ -172,3 +172,16 @@ let ``An indented block separates multi-line constructs and keeps the author's b
 let ``Separating constructs is idempotent`` () =
     let once = format (lines [ "def a = 1"; "-- note"; "def f = {"; "  1"; "}"; "def b = 2" ])
     Assert.Equal(once, format once)
+
+[<Fact>]
+let ``Fields go one per line when one of them spans lines`` () =
+    Assert.Equal(
+        lines [ "def main = {"; "  use Log("; "    log = { message ->"; "      println(\"\")"; "      println(message)"; "    }"; "  )"; ""; "  run()"; "}" ],
+        format (lines [ "def main = {"; "  use Log(log = { message ->"; "    println(\"\")"; "    println(message)"; "  })"; "  run()"; "}" ]))
+    Assert.Equal(
+        lines [ "def pair = ("; "  1"; "  { x ->"; "    x"; "  }"; ")" ],
+        format (lines [ "def pair = (1, { x ->"; "  x"; "})" ]))
+
+[<Fact>]
+let ``Fields that each fit on one line stay on one line`` () =
+    unchanged "def a = f(x = 1, y = { z -> z })\n"
