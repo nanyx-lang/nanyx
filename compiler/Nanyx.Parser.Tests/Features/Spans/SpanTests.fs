@@ -539,6 +539,23 @@ let ``each pattern spans its text, and nested patterns span theirs`` () =
     | other -> failwith $"Unexpected arms: %A{other}"
 
 [<Fact>]
+let ``a list pattern ending in an unnamed splat keeps a wildcard rest spanning the dots`` () =
+    // `[x, ...]` matches any list of one or more, so it must not parse the same as `[x]`.
+    let source = "def f = match v\n  | [x, ...] -> x\n  | [y] -> y"
+    match armsOf "f" (parse source) with
+    | [ [ unnamed ]; [ exact ] ] ->
+        match unnamed.Kind with
+        | ListPattern ([ x ], Some rest) ->
+            textOf source x.Span |> should equal "x"
+            rest.Kind |> should equal WildcardPattern
+            textOf source rest.Span |> should equal "..."
+        | other -> failwith $"Expected a list pattern with a rest, got %A{other}"
+        match exact.Kind with
+        | ListPattern ([ _ ], None) -> ()
+        | other -> failwith $"Expected a list pattern without a rest, got %A{other}"
+    | other -> failwith $"Unexpected arms: %A{other}"
+
+[<Fact>]
 let ``a tag with several payload patterns matches them as a tuple spanning the parentheses`` () =
     let source = "def f = match v\n  | #pair(a, b) -> a\n  | #one x -> x"
     match armsOf "f" (parse source) with

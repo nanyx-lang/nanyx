@@ -410,6 +410,22 @@ let ``Run - list literals and patterns`` () =
     runSource source |> assertRan "empty\none\none then another\nmany\ndbg: 10\n"
 
 [<Fact>]
+let ``Run - an unnamed rest matches a longer list`` () =
+    // `[x, ...]` binds the head and ignores the rest, whatever its length.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def first: list(int) -> int = { xs ->\n" +
+        "  match xs\n" +
+        "  | [x, ...] -> x\n" +
+        "  | [] -> 0\n" +
+        "}\n" +
+        "dbg(first([5, 6, 7]))\n" +
+        "dbg(first([8]))\n" +
+        "dbg(first([]))\n"
+    runSource source |> assertRan "dbg: 5\ndbg: 8\ndbg: 0\n"
+
+[<Fact>]
 let ``Run - list spread in expressions`` () =
     // Regression: `[1, ...rest]` worked as a pattern but not as an expression (#44).
     let source =
