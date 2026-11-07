@@ -117,3 +117,34 @@ let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol optio
             |> Seq.sortBy (fun symbol -> symbol.Declaration.End - symbol.Declaration.Start)
             |> Seq.tryHead
     | _ -> None
+
+/// The span of every name in the compiled root module that refers to `symbol`, in the order they are written: a
+/// call's or pipe's function name, an identifier or qualified name, a qualified context member's name, or a type
+/// name. For an import, the alias each qualified name it brought in is written with (`m` in `m.foo`). The
+/// declaration itself is not among them. Empty when the module did not type-check.
+let referencesTo (result: CompileResult) (symbol: Symbol) : SourceSpan list =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let refersTo (table: Map<NodeId, SymbolId>) (id: NodeId) = table |> Map.tryFind id = Some symbol.Id
+        let expressionSpans =
+            Hover.allExpressions syntax
+            |> List.choose (fun expr ->
+                if refersTo typed.References expr.Id then
+                    nameSpan expr
+                elif symbol.Kind = ImportedModule && refersTo typed.ImportReferences expr.Id then
+                    // The name is written under the import's alias, which is its first segment.
+                    Some { expr.Span with End = min expr.Span.End (expr.Span.Start + symbol.Name.Length) }
+                else
+                    None)
+        let typeSpans =
+            let rec walk (typeExpr: TypeExpr) = typeExpr :: (typeChildren typeExpr |> List.collect walk)
+            (syntax |> List.collect topLevelTypes) @ (Hover.allExpressions syntax |> List.collect expressionTypes)
+            |> List.collect walk
+            |> List.filter (fun typeExpr -> refersTo typed.References typeExpr.Id)
+            |> List.choose typeNameSpan
+        // A node desugaring made up can share the span of the syntax it came from.
+        expressionSpans @ typeSpans
+        |> List.filter (SourceSpan.isNone >> not)
+        |> List.distinct
+        |> List.sortBy (fun span -> span.Start)
+    | _ -> []

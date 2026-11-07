@@ -3,7 +3,6 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
-using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Nanyx.LanguageServer.Handlers;
 
@@ -40,31 +39,8 @@ public sealed class DefinitionHandler : DefinitionHandlerBase
             return null;
         }
 
-        var location = LocationOf(request.TextDocument.Uri, document, symbol.Value.Declaration);
+        var location = SourceLocations.Of(request.TextDocument.Uri, document, symbol.Value.Declaration, _standardLibrary);
         return location is null ? null : new LocationOrLocationLinks(location);
-    }
-
-    private Location? LocationOf(DocumentUri uri, OpenDocument document, Parser.Program.SourceSpan span)
-    {
-        if (span.File == document.FileName)
-        {
-            return new Location { Uri = uri, Range = document.Positions.ToRange(span.Start, span.End) };
-        }
-
-        // Another source file. A standard-library module is named by its import path instead ("nanyx/text.nyx"),
-        // and is opened from the copy of its source on disk.
-        var path = Path.IsPathRooted(span.File) ? span.File : _standardLibrary.TryGetPath(span.File);
-        if (path is null)
-        {
-            return null;
-        }
-
-        // The declaration is a name, so it is on one line, and its range follows from where it starts.
-        return new Location
-        {
-            Uri = DocumentUri.FromFileSystemPath(path),
-            Range = new Range(span.StartLine, span.StartColumn, span.StartLine, span.StartColumn + span.End - span.Start)
-        };
     }
 
     protected override DefinitionRegistrationOptions CreateRegistrationOptions(

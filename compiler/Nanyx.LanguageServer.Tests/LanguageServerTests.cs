@@ -405,6 +405,34 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Server_advertises_references()
+    {
+        Assert.NotNull(_client.ServerSettings.Capabilities.ReferencesProvider);
+    }
+
+    [Fact]
+    public async Task References_are_the_names_that_refer_to_a_declaration_and_the_declaration_when_asked()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-5");
+
+        Open(uri, "def twice = { n -> n * 2 }\ndef four = twice(2)\ndef eight = twice(four)\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var calls = new[] { new Range(1, 11, 1, 16), new Range(2, 12, 2, 17) };
+        // From a use, without the declaration.
+        Assert.Equal(calls, (await ReferencesAt(uri, 2, 13, includeDeclaration: false)).Select(location => location.Range));
+        // From the declaration, with it, which comes first.
+        Assert.Equal(
+            calls.Prepend(new Range(0, 4, 0, 9)),
+            (await ReferencesAt(uri, 0, 5, includeDeclaration: true)).Select(location => location.Range));
+        Assert.All(await ReferencesAt(uri, 0, 5, includeDeclaration: true), location => Assert.Equal(uri, location.Uri));
+        // A parameter.
+        Assert.Equal(
+            [new Range(0, 19, 0, 20)],
+            (await ReferencesAt(uri, 0, 14, includeDeclaration: false)).Select(location => location.Range));
+    }
+
+    [Fact]
     public async Task Definition_of_a_qualified_import_is_in_the_imported_file()
     {
         var directory = Directory.CreateTempSubdirectory("nanyx-definition-");
@@ -870,6 +898,16 @@ public sealed class LanguageServerTests : IAsyncLifetime
         (await _client.TextDocument.RequestDefinition(
             new DefinitionParams { TextDocument = new TextDocumentIdentifier(uri), Position = new Position(line, character) },
             _cancellation.Token))?.ToList() ?? [];
+
+    private async Task<List<Location>> ReferencesAt(DocumentUri uri, int line, int character, bool includeDeclaration) =>
+        (await _client.TextDocument.RequestReferences(
+            new ReferenceParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(line, character),
+                Context = new ReferenceContext { IncludeDeclaration = includeDeclaration }
+            },
+            _cancellation.Token)).ToList();
 
     private async Task<Location?> SingleDefinitionAt(DocumentUri uri, int line, int character) =>
         Assert.Single(await DefinitionsAt(uri, line, character)).Location;

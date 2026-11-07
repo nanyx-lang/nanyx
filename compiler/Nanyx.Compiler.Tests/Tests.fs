@@ -2452,6 +2452,39 @@ let ``Context members of an imported context are declared in its module`` () =
         Some (TypeDefinition, "nanyx/console.nyx", offsetOf consoleSource "Console =" 0 0),
         definitionOf (Compiler.compile source) (offsetOf source "[Console]" 0 2))
 
+/// The text of each name in `source` that refers to what the name at `offset` declares or refers to, with where
+/// it starts.
+let private referencesAt (source: string) (offset: int) =
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let symbol = (Definition.symbolAt "" result offset).Value
+    Definition.referencesTo result symbol |> List.map (fun span -> source.Substring(span.Start, span.End - span.Start), span.Start)
+
+[<Fact>]
+let ``References are every name that refers to a declaration, in order`` () =
+    let source =
+        "type Point = (x: int, y: int)\n" +
+        "def origin: Point = (x = 0, y = 0)\n" +
+        "def shift = { p, d -> (x = p.x + d, y = p.y + d) }\n" +
+        "def twice = shift(shift(origin, 1), 1)\n" +
+        "def piped = origin \\shift(2)\n"
+    let at text occurrence = text, offsetOf source text occurrence 0
+    // A top-level def, from its declaration or from a use: its calls by name, and a pipe's target.
+    let shift = [ at "shift" 1; at "shift" 2; at "shift" 3 ]
+    Assert.Equal<(string * int) list>(shift, referencesAt source (offsetOf source "def shift" 0 4))
+    Assert.Equal<(string * int) list>(shift, referencesAt source (offsetOf source "\\shift" 0 1))
+    Assert.Equal<(string * int) list>([ at "origin" 1; at "origin" 2 ], referencesAt source (offsetOf source "def origin" 0 4))
+    // A parameter, and a type.
+    Assert.Equal<(string * int) list>([ "d", offsetOf source "+ d" 0 2; "d", offsetOf source "+ d" 1 2 ], referencesAt source (offsetOf source "p, d" 0 3))
+    Assert.Equal<(string * int) list>([ at "Point" 1 ], referencesAt source (offsetOf source "type Point" 0 5))
+
+[<Fact>]
+let ``References to an import are the alias its names are written with`` () =
+    let source = "import nanyx/text as t\ndef a = t.String.uppercase(\"x\")\ndef b = t.String.uppercase(\"y\")\n"
+    Assert.Equal<(string * int) list>(
+        [ "t", offsetOf source "t.String" 0 0; "t", offsetOf source "t.String" 1 0 ],
+        referencesAt source (offsetOf source "as t" 0 3))
+
 // Names in scope: what completion offers at a position.
 
 /// The names in scope at `offset` in `result`, as each name's kind and the file it is declared in.
