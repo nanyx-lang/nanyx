@@ -70,7 +70,7 @@ d.process(...) -- uses the alias `d` for dataProcessing
 
 A plain import like `userManagement` above lifts every exported member of that module directly into scope, unqualified. This is deliberate, and pairs with private-by-default module members ([Exports](#exports)): a module only exports what it explicitly marks with `export`, so the exporting module — not the importer — controls what enters its public API. Because of that, it's safe for a plain import to be open by default; qualification via an alias, and selective imports, remain available whenever you want to be more explicit.
 
-Note that most standard library functions are [attached definitions](../advanced/attached-definitions) such as `List.map` or `String.split`, which are resolved by the type of their receiver (`xs \map f`, `xs.map(f)`) rather than imported as bare names. This is why importing several standard library modules at once rarely produces ambiguous names.
+Note that most standard library functions are [attached definitions](../advanced/attached-definitions) such as `List.map` or `String.split`, which are resolved by the type of the value piped into them (`xs \map(f)`) rather than imported as bare names. This is why importing several standard library modules at once rarely produces ambiguous names.
 
 ## Importing modules by file path
 
