@@ -375,14 +375,35 @@ type ParseState =
       ModuleBlocks: (ModuleName * SourceSpan) list
       /// The furthest workflow keyword applied to a value, where it is and what to say about it. It is a cell
       /// shared by every copy of the state, so backtracking does not forget it (see `workflowKeywordApplication`).
-      WorkflowKeyword: (Position * string) option ref }
+      WorkflowKeyword: (Position * string) option ref
+      /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
+      /// line break), most recent first. For the formatter, which puts them back: see `parseModuleWithTrivia`.
+      Comments: (int * int) list
+      /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
+      /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
+      StringTexts: (int * int) list }
 
 module ParseState =
-    let empty () = { Declared = Map.empty; PendingNames = []; LambdaDepth = 0; ModuleBlocks = []; WorkflowKeyword = ref None }
+    let empty () =
+        { Declared = Map.empty
+          PendingNames = []
+          LambdaDepth = 0
+          ModuleBlocks = []
+          WorkflowKeyword = ref None
+          Comments = []
+          StringTexts = [] }
+
+/// Runs `p`, noting the offsets of the text it consumed with `note`.
+let private noting (note: int * int -> ParseState -> ParseState) (p: Parser<'a, ParseState>) : Parser<'a, ParseState> =
+    pipe3 getPosition p getPosition (fun start value finish -> value, (int start.Index, int finish.Index))
+    >>= fun (value, range) -> updateUserState (note range) >>% value
 
 // Helper: whitespace and comment handling
-let comment () = pstring "--" >>. skipRestOfLine true
-let inlineCommentNoNl () = pstring "--" >>. skipRestOfLine false
+let private lineComment () =
+    noting (fun range state -> { state with Comments = range :: state.Comments }) (pstring "--" >>. skipRestOfLine false)
+
+let comment () = lineComment () >>. optional skipNewline
+let inlineCommentNoNl () = lineComment ()
 let ws: Parser<unit, ParseState> = skipMany (skipMany1 spaces1 <|> comment ())
 let wsAll: Parser<unit, ParseState> = ws
 let wsInline = skipMany (skipAnyOf " \t")
@@ -554,13 +575,17 @@ let private blockSpanned (statements: Parser<Statement list, ParseState>) : Pars
         Expression.at span (Block stmts)
 
 
+/// Runs `p`, which parses text inside a string literal, and notes where that text is.
+let private stringText (p: Parser<string, ParseState>) =
+    noting (fun range state -> { state with StringTexts = range :: state.StringTexts }) p
+
 // Parser for literals
 let stringLiteralNoWs: Parser<Literal, ParseState> =
     let doubleQuoted =
-        between (pstring "\"") (pstring "\"") (manyChars (noneOf "\""))
+        between (pstring "\"") (pstring "\"") (stringText (manyChars (noneOf "\"")))
         |>> StringLit
     let singleQuoted =
-        between (pstring "'") (pstring "'") (manyChars (noneOf "'"))
+        between (pstring "'") (pstring "'") (stringText (manyChars (noneOf "'")))
         |>> StringLit
     attempt doubleQuoted <|> singleQuoted
     <?> "string literal"
@@ -674,7 +699,7 @@ let pattern, patternRef = createParserForwardedToRef<Pattern, ParseState>()
 
 // Interpolated double-quoted strings with {expr} holes
 let interpolatedStringExprNoWs: Parser<Expression, ParseState> =
-    let textPart = many1Chars (noneOf "\"{") |>> StringText
+    let textPart = stringText (many1Chars (noneOf "\"{")) |>> StringText
     let holePart =
         between (pchar '{' .>> ws) (ws >>. pchar '}') expression
         |>> StringExpr
@@ -2295,18 +2320,43 @@ let private expandMidFileModules (items: TopLevelItem list) : TopLevelItem list 
 /// Why a module could not be parsed, and where.
 type ParseError = { Message: string; Span: SourceSpan }
 
-/// Parses the source of the file at `filePath`, as `parseModuleFile` does, together with the names its nodes
-/// declare and the text of each `module name =` block in it.
-let parseModuleFileWithNames (filePath: string) (input: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, ParseError> =
-    let normalized =
-        input.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
+/// What the parser skips that the formatter has to put back, and where it is. Neither span includes the final line
+/// break.
+type Trivia =
+    /// A `--` comment, its text starting with `--`, and spanning to the end of its line. `trailing` when code comes
+    /// before it on its line.
+    | LineComment of text: string * trailing: bool * span: SourceSpan
+    /// A run of this many consecutive blank lines (nothing but spaces and tabs), outside string literals, spanning
+    /// from the start of the first to the end of the last.
+    | BlankLines of count: int * span: SourceSpan
+
+    member this.Span =
+        match this with
+        | LineComment(_, _, span)
+        | BlankLines(_, span) -> span
+
+/// A module as written, for tools that print it back, such as the formatter.
+type SourceModule =
+    { /// The top-level items as parsed: unlike `parseModuleFile`, `module name =` blocks are kept as they are, not
+      /// expanded into qualified definitions.
+      Items: TopLevelItem list
+      /// The comments and runs of blank lines, in source order.
+      Trivia: Trivia list
+      /// The source the spans index into: line endings normalised to `\n`, trailing whitespace removed.
+      Source: string }
+
+let private normalizeSource (input: string) =
+    input.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
+
+/// Parses normalised source, returning the top-level items as written and the final state.
+let private runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
     let initialState = ParseState.empty ()
     // A parse fails at a point: its span is the character there, or nothing at the end of the input.
     let errorAt (position: Position) message =
         { Message = message
           Span = spanOf position (min normalized.Length (int position.Index + 1)) }
     match runParserOnString moduleParser initialState filePath normalized with
-    | ParserResult.Success(result, state, _) -> Result.Ok (expandMidFileModules result, state.Declared, state.ModuleBlocks)
+    | ParserResult.Success(result, state, _) -> Result.Ok (result, state)
     | ParserResult.Failure(errorMsg, error, _) ->
         // The failure of a workflow keyword is backtracked over, and FParsec reports some enclosing construct
         // instead (often the whole def), so it is reported where it happened.
@@ -2317,6 +2367,70 @@ let parseModuleFileWithNames (filePath: string) (input: string) : Result<Module 
             let focused = ParserError(position, null, ErrorMessageList(ErrorMessage.Message message))
             Result.Error (errorAt position (focused.ToString stream))
         | None -> Result.Error (errorAt error.Position errorMsg)
+
+/// Parses the source of the file at `filePath`, as `parseModuleFile` does, together with the names its nodes
+/// declare and the text of each `module name =` block in it.
+let parseModuleFileWithNames (filePath: string) (input: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, ParseError> =
+    runModuleParser filePath (normalizeSource input)
+    |> Result.map (fun (items, state) -> expandMidFileModules items, state.Declared, state.ModuleBlocks)
+
+/// The comments and runs of blank lines in `source`, in source order, given the comments the parser skipped and
+/// where the text of its string literals is (each as start and end offsets).
+let private collectTrivia (filePath: string) (source: string) (comments: (int * int) list) (stringTexts: (int * int) list) : Trivia list =
+    // The offset each line starts at.
+    let lineStarts =
+        [| yield 0
+           for i in 0 .. source.Length - 1 do
+               if source[i] = '\n' then yield i + 1 |]
+    let lineEnd line =
+        if line + 1 < lineStarts.Length then lineStarts[line + 1] - 1 else source.Length
+    let spanAt line start finish =
+        { File = filePath; Start = start; End = finish; StartLine = line; StartColumn = start - lineStarts[line] }
+    let lineOf offset =
+        match Array.BinarySearch(lineStarts, offset) with
+        | found when found >= 0 -> found
+        | notFound -> ~~~notFound - 1
+    let isBlank line =
+        source.AsSpan(lineStarts[line], lineEnd line - lineStarts[line]).Trim(" \t".AsSpan()).IsEmpty
+    // A line whose preceding line break is inside a string literal is part of that string.
+    let inString line =
+        line > 0 && stringTexts |> List.exists (fun (start, finish) -> start <= lineStarts[line] - 1 && lineStarts[line] - 1 < finish)
+
+    let commentTrivia =
+        comments
+        // FParsec restores the state when it backtracks, so a comment is noted once; this is only a safety net.
+        |> List.distinct
+        |> List.map (fun (start, finish) ->
+            let line = lineOf start
+            let before = source.AsSpan(lineStarts[line], start - lineStarts[line])
+            LineComment(source.Substring(start, finish - start), not (before.Trim(" \t".AsSpan()).IsEmpty), spanAt line start finish))
+
+    let blankTrivia =
+        [ if source.Length > 0 then yield! [ 0 .. lineStarts.Length - 1 ] ]
+        |> List.filter (fun line -> isBlank line && not (inString line))
+        // Consecutive blank lines make one run: each run is a list of its lines, last first.
+        |> List.fold
+            (fun runs line ->
+                match runs with
+                | (previous :: _ as run) :: rest when previous = line - 1 -> (line :: run) :: rest
+                | _ -> [ line ] :: runs)
+            []
+        |> List.map (fun run ->
+            let first = List.last run
+            let last = List.head run
+            BlankLines(run.Length, spanAt first lineStarts[first] (lineEnd last)))
+
+    commentTrivia @ blankTrivia |> List.sortBy (fun (trivia: Trivia) -> trivia.Span.Start)
+
+/// Parses the source of the file at `filePath` as it is written, keeping its comments and blank lines, for tools
+/// that print it back (the formatter). The items are not rewritten: see `SourceModule`.
+let parseModuleWithTrivia (filePath: string) (input: string) : Result<SourceModule, ParseError> =
+    let normalized = normalizeSource input
+    runModuleParser filePath normalized
+    |> Result.map (fun (items, state) ->
+        { Items = items
+          Trivia = collectTrivia filePath normalized state.Comments state.StringTexts
+          Source = normalized })
 
 /// Parses the source of the file at `filePath`, which is what the spans of the module's nodes refer to. Line
 /// endings are normalised to `\n` first, so span offsets are into the normalised source (lines and columns are

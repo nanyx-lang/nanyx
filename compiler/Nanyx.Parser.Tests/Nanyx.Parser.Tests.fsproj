@@ -34,6 +34,7 @@
     <Compile Include="Features\Tags\TagTests.fs" />
     <Compile Include="Features\Tuples\TupleTests.fs" />
     <Compile Include="Features\Types\TypeTests.fs" />
+    <Compile Include="Features\Trivia\TriviaTests.fs" />
     <Compile Include="Features\Spans\SpanTests.fs" />
   </ItemGroup>
 
