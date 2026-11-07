@@ -229,6 +229,9 @@ What it does today:
 - `textDocument/references` lists the names in the document that refer to the same declaration, and the
   declaration when asked (`Definition.referencesTo`). Only the document's own compile is searched, not the
   files that import it.
+- `textDocument/documentSymbol` gives the outline: top-level defs, types, contexts and `module name =`
+  blocks, with their local defs, fields and members nested (`NyxCompiler.Outline`). It needs only a parse,
+  so a type error does not empty it; while the text does not parse, the last good text's outline is shown.
 - `textDocument/codeLens` shows the inferred type above each top-level def that does not write its own
   (`α -> α` above `def id = { x -> x }`); a destructuring def's lenses say which name each is for
   (`p: int`). `textDocument/inlayHint` shows `: type` after each unannotated local def, lambda parameter
