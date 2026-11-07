@@ -98,10 +98,12 @@ public sealed class DocumentStore
 {
     private readonly ConcurrentDictionary<DocumentUri, OpenDocument> _documents = new();
     private readonly ILogger<DocumentStore> _logger;
+    private readonly AnalyzerOptions _analyzers;
 
-    public DocumentStore(ILogger<DocumentStore> logger)
+    public DocumentStore(ILogger<DocumentStore> logger, ServerSettings settings)
     {
         _logger = logger;
+        _analyzers = settings.AnalyzerOptions;
     }
 
     /// <summary>Compiles the full text of a document after it was opened or changed, and records both.</summary>
@@ -130,7 +132,7 @@ public sealed class DocumentStore
         var path = uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : null;
         try
         {
-            var result = path is null ? Compiler.compile(text) : Compiler.compileSource(path, text);
+            var result = path is null ? Compiler.compileWith(_analyzers, text) : Compiler.compileSourceWith(_analyzers, path, text);
             return new OpenDocument(text, path ?? string.Empty, result, null);
         }
         catch (Exception ex)

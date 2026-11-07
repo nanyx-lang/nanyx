@@ -1000,7 +1000,10 @@ module Compiler =
         | Result.Ok (ast, _, _) -> Ok ast
         | Result.Error err -> Error [ syntaxError err ]
 
-    let private compileWith (origin: ModuleOrigin) (source: string) : CompileResult =
+    /// Checks the module from `origin`, then runs the analyzers `options` names over it if it type-checked. Only
+    /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
+    /// diagnostics are not repeated in every module that imports it, and the standard library never is.
+    let private compileFrom (options: AnalyzerOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
         match typecheckModule (CheckedModules()) origin source Set.empty with
         | Result.Error (phase, diagnostics) ->
             { Phase = phase
@@ -1016,28 +1019,43 @@ module Compiler =
                     ExprTypes = resolve checkedModule.RawExprTypes
                     CalleeTypes = resolve checkedModule.RawCalleeTypes
                     SymbolTypes = resolve checkedModule.RawSymbolTypes }
+            // A rule configured as an error fails the compile as a compiler error does: callers that stop at
+            // errors (`nanyx run`, say) look at the diagnostics, and the typed module is still there for the
+            // editor's features.
             { Phase = Typed
-              Diagnostics = []
+              Diagnostics = Analyzers.run options (SemanticModel.ofTyped checkedModule.Syntax typed)
               Typed = Some typed
               Syntax = Some checkedModule.Syntax }
 
-    /// Compiles the file at `filePath` up to the typed module, resolving its imports (standard-library modules
-    /// from the embedded library, everything else relative to the file).
-    let compileFile (filePath: string) : CompileResult =
+    /// `compileFile` with the analyzers and severities `options` gives.
+    let compileFileWith (options: AnalyzerOptions) (filePath: string) : CompileResult =
         if not (File.Exists filePath) then
             { Phase = Parsed
               Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"File not found: {filePath}" ]
               Typed = None
               Syntax = None }
         else
-            compileWith (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)
+            compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)
+
+    /// Compiles the file at `filePath` up to the typed module, resolving its imports (standard-library modules
+    /// from the embedded library, everything else relative to the file), and runs every analyzer over it.
+    let compileFile (filePath: string) : CompileResult =
+        compileFileWith Analyzers.defaultOptions filePath
+
+    /// `compileSource` with the analyzers and severities `options` gives.
+    let compileSourceWith (options: AnalyzerOptions) (filePath: string) (source: string) : CompileResult =
+        compileFrom options (SourceFile (Path.GetFullPath filePath)) source
 
     /// Compiles `source` as if it were the contents of the file at `filePath` (which need not exist, or may hold
     /// older text: an editor's unsaved buffer, say). Imports are resolved exactly as `compileFile` resolves them.
     let compileSource (filePath: string) (source: string) : CompileResult =
-        compileWith (SourceFile (Path.GetFullPath filePath)) source
+        compileSourceWith Analyzers.defaultOptions filePath source
 
-    /// Compiles source given directly, up to the typed module. Standard-library imports are resolved; imports by
-    /// path cannot be, since there is no file for them to be relative to.
+    /// `compile` with the analyzers and severities `options` gives.
+    let compileWith (options: AnalyzerOptions) (source: string) : CompileResult =
+        compileFrom options InMemory source
+
+    /// Compiles source given directly, up to the typed module, and runs every analyzer over it. Standard-library
+    /// imports are resolved; imports by path cannot be, since there is no file for them to be relative to.
     let compile (source: string) : CompileResult =
-        compileWith InMemory source
+        compileWith Analyzers.defaultOptions source

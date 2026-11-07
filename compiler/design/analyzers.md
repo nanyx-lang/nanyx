@@ -193,6 +193,19 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 
 ### 4. The analyzer host (internal)
 
+> **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Analyzers.fs`), with the official `default`
+> analyzer registered and no rules yet. What it settled:
+>
+> - Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its
+>   diagnostics are not repeated in every importer (the language server would show them at the top of each one).
+> - A failing analyzer is reported under a rule every analyzer has, `<analyzer>/analyzerFailed`, a warning by
+>   default, so it can be configured or turned off like any rule. Throwing, or reporting a rule the analyzer does
+>   not declare, both count as failing, and the analyzer's other reports for the module are left out.
+> - The `SemanticModel` has no `Lowered` table yet ([#99](https://github.com/nanyx-lang/nanyx/issues/99)).
+> - The configuration is `AnalyzerOptions` (the analyzers to run, and severities by code), passed to
+>   `Compiler.compileWith` and its file and source variants, and to the language server in its settings. Neither
+>   `nanyx` nor the editor has a way to set it yet: that waits for the package manifest.
+
 Before any public contract, analyzers are F# values compiled into the compiler:
 
 ```fsharp

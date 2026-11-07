@@ -243,7 +243,9 @@ internal static class CliCommands
 
         Console.WriteLine("Inferred types:");
         PrintTypes(result.Typed.Value.Types);
-        return 0;
+
+        // The module type-checked, but an analyzer rule configured as an error fails the check all the same.
+        return HasErrors(result.Diagnostics) ? 1 : 0;
     }
 
     private static int RunWasm(CompileResult result, string inputFile, string? outputPath)
