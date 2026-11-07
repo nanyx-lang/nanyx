@@ -925,7 +925,40 @@ let format (options: Options) (parsed: SourceModule) : string =
             match parameters with
             | [] -> Doc.empty
             | _ -> cat [ text "("; commaJoin (List.map parameter parameters); text ")" ]
-        cat [ head; parametersDoc; text " = "; (if isPrivate then text "private " else Doc.empty); typeExpr body ]
+        cat [ head; parametersDoc; text " = "; (if isPrivate then text "private " else Doc.empty); typeBody body ]
+
+    /// The type a type or context definition stands for. A record of more than three fields, or with a comment among
+    /// them, has one field per line, named fields separated by newlines and positional ones followed by commas (the
+    /// parser takes nothing else after them):
+    ///
+    ///   type Product = (
+    ///     sku: string
+    ///     name: string
+    ///     price: int
+    ///     stock: int
+    ///   )
+    and typeBody (body: TypeExpr) : Doc =
+        match body.Kind with
+        | TypeRecord fields when fields.Length > 3 || (valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
+            let isPositional field =
+                match field with
+                | TypeField(n, false, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
+                | _ -> false
+            // A field's own text is not kept; its type's span stands in for where it is.
+            let spanOf field =
+                match field with
+                | TypeField(_, _, _, Some t, defaultValue) ->
+                    let finish = match defaultValue with Some value when valid value.Span -> value.Span.End | _ -> t.Span.End
+                    t.Span.Start, finish
+                | TypeMember(_, Some t) -> t.Span.Start, t.Span.End
+                | _ -> -1, -1
+            let children =
+                fields
+                |> List.map (fun field ->
+                    let start, finish = spanOf field
+                    start, finish, fun () -> cat [ recordTypeField field; (if isPositional field then text "," else Doc.empty) ])
+            cat [ text "("; nest (cat [ hard; sequence false body.Span.Start body.Span.End children ]); hard; text ")" ]
+        | _ -> typeExpr body
 
     and importDoc (start: int) (finish: int) (items: ImportItem list) : Doc =
         let item (i: ImportItem) =
