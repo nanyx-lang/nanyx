@@ -1169,6 +1169,7 @@ let rec private tryExprTy (env: TranspileEnv) (expr: Expression) : Ty option =
             | _ -> tryRecordFieldTys ty
         tryExprTy env inner |> Option.bind fieldTys |> Option.bind (Map.tryFind fieldName)
     | FunctionCall("__with", _, baseExpr :: _) -> tryExprTy env baseExpr  // a record update has the record's type
+    | FunctionCall("dbg", _, [ value ]) -> tryExprTy env value  // dbg returns its argument
     | FunctionCall(name, _, _)
     | Pipe(_, name, _, _) ->
         env.ValueTys
@@ -1329,9 +1330,21 @@ let private exprChildren (expr: Expression) : Expression list =
 
 /// Whether lowering `expr` needs the interpolation scratch locals (see `interpolationLocalNames`).
 /// Used for function bodies and for the script start function alike, so both declare the same locals.
+/// `dbg` of a value that may be a tag prints it as `"{value}"` does (see the `dbg` case of
+/// `transpileExpression`). Its type is not known here, so any `dbg` of a non-literal counts.
+let private isDbgOfValue (expr: Expression) =
+    match expr.Kind with
+    | FunctionCall("dbg", _, args) ->
+        match flattenCallArgs args with
+        | [Kind (LiteralExpr _ | TagExpr _ | InterpolatedString _)] -> false
+        | [_] -> true
+        | _ -> false
+    | _ -> false
+
 let rec private containsInterpolation (expr: Expression) : bool =
     match expr.Kind with
     | InterpolatedString _ -> true
+    | _ when isDbgOfValue expr -> true
     | _ -> exprChildren expr |> List.exists containsInterpolation
 
 /// The most `{...}` holes any single interpolated string in `expr` has: each hole is evaluated once
@@ -1340,6 +1353,7 @@ let rec private maxInterpolationHoles (expr: Expression) : int =
     let own =
         match expr.Kind with
         | InterpolatedString parts -> parts |> List.filter (function StringExpr _ -> true | _ -> false) |> List.length
+        | _ when isDbgOfValue expr -> 1
         | _ -> 0
     exprChildren expr |> List.fold (fun acc child -> max acc (maxInterpolationHoles child)) own
 
@@ -2661,6 +2675,11 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
         | _ when tryGetExprTypeName env argExpr = Some "float" ->
             env.UsedHelpers.Add Helpers.floatToString |> ignore
             $"{argCode}\n    local.tee ${dbgLocal}\n    call ${Helpers.floatToString}\n    call $dbg_str\n    local.get ${dbgLocal}"
+        | _ when holeTy argExpr |> Option.bind tryTagMembers |> Option.isSome ->
+            // A tag value prints as `"{value}"` would; the hole local keeps the value to return.
+            env.UsedHelpers.Add Helpers.alloc |> ignore
+            let rendered = transpileExpression env { argExpr with Kind = InterpolatedString [ StringExpr argExpr ] }
+            $"{rendered}\n    call $dbg_str\n    local.get ${interpolationHoleLocalName 0}"
         | _ -> $"{argCode}\n    local.tee ${dbgLocal}\n    call $dbg\n    local.get ${dbgLocal}"
     | FunctionCall(name, _, args) ->
         // Check if this is a type constructor call (e.g., Person(...))

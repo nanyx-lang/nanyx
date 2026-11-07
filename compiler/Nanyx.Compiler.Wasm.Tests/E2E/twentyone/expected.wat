@@ -180,7 +180,7 @@
   )
   (export "message" (func $message))
 
-  (func $main (result i32) (local $msg i32) (local $__dbg_tmp i32)
+  (func $main (result i32) (local $msg i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0 i32) (local $__dbg_tmp i32)
     call $message
     local.set $msg
     local.get $msg
