@@ -8,11 +8,16 @@ let private contains (offset: int) (span: SourceSpan) =
     not (SourceSpan.isNone span) && span.Start <= offset && offset < span.End
 
 /// The span of the name a referring expression is written with: a call's or pipe's function name (not its
-/// arguments), or all of an identifier or qualified name.
+/// arguments), a qualified context member's name after the context and its dot, or all of an identifier or
+/// qualified name.
 let private nameSpan (expr: Expression) =
     match expr.Kind with
     | FunctionCall(_, nameSpan, _)
     | Pipe(_, _, nameSpan, _) -> nameSpan
+    | ContextMemberAccess(context, memberName)
+    | ContextMemberCall(context, memberName, _) when not (SourceSpan.isNone context.Span) ->
+        let start = context.Span.End + 1
+        Some { expr.Span with Start = start; End = start + memberName.Length; StartColumn = expr.Span.StartColumn + start - expr.Span.Start }
     | _ -> Some expr.Span
 
 /// The type expressions directly inside `typeExpr`.

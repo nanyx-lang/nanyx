@@ -394,6 +394,17 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Definition_of_a_context_member_is_its_declaration_in_the_context()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-4");
+
+        Open(uri, "context Logger = (log: string -> ())\ndef greet: [Logger] string -> () = { name -> log(name) }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(new Location { Uri = uri, Range = new Range(0, 18, 0, 21) }, await SingleDefinitionAt(uri, 1, 46));
+    }
+
+    [Fact]
     public async Task Definition_of_a_qualified_import_is_in_the_imported_file()
     {
         var directory = Directory.CreateTempSubdirectory("nanyx-definition-");

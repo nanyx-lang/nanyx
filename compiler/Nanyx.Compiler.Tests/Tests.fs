@@ -2422,6 +2422,36 @@ let ``Type names refer to imported types in their own file`` () =
         let preludeSource = (StandardLibrary.tryLoadSource "prelude").Value.Replace("\r\n", "\n")
         Assert.Equal(Some (TypeDefinition, "nanyx/prelude.nyx", offsetOf preludeSource "Result(a, e) =" 0 0), at "Result("))
 
+[<Fact>]
+let ``Context members are declared in the context and referred to where it is required`` () =
+    let source =
+        "context Store(a) = (get: () -> a, put: a -> ())\n" +
+        "def save: [Store(int)] int -> () = { n -> put(n) }\n" +
+        "def peek = Store(int).get\n"
+    let result = Compiler.compile source
+    let put = Some (ContextMember, "", offsetOf source "put:" 0 0)
+    // A member called in a def that requires the context.
+    Assert.Equal(put, definitionOf result (offsetOf source "put(n)" 0 1))
+    // A member's own name is its declaration.
+    Assert.Equal(put, definitionOf result (offsetOf source "put:" 0 1))
+    // A qualified member by its name, and the context it is qualified by.
+    Assert.Equal(Some (ContextMember, "", offsetOf source "get:" 0 0), definitionOf result (offsetOf source "Store(int).get" 0 12))
+    let store = Some (TypeDefinition, "", offsetOf source "Store(a)" 0 0)
+    Assert.Equal(store, definitionOf result (offsetOf source "Store(int).get" 0 1))
+    // The context a signature requires.
+    Assert.Equal(store, definitionOf result (offsetOf source "[Store" 0 2))
+
+[<Fact>]
+let ``Context members of an imported context are declared in its module`` () =
+    let source = "import nanyx/console\ndef hello: [Console] () -> () = { println(\"hi\") }\n"
+    let consoleSource = (StandardLibrary.tryLoadSource "console").Value.Replace("\r\n", "\n")
+    Assert.Equal(
+        Some (ContextMember, "nanyx/console.nyx", offsetOf consoleSource "println:" 0 0),
+        definitionOf (Compiler.compile source) (offsetOf source "println(" 0 2))
+    Assert.Equal(
+        Some (TypeDefinition, "nanyx/console.nyx", offsetOf consoleSource "Console =" 0 0),
+        definitionOf (Compiler.compile source) (offsetOf source "[Console]" 0 2))
+
 // Names in scope: what completion offers at a position.
 
 /// The names in scope at `offset` in `result`, as each name's kind and the file it is declared in.

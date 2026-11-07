@@ -181,7 +181,9 @@ How it is produced:
   `SymbolId` it found against the node. Imports become `ImportedModule` symbols, and a qualified access such as
   `m.sqrt` records a reference to both the import and the imported definition. Type definitions and contexts are
   `TypeDefinition` symbols (built as that, rather than `TypeName`, which is a case of `TypeExprKind`), and a type
-  expression that names one records a reference by its own node.
+  expression that names one records a reference by its own node. A context's members are `ContextMember` symbols,
+  declared at their names in the context's record type (the parser records a record type's field names by its
+  node), and carried with the context's `TypeDefInfo` so an imported context's members keep their module's symbols.
 - **Desugaring keeps provenance.** Every node `desugar` and `applyAttributes` synthesize gets the span (and
   originating `NodeId`) of the syntax it replaced, and `Lowered` records the mapping. Analyzers walk `Syntax`; the
   type of a workflow bind is found through `Lowered`. This is much cheaper than teaching inference to check

@@ -99,7 +99,8 @@ let private declareSymbol (declarer: Declarer) (holder: NodeId) (name: string) (
                 | DefValue
                 | TypeDefBody -> List.tryHead names
                 | LambdaParameters
-                | ArmBody -> names |> List.tryFind (fun (declaredName, _) -> declaredName = name))
+                | ArmBody
+                | RecordTypeFields -> names |> List.tryFind (fun (declaredName, _) -> declaredName = name))
         match declared with
         | None -> None, state
         | Some (_, span) ->
@@ -131,6 +132,21 @@ let private recordTypeReference (typeExpr: TypeExpr) (info: TypeDefInfo) (state:
     match info.Symbol with
     | Some symbol -> { state with References = state.References |> Map.add typeExpr.Id symbol }
     | None -> state
+
+/// Records that `expr`, a qualified `Context.member`, names that member of the context `ctxType` names, and that
+/// `ctxType` names the context.
+let private recordContextMemberReference (expr: Expression) (ctxType: TypeExpr) (memberName: Identifier) (state: InferState) =
+    match ctxType.Kind with
+    | TypeName name
+    | TypeApply(name, _) ->
+        match state.TypeDefs |> Map.tryFind name with
+        | Some info ->
+            let state = recordTypeReference ctxType info state
+            match info.Members |> Map.tryFind memberName with
+            | Some symbol -> { state with References = state.References |> Map.add expr.Id symbol }
+            | None -> state
+        | None -> state
+    | _ -> state
 
 /// Records that `expr` names what `scheme` is bound for, and the import it came through if it was imported.
 let private recordReference (expr: Expression) (scheme: TypeScheme) (state: InferState) =
@@ -485,7 +501,8 @@ let private extendEnvWithRecordFields (env: TypeEnv) (ty: Ty) =
         | _ -> env
     | _ -> env
 
-let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : (Identifier * Ty) list * InferState =
+/// The members of the context `ctxExpr` names, each with its type and its symbol, if the context declares one.
+let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : (Identifier * Ty * SymbolId option) list * InferState =
     match ctxExpr.Kind with
     | TypeRecord fields ->
         let mutable current = state
@@ -500,7 +517,7 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
                     | Some t -> typeExprToTy current t
                     | None -> freshVar current
                 current <- next
-                name, ty)
+                name, ty, None)
         members, current
     | TypeContext contexts ->
         let mutable current = state
@@ -513,19 +530,27 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
         members, current
     | TypeName name
     | TypeApply(name, _) ->
+        let infoOpt = state.TypeDefs |> Map.tryFind name
         let state =
-            match state.TypeDefs |> Map.tryFind name with
+            match infoOpt with
             | Some info -> recordTypeReference ctxExpr info state
             | None -> state
+        // Each member's symbol is the one the context's definition declared, in whichever module that is.
+        let withSymbols (members: (Identifier * Ty * SymbolId option) list) =
+            match infoOpt with
+            | Some info -> members |> List.map (fun (memberName, ty, _) -> memberName, ty, info.Members |> Map.tryFind memberName)
+            | None -> members
         match state.ContextDefs |> Map.tryFind name with
-        | Some ctxDef -> collectContextMembers state ctxDef
+        | Some ctxDef ->
+            let members, next = collectContextMembers state ctxDef
+            withSymbols members, next
         | None ->
             // Also check TypeDefs for non-context types used as contexts
-            match state.TypeDefs |> Map.tryFind name with
+            match infoOpt with
             | Some info ->
                 match Unifier.unalias info.Underlying with
                 | TyRecord fields ->
-                    fields |> Map.toList, state
+                    fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, ty, None) |> withSymbols, state
                 | _ -> [], state
             | None -> [], state
     | _ -> [], state
@@ -536,7 +561,7 @@ let private extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: 
     for ctx in contexts do
         let members, next = collectContextMembers current ctx
         current <- next
-        env' <- members |> List.fold (fun acc (name, ty) -> TypeEnv.extend name (TypeEnv.mono ty) acc) env'
+        env' <- members |> List.fold (fun acc (name, ty, symbol) -> TypeEnv.declare name symbol (TypeEnv.mono ty) acc) env'
     env', current
 
 let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Identifier list =
@@ -564,7 +589,7 @@ let private ensureContextAvailable (env: TypeEnv) (state: InferState) (name: Ide
         contexts
         |> List.collect (fun ctx ->
             let members, _ = collectContextMembers state ctx
-            members |> List.map fst)
+            members |> List.map (fun (memberName, _, _) -> memberName))
     let missing =
         requiredMembers
         |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone)
@@ -599,13 +624,31 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
         if name.StartsWith("$") && isPrivate then next.LocalPrivateNominals |> Set.add name else next.LocalPrivateNominals
     let nextContexts =
         if isContextDef modifiers then next.ContextDefs |> Map.add name body else next.ContextDefs
-    // A type is named in types, not written as a value, so it has no scope.
-    let symbol, next =
-        let symbol, declared = declareSymbol TypeDefBody body.Id name TypeDefinition (modifiers |> List.contains Export) None next
+    let isExport = modifiers |> List.contains Export
+    // A type is named in types, and a context's member is in scope only where the context is required, so neither
+    // has a scope of its own.
+    let declareUnscoped declarer holder symbolName kind state =
+        let symbol, declared = declareSymbol declarer holder symbolName kind isExport None state
         symbol, { declared with Scopes = symbol |> Option.map (fun id -> declared.Scopes |> Map.remove id) |> Option.defaultValue declared.Scopes }
+    let symbol, next = declareUnscoped TypeDefBody body.Id name TypeDefinition next
+    let mutable next = next
+    let members =
+        match body.Kind with
+        | TypeRecord fields when isContextDef modifiers ->
+            fields
+            |> List.choose (function
+                | TypeField(memberName, _, _, _, _) ->
+                    let memberSymbol, declared = declareUnscoped RecordTypeFields body.Id memberName ContextMember next
+                    next <- declared
+                    memberSymbol |> Option.map (fun id -> memberName, id)
+                | TypeMember _ -> None)
+            |> Map.ofList
+        | _ -> Map.empty
     { next with
         TypeVars = originalTypeVars
-        TypeDefs = next.TypeDefs |> Map.add name { Parameters = paramVars; Underlying = underlyingTy; IsPrivate = isPrivate; Symbol = symbol }
+        TypeDefs =
+            next.TypeDefs
+            |> Map.add name { Parameters = paramVars; Underlying = underlyingTy; IsPrivate = isPrivate; Symbol = symbol; Members = members }
         ContextDefs = nextContexts
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }
@@ -1734,12 +1777,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | ContextMemberAccess(ctxType, memberName) ->
         // TODO: Look up the context type and find the member's type
         // For now, return a fresh type variable
-        let ty, next = freshVar state
+        let ty, next = freshVar (recordContextMemberReference expr ctxType memberName state)
         Ok (mkTypedExpr expr ty None None None, next)
     | ContextMemberCall(ctxType, memberName, args) ->
         // TODO: Look up the context, find the member function type, check args
         // For now, infer args and return a fresh type variable
-        let mutable current = state
+        let mutable current = recordContextMemberReference expr ctxType memberName state
         let mutable errors: Diagnostic list = []
         for arg in args do
             match inferExpr env current arg with
