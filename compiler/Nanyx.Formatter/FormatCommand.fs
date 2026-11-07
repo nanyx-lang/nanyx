@@ -21,6 +21,9 @@ type Formatting =
     /// The formatted text would not say the same thing, or would lose a comment: a bug in the formatter, so the file
     /// is left alone.
     | NotSafe of string
+    /// The formatter's settings for it, in its `.nyxpack` manifest, are not valid: the message names the manifest
+    /// and what is wrong. No file under that manifest is formatted.
+    | BadSettings of string
 
 /// What happened to one file.
 type FileResult =
@@ -80,20 +83,24 @@ let findFiles (currentDirectory: string) (paths: string list) : Result<string li
 
 let private utf8Bom = [| 0xEFuy; 0xBBuy; 0xBFuy |]
 
-/// Formats each file, rewriting the ones that change in write mode (keeping a byte order mark if there was one), and
-/// leaving alone any that do not parse or that the formatter cannot format safely.
-let run (options: Formatter.Options) (mode: Mode) (files: string list) : (string * FileResult) list =
+/// Formats each file with the options `settings` gives for it (see `Settings.cached`), rewriting the ones that change
+/// in write mode (keeping a byte order mark if there was one), and leaving alone any whose settings are not valid, that
+/// do not parse, or that the formatter cannot format safely.
+let run (settings: string -> Result<Formatter.Options, string>) (mode: Mode) (files: string list) : (string * FileResult) list =
     files
     |> List.map (fun file ->
-        let bytes = File.ReadAllBytes file
-        let hasBom = bytes.Length >= 3 && bytes[0..2] = utf8Bom
-        let text = Encoding.UTF8.GetString(bytes, (if hasBom then 3 else 0), bytes.Length - (if hasBom then 3 else 0))
-        match formatText options file text with
-        | Formatted formatted when formatted = text -> file, Unchanged
-        | Formatted formatted ->
-            if mode = Write then File.WriteAllText(file, formatted, UTF8Encoding(hasBom))
-            file, Changed
-        | failure -> file, Failed failure)
+        match settings file with
+        | Result.Error message -> file, Failed(BadSettings message)
+        | Result.Ok options ->
+            let bytes = File.ReadAllBytes file
+            let hasBom = bytes.Length >= 3 && bytes[0..2] = utf8Bom
+            let text = Encoding.UTF8.GetString(bytes, (if hasBom then 3 else 0), bytes.Length - (if hasBom then 3 else 0))
+            match formatText options file text with
+            | Formatted formatted when formatted = text -> file, Unchanged
+            | Formatted formatted ->
+                if mode = Write then File.WriteAllText(file, formatted, UTF8Encoding(hasBom))
+                file, Changed
+            | failure -> file, Failed failure)
 
 /// 2 if any file could not be formatted, 1 in check mode if any file is not formatted, and 0 otherwise.
 let exitCode (mode: Mode) (results: (string * FileResult) list) =

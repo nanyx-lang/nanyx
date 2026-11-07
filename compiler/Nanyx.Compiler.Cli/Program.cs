@@ -100,8 +100,10 @@ internal static class CliCommands
         }
 
         var mode = check ? Nanyx.Formatter.FormatCommand.Mode.Check : Nanyx.Formatter.FormatCommand.Mode.Write;
-        var results = Nanyx.Formatter.FormatCommand.run(Nanyx.Formatter.Formatter.OptionsModule.defaults, mode, found.ResultValue);
+        var results = Nanyx.Formatter.FormatCommand.run(Nanyx.Formatter.Settings.cached(), mode, found.ResultValue);
 
+        // Every file under a manifest with bad settings fails the same way, so each message is printed once.
+        var settingsErrors = new HashSet<string>();
         foreach (var (file, result) in results)
         {
             if (result.IsChanged && check)
@@ -117,6 +119,12 @@ internal static class CliCommands
                         break;
                     case Nanyx.Formatter.FormatCommand.Formatting.NotSafe notSafe:
                         Console.Error.WriteLine($"{DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
+                        break;
+                    case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings:
+                        if (settingsErrors.Add(badSettings.Item))
+                        {
+                            Console.Error.WriteLine($"{badSettings.Item}; no file under it was formatted.");
+                        }
                         break;
                 }
             }
