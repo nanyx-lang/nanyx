@@ -99,6 +99,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "vscode-tmgrammar-test -g syntaxes/nanyx.tmLanguage.json \"tests/syntax/**/*.nyx\"",
     "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
@@ -107,6 +108,7 @@
   "devDependencies": {
     "@types/node": "^20.11.30",
     "@types/vscode": "^1.76.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vscode-tmgrammar-test": "^0.1.3"
   }
 }

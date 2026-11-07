@@ -39,6 +39,9 @@ jobs:
       - name: Compile
         run: npm run compile
 
+      - name: Test the syntax grammar
+        run: npm test
+
       - name: Read the extension version
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
