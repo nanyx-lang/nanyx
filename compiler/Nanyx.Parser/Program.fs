@@ -357,6 +357,8 @@ type Declarer =
     | LambdaParameters
     /// The body of a match arm declares the variables its patterns bind.
     | ArmBody
+    /// The body of a type definition (or a context's) declares the type's name.
+    | TypeDefBody
 
 /// The names nodes declare, each with the span it is written at. Declarations have no nodes of their own yet
 /// (#96), so their spans are kept here, keyed by the node they belong to.
@@ -1215,6 +1217,12 @@ let typeDefCore: Parser<Definition, ParseState> =
             | Some predicate -> TypeExpr.at (endingAt predicate.Span span) (TypeWhere(baseType, predicate))
             | None -> baseType
 
+    // The body declares the type's name, written at `start`.
+    let declaringTypeName ((start, name), def) =
+        match def with
+        | TypeDef(_, _, _, body) -> declare TypeDefBody body.Id [ name, nameSpan start name ] >>% def
+        | ValueDef _ -> preturn def
+
     let applyPrivate modifiers privateOpt =
         match privateOpt with
         | Some _ -> Private :: modifiers
@@ -1230,27 +1238,29 @@ let typeDefCore: Parser<Definition, ParseState> =
     let contextDef =
         pipe5
             (opt (attempt (pstring "export" >>. ws)))
-            (pstring "context" >>. ws >>. contextName)
+            (pstring "context" >>. ws >>. (getPosition .>>. contextName))
             (opt (attempt (wsNoNl() >>. typeParams)))
             (wsNoNl() >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
             typeExprWithWhere
-            (fun exportOpt name paramsOpt privateOpt typeValue ->
+            (fun exportOpt (start, name) paramsOpt privateOpt typeValue ->
                 let typeParams = defaultArg paramsOpt []
                 let baseMods = if exportOpt.IsSome then [Export] else []
                 let modifiers = applyPrivate (Context :: baseMods) privateOpt
-                TypeDef(name, modifiers, typeParams, typeValue))
+                (start, name), TypeDef(name, modifiers, typeParams, typeValue))
+        >>= declaringTypeName
 
     let typeDefWithModifiers =
         pipe5
             typeModifiers
-            (pstring "type" >>. ws >>. typeNameIdentifier)
+            (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
             (opt (attempt (wsNoNl() >>. typeParams)))
             (wsNoNl() >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
             typeExprWithWhere
-            (fun modifiers name paramsOpt privateOpt typeValue ->
+            (fun modifiers (start, name) paramsOpt privateOpt typeValue ->
                 let typeParams = defaultArg paramsOpt []
                 let modifiers = applyPrivate modifiers privateOpt
-                TypeDef(name, modifiers, typeParams, typeValue))
+                (start, name), TypeDef(name, modifiers, typeParams, typeValue))
+        >>= declaringTypeName
 
     attempt contextDef <|> typeDefWithModifiers
     <?> "type definition"

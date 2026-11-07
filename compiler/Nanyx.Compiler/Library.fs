@@ -855,6 +855,13 @@ module Compiler =
                     |> Map.values
                     |> Seq.map (fun symbol -> symbol.Id, symbol)
                     |> Map.ofSeq
+                // The exported types, declared in the imported module's file too.
+                let exportedTypeSymbols =
+                    exportedTypeDefs
+                    |> Map.values
+                    |> Seq.choose (fun info -> info.Symbol |> Option.bind (fun id -> imported.Typed.Symbols |> Map.tryFind id))
+                    |> Seq.map (fun symbol -> symbol.Id, symbol)
+                    |> Map.ofSeq
                 env <- extendEnvWithImport env qualifier exportedValueTypes (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
                 // The import is a symbol of its own, unless the compiler made it up (for `@entry`).
                 let importSymbols, importedThrough =
@@ -882,7 +889,7 @@ module Compiler =
                 state <-
                     { state with
                         TypeDefs = mergeTypeDefs typeDefs exportedTypeDefs
-                        Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.append exportedSymbols importSymbols)
+                        Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
                         ImportedThrough = importedThrough }
                 if importedKey = preludeKey then
                     preludeInlined <- inlinedItemsForImport item imported

@@ -179,7 +179,9 @@ How it is produced:
 
 - **Name resolution is recorded, not just performed.** Inference already looks every name up; it records the
   `SymbolId` it found against the node. Imports become `ImportedModule` symbols, and a qualified access such as
-  `m.sqrt` records a reference to both the import and the imported definition.
+  `m.sqrt` records a reference to both the import and the imported definition. Type definitions and contexts are
+  `TypeDefinition` symbols (built as that, rather than `TypeName`, which is a case of `TypeExprKind`), and a type
+  expression that names one records a reference by its own node.
 - **Desugaring keeps provenance.** Every node `desugar` and `applyAttributes` synthesize gets the span (and
   originating `NodeId`) of the syntax it replaced, and `Lowered` records the mapping. Analyzers walk `Syntax`; the
   type of a workflow bind is found through `Lowered`. This is much cheaper than teaching inference to check

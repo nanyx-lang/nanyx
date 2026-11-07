@@ -20,6 +20,8 @@ type SymbolKind =
     | PatternVariable
     /// An import: the module it brings in, under its alias if it has one.
     | ImportedModule
+    /// A type definition or a context. A name written in a type refers to it; it is not a value in scope.
+    | TypeDefinition
 
 /// Something a name can refer to, and where it is declared. A symbol from an imported module is declared in
 /// that module's file.
@@ -93,7 +95,9 @@ type TypedTopLevelItem =
     | TypedDef of TypedDefinition
     | TypedExprItem of TypedExpr
 
-type TypeDefInfo = { Parameters: TyVar list; Underlying: Ty; IsPrivate: bool }
+/// A type definition: its parameters, the type it stands for, and the symbol it declares (`None` for one the
+/// compiler made up, which has no name written in the source).
+type TypeDefInfo = { Parameters: TyVar list; Underlying: Ty; IsPrivate: bool; Symbol: SymbolId option }
 
 /// `ExprTypes` holds the resolved type of every expression inference typed, by node; `CalleeTypes` the type of
 /// the function at each call or pipe, by the call's node; `SymbolTypes` the type of each declaration the module

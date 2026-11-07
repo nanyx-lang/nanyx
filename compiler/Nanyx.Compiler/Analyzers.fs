@@ -164,7 +164,8 @@ module UnusedBindings =
         | Parameter
         | PatternVariable
         | TopLevelValue
-        | ImportedModule -> rename
+        | ImportedModule
+        | TypeDefinition -> rename
 
     let private messageFor (symbol: Symbol) =
         match symbol.Kind with
@@ -172,7 +173,8 @@ module UnusedBindings =
         | PatternVariable -> $"`{symbol.Name}` is introduced by a pattern but never used"
         | LocalValue
         | TopLevelValue
-        | ImportedModule -> $"`{symbol.Name}` is never used"
+        | ImportedModule
+        | TypeDefinition -> $"`{symbol.Name}` is never used"
 
     let analyze (model: SemanticModel) : Report list =
         let referenced = model.References |> Map.values |> Set.ofSeq
@@ -193,7 +195,8 @@ module UnusedBindings =
             | Parameter
             | PatternVariable -> true
             | TopLevelValue
-            | ImportedModule -> false)
+            | ImportedModule
+            | TypeDefinition -> false)
         |> Seq.filter (fun symbol -> not (symbol.Name.StartsWith "_") && not (referenced.Contains symbol.Id))
         |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
         |> Seq.map (fun symbol ->
