@@ -282,7 +282,7 @@ let ``Run - text startsWith, endsWith and contains`` () =
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "def show: bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
+        "def show: [Console] bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
         "show(String.startsWith(\"nanyx\", \"nan\"))\n" +
         "show(String.startsWith(\"nanyx\", \"nyx\"))\n" +
         "show(String.startsWith(\"nan\", \"nanyx\"))\n" +
@@ -300,7 +300,7 @@ let ``Run - text indexOf, lastIndexOf and count`` () =
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "def show: (#some(int) | #notFound) -> () = {\n" +
+        "def show: [Console] (#some(int) | #notFound) -> () = {\n" +
         "  | #some(i) -> println(\"#some({i})\")\n" +
         "  | #notFound -> println(\"#notFound\")\n" +
         "}\n" +
@@ -348,7 +348,7 @@ let ``Run - text trimStart, trimEnd, isEmpty and isBlank`` () =
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "def show: bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
+        "def show: [Console] bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
         "println(\"[\" ++ String.trimStart(\" \t x \") ++ \"]\")\n" +
         "println(\"[\" ++ String.trimEnd(\" x \r\n\") ++ \"]\")\n" +
         "show(String.isEmpty(\"\"))\n" +
@@ -614,7 +614,7 @@ let ``Run - interpolation holes that allocate or have effects run once`` () =
         "import nanyx/text\n" +
         "\n" +
         "def s = \"b\"\n" +
-        "def shout: string -> string = { v ->\n" +
+        "def shout: [Console] string -> string = { v ->\n" +
         "  println(\"shouting \" ++ v)\n" +
         "  String.uppercase(v)\n" +
         "}\n" +
@@ -744,7 +744,7 @@ let ``Run - mutually recursive top-level functions`` () =
         "\n" +
         "def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }\n" +
         "def isOdd: int -> bool = { n -> if n == 0 then false else isEven(n - 1) }\n" +
-        "def show: bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
+        "def show: [Console] bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
         "show(isEven(10))\n" +
         "show(isOdd(7))\n" +
         "show(isEven(7))\n" +
@@ -851,7 +851,7 @@ let ``Run - for loops over ranges and lists`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def shout: list(string) -> () = { names ->\n" +
+        "def shout: [Console] list(string) -> () = { names ->\n" +
         "  for names | name -> println(name ++ \"!\")\n" +
         "}\n" +
         "@entry\n" +
@@ -896,7 +896,7 @@ let ``Run - boolean keywords not, and, or`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def show: bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
+        "def show: [Console] bool -> () = { b -> println(if b then \"yes\" else \"no\") }\n" +
         "def between: (int, int, int) -> bool = { x, lo, hi -> x >= lo and x <= hi }\n" +
         "show(not true)\n" +
         "show(not false)\n" +
@@ -1157,12 +1157,12 @@ let ``Run - a proc block continues past each #some and stops at the first #error
         "  return add(try f(x), try f(x + 1))\n" +
         "} }\n" +
         "\n" +
-        "def show: (#some(string) | #error(#tooBig)) -> () = {\n" +
+        "def show: [Console] (#some(string) | #error(#tooBig)) -> () = {\n" +
         "  | #some(s) -> println(s)\n" +
         "  | #error(_) -> println(\"error\")\n" +
         "}\n" +
         "\n" +
-        "def showInt: (#some(int) | #error(#tooBig)) -> () = {\n" +
+        "def showInt: [Console] (#some(int) | #error(#tooBig)) -> () = {\n" +
         "  | #some(n) -> println(\"sum = {n}\")\n" +
         "  | #error(_) -> println(\"error\")\n" +
         "}\n" +
@@ -1189,7 +1189,7 @@ let ``Run - a proc block gives back whichever failure stopped it`` () =
         "  return i\n" +
         "} }\n" +
         "\n" +
-        "def show: (#some(int) | #nil | #notFound) -> () = {\n" +
+        "def show: [Console] (#some(int) | #nil | #notFound) -> () = {\n" +
         "  | #some(_) -> println(\"found\")\n" +
         "  | #nil -> println(\"nil\")\n" +
         "  | #notFound -> println(\"not found\")\n" +
@@ -1206,7 +1206,7 @@ let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def show: (#some(int) | #invalidInt) -> () = {\n" +
+        "def show: [Console] (#some(int) | #invalidInt) -> () = {\n" +
         "  | #some(n) -> println(\"#some({n})\")\n" +
         "  | #invalidInt -> println(\"#invalidInt\")\n" +
         "}\n" +
@@ -1327,7 +1327,7 @@ let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
         "  return try half(h)\n" +
         "} }\n" +
         "\n" +
-        "def show: Result(int, string) -> () = {\n" +
+        "def show: [Console] Result(int, string) -> () = {\n" +
         "  | #some(n) -> println(\"some {n}\")\n" +
         "  | #error(e) -> println(\"error {e}\")\n" +
         "}\n" +
