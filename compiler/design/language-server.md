@@ -102,6 +102,14 @@ what the compiler keeps: exact spans, resolved names and types.
   brought in is written with, from `ImportReferences`. The declaration comes first when the client asks for it,
   in whichever file it is. The files that import the document are not searched: that needs an index of the
   workspace.
+- **Document symbols** ([#278](https://github.com/nanyx-lang/nanyx/issues/278)), for the outline view, breadcrumbs
+  and Go to Symbol in Editor. `NyxCompiler.Outline.ofSource` parses the text and lists its top-level defs (a
+  function when the value is a lambda), types (a record, a union or another alias), contexts and `module name =`
+  blocks, each with what is declared inside it: a def's local defs, a record's fields, a context's members, a
+  block's definitions. The parser lifts a block's defs to the top level, so they are put back by where the block
+  is written. Names and their spans come from the declared names the parser records (`DefValue`, `TypeDefBody`,
+  `RecordTypeFields`). It needs a parse, not a type-check, so a type error leaves the outline as it was; a text
+  that does not parse shows the last good text's outline, less the items edited since.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*.
@@ -128,7 +136,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    Go-to-definition is done for values (including those in the standard library), type names and context members
    ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
    ([#276](https://github.com/nanyx-lang/nanyx/issues/276)); across the workspace it is not.
-4. **Document symbols.** The outline view, from top-level definitions.
+4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278)). Workspace symbols (Go to
+   Symbol in Workspace) would need an index of the workspace's files, as find-references across it does.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered

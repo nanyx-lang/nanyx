@@ -26,6 +26,7 @@
     <Compile Include="Definition.fs" />
     <Compile Include="TypeHints.fs" />
     <Compile Include="Completion.fs" />
+    <Compile Include="Outline.fs" />
   </ItemGroup>
 
   <ItemGroup>

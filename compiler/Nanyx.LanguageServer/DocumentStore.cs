@@ -23,9 +23,17 @@ public sealed record OpenDocument(
     OpenDocument? PreviousGood = null)
 {
     private EditedRegion? _editsSinceLastGood;
+    private Lazy<Outline.OutlineItem[]?>? _outline;
 
     /// <summary>Converts positions in <see cref="Text"/>, built once per change rather than on every request.</summary>
     public SourcePositions Positions { get; } = new(Text);
+
+    /// <summary>
+    /// What <see cref="Text"/> declares, as a tree (see <c>NyxCompiler.Outline</c>), or <c>null</c> if it does not
+    /// parse. It needs only a parse, so a text that does not type-check has one. Parsed once, when first asked for.
+    /// </summary>
+    public Outline.OutlineItem[]? Outline =>
+        (_outline ??= new Lazy<Outline.OutlineItem[]?>(() => NyxCompiler.Outline.ofSource(FileName, Text)?.Value.ToArray())).Value;
 
     /// <summary>Whether <see cref="Compiled"/> type-checked, and so has the types and symbols editor features read.</summary>
     public bool TypeChecked => Compiled is { Syntax: not null, Typed: not null };
