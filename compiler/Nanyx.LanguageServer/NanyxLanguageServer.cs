@@ -11,7 +11,8 @@ namespace Nanyx.LanguageServer;
 /// </summary>
 /// <remarks>
 /// The server publishes diagnostics, shows inferred types on hover, in lenses above unannotated top-level defs and
-/// in inlay hints after other unannotated names, goes to definitions, and completes the names in scope. Each editor
+/// in inlay hints after other unannotated names, goes to definitions, completes the names in scope, and formats
+/// documents. Each editor
 /// feature is one handler class in <c>Handlers/</c>, registered in <see cref="Configure"/>, reading the document's
 /// last compile from <see cref="DocumentStore"/>. To add a feature, add a handler that derives from the matching
 /// OmniSharp base class and register it: <c>textDocument/references</c>, for one, would be a
@@ -60,5 +61,6 @@ public static class NanyxLanguageServer
             .WithHandler<DefinitionHandler>()
             .WithHandler<CodeLensHandler>()
             .WithHandler<InlayHintHandler>()
-            .WithHandler<CompletionHandler>();
+            .WithHandler<CompletionHandler>()
+            .WithHandler<FormattingHandler>();
 }
