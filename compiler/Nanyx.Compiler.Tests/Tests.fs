@@ -2438,6 +2438,57 @@ let ``The prelude's names are in scope until the module declares its own`` () =
     let source = "def value = {\n  def proc = 2\n  proc\n}\n"
     Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (LocalValue, "") ], proc source (offsetOf source "  proc\n" 0 2))
 
+// Members: what completion offers after a dot.
+
+/// What can follow `path` and a dot at the start of `at` in `result`, as each member's name, kind and type.
+let private membersIn (result: CompileResult) (source: string) (at: string) (path: string list) =
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Completion.membersAt Greek result (offsetOf source at 0 0) path
+    |> List.map (fun item -> item.Name, item.Kind, item.Type)
+
+[<Fact>]
+let ``After a value's name come the fields of its record, followed through the path`` () =
+    let source =
+        "def p = (x = 1, name = \"a\", inner = (y = true))\n" +
+        "def t = (1, 2)\n" +
+        "def f = { v -> v }\n" +
+        "def q = p\n"
+    let members = membersIn (Compiler.compile source) source
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "inner", Completion.Field, Some "(y: bool)"; "name", Completion.Field, Some "string"; "x", Completion.Field, Some "int" ],
+        members "def q" [ "p" ])
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "y", Completion.Field, Some "bool" ], members "def q" [ "p"; "inner" ])
+    // A tuple's numbered items are not names, and a value not yet known to be a record has no fields.
+    Assert.Empty(members "def q" [ "t" ])
+    Assert.Empty(members "v }" [ "v" ])
+
+[<Fact>]
+let ``After an import's alias come its exports, and after a prefix the names under it`` () =
+    withTempDir (fun dir ->
+        let modulePath = Path.Combine(dir, "mod.nyx")
+        File.WriteAllText(modulePath, "module mod\nexport def foo = 1\nexport def twice = { n -> n * 2 }\ndef hidden = 2")
+        let mainPath = Path.Combine(dir, "main.nyx")
+        let mainSource = "module main\nimport \"mod.nyx\" as m\ndef value = m.foo"
+        File.WriteAllText(mainPath, mainSource)
+        Assert.Equal<(string * Completion.MemberKind * string option) list>(
+            [ "foo", Completion.Definition, Some "int"; "twice", Completion.Definition, Some "int -> int" ],
+            membersIn (Compiler.compileFile mainPath) mainSource "def value" [ "m" ]))
+    let source = "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\n"
+    let members = membersIn (Compiler.compile source) source "def shout"
+    // A dotted export is offered a segment at a time.
+    Assert.Contains(("String", Completion.Prefix, None), members [ "t" ])
+    Assert.Contains("uppercase", members [ "t"; "String" ] |> List.map (fun (name, _, _) -> name))
+    // The prelude's definitions attached to a type.
+    Assert.Contains("map", members [ "Result" ] |> List.map (fun (name, _, _) -> name))
+
+[<Fact>]
+let ``A module block offers only what it exports`` () =
+    let source = "module inner =\n  def secret = 1\n  export def open = secret + 1\ndef value = inner.open\n"
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "open", Completion.Definition, Some "int" ],
+        membersIn (Compiler.compile source) source "def value" [ "inner" ])
+
 // Type hints: the inferred types shown for declarations that do not write theirs.
 
 /// Each hint as its name, type and where its name starts.

@@ -45,6 +45,31 @@ public static class CompletionContext
     }
 
     /// <summary>
+    /// The names written before the dot that the word at <paramref name="wordStart"/> follows: <c>p</c> for
+    /// <c>p.x</c>, <c>p</c> and <c>inner</c> for <c>p.inner.x</c>. <c>null</c> if the word does not follow a dot,
+    /// the dot is not in code, or what is before it is not a name or a dotted name (a number, a call's result, a
+    /// tag).
+    /// </summary>
+    public static IReadOnlyList<string>? MemberPath(string text, int wordStart)
+    {
+        if (wordStart == 0 || text[wordStart - 1] != '.')
+        {
+            return null;
+        }
+
+        var start = wordStart - 1;
+        while (start > 0 && (IsNameCharacter(text[start - 1]) || text[start - 1] == '.'))
+        {
+            start--;
+        }
+
+        var path = text[start..(wordStart - 1)].Split('.');
+        var isName = path.All(segment => segment.Length > 0) && !char.IsDigit(path[0][0]);
+        var isTag = start > 0 && text[start - 1] == '#';
+        return isName && !isTag && IsCode(text, wordStart) ? path : null;
+    }
+
+    /// <summary>
     /// Whether <paramref name="offset"/> is in code: not in a <c>--</c> comment, a <c>---</c> block comment, a
     /// <c>'raw'</c> string, or a <c>"string"</c> outside its <c>{interpolation}</c> holes.
     /// </summary>

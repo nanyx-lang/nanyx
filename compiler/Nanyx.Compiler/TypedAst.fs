@@ -106,6 +106,11 @@ type TypeDefInfo = { Parameters: TyVar list; Underlying: Ty; IsPrivate: bool }
 /// write their own type: an annotated def or lambda parameter. `Scopes` says where each name can be written
 /// unqualified (see `Scope`): the module's own declarations, the aliases of its imports, and the names its imports
 /// and the prelude bring in unqualified, less those the module declares itself.
+///
+/// `ModuleNames` are the names that can be written anywhere in the module, dotted or not, and the symbol each
+/// means: the module's own top-level defs (less those a `module name =` block keeps to itself) and what its imports
+/// and the prelude bring in, under the import's alias where it has one (`m.foo`), less what the module declares
+/// itself. `ImportedTypes` holds the type each imported definition among them has, as its module gave it.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -118,4 +123,6 @@ type TypedModule =
       AnnotatedSymbols: Set<SymbolId>
       References: Map<NodeId, SymbolId>
       ImportReferences: Map<NodeId, SymbolId>
-      Scopes: Map<SymbolId, SourceSpan> }
+      Scopes: Map<SymbolId, SourceSpan>
+      ModuleNames: Map<string, SymbolId>
+      ImportedTypes: Map<SymbolId, Ty> }
