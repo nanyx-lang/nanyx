@@ -155,9 +155,18 @@ let ``Imports stay together, however many lines they span`` () =
     unchanged (lines [ "import nanyx/console"; "import ("; "  nanyx/text"; "  nanyx/math"; ")"; "import nanyx/result"; ""; "def a = 1" ])
 
 [<Fact>]
-let ``An indented block gets no blank lines, which would end it`` () =
-    unchanged (lines [ "def x ="; "  def f = { y ->"; "    y"; "  }"; "  f(1)" ])
-    unchanged (lines [ "module m ="; "  def f = { y ->"; "    y"; "  }"; "  def g = 2" ])
+let ``An indented block separates multi-line constructs and keeps the author's blank lines`` () =
+    Assert.Equal(
+        lines [ "def x ="; "  def f = { y ->"; "    y"; "  }"; ""; "  f(1)" ],
+        format (lines [ "def x ="; "  def f = { y ->"; "    y"; "  }"; "  f(1)" ]))
+    Assert.Equal(
+        lines [ "module m ="; "  def f = { y ->"; "    y"; "  }"; ""; "  def g = 2" ],
+        format (lines [ "module m ="; "  def f = { y ->"; "    y"; "  }"; "  def g = 2" ]))
+    unchanged (lines [ "def x ="; "  def a = 1"; ""; "  -- the result"; "  a" ])
+    unchanged (lines [ "module m ="; "  def a = 1"; ""; "  def b = 2" ])
+    Assert.Equal(
+        lines [ "def x ="; "  def a = 1"; ""; "  a" ],
+        format (lines [ "def x ="; "  def a = 1"; ""; ""; "  a" ]))
 
 [<Fact>]
 let ``Separating constructs is idempotent`` () =
