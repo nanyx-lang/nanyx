@@ -666,6 +666,65 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Contains(await CompletionsAt(uri, 1, 21), item => item.Label == "uppercase" && item.Kind == CompletionItemKind.Function);
     }
 
+    [Fact]
+    public void Server_advertises_document_formatting()
+    {
+        Assert.NotNull(_client.ServerSettings.Capabilities.DocumentFormattingProvider);
+    }
+
+    [Fact]
+    public async Task Formatting_a_document_replaces_all_of_it_with_the_formatted_text()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-format");
+        Open(uri, "def add={a,b->a+b}\n\ndef two = add(1,1)");
+        await NextPublished(uri);
+
+        var edit = Assert.Single(await FormattingEdits(uri));
+        Assert.Equal(new Range(0, 0, 2, 18), edit.Range);
+        Assert.Equal("def add = { a, b -> a + b }\n\ndef two = add(1, 1)\n", edit.NewText);
+    }
+
+    [Fact]
+    public async Task Formatting_keeps_CRLF_line_endings()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-format-crlf");
+        Open(uri, "def a={1}\r\ndef b = 2\r\n");
+        await NextPublished(uri);
+
+        var edit = Assert.Single(await FormattingEdits(uri));
+        Assert.Equal(new Range(0, 0, 2, 0), edit.Range);
+        Assert.Equal("def a = { 1 }\r\ndef b = 2\r\n", edit.NewText);
+    }
+
+    [Fact]
+    public async Task Formatting_a_formatted_document_changes_nothing()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-formatted");
+        Open(uri, "def add = { a, b -> a + b }\n");
+        await NextPublished(uri);
+
+        Assert.Empty(await FormattingEdits(uri));
+    }
+
+    [Fact]
+    public async Task A_document_that_does_not_parse_is_not_formatted()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-unparsed");
+        Open(uri, "def add={a,b->a+b}\ndef = = =\n");
+        await NextPublished(uri);
+
+        Assert.Empty(await FormattingEdits(uri));
+    }
+
+    private async Task<List<TextEdit>> FormattingEdits(DocumentUri uri) =>
+        (await _client.TextDocument.RequestDocumentFormatting(
+            new DocumentFormattingParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Options = new FormattingOptions { TabSize = 4, InsertSpaces = false }
+            },
+            _cancellation.Token))?.ToList() ?? [];
+
     private async Task<List<CompletionItem>> CompletionsAt(DocumentUri uri, int line, int character) =>
         (await _client.TextDocument.RequestCompletion(
             new CompletionParams { TextDocument = new TextDocumentIdentifier(uri), Position = new Position(line, character) },

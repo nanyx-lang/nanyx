@@ -13,6 +13,10 @@ from the Nanyx language server.
   `editor.codeLens` and `editor.inlayHints.enabled` settings turn the lenses and hints off; under
   `"[nanyx]": { ... }` they do so for Nanyx files only.
 - Go to definition.
+- Formatting: **Format Document** formats a `.nyx` file with the standard formatter, as `nanyx format`
+  does. A file that does not parse is left as it is. To format on save, set `"editor.formatOnSave": true`, or
+  `"[nanyx]": { "editor.formatOnSave": true }` for Nanyx files only. Compilers released before formatting
+  existed do not offer it.
 - Commands: **Nanyx: Download the compiler** and **Nanyx: Restart the language server**.
 
 ## How the extension finds `nanyx`

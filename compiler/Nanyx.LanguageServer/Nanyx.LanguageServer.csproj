@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
+    <ProjectReference Include="..\Nanyx.Formatter\Nanyx.Formatter.fsproj" />
   </ItemGroup>
 
   <ItemGroup>
