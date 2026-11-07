@@ -54,6 +54,14 @@ nanyx format src/
 nanyx format src/file1.nyx src/file2.nyx
 ```
 
+## Files and exit codes
+
+A directory means every `.nyx` file under it, leaving out `bin`, `obj`, `node_modules` and hidden directories. Each file keeps its line endings.
+
+A file that does not parse is left as it is and its syntax error is reported. The formatter also parses its own output before writing it, and leaves a file alone if the result would not mean exactly the same as before.
+
+`nanyx format` exits with `0` when it has nothing to report, `1` when `--check` finds a file that is not formatted, and `2` when a file could not be formatted.
+
 # Typical workflow
 
 Format files before committing changes, and enable format-on-save in your editor where possible.
@@ -85,7 +93,7 @@ def Option.map
 
 # Configuration
 
-The formatter has a small set of configuration options that can be set in a `[formatter]` table of the package's `.nyxpack` manifest. These options are intentionally limited to keep style consistent across contributors and projects.
+The formatter has a small set of configuration options that can be set in a `[formatter]` table of the package's `.nyxpack` manifest. These options are intentionally limited to keep style consistent across contributors and projects. (The formatter does not read this table yet, and uses the defaults until it does.)
 
 ```toml
 [formatter]
