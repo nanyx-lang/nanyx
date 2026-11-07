@@ -1,4 +1,6 @@
 using System.IO.Pipelines;
+using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 using OmniSharp.Extensions.LanguageServer.Client;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client;
@@ -7,6 +9,13 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Xunit;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using Analyzer = NyxCompiler.Analyzer;
+using AnalyzerOptions = NyxCompiler.AnalyzerOptions;
+using Fix = NyxCompiler.Fix;
+using Report = NyxCompiler.Report;
+using Rule = NyxCompiler.Rule;
+using SemanticModel = NyxCompiler.SemanticModel;
+using Severity = NyxCompiler.Severity;
 
 namespace Nanyx.LanguageServer.Tests;
 
@@ -93,6 +102,42 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Equal("NYX0101", diagnostic.Code?.String);
         Assert.Contains("missing", diagnostic.Message.String);
         Assert.Equal(new Range(2, 8, 2, 15), diagnostic.Range);
+    }
+
+    [Fact]
+    public async Task Analyzer_diagnostics_are_published_at_their_configured_severity()
+    {
+        // A test analyzer that reports every top-level def, at a warning by default.
+        var everyDef = new Rule("everyDef", "Every def", Severity.Warning, "");
+        var analyzer = new Analyzer(
+            "test",
+            ListModule.OfSeq([everyDef]),
+            FuncConvert.FromFunc<SemanticModel, FSharpList<Report>>(model => ListModule.OfSeq(
+                model.Syntax
+                    .Where(item => item.Kind.IsDef)
+                    .Select(item => new Report(
+                        "everyDef", item.Span, "a def",
+                        FSharpList<Tuple<Parser.Program.SourceSpan, string>>.Empty, FSharpList<Fix>.Empty)))));
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "analyzed.nyx"));
+
+        async Task<Diagnostic> PublishedWith(FSharpMap<string, FSharpOption<Severity>> severities)
+        {
+            await RestartWithAsync(ServerSettings.Default with
+            {
+                Analyzers = new AnalyzerOptions(ListModule.OfSeq([analyzer]), severities)
+            });
+            Open(uri, "def one = 1\n");
+            return Assert.Single((await NextPublished(uri)).Diagnostics!);
+        }
+
+        var byDefault = await PublishedWith(MapModule.Empty<string, FSharpOption<Severity>>());
+        Assert.Equal(DiagnosticSeverity.Warning, byDefault.Severity);
+        Assert.Equal("test/everyDef", byDefault.Code?.String);
+        Assert.Equal("a def", byDefault.Message.String);
+        Assert.Equal(new Range(0, 0, 0, 11), byDefault.Range);
+
+        var asInfo = await PublishedWith(MapModule.OfSeq([Tuple.Create("test/everyDef", FSharpOption<Severity>.Some(Severity.Info))]));
+        Assert.Equal(DiagnosticSeverity.Information, asInfo.Severity);
     }
 
     [Fact]
