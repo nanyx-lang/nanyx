@@ -9,10 +9,15 @@ namespace Nanyx.LanguageServer;
 /// Which analyzers run on each document and how serious their diagnostics are; every analyzer at its rules' default
 /// severities when <c>null</c>.
 /// </param>
+/// <param name="StandardLibrarySource">
+/// Where the standard library's source is written for the editor to open; under the user's local application data
+/// when <c>null</c>.
+/// </param>
 public sealed record ServerSettings(
     TypeVarNames TypeVarNames,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
-    AnalyzerOptions? Analyzers = null)
+    AnalyzerOptions? Analyzers = null,
+    StandardLibrarySource? StandardLibrarySource = null)
 {
     public static ServerSettings Default { get; } = new(TypeVarNames.Greek);
 

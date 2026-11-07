@@ -49,6 +49,7 @@ public static class NanyxLanguageServer
                 services.AddSingleton(settings);
                 services.AddSingleton<DocumentStore>();
                 services.AddSingleton<DiagnosticsPublisher>();
+                services.AddSingleton(settings.StandardLibrarySource ?? new StandardLibrarySource());
             })
             .ConfigureLogging(logging =>
             {

@@ -9,17 +9,18 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Goes to where the name under the cursor is declared: a value, parameter, pattern variable or import, in this
-/// document or in a source file it imports. On a declaration's own name it goes to that declaration. Nothing is
-/// found in a document that did not type-check, nor for a standard-library definition, whose source is embedded
-/// in the compiler rather than a file the editor can open.
+/// document, in a source file it imports, or in the standard library (see <see cref="StandardLibrarySource"/>). On
+/// a declaration's own name it goes to that declaration. Nothing is found in a document that did not type-check.
 /// </summary>
 public sealed class DefinitionHandler : DefinitionHandlerBase
 {
     private readonly DocumentStore _documents;
+    private readonly StandardLibrarySource _standardLibrary;
 
-    public DefinitionHandler(DocumentStore documents)
+    public DefinitionHandler(DocumentStore documents, StandardLibrarySource standardLibrary)
     {
         _documents = documents;
+        _standardLibrary = standardLibrary;
     }
 
     public override Task<LocationOrLocationLinks?> Handle(DefinitionParams request, CancellationToken cancellationToken) =>
@@ -43,7 +44,7 @@ public sealed class DefinitionHandler : DefinitionHandlerBase
         return location is null ? null : new LocationOrLocationLinks(location);
     }
 
-    private static Location? LocationOf(DocumentUri uri, OpenDocument document, Parser.Program.SourceSpan span)
+    private Location? LocationOf(DocumentUri uri, OpenDocument document, Parser.Program.SourceSpan span)
     {
         if (span.File == document.FileName)
         {
@@ -51,8 +52,9 @@ public sealed class DefinitionHandler : DefinitionHandlerBase
         }
 
         // Another source file. A standard-library module is named by its import path instead ("nanyx/text.nyx"),
-        // which is not a file on disk.
-        if (!Path.IsPathRooted(span.File))
+        // and is opened from the copy of its source on disk.
+        var path = Path.IsPathRooted(span.File) ? span.File : _standardLibrary.TryGetPath(span.File);
+        if (path is null)
         {
             return null;
         }
@@ -60,7 +62,7 @@ public sealed class DefinitionHandler : DefinitionHandlerBase
         // The declaration is a name, so it is on one line, and its range follows from where it starts.
         return new Location
         {
-            Uri = DocumentUri.FromFileSystemPath(span.File),
+            Uri = DocumentUri.FromFileSystemPath(path),
             Range = new Range(span.StartLine, span.StartColumn, span.StartLine, span.StartColumn + span.End - span.Start)
         };
     }
