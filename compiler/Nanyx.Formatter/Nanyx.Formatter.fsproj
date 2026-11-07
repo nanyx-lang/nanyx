@@ -10,6 +10,7 @@
     <Compile Include="Doc.fs" />
     <Compile Include="Syntax.fs" />
     <Compile Include="Formatter.fs" />
+    <Compile Include="FormatCommand.fs" />
   </ItemGroup>
 
   <ItemGroup>

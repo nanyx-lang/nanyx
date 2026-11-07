@@ -27,10 +27,11 @@
     <ProjectReference Include="..\Nanyx.Compiler.Wasm\Nanyx.Compiler.Wasm.fsproj" />
     <ProjectReference Include="..\Nanyx.Compiler.Runtime\Nanyx.Compiler.Runtime.fsproj" />
     <ProjectReference Include="..\Nanyx.LanguageServer\Nanyx.LanguageServer.csproj" />
+    <ProjectReference Include="..\Nanyx.Formatter\Nanyx.Formatter.fsproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Consolo" Version="0.33.0" />
+    <PackageReference Include="Consolo" Version="0.34.0" />
   </ItemGroup>
 
 </Project>

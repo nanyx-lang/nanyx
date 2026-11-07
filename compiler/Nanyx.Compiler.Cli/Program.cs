@@ -77,6 +77,70 @@ internal static class CliCommands
         return RunProgram(result);
     }
 
+    /// <summary>
+    /// Format Nanyx source files in the standard style.
+    /// </summary>
+    /// <param name="check">Write nothing; list the files that are not formatted, and exit with 1 if there are any.</param>
+    /// <param name="write">Rewrite the files that are not formatted, which is what happens without --check too.</param>
+    /// <param name="paths">Files or directories to format; a directory means every .nyx file under it, and none means the current directory.</param>
+    [Consolo("format")]
+    public static int Format(bool check = false, bool write = false, params string[] paths)
+    {
+        if (check && write)
+        {
+            Console.Error.WriteLine("Use --check or --write, not both.");
+            return 2;
+        }
+
+        var found = Nanyx.Formatter.FormatCommand.findFiles(Directory.GetCurrentDirectory(), ListModule.OfSeq(paths));
+        if (found.IsError)
+        {
+            Console.Error.WriteLine(found.ErrorValue);
+            return 2;
+        }
+
+        var mode = check ? Nanyx.Formatter.FormatCommand.Mode.Check : Nanyx.Formatter.FormatCommand.Mode.Write;
+        var results = Nanyx.Formatter.FormatCommand.run(Nanyx.Formatter.Formatter.OptionsModule.defaults, mode, found.ResultValue);
+
+        foreach (var (file, result) in results)
+        {
+            if (result.IsChanged && check)
+            {
+                Console.WriteLine(DisplayPath(file));
+            }
+            else if (result is Nanyx.Formatter.FormatCommand.FileResult.Failed failed)
+            {
+                switch (failed.Item)
+                {
+                    case Nanyx.Formatter.FormatCommand.Formatting.NotParsed notParsed:
+                        PrintDiagnostics(ListModule.OfSeq([SyntaxError(notParsed.Item)]), Console.Error);
+                        break;
+                    case Nanyx.Formatter.FormatCommand.Formatting.NotSafe notSafe:
+                        Console.Error.WriteLine($"{DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
+                        break;
+                }
+            }
+        }
+
+        return Nanyx.Formatter.FormatCommand.exitCode(mode, results);
+    }
+
+    /// <summary>The diagnostic `nanyx check` gives for a failed parse. FParsec's report starts by giving the file and
+    /// position ("Error in path: Ln: 1 Col: 5", wrapped when the path is long), which the diagnostic's span already
+    /// gives.</summary>
+    private static Diagnostic SyntaxError(Parser.Program.ParseError error)
+    {
+        var message = error.Message;
+        var column = message.IndexOf(" Col: ", StringComparison.Ordinal);
+        var lineEnd = column < 0 ? -1 : message.IndexOf('\n', column);
+        if (message.StartsWith("Error in ") && lineEnd >= 0)
+        {
+            message = message[(lineEnd + 1)..];
+        }
+
+        return Diagnostics.at(DiagnosticCodes.SyntaxError, error.Span, message);
+    }
+
     private const string HelloWorldSource = """
         import nanyx/console
 
