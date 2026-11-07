@@ -7,7 +7,7 @@
     <AssemblyName>nanyx</AssemblyName>
     <RootNamespace>NanyxCompiler.Cli</RootNamespace>
     <!-- Bumped for each release; when main has a Version with no compiler/<version> tag, the compiler workflow releases it. -->
-    <Version>0.14.0</Version>
+    <Version>0.15.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ImplicitUsings>enable</ImplicitUsings>
