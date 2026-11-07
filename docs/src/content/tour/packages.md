@@ -187,6 +187,17 @@ Packages without an entrypoint can still be built and consumed normally; they si
 
 The entrypoint is declared entirely in source code and does not need to be repeated in the package manifest.
 
+# Building and running a package
+
+In a package's directory (or any directory under it), `nanyx build` checks every source file the manifest selects and writes the program to `out/<package name>.wat`, and `nanyx run` checks them and runs the package's `@entry`. Both also take the package's directory or manifest:
+
+```text
+nanyx run examples/greeter
+nanyx build examples/greeter/greeter.nyxpack
+```
+
+The analyzers that check a package are the ones its manifest names; see [Analyzers](../advanced/analyzers).
+
 # Projects
 
 A project is an optional grouping of packages that are developed together. It is described by a `.nyxproj` TOML document.

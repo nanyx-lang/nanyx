@@ -28,8 +28,6 @@ only then design the public contract that Nanyx-authored analyzers will be writt
 ## Non-goals (for now)
 
 - The public, versioned API for analyzers written in Nanyx. It is the last step, not the first.
-- Package-manifest configuration. The `.nyxpack` manifest does not exist yet; configuration is passed in as a
-  compiler option until it does.
 - Running analyzers on code that does not type-check (see [Code with errors](#code-with-errors)).
 
 ## Where the compiler is today
@@ -209,8 +207,10 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 >   not declare, both count as failing, and the analyzer's other reports for the module are left out.
 > - The `SemanticModel` has no `Lowered` table yet ([#99](https://github.com/nanyx-lang/nanyx/issues/99)).
 > - The configuration is `AnalyzerOptions` (the analyzers to run, and severities by code), passed to
->   `Compiler.compileWith` and its file and source variants, and to the language server in its settings. Neither
->   `nanyx` nor the editor has a way to set it yet: that waits for the package manifest.
+>   `Compiler.compileWith` and its file and source variants. A package's `.nyxpack` sets it with an
+>   `[analyzers.<name>]` table per analyzer to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
+>   `nanyx build`, `nanyx run` and the language server; without the table, the analyzer does not run. A file
+>   outside any package runs every analyzer at its defaults.
 
 Before any public contract, analyzers are F# values compiled into the compiler:
 

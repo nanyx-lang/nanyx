@@ -1,0 +1,10 @@
+module main
+
+import "./greetings" as greetings
+
+@entry
+def main = {
+  def names = ["Ada", "Grace", "Barbara"]
+  List.fold(names, (), { _, name -> println(greetings.greet(name)) })
+  println(greetings.farewell("everyone"))
+}

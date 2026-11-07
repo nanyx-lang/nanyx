@@ -1,0 +1,9 @@
+module greetings
+
+export def greet: string -> string = { name ->
+  "Hello, " ++ name ++ "!"
+}
+
+export def farewell: string -> string = { name ->
+  "Goodbye, " ++ name ++ "."
+}
