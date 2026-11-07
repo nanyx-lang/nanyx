@@ -405,6 +405,48 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Server_advertises_quick_fixes()
+    {
+        Assert.Contains(
+            CodeActionKind.QuickFix,
+            _client.ServerSettings.Capabilities.CodeActionProvider?.Value?.CodeActionKinds ?? []);
+    }
+
+    [Fact]
+    public async Task Code_actions_are_the_fixes_of_the_diagnostics_in_the_range()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-8");
+        const string text = "def f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
+
+        Open(uri, text);
+        var published = (await NextPublished(uri)).Diagnostics!;
+        Assert.Equal(2, published.Count());
+
+        // An unused local is removed, line and all.
+        var remove = Assert.Single(await CodeActionsIn(uri, new Range(1, 8, 1, 8)));
+        Assert.Equal(("Remove `unused`", CodeActionKind.QuickFix, true), (remove.Title, remove.Kind, remove.IsPreferred));
+        Assert.Equal("default/unusedBindings", Assert.Single(remove.Diagnostics!).Code?.String);
+        Assert.Equal("def f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
+
+        // An unused parameter is renamed to `_`.
+        var rename = Assert.Single(await CodeActionsIn(uri, new Range(4, 10, 4, 11)));
+        Assert.Equal("Rename `x` to `_`", rename.Title);
+        Assert.Equal("def f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
+
+        // Nothing where no diagnostic is.
+        Assert.Empty(await CodeActionsIn(uri, new Range(2, 2, 2, 3)));
+    }
+
+    /// <summary><paramref name="text"/> with <paramref name="edit"/> made to it.</summary>
+    private static string Applied(string text, TextEdit edit)
+    {
+        var positions = new SourcePositions(text);
+        var start = positions.ToOffset(edit.Range.Start);
+        var end = positions.ToOffset(edit.Range.End);
+        return text[..start] + edit.NewText + text[end..];
+    }
+
+    [Fact]
     public void Server_advertises_document_symbols()
     {
         Assert.NotNull(_client.ServerSettings.Capabilities.DocumentSymbolProvider);
@@ -946,12 +988,24 @@ public sealed class LanguageServerTests : IAsyncLifetime
             new DefinitionParams { TextDocument = new TextDocumentIdentifier(uri), Position = new Position(line, character) },
             _cancellation.Token))?.ToList() ?? [];
 
+    private async Task<List<CodeAction>> CodeActionsIn(DocumentUri uri, Range range) =>
+        (await _client.TextDocument.RequestCodeAction(
+            new CodeActionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Range = range,
+                Context = new CodeActionContext { Diagnostics = new Container<Diagnostic>() }
+            },
+            _cancellation.Token))?
+        .Select(item => item.CodeAction!)
+        .ToList() ?? [];
+
     private async Task<List<DocumentSymbol>> DocumentSymbols(DocumentUri uri) =>
         (await _client.TextDocument.RequestDocumentSymbol(
             new DocumentSymbolParams { TextDocument = new TextDocumentIdentifier(uri) },
-            _cancellation.Token))
+            _cancellation.Token))?
         .Select(symbol => symbol.DocumentSymbol!)
-        .ToList();
+        .ToList() ?? [];
 
     private async Task<List<Location>> ReferencesAt(DocumentUri uri, int line, int character, bool includeDeclaration) =>
         (await _client.TextDocument.RequestReferences(
@@ -961,7 +1015,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
                 Position = new Position(line, character),
                 Context = new ReferenceContext { IncludeDeclaration = includeDeclaration }
             },
-            _cancellation.Token)).ToList();
+            _cancellation.Token))?.ToList() ?? [];
 
     private async Task<Location?> SingleDefinitionAt(DocumentUri uri, int line, int character) =>
         Assert.Single(await DefinitionsAt(uri, line, character)).Location;

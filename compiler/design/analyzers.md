@@ -101,7 +101,8 @@ Once every node has a span, the diagnostics that are now reported at the nearest
 ### 2. Structured diagnostics
 
 > **Done** in [#97](https://github.com/nanyx-lang/nanyx/issues/97), except that no compiler error offers
-> suggestions or fixes yet, and the language server does not yet turn fixes into code actions.
+> suggestions or fixes yet. The language server offers fixes as quick fixes
+> ([#284](https://github.com/nanyx-lang/nanyx/issues/284)).
 
 The diagnostic follows the error anatomy in [Principles](../../docs/src/content/foundations/principles.md#human-readable-errors):
 a code, a short title, a detailed message, suggestions and fixes.
@@ -197,7 +198,7 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 
 > **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Analyzers.fs`). The official `default`
 > analyzer's first rule is `unusedBindings` ([#101](https://github.com/nanyx-lang/nanyx/issues/101)), whose fixes are
-> the first any diagnostic offers; the language server does not show them as code actions yet. The semantic model
+> the first any diagnostic offers; the language server shows them as quick fixes. The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
 >
 > - Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its
