@@ -76,6 +76,29 @@ let ``Run - dbg prints integers, strings and tags in order`` () =
     runSource source |> assertRan "dbg: 42\ndbg: -7\ndbg: text\ndbg: #ok\ndbg: #some(5)\ndone\n"
 
 [<Fact>]
+let ``Run - dbg prints a tag-typed value by its tag and payload`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def pick = { n ->\n" +
+        "  if n == 0 then #some(\"first\")\n" +
+        "  else if n == 1 then #none\n" +
+        "  else #err\n" +
+        "}\n" +
+        "\n" +
+        "def main = {\n" +
+        "  def a = dbg(pick(0))\n" +
+        "  dbg(pick(1))\n" +
+        "  dbg(pick(2))\n" +
+        "  dbg(dbg(a))\n" +
+        "  println(\"done\")\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source
+    |> assertRan "dbg: #some(\"first\")\ndbg: #none\ndbg: #err\ndbg: #some(\"first\")\ndbg: #some(\"first\")\ndone\n"
+
+[<Fact>]
 let ``Run - console print and println write to stdout`` () =
     let source =
         "import nanyx/console\n" +

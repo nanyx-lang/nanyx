@@ -280,7 +280,7 @@
   )
   (export "sum" (func $sum))
 
-  (func $main (result i32) (local $__dbg_tmp i32)
+  (func $main (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0 i32) (local $__dbg_tmp i32)
     i32.const 1
     i32.const 2
     i32.const 3
