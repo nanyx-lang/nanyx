@@ -109,6 +109,18 @@ issue):
   ```
 
 - A lambda with match cases puts each case on its own line, the `|`s aligned under the first.
+- A lambda whose body is on the `->`'s line but spans lines indents the body once, and puts its `}` back at the
+  lambda's line's indent, so two closing braces never line up (decided 2026-11-07):
+
+  ```nanyx
+  def checkOrder = { products, lines -> proc {
+      match lines
+        | [] -> (return [])
+        | [first, ...rest] -> ...
+    }
+  }
+  ```
+
 - A pipeline that does not fit puts each stage on its own line, indented once.
 - A record, list, tuple or call's arguments that does not fit puts each element on its own line, separated by newlines
   instead of commas, as the docs write them, with the closing bracket on a line of its own; trailing commas therefore

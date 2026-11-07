@@ -82,7 +82,7 @@ let ``Or-patterns, rec and destructuring defs are printed as written`` () =
 
 [<Fact>]
 let ``Workflow keywords are printed as written`` () =
-    unchanged (lines [ "def f = { args -> proc {"; "  def a = try g(args)"; "  def b = try! h(a)"; "  return b"; "}"; "}" ])
+    unchanged (lines [ "def f = { args -> proc {"; "    def a = try g(args)"; "    def b = try! h(a)"; "    return b"; "  }"; "}" ])
 
 [<Fact>]
 let ``Literals are printed from the source`` () =
@@ -208,3 +208,12 @@ let ``A def without an annotation keeps a short lambda on one line`` () =
 [<Fact>]
 let ``A body moved to its own line keeps the operators a statement can take bracketed`` () =
     Assert.Equal(lines [ "def odd: int -> bool = { n ->"; "  (n % 2) == 1"; "}" ], format "def odd: int -> bool = { n -> n % 2 == 1 }")
+
+[<Fact>]
+let ``A lambda body that spans lines is indented, with the closing braces on different lines`` () =
+    Assert.Equal(
+        lines [ "def checkOrder = { products, lines -> proc {"; "    match lines"; "      | [] -> (return [])"; "      | [first, ...rest] ->"; "        def line = try parseLine(first)"; "        return [line]"; "  }"; "}" ],
+        format (lines [ "def checkOrder = { products, lines -> proc {"; "  match lines"; "    | [] -> (return [])"; "    | [first, ...rest] ->"; "      def line = try parseLine(first)"; "      return [line]"; "}"; "}" ]))
+    Assert.Equal(
+        lines [ "def f = { x -> match x"; "    | 1 -> a"; "    | _ -> b"; "}" ],
+        format (lines [ "def f = { x -> match x"; "  | 1 -> a"; "  | _ -> b"; "}" ]))
