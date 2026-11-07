@@ -27,7 +27,7 @@ let private names directory (files: string list) =
 let private formatted = "def add = { a, b -> a + b }\n"
 let private unformatted = "def add={a,b->a+b}"
 
-let private run mode files = FormatCommand.run Formatter.Options.defaults mode files
+let private run mode files = FormatCommand.run (Settings.cached ()) mode files
 
 [<Fact>]
 let ``No paths means every .nyx file under the current directory, skipping build output and hidden directories`` () =
@@ -111,3 +111,111 @@ let ``Formatted text is checked by parsing it again`` () =
     match formatText Formatter.Options.defaults "" "-- a comment\ndef a = [1, ...xs] -- and another\n" with
     | Formatted text -> Assert.Equal("-- a comment\ndef a = [1, ...xs] -- and another\n", text)
     | other -> failwith $"Unexpected: %A{other}"
+
+let private block = "def x =\n  def a = 1\n  a\n"
+
+let private settingsOf file =
+    match Settings.forFile file with
+    | Result.Ok options -> options
+    | Result.Error message -> failwith message
+
+let private formattedWith options text =
+    match formatText options "" text with
+    | Formatted formatted -> formatted
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
+let ``With no manifest the defaults apply`` () =
+    let directory = directoryWith [ "a.nyx", block ]
+    Assert.Equal(Formatter.Options.defaults, settingsOf (Path.Combine(directory, "a.nyx")))
+
+[<Fact>]
+let ``With a manifest that has no formatter table the defaults apply`` () =
+    let directory = directoryWith [ "app.nyxpack", "name = \"app\"\n\n[dependencies]\n"; "a.nyx", block ]
+    Assert.Equal(Formatter.Options.defaults, settingsOf (Path.Combine(directory, "a.nyx")))
+
+[<Fact>]
+let ``indentSize sets the indent`` () =
+    let directory = directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "a.nyx", block ]
+    let file = Path.Combine(directory, "a.nyx")
+    Assert.Equal({ Formatter.Options.defaults with IndentSize = 4 }, settingsOf file)
+    run Write [ file ] |> ignore
+    Assert.Equal("def x =\n    def a = 1\n    a\n", File.ReadAllText file)
+
+[<Fact>]
+let ``lineWidth sets the line width`` () =
+    let directory = directoryWith [ "app.nyxpack", "[formatter]\nlineWidth = 20\n"; "a.nyx", unformatted ]
+    let file = Path.Combine(directory, "a.nyx")
+    let options = { Formatter.Options.defaults with LineWidth = 20 }
+    Assert.Equal(options, settingsOf file)
+    run Write [ file ] |> ignore
+    Assert.Equal(formattedWith options unformatted, File.ReadAllText file)
+
+[<Fact>]
+let ``The nearest manifest in a parent directory applies`` () =
+    let directory =
+        directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "src/deep/a.nyx", block; "src/b.nyx", block ]
+    Assert.Equal(4, (settingsOf (Path.Combine(directory, "src/deep/a.nyx"))).IndentSize)
+    Assert.Equal(4, (settingsOf (Path.Combine(directory, "src/b.nyx"))).IndentSize)
+
+[<Fact>]
+let ``Two packages with different settings are formatted in one run, each with its own`` () =
+    let directory =
+        directoryWith [
+            "one/one.nyxpack", "[formatter]\nindentSize = 4\n"
+            "one/a.nyx", block
+            "two/two.nyxpack", "[formatter]\nindentSize = 3\n"
+            "two/b.nyx", block
+        ]
+    let results = run Write (found directory [])
+    Assert.Equal(0, exitCode Write results)
+    Assert.Equal("def x =\n    def a = 1\n    a\n", File.ReadAllText(Path.Combine(directory, "one/a.nyx")))
+    Assert.Equal("def x =\n   def a = 1\n   a\n", File.ReadAllText(Path.Combine(directory, "two/b.nyx")))
+
+/// Formats a package whose manifest has `formatter` as its `[formatter]` table, next to a package with valid settings,
+/// and returns the error for the first package's files, checking that none of them was touched and the other was.
+let private badSettings (formatter: string) =
+    let directory =
+        directoryWith [
+            "bad/bad.nyxpack", formatter
+            "bad/a.nyx", unformatted
+            "bad/src/b.nyx", unformatted
+            "good/good.nyxpack", "[formatter]\nlineWidth = 80\n"
+            "good/c.nyx", unformatted
+        ]
+    let results = run Write (found directory [])
+    Assert.Equal(2, exitCode Write results)
+    Assert.Equal(unformatted, File.ReadAllText(Path.Combine(directory, "bad/a.nyx")))
+    Assert.Equal(unformatted, File.ReadAllText(Path.Combine(directory, "bad/src/b.nyx")))
+    Assert.Equal(formatted, File.ReadAllText(Path.Combine(directory, "good/c.nyx")))
+    match results |> List.map snd with
+    | [ Failed(BadSettings message); Failed(BadSettings message'); Changed ] ->
+        Assert.Equal(message, message')
+        Assert.Contains(Path.Combine(directory, "bad", "bad.nyxpack"), message)
+        message
+    | other -> failwith $"Unexpected results: %A{other}"
+
+[<Fact>]
+let ``An unknown setting is an error naming the manifest and the key, and nothing under the manifest is formatted`` () =
+    let message = badSettings "[formatter]\nlineWidth = 80\ntabs = true\n"
+    Assert.Contains("[formatter] tabs", message)
+    Assert.Contains("lineWidth and indentSize", message)
+
+[<Theory>]
+[<InlineData("lineWidth = 0", "lineWidth", "not 0")>]
+[<InlineData("indentSize = -2", "indentSize", "not -2")>]
+[<InlineData("lineWidth = 80.5", "lineWidth", "a float")>]
+[<InlineData("indentSize = \"4\"", "indentSize", "the string \"4\"")>]
+[<InlineData("lineWidth = 99999999999", "lineWidth", "not 99999999999")>]
+let ``A setting that is not a positive integer is an error naming the manifest and the key`` (setting: string, key: string, found: string) =
+    let message = badSettings $"[formatter]\n{setting}\n"
+    Assert.Contains($"[formatter] {key} must be a positive integer", message)
+    Assert.Contains(found, message)
+
+[<Fact>]
+let ``A manifest that is not valid TOML is an error naming it`` () =
+    Assert.Contains("not valid TOML", badSettings "[formatter\nlineWidth = 80\n")
+
+[<Fact>]
+let ``A formatter key that is not a table is an error naming it`` () =
+    Assert.Contains("formatter must be a table", badSettings "formatter = 3\n")

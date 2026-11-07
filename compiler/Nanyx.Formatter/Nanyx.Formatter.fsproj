@@ -10,11 +10,16 @@
     <Compile Include="Doc.fs" />
     <Compile Include="Syntax.fs" />
     <Compile Include="Formatter.fs" />
+    <Compile Include="Settings.fs" />
     <Compile Include="FormatCommand.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Tomlyn" Version="2.10.1" />
   </ItemGroup>
 
 </Project>
