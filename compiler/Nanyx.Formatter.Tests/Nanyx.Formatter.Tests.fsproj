@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <Compile Include="DocTests.fs" />
+    <Compile Include="FormatterTests.fs" />
+    <Compile Include="CorpusTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
     <ProjectReference Include="..\Nanyx.Formatter\Nanyx.Formatter.fsproj" />
   </ItemGroup>
 
