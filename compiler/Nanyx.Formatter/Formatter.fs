@@ -135,9 +135,18 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// and a function building its document. The comments among them are put back: a comment after a child on its
     /// last line stays at the end of that line, and any other on a line of its own. A comment inside a child that the
     /// child does not place itself goes on a line of its own before it, or after it when the child placed comments
-    /// that come before it, so that comments stay in order. With `keepBlankLines`, a blank line between two children
-    /// (however many there were) is kept.
-    let sequence (keepBlankLines: bool) (start: int) (finish: int) (children: (int * int * (unit -> Doc)) list) : Doc =
+    /// that come before it, so that comments stay in order.
+    ///
+    /// With `blankLines`, for where the parser allows blank lines between children (the top level and a lambda's
+    /// statements, but not an indented block, which a blank line ends): a child that spans more than one line gets a
+    /// blank line before it (and its leading comments) and after it, except at the start and end and between two
+    /// imports; between children that each fit on one line, a blank line (however many there were) is kept, and none
+    /// is added.
+    let rec sequence (blankLines: bool) (start: int) (finish: int) (children: (int * int * (unit -> Doc)) list) : Doc =
+        sequenceOf blankLines start finish (children |> List.map (fun (childStart, childEnd, build) -> childStart, childEnd, false, build))
+
+    /// `sequence`, with each child saying whether it is an import.
+    and sequenceOf (blankLines: bool) (start: int) (finish: int) (children: (int * int * bool * (unit -> Doc)) list) : Doc =
         let parts = ResizeArray<Doc>()
         let mutable empty = true
         let mutable blank = false
@@ -154,23 +163,30 @@ let format (options: Options) (parsed: SourceModule) : string =
             placed[i] <- true
             emit (text (fst comments[i]))
 
+        // The comments, and the author's blank lines, between the offsets `a` and `b`, in order.
         let between a b =
             let blanks =
-                if keepBlankLines then
+                if blankLines then
                     blankRuns |> List.filter (fun span -> a <= span.Start && span.Start < b) |> List.map (fun span -> span.Start, None)
                 else
                     []
             let inBetween = unplacedIn a b |> List.map (fun i -> (snd comments[i]).Start, Some i)
-            for _, entry in List.sortBy fst (blanks @ inBetween) do
+            List.sortBy fst (blanks @ inBetween) |> List.map snd
+
+        let emitBetween entries (separate: bool) =
+            if blankLines && separate && not empty then blank <- true
+            for entry in entries do
                 match entry with
                 | Some i -> placeComment i
                 | None -> if not empty then blank <- true
 
         let mutable previous = start
-        for childStart, childEnd, build in children do
+        let mutable previousMultiLine = false
+        let mutable previousImport = false
+        for childStart, childEnd, isImport, build in children do
             let childStart = max childStart previous
             let childEnd = max childEnd childStart
-            between previous childStart
+            let leading = between previous childStart
             let placedBefore = Array.copy placed
             let doc = build ()
             let firstPlacedByChild =
@@ -178,6 +194,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                 |> Seq.fold min Int32.MaxValue
             let orphans = unplacedIn childStart childEnd
             let before, after = orphans |> List.partition (fun i -> (snd comments[i]).Start < firstPlacedByChild)
+            let multiLine = Doc.hasHardLine doc || not after.IsEmpty
+            emitBetween leading ((multiLine || previousMultiLine) && not (isImport && previousImport))
             for i in before do
                 placeComment i
             emit doc
@@ -191,7 +209,9 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | i :: _ -> placeComment i
                 | [] -> ()
             previous <- childEnd
-        between previous finish
+            previousMultiLine <- multiLine
+            previousImport <- isImport
+        emitBetween (between previous finish) previousMultiLine
         cat (List.ofSeq parts)
 
     /// The runs of top-level items or statements that make up one def each: a destructuring `def (a, b) = value` is
@@ -477,7 +497,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             match body.Kind with
             // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
             // its braces go among them.
-            | Block statements -> cat [ head; nest (cat [ hard; statementsInSequence e.Span.Start e.Span.End statements ]); hard; text "}" ]
+            | Block statements -> cat [ head; nest (cat [ hard; statementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
             | _ ->
                 let bodyDoc = expr full body
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
@@ -629,12 +649,13 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeApply(n, args) -> cat [ text n; text "("; commaJoin (List.map typeExpr args); text ")" ]
         | _ -> typeExpr context
 
+    /// An indented block (a def's value, an arm's body, an `if` branch), which a blank line would end.
     and block (b: Expression) : Doc =
         match b.Kind with
-        | Block statements -> statementsInSequence b.Span.Start b.Span.End statements
+        | Block statements -> statementsInSequence false b.Span.Start b.Span.End statements
         | _ -> expr full b
 
-    and statementsInSequence (start: int) (finish: int) (statements: Statement list) : Doc =
+    and statementsInSequence (blankLines: bool) (start: int) (finish: int) (statements: Statement list) : Doc =
         let defOf (s: Statement) =
             match s.Kind with
             | DefStatement(isExport, n, t, value) -> Some(isExport, n, t, value)
@@ -647,7 +668,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                 first.Span.Start, first.Span.End, fun () -> destructuringDef [ for k in index .. index + count - 1 -> (defOf all[k]).Value ] first.Span
             else
                 first.Span.Start, first.Span.End, fun () -> statement first)
-        |> sequence true start finish
+        |> sequence blankLines start finish
 
     and statement (s: Statement) : Doc =
         match s.Kind with
@@ -911,32 +932,49 @@ let format (options: Options) (parsed: SourceModule) : string =
             let children = items |> List.map (fun i -> i.Span.Start, i.Span.End, fun () -> item i)
             cat [ text "import ("; nest (cat [ hard; sequence false start finish children ]); hard; text ")" ]
 
-    let rec topLevel (start: int) (finish: int) (items: TopLevelItem list) : Doc =
+    /// The items of the module, or of a module block, which a blank line would end (`blankLines` false).
+    let rec topLevel (blankLines: bool) (start: int) (finish: int) (items: TopLevelItem list) : Doc =
         let defOf (i: TopLevelItem) =
             match i.Kind with
             | Def(ValueDef(isExport, n, t, value)) -> Some(isExport, n, t, value)
             | _ -> None
+        let isAttribute (i: TopLevelItem) =
+            match i.Kind with
+            | Attribute _ -> true
+            | _ -> false
+        let isImport (i: TopLevelItem) =
+            match i.Kind with
+            | Import _ -> true
+            | _ -> false
         let all = Array.ofList items
         destructuringRuns (items |> List.map (fun i -> i.Span, defOf i))
         |> List.map (fun (index, count, isDestructuring) ->
             let first = all[index]
             if isDestructuring then
-                first.Span.Start, first.Span.End, fun () -> destructuringDef [ for k in index .. index + count - 1 -> (defOf all[k]).Value ] first.Span
+                first.Span.Start, first.Span.End, first, fun () -> destructuringDef [ for k in index .. index + count - 1 -> (defOf all[k]).Value ] first.Span
             else
-                first.Span.Start, first.Span.End, fun () -> item first)
-        |> sequence true start finish
+                first.Span.Start, first.Span.End, first, fun () -> item first)
+        // An attribute line belongs to the item after it, so nothing comes between them.
+        |> List.foldBack
+            (fun (childStart, childEnd, first: TopLevelItem, build) children ->
+                match children with
+                | (_, nextEnd, nextIsImport, build') :: rest when isAttribute first ->
+                    (childStart, nextEnd, nextIsImport, fun () -> cat [ build (); hard; build' () ]) :: rest
+                | _ -> (childStart, childEnd, isImport first, build) :: children)
+            <| []
+        |> sequenceOf blankLines start finish
 
     and item (i: TopLevelItem) : Doc =
         match i.Kind with
         | ModuleDecl n -> text $"module {n}"
-        | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel i.Span.Start i.Span.End items ]) ]
+        | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel false i.Span.Start i.Span.End items ]) ]
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items
         | Expr value -> expr statementPosition value
         | Attribute n -> text $"@{n}"
 
-    Doc.render options.LineWidth (topLevel 0 source.Length parsed.Items)
+    Doc.render options.LineWidth (topLevel true 0 source.Length parsed.Items)
 
 /// Formats the source of the file at `filePath`, or says why it does not parse.
 let formatSource (options: Options) (filePath: string) (input: string) : Result<string, ParseError> =
