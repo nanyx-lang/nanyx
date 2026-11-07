@@ -478,6 +478,50 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Empty(await InlayHintsIn(uri, new Range(0, 0, 1, 0)));
     }
 
+    [Fact]
+    public async Task Lenses_and_inlay_hints_stay_on_unchanged_defs_while_the_file_does_not_type_check()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hints-last-good.nyx"));
+
+        Open(uri, "def id = { x -> x }\r\ndef scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset\r\n}\r\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // A broken line inserted between the two defs: both keep their hints, the second moved down a line.
+        Change(uri, version: 2,
+            "def id = { x -> x }\r\ndef broken = missing +\r\ndef scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset\r\n}\r\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(
+            [(new Range(0, 4, 0, 6), "α -> α"), (new Range(2, 4, 2, 9), "int -> int")],
+            (await CodeLenses(uri)).Select(lens => (lens.Range, lens.Command?.Title)));
+        Assert.Equal(
+            [(new Position(0, 12), ": α"), (new Position(2, 20), ": int"), (new Position(3, 12), ": int")],
+            (await InlayHintsIn(uri, new Range(0, 0, 6, 0))).Select(hint => (hint.Position, hint.Label.String)));
+    }
+
+    [Fact]
+    public async Task Hover_reads_the_last_good_compile_except_in_a_def_edited_since()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-last-good.nyx"));
+
+        Open(uri, "def id = { x -> x }\ndef total = id(40) + 2\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Change(uri, version: 2, "def id = { x -> x }\ndef total = id(40) + missing\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        // The untouched def still has its types; the edited one has none, rather than ones that may be stale.
+        var lambda = await HoverAt(uri, 0, 9);
+        Assert.Equal("```nanyx\nα -> α\n```", lambda?.Contents.MarkupContent?.Value);
+        Assert.Null(await HoverAt(uri, 1, 16));
+        Assert.Equal([new Range(0, 4, 0, 6)], (await CodeLenses(uri)).Select(lens => lens.Range));
+    }
+
+    private async Task<List<CodeLens>> CodeLenses(DocumentUri uri) =>
+        (await _client.TextDocument.RequestCodeLens(
+            new CodeLensParams { TextDocument = new TextDocumentIdentifier(uri) },
+            _cancellation.Token))?.ToList() ?? [];
+
     private async Task<List<InlayHint>> InlayHintsIn(DocumentUri uri, Range range) =>
         (await _client.TextDocument.RequestInlayHints(
             new InlayHintParams { TextDocument = new TextDocumentIdentifier(uri), Range = range },

@@ -37,7 +37,13 @@ what the compiler keeps: exact spans, resolved names and types.
   written has no type rather than that of the rest of the workflow. Each document
   is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A
   declared signature or doc comment needs name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)),
-  and a file that fails to type-check shows no hover.
+  and a file that has never type-checked shows no hover.
+- **The last good compile is kept** ([#210](https://github.com/nanyx-lang/nanyx/issues/210)). While the text does
+  not type-check, hover, lenses and inlay hints read the last text of the document that did (`OpenDocument.LastGood`).
+  The client sends whole documents, so what changed since is taken as one region, between the texts' common start
+  and common end (`EditedRegion`); positions are mapped across it, and a top-level item that overlaps it gets
+  nothing, since what that compile says about it may no longer be true. Diagnostics always come from the current
+  text.
 - **Go-to-definition** for values, parameters, pattern variables and imports, from the symbols and references
   name resolution records ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). A declaration's own name goes
   to itself. A definition in an imported source file opens that file; one in the standard library goes nowhere,
@@ -47,9 +53,8 @@ what the compiler keeps: exact spans, resolved names and types.
   its type gets a lens above it with its whole type; a local def, lambda parameter or pattern variable gets an
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
-  the `α` in its def's lens (see `NyxCompiler.TypeHints`). Like hover, a file that fails to type-check shows none,
-  so they disappear while the file is broken and the code moves up and down as the lenses come and go; keeping
-  the last good ones until the next good compile is [#210](https://github.com/nanyx-lang/nanyx/issues/210).
+  the `α` in its def's lens (see `NyxCompiler.TypeHints`). Like hover, they come from the last good compile, so
+  while the file is broken only the def being edited loses its lens.
 - **No find-references or completion.** Each is one handler in `Handlers/`. Find-references can read the same
   `References` table, though only of the open document's own compile.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
@@ -78,8 +83,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    Go-to-definition is done for values; it still needs type names and context members as symbols, and a
    way to open standard-library source (a virtual document, say).
 4. **Document symbols.** The outline view, from top-level definitions.
-5. **Completion.** Filed: keep the last good compile, since completion is asked for while the text does not
-   compile ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); record where each symbol is in scope
+5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
+   compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)). Filed: record where each symbol is in scope
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); then names in scope
    ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), record fields, module exports and attached definitions
    after a dot ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths

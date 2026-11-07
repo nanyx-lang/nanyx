@@ -25,6 +25,9 @@ public sealed class SourcePositions
         }
     }
 
+    /// <summary>The text with its line endings normalised, as the parser sees it: what offsets count into.</summary>
+    public string NormalizedText => _normalized;
+
     /// <summary>The offset of <paramref name="position"/>, clamped to its line (and the line to the text).</summary>
     public int ToOffset(Position position)
     {
