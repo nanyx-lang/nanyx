@@ -77,6 +77,7 @@ module DiagnosticCodes =
     let InvalidBuiltInCall = code 208 "Invalid built-in call" Severity.Error
     let InvalidRecordUpdate = code 209 "Invalid record update" Severity.Error
     let MisplacedTypeof = code 210 "Misplaced typeof" Severity.Error
+    let UndeclaredContext = code 211 "Undeclared context" Severity.Error
 
     /// Every compiler code, in order.
     let all =
@@ -86,7 +87,7 @@ module DiagnosticCodes =
           UnknownAttachedType; UnknownContext
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
-          MisplacedTypeof ]
+          MisplacedTypeof; UndeclaredContext ]
 
 module Diagnostics =
     let private create (code: DiagnosticCode) (span: SourceSpan option) (message: string) =

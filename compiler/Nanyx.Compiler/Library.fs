@@ -47,7 +47,9 @@ type private CheckedModule =
       RawCalleeTypes: Map<NodeId, Ty>
       RawSymbolTypes: Map<SymbolId, Ty>
       /// The symbols of the module's own exported definitions, by name: not those of what it imports.
-      Exports: Map<string, Symbol> }
+      Exports: Map<string, Symbol>
+      /// The contexts each of the module's own exported definitions requires, written or inferred, by name.
+      ContextRequirements: Map<string, TypeExpr list> }
 
 module Compiler =
     let private normalizeSource (source: string) =
@@ -887,11 +889,21 @@ module Compiler =
                         state.TypeDefs
                     else
                         state.TypeDefs |> Map.filter (fun name _ -> not (preludeTypeNames.Contains name && exportedTypeDefs.ContainsKey name))
+                // A function that requires a context requires it wherever it is called, under the name it is imported as.
+                let contextRequirements =
+                    imported.ContextRequirements
+                    |> Map.fold (fun acc name contexts ->
+                        let importedName =
+                            match qualifier with
+                            | Some qualifier -> $"{qualifier}.{name}"
+                            | None -> name
+                        acc |> Map.add importedName contexts) state.ContextRequirements
                 state <-
                     { state with
                         TypeDefs = mergeTypeDefs typeDefs exportedTypeDefs
                         Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
-                        ImportedThrough = importedThrough }
+                        ImportedThrough = importedThrough
+                        ContextRequirements = contextRequirements }
                 if importedKey = preludeKey then
                     preludeInlined <- inlinedItemsForImport item imported
                 else
@@ -1028,7 +1040,10 @@ module Compiler =
                                 |> Seq.map (fun id -> state.Symbols.[id])
                                 |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue && symbol.IsExported)
                                 |> Seq.map (fun symbol -> symbol.Name, symbol)
-                                |> Map.ofSeq }
+                                |> Map.ofSeq
+                             ContextRequirements =
+                                let exported = exportedValueNames own
+                                state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name) }
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =

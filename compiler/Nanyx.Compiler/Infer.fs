@@ -7,6 +7,22 @@ open NyxCompiler
 type TypedExpr = NyxCompiler.TypedExpr
 type TypedStatement = NyxCompiler.TypedStatement
 
+/// Which contexts the code being inferred runs in.
+type ContextScope =
+    /// The top level of a module, which runs in the ambient instances (the runtime's `Console`).
+    | AmbientScope
+    /// The body of the def `name`. One that writes its type has only the contexts the type declares; one that does
+    /// not (`inferring`) needs whichever ambient contexts its body uses, which are inferred.
+    | DefScope of name: Identifier * inferring: bool
+
+/// A use of the unannotated top-level def `Callee`, whose contexts are only known once every def has been inferred:
+/// `Available` are the ambient contexts something nearer than the ambient instance supplies at `Span`.
+type DeferredContextUse =
+    { Caller: ContextScope
+      Callee: Identifier
+      Span: SourceSpan
+      Available: Set<Identifier> }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -14,6 +30,15 @@ type InferState =
             TypeDefs: Map<string, TypeDefInfo>;
             ContextDefs: Map<string, TypeExpr>;
             ContextRequirements: Map<string, TypeExpr list>;
+            /// The imported definitions that are an ambient context instance's members, by name: the definition's
+            /// symbol and the context's name. `println` is the runtime's `Console`'s, which `@entry` imports.
+            AmbientMembers: Map<string, SymbolId * Identifier>;
+            ContextScope: ContextScope;
+            /// The ambient contexts each unannotated top-level def uses itself, by the def's name.
+            InferredContexts: Map<Identifier, Set<Identifier>>;
+            /// The module's unannotated top-level functions, by name, with their symbols.
+            UnannotatedDefs: Map<Identifier, SymbolId>;
+            DeferredContextUses: DeferredContextUse list;
             LocalNominals: Set<string>;
             LocalPrivateNominals: Set<string>;
             /// The type of every expression inferred so far, by node. These are the types as inference first saw
@@ -60,6 +85,11 @@ let emptyState =
             TypeDefs = Map.empty;
             ContextDefs = Map.empty;
             ContextRequirements = Map.empty;
+            AmbientMembers = Map.empty;
+            ContextScope = AmbientScope;
+            InferredContexts = Map.empty;
+            UnannotatedDefs = Map.empty;
+            DeferredContextUses = [];
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
             ExprTypes = Map.empty;
@@ -584,18 +614,79 @@ let private ensureContextsExist (state: InferState) (name: Identifier) (span: So
 let private registerContextRequirement (state: InferState) (name: Identifier) (contexts: TypeExpr list) =
     { state with ContextRequirements = state.ContextRequirements |> Map.add name contexts }
 
-let private ensureContextAvailable (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) =
+/// Whether `name` is bound in `env` to the ambient instance's member, not to something nearer that shadows it: a
+/// member of a context the def declares, or of an instance a `use` loads.
+let private isAmbientMember (env: TypeEnv) (state: InferState) (name: Identifier) =
+    match state.AmbientMembers |> Map.tryFind name, TypeEnv.tryFind name env with
+    | Some (symbol, _), Some scheme -> scheme.Symbol = Some symbol
+    | _ -> false
+
+/// The ambient contexts that code in `env` runs in: every one at the top level, else those something nearer
+/// supplies every member of.
+let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Identifier> =
+    let membersByContext =
+        state.AmbientMembers
+        |> Map.toList
+        |> List.groupBy (fun (_, (_, ctxName)) -> ctxName)
+    membersByContext
+    |> List.filter (fun (_, members) ->
+        match state.ContextScope with
+        | AmbientScope -> true
+        | DefScope _ ->
+            members |> List.forall (fun (memberName, _) -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName)))
+    |> List.map fst
+    |> Set.ofList
+
+/// `what` (which ends "requires", say) the context `ctxName` at `span`, in the def `defName`, whose type does not
+/// declare it.
+let private undeclaredContext (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
+    Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{defName}' does not declare: add [{ctxName}] to the type of '{defName}', or load an instance with `use`"
+
+/// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level, inferred for
+/// an unannotated def, and an error in a def whose type does not declare it.
+let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: string) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+    match state.ContextScope with
+    | AmbientScope -> Ok state
+    | DefScope(defName, true) ->
+        let contexts = state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
+        Ok { state with InferredContexts = state.InferredContexts |> Map.add defName (contexts.Add ctxName) }
+    | DefScope(defName, false) -> Error [ undeclaredContext defName ctxName what span ]
+
+/// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
+/// of an unannotated top-level def is kept to check once its contexts are known.
+let private checkContextUse (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+    if isAmbientMember env state name then
+        let _, ctxName = state.AmbientMembers.[name]
+        needAmbientContext state ctxName $"'{name}' is a member of" span
+    else
+        match state.UnannotatedDefs |> Map.tryFind name, TypeEnv.tryFind name env with
+        | Some symbol, Some scheme when scheme.Symbol = Some symbol && not state.AmbientMembers.IsEmpty ->
+            let deferred = { Caller = state.ContextScope; Callee = name; Span = span; Available = availableAmbientContexts env state }
+            Ok { state with DeferredContextUses = deferred :: state.DeferredContextUses }
+        | _ -> Ok state
+
+/// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
+/// is an error only when `reportMissing`.
+let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     let requiredMembers =
         contexts
-        |> List.collect (fun ctx ->
+        |> List.map (fun ctx ->
             let members, _ = collectContextMembers state ctx
-            members |> List.map (fun (memberName, _, _) -> memberName))
+            ctx, members |> List.map (fun (memberName, _, _) -> memberName))
     let missing =
         requiredMembers
+        |> List.collect snd
         |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone)
         |> List.distinct
-    if missing.IsEmpty then
-        Ok ()
+    if missing.IsEmpty || not reportMissing then
+        // Every member is in scope, but one the ambient instance supplies is only available where its context is.
+        requiredMembers
+        |> List.fold (fun result (ctx, members) ->
+            result
+            |> Result.bind (fun current ->
+                match ctx.Kind, members |> List.exists (isAmbientMember env current) with
+                | (TypeName ctxName | TypeApply(ctxName, _)), true -> needAmbientContext current ctxName $"'{name}' requires" span
+                | _ -> Ok current)) (Ok state)
     else
         let missingText = String.concat ", " missing
         Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span $"Missing context members for '{name}': {missingText}" ]
@@ -912,8 +1003,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
         | Some scheme ->
-            let ty, next = instantiate (recordReference expr scheme state) scheme
-            Ok (mkTypedExpr expr ty None None None, next)
+            // A function that needs an ambient context can only be passed on where it runs in that context. One that
+            // needs a context nothing here supplies can be passed to code that loads it.
+            let contextCheck =
+                match state.ContextRequirements |> Map.tryFind name with
+                | Some contexts -> ensureContextAvailable false env state name contexts expr.Span
+                | None -> Ok state
+                |> Result.bind (fun current -> checkContextUse env current name expr.Span)
+            match contextCheck with
+            | Error err -> Error err
+            | Ok state ->
+                let ty, next = instantiate (recordReference expr scheme state) scheme
+                Ok (mkTypedExpr expr ty None None None, next)
         | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" ]
     | FunctionCall(name, spanOpt, args) ->
         let calleeSpan = nameSpan spanOpt expr
@@ -999,11 +1100,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         else
         let contextCheck =
             match state.ContextRequirements |> Map.tryFind name with
-            | Some contexts -> ensureContextAvailable env state name contexts calleeSpan
-            | None -> Ok ()
+            | Some contexts -> ensureContextAvailable true env state name contexts calleeSpan
+            | None -> Ok state
+            |> Result.bind (fun current -> checkContextUse env current name calleeSpan)
         match contextCheck with
         | Error err -> Error err
-        | Ok () ->
+        | Ok state ->
             match TypeEnv.tryFind name env with
             | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
             | Some scheme ->
@@ -1914,11 +2016,19 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             match contextOpt with
                             | Some contexts -> registerContextRequirement preboundState name contexts
                             | None -> preboundState
+                        // A local function that writes its type runs in the contexts the type declares; one that does
+                        // not runs in those of the def around it.
+                        let outerScope = nextStateWithReq.ContextScope
+                        let bodyState =
+                            match typeOpt, expr.Kind with
+                            | Some _, Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, false) }
+                            | _ -> nextStateWithReq
                         let inferResult =
                             match expr.Kind with
                             | Lambda(args, body) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
-                                inferLambdaWithExpected envWithRec nextStateWithReq expr args body effectiveExpectedInputOpt expectedReturnOpt
-                            | _ -> inferExpr envWithRec nextStateWithReq expr
+                                inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
+                            | _ -> inferExpr envWithRec bodyState expr
+                            |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = outerScope })
                         match inferResult with
                         | Ok (typedExpr, next) ->
                             let declaredTy, finalState =
@@ -2047,6 +2157,27 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let mutable items: TypedTopLevelItem list = []
     let mutable errors: Diagnostic list = []
 
+    // An imported context whose every member is also an imported definition of that name is an ambient instance:
+    // the one the runtime supplies, as `nanyx/console`'s definitions are its `Console`. The top level of the module
+    // runs in it; a def runs in it only if it declares the context, or does not write its type and so infers it.
+    state <-
+        { state with
+            AmbientMembers =
+                state.TypeDefs
+                |> Map.toList
+                |> List.collect (fun (ctxName, info) ->
+                    let bindings =
+                        info.Members
+                        |> Map.toList
+                        |> List.map (fun (memberName, memberSymbol) ->
+                            memberName,
+                            TypeEnv.tryFind memberName env
+                            |> Option.bind (fun scheme -> scheme.Symbol)
+                            |> Option.filter (fun symbol -> symbol <> memberSymbol))
+                    if bindings.IsEmpty || not info.Parameters.IsEmpty || bindings |> List.exists (snd >> Option.isNone) then []
+                    else bindings |> List.map (fun (memberName, symbol) -> memberName, (symbol.Value, ctxName)))
+                |> Map.ofList }
+
     // Pre-bind every top-level value before inferring any body, so a definition can refer to one
     // declared later in the module (forward references, mutual recursion). An annotated def is bound
     // at its declared type; an unannotated one at a fresh variable that its inferred type is unified
@@ -2059,7 +2190,11 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             state <- registerTypeDef state name modifiers parameters body
         | Kind (Def (ValueDef(isExport, name, typeOpt, value))) ->
             let symbol, declared = declareSymbol DefValue value.Id name TopLevelValue isExport None state
-            state <- declared
+            // The module's own def wins over an imported one of the same name, and requires only its own contexts.
+            state <- { declared with ContextRequirements = declared.ContextRequirements |> Map.remove name }
+            match typeOpt, value.Kind, symbol with
+            | None, Lambda _, Some symbol -> state <- { state with UnannotatedDefs = state.UnannotatedDefs |> Map.add name symbol }
+            | _ -> ()
             let _, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
             match declaredTypeExprOpt with
             // An annotation with a `typeof` can only be read once the values it names are in scope, so the def is
@@ -2122,11 +2257,18 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     match contextOpt with
                     | Some contexts -> registerContextRequirement nextState2 name contexts
                     | None -> nextState2
+                // A function runs in the contexts its type declares, or infers them. A value is computed at the top
+                // level, in the ambient ones.
+                let bodyState =
+                    match expr.Kind with
+                    | Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, typeOpt.IsNone) }
+                    | _ -> nextStateWithReq
                 let inferResult =
                     match expr.Kind with
                     | Lambda(args, body) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
-                        inferLambdaWithExpected envWithRec nextStateWithReq expr args body effectiveExpectedInputOpt expectedReturnOpt
-                    | _ -> inferExpr envWithRec nextStateWithReq expr
+                        inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
+                    | _ -> inferExpr envWithRec bodyState expr
+                    |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = AmbientScope })
                 match inferResult with
                 | Ok (typedExpr, next) ->
                     let declaredTy, finalState =
@@ -2194,6 +2336,38 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters
             items <- items @ [ TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ]
         | Def (ValueDef _) -> ()
+
+    if errors.IsEmpty then
+        // The ambient contexts each unannotated function needs: those its body uses, and those the unannotated
+        // functions it uses need that nothing nearer supplies, until no more are found.
+        let uses = List.rev state.DeferredContextUses
+        let mutable required =
+            state.UnannotatedDefs |> Map.map (fun name _ -> state.InferredContexts |> Map.tryFind name |> Option.defaultValue Set.empty)
+        let mutable changed = true
+        while changed do
+            changed <- false
+            for used in uses do
+                match used.Caller with
+                | DefScope(caller, true) when required.ContainsKey caller ->
+                    let needed = Set.difference required.[used.Callee] used.Available
+                    if not (Set.isSubset needed required.[caller]) then
+                        required <- required |> Map.add caller (Set.union required.[caller] needed)
+                        changed <- true
+                | _ -> ()
+        for used in uses do
+            match used.Caller with
+            | DefScope(caller, false) ->
+                for ctxName in Set.difference required.[used.Callee] used.Available do
+                    errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span ]
+            | _ -> ()
+        // What an unannotated function needs is part of its type, as a context written in its type is.
+        state <-
+            { state with
+                ContextRequirements =
+                    required
+                    |> Map.filter (fun _ contexts -> not contexts.IsEmpty)
+                    |> Map.fold (fun acc name contexts ->
+                        acc |> Map.add name (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic))) state.ContextRequirements }
 
     if errors.IsEmpty then Ok (types, items, state) else Error errors
 
