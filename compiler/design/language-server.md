@@ -110,6 +110,11 @@ what the compiler keeps: exact spans, resolved names and types.
   is written. Names and their spans come from the declared names the parser records (`DefValue`, `TypeDefBody`,
   `RecordTypeFields`). It needs a parse, not a type-check, so a type error leaves the outline as it was; a text
   that does not parse shows the last good text's outline, less the items edited since.
+- **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
+  requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
+  published, with a diagnostic's first fix preferred. Only analyzers offer fixes so far (`default/unusedBindings`
+  removes an unused local or renames an unused name to `_`); a compiler error's fixes will appear the same way
+  once it has them. A fix that edits another file is not offered.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*.
@@ -145,7 +150,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
    ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), and a value's attached definitions after a pipe's `\`
    ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
-6. **Code actions.** From diagnostic fixes.
+6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)); compiler
+   errors have no fixes yet.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
 
 ## Open questions
