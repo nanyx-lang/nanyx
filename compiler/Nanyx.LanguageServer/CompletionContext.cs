@@ -1,5 +1,10 @@
 namespace Nanyx.LanguageServer;
 
+/// <summary>An import path written up to the cursor.</summary>
+/// <param name="IsFile">Whether it is a file's path, in quotes (<c>"util.nyx"</c>), rather than a module's (<c>nanyx/text</c>).</param>
+/// <param name="Written">What is written of it so far, without the opening quote.</param>
+public sealed record ImportPath(bool IsFile, string Written);
+
 /// <summary>
 /// What surrounds the cursor in the text being typed, read from the characters alone, since the text being typed
 /// rarely parses. Offsets are into the text as the parser sees it (see <see cref="SourcePositions"/>).
@@ -42,6 +47,78 @@ public static class CompletionContext
         }
 
         return IsCode(text, wordStart);
+    }
+
+    /// <summary>
+    /// The import path being written at <paramref name="cursor"/>, if the cursor is on an item of an <c>import</c>:
+    /// on its line, or inside its <c>import ( ... )</c> block. <c>null</c> elsewhere, and on an import's alias.
+    /// </summary>
+    public static ImportPath? ImportPathAt(string text, int cursor)
+    {
+        if (ImportItemsStart(text, cursor) is not { } itemsStart)
+        {
+            return null;
+        }
+
+        var items = text[itemsStart..cursor];
+        if (items.Count(character => character == '"') % 2 == 1)
+        {
+            return new ImportPath(IsFile: true, Written: items[(items.LastIndexOf('"') + 1)..]);
+        }
+
+        var start = items.Length;
+        while (start > 0 && !char.IsWhiteSpace(items[start - 1]) && items[start - 1] != '(')
+        {
+            start--;
+        }
+
+        var written = items[start..];
+        var before = items[..start].TrimEnd();
+        var isAlias = EndsWithWord(before, "as");
+        return written.Contains('"') || isAlias ? null : new ImportPath(IsFile: false, Written: written);
+    }
+
+    /// <summary>
+    /// Where the items of the import the cursor is in start: after <c>import</c> on the cursor's own line, or after
+    /// the <c>(</c> of an <c>import ( ... )</c> block not yet closed before the cursor.
+    /// </summary>
+    private static int? ImportItemsStart(string text, int cursor)
+    {
+        var lineStart = cursor == 0 ? 0 : text.LastIndexOf('\n', cursor - 1) + 1;
+        while (true)
+        {
+            var line = text[lineStart..LineEnd(text, lineStart)];
+            var indent = line.Length - line.TrimStart().Length;
+            var keyword = lineStart + indent;
+            if (line.TrimStart().StartsWith("import", StringComparison.Ordinal)
+                && keyword + 6 <= text.Length
+                && (keyword + 6 == text.Length || !IsNameCharacter(text[keyword + 6])))
+            {
+                var afterKeyword = keyword + 6;
+                if (cursor < afterKeyword)
+                {
+                    return null;
+                }
+
+                var open = text.IndexOf('(', afterKeyword, LineEnd(text, lineStart) - afterKeyword);
+                if (open < 0)
+                {
+                    // `import item`: only on its own line.
+                    return cursor <= LineEnd(text, lineStart) ? afterKeyword : null;
+                }
+
+                return cursor > open && text.IndexOf(')', open, cursor - open) < 0 ? open + 1 : null;
+            }
+
+            // Only the lines of a block can come between the cursor and its `import (`: indented, or the `)`.
+            if (lineStart == 0 || (lineStart < cursor && indent == 0 && line.Trim().Length > 0 && !line.Trim().StartsWith(')')))
+            {
+                return null;
+            }
+
+            // The line before: its own line ending is at `lineStart - 1`.
+            lineStart = lineStart < 2 ? 0 : text.LastIndexOf('\n', lineStart - 2) + 1;
+        }
     }
 
     /// <summary>

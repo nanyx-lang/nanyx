@@ -3,12 +3,14 @@ using NyxCompiler;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using TextEdit = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextEdit;
 
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Offers the names in scope at the cursor, with their types, and the language's keywords; after a dot, the fields
-/// of a record or the names under a prefix (an import's alias, a type's attached definitions). Completion is asked
+/// of a record or the names under a prefix (an import's alias, a type's attached definitions); and in an import, the
+/// standard library's modules and the files beside the document (see <see cref="ImportPaths"/>). Completion is asked
 /// for while the user types, when the text rarely type-checks, so these come from the document's last compile that
 /// did, at the place there nearest the cursor (see <see cref="OpenDocument.NearestInLastGood"/>): a name declared
 /// since is not offered until the text type-checks again. Nothing is offered in a comment or a string, or where a
@@ -48,7 +50,13 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         var text = document.Positions.NormalizedText;
-        var wordStart = CompletionContext.WordStart(text, document.Positions.ToOffset(request.Position));
+        var cursor = document.Positions.ToOffset(request.Position);
+        if (CompletionContext.ImportPathAt(text, cursor) is { } import)
+        {
+            return ImportPaths(document, import, cursor);
+        }
+
+        var wordStart = CompletionContext.WordStart(text, cursor);
         if (CompletionContext.MemberPath(text, wordStart) is { } path)
         {
             return Members(document, path, wordStart - 1 - string.Join('.', path).Length);
@@ -71,6 +79,74 @@ public sealed class CompletionHandler : CompletionHandlerBase
             SortText = $"3{keyword}"
         });
         return new CompletionList(names.Concat(keywords));
+    }
+
+    /// <summary>
+    /// What can follow the import path written up to <paramref name="cursor"/>: the standard library's modules
+    /// after <c>nanyx/</c>, a level at a time (<c>nanyx/text.</c> offers the modules under <c>text</c>), and in quotes
+    /// the <c>.nyx</c> files and folders beside the document, or in the folder the path has reached. An untitled
+    /// document has no folder, so it is offered no files. Each item replaces only the part of the path after its last
+    /// <c>/</c> (or <c>.</c>, in a module's path), and a folder or a level of modules asks for the next part.
+    /// </summary>
+    private static CompletionList ImportPaths(OpenDocument document, ImportPath import, int cursor)
+    {
+        var written = import.Written;
+        var separator = import.IsFile ? written.LastIndexOf('/') : written.LastIndexOfAny(['/', '.']);
+        var range = document.Positions.ToRange(cursor - (written.Length - separator - 1), cursor);
+        CompletionItem Item(string label, CompletionItemKind kind, string insert, string? documentation = null) => new()
+        {
+            Label = label,
+            Kind = kind,
+            TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit { Range = range, NewText = insert }),
+            Documentation = documentation is null ? null : new StringOrMarkupContent(documentation),
+            // A folder or a level of modules is only part of a path: the editor asks again for what follows it.
+            Command = insert == label ? null : new Command { Name = "editor.action.triggerSuggest", Title = "Suggest" }
+        };
+
+        if (import.IsFile)
+        {
+            if (document.FileName.Length == 0 || Path.GetDirectoryName(document.FileName) is not { } documentFolder)
+            {
+                return new CompletionList();
+            }
+
+            var folder = Path.GetFullPath(Path.Combine(documentFolder, written[..(separator + 1)]));
+            if (!Directory.Exists(folder))
+            {
+                return new CompletionList();
+            }
+
+            var folders = Directory.GetDirectories(folder)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .Where(name => !name.StartsWith('.'))
+                .Select(name => Item(name, CompletionItemKind.Folder, $"{name}/"));
+            var files = Directory.GetFiles(folder, "*.nyx")
+                .Where(file => !string.Equals(Path.GetFullPath(file), document.FileName, StringComparison.OrdinalIgnoreCase))
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .Select(name => Item(name, CompletionItemKind.File, name));
+            return new CompletionList(folders.Concat(files));
+        }
+
+        var prefix = StandardLibrary.importPrefix;
+        if (!written.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            // Only the standard library's modules are imported by name, so far.
+            return written.Contains('/')
+                ? new CompletionList()
+                : new CompletionList(Item(StandardLibrary.packageName, CompletionItemKind.Module, prefix));
+        }
+
+        var level = written[prefix.Length..(separator + 1)];
+        return new CompletionList(
+            StandardLibrary.moduleNames
+                .Where(name => name.StartsWith(level, StringComparison.Ordinal))
+                .Select(name => name[level.Length..])
+                .GroupBy(rest => rest.Split('.')[0])
+                .Select(group => group.Contains(group.Key)
+                    ? Item(group.Key, CompletionItemKind.Module, group.Key, StandardLibrary.trySummary(level + group.Key)?.Value)
+                    : Item(group.Key, CompletionItemKind.Module, $"{group.Key}.")));
     }
 
     /// <summary>
@@ -127,7 +203,8 @@ public sealed class CompletionHandler : CompletionHandlerBase
         {
             DocumentSelector = TextDocumentSyncHandler.Selector,
             ResolveProvider = false,
-            // Members are offered as soon as the dot is typed; names as soon as a name is started, by the editor.
-            TriggerCharacters = new Container<string>(".")
+            // Members are offered as soon as the dot is typed, and the next part of an import path as soon as its
+            // `/` or opening quote is; names as soon as a name is started, by the editor.
+            TriggerCharacters = new Container<string>(".", "/", "\"")
         };
 }
