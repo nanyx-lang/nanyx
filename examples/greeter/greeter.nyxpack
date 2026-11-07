@@ -1,0 +1,15 @@
+# A package: `nanyx run` in this directory runs its @entry, and `nanyx build` checks every source file and writes
+# the program to out/greeter.wat.
+
+[package]
+name = "greeter"
+version = "0.1.0"
+sources = ["src/**/*.nyx"]
+
+# The official analyzer runs only in packages that turn it on. Each rule can be set to error, warning, info, hint
+# or none; leave the table empty to keep every rule at its default.
+[analyzers.default]
+unusedBindings = "error"
+
+[formatter]
+lineWidth = 100

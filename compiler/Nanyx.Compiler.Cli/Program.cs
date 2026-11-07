@@ -54,16 +54,129 @@ internal static class CliCommands
     }
 
     /// <summary>
-    /// Compile a Nanyx source file.
+    /// Run a Nanyx program: a .nyx file, or the @entry of a package.
     /// </summary>
-    /// <param name="inputFile">The path to the .nyx file to compile.</param>
+    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Optional output path for generated artifacts.</param>
     [Consolo("run")]
     public static int Run(
-        string inputFile,
-        [Consolo("out", Alias = "o")] string? outputPath = null)
+        [Consolo("out", Alias = "o")] string? outputPath = null,
+        params string[] path)
     {
-        return Execute(inputFile, Target.Run, outputPath);
+        if (!TrySinglePath(path, out var single))
+        {
+            return 2;
+        }
+
+        if (single is not null && !IsPackagePath(single))
+        {
+            return Execute(single, Target.Run, outputPath);
+        }
+
+        if (!TryFindPackage(single, out var package))
+        {
+            return 1;
+        }
+
+        // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
+        var build = PackageModule.build(package);
+        PrintDiagnostics(build.Diagnostics, Console.Error);
+        if (HasErrors(build.Diagnostics))
+        {
+            return 1;
+        }
+
+        var entry = PackageModule.entryResult(build);
+        if (entry is null)
+        {
+            Console.Error.WriteLine($"The package {package.Manifest.Name} has no @entry, so there is nothing to run.");
+            return 1;
+        }
+
+        return RunProgram(entry.Value);
+    }
+
+    /// <summary>
+    /// Build a Nanyx package: check every source file the manifest selects, and write its @entry program as WebAssembly text.
+    /// </summary>
+    /// <param name="path">The package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
+    /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
+    [Consolo("build")]
+    public static int Build(
+        [Consolo("out", Alias = "o")] string? outputPath = null,
+        params string[] path)
+    {
+        if (!TrySinglePath(path, out var single) || !TryFindPackage(single, out var package))
+        {
+            return 1;
+        }
+
+        var build = PackageModule.build(package);
+        PrintDiagnostics(build.Diagnostics, Console.Out);
+        if (HasErrors(build.Diagnostics))
+        {
+            return 1;
+        }
+
+        var entry = PackageModule.entryResult(build);
+        var files = package.Sources.Length == 1 ? "1 file" : $"{package.Sources.Length} files";
+        if (entry is null)
+        {
+            Console.WriteLine($"Checked {package.Manifest.Name} ({files}); it has no @entry, so no program was written.");
+            return 0;
+        }
+
+        if (!TryEmitWat(entry.Value, Console.Out, out var wat))
+        {
+            return 1;
+        }
+
+        var finalOutputPath = string.IsNullOrWhiteSpace(outputPath)
+            ? Path.Combine(package.Manifest.Root, "out", package.Manifest.Name + ".wat")
+            : outputPath!;
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(finalOutputPath))!);
+        File.WriteAllText(finalOutputPath, wat);
+        Console.WriteLine($"Built {package.Manifest.Name} ({files}): {DisplayPath(Path.GetFullPath(finalOutputPath))}");
+        return 0;
+    }
+
+    /// <summary>
+    /// The one path a command was given, or <c>null</c> for none. Paths are taken as a <c>params</c> array only so that
+    /// the path can be left out and still be positional.
+    /// </summary>
+    private static bool TrySinglePath(string[] paths, out string? path)
+    {
+        path = paths.FirstOrDefault();
+        if (paths.Length > 1)
+        {
+            Console.Error.WriteLine($"Give one file, directory or manifest, not {paths.Length}.");
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
+    private static bool IsPackagePath(string path) =>
+        Directory.Exists(path) || path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The package a path names, or the one the current directory is in; otherwise reports why there is none.</summary>
+    private static bool TryFindPackage(string? path, out Package package)
+    {
+        var found = PackageModule.find(path ?? Directory.GetCurrentDirectory());
+        if (found.IsError)
+        {
+            foreach (var error in found.ErrorValue)
+            {
+                Console.Error.WriteLine(error);
+            }
+
+            package = null!;
+            return false;
+        }
+
+        package = found.ResultValue;
+        return true;
     }
 
     /// <summary>

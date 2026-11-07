@@ -49,7 +49,15 @@ shadowedNames = "info"
 deprecatedUsage = "warning"
 ```
 
-You can suppress a specific rule by setting its severity to `"none"`:
+An analyzer runs only if the manifest has a table for it, so removing `[analyzers.default]` uninstalls the default analyzer. An empty table runs every rule at its default severity:
+
+```toml
+[analyzers.default]
+```
+
+A single file run on its own (`nanyx run script.nyx`) has no manifest, so it runs the default analyzer with its defaults.
+
+The severities are `"error"`, `"warning"`, `"info"` and `"hint"`. An analyzer or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `"none"`:
 
 ```toml
 [analyzers.default]

@@ -39,10 +39,15 @@ Out of scope here:
 
 ## Where the compiler is today
 
-Nothing past the docs exists yet.
+A first slice of `.nyxpack` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
 
-- **No manifest is read.** `.nyxpack` and `.nyxproj` appear only in the docs and in
-  [analyzers.md](analyzers.md). There is no `nanyx new`, `build` or `restore`, and `nanyx run` needs a file.
+- **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
+  `sources`; `public-modules` is accepted but not used) and `[analyzers]` table are read, with an error naming the
+  key for anything wrong or unknown. `nanyx build` and `nanyx run` without a file (or with a directory or manifest)
+  check every source file, and `run` runs the one `@entry`; `build` writes it to `out/<name>.wat`. The language
+  server reads the manifest's analyzer configuration too. `[dependencies]` and `[project-references]` are refused
+  when non-empty, source files need not be named modules yet, and there is no `.nyxproj`, `nanyx new` or `restore`.
+  The formatter still reads its `[formatter]` table itself.
 - **Imports resolve two ways only** (`resolveImportPath` and `StandardLibrary.tryModuleName` in `Library.fs`).
   A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file, with `.` and `/` treated
   alike. A name starting `nanyx/` comes from the standard library embedded in the compiler. There are no search
