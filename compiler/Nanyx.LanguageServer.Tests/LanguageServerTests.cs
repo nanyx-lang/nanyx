@@ -406,15 +406,47 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Definition_in_the_standard_library_returns_nothing()
+    public async Task Definition_in_the_standard_library_is_in_a_read_only_copy_of_its_source()
     {
-        var uri = DocumentUri.Parse("untitled:Untitled-2");
+        var root = Directory.CreateTempSubdirectory("nanyx-stdlib-");
+        try
+        {
+            await RestartWithAsync(ServerSettings.Default with
+            {
+                StandardLibrarySource = new StandardLibrarySource(root.FullName)
+            });
+            var uri = DocumentUri.Parse("untitled:Untitled-2");
 
-        // The standard library is embedded in the compiler: there is no file to go to.
-        Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\n");
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+            Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\ndef n = Int.parse(\"1\")\n");
+            Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        Assert.Empty(await DefinitionsAt(uri, 1, 15));
+            // A qualified import of nanyx/text, and a definition the prelude brings into scope.
+            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 1, 22), "text", "uppercase");
+            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 2, 13), "prelude", "parse");
+        }
+        finally
+        {
+            foreach (var file in root.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                file.Attributes = FileAttributes.Normal;
+            }
+
+            root.Delete(recursive: true);
+        }
+
+        void AssertDefinitionInStandardLibrary(Location? location, string moduleName, string name)
+        {
+            Assert.NotNull(location);
+            var path = Path.Combine(root.FullName, "nanyx", moduleName + ".nyx");
+            Assert.Equal(DocumentUri.FromFileSystemPath(path), location.Uri);
+            Assert.True(File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly));
+
+            var source = File.ReadAllText(path);
+            Assert.Equal(NyxCompiler.StandardLibrary.tryLoadSource(moduleName).Value, source);
+
+            var line = source.Replace("\r\n", "\n").Split('\n')[location.Range.Start.Line];
+            Assert.EndsWith(name, line[location.Range.Start.Character..location.Range.End.Character]);
+        }
     }
 
     [Fact]
