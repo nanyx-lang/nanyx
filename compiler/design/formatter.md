@@ -136,6 +136,11 @@ def two = 2
 
 Blank lines inside an expression (between a lambda's match cases, between record fields) are removed.
 
+Two exceptions. Imports in a row stay together, however many lines a bracketed `import (...)` takes, and an
+attribute such as `@entry` stays on the line before its item. And for now, only the top level and a lambda's
+statements get blank lines: the parser ends an indented block (a def's value written on the lines after it, an arm's
+body, an `if` branch, a `module name =` block) at a blank line, so blank lines there would change the code.
+
 Whether a construct spans more than one line depends on its layout, which depends on where it starts. The printer
 knows its indent before printing it, so it decides by measuring: a construct is multi-line if it contains a comment on
 its own line, a hard line, or a group that does not fit flat in the remaining width.

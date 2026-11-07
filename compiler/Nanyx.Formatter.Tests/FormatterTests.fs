@@ -118,4 +118,48 @@ let ``Single blank lines between statements are kept, and runs of them become on
 [<Fact>]
 let ``Imports and module blocks are printed as written`` () =
     unchanged (lines [ "import nanyx/console"; "import (" ; "  nanyx/text as t"; "  \"./local.nyx\""; ")" ])
-    unchanged (lines [ "module app"; "module geometry ="; "  def origin = 0"; "  def unit = 1"; "def p = geometry.origin" ])
+    unchanged (lines [ "module app"; ""; "module geometry ="; "  def origin = 0"; "  def unit = 1"; ""; "def p = geometry.origin" ])
+
+[<Fact>]
+let ``A construct that spans lines gets a blank line before and after it at the top level`` () =
+    Assert.Equal(
+        lines [ "def zero = 0"; "def one = 1"; ""; "def add = { a, b ->"; "  a + b"; "}"; ""; "def two = 2" ],
+        format (lines [ "def zero = 0"; "def one = 1"; "def add = { a, b ->"; "  a + b"; "}"; "def two = 2" ]))
+
+[<Fact>]
+let ``Two constructs that span lines get one blank line between them, not two`` () =
+    Assert.Equal(
+        lines [ "def f = {"; "  1"; "}"; ""; "def g = {"; "  2"; "}" ],
+        format (lines [ "def f = {"; "  1"; "}"; "def g = {"; "  2"; "}" ]))
+
+[<Fact>]
+let ``Statements in a lambda that span lines are separated, but not from its braces`` () =
+    Assert.Equal(
+        lines [ "def main = {"; "  def f = { x ->"; "    x"; "  }"; ""; "  def a = 1"; "  def b = 2"; ""; "  match a"; "    | 1 -> b"; "    | _ -> 0"; "}" ],
+        format (lines [ "def main = {"; "  def f = { x ->"; "    x"; "  }"; "  def a = 1"; "  def b = 2"; "  match a"; "    | 1 -> b"; "    | _ -> 0"; "}" ]))
+
+[<Fact>]
+let ``The blank line goes before a construct's leading comment`` () =
+    Assert.Equal(
+        lines [ "def a = 1"; ""; "-- Adds two numbers."; "def add = { a, b ->"; "  a + b"; "}" ],
+        format (lines [ "def a = 1"; "-- Adds two numbers."; "def add = { a, b ->"; "  a + b"; "}" ]))
+
+[<Fact>]
+let ``An attribute stays on the line before its item`` () =
+    Assert.Equal(
+        lines [ "def a = 1"; ""; "@entry"; "def main = {"; "  a"; "}" ],
+        format (lines [ "def a = 1"; "@entry"; "def main = {"; "  a"; "}" ]))
+
+[<Fact>]
+let ``Imports stay together, however many lines they span`` () =
+    unchanged (lines [ "import nanyx/console"; "import ("; "  nanyx/text"; "  nanyx/math"; ")"; "import nanyx/result"; ""; "def a = 1" ])
+
+[<Fact>]
+let ``An indented block gets no blank lines, which would end it`` () =
+    unchanged (lines [ "def x ="; "  def f = { y ->"; "    y"; "  }"; "  f(1)" ])
+    unchanged (lines [ "module m ="; "  def f = { y ->"; "    y"; "  }"; "  def g = 2" ])
+
+[<Fact>]
+let ``Separating constructs is idempotent`` () =
+    let once = format (lines [ "def a = 1"; "-- note"; "def f = {"; "  1"; "}"; "def b = 2" ])
+    Assert.Equal(once, format once)
