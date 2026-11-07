@@ -48,8 +48,11 @@ what the compiler keeps: exact spans, resolved names and types.
   name resolution records ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). A declaration's own name goes
   to itself. A definition in an imported source file opens that file. The standard library is embedded in the
   compiler, so a definition in it opens a read-only copy of its module's source, which the server writes under the
-  user's local application data by compiler version (`StandardLibrarySource`). Type names and context members are
-  not symbols yet, so they go nowhere ([#266](https://github.com/nanyx-lang/nanyx/issues/266)).
+  user's local application data by compiler version (`StandardLibrarySource`). A type name in a type (an
+  annotation, a type definition, a context) goes to the type's definition: each type definition and context is a
+  `TypeDefinition` symbol, declared at its name, and each type expression that names one records a reference by its
+  node. Context members are not symbols yet, so they go nowhere
+  ([#266](https://github.com/nanyx-lang/nanyx/issues/266)).
 - **Inferred types in lenses and inlay hints**, as F# tooling shows them. A top-level def that does not write
   its type gets a lens above it with its whole type; a local def, lambda parameter or pattern variable gets an
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
@@ -107,8 +110,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 2. **Hover.** Inferred types are done ([#120](https://github.com/nanyx-lang/nanyx/issues/120)); declared
    signatures and docs follow from name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
 3. **Go-to-definition and find-references.** From the recorded symbols and references ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
-   Go-to-definition is done for values, including those in the standard library; it still needs type names and
-   context members as symbols ([#266](https://github.com/nanyx-lang/nanyx/issues/266)).
+   Go-to-definition is done for values, including those in the standard library, and for type names; it still
+   needs context members as symbols ([#266](https://github.com/nanyx-lang/nanyx/issues/266)).
 4. **Document symbols.** The outline view, from top-level definitions.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded

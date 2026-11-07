@@ -96,7 +96,8 @@ let private declareSymbol (declarer: Declarer) (holder: NodeId) (name: string) (
             |> Option.bind (fun names ->
                 match declarer with
                 // A def's value declares only that def, whose name a module block has qualified since.
-                | DefValue -> List.tryHead names
+                | DefValue
+                | TypeDefBody -> List.tryHead names
                 | LambdaParameters
                 | ArmBody -> names |> List.tryFind (fun (declaredName, _) -> declaredName = name))
         match declared with
@@ -124,6 +125,12 @@ let private recordAnnotated (symbol: SymbolId option) (isAnnotated: bool) (state
     match symbol with
     | Some symbol when isAnnotated -> { state with AnnotatedSymbols = state.AnnotatedSymbols |> Set.add symbol }
     | _ -> state
+
+/// Records that the type expression `typeExpr` names the type definition `info`, if it declares a symbol.
+let private recordTypeReference (typeExpr: TypeExpr) (info: TypeDefInfo) (state: InferState) =
+    match info.Symbol with
+    | Some symbol -> { state with References = state.References |> Map.add typeExpr.Id symbol }
+    | None -> state
 
 /// Records that `expr` names what `scheme` is bound for, and the import it came through if it was imported.
 let private recordReference (expr: Expression) (scheme: TypeScheme) (state: InferState) =
@@ -313,8 +320,8 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
         | Some prim -> prim, state
         | None ->
             match state.TypeDefs |> Map.tryFind name with
-            | Some info when name.StartsWith("$") -> TyNominal(name, info.Underlying, info.IsPrivate), state
-            | Some info -> aliasType name info, state
+            | Some info when name.StartsWith("$") -> TyNominal(name, info.Underlying, info.IsPrivate), recordTypeReference typeExpr info state
+            | Some info -> aliasType name info, recordTypeReference typeExpr info state
             | None -> TyPrimitive name, state
     | TypeVar name ->
         match state.TypeVars |> Map.tryFind name with
@@ -367,6 +374,7 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
         else
             match current.TypeDefs |> Map.tryFind name with
             | Some info when not (name.StartsWith("$")) ->
+                let current = recordTypeReference typeExpr info current
                 if info.Parameters.Length = argTys.Length then
                     let substitutions =
                         (info.Parameters, argTys)
@@ -375,7 +383,8 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
                     TyAlias(name, argTys, Unifier.apply substitutions info.Underlying), current
                 else
                     TyApply(name, argTys), current
-            | _ -> TyApply(name, argTys), current
+            | Some info -> TyApply(name, argTys), recordTypeReference typeExpr info current
+            | None -> TyApply(name, argTys), current
     | TypeFunc(arg, ret) ->
         let argTy, next = typeExprToTy state arg
         let retTy, nextState = typeExprToTy next ret
@@ -504,9 +513,13 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
         members, current
     | TypeName name
     | TypeApply(name, _) ->
+        let state =
+            match state.TypeDefs |> Map.tryFind name with
+            | Some info -> recordTypeReference ctxExpr info state
+            | None -> state
         match state.ContextDefs |> Map.tryFind name with
         | Some ctxDef -> collectContextMembers state ctxDef
-        | None -> 
+        | None ->
             // Also check TypeDefs for non-context types used as contexts
             match state.TypeDefs |> Map.tryFind name with
             | Some info ->
@@ -586,9 +599,13 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
         if name.StartsWith("$") && isPrivate then next.LocalPrivateNominals |> Set.add name else next.LocalPrivateNominals
     let nextContexts =
         if isContextDef modifiers then next.ContextDefs |> Map.add name body else next.ContextDefs
+    // A type is named in types, not written as a value, so it has no scope.
+    let symbol, next =
+        let symbol, declared = declareSymbol TypeDefBody body.Id name TypeDefinition (modifiers |> List.contains Export) None next
+        symbol, { declared with Scopes = symbol |> Option.map (fun id -> declared.Scopes |> Map.remove id) |> Option.defaultValue declared.Scopes }
     { next with
         TypeVars = originalTypeVars
-        TypeDefs = next.TypeDefs |> Map.add name { Parameters = paramVars; Underlying = underlyingTy; IsPrivate = isPrivate }
+        TypeDefs = next.TypeDefs |> Map.add name { Parameters = paramVars; Underlying = underlyingTy; IsPrivate = isPrivate; Symbol = symbol }
         ContextDefs = nextContexts
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }

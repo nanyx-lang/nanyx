@@ -2369,6 +2369,59 @@ let ``Imported names refer to the imported definition and the import`` () =
         let toUpper = (symbolAt (fun typed -> typed.References) (Compiler.compile source) (offsetOf source "t.String.uppercase" 0 2)).Value
         Assert.Equal("nanyx/text.nyx", toUpper.Declaration.File))
 
+/// What the name at `offset` goes to, as go-to-definition finds it: its kind, file and where it is declared.
+let private definitionOf (result: CompileResult) (offset: int) =
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Definition.symbolAt "" result offset
+    |> Option.map (fun symbol -> symbol.Kind, symbol.Declaration.File, symbol.Declaration.Start)
+
+[<Fact>]
+let ``Type names refer to the type definition`` () =
+    let source =
+        "def id: Point -> Point = { p -> p }\n" +
+        "type Point = (x: int, y: int)\n" +
+        "type Line = (start: Point, finish: Point)\n" +
+        "type Box(a) = (item: a)\n" +
+        "def boxed: Box(Point) -> Point = { b -> b.item }\n" +
+        "def g = {\n" +
+        "  def q: Point = (x = 1, y = 2)\n" +
+        "  def r: Line = (start = q, finish = q)\n" +
+        "  r.start\n" +
+        "}\n"
+    let result = Compiler.compile source
+    let point = Some (TypeDefinition, "", offsetOf source "type Point" 0 5)
+    // In an annotation, before the type is declared and after.
+    Assert.Equal(point, definitionOf result (offsetOf source "Point ->" 0 2))
+    Assert.Equal(point, definitionOf result (offsetOf source "-> Point =" 0 3))
+    // In another type's definition.
+    Assert.Equal(point, definitionOf result (offsetOf source "start: Point" 0 7))
+    // An applied type by its name, and the types it is applied to.
+    Assert.Equal(Some (TypeDefinition, "", offsetOf source "Box(a)" 0 0), definitionOf result (offsetOf source "Box(Point)" 0 1))
+    Assert.Equal(point, definitionOf result (offsetOf source "Box(Point)" 0 4))
+    // A local def's annotation.
+    Assert.Equal(point, definitionOf result (offsetOf source "q: Point" 0 3))
+    Assert.Equal(Some (TypeDefinition, "", offsetOf source "Line =" 0 0), definitionOf result (offsetOf source "r: Line" 0 3))
+    // A type definition's own name is its declaration, and a built-in type has none.
+    Assert.Equal(point, definitionOf result (offsetOf source "type Point" 0 6))
+    Assert.Equal(None, definitionOf result (offsetOf source "x: int" 0 3))
+
+[<Fact>]
+let ``Type names refer to imported types in their own file`` () =
+    withTempDir (fun dir ->
+        let modulePath = Path.Combine(dir, "shapes.nyx")
+        let moduleSource = "module shapes\nexport type Shape = #circle(int) | #square(int)\n"
+        File.WriteAllText(modulePath, moduleSource)
+        let mainPath = Path.Combine(dir, "main.nyx")
+        let mainSource = "module main\nimport \"shapes.nyx\"\ndef unit: Shape = #circle(1)\ndef ok: Result(int, string) = #some(1)\n"
+        File.WriteAllText(mainPath, mainSource)
+        let result = Compiler.compileFile mainPath
+        Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+        let at text = Definition.symbolAt mainPath result (offsetOf mainSource text 0 1) |> Option.map (fun symbol -> symbol.Kind, symbol.Declaration.File, symbol.Declaration.Start)
+        Assert.Equal(Some (TypeDefinition, modulePath, offsetOf moduleSource "Shape" 0 0), at "Shape =")
+        // The prelude's types are declared in the prelude.
+        let preludeSource = (StandardLibrary.tryLoadSource "prelude").Value.Replace("\r\n", "\n")
+        Assert.Equal(Some (TypeDefinition, "nanyx/prelude.nyx", offsetOf preludeSource "Result(a, e) =" 0 0), at "Result("))
+
 // Names in scope: what completion offers at a position.
 
 /// The names in scope at `offset` in `result`, as each name's kind and the file it is declared in.

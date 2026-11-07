@@ -383,6 +383,17 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Definition_of_a_type_name_is_the_type_definition()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-3");
+
+        Open(uri, "type Point = (x: int, y: int)\ndef origin: Point = (x = 0, y = 0)\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(new Location { Uri = uri, Range = new Range(0, 5, 0, 10) }, await SingleDefinitionAt(uri, 1, 14));
+    }
+
+    [Fact]
     public async Task Definition_of_a_qualified_import_is_in_the_imported_file()
     {
         var directory = Directory.CreateTempSubdirectory("nanyx-definition-");
