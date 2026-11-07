@@ -1,8 +1,9 @@
 # Formatter: workstream
 
-> **Status: proposal.** This page frames the formatter workstream and proposes how `nanyx format` is built. The
-> user's side is already described in the docs; the rest is open for discussion until the questions at the end are
-> settled. Work is tracked under the `formatting` label.
+> **Status: proposal, partly decided.** This page frames the formatter workstream and proposes how `nanyx format` is
+> built. The user's side is already described in the docs. Configuration, blank lines, import sorting and
+> unparseable files were decided on 2026-11-07 (see [Decided](#decided)); the style rules are still open. Work is
+> tracked under the `formatting` label.
 
 ## Summary
 
@@ -29,9 +30,9 @@ Out of scope here:
 
 - Style diagnostics (naming, unused code, preferring one construct to another): the
   [official analyzer](../../docs/src/content/standard-tools/official-analyzer.md), in the analyzers workstream. The
-  formatter only moves whitespace and comments, adds or removes parentheses, and never renames or reorders anything.
-- Reading `.nyxpack` itself: the packaging workstream. The formatter reads its `[formatter]` table once manifests can
-  be read.
+  formatter only moves whitespace and comments, adds or removes parentheses and blank lines, and sorts imports. It
+  never renames anything or reorders anything else.
+- Reading the rest of `.nyxpack`: the packaging workstream. The formatter reads only its `[formatter]` table.
 
 ## Where the compiler is today
 
@@ -63,8 +64,7 @@ attaches each comment to a node:
 - A comment with no following node in its block (the end of a file, a match or a lambda body) is printed at the end
   of that block.
 
-Blank lines between two statements or top-level items are kept, but a run of them becomes one. Blank lines anywhere
-else (inside an expression) are removed.
+Blank lines are covered under [Blank lines](#blank-lines) below.
 
 ### Printing
 
@@ -81,8 +81,9 @@ construct are written once, as documents, and the printer decides where to break
 
 `nanyx format` refuses a file that does not parse, and says where the parse error is.
 
-After formatting, it parses its own output and compares the tree with the original (equality ignores spans). If they
-differ, or a comment was dropped, it leaves the file alone and reports an internal error with the file's name. This
+After formatting, it parses its own output and compares the tree with the original (equality ignores spans), with
+the original's imports sorted the same way first. If they differ, or a comment was dropped, it leaves the file alone
+and reports an internal error with the file's name. This
 check runs on every file, always: it costs one extra parse, and a formatter that silently changes a program is worse
 than none.
 
@@ -94,8 +95,8 @@ file in the repository and every Nanyx code block in the docs.
 The docs' examples are the starting point. Proposed rules, each to be confirmed by the maintainer (see the tracking
 issue):
 
-- Two spaces of indent; a line width of 100. Indent is measured from the start of the line, never from a keyword's
-  column.
+- Two spaces of indent and a line width of 100, unless [configured](#configuration). Indent is measured from the
+  start of the line, never from a keyword's column.
 - One space around binary operators and `->`, after commas, and inside a lambda's braces: `{ a, b -> a + b }`.
 - A definition that fits on one line stays on one line. One that does not breaks before its `:` and its `=`, each
   indented once:
@@ -109,8 +110,62 @@ issue):
 
 - A lambda with match cases puts each case on its own line, the `|`s aligned under the first.
 - A pipeline that does not fit puts each stage on its own line, indented once.
-- A list, tuple or record that does not fit puts each element on its own line.
-- One blank line between top-level definitions is kept, never added or removed; runs of them become one.
+- A record, list or tuple that does not fit puts each element on its own line, separated by newlines instead of
+  commas, as the docs write them; trailing commas therefore never arise. Where the parser does not yet accept newlines
+  as separators for some form, that form keeps its commas until it does.
+
+### Blank lines
+
+A construct that spans more than one line, once laid out, gets a blank line before and after it, at every level: top
+level, module blocks, and the statements of a lambda or block body. The first and last statements of a body are the
+exception: there is no blank line after the opening `{` or before the closing `}`.
+
+Between constructs that each fit on one line, the author's choice is kept: a single blank line stays, a run of them
+becomes one, and none is added.
+
+```nanyx
+def zero = 0
+def one = 1
+
+def add
+  : int, int -> int
+  = { a, b -> a + b }
+
+def two = 2
+```
+
+Blank lines inside an expression (between a lambda's match cases, between record fields) are removed.
+
+Whether a construct spans more than one line depends on its layout, which depends on where it starts. The printer
+knows its indent before printing it, so it decides by measuring: a construct is multi-line if it contains a comment on
+its own line, a hard line, or a group that does not fit flat in the remaining width.
+
+### Sorting imports
+
+The imports in each run of consecutive `import` statements are sorted, and the names within one `import (...)` are
+sorted. A blank line or an own-line comment ends a run, so authors can group imports and keep the groups apart.
+Comments attached to an import move with it.
+
+The order: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each
+group alphabetical by its source as written, ignoring case, with ties broken by case.
+
+Reordering imports is safe because an import only brings names into scope, and a name exported by two imports is an
+error whatever their order (#155). If imports ever gain effects, this rule changes with them.
+
+### Configuration
+
+The `[formatter]` table of the package's `.nyxpack` (TOML), as the docs describe, with two settings:
+
+```toml
+[formatter]
+lineWidth = 100   # default 100
+indentSize = 2    # default 2
+```
+
+`nanyx format` finds the nearest `.nyxpack` in the file's directory or above it, and reads only that table, so it
+does not wait for the packaging workstream to read whole manifests. With no `.nyxpack`, or no table, the defaults
+apply. An unknown key or a value that is not a positive integer is an error naming the file and key. The language
+server uses the same settings for the document it formats.
 
 ### The command
 
@@ -120,8 +175,7 @@ nanyx format [--check | --write] [paths...]
 
 With no path it formats every `.nyx` file under the current directory; a directory means every `.nyx` file under
 it. `--write` is the default. `--check` writes nothing, lists each file that would change, and exits 1 if any would.
-Exit code 2 means a file could not be formatted (it does not parse, or the safety check failed). Until manifests can
-be read, the line width and indent are the defaults.
+Exit code 2 means a file could not be formatted (it does not parse, or the safety check failed).
 
 ### The editor
 
@@ -147,22 +201,30 @@ its own:
    codes, and the safety check.
 6. **The editor** ([#222](https://github.com/nanyx-lang/nanyx/issues/222)). Document formatting in the language
    server; format-on-save in the extension.
-7. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and
-   the docs' code blocks, and run `nanyx format --check` in CI.
+7. **Blank lines** ([#225](https://github.com/nanyx-lang/nanyx/issues/225)). Blank lines around multi-line
+   constructs, at every level.
+8. **Sorting imports** ([#226](https://github.com/nanyx-lang/nanyx/issues/226)).
+9. **Configuration** ([#227](https://github.com/nanyx-lang/nanyx/issues/227)). The `[formatter]` table of
+   `.nyxpack`.
+10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and
+    the docs' code blocks, and run `nanyx format --check` in CI.
 
-Later: the `[formatter]` table from `.nyxpack` (after packaging can read manifests), range formatting, formatting
-standard input for other editors (`nanyx format -`).
+Later: range formatting, formatting standard input for other editors (`nanyx format -`).
+
+## Decided
+
+On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
+
+- **Configuration.** `lineWidth` and `indentSize`, for now, in the `[formatter]` table of `.nyxpack`.
+- **Blank lines.** A construct that spans several lines gets a blank line before and after it, at every level;
+  between single-line constructs, the author's single blank lines are kept.
+- **Trailing commas.** A non-issue: Nanyx separates the elements of a multi-line record or list with newlines, not
+  commas.
+- **Imports.** Sorted, within each run of consecutive imports.
+- **Unparseable files.** Refused.
 
 ## Open questions
 
-- **Configuration.** The docs promise `lineWidth` and `indentSize`. Should `indentSize` exist at all? One indent
-  everywhere is a stronger guarantee than one indent per project, and Go, Elm and Black allow none.
-- **Blank lines.** Keep the author's single blank lines (proposed), or impose exactly one between top-level
-  definitions?
-- **Trailing commas.** Does the language allow a trailing comma in a broken list or record, and should the formatter
-  add one?
-- **Imports.** Should the formatter sort imports? This page proposes not: it reorders code, so it belongs to an
-  analyzer with a fix.
+- **The style rules** in [The style](#the-style), starting from the docs' examples.
 - **Alignment.** Aligning `=` or `->` across consecutive lines looks tidy but makes one edit change many lines in a
   diff. This page proposes no alignment beyond the `|`s of match cases.
-- **Unparseable files.** Refuse them (proposed), or format the top-level items that do parse and leave the rest?
