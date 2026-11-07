@@ -728,7 +728,8 @@ let interpolatedStringExprNoWs: Parser<Expression, ParseState> =
             LiteralExpr (StringLit text)
     spanned (between (pstring "\"") (pstring "\"") partsParser |>> toKind)
 
-let wildcardPattern = spannedPattern (pstring "_" >>% WildcardPattern)
+// `_` alone: `_rest` is a name, which says it is unused on purpose.
+let wildcardPattern = spannedPattern (pstring "_" .>> notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_')) >>% WildcardPattern)
 let elsePattern = spannedPattern (pstring "else" >>% ElsePattern)
 let identifierPattern =
     spannedPattern (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% IdentifierPattern name)

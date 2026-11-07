@@ -1060,7 +1060,7 @@ module Compiler =
             // errors (`nanyx run`, say) look at the diagnostics, and the typed module is still there for the
             // editor's features.
             { Phase = Typed
-              Diagnostics = Analyzers.run options (SemanticModel.ofTyped checkedModule.Syntax typed)
+              Diagnostics = Analyzers.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
               Typed = Some typed
               Syntax = Some checkedModule.Syntax }
 

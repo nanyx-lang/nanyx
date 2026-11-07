@@ -33,11 +33,13 @@ let private source = "def one = 1\ndef two = one + 1"
 let private textAt (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
 [<Fact>]
-let ``The official analyzer is registered and reports nothing yet`` () =
+let ``The official analyzer is registered and runs by default`` () =
     let official = Assert.Single(Analyzers.all)
     Assert.Equal("default", official.Name)
-    Assert.Empty(official.Rules)
+    Assert.Equal<string list>([ "unusedBindings" ], official.Rules |> List.map (fun rule -> rule.Id))
     Assert.Empty((Compiler.compile source).Diagnostics)
+    let unused = Assert.Single((Compiler.compile "def f = { x -> 1 }").Diagnostics)
+    Assert.Equal("default/unusedBindings", unused.Code)
 
 [<Fact>]
 let ``A report becomes a diagnostic with the rule's code, title and default severity`` () =
@@ -136,3 +138,100 @@ let ``Only the module being compiled is analyzed, not the modules it imports`` (
         Assert.Equal(Path.GetFullPath mainPath, diagnostic.Span.Value.File)
     finally
         Directory.Delete(dir, true)
+
+// The official analyzer's `unusedBindings` rule.
+
+/// What `default/unusedBindings` reports for `source`: each message with the text it is reported at.
+let private unusedIn (source: string) =
+    (Compiler.compile source).Diagnostics
+    |> List.map (fun diagnostic ->
+        Assert.Equal("default/unusedBindings", diagnostic.Code)
+        Assert.Equal(Severity.Warning, diagnostic.Severity)
+        diagnostic.Message, textAt source diagnostic.Span.Value)
+
+/// `source` with the edits of the only fix of the only diagnostic for it applied.
+let private fixed' (source: string) =
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    let fix = Assert.Single(diagnostic.Fixes)
+    fix.Edits
+    |> List.sortByDescending (fun edit -> edit.Span.Start)
+    |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source,
+    fix.Title
+
+[<Fact>]
+let ``An unused local def, argument or pattern variable is reported once, at its name`` () =
+    // The examples from the official analyzer's page in the docs.
+    let source =
+        "def total =\n  def taxRate = 0.2\n  100\n" +
+        "def greet: (string, string) -> string = { name, title ->\n  \"Hello, {name}!\"\n}\n" +
+        "def describe: #some(int) | #error(string) -> string = { response ->\n" +
+        "  match response\n    | #some(value) -> \"Success\"\n    | #error(msg) -> \"Error\"\n}\n"
+    Assert.Equal<(string * string) list>(
+        [ "`taxRate` is never used", "taxRate"
+          "Argument `title` is never used", "title"
+          "`value` is introduced by a pattern but never used", "value"
+          "`msg` is introduced by a pattern but never used", "msg" ],
+        unusedIn source)
+
+[<Fact>]
+let ``Used names, top-level defs and names starting with an underscore are not reported`` () =
+    let source =
+        "def unusedTopLevel = 1\n" +
+        "def f = { x, _ignored ->\n" +
+        "  def doubled = x * 2\n" +
+        "  def _spare = 3\n" +
+        "  def g = { y -> \"{y} {doubled}\" }\n" +
+        "  match [doubled]\n" +
+        "    | [_first, ..._rest] -> g(1)\n" +
+        "    | _ -> g(2)\n" +
+        "}\n"
+    Assert.Empty(unusedIn source)
+
+[<Fact>]
+let ``Names the compiler makes up are not reported`` () =
+    // A destructuring def binds the whole value under a made-up name, `for` its element, a shorthand lambda its
+    // argument, and a workflow bind a lambda's.
+    let source =
+        "def half: int -> Result(int, string) = { n -> #some(n / 2) }\n" +
+        "def f = { pair ->\n" +
+        "  def (a, b) = pair\n" +
+        "  def doubled = [a, b] \\ List.map({ * 2 })\n" +
+        "  for doubled\n    | n -> n\n" +
+        "}\n" +
+        "def quarter = { n -> proc {\n  def h = try half(n)\n  return try half(h)\n} }\n"
+    Assert.Empty(unusedIn source)
+
+[<Fact>]
+let ``The fix for an unused local def removes its line, with a comment after it`` () =
+    let source = "def total = { x ->\n  def y = 1\n  def taxRate = 0.2 -- the rate\n  x + y\n}\n"
+    let text, title = fixed' source
+    Assert.Equal("Remove `taxRate`", title)
+    Assert.Equal("def total = { x ->\n  def y = 1\n  x + y\n}\n", text)
+    Assert.Empty((Compiler.compile text).Diagnostics)
+
+[<Fact>]
+let ``The fix for an unused argument or pattern variable renames it to an underscore`` () =
+    let argument, title = fixed' "def f = { x, y -> x }"
+    Assert.Equal("Rename `y` to `_`", title)
+    Assert.Equal("def f = { x, _ -> x }", argument)
+    let pattern, _ = fixed' "def f: #some(int) | #none -> int = { o ->\n  match o\n    | #some(n) -> 1\n    | #none -> 0\n}"
+    Assert.Contains("| #some(_) -> 1", pattern)
+    Assert.Empty((Compiler.compile pattern).Diagnostics)
+    // After a list pattern's `...` too: without a name, `[x, ...]` would be a list of one.
+    let rest, _ = fixed' "def f: list(int) -> int = { xs ->\n  match xs\n    | [x, ...rest] -> x\n    | [] -> 0\n}"
+    Assert.Contains("| [x, ..._] -> x", rest)
+    Assert.Empty((Compiler.compile rest).Diagnostics)
+
+[<Fact>]
+let ``The fix for one unused name of a destructuring def renames it rather than removing the def`` () =
+    let text, title = fixed' "def f = { pair ->\n  def (a, b) = pair\n  b\n}"
+    Assert.Equal("Rename `a` to `_`", title)
+    Assert.Equal("def f = { pair ->\n  def (_, b) = pair\n  b\n}", text)
+    Assert.Empty((Compiler.compile text).Diagnostics)
+
+[<Fact>]
+let ``The fix for an unused def that ends its block renames it, since the block's value is the def`` () =
+    let text, title = fixed' "def f = { x ->\n  def y = x\n}"
+    Assert.Equal("Rename `y` to `_`", title)
+    Assert.Equal("def f = { x ->\n  def _ = x\n}", text)
+    Assert.Empty((Compiler.compile text).Diagnostics)

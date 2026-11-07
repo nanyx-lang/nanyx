@@ -393,9 +393,9 @@ let ``Run - list literals and patterns`` () =
         "def describe: list(int) -> string = { xs ->\n" +
         "  match xs\n" +
         "  | [] -> \"empty\"\n" +
-        "  | [x] -> \"one\"\n" +
-        "  | [1, y] -> \"one then another\"\n" +
-        "  | [x, ...rest] -> \"many\"\n" +
+        "  | [_x] -> \"one\"\n" +
+        "  | [1, _y] -> \"one then another\"\n" +
+        "  | [_x, ..._rest] -> \"many\"\n" +
         "}\n" +
         "def sum: list(int) -> int = { xs ->\n" +
         "  match xs\n" +
@@ -574,7 +574,7 @@ let ``Run - interpolating variables bound by match patterns`` () =
         "def first: list(int) -> string = { xs ->\n" +
         "  match xs\n" +
         "    | [] -> \"empty\"\n" +
-        "    | [x, ...rest] -> \"first {x}\"\n" +
+        "    | [x, ..._rest] -> \"first {x}\"\n" +
         "}\n" +
         "println(describe(#some(3)) ++ \", \" ++ describe(#none))\n" +
         "println(greet(#named(\"Ada\")) ++ \", \" ++ greet(#anon))\n" +
@@ -699,7 +699,7 @@ let ``Run - tuple patterns in match arms`` () =
         "}\n" +
         "def firstName: list((string, int)) -> string = { people ->\n" +
         "  match people\n" +
-        "    | [(name, _), ...rest] -> name\n" +
+        "    | [(name, _), ..._rest] -> name\n" +
         "    | [] -> \"nobody\"\n" +
         "}\n" +
         "@entry\n" +
@@ -912,7 +912,7 @@ let ``Run - if-matching`` () =
         "import nanyx/console\n" +
         "\n" +
         "def get: int -> #some(int) | #none = { n -> #some(n) }\n" +
-        "def nothing: int -> #some(int) | #none = { n -> #none }\n" +
+        "def nothing: int -> #some(int) | #none = { _n -> #none }\n" +
         "def describe: #some(int) | #none -> string = { r ->\n" +
         "  if r is #some(v) then \"got {v}\" else \"nothing\"\n" +
         "}\n" +
@@ -1343,7 +1343,7 @@ let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
         "  | #some(s) -> println(s)\n" +
         "  | #empty -> println(\"empty\")\n" +
         "def seven = Option.defaultValue(#none, 7)\n" +
-        "def three = Option.mapOr(name, 0, { s -> 3 })\n" +
+        "def three = Option.mapOr(name, 0, { _s -> 3 })\n" +
         "println(\"{seven} {three}\")\n"
     runSource source |> assertRan "some 2\nerror ERR: odd\nsome 20\n0\nabc!\n7 3\n"
 

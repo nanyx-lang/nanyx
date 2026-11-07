@@ -141,3 +141,11 @@ let ``Or-patterns work in pattern lambdas and with several scrutinees`` () =
         arms |> List.map (fst >> List.length) |> should equal [ 2; 2; 2 ]
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``a name starting with an underscore is a name in a pattern, and a lone underscore a wildcard`` () =
+    match parseModule "def x = match v\n  | [_first, _] -> 1\n  | _other -> 2" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match (_, [ [ Kind (ListPattern ([ Kind (IdentifierPattern "_first"); Kind WildcardPattern ], None)) ], _
+                                                                    [ Kind (IdentifierPattern "_other") ], _ ]))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
