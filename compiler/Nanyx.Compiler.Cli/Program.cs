@@ -113,7 +113,7 @@ internal static class CliCommands
                 switch (failed.Item)
                 {
                     case Nanyx.Formatter.FormatCommand.Formatting.NotParsed notParsed:
-                        PrintDiagnostics(ListModule.OfSeq([SyntaxError(notParsed.Item)]), Console.Error);
+                        PrintDiagnostics(ListModule.OfSeq([Compiler.syntaxError(notParsed.Item)]), Console.Error);
                         break;
                     case Nanyx.Formatter.FormatCommand.Formatting.NotSafe notSafe:
                         Console.Error.WriteLine($"{DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
@@ -123,22 +123,6 @@ internal static class CliCommands
         }
 
         return Nanyx.Formatter.FormatCommand.exitCode(mode, results);
-    }
-
-    /// <summary>The diagnostic `nanyx check` gives for a failed parse. FParsec's report starts by giving the file and
-    /// position ("Error in path: Ln: 1 Col: 5", wrapped when the path is long), which the diagnostic's span already
-    /// gives.</summary>
-    private static Diagnostic SyntaxError(Parser.Program.ParseError error)
-    {
-        var message = error.Message;
-        var column = message.IndexOf(" Col: ", StringComparison.Ordinal);
-        var lineEnd = column < 0 ? -1 : message.IndexOf('\n', column);
-        if (message.StartsWith("Error in ") && lineEnd >= 0)
-        {
-            message = message[(lineEnd + 1)..];
-        }
-
-        return Diagnostics.at(DiagnosticCodes.SyntaxError, error.Span, message);
     }
 
     private const string HelloWorldSource = """
