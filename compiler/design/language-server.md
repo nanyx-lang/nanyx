@@ -65,7 +65,7 @@ what the compiler keeps: exact spans, resolved names and types.
   (`OpenDocument.NearestInLastGood`): a cursor in text edited since moves to where the edit starts, so a name
   declared since that compile is not offered until the text type-checks again. Whether the cursor is in a comment
   or a string, after a dot, or naming a new def is read from the characters alone (`CompletionContext`), since the
-  text being typed rarely parses. Import paths are [#214](https://github.com/nanyx-lang/nanyx/issues/214).
+  text being typed rarely parses.
 - **Completion after a dot** ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), triggered by typing it.
   The names before the dot are read from the characters (`CompletionContext.MemberPath`). If the first is a value
   in scope, the fields of its record type are offered, followed through the rest of the path. Otherwise the names
@@ -74,6 +74,13 @@ what the compiler keeps: exact spans, resolved names and types.
   definitions attached to a type (`Result.`). An imported definition's type is its module's (`ImportedTypes`). Only a
   name or a dotted name before the dot is understood, not a call's result; and a value's attached definitions
   (`s.` offering `String`'s) wait on [#185](https://github.com/nanyx-lang/nanyx/issues/185).
+- **Completion of import paths** ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), triggered by `/` and
+  `"` too, and needing no compile: which import item the cursor is on is read from the characters
+  (`CompletionContext.ImportPathAt`), on an `import` line or in an `import ( ... )` block. A module path offers
+  `nanyx/`, then the standard library's modules (`StandardLibrary.moduleNames`) a level at a time, each with the
+  summary from the comment that opens it (`StandardLibrary.trySummary`). A quoted path offers the `.nyx` files and
+  the folders beside the document, or in the folder the path has reached; an untitled document has none. Each item
+  replaces only the part after the path's last separator, and a folder or a level asks for the next part at once.
 - **No find-references.** It is one handler in `Handlers/`, and can read the same `References` table, though only
   of the open document's own compile.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
@@ -106,9 +113,9 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
    ([#212](https://github.com/nanyx-lang/nanyx/issues/212)); record fields and module exports after a dot are
-   offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)). Filed: a value's attached definitions after a
-   dot (#213, waiting on [#185](https://github.com/nanyx-lang/nanyx/issues/185)), and import paths
-   ([#214](https://github.com/nanyx-lang/nanyx/issues/214)).
+   offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
+   ([#214](https://github.com/nanyx-lang/nanyx/issues/214)). Left: a value's attached definitions after a dot
+   (#213, waiting on [#185](https://github.com/nanyx-lang/nanyx/issues/185)).
 6. **Code actions.** From diagnostic fixes.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
 

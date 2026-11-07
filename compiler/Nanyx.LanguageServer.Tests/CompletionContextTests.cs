@@ -73,4 +73,34 @@ public sealed class CompletionContextTests
     [InlineData("def a = \"p.|\"")]
     public void There_is_no_path_where_the_word_follows_no_dot_or_no_name(string marked) =>
         Assert.Null(MemberPathAt(marked));
+
+    private static ImportPath? ImportPathAt(string marked)
+    {
+        var cursor = marked.IndexOf('|');
+        return CompletionContext.ImportPathAt(marked.Remove(cursor, 1), cursor);
+    }
+
+    [Theory]
+    [InlineData("import |", false, "")]
+    [InlineData("import nan|", false, "nan")]
+    [InlineData("import nanyx/te|", false, "nanyx/te")]
+    [InlineData("module main\n\nimport nanyx/text.|", false, "nanyx/text.")]
+    [InlineData("import (\n  nanyx/console\n  nanyx/|", false, "nanyx/")]
+    [InlineData("import (nanyx/console |", false, "")]
+    [InlineData("import \"|", true, "")]
+    [InlineData("import \"sub/ut|", true, "sub/ut")]
+    [InlineData("import (\n  \"../shared/|", true, "../shared/")]
+    public void The_import_path_written_up_to_the_cursor_is_read(string marked, bool isFile, string written) =>
+        Assert.Equal(new ImportPath(isFile, written), ImportPathAt(marked));
+
+    [Theory]
+    [InlineData("def a = nanyx|")]
+    [InlineData("imp|")]
+    [InlineData("import nanyx/text as t|")]
+    [InlineData("import \"util.nyx\"|")]
+    [InlineData("import nanyx/text\ndef a = b|")]
+    [InlineData("import (\n  nanyx/text\n)\ndef a = b|")]
+    [InlineData("import (\n  nanyx/text\n)|")]
+    public void There_is_no_import_path_outside_an_imports_items(string marked) =>
+        Assert.Null(ImportPathAt(marked));
 }

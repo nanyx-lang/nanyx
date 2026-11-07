@@ -632,9 +632,9 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Completion_is_triggered_by_a_dot()
+    public void Completion_is_triggered_by_a_dot_and_by_the_start_of_an_import_paths_next_part()
     {
-        Assert.Equal(["."], _client.ServerSettings.Capabilities.CompletionProvider?.TriggerCharacters ?? []);
+        Assert.Equal([".", "/", "\""], _client.ServerSettings.Capabilities.CompletionProvider?.TriggerCharacters ?? []);
     }
 
     [Fact]
@@ -724,6 +724,57 @@ public sealed class LanguageServerTests : IAsyncLifetime
                 Options = new FormattingOptions { TabSize = 4, InsertSpaces = false }
             },
             _cancellation.Token))?.ToList() ?? [];
+
+    [Fact]
+    public async Task Completion_in_an_import_offers_the_standard_librarys_modules()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-4");
+
+        Open(uri, "import \n");
+        await NextPublished(uri);
+        var package = Assert.Single(await CompletionsAt(uri, 0, 7));
+        Assert.Equal(("nanyx", CompletionItemKind.Module, "nanyx/"), (package.Label, package.Kind, package.TextEdit?.TextEdit?.NewText));
+        // The rest of the path is asked for at once.
+        Assert.Equal("editor.action.triggerSuggest", package.Command?.Name);
+
+        Change(uri, version: 2, "import nanyx/co\n");
+        await NextPublished(uri);
+        var modules = await CompletionsAt(uri, 0, 15);
+        Assert.Equal(["console", "math", "result", "text"], modules.Select(item => item.Label));
+        var console = modules[0];
+        Assert.Equal(new Range(0, 13, 0, 15), console.TextEdit?.TextEdit?.Range);
+        Assert.Equal("how a program talks to the terminal.", console.Documentation?.String);
+    }
+
+    [Fact]
+    public async Task Completion_in_a_quoted_import_offers_the_files_and_folders_beside_the_document()
+    {
+        var directory = Directory.CreateTempSubdirectory("nanyx-completion-");
+        try
+        {
+            File.WriteAllText(Path.Combine(directory.FullName, "util.nyx"), "module util\n");
+            File.WriteAllText(Path.Combine(directory.FullName, "notes.txt"), "");
+            Directory.CreateDirectory(Path.Combine(directory.FullName, "shared"));
+            File.WriteAllText(Path.Combine(directory.FullName, "shared", "text.nyx"), "module text\n");
+            var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory.FullName, "main.nyx"));
+
+            Open(uri, "import \"\n");
+            await NextPublished(uri);
+            // Not the document itself, nor a file that is not Nanyx source.
+            Assert.Equal(
+                [("shared", CompletionItemKind.Folder, "shared/"), ("util.nyx", CompletionItemKind.File, "util.nyx")],
+                (await CompletionsAt(uri, 0, 8)).Select(item => (item.Label, item.Kind, item.TextEdit?.TextEdit?.NewText)));
+
+            Change(uri, version: 2, "import \"shared/t\n");
+            await NextPublished(uri);
+            var inFolder = Assert.Single(await CompletionsAt(uri, 0, 16));
+            Assert.Equal(("text.nyx", new Range(0, 15, 0, 16)), (inFolder.Label, inFolder.TextEdit?.TextEdit?.Range));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
 
     private async Task<List<CompletionItem>> CompletionsAt(DocumentUri uri, int line, int character) =>
         (await _client.TextDocument.RequestCompletion(

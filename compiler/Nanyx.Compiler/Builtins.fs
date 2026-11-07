@@ -115,3 +115,14 @@ module StandardLibrary =
         else
             use reader = new StreamReader(stream)
             Some (reader.ReadToEnd())
+
+    /// What a standard-library module is for, from the comment that opens it: `how a program talks to the terminal.`
+    /// for `-- nanyx/console: how a program talks to the terminal.` None if it has no such comment.
+    let trySummary (moduleName: string) : string option =
+        let heading = $"-- {importPrefix}{moduleName}: "
+        tryLoadSource moduleName
+        |> Option.bind (fun source ->
+            source.Split('\n')
+            |> Array.map (fun line -> line.TrimEnd '\r')
+            |> Array.tryFind (fun line -> line.StartsWith(heading, System.StringComparison.Ordinal))
+            |> Option.map (fun line -> line.Substring heading.Length))
