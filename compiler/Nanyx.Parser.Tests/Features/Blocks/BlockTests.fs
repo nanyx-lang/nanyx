@@ -113,3 +113,79 @@ let ``A comment after the last item of a module block ends it there`` () =
                       "def app.m.a", "def a = 1"
                       "def app.m.b", "def b = 2"
                       "def c", "def c = 3" ]
+
+[<Fact>]
+let ``An empty line between statements does not end a def block`` () =
+    let source = "def x =\n  def a = 1\n\n  a\n"
+    defBlockTexts "x" source |> should equal ("def a = 1\n\n  a", [ "def a = 1"; "a" ])
+    parseSource source |> should haveLength 1
+
+[<Fact>]
+let ``A line of only spaces between statements does not end a def block`` () =
+    let source = "def x =\n  def a = 1\n    \n  a\n"
+    defBlockTexts "x" source |> should equal ("def a = 1\n    \n  a", [ "def a = 1"; "a" ])
+
+[<Fact>]
+let ``A comment line at the indent between statements does not end a def block`` () =
+    let source = "def x =\n  def a = 1\n  -- note\n  a\n"
+    defBlockTexts "x" source |> should equal ("def a = 1\n  -- note\n  a", [ "def a = 1"; "a" ])
+    parseSource source |> should haveLength 1
+
+[<Fact>]
+let ``Several blank and comment lines between statements do not end a def block`` () =
+    let source = "def x =\n  def a = 1\n\n-- one\n    -- two\n\n  a\n"
+    defBlockTexts "x" source |> should equal ("def a = 1\n\n-- one\n    -- two\n\n  a", [ "def a = 1"; "a" ])
+
+[<Fact>]
+let ``Code at a smaller indent after blank and comment lines still ends a def block`` () =
+    let source = "def x =\n  def a = 1\n  a\n\n  -- note\n\ndef y = 2\n"
+    defBlockTexts "x" source |> should equal ("def a = 1\n  a", [ "def a = 1"; "a" ])
+    parseSource source |> List.map (fun item -> textOf source item.Span) |> should equal [ "def x =\n  def a = 1\n  a"; "def y = 2" ]
+
+[<Fact>]
+let ``A comment line skipped between statements is recorded once`` () =
+    let source = "def x =\n  def a = 1\n  -- note\n  a\n  -- after\ndef y = 2\n"
+    match parseModuleWithTrivia "t.nyx" source with
+    | Result.Ok parsed ->
+        parsed.Trivia
+        |> List.choose (function
+            | LineComment(text, _, _) -> Some text
+            | _ -> None)
+        |> should equal [ "-- note"; "-- after" ]
+    | Result.Error err -> failwith $"Parse failed: {err.Message}"
+
+[<Fact>]
+let ``An empty line in a match arm's block body does not end the arm`` () =
+    let source = "def f = { x ->\n  match x\n    | 1 ->\n      def a = 1\n\n      a\n    | _ -> 0\n}\n"
+    let parsed = parseSource source
+    parsed |> should haveLength 1
+    textOf source parsed.[0].Span |> should equal (source.TrimEnd '\n')
+
+[<Fact>]
+let ``An empty line between items does not end a module block`` () =
+    let source = "module app\nmodule m =\n  def a = 1\n\n  def b = 2\ndef c = 3\n"
+    itemsOf source
+    |> should equal [ "module app", "module app"
+                      "module app.m", "module m =\n  def a = 1\n\n  def b = 2"
+                      "def app.m.a", "def a = 1"
+                      "def app.m.b", "def b = 2"
+                      "def c", "def c = 3" ]
+
+[<Fact>]
+let ``A line of only the indent between items does not end a module block`` () =
+    let source = "module app\nmodule m =\n  def a = 1\n  \n  def b = 2\n"
+    itemsOf source |> List.map fst |> should equal [ "module app"; "module app.m"; "def app.m.a"; "def app.m.b" ]
+
+[<Fact>]
+let ``A comment line between items does not end a module block`` () =
+    let source = "module app\nmodule m =\n  def a = 1\n  -- note\n  def b = 2\n"
+    itemsOf source |> List.map fst |> should equal [ "module app"; "module app.m"; "def app.m.a"; "def app.m.b" ]
+
+[<Fact>]
+let ``Code at a smaller indent after blank and comment lines still ends a module block`` () =
+    let source = "module app\nmodule m =\n  def a = 1\n\n  -- note\n\ndef b = 2\n"
+    itemsOf source
+    |> should equal [ "module app", "module app"
+                      "module app.m", "module m =\n  def a = 1"
+                      "def app.m.a", "def a = 1"
+                      "def b", "def b = 2" ]

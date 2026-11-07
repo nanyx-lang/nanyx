@@ -137,8 +137,8 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// child does not place itself goes on a line of its own before it, or after it when the child placed comments
     /// that come before it, so that comments stay in order.
     ///
-    /// With `blankLines`, for where the parser allows blank lines between children (the top level and a lambda's
-    /// statements, but not an indented block, which a blank line ends): a child that spans more than one line gets a
+    /// With `blankLines`, for where the parser allows blank lines between children (the top level, a module block and
+    /// a block of statements, but not a list of imports): a child that spans more than one line gets a
     /// blank line before it (and its leading comments) and after it, except at the start and end and between two
     /// imports; between children that each fit on one line, a blank line (however many there were) is kept, and none
     /// is added.
@@ -649,10 +649,10 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeApply(n, args) -> cat [ text n; text "("; commaJoin (List.map typeExpr args); text ")" ]
         | _ -> typeExpr context
 
-    /// An indented block (a def's value, an arm's body, an `if` branch), which a blank line would end.
+    /// An indented block (a def's value, an arm's body, an `if` branch).
     and block (b: Expression) : Doc =
         match b.Kind with
-        | Block statements -> statementsInSequence false b.Span.Start b.Span.End statements
+        | Block statements -> statementsInSequence true b.Span.Start b.Span.End statements
         | _ -> expr full b
 
     and statementsInSequence (blankLines: bool) (start: int) (finish: int) (statements: Statement list) : Doc =
@@ -932,7 +932,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let children = items |> List.map (fun i -> i.Span.Start, i.Span.End, fun () -> item i)
             cat [ text "import ("; nest (cat [ hard; sequence false start finish children ]); hard; text ")" ]
 
-    /// The items of the module, or of a module block, which a blank line would end (`blankLines` false).
+    /// The items of the module, or of a module block.
     let rec topLevel (blankLines: bool) (start: int) (finish: int) (items: TopLevelItem list) : Doc =
         let defOf (i: TopLevelItem) =
             match i.Kind with
@@ -967,7 +967,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     and item (i: TopLevelItem) : Doc =
         match i.Kind with
         | ModuleDecl n -> text $"module {n}"
-        | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel false i.Span.Start i.Span.End items ]) ]
+        | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel true i.Span.Start i.Span.End items ]) ]
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items

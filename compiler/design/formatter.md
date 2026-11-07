@@ -117,7 +117,8 @@ issue):
 ### Blank lines
 
 A construct that spans more than one line, once laid out, gets a blank line before and after it, at every level: top
-level, module blocks, and the statements of a lambda or block body. The first and last statements of a body are the
+level, module blocks, and the statements of a lambda or of an indented block (a def's value written on the lines
+after it, an arm's body, an `if` branch). The first and last statements of a body are the
 exception: there is no blank line after the opening `{` or before the closing `}`.
 
 Between constructs that each fit on one line, the author's choice is kept: a single blank line stays, a run of them
@@ -137,9 +138,7 @@ def two = 2
 Blank lines inside an expression (between a lambda's match cases, between record fields) are removed.
 
 Two exceptions. Imports in a row stay together, however many lines a bracketed `import (...)` takes, and an
-attribute such as `@entry` stays on the line before its item. And for now, only the top level and a lambda's
-statements get blank lines: the parser ends an indented block (a def's value written on the lines after it, an arm's
-body, an `if` branch, a `module name =` block) at a blank line, so blank lines there would change the code.
+attribute such as `@entry` stays on the line before its item.
 
 Whether a construct spans more than one line depends on its layout, which depends on where it starts. The printer
 knows its indent before printing it, so it decides by measuring: a construct is multi-line if it contains a comment on

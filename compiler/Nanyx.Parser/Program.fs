@@ -414,6 +414,13 @@ let wsWithComments () = ws
 let blockLineEnd () : Parser<unit, ParseState> =
     wsNoNl() >>. optional (inlineCommentNoNl ()) >>. skipNewline
 
+/// The end of a line in an indentation-based block, then any lines that are empty, whitespace only or a comment, so
+/// the next parser starts at the beginning of the next line with code. Used between a block's statements, inside an
+/// `attempt`: if what follows is not at the block's indent, the block ends at its last statement and the comments
+/// skipped here are forgotten, to be noted again by whatever parses them next.
+let blockLinesEnd () : Parser<unit, ParseState> =
+    blockLineEnd () >>. skipMany (attempt (blockLineEnd ()))
+
 // Indentation helpers
 let getIndentation () = 
     getPosition |>> (fun pos -> int pos.Column - 1)
@@ -1182,7 +1189,7 @@ let blockExpr() : Parser<Expression, ParseState> =
             blockSpanned (
                 pipe2
                     statementItems
-                    (many (attempt (blockLineEnd () >>. statementAtIndent)))
+                    (many (attempt (blockLinesEnd () >>. statementAtIndent)))
                     (fun first rest -> List.concat (first :: rest)))
         else
             pzero
@@ -2102,7 +2109,7 @@ let moduleBlockDecl: Parser<TopLevelItem, ParseState> =
                 if indent > 0 then
                     pipe2
                         linePayload
-                        (many (attempt (blockLineEnd () >>. lineAtIndent indent)))
+                        (many (attempt (blockLinesEnd () >>. lineAtIndent indent)))
                         (fun first rest -> name, first :: rest |> List.choose id)
                     >>= fun (name, items) -> if items.IsEmpty then pzero else preturn (ModuleBlock(name, items))
                 else
