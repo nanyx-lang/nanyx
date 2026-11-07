@@ -1395,7 +1395,7 @@ let recordField =
 // When the first field starts its line, a field that starts a later line at the same indentation follows the
 // field before it without a comma. A field may itself run over several lines (a lambda, a `match`), as long as
 // its continuation lines are indented more than the fields.
-let recordFields =
+let private byCommaOrLine (item: Parser<'a, ParseState>) : Parser<'a list, ParseState> =
     ws >>. getPosition .>>. currentLineIndent >>= fun (first, firstLineIndent) ->
         let comma = pstring "," .>> ws
         let nextLine =
@@ -1404,9 +1404,11 @@ let recordFields =
                 ws >>. getPosition .>>. currentLineIndent >>= fun (pos, lineIndent) ->
                     if pos.Column = first.Column && lineIndent = pos.Column then preturn () else pzero
         pipe2
-            recordField
-            (many ((comma >>. recordField) <|> attempt (nextLine >>. recordField)))
+            item
+            (many ((comma >>. item) <|> attempt (nextLine >>. item)))
             (fun head tail -> head :: tail)
+
+let recordFields = byCommaOrLine recordField
 
 // A lone positional field is just its expression, all-positional fields are a tuple, and any named field
 // makes the whole thing a record.
@@ -1441,7 +1443,13 @@ let tupleOrParenExpr =
     <?> "tuple or record"
 
 // List expression parser. `...expr` splices a list in place: `[a, ...xs, b]` is desugared to
-// `[a] ++ xs ++ [b]`, so the rest of the compiler only ever sees list literals and concatenation.
+// `[a] ++ xs ++ [b]`, so the rest of the compiler only ever sees list literals and concatenation. Like a record's
+// fields, the items are separated by commas or written one per line, and the `]` may start a line:
+//
+//   [
+//     a
+//     ...xs
+//   ]
 let listExpr =
     let item =
         (pstring "..." >>. ws >>. expression |>> Choice2Of2)
@@ -1449,8 +1457,8 @@ let listExpr =
     withSpan (
         between
             (pstring "[")
-            (pstring "]")
-            (sepBy (ws >>. item) (pstring "," .>> ws)))
+            (ws >>. pstring "]")
+            (ws >>. opt (byCommaOrLine item) |>> Option.defaultValue []))
     |>> fun (items, span) ->
         // Each segment is a run of elements or a spread list.
         let segments =

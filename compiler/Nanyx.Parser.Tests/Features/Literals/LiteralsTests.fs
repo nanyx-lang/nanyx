@@ -25,6 +25,27 @@ let ``a list of only a spread is the spread itself, and no spread is a plain lis
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``list items may be written one per line, without commas, with the ] on a line of its own`` () =
+    let oneLine = parseModule "def x = [1, 2, ...xs]"
+    let byLine = parseModule "def x = [\n  1\n  2\n  ...xs\n]"
+    let byLineWithCommas = parseModule "def x = [\n  1,\n  2,\n  ...xs\n]"
+    match oneLine, byLine, byLineWithCommas with
+    | Result.Ok expected, Result.Ok actual, Result.Ok withCommas ->
+        actual |> should equal expected
+        withCommas |> should equal expected
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
+let ``an empty list may span lines`` () =
+    match parseModule "def z = [\n]" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "z", _, Kind (ListExpr [])))) ] -> ()
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
+let ``a list item on a line indented differently is an error, not a new item`` () =
+    parseModule "def x = [\n  1\n    2\n]" |> isError |> should equal true
+
+[<Fact>]
 let ``Parse literals.nyx file`` () =
     let result = parseTestFile "literals.nyx"
 
