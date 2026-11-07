@@ -12,6 +12,7 @@ with a Stream field. An issue that serves several workstreams is placed under th
 | Error messages | [error-messages.md](error-messages.md) | [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) |
 | Language server and editor | [language-server.md](language-server.md) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [packaging.md](packaging.md) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
+| Formatter | [formatter.md](formatter.md) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
 
 An issue that serves more than one workstream gets every label that applies, and appears in each tracking
 issue. The finer labels (`parser`, `type checker`, `wasm backend`) say which part of the compiler an issue is in,
