@@ -49,7 +49,7 @@ what the compiler keeps: exact spans, resolved names and types.
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). Like hover, a file that fails to type-check shows none,
   so they disappear while the file is broken and the code moves up and down as the lenses come and go; keeping
-  the last good ones until the next good compile is a follow-up.
+  the last good ones until the next good compile is [#210](https://github.com/nanyx-lang/nanyx/issues/210).
 - **No find-references or completion.** Each is one handler in `Handlers/`. Find-references can read the same
   `References` table, though only of the open document's own compile.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
@@ -65,7 +65,7 @@ what the compiler keeps: exact spans, resolved names and types.
 
 ## Plan
 
-_To do._ Candidate items, not yet filed, in rough dependency order:
+_To do._ Candidate items, in rough dependency order; those not linked to an issue are not yet filed:
 
 1. **Exact ranges.** Done ([#97](https://github.com/nanyx-lang/nanyx/issues/97)): diagnostics carry spans, codes
    and related locations, and are published as LSP ranges, `code` and `relatedInformation`. What is left waits on
@@ -78,7 +78,12 @@ _To do._ Candidate items, not yet filed, in rough dependency order:
    Go-to-definition is done for values; it still needs type names and context members as symbols, and a
    way to open standard-library source (a virtual document, say).
 4. **Document symbols.** The outline view, from top-level definitions.
-5. **Completion.** Names in scope, then record members and module exports.
+5. **Completion.** Filed: keep the last good compile, since completion is asked for while the text does not
+   compile ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); record where each symbol is in scope
+   ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); then names in scope
+   ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), record fields, module exports and attached definitions
+   after a dot ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
+   ([#214](https://github.com/nanyx-lang/nanyx/issues/214)).
 6. **Code actions.** From diagnostic fixes.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
 
