@@ -387,14 +387,15 @@ module Compiler =
                 | None -> name
             acc |> TypeEnv.declare importedName (symbols |> Map.tryFind name) (quantify ty)) env
 
-    /// The diagnostic for a failed parse. FParsec's report starts with a line giving the file and position, which
-    /// the diagnostic's span already gives.
-    let private syntaxError (error: ParseError) =
+    /// The diagnostic for a failed parse. FParsec's report starts by giving the file and position ("Error in path:
+    /// Ln: 1 Col: 5"), which the diagnostic's span already gives. FParsec wraps that line when the path is long, so
+    /// it is cut off through the position, not at the first line break.
+    let syntaxError (error: ParseError) =
+        let column = error.Message.IndexOf(" Col: ", System.StringComparison.Ordinal)
+        let lineEnd = if column < 0 then -1 else error.Message.IndexOf('\n', column)
         let message =
-            if error.Message.StartsWith "Error in " && error.Message.Contains "\n" then
-                error.Message.Substring(error.Message.IndexOf '\n' + 1)
-            else
-                error.Message
+            if error.Message.StartsWith "Error in " && lineEnd >= 0 then error.Message.Substring(lineEnd + 1)
+            else error.Message
         Diagnostics.at DiagnosticCodes.SyntaxError error.Span message
     let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =
         match parseModuleFileWithNames filePath source with

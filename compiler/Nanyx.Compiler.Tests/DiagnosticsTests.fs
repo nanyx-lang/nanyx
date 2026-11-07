@@ -126,6 +126,19 @@ let ``A parse error has a code and the position where parsing failed`` () =
     Assert.DoesNotContain("Ln:", diagnostic.Message)
 
 [<Fact>]
+let ``A parse error's message leaves out the file however long its path is`` () =
+    // FParsec wraps the line naming the file and position when the path is long.
+    let directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nanyx-diagnostics-tests", String.replicate 6 "a-rather-long-directory-name-", System.Guid.NewGuid().ToString("N"))
+    System.IO.Directory.CreateDirectory directory |> ignore
+    let file = System.IO.Path.Combine(directory, "broken.nyx")
+    System.IO.File.WriteAllText(file, "def = 2")
+    let diagnostic = single (Compiler.compileFile file)
+    Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
+    Assert.DoesNotContain("a-rather-long", diagnostic.Message)
+    Assert.DoesNotContain("Ln:", diagnostic.Message)
+    Assert.StartsWith("def = 2", diagnostic.Message)
+
+[<Fact>]
 let ``An unknown standard library module is reported at the import`` () =
     let source = "import nanyx/sockets\n\ndbg(1)"
     let diagnostic = single (Compiler.compile source)
