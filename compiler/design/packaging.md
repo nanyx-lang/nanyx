@@ -74,7 +74,8 @@ Nothing past the docs exists yet.
 ### Names and ownership
 
 A package name is dotted, as in the docs: `acme.web`, `nanyx.http`. The first segment is the package's
-**namespace**, and a namespace has an owner.
+**namespace**, and a namespace has an owner. Owners are GitHub accounts at launch (decided in
+[#207](https://github.com/nanyx-lang/nanyx/issues/207)).
 
 - A namespace is claimed by a GitHub user or organisation of the same name at first publish, and only that
   account (or members it grants) can publish under it. This reuses an identity people already have and gives
@@ -214,8 +215,6 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 - **Index address and artifact storage.** The static index on GitHub is decided. Is `packages.nanyx.dev` the
   address, and who holds the domain? Are artifacts kept in object storage (Cloudflare R2) or as release assets on
   a project-owned repository?
-- **Name ownership.** Is tying namespaces to GitHub accounts acceptable at launch, or do we need our own accounts
-  from the start?
 - **Resolution.** PubGrub (newest compatible) or minimal version selection (Go: oldest that satisfies, no
   solver, no lockfile strictly needed)? This page proposes PubGrub for its error messages.
 - **Major versions.** Is "a new major is a new package name" acceptable, or should a build allow two majors of a
