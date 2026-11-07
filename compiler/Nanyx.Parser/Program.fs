@@ -410,6 +410,10 @@ let wsInline = skipMany (skipAnyOf " \t")
 let wsNoNl() = skipMany (skipAnyOf " \t") // whitespace without newlines
 let wsWithComments () = ws
 
+/// The end of a line in an indentation-based block: an optional `-- comment`, then the newline.
+let blockLineEnd () : Parser<unit, ParseState> =
+    wsNoNl() >>. optional (inlineCommentNoNl ()) >>. skipNewline
+
 // Indentation helpers
 let getIndentation () = 
     getPosition |>> (fun pos -> int pos.Column - 1)
@@ -1174,7 +1178,7 @@ let blockExpr() : Parser<Expression, ParseState> =
             blockSpanned (
                 pipe2
                     statementItems
-                    (many (attempt (newline >>. statementAtIndent)))
+                    (many (attempt (blockLineEnd () >>. statementAtIndent)))
                     (fun first rest -> List.concat (first :: rest)))
         else
             pzero
@@ -2094,7 +2098,7 @@ let moduleBlockDecl: Parser<TopLevelItem, ParseState> =
                 if indent > 0 then
                     pipe2
                         linePayload
-                        (many (attempt (newline >>. lineAtIndent indent)))
+                        (many (attempt (blockLineEnd () >>. lineAtIndent indent)))
                         (fun first rest -> name, first :: rest |> List.choose id)
                     >>= fun (name, items) -> if items.IsEmpty then pzero else preturn (ModuleBlock(name, items))
                 else
