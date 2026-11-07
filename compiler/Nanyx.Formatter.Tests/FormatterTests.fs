@@ -92,8 +92,8 @@ let ``Literals are printed from the source`` () =
 
 [<Fact>]
 let ``Type annotations read as the docs write them`` () =
-    unchanged "def f: int, int -> int = { a, b -> a + b }\n"
-    unchanged "def g: (int -> int), int -> int = { h, x -> h(x) }\n"
+    unchanged (lines [ "def f: int, int -> int = { a, b ->"; "  a + b"; "}" ])
+    unchanged (lines [ "def g: (int -> int), int -> int = { h, x ->"; "  h(x)"; "}" ])
     unchanged "def h: list(a -> b) -> int = { fs -> 0 }\n"
     unchanged "type Point = (x: int, y: int)\n"
     unchanged "type Shape = #circle(radius: float) | #square(float)\n"
@@ -185,3 +185,26 @@ let ``Fields go one per line when one of them spans lines`` () =
 [<Fact>]
 let ``Fields that each fit on one line stay on one line`` () =
     unchanged "def a = f(x = 1, y = { z -> z })\n"
+
+[<Fact>]
+let ``An annotated def's lambda body goes on the line after the arrow`` () =
+    Assert.Equal(
+        lines [ "def heading: [Log] string -> () = { title ->"; "  log(\"== \" ++ String.uppercase(title) ++ \" ==\")"; "}" ],
+        format "def heading: [Log] string -> () = { title -> log(\"== \" ++ String.uppercase(title) ++ \" ==\") }")
+    Assert.Equal(
+        lines [ "def main = {"; "  def double: int -> int = { x ->"; "    x * 2"; "  }"; ""; "  double(2)"; "}" ],
+        format (lines [ "def main = {"; "  def double: int -> int = { x -> x * 2 }"; "  double(2)"; "}" ]))
+
+[<Fact>]
+let ``A lambda body that is only a name or a literal stays on the def's line`` () =
+    unchanged "def id: a -> a = { x -> x }\n"
+    unchanged "def zero: () -> int = { 0 }\n"
+    unchanged "def none: a -> #none = { _ -> #none }\n"
+
+[<Fact>]
+let ``A def without an annotation keeps a short lambda on one line`` () =
+    unchanged "def add = { a, b -> a + b }\n"
+
+[<Fact>]
+let ``A body moved to its own line keeps the operators a statement can take bracketed`` () =
+    Assert.Equal(lines [ "def odd: int -> bool = { n ->"; "  (n % 2) == 1"; "}" ], format "def odd: int -> bool = { n -> n % 2 == 1 }")

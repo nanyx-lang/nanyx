@@ -332,7 +332,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | FunctionCall("__for", _, [ iterable; loop ]) when (match loop.Kind with Lambda([ ("__for_element", None) ], _) -> true | _ -> false) ->
             forDoc iterable loop
         | FunctionCall(n, nameSpan, args) -> cat [ text n; callArguments e (nameEnd nameSpan (e.Span.Start + n.Length)) args ]
-        | Lambda(parameters, body) -> lambdaDoc e parameters body
+        | Lambda(parameters, body) -> lambdaDoc e parameters body false
         | Pipe(value, n, nameSpan, args) ->
             cat [ expr { position with Tail = false; Prec = 0 } value; text " \\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
         | Block _ -> block e
@@ -493,7 +493,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | [ argument; lambda ] -> cat [ parenFields argument afterName lambda.Span.Start; text " "; expr full lambda ]
         | _ -> cat [ text "("; commaJoin (List.map (expr full) args); text ")" ]
 
-    and lambdaDoc (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) : Doc =
+    /// A lambda. With `bodyOnOwnLine`, a body that is an expression goes on a line of its own after the `->`, as the
+    /// one statement of a block (see `defDoc`).
+    and lambdaDoc (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) (bodyOnOwnLine: bool) : Doc =
         match shorthand e parameters body with
         | Some doc -> doc
         | None ->
@@ -509,6 +511,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
             // its braces go among them.
             | Block statements -> cat [ head; nest (cat [ hard; statementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
+            | _ when bodyOnOwnLine -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
             | _ ->
                 let bodyDoc = expr full body
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
@@ -703,8 +706,19 @@ let format (options: Options) (parsed: SourceModule) : string =
                  | None -> Doc.empty)
                 text " ="
             ]
+        // A def with a type annotation whose value is a lambda keeps the signature's line to itself: the body goes on
+        // the next line, unless it is only a name or a literal (`def id: a -> a = { x -> x }`).
+        let isTrivial (body: Expression) =
+            match body.Kind with
+            | IdentifierExpr _
+            | LiteralExpr _
+            | UnitExpr
+            | TagExpr(_, None) -> true
+            | _ -> false
         match value.Kind with
         | Block _ -> cat [ head; nest (cat [ hard; block value ]) ]
+        | Lambda(parameters, body) when typeOpt.IsSome && not (isTrivial body) ->
+            cat [ head; text " "; lambdaDoc value parameters body true ]
         | _ -> cat [ head; text " "; expr full value ]
 
     and destructuringDef (group: Def list) (span: SourceSpan) : Doc =
