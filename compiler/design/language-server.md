@@ -65,8 +65,15 @@ what the compiler keeps: exact spans, resolved names and types.
   (`OpenDocument.NearestInLastGood`): a cursor in text edited since moves to where the edit starts, so a name
   declared since that compile is not offered until the text type-checks again. Whether the cursor is in a comment
   or a string, after a dot, or naming a new def is read from the characters alone (`CompletionContext`), since the
-  text being typed rarely parses. Members after a dot are [#213](https://github.com/nanyx-lang/nanyx/issues/213),
-  import paths [#214](https://github.com/nanyx-lang/nanyx/issues/214).
+  text being typed rarely parses. Import paths are [#214](https://github.com/nanyx-lang/nanyx/issues/214).
+- **Completion after a dot** ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), triggered by typing it.
+  The names before the dot are read from the characters (`CompletionContext.MemberPath`). If the first is a value
+  in scope, the fields of its record type are offered, followed through the rest of the path. Otherwise the names
+  written under the path as a prefix are (`TypedModule.ModuleNames`, every name the module can write, dotted or
+  not): an import's exports under its alias, a dotted export a segment at a time (`t.` offers `String`), and the
+  definitions attached to a type (`Result.`). An imported definition's type is its module's (`ImportedTypes`). Only a
+  name or a dotted name before the dot is understood, not a call's result; and a value's attached definitions
+  (`s.` offering `String`'s) wait on [#185](https://github.com/nanyx-lang/nanyx/issues/185).
 - **No find-references.** It is one handler in `Handlers/`, and can read the same `References` table, though only
   of the open document's own compile.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
@@ -98,8 +105,9 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
-   ([#212](https://github.com/nanyx-lang/nanyx/issues/212)). Filed: record fields, module exports and attached
-   definitions after a dot ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
+   ([#212](https://github.com/nanyx-lang/nanyx/issues/212)); record fields and module exports after a dot are
+   offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)). Filed: a value's attached definitions after a
+   dot (#213, waiting on [#185](https://github.com/nanyx-lang/nanyx/issues/185)), and import paths
    ([#214](https://github.com/nanyx-lang/nanyx/issues/214)).
 6. **Code actions.** From diagnostic fixes.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.

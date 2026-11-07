@@ -957,25 +957,36 @@ module Compiler =
                                 | _ -> true)
                             |> distinctDefinitions
                             |> reachedItems own
-                        // The names the imports and the prelude bring in unqualified, each meaning the definition the
-                        // environment settled on (an explicit import's over the prelude's), less the names the module
-                        // declares at the top level itself. A qualified import's names have a dot (`m.foo`).
-                        let declaredHere =
+                        // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
+                        // alias), each meaning the definition the environment settled on (an explicit import's over
+                        // the prelude's), less the names the module declares at the top level itself.
+                        let ownTopLevel =
                             state.Scopes
                             |> Map.keys
                             |> Seq.map (fun id -> state.Symbols.[id])
                             |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
-                            |> Seq.map (fun symbol -> symbol.Name)
-                            |> Set.ofSeq
-                        let scopes =
+                            |> List.ofSeq
+                        let declaredHere = ownTopLevel |> List.map (fun symbol -> symbol.Name) |> Set.ofList
+                        let imported =
                             env
-                            |> Map.toSeq
-                            |> Seq.choose (fun (name, scheme) ->
+                            |> Map.toList
+                            |> List.choose (fun (name, scheme) ->
                                 match scheme.Symbol with
-                                | Some id when state.Symbols.ContainsKey id && not (name.Contains '.') && not (declaredHere.Contains name) ->
-                                    Some (id, Scope.wholeModule (sourceFileName origin))
+                                | Some id when state.Symbols.ContainsKey id && not (declaredHere.Contains name) -> Some (name, id, scheme.Type)
                                 | _ -> None)
-                            |> Seq.fold (fun acc (id, scope) -> acc |> Map.add id scope) state.Scopes
+                        // Only the undotted ones are in scope as names: a dotted one is reached through its prefix.
+                        let scopes =
+                            imported
+                            |> List.filter (fun (name, _, _) -> not (name.Contains '.'))
+                            |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (sourceFileName origin))) state.Scopes
+                        // A def a `module name =` block does not export can only be named inside the block.
+                        let keptToItsBlock (symbol: Symbol) =
+                            not symbol.IsExported
+                            && state.ModuleBlocks |> List.exists (fun (_, block) -> SourceSpan.contains block symbol.Declaration)
+                        let moduleNames =
+                            ownTopLevel
+                            |> List.filter (keptToItsBlock >> not)
+                            |> List.fold (fun acc symbol -> acc |> Map.add symbol.Name symbol.Id) (imported |> List.map (fun (name, id, _) -> name, id) |> Map.ofList)
                         Ok { Typed =
                                 { Module = inlined @ own
                                   // The types of the imported definitions inlined for the backend, then the module's own.
@@ -990,7 +1001,9 @@ module Compiler =
                                   AnnotatedSymbols = state.AnnotatedSymbols
                                   References = state.References
                                   ImportReferences = state.ImportReferences
-                                  Scopes = scopes }
+                                  Scopes = scopes
+                                  ModuleNames = moduleNames
+                                  ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList }
                              Own = own
                              Inlined = inlined
                              Name = declaredModuleName desugared

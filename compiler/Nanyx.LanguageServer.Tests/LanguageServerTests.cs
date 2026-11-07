@@ -618,7 +618,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Completion_offers_nothing_in_a_comment_a_string_or_after_a_dot()
+    public async Task Completion_offers_nothing_in_a_comment_or_a_string_and_only_members_after_a_dot()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-nothing.nyx"));
 
@@ -628,7 +628,42 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Empty(await CompletionsAt(uri, 0, 19));
         Assert.Empty(await CompletionsAt(uri, 1, 11));
         Assert.Contains(await CompletionsAt(uri, 1, 15), item => item.Label == "a");
-        Assert.Empty(await CompletionsAt(uri, 3, 11));
+        Assert.Equal(["x", "y"], (await CompletionsAt(uri, 3, 11)).Select(item => item.Label));
+    }
+
+    [Fact]
+    public void Completion_is_triggered_by_a_dot()
+    {
+        Assert.Equal(["."], _client.ServerSettings.Capabilities.CompletionProvider?.TriggerCharacters ?? []);
+    }
+
+    [Fact]
+    public async Task Completion_after_a_dot_just_typed_offers_a_records_fields()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-fields.nyx"));
+
+        Open(uri, "def p = (x = 1, name = \"a\")\ndef q = p.x\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // The dot was just typed, so the text does not parse.
+        Change(uri, version: 2, "def p = (x = 1, name = \"a\")\ndef q = p.\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(
+            [("name", CompletionItemKind.Field, "string"), ("x", CompletionItemKind.Field, "int")],
+            (await CompletionsAt(uri, 1, 10)).Select(item => (item.Label, item.Kind, item.Detail)));
+    }
+
+    [Fact]
+    public async Task Completion_after_an_imports_alias_offers_its_exports()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-3");
+
+        Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Contains(await CompletionsAt(uri, 1, 14), item => item.Label == "String" && item.Kind == CompletionItemKind.Module);
+        Assert.Contains(await CompletionsAt(uri, 1, 21), item => item.Label == "uppercase" && item.Kind == CompletionItemKind.Function);
     }
 
     private async Task<List<CompletionItem>> CompletionsAt(DocumentUri uri, int line, int character) =>

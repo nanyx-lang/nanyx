@@ -31,22 +31,82 @@ let namesInScope (result: CompileResult) (offset: int) : Symbol list =
 /// it has one, and whether that type is a function's.
 type NameInScope = { Symbol: Symbol; Type: string option; IsFunction: bool }
 
-/// The names of `namesInScope`, with their types: a declaration of the module's own has the type inference recorded
-/// for it, and a name an import brings in has the type its module gave it. An import's alias has none.
+/// The type of a symbol: what inference recorded for a declaration of the module's own, or what its module gave a
+/// definition an import brings in. An import's alias has none.
+let private symbolType (typed: TypedModule) (symbol: Symbol) : Ty option =
+    typed.SymbolTypes |> Map.tryFind symbol.Id |> Option.orElse (typed.ImportedTypes |> Map.tryFind symbol.Id)
+
+let private isFunction (ty: Ty) =
+    match Unifier.unalias ty with
+    | TyFunc _ -> true
+    | _ -> false
+
+/// The names of `namesInScope`, with their types.
 let typedNamesInScope (names: TypeVarNames) (result: CompileResult) (offset: int) : NameInScope list =
     match result.Typed with
     | Some typed ->
         namesInScope result offset
         |> List.map (fun symbol ->
-            let ty =
-                match typed.SymbolTypes |> Map.tryFind symbol.Id with
-                | Some ty -> Some ty
-                | None when symbol.Kind = TopLevelValue -> typed.Types |> Map.tryFind symbol.Name
-                | None -> None
+            let ty = symbolType typed symbol
             { Symbol = symbol
               Type = ty |> Option.map (Unifier.tyToDisplayString names)
-              IsFunction =
-                match ty |> Option.map Unifier.unalias with
-                | Some (TyFunc _) -> true
-                | _ -> false })
+              IsFunction = ty |> Option.exists isFunction })
     | None -> []
+
+type MemberKind =
+    /// A field of a record.
+    | Field
+    /// A definition written after the prefix: `foo` in `m.foo`, `uppercase` in `String.uppercase`.
+    | Definition
+    /// A further prefix: `String` in `t.String.uppercase`.
+    | Prefix
+
+/// What can follow a dot, with its type as hover writes it, if it has one.
+type Member = { Name: string; Kind: MemberKind; Type: string option; IsFunction: bool }
+
+/// The fields of a record type, or of the record a named type stands for.
+let rec private recordFields (ty: Ty) : Map<string, Ty> option =
+    match Unifier.unalias ty with
+    | TyRecord fields -> Some fields
+    | TyNominal(_, underlying, _) -> recordFields underlying
+    | _ -> None
+
+/// What can follow `path` and a dot at `offset` in the compiled root module, ordered by name, where `path` is the
+/// names written before the dot (`p`, or `p`, `inner` for `p.inner.`). If the first is a value in scope there, these
+/// are the fields of its record type, followed through the rest of the path; a tuple's numbered items are left out,
+/// and a value whose type is not yet known to be a record has none. Otherwise they are the module's names written
+/// under the path as a prefix (see `TypedModule.ModuleNames`): an import's exports under its alias (`m.`), or
+/// definitions attached to a type (`String.`). Empty when the module did not type-check.
+let membersAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path: string list) : Member list =
+    let typeOf ty = Some (Unifier.tyToDisplayString names ty)
+    match result.Typed, path with
+    | Some typed, first :: rest ->
+        let value = namesInScope result offset |> List.tryFind (fun symbol -> symbol.Name = first && symbol.Kind <> ImportedModule)
+        match value with
+        | Some symbol ->
+            let pathType =
+                rest |> List.fold (fun ty field -> ty |> Option.bind recordFields |> Option.bind (Map.tryFind field)) (symbolType typed symbol)
+            pathType
+            |> Option.bind recordFields
+            |> Option.map (fun fields ->
+                fields
+                |> Map.toList
+                |> List.filter (fun (name, _) -> not (System.Char.IsDigit name.[0]))
+                |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty }))
+            |> Option.defaultValue []
+        | None ->
+            let prefix = String.concat "." path + "."
+            typed.ModuleNames
+            |> Map.toList
+            |> List.filter (fun (name, _) -> name.StartsWith(prefix, System.StringComparison.Ordinal))
+            |> List.map (fun (name, id) ->
+                let after = name.Substring prefix.Length
+                match after.IndexOf '.' with
+                | -1 ->
+                    let ty = symbolType typed typed.Symbols.[id]
+                    { Name = after; Kind = Definition; Type = ty |> Option.bind typeOf; IsFunction = ty |> Option.exists isFunction }
+                | dot -> { Name = after.Substring(0, dot); Kind = Prefix; Type = None; IsFunction = false })
+            // A prefix shared by several names is offered once; a definition of the same name comes first.
+            |> List.sortBy (fun item -> item.Name, item.Kind <> Definition)
+            |> List.distinctBy (fun item -> item.Name)
+    | _ -> []

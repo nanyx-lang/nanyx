@@ -1,3 +1,4 @@
+using Microsoft.FSharp.Collections;
 using NyxCompiler;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -6,11 +7,12 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
-/// Offers the names in scope at the cursor, with their types, and the language's keywords. Completion is asked for
-/// while the user types, when the text rarely type-checks, so the names come from the document's last compile that
+/// Offers the names in scope at the cursor, with their types, and the language's keywords; after a dot, the fields
+/// of a record or the names under a prefix (an import's alias, a type's attached definitions). Completion is asked
+/// for while the user types, when the text rarely type-checks, so these come from the document's last compile that
 /// did, at the place there nearest the cursor (see <see cref="OpenDocument.NearestInLastGood"/>): a name declared
-/// since is not offered until the text type-checks again. Nothing is offered in a comment or a string, after a dot
-/// (a member), or where a <c>def</c> names something new.
+/// since is not offered until the text type-checks again. Nothing is offered in a comment or a string, or where a
+/// <c>def</c> names something new.
 /// </summary>
 public sealed class CompletionHandler : CompletionHandlerBase
 {
@@ -47,6 +49,11 @@ public sealed class CompletionHandler : CompletionHandlerBase
 
         var text = document.Positions.NormalizedText;
         var wordStart = CompletionContext.WordStart(text, document.Positions.ToOffset(request.Position));
+        if (CompletionContext.MemberPath(text, wordStart) is { } path)
+        {
+            return Members(document, path, wordStart - 1 - string.Join('.', path).Length);
+        }
+
         if (!CompletionContext.OffersNames(text, wordStart))
         {
             return new CompletionList();
@@ -64,6 +71,31 @@ public sealed class CompletionHandler : CompletionHandlerBase
             SortText = $"3{keyword}"
         });
         return new CompletionList(names.Concat(keywords));
+    }
+
+    /// <summary>
+    /// What can follow <paramref name="path"/> and a dot (see <see cref="Completion.membersAt"/>), where the path
+    /// starts at <paramref name="pathStart"/>. A record whose fields were added since the last good compile offers
+    /// the fields it had then.
+    /// </summary>
+    private CompletionList Members(OpenDocument document, IReadOnlyList<string> path, int pathStart)
+    {
+        if (document.LastGood?.Compiled is not { } compiled || document.NearestInLastGood(pathStart) is not { } offset)
+        {
+            return new CompletionList();
+        }
+
+        return new CompletionList(
+            Completion.membersAt(_settings.TypeVarNames, compiled, offset, ListModule.OfSeq(path))
+                .Select(member => new CompletionItem
+                {
+                    Label = member.Name,
+                    Kind = member.Kind.IsField ? CompletionItemKind.Field
+                        : member.Kind.IsPrefix ? CompletionItemKind.Module
+                        : member.IsFunction ? CompletionItemKind.Function
+                        : CompletionItemKind.Variable,
+                    Detail = member.Type?.Value
+                }));
     }
 
     /// <summary>
@@ -91,5 +123,11 @@ public sealed class CompletionHandler : CompletionHandlerBase
     protected override CompletionRegistrationOptions CreateRegistrationOptions(
         CompletionCapability capability,
         ClientCapabilities clientCapabilities) =>
-        new() { DocumentSelector = TextDocumentSyncHandler.Selector, ResolveProvider = false };
+        new()
+        {
+            DocumentSelector = TextDocumentSyncHandler.Selector,
+            ResolveProvider = false,
+            // Members are offered as soon as the dot is typed; names as soon as a name is started, by the editor.
+            TriggerCharacters = new Container<string>(".")
+        };
 }
