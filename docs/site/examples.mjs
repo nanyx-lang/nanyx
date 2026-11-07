@@ -210,6 +210,12 @@ export const exampleGroups = [
         title: "Speech model decoding loop",
         description: "A greedy decoder as a pure step function and a sampling loop over immutable state.",
       },
+      {
+        file: "shop.nyx",
+        slug: "corner-shop",
+        title: "Corner shop",
+        description: "Orders checked with proc, receipts, a stock report and an RPN calculator, all runnable today.",
+      },
     ],
   },
 ];
