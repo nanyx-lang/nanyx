@@ -11,6 +11,8 @@
   <Project Path="Nanyx.Compiler.Runtime/Nanyx.Compiler.Runtime.fsproj" />
   <Project Path="Nanyx.Compiler.Tests/Nanyx.Compiler.Tests.fsproj" />
   <Project Path="Nanyx.Compiler.Wasm/Nanyx.Compiler.Wasm.fsproj" />
+  <Project Path="Nanyx.Formatter.Tests/Nanyx.Formatter.Tests.fsproj" />
+  <Project Path="Nanyx.Formatter/Nanyx.Formatter.fsproj" />
   <Project Path="Nanyx.LanguageServer/Nanyx.LanguageServer.csproj" />
   <Project Path="Nanyx.LanguageServer.Tests/Nanyx.LanguageServer.Tests.csproj" />
   <Project Path="Nanyx.Parser.Tests/Nanyx.Parser.Tests.fsproj" />
