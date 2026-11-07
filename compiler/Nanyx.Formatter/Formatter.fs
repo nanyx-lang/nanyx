@@ -559,8 +559,9 @@ let format (options: Options) (parsed: SourceModule) : string =
                 let head =
                     let first = (Doc.render Int32.MaxValue bodyDoc).TrimStart()
                     if List.isEmpty parameters && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
-                if Doc.hasHardLine bodyDoc then cat [ head; text " "; bodyDoc; hard; text "}" ]
-                else cat [ head; text " "; bodyDoc; text " }" ]
+                // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
+                // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
+                Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
 
     /// The shorthand lambdas the parser expands, made up at the span of the whole lambda: `{ }`, `{ * }`, `{ * 2 }`,
     /// `{ .name }` and `{ | pattern -> ... }`.
