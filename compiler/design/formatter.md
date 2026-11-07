@@ -135,6 +135,18 @@ issue):
   )
   ```
 
+- A type or context definition whose body is a record of more than three fields puts each field on its own line
+  (decided 2026-11-07):
+
+  ```nanyx
+  type Product = (
+    sku: string
+    name: string
+    price: int
+    stock: int
+  )
+  ```
+
 ### Blank lines
 
 A construct that spans more than one line, once laid out, gets a blank line before and after it, at every level: top
