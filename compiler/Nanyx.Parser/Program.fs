@@ -272,7 +272,7 @@ and UseBinding =
 // Helper type for parsing list patterns
 type ListPatternElement =
     | RegularPattern of Pattern
-    | Splat of (Identifier * SourceSpan) option
+    | Splat of Pattern  // the rest: an IdentifierPattern for `...rest`, a WildcardPattern (spanned at the `...`) for `...`
 
 
 type Module = TopLevelItem list
@@ -823,8 +823,12 @@ let recordMemberPattern =
 // List pattern: [pat1, pat2, ...] or [pat1, ...rest] or [first, ..., last]
 let private listPatternKind =
     let splatPattern =
-        pstring "..." >>. ws >>. opt (withSpan (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% name))
-        |>> Splat
+        withSpan (pstring "...") .>> ws
+        .>>. opt (withSpan (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% name))
+        |>> fun ((_, dotsSpan), name) ->
+            match name with
+            | Some (id, span) -> Splat (Pattern.at span (IdentifierPattern id))
+            | None -> Splat (Pattern.at dotsSpan WildcardPattern)
     
     let regularPatternOrSplat =
         (attempt splatPattern) <|> (pattern |>> RegularPattern)
@@ -852,12 +856,12 @@ let private listPatternKind =
                 match e with 
                 | RegularPattern p -> p 
                 | _ -> failwith "unexpected")
-            let splatName = 
+            // `...` with no name keeps a WildcardPattern rest, so it still matches lists of any length
+            let rest =
                 match elements.[idx] with
-                | Splat (Some (id, span)) -> Some (Pattern.at span (IdentifierPattern id))
-                | Splat None -> None
+                | Splat rest -> rest
                 | _ -> failwith "unexpected"
-            ListPattern(beforeSplat, splatName)
+            ListPattern(beforeSplat, Some rest)
         | Some idx ->
             // Splat in middle: [first, ..., last]
             let beforeSplat = elements |> List.take idx |> List.map (fun e ->

@@ -693,17 +693,10 @@ let format (options: Options) (parsed: SourceModule) : string =
         | RecordMemberPattern fields ->
             cat [ text "("; commaJoin (fields |> List.map (fun (n, p) -> cat [ text n; text " = "; pattern p ])); text ")" ]
         | ListPattern(ps, rest) ->
-            // `[a, ...]` and `[a]` are parsed the same; the source says which was written.
-            let bareSplat () =
-                valid p.Span && p.Span.End >= 1 && source[p.Span.End - 1] = ']' && (
-                    let mutable i = p.Span.End - 2
-                    while i >= 0 && Char.IsWhiteSpace source[i] do
-                        i <- i - 1
-                    i >= 2 && source.Substring(i - 2, 3) = "...")
             let restDoc =
                 match rest with
+                | Some (Kind WildcardPattern) -> [ text "..." ]
                 | Some r -> [ cat [ text "..."; pattern r ] ]
-                | None when bareSplat () -> [ text "..." ]
                 | None -> []
             cat [ text "["; commaJoin (List.map pattern ps @ restDoc); text "]" ]
         | ListSplatMiddle(before, after) ->

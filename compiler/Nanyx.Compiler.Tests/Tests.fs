@@ -343,6 +343,17 @@ let ``Match accepts exhaustive list patterns`` () =
     Assert.True(result.Diagnostics.IsEmpty)
 
 [<Fact>]
+let ``Match accepts an unnamed rest as covering every longer list`` () =
+    // `[x, ...]` matches any list of one or more, like `[x, ...rest]`; it is not `[x]`.
+    let source =
+        "def values = [1, 2]\n" +
+        "def result = match values\n" +
+        "| [x, ...] -> x\n" +
+        "| [] -> 0\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
 let ``Typecheck list type application`` () =
     let source =
         "def sum: list(int) -> int = { xs -> 0 }\n" +
