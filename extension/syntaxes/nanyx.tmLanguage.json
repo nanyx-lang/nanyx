@@ -313,7 +313,7 @@
       "patterns": [
         {
           "comment": "x.field and the shorthand { .field }",
-          "match": "(\\.)([a-z_][A-Za-z0-9_]*)(?!\\s*\\()",
+          "match": "(\\.)([a-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_]|\\s*\\()",
           "captures": {
             "1": { "name": "punctuation.accessor.nanyx" },
             "2": { "name": "variable.other.member.nanyx" }
