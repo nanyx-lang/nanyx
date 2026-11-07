@@ -259,7 +259,7 @@ let private referenceErrors (name: string) (expr: Expression) (scheme: TypeSchem
 /// The names definitions can be attached to a value of type `ty` under, nearest first: each alias it is written
 /// with, then the nominal type or the language's name for a built-in type (`String`, `List`). Empty when the type
 /// has no name, such as a union, a record written out in full, or a type that is not known yet.
-let rec private attachedTypeNames (ty: Ty) : string list =
+let rec attachedTypeNames (ty: Ty) : string list =
     match ty with
     | TyAlias(name, _, underlying) -> name :: attachedTypeNames underlying
     | TyNominal(name, _, _) -> [ name ]

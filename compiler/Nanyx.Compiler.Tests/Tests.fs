@@ -2561,6 +2561,50 @@ let ``A module block offers only what it exports`` () =
         [ "open", Completion.Definition, Some "int" ],
         membersIn (Compiler.compile source) source "def value" [ "inner" ])
 
+// Pipe targets: what completion offers after a pipe's `\`.
+
+/// What a pipe can call when `path` is piped at the start of `at`, as each target's name and whether it is attached.
+let private pipeTargetsIn (source: string) (at: string) (path: string list) =
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Completion.pipeTargetsAt Greek result (offsetOf source at 0 0) path
+
+[<Fact>]
+let ``After a pipe come the definitions attached to the piped value's type, then the functions in scope`` () =
+    let source =
+        "import nanyx/text\n" +
+        "def s = \"abc\"\n" +
+        "def double = { n -> n * 2 }\n" +
+        "def r = s\n"
+    let targets = pipeTargetsIn source "def r" [ "s" ]
+    let attached = targets |> List.takeWhile (fun target -> target.IsAttached)
+    Assert.Contains("startsWith", attached |> List.map (fun target -> target.Name))
+    Assert.Contains("length", attached |> List.map (fun target -> target.Name))
+    Assert.Equal<string list>(attached |> List.map (fun target -> target.Name) |> List.sort, attached |> List.map (fun target -> target.Name))
+    let startsWith = attached |> List.find (fun target -> target.Name = "startsWith")
+    Assert.True(startsWith.IsFunction)
+    // The functions in scope follow, and nothing attached comes after them.
+    let rest = targets |> List.skip attached.Length
+    let double: Completion.PipeTarget = { Name = "double"; Type = Some "int -> int"; IsFunction = true; IsAttached = false }
+    Assert.Contains(double, rest)
+    Assert.All(rest, fun target -> Assert.False target.IsAttached)
+
+[<Fact>]
+let ``After a pipe come the module's own definitions attached to a type`` () =
+    let source =
+        "type Point = (x: int, y: int)\n" +
+        "def Point.norm = { p -> p.x + p.y }\n" +
+        "def p = Point(x = 1, y = 2)\n" +
+        "def q = p\n"
+    let attached = pipeTargetsIn source "def q" [ "p" ] |> List.filter (fun target -> target.IsAttached)
+    Assert.Equal<string list>([ "norm" ], attached |> List.map (fun target -> target.Name))
+
+[<Fact>]
+let ``After a pipe on a value of unknown type come only the functions in scope`` () =
+    let source = "def f = { v -> v }\n"
+    Assert.All(pipeTargetsIn source "v }" [ "v" ], fun target -> Assert.False target.IsAttached)
+    Assert.Contains("f", pipeTargetsIn source "v }" [] |> List.map (fun target -> target.Name))
+
 // Type hints: the inferred types shown for declarations that do not write theirs.
 
 /// Each hint as its name, type and where its name starts.

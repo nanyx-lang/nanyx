@@ -79,7 +79,15 @@ what the compiler keeps: exact spans, resolved names and types.
   name or a dotted name before the dot is understood, not a call's result. A dot on a value never reaches an
   attached definition, so none is offered there; a string's or a list's built-in `length` will be, once the
   compiler has it ([#185](https://github.com/nanyx-lang/nanyx/issues/185)). A value's attached definitions are
-  reached with a pipe, and offered after `\` ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
+  reached with a pipe, and offered after `\`.
+- **Completion after a pipe's `\`** ([#269](https://github.com/nanyx-lang/nanyx/issues/269)), triggered by typing
+  it. The names just before the `\` are read from the characters (`CompletionContext.PipedPath`), across a line
+  break for a pipe that starts a line; a call's result or a literal before it gives no name. If they name a value of
+  known type, the definitions attached to that type come first, under each name a pipe resolves it by
+  (`Infer.attachedTypeNames`: `String` for a string, `List` for a list, a nominal or alias type's own name), from
+  `ModuleNames`; then the functions in scope, which a pipe calls when no attached definition has the name
+  (`Completion.pipeTargetsAt`). Only the names just before the `\` are read, though a pipe takes all of the
+  expression before it, so in `a + b \f` the type is `b`'s.
 - **Completion of import paths** ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), triggered by `/` and
   `"` too, and needing no compile: which import item the cursor is on is read from the characters
   (`CompletionContext.ImportPathAt`), on an `import` line or in an `import ( ... )` block. A module path offers
@@ -120,8 +128,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
    ([#212](https://github.com/nanyx-lang/nanyx/issues/212)); record fields and module exports after a dot are
    offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
-   ([#214](https://github.com/nanyx-lang/nanyx/issues/214)). Filed: a value's attached definitions after a pipe's
-   `\` ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
+   ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), and a value's attached definitions after a pipe's `\`
+   ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
 6. **Code actions.** From diagnostic fixes.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
 

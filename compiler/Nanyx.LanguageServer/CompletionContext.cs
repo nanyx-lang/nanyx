@@ -147,6 +147,47 @@ public static class CompletionContext
     }
 
     /// <summary>
+    /// The names of the value piped into the word at <paramref name="wordStart"/>, if the word follows a pipe's
+    /// <c>\</c>: <c>s</c> for <c>s \tr</c>, <c>p</c> and <c>inner</c> for <c>p.inner\</c>. The <c>\</c> may stand
+    /// at the start of a line, piping what the lines before it end with. Empty when what is piped is not a name or a
+    /// dotted name (a call's result, a literal, an earlier pipe). <c>null</c> if the word follows no <c>\</c>, or is
+    /// not in code. Only the names just before the <c>\</c> are read, though a pipe takes all of the expression
+    /// before it: in <c>a + b \f</c> they are <c>b</c>.
+    /// </summary>
+    public static IReadOnlyList<string>? PipedPath(string text, int wordStart)
+    {
+        var pipe = wordStart;
+        while (pipe > 0 && text[pipe - 1] is ' ' or '\t')
+        {
+            pipe--;
+        }
+
+        if (pipe == 0 || text[pipe - 1] != '\\' || !IsCode(text, wordStart))
+        {
+            return null;
+        }
+
+        var end = pipe - 1;
+        while (end > 0 && char.IsWhiteSpace(text[end - 1]))
+        {
+            end--;
+        }
+
+        var start = end;
+        while (start > 0 && (IsNameCharacter(text[start - 1]) || text[start - 1] == '.'))
+        {
+            start--;
+        }
+
+        var path = text[start..end].Split('.');
+        var isName = start < end
+            && path.All(segment => segment.Length > 0)
+            && !char.IsDigit(path[0][0])
+            && (start == 0 || text[start - 1] is not ('#' or '"' or '\''));
+        return isName ? path : [];
+    }
+
+    /// <summary>
     /// Whether <paramref name="offset"/> is in code: not in a <c>--</c> comment, a <c>---</c> block comment, a
     /// <c>'raw'</c> string, or a <c>"string"</c> outside its <c>{interpolation}</c> holes.
     /// </summary>
