@@ -95,8 +95,13 @@ what the compiler keeps: exact spans, resolved names and types.
   summary from the comment that opens it (`StandardLibrary.trySummary`). A quoted path offers the `.nyx` files and
   the folders beside the document, or in the folder the path has reached; an untitled document has none. Each item
   replaces only the part after the path's last separator, and a folder or a level asks for the next part at once.
-- **No find-references.** It is one handler in `Handlers/`, and can read the same `References` table, though only
-  of the open document's own compile.
+- **Find-references in the open document** ([#276](https://github.com/nanyx-lang/nanyx/issues/276)). From the
+  name under the cursor it finds the symbol as go-to-definition does, then every name in the document's compile
+  whose node `References` maps to it (`NyxCompiler.Definition.referencesTo`): a call's or pipe's function name, an
+  identifier, a qualified context member's name, a type name. An import's references are the alias each name it
+  brought in is written with, from `ImportReferences`. The declaration comes first when the client asks for it,
+  in whichever file it is. The files that import the document are not searched: that needs an index of the
+  workspace.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*.
@@ -121,7 +126,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    signatures and docs follow from name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
 3. **Go-to-definition and find-references.** From the recorded symbols and references ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
    Go-to-definition is done for values (including those in the standard library), type names and context members
-   ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is not.
+   ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
+   ([#276](https://github.com/nanyx-lang/nanyx/issues/276)); across the workspace it is not.
 4. **Document symbols.** The outline view, from top-level definitions.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded

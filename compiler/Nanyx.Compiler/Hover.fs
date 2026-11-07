@@ -85,6 +85,11 @@ let expressionsAt (offset: int) (module': Module) : Expression list =
         else found
     module' |> List.collect topLevelExpressions |> List.fold search []
 
+/// Every expression in `module'`, each before those inside it.
+let allExpressions (module': Module) : Expression list =
+    let rec walk (expr: Expression) : Expression list = expr :: (children expr |> List.collect walk)
+    module' |> List.collect topLevelExpressions |> List.collect walk
+
 /// The span of a call's or pipe's function name, when it has one.
 let private calleeSpan (expr: Expression) =
     match expr.Kind with

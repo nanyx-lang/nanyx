@@ -220,11 +220,15 @@ What it does today:
   `int -> int`), and on a declaration's own name (a def, a parameter, a pattern variable) the type of
   what it declares. The types come from the typed module's `ExprTypes` and `CalleeTypes`, recorded by
   node during inference, and `SymbolTypes`, by symbol (see `NyxCompiler.Hover`). A file that does not type-check shows no hover.
-- `textDocument/definition` goes from a value, parameter, pattern variable or import name to where it
-  is declared, from the typed module's `References` and `Symbols` (see `NyxCompiler.Definition`). On a
-  declaration's own name it returns that declaration. A definition in an imported source file opens that
-  file; one in the standard library returns nothing, because the library is embedded in the compiler
-  rather than a file the editor can open. Type names and context members are not symbols yet.
+- `textDocument/definition` goes from a value, parameter, pattern variable, import, type name or context
+  member to where it is declared, from the typed module's `References` and `Symbols` (see
+  `NyxCompiler.Definition`). On a declaration's own name it returns that declaration. A definition in an
+  imported source file opens that file. The standard library is embedded in the compiler, so a definition
+  in it opens a read-only copy of its module's source, which the server writes under the user's local
+  application data (see `StandardLibrarySource`).
+- `textDocument/references` lists the names in the document that refer to the same declaration, and the
+  declaration when asked (`Definition.referencesTo`). Only the document's own compile is searched, not the
+  files that import it.
 - `textDocument/codeLens` shows the inferred type above each top-level def that does not write its own
   (`α -> α` above `def id = { x -> x }`); a destructuring def's lenses say which name each is for
   (`p: int`). `textDocument/inlayHint` shows `: type` after each unannotated local def, lambda parameter
@@ -234,9 +238,9 @@ What it does today:
   types as inlay hints after their names instead of lenses, and `--top-level-type-hints off` shows
   neither for them (the default is `lens`). A file that does not type-check shows neither.
 
-Find-references and completion are not implemented yet: each is one handler class in
-`Nanyx.LanguageServer/Handlers/`, registered in `NanyxLanguageServer.Configure` (tracked in
-[#113](https://github.com/nanyx-lang/nanyx/issues/113)).
+Each feature is one handler class in `Nanyx.LanguageServer/Handlers/`, registered in
+`NanyxLanguageServer.Configure`; what is still to come is tracked in
+[#113](https://github.com/nanyx-lang/nanyx/issues/113).
 Hover shows only types, not a name's declared signature or docs. Two compiler improvements
 the server makes visible: a parse error currently drops the whole file (so one error hides
 everything after it), and inference stops at a module's first error, so only one shows at a time.
