@@ -62,7 +62,7 @@ def result = fold([1, 2, 3], 0, { + })
 
 # Qualified piping
 
-If the function is [attached](../advanced/attached-definitions) to the type on the left-hand side of the `\`, the function does not need to be qualified with the type name. `x \f` resolves `f` by the type of `x` in exactly the same way that `x.f` does (see [Dot access](../advanced/attached-definitions#dot-access)); the two differ only in that `\` is preferred for chains and whenever extra arguments are passed.
+If the function is [attached](../advanced/attached-definitions) to the type on the left-hand side of the `\`, the function does not need to be qualified with the type name: `x \f` resolves `f` by the type of `x`. This is the only way to call an attached definition without its type name. Dot access, `x.f`, only reads a field or a built-in property of `x` (see [Dot access](../advanced/attached-definitions#dot-access)).
 
 ```nanyx
 -- In regular function syntax we must qualify the function with the type name

@@ -10,7 +10,7 @@ The `collections` module provides functions for working with lists, maps, sets, 
 
 Since lists are immutable, all transform operations on lists return new lists.
 
-These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` and `xs.map(f)` both resolve to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
+These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
 
 ## all
 

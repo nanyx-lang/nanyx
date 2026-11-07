@@ -6,7 +6,7 @@ order: 4
 
 The `string` module provides functions for working with UTF-8 strings. Import it as `nanyx/text`.
 
-These functions are [attached definitions](../advanced/attached-definitions) on `String`, so when the receiver is known to be a string they can be used without qualification: `s \split(on = ",")`, `s.length`, `s.startsWith("nan")`.
+These functions are [attached definitions](../advanced/attached-definitions) on `String`, so when the receiver is known to be a string they can be piped into without qualification: `s \split(on = ",")`, `s \startsWith("nan")`. A string's length is also a built-in property, read with a dot: `s.length`.
 
 # length
 

@@ -36,17 +36,14 @@ def len = p \length
 
 # Dot access
 
-Dot syntax on a value resolves in two steps. `x.f` means the field `f` if the type of `x` has one; otherwise it means the attached definition `T.f(x)`, where `T` is the type of `x`. Any further arguments are passed after the receiver, so `x.f(args)` is `T.f(x, args)`.
-
-The pipe operator resolves the same way, so the following three expressions are the same call:
+Dot syntax on a value reads what the value itself has: the fields of a record, and the properties a built-in type has, such as the `length` of a string or a list. It never reaches an attached definition. An attached definition is reached by its qualified name, or by piping the value into it, which resolves the name by the value's type:
 
 ```nanyx
 def len1 = Point.length(p)
 def len2 = p \length
-def len3 = p.length
 ```
 
-Prefer the dot form for a single access, and the pipe form for chains of calls (see [Piping](../tour/piping)).
+`p.length` would be an error here, since `Point` has no `length` field. Keeping the two apart means a field and an attached definition of the same name never compete: `p.x` is always the field `x`, and `p \x` always the definition attached to `Point`. See [Piping](../tour/piping) for passing further arguments.
 
 # Attaching operators
 
