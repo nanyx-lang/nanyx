@@ -113,8 +113,19 @@ issue):
 - A record, list or tuple that does not fit puts each element on its own line, separated by newlines instead of
   commas, as the docs write them; trailing commas therefore never arise. Where the parser does not yet accept newlines
   as separators for some form, that form keeps its commas until it does.
-- So does a record, tuple or call's arguments with an element that spans lines (a lambda with a block), with the
-  closing bracket on a line of its own:
+- A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
+  body is only a name or a literal (decided 2026-11-07):
+
+  ```nanyx
+  def heading: [Log] string -> () = { title ->
+    log("== " ++ String.uppercase(title) ++ " ==")
+  }
+
+  def id: a -> a = { x -> x }
+  ```
+
+- A record, tuple or call's arguments with an element that spans lines (a lambda with a block) also puts each
+  element on its own line, with the closing bracket on a line of its own:
 
   ```nanyx
   use Log(

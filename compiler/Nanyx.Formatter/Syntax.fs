@@ -10,7 +10,8 @@ open Parser.Program
 let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
 
 /// The items with what formatting may change taken out: each destructuring temporary is renamed by the order it first
-/// appears in, and imports lose their spans (the only spans syntax equality looks at).
+/// appears in, imports lose their spans (the only spans syntax equality looks at), and a lambda whose body is a block
+/// of one expression has that expression as its body.
 let normalize (items: TopLevelItem list) : TopLevelItem list =
     let temps = Dictionary<string, string>()
 
@@ -34,7 +35,13 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | UnitExpr -> e.Kind
             | IdentifierExpr n -> IdentifierExpr(name n)
             | FunctionCall(n, span, args) -> FunctionCall(n, span, List.map expr args)
-            | Lambda(parameters, body) -> Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr body)
+            | Lambda(parameters, body) ->
+                // `{ x -> e }` and `{ x ->` / `e` / `}` (a block of the one statement `e`) are the same lambda.
+                let body =
+                    match body.Kind with
+                    | Block [ { Kind = ExprStatement single } ] -> single
+                    | _ -> body
+                Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr body)
             | BinaryOp(op, l, r) -> BinaryOp(op, expr l, expr r)
             | Pipe(value, n, span, args) -> Pipe(expr value, n, span, List.map expr args)
             | Block statements -> Block(List.map statement statements)
