@@ -41,6 +41,10 @@ type Ty =
     | TyNominal of string * Ty * bool
     | TyFunc of Ty * Ty
     | TyRecord of Map<string, Ty>
+    /// A record known to have at least these fields, its others standing for the row variable: what reading `p.name`
+    /// tells inference about a `p` of no other known type. The variable is solved to a record (or another open one)
+    /// with the remaining fields, as a union's rest variable is to its remaining tags.
+    | TyOpenRecord of Map<string, Ty> * TyVar
     | TyTag of string * Ty option
     | TyApply of string * Ty list
     | TyUnion of Ty list

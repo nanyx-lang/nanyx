@@ -1332,3 +1332,28 @@ let ``Run - fields of a record bound by a match pattern`` () =
         "\n" +
         "main()\n"
     runSource source |> assertRan "x = bx, y = by\npat 1\n"
+
+[<Fact>]
+let ``Run - a function reading fields takes any record that has them`` () =
+    // The records' fields are in different places, so each read finds its field from the record's layout.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def label = { p -> p.name ++ \" from \" ++ p.city }\n" +
+        "def show = {\n" +
+        "  | #some(p), n -> println(p.name ++ \" \" ++ n)\n" +
+        "  | _, _ -> println(\"none\")\n" +
+        "}\n" +
+        "def twice = { p -> label(p) ++ \"; \" ++ label(p) }\n" +
+        "\n" +
+        "println(label((age = 3, name = \"a\", city = \"Leeds\")))\n" +
+        "println(label((city = \"York\", name = \"b\")))\n" +
+        "show(#some((name = \"c\", age = 3)), \"one\")\n" +
+        "show(#some((zip = 1, name = \"d\")), \"two\")\n" +
+        "def home = (name = \"e\", city = \"Bath\")\n" +
+        "def moved = home with city = \"Ely\"\n" +
+        "println(label(moved))\n" +
+        "println(twice((name = \"f\", city = \"Hull\", extra = 0)))\n" +
+        "def people = [(name = \"g\", city = \"X\"), (name = \"h\", city = \"Y\")]\n" +
+        "for people \\ List.map(label) | s -> println(s)\n"
+    runSource source |> assertRan "a from Leeds\nb from York\nc one\nd two\ne from Ely\nf from Hull; f from Hull\ng from X\nh from Y\n"

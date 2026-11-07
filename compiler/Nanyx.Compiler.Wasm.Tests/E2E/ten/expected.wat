@@ -42,17 +42,22 @@
   )
 
   (func $main (result i32) (local $t i32)
-    i32.const 12
+    i32.const 16
     call $__nanyx_alloc
-    i32.const 10
+    i32.const 1
     i32.const 0
     call $__nanyx_record_set
-    i32.const 20
+    i32.const 10
     i32.const 4
     call $__nanyx_record_set
-    i32.const 30
+    i32.const 20
     i32.const 8
     call $__nanyx_record_set
+    i32.const 30
+    i32.const 12
+    call $__nanyx_record_set
+    i32.const 4
+    i32.add
     local.set $t
     local.get $t
     i32.const 0

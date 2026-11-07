@@ -245,32 +245,42 @@
   (export "printPerson" (func $printPerson))
 
   (func $main (result i32) (local $p i32) (local $p2 i32)
-    i32.const 12
+    i32.const 16
     call $__nanyx_alloc
-    i32.const 30
+    i32.const 1
     i32.const 0
     call $__nanyx_record_set
-    i32.const 260
+    i32.const 30
     i32.const 4
     call $__nanyx_record_set
-    i32.const 100
+    i32.const 260
     i32.const 8
     call $__nanyx_record_set
+    i32.const 100
+    i32.const 12
+    call $__nanyx_record_set
+    i32.const 4
+    i32.add
     local.set $p
     local.get $p
     call $printPerson
     drop
-    i32.const 12
+    i32.const 16
     call $__nanyx_alloc
-    i32.const 25
+    i32.const 1
     i32.const 0
     call $__nanyx_record_set
-    i32.const 270
+    i32.const 25
     i32.const 4
     call $__nanyx_record_set
-    i32.const 80
+    i32.const 270
     i32.const 8
     call $__nanyx_record_set
+    i32.const 80
+    i32.const 12
+    call $__nanyx_record_set
+    i32.const 4
+    i32.add
     local.set $p2
     local.get $p2
     call $printPerson
