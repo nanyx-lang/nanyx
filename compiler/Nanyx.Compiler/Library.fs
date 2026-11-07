@@ -855,11 +855,12 @@ module Compiler =
                     |> Map.values
                     |> Seq.map (fun symbol -> symbol.Id, symbol)
                     |> Map.ofSeq
-                // The exported types, declared in the imported module's file too.
+                // The exported types and their contexts' members, declared in the imported module's file too.
                 let exportedTypeSymbols =
                     exportedTypeDefs
                     |> Map.values
-                    |> Seq.choose (fun info -> info.Symbol |> Option.bind (fun id -> imported.Typed.Symbols |> Map.tryFind id))
+                    |> Seq.collect (fun info -> Option.toList info.Symbol @ (info.Members |> Map.values |> List.ofSeq))
+                    |> Seq.choose (fun id -> imported.Typed.Symbols |> Map.tryFind id)
                     |> Seq.map (fun symbol -> symbol.Id, symbol)
                     |> Map.ofSeq
                 env <- extendEnvWithImport env qualifier exportedValueTypes (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))

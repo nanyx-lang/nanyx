@@ -22,6 +22,9 @@ type SymbolKind =
     | ImportedModule
     /// A type definition or a context. A name written in a type refers to it; it is not a value in scope.
     | TypeDefinition
+    /// A member of a context, declared in the context's definition. A name in a def that requires the context, or
+    /// a qualified `Context.member`, refers to it.
+    | ContextMember
 
 /// Something a name can refer to, and where it is declared. A symbol from an imported module is declared in
 /// that module's file.
@@ -96,8 +99,14 @@ type TypedTopLevelItem =
     | TypedExprItem of TypedExpr
 
 /// A type definition: its parameters, the type it stands for, and the symbol it declares (`None` for one the
-/// compiler made up, which has no name written in the source).
-type TypeDefInfo = { Parameters: TyVar list; Underlying: Ty; IsPrivate: bool; Symbol: SymbolId option }
+/// compiler made up, which has no name written in the source). A context's `Members` are its members' symbols, by
+/// name; any other type has none.
+type TypeDefInfo =
+    { Parameters: TyVar list
+      Underlying: Ty
+      IsPrivate: bool
+      Symbol: SymbolId option
+      Members: Map<string, SymbolId> }
 
 /// `ExprTypes` holds the resolved type of every expression inference typed, by node; `CalleeTypes` the type of
 /// the function at each call or pipe, by the call's node; `SymbolTypes` the type of each declaration the module

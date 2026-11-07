@@ -359,6 +359,8 @@ type Declarer =
     | ArmBody
     /// The body of a type definition (or a context's) declares the type's name.
     | TypeDefBody
+    /// A record type declares its named fields: a context's are its members.
+    | RecordTypeFields
 
 /// The names nodes declare, each with the span it is written at. Declarations have no nodes of their own yet
 /// (#96), so their spans are kept here, keyed by the node they belong to.
@@ -966,10 +968,11 @@ do
             (opt (attempt (pstring "=" >>. wsNoNl() >>. typeExpr)))
             (fun name typeOpt -> TypeMember(name, typeOpt))
 
+    // A named field's name is noted, for the record type it is in to declare.
     let typeField =
         pipe5
             (opt (pstring "mut" >>. ws))
-            identifierNoWs
+            (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% name)
             (opt (pstring "?" >>% true))
             (wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
@@ -987,16 +990,19 @@ do
         many (attempt (typeExpr .>> ws .>> pstring "," .>> ws))
         |>> List.mapi (fun index typeValue -> TypeField(string index, false, false, Some typeValue, None))
 
+    // The names noted while a record type is parsed are its named fields: a record nested in it takes its own.
     let typeRecord =
-        spannedType (
-            between
-                (pstring "(")
-                (ws >>. pstring ")")
-                (pipe3
-                    (ws >>. positionalTypeFields)
-                    (attempt typeMemberField <|> typeField)
-                    (many (attempt (recordFieldSeparator >>. (attempt typeMemberField <|> typeField))))
-                    (fun positional first rest -> TypeRecord(positional @ first :: rest))))
+        collectingNames (
+            spannedType (
+                between
+                    (pstring "(")
+                    (ws >>. pstring ")")
+                    (pipe3
+                        (ws >>. positionalTypeFields)
+                        (attempt typeMemberField <|> typeField)
+                        (many (attempt (recordFieldSeparator >>. (attempt typeMemberField <|> typeField))))
+                        (fun positional first rest -> TypeRecord(positional @ first :: rest)))))
+        >>= fun (record, fields) -> declare RecordTypeFields record.Id fields >>% record
 
     // Brackets group: `(int, a -> b)` is a function of two parameters, as it is without them, and `()` is unit.
     // A bracketed tuple spans its brackets, as a tuple pattern does; any other type in brackets is just that type.
