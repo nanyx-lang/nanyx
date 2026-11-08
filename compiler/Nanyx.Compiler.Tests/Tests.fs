@@ -828,6 +828,46 @@ let ``nanyx/text functions are attached to String`` () =
     Assert.Contains("Unknown function 'trim'", (List.head bare.Diagnostics).Message)
 
 [<Fact>]
+let ``A string's and a list's length are built-in properties, read with a dot`` () =
+    // No import: the property is the string's own, not `nanyx/text`'s `String.length`.
+    let result =
+        Compiler.compile (
+            "def s = \"hello\"\n" +
+            "def n = s.length\n" +
+            "def xs = [1, 2, 3]\n" +
+            "def m = xs.length\n" +
+            "def size: string -> int = { text -> text.length }\n" +
+            "def r = (length = \"field\")\n" +
+            "def f = r.length\n")
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let types = result.Typed.Value.Types
+    Assert.Equal(TyPrimitive "int", types.["n"])
+    Assert.Equal(TyPrimitive "int", types.["m"])
+    // A record's own field of that name is still the field.
+    Assert.Equal(TyPrimitive "string", types.["f"])
+
+/// The one diagnostic compiling `source` gives, as its code and message.
+let private onlyDiagnostic (source: string) =
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    diagnostic.Code, diagnostic.Message
+
+[<Fact>]
+let ``A dot on a value does not reach a definition attached to its type, and the error says to pipe`` () =
+    let code, message = onlyDiagnostic "import nanyx/text\ndef s = \"nanyx\"\ndef b = s.isEmpty\n"
+    Assert.Equal(DiagnosticCodes.UnknownMember.Code, code)
+    Assert.Equal("'string' has no property 'isEmpty'. 'String.isEmpty' is attached to its type: call it with a pipe, as in `s \\isEmpty`", message)
+    // Called, it reads as a function named `s.startsWith`.
+    let code, message = onlyDiagnostic "import nanyx/text\ndef s = \"nanyx\"\ndef b = s.startsWith(\"nan\")\n"
+    Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
+    Assert.Equal("'s' is a value, so 's.startsWith' is not a function's name. 'String.startsWith' is attached to its type: call it with a pipe, as in `s \\startsWith(...)`", message)
+    // A record type with an attached definition and no field of that name.
+    let _, message =
+        onlyDiagnostic "type Point = (x: int, y: int)\ndef Point.length = { p -> p.x + p.y }\ndef p = Point(x = 3, y = 4)\ndef n = p.length\n"
+    Assert.Equal("Record 'p' has no member 'length'. 'Point.length' is attached to its type: call it with a pipe, as in `p \\length`", message)
+    // Nothing attached: the property is just missing.
+    Assert.Equal((DiagnosticCodes.UnknownMember.Code, "'string' has no property 'size'"), onlyDiagnostic "def s = \"x\"\ndef n = s.size\n")
+
+[<Fact>]
 let ``nanyx/text imported with as is only reached qualified from a pipe`` () =
     let qualified = Compiler.compile "import nanyx/text as t\ndef x = \" a \" \\ t.String.trim"
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
@@ -2686,6 +2726,10 @@ let ``After a value's name come the fields of its record, followed through the p
         [ "y", Completion.Field, Some "bool" ], members "def q" [ "p"; "inner" ])
     // A tuple's numbered items are not names, and a value not yet known to be a record has no fields.
     Assert.Empty(members "def q" [ "t" ])
+    // A string's built-in property, but never what is attached to `String`: that follows a pipe.
+    let withText = "import nanyx/text\ndef s = \"abc\"\ndef q = s\n"
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "length", Completion.Property, Some "int" ], membersIn (Compiler.compile withText) withText "def q" [ "s" ])
     Assert.Empty(members "v }" [ "v" ])
 
 [<Fact>]

@@ -788,6 +788,23 @@ let ``Run - with record update`` () =
     runSource source |> assertRan "31 30 Alice 32\n4\n"
 
 [<Fact>]
+let ``Run - a string's and a list's built-in length`` () =
+    // No `import nanyx/text`: a string's length is a property of the string, not an attached definition.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def size: string -> int = { s -> s.length }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def words = [\"nan\", \"yx\", \"lang\"]\n" +
+        "  def greeting = \"hello\"\n" +
+        "  println(\"{greeting.length} {words.length} {size(\"\")} {[].length}\")\n" +
+        "  def record = (length = \"field\")\n" +
+        "  println(record.length)\n" +
+        "}\n"
+    runSource source |> assertRan "5 3 0 0\nfield\n"
+
+[<Fact>]
 let ``Run - member access on the result of a call`` () =
     // Regression: `shift(...)` returned a Point but `q.x` on it was "Record 'q' has no member 'x'" (#60).
     let source =
