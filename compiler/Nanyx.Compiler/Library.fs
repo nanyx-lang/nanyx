@@ -50,6 +50,8 @@ type private CheckedModule =
       Exports: Map<string, Symbol>
       /// The contexts each of the module's own exported definitions requires, written or inferred, by name.
       ContextRequirements: Map<string, TypeExpr list>
+      /// The type each of those definitions declares, without its contexts, where it writes one.
+      ContextSignatures: Map<string, TypeExpr>
       /// The ambient contexts (the runtime's, as `Console`) by the names the module knows them by, with their
       /// definitions: an importer that cannot name one still needs it where it calls a function that requires it.
       AmbientContexts: Map<string, TypeDefInfo> }
@@ -882,6 +884,8 @@ module Compiler =
             let mutable preludeInlined: TopLevelItem list = []
             let mutable preludeTypeNames: Set<string> = Set.empty
             let mutable inlinedTypes: Map<string, Ty> = Map.empty
+            // Where the calls in the imported modules' definitions, which are inlined, find their instances.
+            let mutable inlinedInstances: Map<NodeId, ContextInstance option list> = Map.empty
             // The modules that bring each name in unqualified, by the module's key, with the name of the module.
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
             let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
@@ -963,6 +967,14 @@ module Compiler =
                             | Some qualifier -> $"{qualifier}.{name}"
                             | None -> name
                         acc |> Map.add importedName contexts) state.ContextRequirements
+                let contextSignatures =
+                    imported.ContextSignatures
+                    |> Map.fold (fun acc name signature ->
+                        let importedName =
+                            match qualifier with
+                            | Some qualifier -> $"{qualifier}.{name}"
+                            | None -> name
+                        acc |> Map.add importedName signature) state.ContextSignatures
                 let typeDefs = mergeTypeDefs typeDefs exportedTypeDefs
                 // The ambient contexts the imported functions require that this module cannot name are carried in
                 // with their definitions, hidden, so a call to one is checked as a call needing the context is here.
@@ -992,12 +1004,14 @@ module Compiler =
                             Seq.append exportedSymbols exportedTypeSymbols
                             |> Seq.fold (fun acc (KeyValue(id, _)) ->
                                 acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
-                        ContextRequirements = contextRequirements }
+                        ContextRequirements = contextRequirements
+                        ContextSignatures = contextSignatures }
                 if importedKey = preludeKey then
                     preludeInlined <- inlinedItemsForImport item imported
                 else
                     inlined <- inlined @ inlinedItemsForImport item imported
                 inlinedTypes <- inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
+                inlinedInstances <- imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
             for item in imports do
                 // An import of a module that is still being checked, because it imports this one, is a cycle.
                 let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
@@ -1113,7 +1127,8 @@ module Compiler =
                                   ImportReferences = state.ImportReferences
                                   Scopes = scopes
                                   ModuleNames = moduleNames
-                                  ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList }
+                                  ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
+                                  ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances }
                              Own = own
                              Inlined = inlined
                              Name = declaredModuleName desugared
@@ -1133,6 +1148,9 @@ module Compiler =
                              ContextRequirements =
                                 let exported = exportedValueNames own
                                 state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name)
+                             ContextSignatures =
+                                let exported = exportedValueNames own
+                                state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
                              AmbientContexts =
                                 state.AmbientMembers
                                 |> Map.values

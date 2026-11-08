@@ -999,6 +999,96 @@ let ``Missing contexts are named, not listed by their members`` () =
         "'g' requires the context 'Clock', which is not available here",
         message (contexts + "def g: [Log + Clock] () -> () = { log(\"hi\") }\ndef h: [Log] () -> () = { g() }"))
 
+/// A parameterised context, a type, and a function that requires the context, for the tests of where a call finds an
+/// instance of it (#328).
+let private showContext =
+    "context Show(a) = (show: a -> string)\n" +
+    "type Point = (x: int, y: int)\n" +
+    "def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }\n"
+
+/// Where each call in `source` that requires a parameterised context finds its instances, in the order written.
+let private instancesIn (source: string) =
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    result.Typed.Value.ContextInstances |> Map.toList |> List.sortBy fst |> List.map snd
+
+[<Fact>]
+let ``A call synthesizes a context's instance from the type's attached definitions`` () =
+    let source =
+        showContext +
+        "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
+        "def s = describe(Point(x = 1, y = 2))\n" +
+        "def t = Point(x = 3, y = 4) \\describe\n"
+    let synthesized = [ Some (InstanceSynthesized [ "show", "Point.show" ]) ]
+    Assert.Equal<ContextInstance option list list>([ synthesized; synthesized ], instancesIn source)
+
+[<Fact>]
+let ``A loaded instance wins over synthesis, and a generic function passes its own on`` () =
+    let source =
+        showContext +
+        "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
+        "def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }\n" +
+        "def main = {\n" +
+        "  use Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  describe(Point(x = 1, y = 2))\n" +
+        "}\n"
+    match instancesIn source with
+    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
+let ``A loaded instance is only used for the type it is for`` () =
+    // `use Show(Point)` does not make a `Show($Money)`: that one is still synthesized.
+    let source =
+        showContext +
+        "type $Money = private int\n" +
+        "def $Money.show: $Money -> string = { m -> \"money\" }\n" +
+        "def main = {\n" +
+        "  use Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  describe($Money(5))\n" +
+        "}\n"
+    Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "$Money.show" ]) ] ], instancesIn source)
+
+[<Fact>]
+let ``A context that cannot be synthesized says which definition is missing or has the wrong type`` () =
+    let message source =
+        match (Compiler.compile (showContext + source)).Diagnostics with
+        | [ diagnostic ] ->
+            Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+            diagnostic.Message
+        | other -> failwith $"Expected one diagnostic, got %A{other}"
+    Assert.Equal(
+        "'describe' requires the context 'Show(Point)', which is not loaded here, and 'Point.show' is not defined: define it, or load an instance with `use`",
+        message "def s = describe(Point(x = 1, y = 2))\n")
+    Assert.Equal(
+        "'describe' requires the context 'Show(int)', which is not loaded here, and 'Int.show' is not defined: define it, or load an instance with `use`",
+        message "def s = describe(3)\n")
+    Assert.Equal(
+        "'describe' requires the context 'Show(Point)', but 'Point.show' has the type 'Point -> int', where 'show' must be 'Point -> string'",
+        message "def Point.show: Point -> int = { p -> p.x }\ndef s = describe(Point(x = 1, y = 2))\n")
+
+[<Fact>]
+let ``A context and the function that requires it can come from an import`` () =
+    withTempDir (fun dir ->
+        File.WriteAllText(
+            Path.Combine(dir, "shows.nyx"),
+            "module shows\n" +
+            "export context Show(a) = (show: a -> string)\n" +
+            "export def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }\n")
+        let mainPath = Path.Combine(dir, "main.nyx")
+        File.WriteAllText(
+            mainPath,
+            "module main\n" +
+            "import \"shows.nyx\"\n" +
+            "type Point = (x: int, y: int)\n" +
+            "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
+            "def s = describe(Point(x = 1, y = 2))\n")
+        let result = Compiler.compileFile mainPath
+        Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+        Assert.Contains(Some (InstanceSynthesized [ "show", "Point.show" ]), result.Typed.Value.ContextInstances |> Map.values |> Seq.concat))
+
 [<Fact>]
 let ``Typecheck supports record constructor syntax`` () =
     let source =

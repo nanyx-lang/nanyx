@@ -120,6 +120,16 @@ type TypeDefInfo =
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 
+/// Where a call finds an instance of a parameterised context its callee requires, such as `Sum(Point)` for a callee
+/// that requires `[Sum(a)]`.
+type ContextInstance =
+    /// An instance in scope where the call is: one a `use` loads, or one the type of the function around the call
+    /// declares. The context is as it is written there (`Sum(Point)`, `Sum(a)`).
+    | InstanceInScope of TypeExpr
+    /// An instance the compiler builds from the definitions attached to the type: each member's name, and the
+    /// definition it is (`+`, `Point.+`).
+    | InstanceSynthesized of (string * string) list
+
 /// `ExprTypes` holds the resolved type of every expression inference typed, by node; `CalleeTypes` the type of
 /// the function at each call or pipe, by the call's node; `SymbolTypes` the type of each declaration the module
 /// makes itself, by its symbol. Type variables left in them are generalised ones. All three are filled in for the
@@ -136,6 +146,10 @@ type TypeDefInfo =
 /// means: the module's own top-level defs (less those a `module name =` block keeps to itself) and what its imports
 /// and the prelude bring in, under the import's alias where it has one (`m.foo`), less what the module declares
 /// itself. `ImportedTypes` holds the type each imported definition among them has, as its module gave it.
+///
+/// `ContextInstances` says, by the node of each call (or pipe) to a function that requires a parameterised context,
+/// where the call finds each context the callee's type declares, in the order it declares them: `None` for one that is
+/// not parameterised, or whose instance is left to be found by its members' names.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -150,4 +164,5 @@ type TypedModule =
       ImportReferences: Map<NodeId, SymbolId>
       Scopes: Map<SymbolId, SourceSpan>
       ModuleNames: Map<string, SymbolId>
-      ImportedTypes: Map<SymbolId, Ty> }
+      ImportedTypes: Map<SymbolId, Ty>
+      ContextInstances: Map<NodeId, ContextInstance option list> }
