@@ -977,8 +977,27 @@ let ``Typecheck rejects missing context on call`` () =
         "def h = { g() }"
     let result = Compiler.compile source
     Assert.False(result.Diagnostics.IsEmpty)
-    let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Missing context", message)
+    let diagnostic = result.Diagnostics |> List.head
+    // The context is named, as a type alias is, not listed by its members.
+    Assert.Equal("Missing context", diagnostic.Title)
+    Assert.Equal("'g' requires the context 'Console', which is not available here", diagnostic.Message)
+
+[<Fact>]
+let ``Missing contexts are named, not listed by their members`` () =
+    let message source =
+        let diagnostic = (Compiler.compile source).Diagnostics |> List.head
+        Assert.True(diagnostic.Code = DiagnosticCodes.MissingContextMembers.Code, diagnostic.Message)
+        diagnostic.Message
+    let contexts =
+        "context Log = (log: string -> ())\n" +
+        "context Clock = (now: () -> int)\n"
+    Assert.Equal(
+        "'g' requires the contexts 'Log' and 'Clock', which are not available here",
+        message (contexts + "def g: [Log + Clock] () -> () = { log(\"hi\") }\ndef h = { g() }"))
+    // A context the caller has is not listed.
+    Assert.Equal(
+        "'g' requires the context 'Clock', which is not available here",
+        message (contexts + "def g: [Log + Clock] () -> () = { log(\"hi\") }\ndef h: [Log] () -> () = { g() }"))
 
 [<Fact>]
 let ``Typecheck supports record constructor syntax`` () =
