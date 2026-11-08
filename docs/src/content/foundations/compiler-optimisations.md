@@ -16,6 +16,8 @@ In practice this means:
 - The exact set of optimisations can evolve between compiler versions.
 - Optimisations must preserve observable behaviour.
 
+Tail calls are the exception: a call in tail position never uses up stack. That is a guarantee of the language, not an optimisation, and every compiler version keeps it. See [Tail recursion](../tour/functions#tail-recursion).
+
 # Typical optimisation areas
 
 Depending on code shape and target backend, the compiler may perform optimisations such as:

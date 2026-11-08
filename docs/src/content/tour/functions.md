@@ -250,7 +250,11 @@ def countdown = { n ->
 
 ## Tail recursion
 
-Tail recursion is a recursive style where the recursive call is the **last** operation in the function. This is much more efficient because the compiler can reuse the same stack frame for each call, effectively turning the recursive function into a loop and preventing stack overflow on large inputs.
+A call is a _tail call_ when it is the **last** thing its function does: the function returns whatever the call returns, with nothing left to do afterwards. Nanyx guarantees that a tail call does not use up stack, so a function that recurses through tail calls runs in constant stack space, however many times it calls itself. It is a loop written as a function.
+
+The guarantee covers every kind of call: a function calling itself, two functions calling each other, and calls through a closure or a context member. It is part of the language, not an optimisation, and holds whether or not a given compiler version optimises anything else.
+
+Recursion that is _not_ in tail position gets no such promise. `factorial` and `length` above multiply or add after the recursive call returns, so each call keeps a stack frame, and a deep enough input runs out of stack.
 
 A common pattern is to nest a helper function that carries an accumulator:
 
@@ -266,6 +270,20 @@ def sum: list(int) -> int = { xs ->
 ```
 
 Here `loop` is internal to `sum`, and `acc` stores the running result. Each recursive step passes the updated accumulator forward, and the base case returns it directly.
+
+## Tail position
+
+A call is a tail call when it is in _tail position_:
+
+- The body of a function is in tail position.
+- When an `if` is in tail position, so are its branches.
+- When a `match` is in tail position, so is the body of each arm.
+- When a block is in tail position, so is its last expression.
+- When `use C(...) in body` is in tail position, so is `body`.
+
+A pipe `x \f(y)` is the call `f(x, y)`, so the same rules apply to it. Nothing else is in tail position: not the arguments of a call, the operands of an operator (`1 + f(n)`), an interpolated value (`"{f(n)}"`), the scrutinee of a `match`, an element of a list or field of a record (`[x, ...f(xs)]`), or the body of a `for` loop.
+
+A [workflow](../advanced/workflows) block is a call to its builder, with the rest of the block passed to each keyword as a closure, and the same rules apply to that code.
 
 # Function composition
 

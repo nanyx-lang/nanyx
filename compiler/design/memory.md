@@ -154,6 +154,9 @@ On the IR, following the paper:
 - **Closures and contexts.** Capturing a value duplicates it, and freeing a closure drops what it captured. Context
   members are passed as closures and follow the same rules.
 - **Host calls.** Strings handed to the runtime (stdout, `dbg`) are borrowed for the call.
+- **Tail calls.** The language guarantees that a tail call uses no stack ([tail-calls.md](tail-calls.md)), so a
+  variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:
+  if the callee only borrowed it, the caller would have to outlive the call.
 
 ## Plan
 
