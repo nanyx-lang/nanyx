@@ -353,3 +353,71 @@ let ``An aliased import's contexts are named with the alias`` () =
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.UnknownContext.Code, diagnostic.Code)
         Assert.Contains("Unknown context 'Logger' in the signature of 'g'", diagnostic.Message))
+
+[<Fact>]
+let ``An aliased import's functions cannot be called without the alias`` () =
+    let main = "module main\nimport \"people.nyx\" as people\ndef g: string = greet(people.$Person.new(\"Ada\"))\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownFunction.Code, "greet" ], compiledWithPeople main)
+
+[<Fact>]
+let ``An aliased import's attached definitions cannot be called without the alias`` () =
+    let main = "module main\nimport \"people.nyx\" as people\ndef p: people.$Person = $Person.new(\"Ada\")\n"
+    match compiledWithPeople main with
+    | [ _, text ] -> Assert.Equal("$Person.new", text)
+    | other -> failwith $"Expected one diagnostic at '$Person.new', got %A{other}"
+
+[<Fact>]
+let ``A shape is not assignable to a nominal type through an annotation`` () =
+    let main = "module main\nimport \"people.nyx\" as people\ndef p: people.$Person = (name = \"Ada\")\n"
+    match compiledWithPeople main with
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    | other -> failwith $"Expected one type mismatch, got %A{other}"
+
+[<Fact>]
+let ``A function that returns a nominal type cannot return its shape`` () =
+    let main = "module main\nimport \"people.nyx\"\ndef make: string -> $Person = { name -> (name = name) }\n"
+    match compiledWithPeople main with
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    | other -> failwith $"Expected one type mismatch, got %A{other}"
+
+[<Fact(Skip = "The shape is accepted where the nominal type is a type argument: #306")>]
+let ``A list of a nominal type cannot hold its shape`` () =
+    let main = "module main\nimport \"people.nyx\"\ndef all: list($Person) = [ $Person.new(\"Ada\"), (name = \"Grace\") ]\n"
+    match compiledWithPeople main with
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    | other -> failwith $"Expected one type mismatch, got %A{other}"
+
+[<Fact>]
+let ``A nominal type cannot be constructed outside its module from inside a lambda`` () =
+    let main = "module main\nimport \"people.nyx\"\ndef all = [ \"Ada\", \"Grace\" ] \\List.map { name -> $Person(name = name) }\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$Person" ], compiledWithPeople main)
+
+/// The undeclared-context diagnostics compiling `main` beside a module `mod` that exports a `[Console]` function `greet`.
+let private undeclaredContextsWithMod (main: string) =
+    let mutable result = []
+    withTempDir (fun dir ->
+        let mainPath = Path.Combine(dir, "main.nyx")
+        File.WriteAllText(
+            Path.Combine(dir, "mod.nyx"),
+            "module mod\nimport nanyx/console\nexport def greet: [Console] () -> () = { println(\"hi\") }\n")
+        File.WriteAllText(mainPath, main)
+        result <-
+            (Compiler.compileFile mainPath).Diagnostics
+            |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UndeclaredContext.Code)
+            |> List.map (fun diagnostic -> textAt main (spanOf diagnostic)))
+    result
+
+[<Fact>]
+let ``An aliased import's function still requires its contexts where it is called`` () =
+    let main = "module main\nimport \"mod.nyx\" as m\ndef g: () -> () = { m.greet() }\n@entry\ndef main = { g() }\n"
+    Assert.Equal<string list>([ "m.greet" ], undeclaredContextsWithMod main)
+
+[<Fact(Skip = "Only reported when the caller's module has Console in scope: #307")>]
+let ``An imported function requires its contexts in a module that does not have them in scope`` () =
+    let main = "module main\nimport \"mod.nyx\"\ndef g: () -> () = { greet() }\n"
+    Assert.Equal<string list>([ "greet" ], undeclaredContextsWithMod main)
+
+[<Fact(Skip = "Not reported when the context can only be named through an alias: #307")>]
+let ``A standard-library function imported under an alias still requires its context`` () =
+    let main = "module main\nimport nanyx/console as c\ndef g: () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
+    Assert.Equal<string list>([ "c.println" ], undeclaredContextsWithMod main)
