@@ -287,7 +287,7 @@
     i32.add
     local.set $p2
     local.get $p2
-    call $printPerson
+    return_call $printPerson
   )
   (export "main" (func $main))
 )

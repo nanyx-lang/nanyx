@@ -349,7 +349,7 @@
     i32.const 290
     local.get $__use_ToString_int_toString_0
     local.get $__use_ToString_string_toString_2
-    call $compareStrings
+    return_call $compareStrings
   )
   (export "main" (func $main))
 

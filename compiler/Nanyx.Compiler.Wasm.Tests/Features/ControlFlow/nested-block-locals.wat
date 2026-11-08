@@ -16,7 +16,7 @@
 
   (func $main (result i32)
     i32.const 5
-    call $nested
+    return_call $nested
   )
   (export "main" (func $main))
 )

@@ -16,7 +16,7 @@
     i32.const 1
     i32.const 10
     i32.const 20
-    call $choose
+    return_call $choose
   )
   (export "main" (func $main))
 )

@@ -1,7 +1,8 @@
 # Tail calls
 
-> **Status: proposed.** This page decides what Nanyx promises about tail calls and how the compiler keeps that
-> promise. It is part of the [compilation](compilation.md) workstream, and its issues carry the `compilation` and
+> **Status: in progress.** This page decides what Nanyx promises about tail calls and how the compiler keeps that
+> promise. The WebAssembly backend keeps it, and the official analyzer reports recursion that is not in tail
+> position; see the [plan](#plan) for the rest. It is part of the [compilation](compilation.md) workstream, and its issues carry the `compilation` and
 > `wasm backend` labels.
 
 ## Summary
@@ -16,13 +17,12 @@ run out of stack.
 
 ## Where we are today
 
-The docs promise more than the compiler does. The tour ([Tail recursion](../../docs/src/content/tour/functions.md))
-says the compiler reuses the stack frame of a tail call, but the backend emits a plain `call` (or `call_indirect`
-for closures and context members) for every call, in tail position or not. Nothing tracks tail position.
+The backend lowers every call in tail position to `return_call` (or `return_call_indirect` for closures and
+context members), so tail recursion runs to any depth: the tests recurse a million calls deep through a top-level
+function, a local `rec`, two functions calling each other, a closure, and a function that passes contexts on.
 
-So a tail-recursive loop runs out of stack at the same depth as one that is not tail-recursive. With Wasmtime's
-default stack, a two-parameter function traps between 30,000 and 40,000 calls deep, whether it is written as a
-top-level function or as a local `rec` loop:
+Recursion that is not in tail position still uses a frame per call. With Wasmtime's default stack, a
+two-parameter function traps between 30,000 and 40,000 calls deep (before this work, tail recursion did too):
 
 ```
 Runtime error: error while executing at wasm backtrace:
@@ -86,14 +86,17 @@ keyword that runs code after its continuation returns (`defer`) is not.
 ### Code generation
 
 When the backend lowers a call in tail position, it emits `return_call $f` instead of `call $f`, and
-`return_call_indirect` instead of `call_indirect` for closures and context members. Lowering carries a flag
-saying whether the expression being lowered is in tail position, set by the rules above. A call to a function
-that needs contexts passes them as extra arguments, which changes nothing.
+`return_call_indirect` instead of `call_indirect` for closures and context members. Before lowering a function,
+it finds the calls in tail position in its body by the rules above (`TailPosition.callsIn`, in the compiler, which
+the analyzer below shares), and lowering a call looks itself up there. A call to a function that needs contexts
+passes them as extra arguments, which changes nothing. The backend runs a lambda with no parameters where it is
+written, so its body is in tail position when the lambda is.
 
-Calls to runtime helpers and host functions stay plain calls; they do not recurse into Nanyx code.
+Every function the backend emits returns an `i32`, so a tail call always returns what its caller returns. The
+module's start function, which runs top-level expressions and returns nothing, makes no tail calls. Calls to
+runtime helpers and host functions stay plain calls; they do not recurse into Nanyx code.
 
-This can be done in the current `CodeGen.fs`. When the core IR from the [memory design](memory.md) arrives, tail
-position becomes a mark on its call nodes.
+When the core IR from the [memory design](memory.md) arrives, tail position becomes a mark on its call nodes.
 
 ### Reference counting
 
@@ -112,12 +115,23 @@ error that names the function that recursed, not a WebAssembly backtrace.
 
 ### Checking tail position
 
-An opt-in `@tailrec` attribute on a function asserts that each of its calls to itself is in tail position; the
-compiler reports the one that is not, and why (the operator, constructor or interpolation it sits inside). It is
-documentation that the compiler checks, not a request to optimise: the guarantee holds with or without it.
+The official analyzer's `nonTailRecursion` rule (`default/nonTailRecursion`) reports a function that calls itself
+other than in tail position: a top-level def whose value is a lambda, or a local `rec`. It reports at the call,
+and says why the call is not in tail position by naming what is done with its result: the operator it is an
+operand of, the function it is passed to, the list it goes into, the name it is bound to, and so on.
 
-There is no warning for recursion that is not in tail position. Code like `List.map` is written that way on
-purpose, and the warning would be noisy.
+- **It is `info` by default.** Recursion that is not in tail position is often right: walking a tree recurses as
+  deep as the tree, and `List.map` is written that way until tail recursion modulo cons exists. A project that
+  wants every loop to be stack-safe raises it to a warning or an error in its `.nyxpack`.
+- **Only a function's own calls count.** A call from a lambda written in the function (a workflow block, a `for`
+  loop's body, an argument to `List.map`) is a call from that lambda, and is not reported. Nor is mutual recursion:
+  the rule looks at one function at a time.
+- **It uses the same rules as the backend** (`TailPosition.callsIn`), so a call it does not report is one the
+  backend lowers to `return_call`.
+
+An opt-in `@tailrec` attribute could later let one function insist on tail recursion whatever the project
+configures: the compiler would report each of its calls to itself that is not in tail position as an error. It is
+documentation that the compiler checks, not a request to optimise: the guarantee holds with or without it.
 
 ### The standard library
 
@@ -130,14 +144,15 @@ until it exists, they can build in reverse and reverse the result.
 
 1. **Docs.** State the guarantee and define tail position in the tour, and say in
    [Compiler optimisations](../../docs/src/content/foundations/compiler-optimisations.md) that tail calls are not
-   one of them. Done with this page.
+   one of them. **Done.**
 2. **Code generation.** Emit `return_call` and `return_call_indirect` in tail position, with tests that recurse a
-   million deep: top-level, local `rec`, mutual recursion, through a closure and through a context member.
-3. **Reference counting.** Keep drops before tail calls and arguments to tail calls owned, when
+   million deep: top-level, local `rec`, mutual recursion, through a closure and passing contexts on. **Done.**
+3. **Analyzer rule.** Report recursion that is not in tail position (`default/nonTailRecursion`). **Done.**
+4. **Reference counting.** Keep drops before tail calls and arguments to tail calls owned, when
    [#294](https://github.com/nanyx-lang/nanyx/issues/294) inserts them.
-4. **Stack overflow error.** Report running out of stack as a Nanyx error.
-5. **`@tailrec`.** Check the attribute in the type checker or as an analyzer.
-6. **Stack-safe `List.map` and `List.filter`.**
+5. **Stack overflow error.** Report running out of stack as a Nanyx error.
+6. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
+7. **Stack-safe `List.map` and `List.filter`.**
 
 ## Open questions
 

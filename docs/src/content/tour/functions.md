@@ -254,7 +254,7 @@ A call is a _tail call_ when it is the **last** thing its function does: the fun
 
 The guarantee covers every kind of call: a function calling itself, two functions calling each other, and calls through a closure or a context member. It is part of the language, not an optimisation, and holds whether or not a given compiler version optimises anything else.
 
-Recursion that is _not_ in tail position gets no such promise. `factorial` and `length` above multiply or add after the recursive call returns, so each call keeps a stack frame, and a deep enough input runs out of stack.
+Recursion that is _not_ in tail position gets no such promise. `factorial` and `length` above multiply or add after the recursive call returns, so each call keeps a stack frame, and a deep enough input runs out of stack. The [official analyzer](../standard-tools/official-analyzer#recursion-not-in-tail-position) points such calls out.
 
 A common pattern is to nest a helper function that carries an accumulator:
 

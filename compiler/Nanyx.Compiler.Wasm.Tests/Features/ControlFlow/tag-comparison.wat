@@ -49,7 +49,7 @@
 
   (func $main (result i32)
     i32.const 3
-    call $classify
+    return_call $classify
   )
   (export "main" (func $main))
 )

@@ -64,7 +64,10 @@ type private TranspileEnv =
       FunctionTable: FunctionTable
       RecordTable: RecordTable
       /// How many `for` loops enclose the expression being lowered; loop locals are named by this depth.
-      ForDepth: int }
+      ForDepth: int
+      /// The calls in tail position in the function being lowered (see `TailPosition.callsIn`), which are lowered
+      /// to `return_call` so that they use no stack.
+      TailCalls: Set<NodeId> }
 
 /// The names of the WebAssembly helper functions the backend emits on demand (see `runtimeHelpers`).
 module private Helpers =
@@ -2079,12 +2082,15 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
           "i32.const 4\n    i32.add" ]
         |> String.concat "\n    "
 
+    // `call`, or `return_call` when `expr` is a call in tail position.
+    let call = if env.TailCalls.Contains expr.Id then "return_call" else "call"
+
     // A call through a function value: `closureCode` pushes the closure block, whose first slot is the
     // function's table slot. The block is passed as the environment, ahead of the arguments.
     let callClosure (closureCode: string) (argsCode: string list) =
         let arity = argsCode.Length + 1
         env.FunctionTable.IndirectArities.Add arity |> ignore
-        ([ closureCode ] @ argsCode @ [ closureCode; "i32.load"; $"call_indirect (type $ctx_fn_{arity})" ])
+        ([ closureCode ] @ argsCode @ [ closureCode; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ])
         |> String.concat "\n    "
 
     let renderStaticBytes bytes =
@@ -2894,10 +2900,10 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                             (codeAcc @ [code], usedCtxs.Add resolvedName)) ([], Set.empty)
                     let allArgsCode = argsCode @ ctxArgsCode
                     match allArgsCode with
-                    | [] -> $"call ${sanitizeIdentifier name}"
+                    | [] -> $"{call} ${sanitizeIdentifier name}"
                     | _ ->
                         let prefix = allArgsCode |> String.concat "\n    "
-                        $"{prefix}\n    call ${sanitizeIdentifier name}"
+                        $"{prefix}\n    {call} ${sanitizeIdentifier name}"
     | ContextMemberCall(ctxType, memberName, args) ->
         // Context member call: C(T).f(args) - the member of this specific context instantiation
         let memberKey = contextMemberKey (Some ctxType) memberName
@@ -3887,7 +3893,8 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   UsedHelpers = usedHelpers
                   FunctionTable = functionTable
                   RecordTable = recordTable
-                  ForDepth = 0 }
+                  ForDepth = 0
+                  TailCalls = TailPosition.callsIn true bodyExpr }
             let fn = sanitizeIdentifier name
             
             // Build parameter signature including context params
@@ -4057,7 +4064,9 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   UsedHelpers = usedHelpers
                   FunctionTable = functionTable
                   RecordTable = recordTable
-                  ForDepth = 0 }
+                  ForDepth = 0
+                  // The start function returns nothing, so nothing in it is a tail call.
+                  TailCalls = Set.empty }
             let bodyCode =
                 topLevelExprs
                 |> List.map (fun expr -> $"{transpileExpression env expr}\n    drop")
