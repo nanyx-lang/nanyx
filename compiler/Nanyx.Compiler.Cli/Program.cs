@@ -479,16 +479,16 @@ internal static class CliCommands
             return false;
         }
 
-        try
+        // What the backend cannot compile is reported where it is written, like any other error.
+        var emitted = CodeGen.tryTranspileTypedModuleToWat(result.Typed.Value);
+        if (emitted.IsError)
         {
-            wat = CodeGen.transpileTypedModuleToWat(result.Typed.Value);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            errors.WriteLine($"WASM emission failed: {ex.Message}");
+            PrintDiagnostics(ListModule.OfSeq(new[] { emitted.ErrorValue }), errors);
             return false;
         }
+
+        wat = emitted.ResultValue;
+        return true;
     }
 
     private static bool HasErrors(FSharpList<Diagnostic> diagnostics)
