@@ -96,6 +96,17 @@ let ``lambda parameters still split at commas`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``a bracketed lambda parameter's annotation ends at the bracket`` () =
+    let parametersOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Lambda (parameters, _))))) ] -> parameters
+        | other -> failwith $"Unexpected parse: %A{other}"
+    parametersOf "def f = { (x: int) -> x + 1 }" |> should equal [ ("x", Some (named "int")) ]
+    parametersOf "def f = { (x: int -> int) -> x(1) }" |> should equal [ ("x", Some (func (named "int") (named "int"))) ]
+    parametersOf "def f = { (x: int), y, (z: list(a)) -> x }" |> should equal [ ("x", Some (named "int")); ("y", None); ("z", Some (ty (TypeApply ("list", [ var "a" ])))) ]
+    parametersOf "def f = { (x) -> x }" |> should equal [ ("x", (None: TypeExpr option)) ]
+
+[<Fact>]
 let ``typeof names a value as a type`` () =
     let annotationOf source =
         match parseModule source with

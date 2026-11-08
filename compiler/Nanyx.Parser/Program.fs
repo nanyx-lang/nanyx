@@ -1869,7 +1869,10 @@ do expressionRef := (attempt matchExpr <|> pipeExpr)
 do 
     let parameter =
         getPosition .>>. typedIdentifier >>= fun (start, (name, typeOpt)) -> noteName start name >>% (name, typeOpt)
-    let paramList = sepBy parameter (pstring "," .>> ws)
+    // A parameter may be bracketed, `{ (x: int) -> x + 1 }`, so the arrow after its annotation ends the parameters
+    // rather than making the annotation a function type.
+    let bracketedParameter = between (pstring "(" >>. wsInline) (wsInline >>. pstring ")") parameter
+    let paramList = sepBy (bracketedParameter <|> parameter) (pstring "," .>> ws)
     let arrow = wsInline >>. pstring "->" .>> wsInline
     
     // Lambda body: allow multi-line statement blocks or a single expression

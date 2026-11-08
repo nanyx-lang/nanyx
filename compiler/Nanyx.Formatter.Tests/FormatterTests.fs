@@ -33,6 +33,11 @@ let ``Operators a statement cannot take without parentheses keep them`` () =
     unchanged (lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> (x and y)"; "    | _ -> x + 1"; "}" ])
 
 [<Fact>]
+let ``An annotated lambda parameter is bracketed`` () =
+    unchanged "def f = { (x: int) -> x + 1 }\n"
+    Assert.Equal("def f = { (x: int), y -> x + y }\n", format "def f = { x: int, y -> x + y }")
+
+[<Fact>]
 let ``&& and || stay as written`` () =
     unchanged "def a = b && c || d\n"
     unchanged "def a = b and c or d\n"
