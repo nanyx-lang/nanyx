@@ -473,10 +473,11 @@ let typeNameIdentifier: Parser<Identifier, ParseState> =
     (pchar '$' >>. identifierNoWs |>> fun name -> "$" + name)
     <|> identifierNoWs
 
+/// A name qualified with dots, any part of which may be a nominal type's: `m.$Email.parse`.
 let qualifiedIdentifier: Parser<Identifier, ParseState> =
     pipe2
         typeNameIdentifier
-        (many (pchar '.' >>. identifierNoWs))
+        (many (pchar '.' >>. typeNameIdentifier))
         (fun head tail -> String.concat "." (head :: tail))
 
 let private spanOf (start: Position) (endIndex: int) : SourceSpan =
@@ -950,9 +951,16 @@ do patternRef :=
 
 // Type expression parser
 do
+    // A type an aliased import brings in is qualified with the alias: `m.$Email`, `m.Shape`.
+    let qualifiedTypeName =
+        pipe2
+            typeNameIdentifier
+            (many (attempt (pchar '.' >>. typeNameIdentifier)))
+            (fun head tail -> String.concat "." (head :: tail))
+
     let typeIdentifier =
         spannedType (
-            typeNameIdentifier |>> fun name ->
+            qualifiedTypeName |>> fun name ->
                 if name.Length = 1 && Char.IsLower name.[0] then TypeVar name
                 else TypeName name)
 
@@ -1040,7 +1048,7 @@ do
     let typeApply =
         spannedType (
             pipe2
-                identifierNoWs
+                (pipe2 identifierNoWs (many (attempt (pchar '.' >>. identifierNoWs))) (fun head tail -> String.concat "." (head :: tail)))
                 (between (pstring "(") (ws >>. pstring ")") (ws >>. typeList))
                 (fun name ((args, resultOpt), span) ->
                     match resultOpt with

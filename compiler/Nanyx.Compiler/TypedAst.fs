@@ -100,9 +100,12 @@ type TypedTopLevelItem =
 
 /// A type definition: its parameters, the type it stands for, and the symbol it declares (`None` for one the
 /// compiler made up, which has no name written in the source). Each parameter's variable is named as the parameter
-/// is written. A context's `Members` are its members' symbols, by name; any other type has none.
+/// is written. A context's `Members` are its members' symbols, by name; any other type has none. `Name` is the name
+/// the type is defined under in its home module, whatever it is written as elsewhere (`m.$Email` under an alias):
+/// it is a nominal type's identity.
 type TypeDefInfo =
-    { Parameters: TyVar list
+    { Name: string
+      Parameters: TyVar list
       Underlying: Ty
       IsPrivate: bool
       IsContext: bool

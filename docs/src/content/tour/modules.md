@@ -130,6 +130,8 @@ def result = m.sqrt(16)  -- 4.0
 def pi = m.pi
 ```
 
+An aliased import brings nothing into scope unqualified, types included: a type the module exports is written with the alias too, as `m.Shape` or `m.$Email`, and so are the definitions attached to it, as `m.$Email.parse(...)`.
+
 ## Selective imports
 
 Import specific items from a module using deconstruction syntax on the import:

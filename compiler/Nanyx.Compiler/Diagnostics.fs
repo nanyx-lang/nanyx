@@ -65,6 +65,7 @@ module DiagnosticCodes =
     let AmbiguousAttachedFunction = code 106 "Ambiguous attached function" Severity.Error
     let UnknownAttachedType = code 107 "Unknown attached type" Severity.Error
     let UnknownContext = code 108 "Unknown context" Severity.Error
+    let UnknownType = code 109 "Unknown type" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -78,16 +79,17 @@ module DiagnosticCodes =
     let InvalidRecordUpdate = code 209 "Invalid record update" Severity.Error
     let MisplacedTypeof = code 210 "Misplaced typeof" Severity.Error
     let UndeclaredContext = code 211 "Undeclared context" Severity.Error
+    let NominalConstructedOutsideItsModule = code 212 "Nominal type constructed outside its module" Severity.Error
 
     /// Every compiler code, in order.
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
-          UnknownAttachedType; UnknownContext
+          UnknownAttachedType; UnknownContext; UnknownType
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
-          MisplacedTypeof; UndeclaredContext ]
+          MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule ]
 
 module Diagnostics =
     let private create (code: DiagnosticCode) (span: SourceSpan option) (message: string) =
