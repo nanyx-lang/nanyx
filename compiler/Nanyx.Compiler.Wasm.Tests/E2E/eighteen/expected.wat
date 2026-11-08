@@ -245,7 +245,7 @@
     i32.const 3
     i32.const 4
     local.get $__use_println_0
-    call $f
+    return_call $f
   )
   (export "main" (func $main))
 

@@ -16,7 +16,7 @@
 
   (func $main (result i32)
     i32.const 15
-    call $threshold
+    return_call $threshold
   )
   (export "main" (func $main))
 )

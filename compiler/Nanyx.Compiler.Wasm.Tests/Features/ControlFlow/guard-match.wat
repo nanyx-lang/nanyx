@@ -26,7 +26,7 @@
 
   (func $main (result i32)
     i32.const 7
-    call $g
+    return_call $g
   )
   (export "main" (func $main))
 )

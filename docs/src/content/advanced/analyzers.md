@@ -57,6 +57,8 @@ An analyzer runs only if the manifest has a table for it, so removing `[analyzer
 
 A single file run on its own (`nanyx run script.nyx`) has no manifest, so it runs the default analyzer with its defaults.
 
+`nanyx run` shows only errors and warnings before it runs the program. `"info"` and `"hint"` diagnostics are suggestions for code you are working on, so `nanyx check` and the editor show them.
+
 The severities are `"error"`, `"warning"`, `"info"` and `"hint"`. An analyzer or rule the compiler does not know is an error in the manifest, so a misspelt name never silently does nothing. You can suppress a specific rule by setting its severity to `"none"`:
 
 ```toml

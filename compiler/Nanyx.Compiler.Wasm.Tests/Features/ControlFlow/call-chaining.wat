@@ -16,7 +16,7 @@
   (func $main (result i32)
     i32.const 5
     call $inc
-    call $double
+    return_call $double
   )
   (export "main" (func $main))
 )

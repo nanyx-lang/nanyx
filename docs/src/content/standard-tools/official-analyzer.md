@@ -80,6 +80,24 @@ match n
 -- Analyzer warning: unreachable code
 ```
 
+## Recursion not in tail position
+
+```nanyx
+def length: list(a) -> int = {
+  | [] -> 0
+  | [_, ...tail] -> 1 + length(tail) -- Analyzer info: `length` calls itself here, but not in tail position: its result is an operand of `+`
+}
+```
+
+A [tail call](../tour/functions#tail-recursion) uses no stack, but any other call keeps a stack frame until it returns, so a function like this runs out of stack on a long enough list. The rule (`nonTailRecursion`) reports a function's calls to itself that are not in tail position, and says why each one is not. Calls from a lambda written inside the function are not checked.
+
+It is `info` by default, since recursion that is not in tail position is often fine: a walk over a tree only recurses as deep as the tree. A project that wants every loop to be stack-safe can raise it:
+
+```toml
+[analyzers.default]
+nonTailRecursion = "warning"
+```
+
 ## Unused return value
 
 ```nanyx

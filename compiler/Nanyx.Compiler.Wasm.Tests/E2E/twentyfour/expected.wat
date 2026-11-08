@@ -374,7 +374,7 @@
     local.get $byte
     call $__nanyx_string_from_byte
     call $__nanyx_string_concat
-    call $console_readLineAfter
+    return_call $console_readLineAfter
       )
     )
       )
@@ -384,7 +384,7 @@
 
   (func $readLine (param $_ i32) (result i32)
     i32.const 260
-    call $console_readLineAfter
+    return_call $console_readLineAfter
   )
   (export "readLine" (func $readLine))
 
@@ -403,7 +403,7 @@
     local.get $byte
     call $__nanyx_string_from_byte
     call $__nanyx_string_concat
-    call $console_readToEndAfter
+    return_call $console_readToEndAfter
       )
     )
   )
@@ -424,7 +424,7 @@
 
   (func $main (result i32)
     i32.const 265
-    call $println
+    return_call $println
   )
   (export "main" (func $main))
 

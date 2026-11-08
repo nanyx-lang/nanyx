@@ -99,7 +99,7 @@
     i32.const 3
     i32.const 3
     call $__nanyx_tag_box
-    call $classify
+    return_call $classify
   )
   (export "main" (func $main))
 )

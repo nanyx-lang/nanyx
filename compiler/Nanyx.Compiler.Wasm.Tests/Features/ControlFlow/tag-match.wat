@@ -238,7 +238,7 @@
 
   (func $r (result i32)
     i32.const 3
-    call $f
+    return_call $f
   )
   (export "r" (func $r))
 

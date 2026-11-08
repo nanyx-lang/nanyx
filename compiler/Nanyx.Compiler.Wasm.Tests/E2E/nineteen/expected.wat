@@ -235,7 +235,7 @@
     i32.const 4
     local.get $__ctx_add
     i32.load
-    call_indirect (type $ctx_fn_3)
+    return_call_indirect (type $ctx_fn_3)
   )
   (export "f" (func $f))
 
@@ -254,7 +254,7 @@
     local.set $__use_add_2
     local.get $__use_println_0
     local.get $__use_add_2
-    call $f
+    return_call $f
   )
   (export "main" (func $main))
 

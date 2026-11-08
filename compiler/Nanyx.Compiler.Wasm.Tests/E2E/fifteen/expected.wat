@@ -71,7 +71,7 @@
     i32.const 8
     local.get $__use_add_0
     i32.load
-    call_indirect (type $ctx_fn_3)
+    return_call_indirect (type $ctx_fn_3)
   )
   (export "main" (func $main))
 

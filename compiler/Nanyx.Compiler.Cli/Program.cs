@@ -80,7 +80,7 @@ internal static class CliCommands
 
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
         var build = PackageModule.build(package);
-        PrintDiagnostics(build.Diagnostics, Console.Error);
+        PrintDiagnostics(WorthStoppingFor(build.Diagnostics), Console.Error);
         if (HasErrors(build.Diagnostics))
         {
             return 1;
@@ -308,7 +308,7 @@ internal static class CliCommands
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
         if (target == Target.Run)
         {
-            PrintDiagnostics(result.Diagnostics, Console.Error);
+            PrintDiagnostics(WorthStoppingFor(result.Diagnostics), Console.Error);
             return RunProgram(result);
         }
 
@@ -341,6 +341,13 @@ internal static class CliCommands
 
         return 0;
     }
+
+    /// <summary>
+    /// The diagnostics `run` shows: errors and warnings. Info and hints are suggestions for when the code is being
+    /// worked on, so `check` and the editor show them, but running a program does not.
+    /// </summary>
+    private static FSharpList<Diagnostic> WorthStoppingFor(FSharpList<Diagnostic> diagnostics) =>
+        ListModule.OfSeq(diagnostics.Where(diagnostic => !diagnostic.Severity.IsInfo && !diagnostic.Severity.IsHint));
 
     private static void PrintDiagnostics(FSharpList<Diagnostic> diagnostics, TextWriter writer)
     {

@@ -198,7 +198,8 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 
 > **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Analyzers.fs`). The official `default`
 > analyzer's first rule is `unusedBindings` ([#101](https://github.com/nanyx-lang/nanyx/issues/101)), whose fixes are
-> the first any diagnostic offers; the language server shows them as quick fixes. The semantic model
+> the first any diagnostic offers; the language server shows them as quick fixes. Its second is `nonTailRecursion`
+> ([tail-calls.md](tail-calls.md#checking-tail-position)). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
 >
 > - Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its

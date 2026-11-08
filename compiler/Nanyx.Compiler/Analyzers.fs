@@ -68,24 +68,17 @@ type AnalyzerOptions =
     { Analyzers: Analyzer list
       Severities: Map<string, Severity option> }
 
-/// The official analyzer's `unusedBindings` rule: a local def, a lambda's argument or a variable a pattern binds that
-/// nothing refers to. Top-level defs are left alone, since another module may use them, and so are names starting
-/// with `_`, which say they are unused on purpose.
-module UnusedBindings =
-    let rule =
-        { Id = "unusedBindings"
-          Title = "Unused binding"
-          DefaultSeverity = Severity.Warning
-          Description =
-            "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported." }
+/// Walking the module as written, for the rules of the official analyzer.
+module private SyntaxTree =
+    /// The value a `use` loads.
+    let useValue (binding: UseBinding) =
+        match binding with
+        | UseValue value
+        | UseContextInstance(_, value) -> value
 
     /// The expressions directly within `expr`, and the statements of it if it is a block. What patterns and types
     /// hold is left out: they hold no blocks.
-    let rec private childrenOf (expr: Expression) : Expression list * Statement list =
-        let ofUse binding =
-            match binding with
-            | UseValue value
-            | UseContextInstance(_, value) -> value
+    let childrenOf (expr: Expression) : Expression list * Statement list =
         match expr.Kind with
         | LiteralExpr _
         | UnitExpr
@@ -104,35 +97,53 @@ module UnusedBindings =
         | TagExpr(_, payload) -> Option.toList payload, []
         | IfExpr(condition, ifTrue, ifFalse) -> [ condition; ifTrue; ifFalse ], []
         | MemberAccess(target, _, _) -> [ target ], []
-        | UseIn(binding, body) -> [ ofUse binding; body ], []
+        | UseIn(binding, body) -> [ useValue binding; body ], []
         | WorkflowBindExpr(_, value)
         | WorkflowReturnExpr value -> [ value ], []
         | InterpolatedString parts -> parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None), []
 
-    /// The blocks of `expr` and of everything within it, each as its statements.
-    let rec private blocksWithin (expr: Expression) : Statement list list =
-        let children, statements = childrenOf expr
-        let ofStatement (statement: Statement) =
-            match statement.Kind with
-            | DefStatement(_, _, _, value)
-            | ExprStatement value
-            | UseStatement (UseValue value)
-            | UseStatement (UseContextInstance(_, value)) -> blocksWithin value
-            | TypeDefStatement _
-            | ImportStatement _ -> []
-        (if statements.IsEmpty then [] else [ statements ])
-        @ (children |> List.collect blocksWithin)
-        @ (statements |> List.collect ofStatement)
+    /// The expressions a statement holds.
+    let ofStatement (statement: Statement) : Expression list =
+        match statement.Kind with
+        | DefStatement(_, _, _, value)
+        | ExprStatement value -> [ value ]
+        | UseStatement binding -> [ useValue binding ]
+        | TypeDefStatement _
+        | ImportStatement _ -> []
 
-    let rec private blocksOfItem (item: TopLevelItem) =
+    /// `expr` and every expression within it.
+    let rec expressionsWithin (expr: Expression) : Expression list =
+        let children, statements = childrenOf expr
+        expr :: ((children @ (statements |> List.collect ofStatement)) |> List.collect expressionsWithin)
+
+    /// The expressions a top-level item holds, and the items of a module block.
+    let rec ofItem (item: TopLevelItem) : Expression list =
         match item.Kind with
         | Def (ValueDef(_, _, _, value))
-        | Expr value -> blocksWithin value
-        | ModuleBlock(_, items) -> items |> List.collect blocksOfItem
+        | Expr value -> [ value ]
+        | ModuleBlock(_, items) -> items |> List.collect ofItem
         | Def (TypeDef _)
         | ModuleDecl _
         | Import _
         | Attribute _ -> []
+
+/// The official analyzer's `unusedBindings` rule: a local def, a lambda's argument or a variable a pattern binds that
+/// nothing refers to. Top-level defs are left alone, since another module may use them, and so are names starting
+/// with `_`, which say they are unused on purpose.
+module UnusedBindings =
+    let rule =
+        { Id = "unusedBindings"
+          Title = "Unused binding"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported." }
+
+    /// The blocks of `expr` and of everything within it, each as its statements.
+    let rec private blocksWithin (expr: Expression) : Statement list list =
+        let children, statements = SyntaxTree.childrenOf expr
+        (if statements.IsEmpty then [] else [ statements ])
+        @ (children |> List.collect blocksWithin)
+        @ (statements |> List.collect SyntaxTree.ofStatement |> List.collect blocksWithin)
 
     /// An edit that removes `statement`'s lines: from the start of its first line to the end of its last, with a
     /// comment after it, when nothing else is written on them. Otherwise it removes the statement alone.
@@ -184,7 +195,8 @@ module UnusedBindings =
         // destructuring def stands for them.
         let removableDefs =
             model.Syntax
-            |> List.collect blocksOfItem
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect blocksWithin
             |> List.collect (fun statements -> statements |> List.truncate (statements.Length - 1))
             |> List.filter (function Kind (DefStatement _) -> true | _ -> false)
             |> List.groupBy (fun statement -> statement.Span)
@@ -210,9 +222,130 @@ module UnusedBindings =
               Fixes = [ fixFor model removableDefs symbol ] })
         |> List.ofSeq
 
+/// The official analyzer's `nonTailRecursion` rule: a function that calls itself other than in tail position, where
+/// each call keeps a stack frame until it returns. A tail call uses no stack (`TailPosition`), so a function that
+/// only calls itself in tail position can recurse to any depth. Calls within a lambda written in the function (a
+/// workflow block, a `for` loop's body) are left alone: they are calls from that lambda, not the function.
+module NonTailRecursion =
+    let rule =
+        { Id = "nonTailRecursion"
+          Title = "Recursive call not in tail position"
+          DefaultSeverity = Severity.Info
+          Description =
+            "A function calls itself, but not as the last thing it does, so every call keeps a stack frame and a deep enough input runs out of stack. A call in tail position uses no stack." }
+
+    /// What a function does with the result of a call within `expr` that `expr` is not itself, which is why the
+    /// call is not in tail position.
+    let private whyNotTail (expr: Expression) : string =
+        match expr.Kind with
+        | FunctionCall(name, _, _)
+        | Pipe(_, name, _, _) -> $"its result is passed to `{name}`"
+        | ContextMemberCall(_, name, _) -> $"its result is passed to `{name}`"
+        // `[x, ...rest]` is parsed as `[x] ++ rest`.
+        | BinaryOp("++", Kind (ListExpr _), _) -> "its result goes into a list"
+        | BinaryOp(op, _, _) -> $"its result is an operand of `{op}`"
+        | IfExpr _ -> "the `if` decides on its result"
+        | Match _ -> "the `match` matches on its result"
+        | Block _ -> "the block goes on after it"
+        | ListExpr _ -> "its result goes into a list"
+        | TupleExpr _ -> "its result goes into a tuple"
+        | RecordExpr _ -> "its result goes into a record"
+        | TagExpr(name, _) -> $"its result is the payload of `#{name}`"
+        | MemberAccess(_, field, _) -> $"`.{field}` is read from its result"
+        | InterpolatedString _ -> "its result is interpolated into a string"
+        | UseIn _ -> "its result is loaded as a context"
+        | WorkflowBindExpr _
+        | WorkflowReturnExpr _ -> "a workflow keyword is applied to its result"
+        | LiteralExpr _
+        | UnitExpr
+        | IdentifierExpr _
+        | ContextMemberAccess _
+        | Lambda _ -> "it is not the last thing the function does"
+
+    /// The calls within `expr`, a function's body or part of it, other than those within lambdas, each with why it
+    /// is not in tail position if it may not be: `why` says that for `expr` itself.
+    let rec private callsWithin (why: string option) (expr: Expression) : (Expression * string option) list =
+        let call =
+            match expr.Kind with
+            | FunctionCall _
+            | Pipe _
+            | ContextMemberCall _ -> [ expr, why ]
+            | _ -> []
+        let children, statements = SyntaxTree.childrenOf expr
+        // The children in tail position when `expr` is (as `TailPosition.callsIn` has it). Any other child loses tail
+        // position here, unless it already lost it further out, which is the reason that counts.
+        let keepTail =
+            match expr.Kind with
+            | IfExpr(_, ifTrue, ifFalse) -> set [ ifTrue.Id; ifFalse.Id ]
+            | Match(_, arms) -> arms |> List.map (fun (_, arm) -> arm.Id) |> Set.ofList
+            | UseIn(_, body) -> set [ body.Id ]
+            | _ -> Set.empty
+        let childWhy = why |> Option.orElse (Some (whyNotTail expr))
+        let ofChild (child: Expression) = callsWithin (if keepTail.Contains child.Id then why else childWhy) child
+        let ofChildren =
+            match expr.Kind with
+            | Lambda _ -> []
+            | _ -> children |> List.collect ofChild
+        let ofStatements =
+            statements
+            |> List.mapi (fun index statement ->
+                match statement.Kind with
+                | ExprStatement last when index = statements.Length - 1 -> callsWithin why last
+                | DefStatement(_, name, _, value) -> callsWithin (why |> Option.orElse (Some $"its result is bound to `{name}`")) value
+                | _ -> SyntaxTree.ofStatement statement |> List.collect (callsWithin childWhy))
+            |> List.concat
+        call @ ofChildren @ ofStatements
+
+    /// The functions a module declares that can call themselves: a top-level def whose value is a lambda, and a
+    /// local `rec` whose value is one. Each is the span of the def (which holds its name) and the lambda.
+    /// `expressions` are every expression of the module, which local defs are found in.
+    let private functionsIn (items: TopLevelItem list) (expressions: Expression list) : (SourceSpan * Expression) list =
+        let rec topLevel (item: TopLevelItem) =
+            match item.Kind with
+            | Def (ValueDef(_, _, _, (Kind (Lambda _) as lambda))) -> [ item.Span, lambda ]
+            | ModuleBlock(_, items) -> items |> List.collect topLevel
+            | _ -> []
+        let local (expr: Expression) =
+            snd (SyntaxTree.childrenOf expr)
+            |> List.choose (fun statement ->
+                match statement.Kind with
+                | DefStatement(_, _, _, Kind (FunctionCall("__rec", _, [ Kind (Lambda _) as lambda ]))) -> Some (statement.Span, lambda)
+                | _ -> None)
+        (items |> List.collect topLevel) @ (expressions |> List.collect local)
+
+    let analyze (model: SemanticModel) : Report list =
+        let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+        functionsIn model.Syntax expressions
+        |> List.collect (fun (declaration, lambda) ->
+            match lambda.Kind with
+            | Lambda(_, body) ->
+                let tailCalls = TailPosition.callsIn false body
+                // A call to the function itself: one to the symbol declared by the def, and not by anything within
+                // the lambda (a local def that hides its name).
+                let isSelf (symbol: Symbol) =
+                    SourceSpan.contains declaration symbol.Declaration && not (SourceSpan.contains lambda.Span symbol.Declaration)
+                callsWithin None body
+                |> List.choose (fun (call, why) ->
+                    match model.References |> Map.tryFind call.Id |> Option.bind (fun id -> model.Symbols |> Map.tryFind id) with
+                    | Some symbol when isSelf symbol && not (tailCalls.Contains call.Id) ->
+                        let why = why |> Option.defaultValue "it is not the last thing the function does"
+                        Some
+                            { Rule = rule.Id
+                              Span = call.Span
+                              Message =
+                                $"`{symbol.Name}` calls itself here, but not in tail position: {why}. Each call keeps a stack frame until it returns, so a deep enough input runs out of stack."
+                              Related = []
+                              Fixes = [] }
+                    | _ -> None)
+            | _ -> [])
+        |> List.sortBy (fun report -> report.Span.Start)
+
 module Analyzers =
     /// The official analyzer, which the docs call `default`. Its rules are added one by one.
-    let official = { Name = "default"; Rules = [ UnusedBindings.rule ]; Analyze = UnusedBindings.analyze }
+    let official =
+        { Name = "default"
+          Rules = [ UnusedBindings.rule; NonTailRecursion.rule ]
+          Analyze = fun model -> UnusedBindings.analyze model @ NonTailRecursion.analyze model }
 
     /// The analyzers the compiler runs unless told otherwise.
     let all = [ official ]
