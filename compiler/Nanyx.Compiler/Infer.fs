@@ -803,12 +803,14 @@ let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: 
     // instance's; otherwise it is needed from the ambient instance, as a context this module can name is.
     let suppliedNearer members =
         members |> List.forall (fun memberName -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName))
+    // Each context with a member not in scope at all, with those members.
     let missing =
         requiredMembers
         |> List.filter (fst >> isCarried >> not)
-        |> List.collect snd
-        |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone)
-        |> List.distinct
+        |> List.choose (fun (ctx, members) ->
+            match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
+            | [] -> None
+            | absent -> Some (ctx, absent))
     if missing.IsEmpty || not reportMissing then
         // Every member is in scope, but one the ambient instance supplies is only available where its context is.
         requiredMembers
@@ -821,8 +823,29 @@ let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: 
                 | (TypeName ctxName | TypeApply(ctxName, _)), true -> needAmbientContext current ctxName $"'{name}' requires" span
                 | _ -> Ok current)) (Ok state)
     else
-        let missingText = String.concat ", " missing
-        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span $"Missing context members for '{name}': {missingText}" ]
+        // A context is named as it is written, as a type alias is; only one written out as a record has nothing to
+        // name it by but its members.
+        let named, unnamed =
+            missing
+            |> List.partition (fun (ctx, _) -> match ctx.Kind with TypeName _ | TypeApply _ -> true | _ -> false)
+        let quoted names = names |> List.distinct |> List.map (fun name -> $"'{name}'")
+        let contextNames =
+            named |> List.choose (fun (ctx, _) -> match ctx.Kind with TypeName ctxName | TypeApply(ctxName, _) -> Some ctxName | _ -> None) |> quoted
+        let memberNames = unnamed |> List.collect snd |> quoted
+        let listed (items: string list) =
+            match items with
+            | [] -> ""
+            | [ only ] -> only
+            | _ -> String.concat ", " (List.truncate (items.Length - 1) items) + " and " + List.last items
+        let message =
+            match contextNames, memberNames with
+            | [ single ], [] -> $"'{name}' requires the context {single}, which is not available here"
+            | _, [] -> $"'{name}' requires the contexts {listed contextNames}, which are not available here"
+            | [], _ -> $"'{name}' requires the context members {listed memberNames}, which are not available here"
+            | _ ->
+                let contextsText = if contextNames.Length = 1 then "the context" else "the contexts"
+                $"'{name}' requires {contextsText} {listed contextNames} and the context members {listed memberNames}, which are not available here"
+        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
 
 let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     let originalTypeVars = state.TypeVars
