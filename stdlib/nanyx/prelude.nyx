@@ -9,14 +9,18 @@ module prelude
 -- Numbers ---------------------------------------------------------------------------------------
 
 -- The value of the ASCII digit `b`, or -1 when `b` is not one.
-def digitValue: int -> int = { b -> if b >= 48 and b <= 57 then b - 48 else -1 }
+def digitValue: int -> int = { b ->
+  if b >= 48 and b <= 57 then b - 48 else -1
+}
 
 -- `acc` followed by the decimal digits of `s` from byte `i` on, or `#invalidInt` at the first byte
 -- that is not a digit.
-def parseDigits: (string, int, int) -> #some(int) | #invalidInt = { s, i, acc ->
-  if i >= __nanyx_string_length(s) then #some(acc)
-  else if digitValue(__nanyx_string_byte_at(s, i)) < 0 then #invalidInt
-  else parseDigits(s, i + 1, acc * 10 + digitValue(__nanyx_string_byte_at(s, i)))
+def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
+  if i >= __nanyx_string_length(s)
+    then #some(acc)
+    else if digitValue(__nanyx_string_byte_at(s, i)) < 0
+      then #invalidInt
+      else parseDigits(s, i + 1, acc * 10 + digitValue(__nanyx_string_byte_at(s, i)))
 }
 
 -- The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
@@ -25,9 +29,12 @@ def parseDigits: (string, int, int) -> #some(int) | #invalidInt = { s, i, acc ->
 export def Int.parse: string -> #some(int) | #invalidInt = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
-  if __nanyx_string_length(s) <= start then #invalidInt
-  else if first == 45 then Option.map(parseDigits(s, start, 0), { n -> 0 - n })
-  else parseDigits(s, start, 0)
+
+  if __nanyx_string_length(s) <= start
+    then #invalidInt
+    else if first == 45
+      then Option.map(parseDigits(s, start, 0), { n -> 0 - n })
+      else parseDigits(s, start, 0)
 }
 
 -- Results ---------------------------------------------------------------------------------------
@@ -54,37 +61,36 @@ export type Result(a, e) = #some(a) | #error(e)
 -- `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
 -- `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
 -- `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
-export def proc: (
-  try: ((#some(a) | r), (a -> (#some(b) | r))) -> (#some(b) | r)
-  return: a -> (#some(a) | r)
-) = (
-  try = {
-    | #some(value), continue -> continue(value)
-    | failure, _ -> failure
-  }
-  return = { value -> #some(value) }
-)
+export def proc
+  : (try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r)
+  = (
+    try = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    return = { value -> #some(value) }
+  )
 
 -- Applies `f` to a success, and leaves an error as it is.
-export def Result.map: (Result(a, e), (a -> b)) -> Result(b, e) = {
+export def Result.map: Result(a, e), (a -> b) -> Result(b, e) = {
   | #some(value), f -> #some(f(value))
   | #error(e), _ -> #error(e)
 }
 
 -- Applies `f` to an error, and leaves a success as it is.
-export def Result.mapError: (Result(a, e), (e -> f)) -> Result(a, f) = {
+export def Result.mapError: Result(a, e), (e -> f) -> Result(a, f) = {
   | #some(value), _ -> #some(value)
   | #error(e), f -> #error(f(e))
 }
 
 -- Continues with `f` on a success. The errors of both steps are kept.
-export def Result.bind: (Result(a, e), (a -> Result(b, e))) -> Result(b, e) = {
+export def Result.bind: Result(a, e), (a -> Result(b, e)) -> Result(b, e) = {
   | #some(value), f -> f(value)
   | #error(e), _ -> #error(e)
 }
 
 -- The success, or `fallback` for an error.
-export def Result.defaultValue: (Result(a, e), a) -> a = {
+export def Result.defaultValue: Result(a, e), a -> a = {
   | #some(value), _ -> value
   | #error(_), fallback -> fallback
 }
@@ -106,19 +112,19 @@ export def Result.isError: Result(a, e) -> bool = {
 -- called as `Option.map(x, f)` or `x \Option.map(f)`.
 
 -- Applies `f` to the value of `#some`.
-export def Option.map: ((#some(a) | r), (a -> b)) -> (#some(b) | r) = {
+export def Option.map: (#some(a) | r), (a -> b) -> #some(b) | r = {
   | #some(value), f -> #some(f(value))
   | other, _ -> other
 }
 
 -- Continues with `f` on the value of `#some`. The other tags of both steps are kept.
-export def Option.bind: ((#some(a) | r), (a -> (#some(b) | r))) -> (#some(b) | r) = {
+export def Option.bind: (#some(a) | r), (a -> #some(b) | r) -> #some(b) | r = {
   | #some(value), f -> f(value)
   | other, _ -> other
 }
 
 -- The value of `#some`, or `fallback` for any other tag.
-export def Option.defaultValue: ((#some(a) | r), a) -> a = {
+export def Option.defaultValue: (#some(a) | r), a -> a = {
   | #some(value), _ -> value
   | _, fallback -> fallback
 }
@@ -134,13 +140,13 @@ export def Option.isNone: (#some(a) | r) -> bool = {
 }
 
 -- The value of `#some` as a success, or `error` for any other tag.
-export def Option.toResult: ((#some(a) | r), e) -> Result(a, e) = {
+export def Option.toResult: (#some(a) | r), e -> Result(a, e) = {
   | #some(value), _ -> #some(value)
   | _, error -> #error(error)
 }
 
 -- `f` applied to the value of `#some`, or `default` for any other tag.
-export def Option.mapOr: ((#some(a) | r), b, (a -> b)) -> b = {
+export def Option.mapOr: (#some(a) | r), b, (a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, default, _ -> default
 }
@@ -151,16 +157,20 @@ export def Option.mapOr: ((#some(a) | r), b, (a -> b)) -> b = {
 -- known to be a list. Lists are immutable: every function gives back a new list.
 
 -- `step` applied to `initial` and the first element, then to that result and the second, and so on.
-export def List.fold: (list(a), b, ((b, a) -> b)) -> b = {
+export def List.fold: list(a), b, (b, a -> b) -> b = {
   | [], acc, _ -> acc
   | [x, ...rest], acc, step -> List.fold(rest, step(acc, x), step)
 }
 
 -- The elements in reverse order.
-export def List.reverse: list(a) -> list(a) = { xs -> List.fold(xs, [], { acc, x -> [x, ...acc] }) }
+export def List.reverse: list(a) -> list(a) = { xs ->
+  List.fold(xs, [], { acc, x -> [x, ...acc] })
+}
 
 -- The number of elements.
-export def List.length: list(a) -> int = { xs -> List.fold(xs, 0, { count, _ -> count + 1 }) }
+export def List.length: list(a) -> int = { xs ->
+  List.fold(xs, 0, { count, _ -> count + 1 })
+}
 
 -- The first element, or `#emptyList`.
 export def List.head: list(a) -> #some(a) | #emptyList = {
@@ -169,42 +179,46 @@ export def List.head: list(a) -> #some(a) | #emptyList = {
 }
 
 -- `f` applied to each element, in order.
-export def List.map: (list(a), (a -> b)) -> list(b) = {
+export def List.map: list(a), (a -> b) -> list(b) = {
   | [], _ -> []
   | [x, ...rest], f -> [f(x), ...List.map(rest, f)]
 }
 
 -- The elements `keep` holds for, in order.
-export def List.filter: (list(a), (a -> bool)) -> list(a) = {
+export def List.filter: list(a), (a -> bool) -> list(a) = {
   | [], _ -> []
-  | [x, ...rest], keep -> if keep(x) then [x, ...List.filter(rest, keep)] else List.filter(rest, keep)
+  | [x, ...rest], keep -> if keep(x)
+    then [x, ...List.filter(rest, keep)]
+    else List.filter(rest, keep)
 }
 
 -- The first element `matches` holds for, or `#notFound`.
-export def List.find: (list(a), (a -> bool)) -> #some(a) | #notFound = {
+export def List.find: list(a), (a -> bool) -> #some(a) | #notFound = {
   | [], _ -> #notFound
   | [x, ...rest], matches -> if matches(x) then #some(x) else List.find(rest, matches)
 }
 
 -- Whether `test` holds for every element (so `true` for an empty list).
-export def List.all: (list(a), (a -> bool)) -> bool = {
+export def List.all: list(a), (a -> bool) -> bool = {
   | [], _ -> true
   | [x, ...rest], test -> if test(x) then List.all(rest, test) else false
 }
 
 -- Whether `test` holds for any element (so `false` for an empty list).
-export def List.any: (list(a), (a -> bool)) -> bool = {
+export def List.any: list(a), (a -> bool) -> bool = {
   | [], _ -> false
   | [x, ...rest], test -> if test(x) then true else List.any(rest, test)
 }
 
 -- `List.fold` from the last element to the first.
-export def List.foldBack: (list(a), b, ((b, a) -> b)) -> b = { xs, initial, step ->
+export def List.foldBack: list(a), b, (b, a -> b) -> b = { xs, initial, step ->
   List.fold(List.reverse(xs), initial, step)
 }
 
 -- `xs` with `x` added at the end.
-export def List.append: (list(a), a) -> list(a) = { xs, x -> xs ++ [x] }
+export def List.append: list(a), a -> list(a) = { xs, x ->
+  xs ++ [x]
+}
 
 -- The lists of `xss` joined end to end.
 export def List.flatten: list(list(a)) -> list(a) = {
@@ -213,19 +227,19 @@ export def List.flatten: list(list(a)) -> list(a) = {
 }
 
 -- The first `count` elements (all of them when there are fewer).
-export def List.take: (list(a), int) -> list(a) = {
+export def List.take: list(a), int -> list(a) = {
   | [], _ -> []
   | [x, ...rest], count -> if count <= 0 then [] else [x, ...List.take(rest, count - 1)]
 }
 
 -- The elements after the first `count`.
-export def List.skip: (list(a), int) -> list(a) = {
+export def List.skip: list(a), int -> list(a) = {
   | [], _ -> []
   | [x, ...rest], count -> if count <= 0 then [x, ...rest] else List.skip(rest, count - 1)
 }
 
 -- Pairs of the elements at the same position, as long as the shorter list.
-export def List.zip: (list(a), list(b)) -> list((a, b)) = {
+export def List.zip: list(a), list(b) -> list((a, b)) = {
   | [x, ...xs], [y, ...ys] -> [(x, y), ...List.zip(xs, ys)]
   | _, _ -> []
 }
