@@ -57,6 +57,8 @@ _To do._ Candidate items, not yet filed:
 4. **Standard library.** Implement the documented modules, writing intrinsics only where Nanyx cannot.
 5. **Memory management.** Free memory with Perceus reference counting, which brings a core IR between the typed
    AST and WebAssembly. Designed in [memory.md](memory.md).
+6. **Tail calls.** Keep the language's promise that a tail call uses no stack, with `return_call`. Designed in
+   [tail-calls.md](tail-calls.md).
 
 ## Open questions
 
