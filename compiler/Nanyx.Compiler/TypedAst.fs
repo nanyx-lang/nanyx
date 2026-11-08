@@ -99,12 +99,13 @@ type TypedTopLevelItem =
     | TypedExprItem of TypedExpr
 
 /// A type definition: its parameters, the type it stands for, and the symbol it declares (`None` for one the
-/// compiler made up, which has no name written in the source). A context's `Members` are its members' symbols, by
-/// name; any other type has none.
+/// compiler made up, which has no name written in the source). Each parameter's variable is named as the parameter
+/// is written. A context's `Members` are its members' symbols, by name; any other type has none.
 type TypeDefInfo =
     { Parameters: TyVar list
       Underlying: Ty
       IsPrivate: bool
+      IsContext: bool
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 

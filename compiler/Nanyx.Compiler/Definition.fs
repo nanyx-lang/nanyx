@@ -92,16 +92,13 @@ let private typeNameSpan (typeExpr: TypeExpr) =
     | TypeApply(name, _) -> Some { typeExpr.Span with End = min typeExpr.Span.End (typeExpr.Span.Start + name.Length) }
     | _ -> None
 
-/// The symbol for the name at `offset` in the compiled root module: what it refers to, or, on a declaration's
-/// own name, the symbol it declares. `file` is the file the root module was compiled as (empty for source
-/// compiled directly), which tells its own declarations from those of the modules it imports. `None` when the
-/// module did not type-check or no name is at `offset`.
-let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol option =
+/// The symbol for the name at `offset`, as `symbolAt` finds it, with the span of the name.
+let private symbolAndNameAt (file: string) (result: CompileResult) (offset: int) : (Symbol * SourceSpan) option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let referencedAt (id: NodeId) (span: SourceSpan option) =
             match typed.References |> Map.tryFind id, span with
-            | Some id, Some span when contains offset span -> typed.Symbols |> Map.tryFind id
+            | Some id, Some span when contains offset span -> typed.Symbols |> Map.tryFind id |> Option.map (fun symbol -> symbol, span)
             | _ -> None
         let referenced =
             Hover.expressionsAt offset syntax
@@ -116,6 +113,32 @@ let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol optio
             |> Seq.filter (fun symbol -> symbol.Declaration.File = file && contains offset symbol.Declaration)
             |> Seq.sortBy (fun symbol -> symbol.Declaration.End - symbol.Declaration.Start)
             |> Seq.tryHead
+            |> Option.map (fun symbol -> symbol, symbol.Declaration)
+    | _ -> None
+
+/// The symbol for the name at `offset` in the compiled root module: what it refers to, or, on a declaration's
+/// own name, the symbol it declares. `file` is the file the root module was compiled as (empty for source
+/// compiled directly), which tells its own declarations from those of the modules it imports. `None` when the
+/// module did not type-check or no name is at `offset`.
+let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol option =
+    symbolAndNameAt file result offset |> Option.map fst
+
+/// What hovering a type's name shows: its definition, as `type Name(params) = <the type it stands for>` (or
+/// `context Name = ...`), with made-up type variables named by `names`, over the span of the name. The name can be
+/// in an annotation, a type definition (its own or another's) or a signature's contexts, and the type can be the
+/// module's own or an imported one. `None` when no type's name is at `offset`.
+let typeDefinitionAt (names: TypeVarNames) (file: string) (result: CompileResult) (offset: int) : Hover.HoverInfo option =
+    match result.Typed, symbolAndNameAt file result offset with
+    | Some typed, Some (symbol, span) when symbol.Kind = TypeDefinition ->
+        typed.TypeDefs
+        |> Map.tryPick (fun _ info -> if info.Symbol = Some symbol.Id then Some info else None)
+        |> Option.map (fun info ->
+            let keyword = if info.IsContext then "context" else "type"
+            let parameters =
+                match info.Parameters |> List.choose (fun var -> var.Name) with
+                | [] -> ""
+                | parameterNames -> "(" + String.concat ", " parameterNames + ")"
+            { Type = $"{keyword} {symbol.Name}{parameters} = {Unifier.tyToDisplayString names info.Underlying}"; Span = span })
     | _ -> None
 
 /// The span of every name in the compiled root module that refers to `symbol`, in the order they are written: a

@@ -220,6 +220,8 @@ What it does today:
   `int -> int`), and on a declaration's own name (a def, a parameter, a pattern variable) the type of
   what it declares. The types come from the typed module's `ExprTypes` and `CalleeTypes`, recorded by
   node during inference, and `SymbolTypes`, by symbol (see `NyxCompiler.Hover`). A file that does not type-check shows no hover.
+  On a type's name, in an annotation or a type definition, hover shows the type's definition instead
+  (`type Point = (x: int, y: int)`; see `Definition.typeDefinitionAt`).
 - `textDocument/definition` goes from a value, parameter, pattern variable, import, type name or context
   member to where it is declared, from the typed module's `References` and `Symbols` (see
   `NyxCompiler.Definition`). On a declaration's own name it returns that declaration. A definition in an
