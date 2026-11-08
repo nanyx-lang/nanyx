@@ -754,7 +754,11 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ExprStatement value -> expr statementPosition value
 
     and defDoc (isExport: bool) (keyword: string) (name: string) (typeOpt: TypeExpr option) (value: Expression) : Doc =
-        let name = cat [ (if isExport then text "export " else Doc.empty); text $"{keyword} {name}" ]
+        defDocNamed isExport keyword (text name) typeOpt value
+
+    /// A def whose name (or destructuring pattern) is already laid out.
+    and defDocNamed (isExport: bool) (keyword: string) (nameDoc: Doc) (typeOpt: TypeExpr option) (value: Expression) : Doc =
+        let name = cat [ (if isExport then text "export " else Doc.empty); text $"{keyword} "; nameDoc ]
         // A signature that does not fit on the def's line goes on the next one, as does the `=`, and the value is
         // indented under them:
         //
@@ -789,8 +793,13 @@ let format (options: Options) (parsed: SourceModule) : string =
         let _, _, _, value = List.head group
         let bindings = List.tail group
         let isExport = bindings |> List.exists (fun (isExport, _, _, _) -> isExport)
-        let patternText = writtenPattern span |> Option.defaultWith (fun () -> rebuiltPattern bindings)
-        defDoc isExport "def" patternText None value
+        match value.Kind with
+        // A pattern that may fail to match (`def $Money(pence) = m`) is bound through a one-arm match on the
+        // value; the def is printed from that arm's pattern.
+        | Match([ scrutinee ], [ [ p ], _ ]) -> defDocNamed isExport "def" (pattern p) None scrutinee
+        | _ ->
+            let patternText = writtenPattern span |> Option.defaultWith (fun () -> rebuiltPattern bindings)
+            defDoc isExport "def" patternText None value
 
     and pattern (p: Pattern) : Doc =
         match p.Kind with

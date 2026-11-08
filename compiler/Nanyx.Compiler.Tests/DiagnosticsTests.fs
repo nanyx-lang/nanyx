@@ -510,6 +510,22 @@ let ``A nominal type in a module block can only be constructed in the block`` ()
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
 
+/// A `module ids =` block with a protected `$UserId`, whose shape only the block can see.
+let private idsBlock =
+    "module ids =\n" +
+    "  export type $UserId = private int\n" +
+    "  export def $UserId.of: int -> $UserId = { n -> $UserId(n) }\n" +
+    "  export def $UserId.value: $UserId -> int = { id -> match id | $UserId(n) -> n }\n" +
+    "  export def first: $UserId = $UserId.of(1)\n\n"
+
+[<Fact>]
+let ``A protected type can only be taken apart in the module that defines it`` () =
+    Assert.Empty(codesAt (idsBlock + "import ids\n\ndef n: int = $UserId.value(first)\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$UserId(n)" ], codesAt (idsBlock + "import ids\n\ndef $UserId(n) = first\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$UserId(n)" ], codesAt (idsBlock + "import ids\n\ndef n = match first | $UserId(n) -> n\n"))
+    // A nominal type that is not protected has no hidden shape, so its pattern is usable anywhere.
+    Assert.Empty(codesAt (moneyBlock + "import money\n\ndef $Money(m) = zero\ndef p: int = m.pence\n"))
+
 [<Fact>]
 let ``A module block cannot use its file's definitions`` () =
     let source = "def outerValue = 1\n\n" + moneyBlock.Replace("def secret = 42", "def secret = outerValue")

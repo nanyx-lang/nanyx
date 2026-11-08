@@ -84,6 +84,9 @@ let ``Or-patterns, rec and destructuring defs are printed as written`` () =
     unchanged (lines [ "def f = {"; "  | 0 | 1 -> \"small\""; "  | _ -> \"big\""; "}" ])
     unchanged (lines [ "def g = {"; "  rec loop = { n -> loop(n) }"; "  loop(1)"; "}" ])
     unchanged "def (a, (b, _)) = pair\n"
+    unchanged "def $Money(pence) = m\n"
+    unchanged "def [first, ...rest] = xs\n"
+    unchanged (lines [ "def f = { m ->"; "  def $Money(pence) = m"; "  pence"; "}" ])
 
 [<Fact>]
 let ``Workflow keywords are printed as written`` () =
