@@ -313,7 +313,7 @@ A block is imported exactly as a file module is:
 - The import can come before or after the block, since declaration order doesn't matter in a module.
 - The name is the block's short name (`money`), even when the file declares a module of its own and the block's full name is `myModule.money`. A block can import the blocks nested directly inside it the same way.
 
-A block is also isolated as a file module is. It sees its own definitions, the blocks nested in it, the prelude, and what it imports itself, but not the rest of its file. So a block that needs `nanyx/console` imports it inside the block, and an import inside a block is that block's alone. A block is a module rather than a program, so it can't have top-level code: everything in it is a definition, a type or an import.
+A block is also isolated as a file module is. It sees its own definitions and types, the blocks nested in it, the prelude, and what it imports itself, but not the rest of its file. So a block that needs `nanyx/console` imports it inside the block, and an import inside a block is that block's alone. A block is a module rather than a program, so it can't have top-level code: everything in it is a definition, a type or an import.
 
 Create hierarchies with dot notation:
 
