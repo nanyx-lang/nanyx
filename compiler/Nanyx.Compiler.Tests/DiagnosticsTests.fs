@@ -473,3 +473,64 @@ let ``An imported function's context needs nothing more where the module cannot 
 let ``A def that declares an aliased context can use its members under the alias`` () =
     let main = "module main\nimport nanyx/console as c\ndef g: [c.Console] () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
     Assert.Equal<string list>([], undeclaredContextsWithMod main)
+/// A `module money =` block with a nominal `$Money`, its constructor and printer, an exported value and a private one.
+let private moneyBlock =
+    "module money =\n" +
+    "  export type $Money = (pence: int)\n" +
+    "  export def $Money.new: int -> $Money = { pence -> $Money(pence = pence) }\n" +
+    "  export def $Money.toString: $Money -> string = { m -> \"{m.pence}p\" }\n" +
+    "  export def zero: $Money = $Money.new(0)\n" +
+    "  def secret = 42\n\n"
+
+/// The diagnostics compiling `source` gives: each one's code and the text it is reported at.
+let private codesAt (source: string) =
+    (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt source (spanOf diagnostic))
+
+[<Fact>]
+let ``A module block can be imported by its file, unqualified or under an alias, before or after it`` () =
+    let unqualified = moneyBlock + "import money\n\ndef price: $Money = $Money.new(250)\ndef text: string = $Money.toString(price)\ndef nothing: string = zero \\toString\n"
+    Assert.Empty(codesAt unqualified)
+    let aliased = moneyBlock + "import money as m\n\ndef price: m.$Money = m.$Money.new(250)\ndef text: string = m.$Money.toString(m.zero)\n"
+    Assert.Empty(codesAt aliased)
+    let first = "import money\n\n" + moneyBlock + "def text: string = $Money.toString(zero)\n"
+    Assert.Empty(codesAt first)
+
+[<Fact>]
+let ``A module block's import brings in only its exports, and a local still shadows them`` () =
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownIdentifier.Code, "secret" ], codesAt (moneyBlock + "import money\n\ndef s = secret\n"))
+    Assert.Empty(codesAt (moneyBlock + "import money\n\ndef f: int -> int = { zero -> zero + 1 }\n"))
+
+[<Fact>]
+let ``A nominal type in a module block can only be constructed in the block`` () =
+    let viaImport = moneyBlock + "import money\n\ndef p = $Money(pence = 1)\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$Money" ], codesAt viaImport)
+    let qualified = moneyBlock + "def p = money.$Money(pence = 1)\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "money.$Money" ], codesAt qualified)
+    match codesAt (moneyBlock + "import money\n\ndef p: $Money = (pence = 1)\n") with
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    | other -> failwith $"Expected one type mismatch, got %A{other}"
+
+[<Fact>]
+let ``A module block cannot use its file's definitions`` () =
+    let source = "def outerValue = 1\n\n" + moneyBlock.Replace("def secret = 42", "def secret = outerValue")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "outerValue" ], codesAt source)
+
+[<Fact>]
+let ``A module block's imports are its own`` () =
+    let fileImport = "import nanyx/console\n\n" + moneyBlock.Replace("def secret = 42", "def secret = { println(\"x\") }")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "println(\"x\")" ], codesAt fileImport)
+    let blockImport = moneyBlock.Replace("module money =\n", "module money =\n  import nanyx/console\n").Replace("def secret = 42", "def secret = { println(\"x\") }")
+    Assert.Empty(codesAt blockImport)
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "println(\"y\")" ], codesAt (blockImport + "println(\"y\")\n"))
+
+[<Fact>]
+let ``A module block can import the block beside it, but not reach it without an import`` () =
+    let other = "module prices =\n  import money\n  export def price: $Money = $Money.new(5)\n"
+    Assert.Empty(codesAt (moneyBlock + other))
+    let unimported = "module prices =\n  export def nothing = money.zero\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "money.zero" ], codesAt (moneyBlock + unimported))
+
+[<Fact>]
+let ``A module block has no top-level code`` () =
+    let source = moneyBlock.Replace("def secret = 42", "def secret = 42\n  secret + 1")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.CodeInModuleBlock.Code, "secret + 1" ], codesAt source)

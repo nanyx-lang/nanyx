@@ -23,6 +23,14 @@ type DeferredContextUse =
       Span: SourceSpan
       Available: Set<Identifier> }
 
+/// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
+type BlockImport =
+    { Import: ImportItem
+      /// The block's full name, which its definitions are qualified with: `money`, or `app.money` in `module app`.
+      Prefix: string
+      /// Where the block is written.
+      Block: SourceSpan }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -88,7 +96,15 @@ type InferState =
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
             /// Where a constraint added now is reported if it cannot be satisfied: the expression being inferred.
-            Origin: SourceSpan }
+            Origin: SourceSpan;
+            /// The imports of `module name =` blocks in this file (see `BlockImport`).
+            BlockImports: BlockImport list;
+            /// The names a block import brings in, each with the qualified name of the definition or type it stands
+            /// for: `zero` (or `m.zero`, under `as m`) for `money.zero`.
+            BlockAliases: Map<string, string>;
+            /// The imports each imported definition is brought in by, as where they are written: a `module name =`
+            /// block's imports are its own. An import the compiler made up (the prelude's) has no place.
+            ImportSites: Map<SymbolId, SourceSpan list> }
 
 let emptyState =
         { NextId = 0;
@@ -121,7 +137,10 @@ let emptyState =
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
             BuiltInProperties = Map.empty;
-            Origin = SourceSpan.none }
+            Origin = SourceSpan.none;
+            BlockImports = [];
+            BlockAliases = Map.empty;
+            ImportSites = Map.empty }
 
 let private freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
@@ -286,6 +305,109 @@ let private ensureAttachedTypeExists (state: InferState) (currentModuleOpt: stri
 let private nameSpan (spanOpt: SourceSpan option) (expr: Expression) : SourceSpan =
     spanOpt |> Option.defaultValue expr.Span
 
+/// The `module name =` block innermost around `span`, with its name, if `span` is in one.
+let blockAround (moduleBlocks: (ModuleName * SourceSpan) list) (span: SourceSpan) : (ModuleName * SourceSpan) option =
+    moduleBlocks
+    |> List.filter (fun (_, block) -> SourceSpan.contains block span)
+    |> List.sortBy (fun (_, block) -> block.End - block.Start)
+    |> List.tryHead
+
+/// The imports in `module'` that name a `module name =` block of the same file, by its short name, rather than
+/// another file. At the top level of the file, that is a block written at the top level; in a block, a block nested
+/// directly in it, or else one written beside it.
+let blockImports (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) : BlockImport list =
+    let parentOf (block: SourceSpan) =
+        moduleBlocks
+        |> List.filter (fun (_, other) -> other <> block && SourceSpan.contains other block)
+        |> List.sortBy (fun (_, other) -> other.End - other.Start)
+        |> List.tryHead
+        |> Option.map snd
+    // Each block is a module declaration where the block starts once blocks are expanded, under its full name.
+    let prefixOf (block: SourceSpan) =
+        module' |> List.tryPick (function
+            | Kind (ModuleDecl name) as item when item.Span.Start = block.Start -> Some name
+            | _ -> None)
+    module'
+    |> List.collect (function
+        | Kind (Import items) -> items
+        | _ -> [])
+    |> List.choose (fun item ->
+        match item.Source with
+        | ModuleImport name when not (name.Contains '/') && not (name.Contains '.') ->
+            let site = blockAround moduleBlocks item.Span |> Option.map snd
+            let named = moduleBlocks |> List.filter (fun (blockName, block) -> blockName = name && Some block <> site)
+            let children = named |> List.filter (fun (_, block) -> parentOf block = site)
+            let siblings =
+                match site with
+                | Some site -> named |> List.filter (fun (_, block) -> parentOf block = parentOf site)
+                | None -> []
+            List.tryHead (children @ siblings)
+            |> Option.bind (fun (_, block) -> prefixOf block |> Option.map (fun prefix -> { Import = item; Prefix = prefix; Block = block }))
+        | _ -> None)
+
+/// The names `blockImport` brings in, each with the qualified name it stands for: the block's own exported
+/// definitions and types, under the import's alias if it has one.
+let private blockAliases (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) (blockImport: BlockImport) : (string * string) list =
+    let ownName (item: TopLevelItem) (name: string) =
+        if name.StartsWith(blockImport.Prefix + ".") && blockAround moduleBlocks item.Span |> Option.map snd = Some blockImport.Block then
+            Some (name.Substring(blockImport.Prefix.Length + 1), name)
+        else
+            None
+    module'
+    |> List.choose (fun item ->
+        match item.Kind with
+        | Def (ValueDef(true, name, _, _)) -> ownName item name
+        | Def (TypeDef(name, modifiers, _, _)) when modifiers |> List.contains Export -> ownName item name
+        | _ -> None)
+    |> List.map (fun (short, qualified) ->
+        match blockImport.Import.Alias with
+        | Some alias -> $"{alias}.{short}", qualified
+        | None -> short, qualified)
+
+/// Whether code at `span` is in the home module of the nominal type `name`: the module that defines it, and within
+/// that the `module name =` block it is defined in, if any. Only its home module can make one from its shape.
+let private inNominalHome (state: InferState) (name: string) (span: SourceSpan) =
+    state.LocalNominals.Contains name
+    && (match state.TypeDefs |> Map.tryFind name |> Option.bind (fun info -> info.Symbol) |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+        | Some symbol when not (SourceSpan.isNone span) ->
+            blockAround state.ModuleBlocks symbol.Declaration = blockAround state.ModuleBlocks span
+        | _ -> true)
+
+/// The error for `expr`, a reference to `name` bound to `scheme`, if it reaches out of the `module name =` block it
+/// is in, or into one: a block sees only its own definitions, the blocks nested in it, the blocks it imports and what
+/// it imports itself, and its imports are its own.
+let private blockIsolation (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
+    let exprBlock = blockAround state.ModuleBlocks expr.Span
+    match scheme.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+    | _ when SourceSpan.isNone expr.Span || state.ModuleBlocks.IsEmpty -> []
+    | None -> []
+    | Some symbol ->
+        match state.ImportSites |> Map.tryFind symbol.Id with
+        | Some sites ->
+            let visible = sites |> List.exists (fun site -> SourceSpan.isNone site || blockAround state.ModuleBlocks site = exprBlock)
+            match exprBlock with
+            | _ when visible -> []
+            | Some (blockName, _) ->
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock expr.Span $"'{name}' is imported outside module '{blockName}', which sees only what it imports itself: import it in the block too" ]
+            | None ->
+                let blockName = sites |> List.tryPick (fun site -> blockAround state.ModuleBlocks site |> Option.map fst) |> Option.defaultValue ""
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock expr.Span $"'{name}' is only imported in module '{blockName}', and a module block's imports are its own: import it here too" ]
+        | None when symbol.Kind = TopLevelValue && symbol.Declaration.File = expr.Span.File ->
+            match exprBlock with
+            | Some (blockName, block) when not (SourceSpan.contains block symbol.Declaration) ->
+                let imported =
+                    symbol.IsExported
+                    && state.BlockImports
+                       |> List.exists (fun blockImport ->
+                           SourceSpan.contains blockImport.Block symbol.Declaration
+                           && blockAround state.ModuleBlocks blockImport.Import.Span = exprBlock)
+                if imported then []
+                else
+                    [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock expr.Span $"'{name}' is defined outside module '{blockName}', which sees only its own definitions and what it imports"
+                      |> Diagnostics.withRelated symbol.Declaration $"'{name}' is declared here" ]
+            | _ -> []
+        | None -> []
+
 /// The error for `expr` naming what `scheme` is bound for, if that is a definition a `module name =` block does
 /// not export and `expr` is outside the block.
 let private privateReference (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
@@ -315,7 +437,9 @@ let private ambiguousReference (name: string) (expr: Expression) (scheme: TypeSc
 /// The errors for a reference to `name`, bound to `scheme`, that the name alone does not show: a definition a module
 /// block keeps private, or a name more than one import brings in.
 let private referenceErrors (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
-    privateReference expr scheme state @ ambiguousReference name expr scheme state
+    match privateReference expr scheme state with
+    | [] -> blockIsolation name expr scheme state @ ambiguousReference name expr scheme state
+    | errors -> errors @ ambiguousReference name expr scheme state
 
 /// The names definitions can be attached to a value of type `ty` under, nearest first: each alias it is written
 /// with, then the nominal type or the language's name for a built-in type (`String`, `List`). Empty when the type
@@ -379,8 +503,14 @@ let private aliasType (name: string) (info: TypeDefInfo) : Ty =
     TyAlias(name, info.Parameters |> List.map TyVar, info.Underlying)
 
 /// Whether `info` defines a nominal type.
+/// Whether a type named `name` is nominal: its own name starts with `$`, whether or not it is qualified with a module
+/// block's name (`money.$Money`).
+let private isNominalName (name: string) =
+    let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
+    own.StartsWith("$")
+
 let private isNominal (info: TypeDefInfo) =
-    info.Name.StartsWith("$")
+    isNominalName info.Name
 
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
 let private namedType (name: string) (info: TypeDefInfo) : Ty =
@@ -773,6 +903,13 @@ let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: 
         Ok { state with InferredContexts = state.InferredContexts |> Map.add defName (contexts.Add ctxName) }
     | DefScope(defName, false) -> Error [ undeclaredContext defName ctxName what span ]
 
+/// The name the definition `name` names is declared under: a block import's name (`zero`) stands for the qualified
+/// one (`money.zero`), unless something nearer binds it.
+let private canonicalName (env: TypeEnv) (state: InferState) (name: Identifier) =
+    match state.BlockAliases |> Map.tryFind name with
+    | Some qualified when (TypeEnv.tryFind name env |> Option.bind _.Symbol) = (TypeEnv.tryFind qualified env |> Option.bind _.Symbol) -> qualified
+    | _ -> name
+
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
 /// of an unannotated top-level def is kept to check once its contexts are known.
 let private checkContextUse (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
@@ -867,9 +1004,9 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
     let isPrivate = isPrivateType modifiers
     let paramVars = paramEntries |> List.map snd
     let nextNominals =
-        if name.StartsWith("$") then next.LocalNominals |> Set.add name else next.LocalNominals
+        if isNominalName name then next.LocalNominals |> Set.add name else next.LocalNominals
     let nextPrivate =
-        if name.StartsWith("$") && isPrivate then next.LocalPrivateNominals |> Set.add name else next.LocalPrivateNominals
+        if isNominalName name && isPrivate then next.LocalPrivateNominals |> Set.add name else next.LocalPrivateNominals
     let nextContexts =
         if isContextDef modifiers then next.ContextDefs |> Map.add name body else next.ContextDefs
     let isExport = modifiers |> List.contains Export
@@ -1171,10 +1308,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             // A function that needs an ambient context can only be passed on where it runs in that context. One that
             // needs a context nothing here supplies can be passed to code that loads it.
             let contextCheck =
-                match state.ContextRequirements |> Map.tryFind name with
+                match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
                 | Some contexts -> ensureContextAvailable false env state name contexts expr.Span
                 | None -> Ok state
-                |> Result.bind (fun current -> checkContextUse env current name expr.Span)
+                |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) expr.Span)
             match contextCheck with
             | Error err -> Error err
             | Ok state ->
@@ -1264,10 +1401,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
         else
         let contextCheck =
-            match state.ContextRequirements |> Map.tryFind name with
+            match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
             | Some contexts -> ensureContextAvailable true env state name contexts calleeSpan
             | None -> Ok state
-            |> Result.bind (fun current -> checkContextUse env current name calleeSpan)
+            |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) calleeSpan)
         match contextCheck with
         | Error err -> Error err
         | Ok state ->
@@ -1390,7 +1527,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | None ->
                 match tryFindTypeDef name state with
                 // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
-                | Some info when isNominal info && not (state.LocalNominals.Contains info.Name) ->
+                | Some info when isNominal info && not (inNominalHome state info.Name calleeSpan) ->
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
                 | Some info ->
                     let mutable current = state
@@ -2140,7 +2277,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
             match expectedReturnOpt with
             | Some expectedReturn ->
                 match Unifier.unalias expectedReturn with
-                | TyNominal(name, underlying, _) when state.LocalNominals.Contains name ->
+                | TyNominal(name, underlying, _) when inNominalHome state name body.Span ->
                     match Unifier.unalias bodyExpr.Type with
                     | TyNominal _ -> addAssignableConstraintAt body.Span bodyExpr.Type expectedReturn next
                     | _ -> addAssignableConstraintAt body.Span bodyExpr.Type underlying next
@@ -2232,7 +2369,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                     | _ ->
                                         let updatedState =
                                             match Unifier.unalias declaredTy with
-                                            | TyNominal(name, underlying, _) when current.LocalNominals.Contains name ->
+                                            | TyNominal(name, underlying, _) when inNominalHome current name expr.Span ->
                                                 match Unifier.unalias typedExpr.Type with
                                                 | TyNominal _ -> addAssignableConstraintAt expr.Span typedExpr.Type declaredTy next
                                                 | _ -> addAssignableConstraintAt expr.Span typedExpr.Type underlying next
@@ -2382,6 +2519,21 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     // at its declared type; an unannotated one at a fresh variable that its inferred type is unified
     // with once its body has been checked. Type definitions are registered in the same pass, so an
     // annotation can name a type declared further down.
+    // A block the file imports (`import money`) brings its exports in under other names: each is bound wherever the
+    // definition it stands for is, so it has the same type and refers to the same symbol.
+    let blockImported = blockImports state.ModuleBlocks module'
+    let aliases = blockImported |> List.collect (blockAliases state.ModuleBlocks module') |> Map.ofList
+    state <- { state with BlockImports = blockImported; BlockAliases = aliases }
+    let aliasesOf =
+        aliases |> Map.toList |> List.groupBy snd |> List.map (fun (qualified, pairs) -> qualified, List.map fst pairs) |> Map.ofList
+    let declareTopLevel (name: string) symbol scheme (env: TypeEnv) =
+        aliasesOf
+        |> Map.tryFind name
+        |> Option.defaultValue []
+        |> List.fold (fun acc alias -> TypeEnv.declare alias symbol scheme acc) (TypeEnv.declare name symbol scheme env)
+    let withoutTopLevel (name: string) (env: TypeEnv) =
+        aliasesOf |> Map.tryFind name |> Option.defaultValue [] |> List.fold (fun acc alias -> acc |> Map.remove alias) (env |> Map.remove name)
+
     let mutable preboundFreshVars: Map<string, Ty> = Map.empty
     for item in module' do
         match item with
@@ -2401,13 +2553,23 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             | Some declaredExpr when (typeOfValues declaredExpr).IsEmpty ->
                 let ty, st = typeExprToTy state declaredExpr
                 state <- st
-                env <- TypeEnv.declare name symbol (TypeEnv.generalize env ty) env
+                env <- declareTopLevel name symbol (TypeEnv.generalize env ty) env
             | _ ->
                 let ty, st = freshVar state
                 state <- st
                 preboundFreshVars <- preboundFreshVars |> Map.add name ty
-                env <- TypeEnv.declare name symbol (TypeEnv.mono ty) env
+                env <- declareTopLevel name symbol (TypeEnv.mono ty) env
         | _ -> ()
+
+    // The exported types of an imported block can be written under the import's names too (`$Money`, `m.$Money`).
+    state <-
+        { state with
+            TypeDefs =
+                aliases
+                |> Map.fold (fun acc alias qualified ->
+                    match state.TypeDefs |> Map.tryFind qualified with
+                    | Some info -> acc |> Map.add alias info
+                    | None -> acc) state.TypeDefs }
 
     for item in module' do
         match item.Kind with
@@ -2419,7 +2581,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
             let typeOfsInferred =
                 match typeOpt with
-                | Some typeExpr -> inferTypeOfValues (env |> Map.remove name) state typeExpr
+                | Some typeExpr -> inferTypeOfValues (withoutTopLevel name env) state typeExpr
                 | None -> Ok state
             match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
             | Error err -> errors <- err
@@ -2478,7 +2640,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                             | _ ->
                                 let updatedState =
                                     match Unifier.unalias declaredTy with
-                                    | TyNominal(name, underlying, _) when state.LocalNominals.Contains name ->
+                                    | TyNominal(name, underlying, _) when inNominalHome state name expr.Span ->
                                         match Unifier.unalias typedExpr.Type with
                                         | TyNominal _ -> addAssignableConstraintAt expr.Span typedExpr.Type declaredTy next
                                         | _ -> addAssignableConstraintAt expr.Span typedExpr.Type underlying next
@@ -2510,12 +2672,16 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
                         // first, as a local def's is: `{ x -> x + 1 }` is `α -> α` until its constraints are
                         // applied, and generalising that would make every use `α -> α` too.
-                        let scheme, generalizedState = generalizeDef (env |> Map.remove name) state declaredTy
+                        let scheme, generalizedState = generalizeDef (withoutTopLevel name env) state declaredTy
                         state <- generalizedState
-                        env <- TypeEnv.declare name symbol scheme env
+                        env <- declareTopLevel name symbol scheme env
                         types <- types |> Map.add name declaredTy
                         items <- items @ [ TypedDef (TypedValueDef(isExport, name, typeOpt, typedExpr)) ]
                 | Error err -> errors <- err
+        // A block is a module, not a program, so it has no top-level code.
+        | Expr expr when errors.IsEmpty && (blockAround state.ModuleBlocks expr.Span).IsSome ->
+            let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
+            errors <- [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"Module '{blockName}' is a block, which can only hold definitions, types and imports, not code to run" ]
         | Expr expr when errors.IsEmpty ->
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->

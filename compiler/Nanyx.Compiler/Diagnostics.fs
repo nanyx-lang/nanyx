@@ -58,6 +58,7 @@ module DiagnosticCodes =
     let InvalidDirective = code 9 "Invalid directive" Severity.Error
     let DirectiveInPackage = code 10 "Directive in a package" Severity.Error
     let UnsupportedDirective = code 11 "Unsupported directive" Severity.Error
+    let CodeInModuleBlock = code 12 "Code in a module block" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -69,6 +70,7 @@ module DiagnosticCodes =
     let UnknownAttachedType = code 107 "Unknown attached type" Severity.Error
     let UnknownContext = code 108 "Unknown context" Severity.Error
     let UnknownType = code 109 "Unknown type" Severity.Error
+    let OutsideModuleBlock = code 110 "Name from outside a module block" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -88,9 +90,9 @@ module DiagnosticCodes =
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
-          UnsupportedDirective
+          UnsupportedDirective; CodeInModuleBlock
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
-          UnknownAttachedType; UnknownContext; UnknownType
+          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule ]

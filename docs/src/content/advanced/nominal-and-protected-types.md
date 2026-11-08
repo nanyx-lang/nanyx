@@ -40,7 +40,7 @@ export type $User = (
 def user = $User(name = "Ada", email = wrapped)
 ```
 
-The constructor (and the ability to clone a value) is only available inside the type's home module. Everywhere else, `$Email("...")` is a compile error. This is the whole point: the home module is the only place a nominal value can come into existence, so it is the only place that needs to uphold the type's invariants.
+The constructor (and the ability to clone a value) is only available inside the type's home module. Everywhere else, `$Email("...")` is a compile error. This is the whole point: the home module is the only place a nominal value can come into existence, so it is the only place that needs to uphold the type's invariants. A type declared in a `module name =` block has that block as its home module, not the whole file, so one file can keep a nominal type sealed away from the rest of it (see [Using a module block in its own file](../tour/modules#using-a-module-block-in-its-own-file)).
 
 The usual pattern is to export a _smart constructor_—an ordinary function that validates its input and calls the real constructor only when the input is acceptable:
 
