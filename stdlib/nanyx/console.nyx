@@ -22,7 +22,9 @@ export context Console = (
 )
 
 -- Writes `text` to standard output.
-export def print: string -> () = { text -> __nanyx_write_stdout(text) }
+export def print: string -> () = { text ->
+  __nanyx_write_stdout(text)
+}
 
 -- Writes `text` followed by a line break to standard output.
 export def println: string -> () = { text ->
@@ -31,7 +33,9 @@ export def println: string -> () = { text ->
 }
 
 -- Writes `text` to standard error.
-export def eprint: string -> () = { text -> __nanyx_write_stderr(text) }
+export def eprint: string -> () = { text ->
+  __nanyx_write_stderr(text)
+}
 
 -- Writes `text` followed by a line break to standard error.
 export def eprintln: string -> () = { text ->
@@ -42,22 +46,28 @@ export def eprintln: string -> () = { text ->
 -- `line` without a carriage return at its end.
 def withoutCarriageReturn: string -> string = { line ->
   def length = __nanyx_string_length(line)
+
   if length > 0 and __nanyx_string_byte_at(line, length - 1) == 13
-  then __nanyx_string_slice(line, 0, length - 1)
-  else line
+    then __nanyx_string_slice(line, 0, length - 1)
+    else line
 }
 
 -- `acc` followed by the rest of the current line of standard input.
 def readLineAfter: string -> #some(string) | #error(IoError) = { acc ->
   def byte = __nanyx_read_stdin_byte()
-  if byte < 0 then (if __nanyx_string_length(acc) == 0 then #error(#endOfInput) else #some(acc))
-  else if byte == 10 then #some(withoutCarriageReturn(acc))
-  else readLineAfter(acc ++ __nanyx_string_from_byte(byte))
+
+  if byte < 0
+    then (if __nanyx_string_length(acc) == 0 then #error(#endOfInput) else #some(acc))
+    else if byte == 10
+      then #some(withoutCarriageReturn(acc))
+      else readLineAfter(acc ++ __nanyx_string_from_byte(byte))
 }
 
 -- The next line of standard input, without its line break (a "\r\n" one included), or
 -- `#error(#endOfInput)` when the input has ended. A last line without a line break is still a line.
-export def readLine: () -> #some(string) | #error(IoError) = { _ -> readLineAfter("") }
+export def readLine: () -> #some(string) | #error(IoError) = { _ ->
+  readLineAfter("")
+}
 
 -- `acc` followed by everything left on standard input.
 def readToEndAfter: string -> string = { acc ->
@@ -66,7 +76,9 @@ def readToEndAfter: string -> string = { acc ->
 }
 
 -- Everything left on standard input (the empty string when nothing is), as is.
-export def readToEnd: () -> #some(string) | #error(IoError) = { _ -> #some(readToEndAfter("")) }
+export def readToEnd: () -> #some(string) | #error(IoError) = { _ ->
+  #some(readToEndAfter(""))
+}
 
 -- Writes out anything the streams hold back. The runtime's writes are not buffered, so there is
 -- nothing to do; it is here so that code written for a buffered `Console` runs unchanged.

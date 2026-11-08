@@ -10,20 +10,26 @@ module math
 -- to call `abs(x)`.
 
 -- `n` without its sign.
-export def abs: int -> int = { n -> if n < 0 then 0 - n else n }
+export def abs: int -> int = { n ->
+  if n < 0 then 0 - n else n
+}
 
 -- The smaller of `a` and `b`.
-export def min: (int, int) -> int = { a, b -> if a <= b then a else b }
+export def min: int, int -> int = { a, b ->
+  if a <= b then a else b
+}
 
 -- The larger of `a` and `b`.
-export def max: (int, int) -> int = { a, b -> if a >= b then a else b }
+export def max: int, int -> int = { a, b ->
+  if a >= b then a else b
+}
 
 -- `n` moved into the range from `low` to `high`: `low` if it is below, `high` if it is above.
-export def clamp: (int, int, int) -> int = { n, low, high ->
+export def clamp: int, int, int -> int = { n, low, high ->
   if n < low then low else if n > high then high else n
 }
 
 -- `base` multiplied by itself `exponent` times (1 when `exponent` is zero or negative).
-export def pow: (int, int) -> int = { base, exponent ->
+export def pow: int, int -> int = { base, exponent ->
   if exponent <= 0 then 1 else base * pow(base, exponent - 1)
 }
