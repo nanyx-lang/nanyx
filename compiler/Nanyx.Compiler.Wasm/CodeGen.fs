@@ -5,6 +5,24 @@ open System.Text
 open NyxCompiler
 open Parser.Program
 
+/// Something the backend cannot compile, and where it is written: what `tryTranspileTypedModuleToWat` reports as a
+/// diagnostic. A failure anywhere in the backend becomes one of these at the innermost expression it happened in that
+/// has a place in the source (see `locatedAt`).
+exception UnsupportedConstruct of message: string * span: SourceSpan
+
+/// Fails with `message`, placed at `span`.
+let private unsupportedAt (span: SourceSpan) (message: string) : 'a = raise (UnsupportedConstruct(message, span))
+
+/// Runs `action`. A failure that does not say where it happened yet is placed at `span`, when that is a place in the
+/// source; one the compiler made up has none, so the failure is left for an enclosing expression to place.
+let private locatedAt (span: SourceSpan) (action: unit -> 'a) : 'a =
+    try
+        action ()
+    with
+    | UnsupportedConstruct _ -> reraise ()
+    | Failure message when not (SourceSpan.isNone span) -> unsupportedAt span message
+    | ex when not (SourceSpan.isNone span) -> unsupportedAt span $"Internal error: {ex.Message}"
+
 type private ContextFn = string * int * int
 
 /// The module's function table (`$ctx_table`), as far as functions used as values are concerned: a top-level
@@ -2066,7 +2084,7 @@ and private collectTagNamesPattern (pattern: Pattern) : string list =
     | WildcardPattern
     | ElsePattern -> []
 
-let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : string =
+let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expression) : string =
     /// The pointer to a string literal's bytes in the data section.
     let stringLiteralCode (value: string) =
         match env.StringLiterals |> Map.tryFind value with
@@ -2152,9 +2170,11 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
     let interpolationHoleType inner =
         match tryGetExprTypeName env inner with
         | Some ("string" | "int" | "bool" | "float" as typeName) -> typeName
-        | Some other -> failwith $"Unsupported interpolated value type for WASM MVP backend: {other}"
+        | Some other -> unsupportedAt inner.Span $"The WebAssembly backend cannot interpolate a value of type '{other}' yet"
         | None when holeTy inner |> Option.bind tryTagMembers |> Option.isSome -> "tag"
-        | None -> failwith $"Unable to determine interpolated value type for WASM MVP backend: {inner}"
+        | None ->
+            // The backend works out a hole's type from what it can see, not from the type checker (#193).
+            unsupportedAt inner.Span "The WebAssembly backend cannot tell the type of this interpolated value: annotate the function or value it comes from"
 
     // A tag hole prints as `#name`, or `#name(payload)` with a string payload in quotes, as the docs show
     // values. The discriminant picks the tag at run time; each tag the hole's type names is checked in turn.
@@ -2177,7 +2197,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                     |> Option.map (fun ty ->
                         match trySimpleTypeName ty with
                         | Some ("string" | "int" | "bool" as typeName) -> typeName
-                        | _ -> failwith $"Unsupported interpolated payload type for WASM MVP backend: #{name}({Unifier.tyToString ty})")
+                        | _ -> unsupportedAt inner.Span $"The WebAssembly backend cannot interpolate '#{name}' with a payload of type '{Unifier.tyToString ty}' yet")
                 name, tagCode id, payloadTypeName
             | None -> failwith $"Internal error: missing tag discriminant for #{name}")
 
@@ -2301,7 +2321,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
             | _ ->
                 // A top-level value (or a parameterless function): evaluate it.
                 $"call ${sanitizeIdentifier name}"
-        | None -> failwith $"Unsupported identifier for WASM MVP backend: {name}"
+        | None -> failwith $"The WebAssembly backend cannot compile a reference to '{name}' here yet"
     | TagExpr(name, None) ->
         match env.TagIds |> Map.tryFind name with
         | Some id -> $"i32.const {tagCode id}"
@@ -2328,7 +2348,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
             env.UsedHelpers.Add Helpers.listConcat |> ignore
             $"{leftCode}\n    {rightCode}\n    call ${Helpers.listConcat}"
         | Some other -> failwith $"Unsupported operand type for ++ in WASM MVP backend: {other}"
-        | None -> failwith $"Unable to tell whether ++ joins strings or lists for WASM MVP backend: {expr}"
+        | None -> failwith "The WebAssembly backend cannot tell whether this `++` joins strings or lists: annotate one side"
     | BinaryOp(op, left, right) when (op = "==" || op = "!=") && (isStringExpr env left || isStringExpr env right) ->
         // Strings are pointers, so equality calls into the runtime helper instead of comparing the pointers.
         let leftCode = transpileExpression env left
@@ -2561,7 +2581,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
             | WildcardPattern
             | ElsePattern
             | IdentifierPattern _ -> "i32.const 1"
-            | _ -> failwith $"Unsupported match pattern for WASM MVP backend: {pattern}"
+            | _ -> unsupportedAt pattern.Span "The WebAssembly backend cannot compile this kind of pattern yet"
 
         let rec emitArms remainingArms =
             match remainingArms with
@@ -2876,7 +2896,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                 if prefix = "" then $"call ${name}{unitResult}" else $"{prefix}\n    call ${name}{unitResult}"
             | None ->
                 if not (env.KnownFunctions.Contains name) then
-                    failwith $"Unsupported function call for WASM MVP backend: {name}"
+                    failwith $"The WebAssembly backend cannot compile a call to '{name}' yet"
                 else
                     // Check if this function requires contexts - if so, pass them
                     let requiredCtxFns = env.FunctionContextRequirements |> Map.tryFind name |> Option.defaultValue []
@@ -3062,16 +3082,29 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                         match field with
                         | NamedField(key, Kind (IdentifierExpr local)) when acc.Locals.ContainsKey local ->
                             { acc with ContextMembers = acc.ContextMembers |> Map.add key $"local.get ${acc.Locals.[local]}" }
-                        | _ -> failwith $"Unsupported context binding for WASM MVP backend: {field}") env
+                        | NamedField(key, _) -> failwith $"The WebAssembly backend cannot compile the `use` binding of '{key}' yet"
+                        | PositionalField _ -> failwith "The WebAssembly backend cannot compile a `use` binding without a name") env
                 transpileStatements updatedEnv tail
-            | UseStatement binding :: _ ->
-                failwith $"Unsupported use statement for WASM MVP backend: {binding}"
+            | UseStatement _ :: _ ->
+                failwith "The WebAssembly backend cannot compile this kind of `use` yet"
             | ImportStatement _ :: _
             | TypeDefStatement _ :: _ ->
                 failwith "Unsupported statement form for WASM MVP backend"
         transpileStatements env (statements |> List.map _.Kind)
     | _ ->
-        failwith $"Unsupported expression for WASM MVP backend: {expr}"
+        let construct =
+            match expr.Kind with
+            | UseIn _ -> "`use ... in`"
+            | ContextMemberAccess _ -> "a context member used as a value"
+            | WorkflowBindExpr _
+            | WorkflowReturnExpr _ -> "a workflow keyword here"
+            | _ -> "this kind of expression"
+        failwith $"The WebAssembly backend cannot compile {construct} yet"
+
+/// The code for `expr`. Whatever the backend cannot compile is reported at the innermost expression it is in that is
+/// written in the source.
+and private transpileExpression (env: TranspileEnv) (expr: Expression) : string =
+    locatedAt expr.Span (fun () -> transpileExpressionUnplaced env expr)
 
 let private defBodyAndParameters (expr: Expression) =
     match expr.Kind with
@@ -3798,7 +3831,11 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
 
-    let renderFunction (name: string) (defTypeOpt: TypeExpr option) (expr: Expression) (typedExprOpt: TypedExpr option) (exportFn: bool) =
+    // What fails outside any expression of a function is reported at the function's definition.
+    let rec renderFunction (name: string) (defTypeOpt: TypeExpr option) (expr: Expression) (typedExprOpt: TypedExpr option) (exportFn: bool) =
+        locatedAt expr.Span (fun () -> renderFunctionUnplaced name defTypeOpt expr typedExprOpt exportFn)
+
+    and renderFunctionUnplaced (name: string) (defTypeOpt: TypeExpr option) (expr: Expression) (typedExprOpt: TypedExpr option) (exportFn: bool) =
             let parameters, bodyExpr = defBodyAndParameters expr
             let parameterNames = parameters |> List.map fst
             let parameterMap = createNameMap parameterNames
@@ -4546,3 +4583,13 @@ let transpileTypedModuleToWat (typed: TypedModule) : string =
             | _ -> None)
         |> Map.ofList
     transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances
+
+/// `transpileTypedModuleToWat`, with what the backend cannot compile reported as a diagnostic at the place in the source
+/// it is written: the innermost expression it is in that has one, or else the definition.
+let tryTranspileTypedModuleToWat (typed: TypedModule) : Result<string, Diagnostic> =
+    try
+        Ok (transpileTypedModuleToWat typed)
+    with
+    | UnsupportedConstruct(message, span) -> Error (Diagnostics.at DiagnosticCodes.UnsupportedByBackend span message)
+    | Failure message -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend message)
+    | ex -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend $"Internal error: {ex.Message}")

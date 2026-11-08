@@ -278,6 +278,26 @@ let ``Run - a call synthesizes a context's instance from attached definitions, a
     |> assertRan "(1, 2)\n<(1, 2)>\n5p & (1, 2)\n<(1, 2)><(1, 2)>\n<(1, 2)>\n<nearer 2>\n<7p>\n"
 
 [<Fact>]
+let ``Run - what the backend cannot compile is reported with its place, like any other error`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def explain = {\n" +
+        "  | #badLine(text) -> \"could not read '{text}'\"\n" +
+        "  | _ -> \"something went wrong\"\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = { println(explain(#badLine(\"x\"))) }\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    // `path/to/file.nyx:4:41: error NYX0301: ...`, the column being that of `text` in the hole.
+    Assert.Matches(
+        ":4:41: error NYX0301: The WebAssembly backend cannot tell the type of this interpolated value: annotate the function or value it comes from\\r?\\n$",
+        outcome.StandardError)
+
+[<Fact>]
 let ``Run - string concatenation and equality`` () =
     let source =
         "import nanyx/console\n" +

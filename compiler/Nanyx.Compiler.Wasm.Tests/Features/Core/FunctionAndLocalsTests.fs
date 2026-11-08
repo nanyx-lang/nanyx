@@ -46,6 +46,48 @@ let ``Transpile attached function on a built-in type`` () =
     Assert.Contains("i32.const 3", wat)
     Assert.Contains("call $Int_double", wat)
 
+/// What the backend reports for `source`, which type-checks but which it cannot compile: the diagnostic, and the line
+/// and column (both from 1) it is reported at.
+let private backendFailure (source: string) =
+    let result = NyxCompiler.Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    match Transpiler.Wasm.CodeGen.tryTranspileTypedModuleToWat result.Typed.Value with
+    | Ok _ -> failwith "Expected the backend to fail"
+    | Error diagnostic ->
+        Assert.Equal(NyxCompiler.DiagnosticCodes.UnsupportedByBackend.Code, diagnostic.Code)
+        let span = diagnostic.Span.Value
+        diagnostic.Message, span.StartLine + 1, span.StartColumn + 1
+
+/// The line and column (both from 1) where `text` first appears in `source`.
+let private placeOf (text: string) (source: string) =
+    let index = source.IndexOf(text, StringComparison.Ordinal)
+    let before = source.Substring(0, index)
+    before.Split('\n').Length, index - (before.LastIndexOf('\n') + 1) + 1
+
+[<Fact>]
+let ``What the backend cannot compile is reported where it is written`` () =
+    // An interpolated value whose type the backend cannot work out (#193) is reported at the value, not the string.
+    let interpolated =
+        "def explain = {\n" +
+        "  | #badLine(text) -> \"could not read '{text}'\"\n" +
+        "  | _ -> \"something went wrong\"\n" +
+        "}\n"
+    let message, line, column = backendFailure interpolated
+    Assert.Equal("The WebAssembly backend cannot tell the type of this interpolated value: annotate the function or value it comes from", message)
+    let expectedLine, expectedColumn = placeOf "text}" interpolated
+    Assert.Equal((expectedLine, expectedColumn), (line, column))
+    // Any other expression it cannot compile is reported at that expression, and named.
+    let useIn =
+        "context Ask = (ask: () -> int)\n" +
+        "def twice: [Ask] () -> int = { ask() + ask() }\n" +
+        "def main = {\n" +
+        "  def n = use Ask(ask = { 21 }) in twice()\n" +
+        "  n\n" +
+        "}\n"
+    let message, line, column = backendFailure useIn
+    Assert.Equal("The WebAssembly backend cannot compile `use ... in` yet", message)
+    Assert.Equal(placeOf "use Ask" useIn, (line, column))
+
 [<Fact>]
 let ``Transpile block local variable`` () =
     let source =

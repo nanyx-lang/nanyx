@@ -86,6 +86,9 @@ module DiagnosticCodes =
     let UndeclaredContext = code 211 "Undeclared context" Severity.Error
     let NominalConstructedOutsideItsModule = code 212 "Nominal type constructed outside its module" Severity.Error
 
+    // Generating code.
+    let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
+
     /// Every compiler code, in order.
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
@@ -95,7 +98,8 @@ module DiagnosticCodes =
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
-          MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule ]
+          MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule
+          UnsupportedByBackend ]
 
 module Diagnostics =
     let private create (code: DiagnosticCode) (span: SourceSpan option) (message: string) =
