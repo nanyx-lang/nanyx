@@ -263,7 +263,8 @@ Current WASM backend support is intentionally minimal and focused on bootstrappi
 - lambda-backed defs compiled as wasm functions with `i32` params/result
 - integer literals
 - integer binary operators (`+`, `-`, `*`, `/`, `%`, comparisons)
-- bare tag literals (`#ok`, `#error`, etc.) lowered to deterministic `i32` discriminants
+- bare tag literals (`#ok`, `#error`, etc.) lowered to deterministic, odd `i32` codes; a tag with a payload
+  (`#some(x)`) is a pointer to a heap cell of (code, payload)
 - function calls to known module defs
 - simple expression blocks with local `def` assignments (`local.set`/`local.get`)
 - top-level expressions (and the `@entry` definition) run from a WebAssembly start function

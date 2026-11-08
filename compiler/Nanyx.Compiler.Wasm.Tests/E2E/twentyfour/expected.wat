@@ -12,6 +12,10 @@
     local.set $ptr
     local.get $ptr
     local.get $size
+    i32.const 3
+    i32.add
+    i32.const -4
+    i32.and
     i32.add
     global.set $heap_ptr
     block $fits
@@ -244,6 +248,18 @@
       end
     end
   )
+  (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
+    (local $cell i32)
+    i32.const 8
+    call $__nanyx_alloc
+    local.tee $cell
+    local.get $code
+    i32.store
+    local.get $cell
+    local.get $payload
+    i32.store offset=4
+    local.get $cell
+  )
 
   (data (i32.const 256) "\00\00\00\00\00")
   (data (i32.const 261) "\0d\00\00\00Hello, World!\00")
@@ -331,18 +347,14 @@
     i32.eq
     (if (result i32)
       (then
-        i32.const 65536
-    i32.const 65535
-    i32.and
-    i32.const 131072
-    i32.or
+        i32.const 5
+    i32.const 3
+    call $__nanyx_tag_box
       )
       (else
-        local.get $acc
-    i32.const 65535
-    i32.and
-    i32.const 196608
-    i32.or
+        i32.const 7
+    local.get $acc
+    call $__nanyx_tag_box
       )
     )
       )
@@ -352,12 +364,10 @@
     i32.eq
     (if (result i32)
       (then
-        local.get $acc
+        i32.const 7
+    local.get $acc
     call $console_withoutCarriageReturn
-    i32.const 65535
-    i32.and
-    i32.const 196608
-    i32.or
+    call $__nanyx_tag_box
       )
       (else
         local.get $acc
@@ -400,12 +410,10 @@
   (export "console.readToEndAfter" (func $console_readToEndAfter))
 
   (func $readToEnd (param $_ i32) (result i32)
+    i32.const 7
     i32.const 260
     call $console_readToEndAfter
-    i32.const 65535
-    i32.and
-    i32.const 196608
-    i32.or
+    call $__nanyx_tag_box
   )
   (export "readToEnd" (func $readToEnd))
 

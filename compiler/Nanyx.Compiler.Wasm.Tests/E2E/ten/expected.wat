@@ -10,6 +10,10 @@
     local.set $ptr
     local.get $ptr
     local.get $size
+    i32.const 3
+    i32.add
+    i32.const -4
+    i32.and
     i32.add
     global.set $heap_ptr
     block $fits

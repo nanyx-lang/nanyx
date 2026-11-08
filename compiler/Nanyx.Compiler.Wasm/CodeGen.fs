@@ -79,6 +79,9 @@ module private Helpers =
     let recordCopy = "__nanyx_record_copy"
     /// Generated per module rather than kept in `runtimeHelpers`: see `renderOpenFieldHelper`.
     let openField = "__nanyx_open_field"
+    let tagBox = "__nanyx_tag_box"
+    let tagCode = "__nanyx_tag_code"
+    let tagEquals = "__nanyx_tag_equals"
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
@@ -97,8 +100,10 @@ module private Helpers =
 /// Memory model: a string is a pointer to its UTF-8 bytes, with its byte length in the 4 bytes before the
 /// pointer and a 0 byte after; a list is 0 (empty) or a pointer to an 8-byte cell of (head, tail); a record (or
 /// tuple) is a pointer to a 4-byte slot per field in field-name order, with its layout's number (see
-/// `RecordTable`) in the 4 bytes before the pointer. The heap is
-/// a bump allocator from `$heap_ptr` that grows the memory when it runs out; nothing is ever freed.
+/// `RecordTable`) in the 4 bytes before the pointer. A tag without a payload is its code (see `tagCode`), which
+/// is odd; a tag with one is a pointer to an 8-byte cell of (code, payload). The heap is a bump allocator from
+/// `$heap_ptr` that hands out 4-byte-aligned blocks, so a pointer is never odd, and grows the memory when it runs
+/// out; nothing is ever freed.
 let private runtimeHelpers : Map<string, string> =
     let lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
     [ Helpers.alloc,
@@ -109,6 +114,10 @@ let private runtimeHelpers : Map<string, string> =
             "  local.set $ptr"
             "  local.get $ptr"
             "  local.get $size"
+            "  i32.const 3"
+            "  i32.add"
+            "  i32.const -4"
+            "  i32.and"
             "  i32.add"
             "  global.set $heap_ptr"
             "  block $fits"
@@ -435,6 +444,67 @@ let private runtimeHelpers : Map<string, string> =
             "  local.get $size"
             $"  call ${Helpers.copyBytes}"
             "  local.get $dst"
+            ")" ]
+      // A tag with a payload: `code payload -> cell`.
+      Helpers.tagBox,
+      lines
+          [ $"(func ${Helpers.tagBox} (param $code i32) (param $payload i32) (result i32)"
+            "  (local $cell i32)"
+            "  i32.const 8"
+            $"  call ${Helpers.alloc}"
+            "  local.tee $cell"
+            "  local.get $code"
+            "  i32.store"
+            "  local.get $cell"
+            "  local.get $payload"
+            "  i32.store offset=4"
+            "  local.get $cell"
+            ")" ]
+      // Which tag a tag value is: the value itself when it is a code (odd), else the code in its cell.
+      Helpers.tagCode,
+      lines
+          [ $"(func ${Helpers.tagCode} (param $tag i32) (result i32)"
+            "  local.get $tag"
+            "  i32.const 1"
+            "  i32.and"
+            "  if (result i32)"
+            "    local.get $tag"
+            "  else"
+            "    local.get $tag"
+            "    i32.load"
+            "  end"
+            ")" ]
+      // `==` on tags: the same code and, for tags with payloads, the same payload word.
+      Helpers.tagEquals,
+      lines
+          [ $"(func ${Helpers.tagEquals} (param $a i32) (param $b i32) (result i32)"
+            "  local.get $a"
+            "  local.get $b"
+            "  i32.eq"
+            "  if"
+            "    i32.const 1"
+            "    return"
+            "  end"
+            "  local.get $a"
+            "  local.get $b"
+            "  i32.or"
+            "  i32.const 1"
+            "  i32.and"
+            "  if"
+            "    i32.const 0"
+            "    return"
+            "  end"
+            "  local.get $a"
+            "  i32.load"
+            "  local.get $b"
+            "  i32.load"
+            "  i32.eq"
+            "  local.get $a"
+            "  i32.load offset=4"
+            "  local.get $b"
+            "  i32.load offset=4"
+            "  i32.eq"
+            "  i32.and"
             ")" ]
       // A float is boxed: an 8-byte block holding the f64, passed around by pointer like every other
       // value, so locals, record slots and calls stay 32-bit.
@@ -937,10 +1007,9 @@ let private createNameMap (names: string list) =
 
 let private sanitizeImportSuffix (name: string) = sanitizeIdentifier name
 
-let private tagPayloadMask = 65535
-let private tagDiscriminantMask = -65536
-
-let private tagDiscriminantBase (id: int) = id <<< 16
+/// A tag's code: odd, so a tag without a payload (which is its code) can't be mistaken for a pointer to the cell
+/// of a tag with one.
+let private tagCode (id: int) = (id <<< 1) ||| 1
 
 let private stringDataBaseOffset = 256
 
@@ -1603,7 +1672,7 @@ let rec private usesHeapAllocationExpr (expr: Expression) : bool =
         || (arms |> List.exists (fun (_, armExpr) -> usesHeapAllocationExpr armExpr))
     | UseIn(_, body) -> usesHeapAllocationExpr body
     | MemberAccess(inner, _, _) -> usesHeapAllocationExpr inner
-    | TagExpr(_, payload) -> payload |> Option.exists usesHeapAllocationExpr
+    | TagExpr(_, payload) -> payload.IsSome
     | InterpolatedString _ -> true
     | WorkflowBindExpr(_, value)
     | WorkflowReturnExpr value -> usesHeapAllocationExpr value
@@ -2083,22 +2152,28 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                         match trySimpleTypeName ty with
                         | Some ("string" | "int" | "bool" as typeName) -> typeName
                         | _ -> failwith $"Unsupported interpolated payload type for WASM MVP backend: #{name}({Unifier.tyToString ty})")
-                name, tagDiscriminantBase id, payloadTypeName
+                name, tagCode id, payloadTypeName
             | None -> failwith $"Internal error: missing tag discriminant for #{name}")
 
     let renderTagHole (valueCode: string) (inner: Expression) (renderText: string -> string) (renderPayload: string -> string -> string) =
+        env.UsedHelpers.Add Helpers.tagCode |> ignore
         tagHoleCases inner
-        |> List.map (fun (name, tagBase, payloadTypeName) ->
+        |> List.map (fun (name, code, payloadTypeName) ->
             let body =
                 match payloadTypeName with
                 | None -> renderText $"#{name}"
                 | Some typeName ->
-                    let payloadCode = $"{valueCode}\n    i32.const {tagPayloadMask}\n    i32.and"
+                    let payloadCode = $"{valueCode}\n    i32.load offset=4"
                     let opening = renderText ("#" + name + "(")
                     let closing = renderText ")"
                     $"{opening}\n    {renderPayload typeName payloadCode}\n    {closing}"
-            $"{valueCode}\n    i32.const {tagDiscriminantMask}\n    i32.and\n    i32.const {tagBase}\n    i32.eq\n    if\n      {body}\n    end")
+            $"{valueCode}\n    call ${Helpers.tagCode}\n    i32.const {code}\n    i32.eq\n    if\n      {body}\n    end")
         |> String.concat "\n    "
+
+    let isTagOperand (operand: Expression) =
+        match operand.Kind with
+        | TagExpr _ -> true
+        | _ -> holeTy operand |> Option.bind tryTagMembers |> Option.isSome
 
     let renderTextLength (text: string) =
         $"local.get $__interp_len\n    i32.const {Encoding.UTF8.GetByteCount text}\n    i32.add\n    local.set $__interp_len"
@@ -2186,7 +2261,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
             |> String.concat "\n    "
         let lengthCode = indexedParts |> List.map renderInterpolationPartLength |> String.concat "\n    "
         let writeCode = indexedParts |> List.map renderInterpolationPartWrite |> String.concat "\n    "
-        $"{evalCode}\n    i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    global.get $heap_ptr\n    local.tee $__interp_base\n    local.get $__interp_len\n    i32.store\n    local.get $__interp_base\n    i32.const 4\n    i32.add\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_cursor\n    i32.const 0\n    i32.store8\n    local.get $__interp_base\n    local.get $__interp_len\n    i32.const 5\n    i32.add\n    i32.add\n    global.set $heap_ptr\n    local.get $__interp_base\n    i32.const 4\n    i32.add"
+        $"{evalCode}\n    i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    global.get $heap_ptr\n    local.tee $__interp_base\n    local.get $__interp_len\n    i32.store\n    local.get $__interp_base\n    i32.const 4\n    i32.add\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_cursor\n    i32.const 0\n    i32.store8\n    local.get $__interp_base\n    local.get $__interp_len\n    i32.const 8\n    i32.add\n    i32.const -4\n    i32.and\n    i32.add\n    global.set $heap_ptr\n    local.get $__interp_base\n    i32.const 4\n    i32.add"
     | IdentifierExpr name ->
         match env.Locals |> Map.tryFind name with
         | Some localName -> $"local.get ${localName}"
@@ -2203,15 +2278,16 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
         | None -> failwith $"Unsupported identifier for WASM MVP backend: {name}"
     | TagExpr(name, None) ->
         match env.TagIds |> Map.tryFind name with
-        | Some id -> $"i32.const {tagDiscriminantBase id}"
+        | Some id -> $"i32.const {tagCode id}"
         | None -> failwith $"Internal error: missing tag discriminant for #{name}"
     | TagExpr(name, Some payloadExpr) ->
-        let tagBase =
+        let code =
             match env.TagIds |> Map.tryFind name with
-            | Some id -> tagDiscriminantBase id
+            | Some id -> tagCode id
             | None -> failwith $"Internal error: missing tag discriminant for #{name}"
+        env.UsedHelpers.Add Helpers.tagBox |> ignore
         let payloadCode = transpileExpression env payloadExpr
-        $"{payloadCode}\n    i32.const {tagPayloadMask}\n    i32.and\n    i32.const {tagBase}\n    i32.or"
+        $"i32.const {code}\n    {payloadCode}\n    call ${Helpers.tagBox}"
     | BinaryOp("++", left, right) ->
         // Concatenation: the backend has to know whether it is joining strings or lists.
         let leftCode = transpileExpression env left
@@ -2238,6 +2314,13 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
         | _ ->
             env.UsedHelpers.Add Helpers.stringEquals |> ignore
             $"{leftCode}\n    {rightCode}\n    call ${Helpers.stringEquals}\n    i32.eqz"
+    | BinaryOp(op, left, right) when (op = "==" || op = "!=") && (isTagOperand left || isTagOperand right) ->
+        // A tag with a payload is a pointer to its cell, so equality compares the cells' contents.
+        env.UsedHelpers.Add Helpers.tagEquals |> ignore
+        let leftCode = transpileExpression env left
+        let rightCode = transpileExpression env right
+        let negate = if op = "!=" then "\n    i32.eqz" else ""
+        $"{leftCode}\n    {rightCode}\n    call ${Helpers.tagEquals}{negate}"
     | BinaryOp(op, left, right) when tryGetExprTypeName env left = Some "float" || tryGetExprTypeName env right = Some "float" ->
         // Floats are boxed: unbox both operands, compute in f64, and box an arithmetic result.
         match wasmFloatInstruction op with
@@ -2382,7 +2465,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
         let tupleElementCode valueCode index =
             $"{valueCode}\n      i32.const {index * 4}\n      i32.add\n      i32.load"
         let tagPayloadCode valueCode =
-            $"{valueCode}\n      i32.const {tagPayloadMask}\n      i32.and"
+            $"{valueCode}\n      i32.load offset=4"
 
         /// `first` and then, only if it held, `second` (so `second` may load through pointers that are
         /// only valid when `first` holds).
@@ -2426,21 +2509,17 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                 env.UsedHelpers.Add Helpers.stringEquals |> ignore
                 $"{valueCode}\n      {stringLiteralCode value}\n      call ${Helpers.stringEquals}"
             | TagPattern(tagName, payloadOpt) ->
-                let tagBase =
+                let code =
                     match env.TagIds |> Map.tryFind tagName with
-                    | Some id -> tagDiscriminantBase id
+                    | Some id -> tagCode id
                     | None -> failwith $"Internal error: missing tag discriminant for pattern #{tagName}"
+                env.UsedHelpers.Add Helpers.tagCode |> ignore
                 let discriminantCheck =
-                    $"{valueCode}\n      i32.const {tagDiscriminantMask}\n      i32.and\n      i32.const {tagBase}\n      i32.eq"
+                    $"{valueCode}\n      call ${Helpers.tagCode}\n      i32.const {code}\n      i32.eq"
                 match payloadOpt with
                 | None -> discriminantCheck
-                | Some (Kind (LiteralPattern(IntLit payload))) ->
-                    // An int payload is stored in the masked bits, so compare it masked too.
-                    let payloadMasked = payload &&& tagPayloadMask
-                    allOf [ discriminantCheck; $"{tagPayloadCode valueCode}\n      i32.const {payloadMasked}\n      i32.eq" ]
                 | Some payload ->
-                    // Only look at the payload once the discriminant matches: another tag's payload bits
-                    // are not a valid pointer.
+                    // Only look at the payload once the code matches: only then is the value a cell.
                     match patternCondition payload (tagPayloadCode valueCode) with
                     | "i32.const 1" -> discriminantCheck
                     | payloadCheck -> guarded discriminantCheck payloadCheck
@@ -2655,17 +2734,16 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                     | Some id -> id
                     | None -> failwith $"Internal error: missing tag discriminant for #{tagName}"
                 let importFn = $"dbg_tag_{sanitizeImportSuffix tagName}"
-                let tagBase = tagDiscriminantBase tagId
-                $"i32.const {tagBase}\n    local.set ${dbgLocal}\n    call ${importFn}\n    local.get ${dbgLocal}"
+                $"i32.const {tagCode tagId}\n    local.set ${dbgLocal}\n    call ${importFn}\n    local.get ${dbgLocal}"
             | TagExpr(tagName, Some payloadExpr) ->
                 let tagId =
                     match env.TagIds |> Map.tryFind tagName with
                     | Some id -> id
                     | None -> failwith $"Internal error: missing tag discriminant for #{tagName}"
                 let importFn = $"dbg_tag_payload_{sanitizeImportSuffix tagName}"
-                let tagBase = tagDiscriminantBase tagId
+                env.UsedHelpers.Add Helpers.tagBox |> ignore
                 let payloadCode = transpileExpression env payloadExpr
-                $"{payloadCode}\n    local.tee ${dbgLocal}\n    call ${importFn}\n    local.get ${dbgLocal}\n    i32.const {tagPayloadMask}\n    i32.and\n    i32.const {tagBase}\n    i32.or"
+                $"{payloadCode}\n    local.tee ${dbgLocal}\n    call ${importFn}\n    i32.const {tagCode tagId}\n    local.get ${dbgLocal}\n    call ${Helpers.tagBox}"
             | LiteralExpr(BoolLit value) -> if value then "i32.const 1" else "i32.const 0"
             | _ -> transpileExpression env argExpr
         match argExpr.Kind with
@@ -4008,6 +4086,9 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
           Helpers.listCons, [ Helpers.alloc ]
           Helpers.recordSet, []
           Helpers.recordCopy, [ Helpers.alloc; Helpers.copyBytes ]
+          Helpers.tagBox, [ Helpers.alloc ]
+          Helpers.tagCode, []
+          Helpers.tagEquals, []
           Helpers.floatBox, [ Helpers.alloc ]
           Helpers.floatToString, [ Helpers.alloc ]
           Helpers.listLength, []
@@ -4284,8 +4365,10 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
             $"  (data (i32.const {offset}) \"{escapeWasmData bytes}\")")
         |> String.concat "\n"
 
-    // Add memory if we have string literals or heap allocation, but no dbg helpers (dbgPrelude already includes memory)
-    let needsMemory = (not (List.isEmpty stringLiteralData) || moduleUsesHeap) && not moduleUsesIoHelpers
+    // Add memory if we have string literals, heap allocation or reads of tag cells, but no dbg helpers (dbgPrelude
+    // already includes memory)
+    let readsTagCells = usedHelperSet.Contains Helpers.tagCode || usedHelperSet.Contains Helpers.tagEquals
+    let needsMemory = (not (List.isEmpty stringLiteralData) || moduleUsesHeap || readsTagCells) && not moduleUsesIoHelpers
     let memorySection =
         if needsMemory then
             "  (memory 1)\n  (export \"memory\" (memory 0))"
