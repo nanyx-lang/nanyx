@@ -278,6 +278,43 @@ module utils =
   def helper2 = { ... }
 ```
 
+## Using a module block in its own file
+
+A block's exports can always be named with the block's name in front, as above (`functions.f`). A block can also be imported by the rest of its file, as a file module would be, by its short name:
+
+```nanyx
+import nanyx/console
+
+module money =
+  -- Prices are whole pence, so no rounding ever creeps in.
+  export type $Money = (pence: int)
+
+  export def $Money.new: int -> $Money = { pence -> $Money(pence = pence) }
+
+  export def $Money.toString: $Money -> string = { m ->
+    def pounds = m.pence / 100
+    def rest = m.pence % 100
+    if rest < 10 then "£{pounds}.0{rest}" else "£{pounds}.{rest}"
+  }
+
+import money
+
+def price: $Money = $Money.new(250)
+
+println(price \toString)
+```
+
+This gives a single file the encapsulation of a separate module: only `money` can build a `$Money` (see [Nominal and protected types](../advanced/nominal-and-protected-types)), so the rest of the file has to go through `$Money.new`. Moving the block to a file of its own later changes one line, the import (to `import "./money"`), and nothing that uses it.
+
+A block is imported exactly as a file module is:
+
+- `import money` brings its exports in unqualified; `import money as m` brings them in as `m.$Money`, `m.$Money.new` and so on.
+- Only exports can be used, however the block is reached.
+- The import can come before or after the block, since declaration order doesn't matter in a module.
+- The name is the block's short name (`money`), even when the file declares a module of its own and the block's full name is `myModule.money`. A block can import the blocks nested directly inside it the same way.
+
+A block is also isolated as a file module is. It sees its own definitions, the blocks nested in it, the prelude, and what it imports itself, but not the rest of its file. So a block that needs `nanyx/console` imports it inside the block, and an import inside a block is that block's alone. A block is a module rather than a program, so it can't have top-level code: everything in it is a definition, a type or an import.
+
 Create hierarchies with dot notation:
 
 ```nanyx
