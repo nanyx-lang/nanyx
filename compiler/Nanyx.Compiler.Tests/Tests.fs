@@ -1027,7 +1027,7 @@ let ``Typecheck reports mismatch for missing tuple args`` () =
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Type mismatch", message)
     Assert.Contains("(", message)
-    Assert.Contains("vs int", message)
+    Assert.Contains("int vs (", message)
 
 [<Fact>]
 let ``Typecheck allows record width subtyping`` () =
