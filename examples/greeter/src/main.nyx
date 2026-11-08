@@ -2,9 +2,11 @@ module main
 
 import "./greetings" as greetings
 
+def everyone: greetings.$Person = greetings.$Person.new("everyone")
+
 @entry
 def main = {
   def names = ["Ada", "Grace", "Barbara"]
-  List.fold(names, (), { _, name -> println(greetings.greet(name)) })
-  println(greetings.farewell("everyone"))
+  List.fold(names, (), { _, name -> println(greetings.greet(greetings.$Person.new(name))) })
+  println(greetings.farewell(everyone))
 }

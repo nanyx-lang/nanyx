@@ -889,6 +889,18 @@ module Compiler =
                         state.TypeDefs
                     else
                         state.TypeDefs |> Map.filter (fun name _ -> not (preludeTypeNames.Contains name && exportedTypeDefs.ContainsKey name))
+                // An aliased import's types are written with the alias (`m.$Email`). Their own names stay known for
+                // the signatures that name them, but cannot be written unless something else brings them in. An
+                // unaliased import's types can, and replace a type only an aliased import brought in.
+                let typeDefs, hiddenTypeNames =
+                    match qualifier with
+                    | Some qualifier ->
+                        let qualified = exportedTypeDefs |> Map.fold (fun acc name info -> acc |> Map.add $"{qualifier}.{name}" info) typeDefs
+                        let hidden = exportedTypeDefs.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
+                        qualified, Set.union state.HiddenTypeNames hidden
+                    | None ->
+                        typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && exportedTypeDefs.ContainsKey name)),
+                        state.HiddenTypeNames - Set.ofSeq exportedTypeDefs.Keys
                 // A function that requires a context requires it wherever it is called, under the name it is imported as.
                 let contextRequirements =
                     imported.ContextRequirements
@@ -901,6 +913,7 @@ module Compiler =
                 state <-
                     { state with
                         TypeDefs = mergeTypeDefs typeDefs exportedTypeDefs
+                        HiddenTypeNames = hiddenTypeNames
                         Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
                         ImportedThrough = importedThrough
                         ContextRequirements = contextRequirements }

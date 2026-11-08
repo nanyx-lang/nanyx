@@ -28,6 +28,10 @@ type InferState =
             Constraints: ConstraintSet;
             TypeVars: Map<string, TyVar>;
             TypeDefs: Map<string, TypeDefInfo>;
+            /// The names in `TypeDefs` that cannot be written: the types only an aliased import brings in, which are
+            /// written with the alias (`m.$Email`). They stay in `TypeDefs` for what the imported definitions' own
+            /// signatures name.
+            HiddenTypeNames: Set<string>;
             ContextDefs: Map<string, TypeExpr>;
             ContextRequirements: Map<string, TypeExpr list>;
             /// The imported definitions that are an ambient context instance's members, by name: the definition's
@@ -83,6 +87,7 @@ let emptyState =
             Constraints = [];
             TypeVars = Map.empty;
             TypeDefs = Map.empty;
+            HiddenTypeNames = Set.empty;
             ContextDefs = Map.empty;
             ContextRequirements = Map.empty;
             AmbientMembers = Map.empty;
@@ -329,14 +334,26 @@ let private tryResolveAttachedFunction (env: TypeEnv) (lhsType: Ty) (funcName: s
 let private aliasType (name: string) (info: TypeDefInfo) : Ty =
     TyAlias(name, info.Parameters |> List.map TyVar, info.Underlying)
 
+/// Whether `info` defines a nominal type.
+let private isNominal (info: TypeDefInfo) =
+    info.Name.StartsWith("$")
+
+/// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
+let private namedType (name: string) (info: TypeDefInfo) : Ty =
+    if isNominal info then TyNominal(info.Name, info.Underlying, info.IsPrivate) else aliasType name info
+
+/// The type definition a type name written in the module means: none for a name only an aliased import brings in,
+/// which has to be written with the alias.
+let private tryFindTypeDef (name: string) (state: InferState) : TypeDefInfo option =
+    if state.HiddenTypeNames.Contains name then None else state.TypeDefs |> Map.tryFind name
+
 let private tryInferAttachedLambdaInput (state: InferState) (name: Identifier) (expr: Expression) : Ty option =
     match expr.Kind with
     | Lambda(args, _) when name.Contains(".") && args.Length = 1 ->
         let dotIndex = name.LastIndexOf(".")
         let typeName = name.Substring(0, dotIndex)
-        match state.TypeDefs |> Map.tryFind typeName with
-        | Some info when typeName.StartsWith("$") -> Some (TyNominal(typeName, info.Underlying, info.IsPrivate))
-        | Some info -> Some (aliasType typeName info)
+        match tryFindTypeDef typeName state with
+        | Some info -> Some (namedType typeName info)
         | None -> lookupPrimitive typeName
     | _ -> None
 
@@ -365,9 +382,8 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
         match lookupPrimitive name with
         | Some prim -> prim, state
         | None ->
-            match state.TypeDefs |> Map.tryFind name with
-            | Some info when name.StartsWith("$") -> TyNominal(name, info.Underlying, info.IsPrivate), recordTypeReference typeExpr info state
-            | Some info -> aliasType name info, recordTypeReference typeExpr info state
+            match tryFindTypeDef name state with
+            | Some info -> namedType name info, recordTypeReference typeExpr info state
             | None -> TyPrimitive name, state
     | TypeVar name ->
         match state.TypeVars |> Map.tryFind name with
@@ -418,8 +434,8 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
                 | multiple -> tupleRecordType multiple
             TyApply("list", [elementTy]), current
         else
-            match current.TypeDefs |> Map.tryFind name with
-            | Some info when not (name.StartsWith("$")) ->
+            match tryFindTypeDef name current with
+            | Some info when not (isNominal info) ->
                 let current = recordTypeReference typeExpr info current
                 if info.Parameters.Length = argTys.Length then
                     let substitutions =
@@ -599,8 +615,40 @@ let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Id
     | TypeContext contexts -> contexts |> List.collect (unknownContextNames state)
     | TypeName name
     | TypeApply(name, _) ->
-        if state.ContextDefs.ContainsKey name || state.TypeDefs.ContainsKey name then [] else [ name ]
+        if state.ContextDefs.ContainsKey name || (tryFindTypeDef name state).IsSome then [] else [ name ]
     | _ -> []
+
+/// The nominal and qualified type names written in `typeExpr` that name no type here: `$Email` where only `m.$Email`
+/// is in scope, say. (Other unknown names are still taken as written, for now.) Contexts are checked apart.
+let rec private unknownTypeNames (state: InferState) (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
+    let mustExist (name: string) = name.StartsWith("$") || name.Contains(".")
+    match typeExpr.Kind with
+    | TypeName name when mustExist name && (lookupPrimitive name).IsNone && (tryFindTypeDef name state).IsNone -> [ name, typeExpr.Span ]
+    | TypeApply(name, args) ->
+        (if mustExist name && (tryFindTypeDef name state).IsNone then [ name, typeExpr.Span ] else [])
+        @ (args |> List.collect (unknownTypeNames state))
+    | TypeTuple items
+    | TypeUnion items
+    | TypeIntersection items -> items |> List.collect (unknownTypeNames state)
+    | TypeRecord fields ->
+        fields
+        |> List.collect (function
+            | TypeField(_, _, _, Some t, _)
+            | TypeMember(_, Some t) -> unknownTypeNames state t
+            | _ -> [])
+    | TypeFunc(arg, ret) -> unknownTypeNames state arg @ unknownTypeNames state ret
+    | TypeTag(_, Some payload)
+    | TypeOptional payload
+    | TypeWithContext(_, payload)
+    | TypeConstraint(_, payload, _)
+    | TypeWhere(payload, _) -> unknownTypeNames state payload
+    | _ -> []
+
+/// Whether every nominal or qualified type a def's annotation, `typeOpt`, names exists.
+let private ensureTypesExist (state: InferState) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+    match typeOpt |> Option.map (unknownTypeNames state) |> Option.defaultValue [] |> List.distinctBy fst with
+    | [] -> Ok ()
+    | unknown -> unknown |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'") |> Error
 
 /// Whether every context in the signature of `name` exists; `span` is where the definition's name is written.
 let private ensureContextsExist (state: InferState) (name: Identifier) (span: SourceSpan) (contexts: TypeExpr list) : Result<unit, Diagnostic list> =
@@ -741,12 +789,14 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
         TypeDefs =
             next.TypeDefs
             |> Map.add name
-                { Parameters = paramVars
+                { Name = name
+                  Parameters = paramVars
                   Underlying = underlyingTy
                   IsPrivate = isPrivate
                   IsContext = isContextDef modifiers
                   Symbol = symbol
                   Members = members }
+        HiddenTypeNames = next.HiddenTypeNames |> Set.remove name
         ContextDefs = nextContexts
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }
@@ -1224,7 +1274,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     else
                         Error errors
             | None ->
-                match state.TypeDefs |> Map.tryFind name with
+                match tryFindTypeDef name state with
+                // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
+                | Some info when isNominal info && not (state.LocalNominals.Contains info.Name) ->
+                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
                 | Some info ->
                     let mutable current = state
                     let argResults =
@@ -1242,9 +1295,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             |> List.choose (function Ok typedExpr -> Some typedExpr.Type | _ -> None)
                         let inputTy = inputTypeFromArgs argTys
                         let constrained = addAssignableConstraint inputTy info.Underlying current
-                        let resultTy =
-                            if name.StartsWith("$") then TyNominal(name, info.Underlying, info.IsPrivate) else aliasType name info
-                        Ok (mkTypedExpr expr resultTy None None None, constrained)
+                        Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
                     else
                         Error errors
                 | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" ]
@@ -1990,7 +2041,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         match typeOpt with
                         | Some typeExpr -> inferTypeOfValues env' current typeExpr
                         | None -> Ok current
-                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> ensureTypesExist current typeOpt) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
                     | Error err -> errors <- err
                     | Ok inferredState ->
                         current <- inferredState
@@ -2229,7 +2280,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match typeOpt with
                 | Some typeExpr -> inferTypeOfValues (env |> Map.remove name) state typeExpr
                 | None -> Ok state
-            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state typeOpt) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
             | Error err -> errors <- err
             | Ok inferredState ->
                 state <- inferredState
