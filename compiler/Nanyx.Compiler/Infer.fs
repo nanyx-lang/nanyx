@@ -618,37 +618,49 @@ let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Id
         if state.ContextDefs.ContainsKey name || (tryFindTypeDef name state).IsSome then [] else [ name ]
     | _ -> []
 
-/// The nominal and qualified type names written in `typeExpr` that name no type here: `$Email` where only `m.$Email`
-/// is in scope, say. (Other unknown names are still taken as written, for now.) Contexts are checked apart.
-let rec private unknownTypeNames (state: InferState) (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
-    let mustExist (name: string) = name.StartsWith("$") || name.Contains(".")
+/// The type names written in `typeExpr` that name no type here: `Strnig`, or `$Email` where only `m.$Email` is in
+/// scope. `parameters` are the names of the parameters of the type definition `typeExpr` is the body of, if it is
+/// one. Contexts are checked apart.
+let rec private unknownTypeNames (state: InferState) (parameters: Set<Identifier>) (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
+    let isUnknown name = not (isBuiltInTypeName name || parameters.Contains name) && (tryFindTypeDef name state).IsNone
+    let ofType = unknownTypeNames state parameters
     match typeExpr.Kind with
-    | TypeName name when mustExist name && (lookupPrimitive name).IsNone && (tryFindTypeDef name state).IsNone -> [ name, typeExpr.Span ]
-    | TypeApply(name, args) ->
-        (if mustExist name && (tryFindTypeDef name state).IsNone then [ name, typeExpr.Span ] else [])
-        @ (args |> List.collect (unknownTypeNames state))
+    | TypeName name when isUnknown name -> [ name, typeExpr.Span ]
+    | TypeApply(name, args) -> (if isUnknown name then [ name, typeExpr.Span ] else []) @ (args |> List.collect ofType)
     | TypeTuple items
     | TypeUnion items
-    | TypeIntersection items -> items |> List.collect (unknownTypeNames state)
+    | TypeIntersection items -> items |> List.collect ofType
     | TypeRecord fields ->
         fields
         |> List.collect (function
             | TypeField(_, _, _, Some t, _)
-            | TypeMember(_, Some t) -> unknownTypeNames state t
+            | TypeMember(_, Some t) -> ofType t
             | _ -> [])
-    | TypeFunc(arg, ret) -> unknownTypeNames state arg @ unknownTypeNames state ret
+    | TypeFunc(arg, ret) -> ofType arg @ ofType ret
     | TypeTag(_, Some payload)
     | TypeOptional payload
     | TypeWithContext(_, payload)
     | TypeConstraint(_, payload, _)
-    | TypeWhere(payload, _) -> unknownTypeNames state payload
+    | TypeWhere(payload, _) -> ofType payload
     | _ -> []
 
-/// Whether every nominal or qualified type a def's annotation, `typeOpt`, names exists.
-let private ensureTypesExist (state: InferState) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
-    match typeOpt |> Option.map (unknownTypeNames state) |> Option.defaultValue [] |> List.distinctBy fst with
+/// The error for each type name written in `typeExprs` that names no type, once per name.
+let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) (typeExprs: TypeExpr list) : Diagnostic list =
+    typeExprs
+    |> List.collect (unknownTypeNames state parameters)
+    |> List.distinctBy fst
+    |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
+
+/// Whether every type an annotation, such as a def's or a lambda parameter's, names exists.
+let private ensureTypesExist (state: InferState) (typeExprs: TypeExpr list) : Result<unit, Diagnostic list> =
+    match unknownTypeErrors state Set.empty typeExprs with
     | [] -> Ok ()
-    | unknown -> unknown |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'") |> Error
+    | errors -> Error errors
+
+/// The error for each type name the definition of a type names that names no type: its body's, and its parameters'
+/// constraints'. Its parameters are in scope in both.
+let private unknownTypesInTypeDef (state: InferState) (body: TypeExpr) (parameters: (Identifier * TypeExpr option) list) : Diagnostic list =
+    unknownTypeErrors state (parameters |> List.map fst |> Set.ofList) (body :: (parameters |> List.choose snd))
 
 /// Whether every context in the signature of `name` exists; `span` is where the definition's name is written.
 let private ensureContextsExist (state: InferState) (name: Identifier) (span: SourceSpan) (contexts: TypeExpr list) : Result<unit, Diagnostic list> =
@@ -1967,11 +1979,12 @@ and private inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: Type
     |> List.fold (fun result value -> result |> Result.bind (fun current -> inferExpr env current value |> Result.map snd)) (Ok state)
 
 and inferLambdaWithExpected (env: TypeEnv) (state: InferState) (lambda: Expression) (args: (Identifier * TypeExpr option) list) (body: Expression) (expectedInputOpt: Ty option) (expectedReturnOpt: Ty option) : Result<TypedExpr * InferState, Diagnostic list> =
-    // The parameters' annotations are read only when nothing else gives their types.
+    // The parameters' annotations are read only when nothing else gives their types, but each must name types.
     let annotated =
-        match expectedInputOpt with
-        | Some _ -> Ok state
-        | None ->
+        match ensureTypesExist state (args |> List.choose snd), expectedInputOpt with
+        | Error errors, _ -> Error errors
+        | Ok (), Some _ -> Ok state
+        | Ok (), None ->
             args
             |> List.choose snd
             |> List.fold (fun result typeExpr -> result |> Result.bind (fun current -> inferTypeOfValues env current typeExpr)) (Ok state)
@@ -2041,7 +2054,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         match typeOpt with
                         | Some typeExpr -> inferTypeOfValues env' current typeExpr
                         | None -> Ok current
-                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> ensureTypesExist current typeOpt) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
                     | Error err -> errors <- err
                     | Ok inferredState ->
                         current <- inferredState
@@ -2122,6 +2135,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             | TypeDefStatement(name, modifiers, parameters, body) ->
                 if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters
                 current <- registerTypeDef current name modifiers parameters body
+                // Checked once the type is registered, so it can name itself.
+                if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement binding ->
                 if errors.IsEmpty then
@@ -2280,7 +2295,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match typeOpt with
                 | Some typeExpr -> inferTypeOfValues (env |> Map.remove name) state typeExpr
                 | None -> Ok state
-            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state typeOpt) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
             | Error err -> errors <- err
             | Ok inferredState ->
                 state <- inferredState
@@ -2392,6 +2407,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
             if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters
+            if errors.IsEmpty then errors <- unknownTypesInTypeDef state body parameters
             items <- items @ [ TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ]
         | Def (ValueDef _) -> ()
 

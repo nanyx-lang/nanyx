@@ -304,6 +304,40 @@ let ``An aliased import's nominal type cannot be named without the alias`` () =
     let main = "module main\nimport \"people.nyx\" as people\ndef p: $Person = people.$Person.new(\"Ada\")\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "$Person" ], compiledWithPeople main)
 
+/// The diagnostics compiling `source` gives: each one's code and the text it is reported at.
+let private compiled (source: string) =
+    (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt source (spanOf diagnostic))
+
+[<Fact>]
+let ``A type name in a def's annotation that names no type is reported`` () =
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "Strnig" ], compiled "def x: Strnig = \"a\"\n")
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.UnknownType.Code, "Strnig"; DiagnosticCodes.UnknownType.Code, "Nmuber" ],
+        compiled "def f: (Strnig, list(Nmuber)) -> Strnig = { s, _ -> s }\n")
+
+[<Fact>]
+let ``A type name in a lambda parameter's annotation that names no type is reported`` () =
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "Foo" ], compiled "def f = { x: Foo -> x }\n")
+
+[<Fact>]
+let ``A type name in a type definition that names no type is reported`` () =
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "Foo" ], compiled "type T = (a: Foo)\n")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "Missing" ], compiled "def f = {\n  type T = #some(Missing)\n  1\n}\n")
+
+[<Fact>]
+let ``Built-in types, type variables, type parameters and types defined anywhere in the module are known`` () =
+    let source =
+        "def n: Int = 1\n" +
+        "def xs: list(string) = [ \"a\" ]\n" +
+        "def ys: Seq(Bool) = [ true ]\n" +
+        "def id: a -> a = { x -> x }\n" +
+        "def t: Tree = #leaf\n" +
+        "type Tree = #leaf | #node(Tree, Tree)\n" +
+        "type Box(item) = (value: item)\n" +
+        "type Pair(a, b) = (first: a, second: b)\n" +
+        "def g = { p: Pair(int, Tree) -> p.first }\n"
+    Assert.Empty(compiled source)
+
 [<Fact>]
 let ``An aliased import's constructor cannot be called without the alias`` () =
     let main = "module main\nimport \"people.nyx\" as people\ndef p = $Person(name = \"Ada\")\n"
