@@ -99,6 +99,36 @@ let ``Run - dbg prints a tag-typed value by its tag and payload`` () =
     |> assertRan "dbg: #some(\"first\")\ndbg: #none\ndbg: #err\ndbg: #some(\"first\")\ndbg: #some(\"first\")\ndone\n"
 
 [<Fact>]
+let ``Run - a nominal value over a primitive is made and taken apart with its type's name`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "type $Money = private int\n" +
+        "\n" +
+        "def $Money.toString: $Money -> string = { m ->\n" +
+        "  def $Money(pence) = m\n" +
+        "  \"{pence / 100}.{pence % 100}\"\n" +
+        "}\n" +
+        "\n" +
+        "def describe: $Money -> string = { m ->\n" +
+        "  match m\n" +
+        "    | $Money(0) -> \"free\"\n" +
+        "    | $Money(p) -> \"{p}p\"\n" +
+        "}\n" +
+        "\n" +
+        "def main = {\n" +
+        "  def price = $Money(289)\n" +
+        "  println($Money.toString(price))\n" +
+        "  println(describe(price))\n" +
+        "  println(describe($Money(0)))\n" +
+        "  def (n, $Money(q)) = (5, price)\n" +
+        "  println(\"{n + q}\")\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "2.89\n289p\nfree\n294\n"
+
+[<Fact>]
 let ``Run - console print and println write to stdout`` () =
     let source =
         "import nanyx/console\n" +

@@ -1896,6 +1896,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors
+                // `$Email(raw)` takes a nominal value apart: the payload pattern matches the value's shape. A protected
+                // type's shape is hidden outside its home module, so only that module can look inside one.
+                | RecordPattern(typeName, [ payload ]) when (tryFindTypeDef typeName state' |> Option.exists isNominal) ->
+                    let info = (tryFindTypeDef typeName state').Value
+                    let isolation = blockIsolationAt state' typeName info.Symbol pattern.Span
+                    if not isolation.IsEmpty then
+                        Error isolation
+                    elif info.IsPrivate && not (inNominalHome state' info.Name pattern.Span) then
+                        Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The protected type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
+                    else
+                        let constrained = addConstraint scrutineeTy (namedType typeName info) state'
+                        match inferPattern armBody env' constrained info.Underlying payload with
+                        | Ok (nextEnv, nextState, _) -> Ok (nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
+                        | Error err -> Error err
                 | RecordPattern(typeName, patterns) ->
                     let mutable currentState = state'
                     let itemTypes, nextState =
@@ -1954,8 +1968,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | WildcardPattern
                 | ElsePattern
                 | IdentifierPattern _ -> true
-                // `(a, _)` matches every tuple: a tuple pattern is irrefutable when each element is.
-                | TuplePattern elements -> elements |> List.forall isCatchAllPattern
+                // `(a, _)` matches every tuple: a tuple pattern is irrefutable when each element is. So are a record
+                // pattern (`$Money(pence)`, `(x = a)`) whose parts all are: the type says the value has that shape.
+                | TuplePattern elements
+                | RecordPattern(_, elements) -> elements |> List.forall isCatchAllPattern
+                | RecordMemberPattern members -> members |> List.forall (snd >> isCatchAllPattern)
                 | _ -> false
             let tryGetTagName (pattern: Pattern) =
                 match pattern.Kind with

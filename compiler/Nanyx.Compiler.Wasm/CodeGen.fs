@@ -51,6 +51,9 @@ type private TranspileEnv =
       AmbientContextMembers: Map<string, string>
       RecordLayouts: Map<string, string list>
       TypeLayouts: Map<string, string list>
+      /// The nominal types of the module whose shape is not a record (`type $Money = private int`). A value of one
+      /// is its shape's value as it is, so its constructor and the pattern that takes it apart compile to nothing.
+      NominalWrappers: Set<string>
       TypeFieldTypes: Map<string, Map<string, string>>
       RecordFieldTypes: Map<string, Map<string, string>>
       ParamTypes: Map<string, string>
@@ -872,6 +875,11 @@ let private wasmBinaryInstruction op =
     | "or" -> Some "i32.or"
     | _ -> None
 
+/// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`).
+let private isNominalTypeName (name: string) =
+    let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
+    own.StartsWith "$"
+
 let private flattenCallArgs (args: Expression list) =
     match args with
     | [Kind (TupleExpr items)] -> items
@@ -1130,6 +1138,11 @@ let rec private patternBoundTys (pattern: Pattern) (ty: Ty) : (string * Ty) list
         patterns
         |> List.mapi (fun index element -> under (fieldTys |> Option.bind (Map.tryFind (string index))) element)
         |> List.concat
+    // `$Email(raw)` binds `raw` at the nominal type's shape.
+    | RecordPattern(typeName, [ payload ]) when isNominalTypeName typeName ->
+        match Unifier.unalias ty with
+        | TyNominal(_, underlying, _) -> patternBoundTys payload underlying
+        | _ -> patternBoundTys payload ty
     | _ -> []
 
 /// The simple types of the identifiers a typed pattern binds (see `patternBoundTys`).
@@ -2506,6 +2519,8 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                 patterns
                 |> List.mapi (fun index element -> patternCondition element (tupleElementCode valueCode index))
                 |> allOf
+            // `$Email(raw)`: a nominal value is its shape's value, which the payload pattern matches.
+            | RecordPattern(typeName, [ payload ]) when isNominalTypeName typeName -> patternCondition payload valueCode
             | LiteralPattern(IntLit value) ->
                 $"{valueCode}\n      i32.const {value}\n      i32.eq"
             | LiteralPattern(BoolLit value) ->
@@ -2619,6 +2634,7 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                         elements
                         |> List.mapi (fun index element -> patternBinds element (tupleElementCode valueCode index))
                         |> List.concat
+                    | RecordPattern(typeName, [ payload ]) when isNominalTypeName typeName -> patternBinds payload valueCode
                     | _ -> []
                 let patternPayloadBinds =
                     List.zip patterns matchTempNames
@@ -2765,6 +2781,11 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
             let rendered = transpileExpression env { argExpr with Kind = InterpolatedString [ StringExpr argExpr ] }
             $"{rendered}\n    call $dbg_str\n    local.get ${interpolationHoleLocalName 0}"
         | _ -> $"{argCode}\n    local.tee ${dbgLocal}\n    call $dbg\n    local.get ${dbgLocal}"
+    | FunctionCall(name, _, args) when env.NominalWrappers.Contains name ->
+        // `$Money(pence)`: a nominal value over a shape that is not a record is that shape's value.
+        match flattenCallArgs args with
+        | [ single ] -> transpileExpression env single
+        | several -> transpileExpression env (Expression.from expr (TupleExpr several))
     | FunctionCall(name, _, args) ->
         // Check if this is a type constructor call (e.g., Person(...))
         match env.TypeLayouts |> Map.tryFind name with
@@ -3579,6 +3600,13 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
 
     let typeLayouts, typeFieldTypes = extractTypeLayouts module'
 
+    let nominalWrappers =
+        module'
+        |> List.choose (function
+            | Kind (Def (TypeDef(name, _, _, body))) when isNominalTypeName name && (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
+            | _ -> None)
+        |> Set.ofList
+
     let knownFunctions = defs |> List.map (fun (n, _, _) -> n) |> Set.ofList
 
     let functionArities =
@@ -3885,6 +3913,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   AmbientContextMembers = ambientContextMembers
                   RecordLayouts = initialRecordLayouts
                   TypeLayouts = typeLayouts
+                  NominalWrappers = nominalWrappers
                   TypeFieldTypes = typeFieldTypes
                   RecordFieldTypes = initialRecordFieldTypes
                   ParamTypes = initialParamTypes
@@ -4056,6 +4085,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   AmbientContextMembers = ambientContextMembers
                   RecordLayouts = Map.empty
                   TypeLayouts = typeLayouts
+                  NominalWrappers = nominalWrappers
                   TypeFieldTypes = typeFieldTypes
                   RecordFieldTypes = Map.empty
                   ParamTypes = Map.empty

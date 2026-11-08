@@ -1755,6 +1755,39 @@ let ``Typecheck matches on an inferred tag union exhaustively`` () =
     Assert.Contains("noMessage", (List.head result.Diagnostics).Message)
 
 [<Fact>]
+let ``A def takes a nominal value apart with its type's pattern`` () =
+    let source =
+        "type $Money = private int\n" +
+        "def toPence: $Money -> int = { m ->\n" +
+        "  def $Money(pence) = m\n" +
+        "  pence\n" +
+        "}\n" +
+        "def price = $Money(250)\n" +
+        "def $Money(top) = price\n" +
+        "def shown = match price\n" +
+        "  | $Money(0) -> \"free\"\n" +
+        "  | $Money(p) -> \"{p}\"\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let typed = result.Typed.Value
+    Assert.Equal(TyPrimitive "int", typed.Types.["top"])
+    Assert.Equal(TyPrimitive "string", typed.Types.["shown"])
+
+[<Fact>]
+let ``A def with a pattern that is not total is a non-exhaustive match`` () =
+    // The parser accepts any pattern on the left of a def; the type checker decides whether it is total.
+    let onlyMessage (source: string) =
+        match (Compiler.compile source).Diagnostics with
+        | [ diagnostic ] -> diagnostic.Message
+        | other -> failwith $"Expected one diagnostic, got %A{other}"
+    let tag = onlyMessage ("def value = if true then #some(1) else #none\n" + "def #some(n) = value\n")
+    Assert.Contains("Non-exhaustive match", tag)
+    Assert.Contains("none", tag)
+    let list = onlyMessage ("def numbers = [1, 2, 3]\n" + "def [first, ...rest] = numbers\n")
+    Assert.Contains("Non-exhaustive match", list)
+    Assert.Contains("list cases", list)
+
+[<Fact>]
 let ``Typecheck infers list element type`` () =
     let source = "def numbers = [1, 2, 3]"
     let result = Compiler.compile source

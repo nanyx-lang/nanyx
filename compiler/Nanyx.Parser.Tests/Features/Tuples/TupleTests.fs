@@ -28,10 +28,48 @@ let ``def with a nested tuple pattern destructures through member access chains`
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
-let ``def cannot destructure with a literal in the pattern`` () =
-    match parseModule "def (1, y) = point" with
-    | Result.Error _ -> ()
+let ``def with a pattern that may not match binds through a one-arm match`` () =
+    // `def $Money(pence) = m` is `def __tuple = match m | $Money(pence) -> pence` and `def pence = __tuple`;
+    // whether the pattern is total is the type checker's to say.
+    match parseModule "def $Money(pence) = m" with
+    | Result.Ok [ Kind (Def (ValueDef (_, temp, None, Kind (Match ([ Kind (IdentifierExpr "m") ],
+                                                              [ [ Kind (RecordPattern ("$Money", [ Kind (IdentifierPattern "pence") ])) ], Kind (IdentifierExpr "pence") ])))))
+                  Kind (Def (ValueDef (_, "pence", None, Kind (IdentifierExpr temp1)))) ] ->
+        temp1 |> should equal temp
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+    // Several names come back as a tuple, one def per element.
+    match parseModule "def [first, ...rest] = xs" with
+    | Result.Ok [ Kind (Def (ValueDef (_, temp, None, Kind (Match ([ Kind (IdentifierExpr "xs") ],
+                                                              [ [ Kind (ListPattern ([ Kind (IdentifierPattern "first") ], Some (Kind (IdentifierPattern "rest")))) ],
+                                                                Kind (TupleExpr [ Kind (IdentifierExpr "first"); Kind (IdentifierExpr "rest") ]) ])))))
+                  Kind (Def (ValueDef (_, "first", None, Kind (MemberAccess (Kind (IdentifierExpr temp1), "0", None)))))
+                  Kind (Def (ValueDef (_, "rest", None, Kind (MemberAccess (Kind (IdentifierExpr temp2), "1", None))))) ] ->
+        temp1 |> should equal temp
+        temp2 |> should equal temp
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+    // A literal in a tuple pattern takes the same route, and a pattern binding no name is only the match.
+    match parseModule "def (1, y) = point" with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit 1)); Kind (IdentifierPattern "y") ]) ], Kind (IdentifierExpr "y") ])))))
+                  Kind (Def (ValueDef (_, "y", None, Kind (IdentifierExpr _)))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+    match parseModule "def #none = value" with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TagPattern ("none", None)) ], Kind UnitExpr ]))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``def with a bare name is an ordinary def, not a destructuring one`` () =
+    match parseModule "def x = 1" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", None, Kind (LiteralExpr (IntLit 1))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+    match parseModule "def $Money.new: int -> $Money = { pence -> $Money(pence) }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "$Money.new", Some _, Kind (Lambda _)))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
 let ``Parse tuple feature files`` () =
