@@ -2396,6 +2396,72 @@ type SourceModule =
       /// The source the spans index into: line endings normalised to `\n`, trailing whitespace removed.
       Source: string }
 
+/// A `#:` directive at the top of a script, which says what a package manifest would: `#:analyzer default`.
+type Directive =
+    { /// The word after `#:`: `analyzer`, say. Empty when there is none.
+      Name: string
+      /// The words after the name.
+      Arguments: string list
+      /// The line, from `#:` to its end.
+      Span: SourceSpan }
+
+/// The lines at the top of a file that are not code: an optional `#!` line, then `#:` directives, among blank lines
+/// and `--` comments. They end at the first line of code, so they are read without parsing the file, and the parser
+/// skips them. `#:` cannot start a tag, so a directive is never code.
+module Directives =
+    /// Each line of `source` (line breaks `\n`), as the offsets it starts and ends at, without its line break.
+    let private lines (source: string) =
+        let mutable start = 0
+        [ while start <= source.Length do
+              let finish = match source.IndexOf('\n', start) with -1 -> source.Length | i -> i
+              yield start, finish
+              start <- finish + 1 ]
+
+    /// The `#!` line and the directive lines at the top of `source`, by line number, with their offsets.
+    let private headerLines (source: string) =
+        lines source
+        |> List.indexed
+        |> List.takeWhile (fun (line, (start, finish)) ->
+            let text = source.Substring(start, finish - start)
+            let trimmed = text.Trim()
+            text.StartsWith "#:" || (line = 0 && text.StartsWith "#!") || trimmed = "" || trimmed.StartsWith "--")
+        |> List.filter (fun (_, (start, _)) -> source.Length > start + 1 && source[start] = '#')
+
+    let private normalize (source: string) = source.Replace("\r\n", "\n").Replace("\r", "\n")
+
+    /// The directives at the top of the file at `filePath`, whose text is `source`.
+    let read (filePath: string) (source: string) : Directive list =
+        let source = normalize source
+        headerLines source
+        |> List.filter (fun (_, (start, _)) -> source[start + 1] = ':')
+        |> List.map (fun (line, (start, finish)) ->
+            let text = source.Substring(start, finish - start).TrimEnd()
+            let name, arguments =
+                match text.Substring(2).Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries) |> List.ofArray with
+                | name :: arguments -> name, arguments
+                | [] -> "", []
+            { Name = name
+              Arguments = arguments
+              Span = { File = filePath; Start = start; End = start + text.Length; StartLine = line; StartColumn = 0 } })
+
+    /// Where the `#!` line and directives at the top of `source` (line breaks `\n`) end: the end of the last of them,
+    /// without its line break, or 0 if it has none.
+    let headerEnd (source: string) : int =
+        match List.tryLast (headerLines source) with
+        | Some (_, (_, finish)) -> finish
+        | None -> 0
+
+    /// `source` (line breaks `\n`) with its `#!` line and directives made blank, for the parser, which skips them.
+    let blank (source: string) : string =
+        match headerLines source with
+        | [] -> source
+        | header ->
+            let chars = source.ToCharArray()
+            for _, (start, finish) in header do
+                for i in start .. finish - 1 do
+                    chars[i] <- ' '
+            String chars
+
 let private normalizeSource (input: string) =
     input.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
 
@@ -2406,8 +2472,11 @@ let private runModuleParser (filePath: string) (normalized: string) : Result<Top
     let errorAt (position: Position) message =
         { Message = message
           Span = spanOf position (min normalized.Length (int position.Index + 1)) }
-    match runParserOnString moduleParser initialState filePath normalized with
+    match runParserOnString moduleParser initialState filePath (Directives.blank normalized) with
     | ParserResult.Success(result, state, _) -> Result.Ok (result, state)
+    // A directive after the code has started is not skipped, and fails where it starts.
+    | ParserResult.Failure(_, error, _) when error.Position.Column = 1L && String.CompareOrdinal(normalized, int error.Position.Index, "#:", 0, 2) = 0 ->
+        Result.Error (errorAt error.Position "A directive (a `#:` line) must come before the first line of code")
     | ParserResult.Failure(errorMsg, error, _) ->
         // The failure of a workflow keyword is backtracked over, and FParsec reports some enclosing construct
         // instead (often the whole def), so it is reported where it happened.

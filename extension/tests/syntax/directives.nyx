@@ -1,0 +1,13 @@
+-- SYNTAX TEST "source.nanyx" "a script's directives are coloured as directives, not as tags"
+
+#:analyzer default.unusedBindings error
+-- <- meta.preprocessor.directive.nanyx punctuation.definition.directive.nanyx
+-- ^^^^^^^ keyword.control.directive.nanyx
+--         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.unquoted.directive.nanyx - constant.other.symbol.nanyx
+
+#:formatter lineWidth 100
+-- ^^^^^^^^ keyword.control.directive.nanyx
+--                    ^^^ string.unquoted.directive.nanyx - constant.numeric
+
+def a = #some(1)
+--      ^ - meta.preprocessor.directive.nanyx

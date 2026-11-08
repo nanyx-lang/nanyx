@@ -937,6 +937,30 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Empty(await FormattingEdits(uri));
     }
 
+    [Fact]
+    public async Task Formatting_a_script_keeps_its_directives_and_uses_its_formatter_directives()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-format-directives");
+        Open(uri, "#:formatter indentSize 4\ndef x =\n  def a = 1\n  a\n");
+        await NextPublished(uri);
+
+        var edit = Assert.Single(await FormattingEdits(uri));
+        Assert.Equal("#:formatter indentSize 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
+    }
+
+    [Fact]
+    public async Task A_script_is_analyzed_as_its_directives_say()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "directives.nyx"));
+
+        Open(uri, "#:analyzer default.unusedBindings error\n#:analyzer nope\ndef f = {\n  def unused = 1\n  2\n}\n");
+
+        var diagnostics = (await NextPublished(uri)).Diagnostics!.ToList();
+        Assert.Equal(["NYX0009", "default/unusedBindings"], diagnostics.Select(d => d.Code?.String));
+        Assert.Equal(new Range(1, 0, 1, 15), diagnostics[0].Range);
+        Assert.Equal(DiagnosticSeverity.Error, diagnostics[1].Severity);
+    }
+
     private async Task<List<TextEdit>> FormattingEdits(DocumentUri uri) =>
         (await _client.TextDocument.RequestDocumentFormatting(
             new DocumentFormattingParams
