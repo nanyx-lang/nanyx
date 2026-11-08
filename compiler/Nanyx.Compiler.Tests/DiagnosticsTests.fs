@@ -534,3 +534,39 @@ let ``A module block can import the block beside it, but not reach it without an
 let ``A module block has no top-level code`` () =
     let source = moneyBlock.Replace("def secret = 42", "def secret = 42\n  secret + 1")
     Assert.Equal<(string * string) list>([ DiagnosticCodes.CodeInModuleBlock.Code, "secret + 1" ], codesAt source)
+[<Fact>]
+let ``A module block cannot name or make its file's types`` () =
+    let point = "type Point = (x: int, y: int)\n\n"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.OutsideModuleBlock.Code, "Point" ],
+        codesAt (point + "module shapes =\n  export def origin: Point = (x = 0, y = 0)\n"))
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.OutsideModuleBlock.Code, "Point" ],
+        codesAt (point + "module shapes =\n  export def all: list(Point) = []\n"))
+    match codesAt (point + "module shapes =\n  export def origin = Point(x = 0, y = 0)\n") with
+    | [ code, text ] ->
+        Assert.Equal(DiagnosticCodes.OutsideModuleBlock.Code, code)
+        Assert.StartsWith("Point", text)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+    Assert.Empty(codesAt (point + "def p: Point = (x = 1, y = 2)\n"))
+
+[<Fact>]
+let ``A module block names the types of the blocks it imports, and its own`` () =
+    let shapes = "module shapes =\n  export type Point = (x: int, y: int)\n  export def origin: Point = Point(x = 0, y = 0)\n\n"
+    Assert.Empty(codesAt (shapes + "module draw =\n  import shapes\n  export def dot: Point -> int = { p -> p.x }\n"))
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.OutsideModuleBlock.Code, "shapes.Point" ],
+        codesAt (shapes + "module draw =\n  export def dot: shapes.Point -> int = { p -> p.x }\n"))
+
+[<Fact>]
+let ``A module block names only the imported types it imports itself`` () =
+    withTempDir (fun dir ->
+        File.WriteAllText(Path.Combine(dir, "people.nyx"), "module people\nexport type $Person = (name: string)\n")
+        let compile (main: string) =
+            let mainPath = Path.Combine(dir, "main.nyx")
+            File.WriteAllText(mainPath, main)
+            (Compiler.compileFile mainPath).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt main (spanOf diagnostic))
+        Assert.Equal<(string * string) list>(
+            [ DiagnosticCodes.OutsideModuleBlock.Code, "$Person" ],
+            compile "import \"people.nyx\"\n\nmodule greet =\n  export def name: $Person -> string = { p -> p.name }\n")
+        Assert.Empty(compile "module greet =\n  import \"people.nyx\"\n  export def name: $Person -> string = { p -> p.name }\n"))

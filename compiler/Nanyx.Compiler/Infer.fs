@@ -373,13 +373,13 @@ let private inNominalHome (state: InferState) (name: string) (span: SourceSpan) 
             blockAround state.ModuleBlocks symbol.Declaration = blockAround state.ModuleBlocks span
         | _ -> true)
 
-/// The error for `expr`, a reference to `name` bound to `scheme`, if it reaches out of the `module name =` block it
-/// is in, or into one: a block sees only its own definitions, the blocks nested in it, the blocks it imports and what
-/// it imports itself, and its imports are its own.
-let private blockIsolation (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
-    let exprBlock = blockAround state.ModuleBlocks expr.Span
-    match scheme.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
-    | _ when SourceSpan.isNone expr.Span || state.ModuleBlocks.IsEmpty -> []
+/// The error for naming `name` at `span`, where it means the definition or type `symbolId`, if that reaches out of the
+/// `module name =` block `span` is in, or into one: a block sees only its own definitions and types, the blocks nested
+/// in it, the blocks it imports and what it imports itself, and its imports are its own.
+let private blockIsolationAt (state: InferState) (name: string) (symbolId: SymbolId option) (span: SourceSpan) : Diagnostic list =
+    let exprBlock = blockAround state.ModuleBlocks span
+    match symbolId |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+    | _ when SourceSpan.isNone span || state.ModuleBlocks.IsEmpty -> []
     | None -> []
     | Some symbol ->
         match state.ImportSites |> Map.tryFind symbol.Id with
@@ -388,11 +388,11 @@ let private blockIsolation (name: string) (expr: Expression) (scheme: TypeScheme
             match exprBlock with
             | _ when visible -> []
             | Some (blockName, _) ->
-                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock expr.Span $"'{name}' is imported outside module '{blockName}', which sees only what it imports itself: import it in the block too" ]
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is imported outside module '{blockName}', which sees only what it imports itself: import it in the block too" ]
             | None ->
                 let blockName = sites |> List.tryPick (fun site -> blockAround state.ModuleBlocks site |> Option.map fst) |> Option.defaultValue ""
-                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock expr.Span $"'{name}' is only imported in module '{blockName}', and a module block's imports are its own: import it here too" ]
-        | None when symbol.Kind = TopLevelValue && symbol.Declaration.File = expr.Span.File ->
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is only imported in module '{blockName}', and a module block's imports are its own: import it here too" ]
+        | None when (symbol.Kind = TopLevelValue || symbol.Kind = TypeDefinition) && symbol.Declaration.File = span.File ->
             match exprBlock with
             | Some (blockName, block) when not (SourceSpan.contains block symbol.Declaration) ->
                 let imported =
@@ -403,10 +403,14 @@ let private blockIsolation (name: string) (expr: Expression) (scheme: TypeScheme
                            && blockAround state.ModuleBlocks blockImport.Import.Span = exprBlock)
                 if imported then []
                 else
-                    [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock expr.Span $"'{name}' is defined outside module '{blockName}', which sees only its own definitions and what it imports"
+                    [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is defined outside module '{blockName}', which sees only its own definitions and what it imports"
                       |> Diagnostics.withRelated symbol.Declaration $"'{name}' is declared here" ]
             | _ -> []
         | None -> []
+
+/// `blockIsolationAt` for `expr`, a reference to `name` bound to `scheme`.
+let private blockIsolation (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
+    blockIsolationAt state name scheme.Symbol expr.Span
 
 /// The error for `expr` naming what `scheme` is bound for, if that is a definition a `module name =` block does
 /// not export and `expr` is outside the block.
@@ -808,12 +812,11 @@ let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Id
 /// The type names written in `typeExpr` that name no type here: `Strnig`, or `$Email` where only `m.$Email` is in
 /// scope. `parameters` are the names of the parameters of the type definition `typeExpr` is the body of, if it is
 /// one. Contexts are checked apart.
-let rec private unknownTypeNames (state: InferState) (parameters: Set<Identifier>) (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
-    let isUnknown name = not (isBuiltInTypeName name || parameters.Contains name) && (tryFindTypeDef name state).IsNone
-    let ofType = unknownTypeNames state parameters
+let rec private typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
+    let ofType = typeNamesIn
     match typeExpr.Kind with
-    | TypeName name when isUnknown name -> [ name, typeExpr.Span ]
-    | TypeApply(name, args) -> (if isUnknown name then [ name, typeExpr.Span ] else []) @ (args |> List.collect ofType)
+    | TypeName name -> [ name, typeExpr.Span ]
+    | TypeApply(name, args) -> (name, typeExpr.Span) :: (args |> List.collect ofType)
     | TypeTuple items
     | TypeUnion items
     | TypeIntersection items -> items |> List.collect ofType
@@ -831,12 +834,21 @@ let rec private unknownTypeNames (state: InferState) (parameters: Set<Identifier
     | TypeWhere(payload, _) -> ofType payload
     | _ -> []
 
-/// The error for each type name written in `typeExprs` that names no type, once per name.
+/// The error for each type name written in `typeExprs` that names no type, once per name, and for each that names a
+/// type the `module name =` block it is written in cannot see.
 let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) (typeExprs: TypeExpr list) : Diagnostic list =
-    typeExprs
-    |> List.collect (unknownTypeNames state parameters)
-    |> List.distinctBy fst
-    |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
+    let named = typeExprs |> List.collect typeNamesIn |> List.filter (fun (name, _) -> not (isBuiltInTypeName name || parameters.Contains name))
+    let unknown =
+        named
+        |> List.filter (fun (name, _) -> (tryFindTypeDef name state).IsNone)
+        |> List.distinctBy fst
+        |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
+    let outside =
+        named
+        |> List.choose (fun (name, span) -> tryFindTypeDef name state |> Option.map (fun info -> name, info, span))
+        |> List.collect (fun (name, info, span) -> blockIsolationAt state name info.Symbol span)
+        |> List.distinctBy _.Message
+    unknown @ outside
 
 /// Whether every type an annotation, such as a def's or a lambda parameter's, names exists.
 let private ensureTypesExist (state: InferState) (typeExprs: TypeExpr list) : Result<unit, Diagnostic list> =
@@ -1526,6 +1538,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Error errors
             | None ->
                 match tryFindTypeDef name state with
+                // A `module name =` block can only make the types it sees.
+                | Some info when not (blockIsolationAt state name info.Symbol calleeSpan).IsEmpty ->
+                    Error (blockIsolationAt state name info.Symbol calleeSpan)
                 // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
                 | Some info when isNominal info && not (inNominalHome state info.Name calleeSpan) ->
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]

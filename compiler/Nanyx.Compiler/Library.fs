@@ -989,8 +989,8 @@ module Compiler =
                         ImportedThrough = importedThrough
                         // Where each definition is imported, since a `module name =` block's imports are its own.
                         ImportSites =
-                            exportedSymbols
-                            |> Map.fold (fun acc id _ ->
+                            Seq.append exportedSymbols exportedTypeSymbols
+                            |> Seq.fold (fun acc (KeyValue(id, _)) ->
                                 acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
                         ContextRequirements = contextRequirements }
                 if importedKey = preludeKey then
