@@ -540,9 +540,10 @@ let format (options: Options) (parsed: SourceModule) : string =
         match shorthand e parameters body with
         | Some doc -> doc
         | None ->
+            // An annotated parameter is bracketed, so an arrow after its annotation is not read as part of it.
             let parameterDoc (n, typeOpt) =
                 match typeOpt with
-                | Some t -> cat [ text n; text ": "; typeExpr t ]
+                | Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
                 | None -> text n
             let head =
                 match parameters with

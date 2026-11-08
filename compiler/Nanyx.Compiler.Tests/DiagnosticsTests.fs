@@ -317,7 +317,7 @@ let ``A type name in a def's annotation that names no type is reported`` () =
 
 [<Fact>]
 let ``A type name in a lambda parameter's annotation that names no type is reported`` () =
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "Foo" ], compiled "def f = { x: Foo, y -> x }\n")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "Foo" ], compiled "def f = { (x: Foo) -> x }\n")
 
 [<Fact>]
 let ``A type name in a type definition that names no type is reported`` () =
@@ -335,7 +335,7 @@ let ``Built-in types, type variables, type parameters and types defined anywhere
         "type Tree = #leaf | #node(Tree, Tree)\n" +
         "type Box(item) = (value: item)\n" +
         "type Pair(a, b) = (first: a, second: b)\n" +
-        "def g = { p: Pair(int, Tree), b: Box(string), c -> (p.first, b.value, c) }\n"
+        "def g = { (p: Pair(int, Tree)), (b: Box(string)) -> (p.first, b.value) }\n"
     Assert.Empty(compiled source)
 
 [<Fact>]
