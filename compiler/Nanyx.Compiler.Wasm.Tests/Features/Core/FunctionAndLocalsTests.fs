@@ -107,7 +107,7 @@ let ``Transpile bare tag literal`` () =
     let wat = transpileWat source
 
     Assert.Contains("(func $main (result i32)", wat)
-    Assert.Contains("i32.const 65536", wat)
+    Assert.Contains("i32.const 3", wat)
 
 [<Fact>]
 let ``Transpile magic dbg for bare tag literal`` () =
@@ -129,9 +129,8 @@ let ``Transpile payload tag literal`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("i32.const 42", wat)
-    Assert.Contains("i32.const 65535", wat)
-    Assert.Contains("i32.or", wat)
+    Assert.Contains("i32.const 3\n    i32.const 42\n    call $__nanyx_tag_box", wat)
+    Assert.Contains("(func $__nanyx_tag_box", wat)
 
 [<Fact>]
 let ``Transpile magic dbg for payload tag literal`` () =

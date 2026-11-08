@@ -1135,6 +1135,46 @@ let ``Run - interpolating tags`` () =
     runSource source |> assertRan "#some(10) #some(\"hi\") #none #done\n"
 
 [<Fact>]
+let ``Run - a tag keeps a payload that does not fit in 16 bits`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def show: [Console] (#some(int) | #none) -> () = {\n" +
+        "  | #some(70000) -> println(\"seventy thousand\")\n" +
+        "  | #some(n) -> println(\"#some({n})\")\n" +
+        "  | #none -> println(\"#none\")\n" +
+        "}\n" +
+        "\n" +
+        "show(#some(-17))\n" +
+        "show(#some(70000))\n" +
+        "show(#some(4464))\n" +
+        "show(#none)\n" +
+        "println(\"{#some(70000) == #some(70000)} {#some(70000) == #some(4464)} {#some(1) != #some(2)}\")\n" +
+        "dbg(#some(-17))\n"
+    runSource source |> assertRan "#some(-17)\nseventy thousand\n#some(4464)\n#none\ntrue false true\ndbg: #some(-17)\n"
+
+[<Fact>]
+let ``Run - a tag's string payload allocated past 64 KB of heap`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def grow: (string, int) -> string = { s, n -> if n == 0 then s else grow(s ++ \"x\", n - 1) }\n" +
+        "\n" +
+        "def show: [Console] (#name(string) | #anon) -> () = {\n" +
+        "  | #name(s) -> println(\"name {s}\")\n" +
+        "  | #anon -> println(\"anon\")\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  -- About 80 KB of strings, so what comes next is allocated above 64 KB.\n" +
+        "  def filler = grow(\"\", 400)\n" +
+        "  show(#name(\"Ada\" ++ \"!\"))\n" +
+        "  println(\"filler is empty: {filler == \"\"}\")\n" +
+        "}\n"
+    runSource source |> assertRan "name Ada!\nfiller is empty: false\n"
+
+[<Fact>]
 let ``Run - a proc block continues past each #some and stops at the first #error`` () =
     // `run(7)` fails at its first `try`, so nothing after it runs; `run(3)` fails at its second. `sum` binds two
     // `try`s nested in its `return`.
@@ -1202,7 +1242,6 @@ let ``Run - a proc block gives back whichever failure stopped it`` () =
 
 [<Fact>]
 let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
-    // Negative and large results are left out: a tag's int payload is kept in 16 bits by the backend (#181).
     let source =
         "import nanyx/console\n" +
         "\n" +
@@ -1215,12 +1254,14 @@ let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
         "show(Int.parse(\"+5\"))\n" +
         "show(Int.parse(\"007\"))\n" +
         "show(Int.parse(\"0\"))\n" +
+        "show(Int.parse(\"-17\"))\n" +
+        "show(Int.parse(\"70000\"))\n" +
         "show(Int.parse(\"\"))\n" +
         "show(Int.parse(\"-\"))\n" +
         "show(Int.parse(\"4x2\"))\n" +
         "show(Int.parse(\" 1\"))\n" +
         "show(\"12\" \\ Int.parse)\n"
-    runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
+    runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#some(-17)\n#some(70000)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
 
 [<Fact>]
 let ``Run - eprint and eprintln write to stderr`` () =
