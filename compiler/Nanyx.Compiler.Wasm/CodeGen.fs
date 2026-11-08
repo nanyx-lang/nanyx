@@ -54,6 +54,13 @@ type private TranspileEnv =
       /// The nominal types of the module whose shape is not a record (`type $Money = private int`). A value of one
       /// is its shape's value as it is, so its constructor and the pattern that takes it apart compile to nothing.
       NominalWrappers: Set<string>
+      /// Where each call to a function that requires a parameterised context finds its instances, by the call's
+      /// node, as the type checker decided (see `TypedModule.ContextInstances`).
+      ContextInstances: Map<NodeId, ContextInstance option list>
+      /// The contexts each top-level function's type declares, in order.
+      FunctionContextTypes: Map<string, TypeExpr list>
+      /// The wrapper that lets each top-level function that has one be passed as a function value.
+      FunctionWrappers: Map<string, string>
       TypeFieldTypes: Map<string, Map<string, string>>
       RecordFieldTypes: Map<string, Map<string, string>>
       ParamTypes: Map<string, string>
@@ -2894,31 +2901,61 @@ let rec private transpileExpression (env: TranspileEnv) (expr: Expression) : str
                                 availParts.[0] = baseName &&
                                 availParts.[availParts.Length - 1] = memberName)
                     
+                    let closureOver wrapper =
+                        transpileExpression env (Expression.from expr (FunctionCall("__closure", None, [ Expression.from expr (FunctionCall("__slot", None, [ Expression.from expr (IdentifierExpr wrapper) ])) ])))
+
+                    // The member's closure: one in scope (a parameter or a `use`), else the ambient instance's.
+                    let memberCodeFor (ctxFnName: string) (resolvedName: string) =
+                        match env.ContextMembers |> Map.tryFind resolvedName, env.AmbientContextMembers |> Map.tryFind resolvedName with
+                        | Some memberCode, _ -> memberCode
+                        | None, Some wrapper -> closureOver wrapper
+                        | None, None ->
+                            let available =
+                                (env.ContextMembers |> Map.toList |> List.map fst) @
+                                (env.AmbientContextMembers |> Map.toList |> List.map fst)
+                            let availableStr = String.concat ", " available
+                            failwith $"Context function {ctxFnName} not available in current scope. Available: [{availableStr}]"
+
+                    // Where the type checker found each context the callee requires, as each required member's
+                    // instance, in the order of `requiredCtxFns`: none for a call it found nothing for.
+                    let instances =
+                        match env.ContextInstances |> Map.tryFind expr.Id, env.FunctionContextTypes |> Map.tryFind name with
+                        | Some found, Some contextTypes when found.Length = contextTypes.Length ->
+                            List.zip contextTypes found
+                            |> List.collect (fun (ctxType, instance) ->
+                                let baseName = match ctxType.Kind with TypeName n | TypeApply(n, _) -> n | _ -> "unknown"
+                                env.TypeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))
+                            |> fun (perMember: (string * ContextInstance option) list) -> if perMember.Length = requiredCtxFns.Length then Some perMember else None
+                        | _ -> None
+
                     // Use fold to process required contexts while tracking which have been used
                     let (ctxArgsCode, _) =
                         requiredCtxFns
-                        |> List.fold (fun (codeAcc, usedCtxs) ctxFnName ->
-                            // Try exact match first, then try compatible match
-                            let resolvedName =
-                                if env.ContextMembers.ContainsKey ctxFnName then ctxFnName
-                                else
-                                    match findCompatibleContext usedCtxs ctxFnName with
-                                    | Some compatible -> compatible
-                                    | None -> ctxFnName  // Will fail below with better error
-
-                            // The member's closure: one in scope (a parameter or a `use`), else the ambient instance's.
-                            let code =
-                                match env.ContextMembers |> Map.tryFind resolvedName, env.AmbientContextMembers |> Map.tryFind resolvedName with
-                                | Some memberCode, _ -> memberCode
-                                | None, Some wrapper ->
-                                    transpileExpression env (Expression.from expr (FunctionCall("__closure", None, [ Expression.from expr (FunctionCall("__slot", None, [ Expression.from expr (IdentifierExpr wrapper) ])) ])))
-                                | None, None ->
-                                    let available =
-                                        (env.ContextMembers |> Map.toList |> List.map fst) @
-                                        (env.AmbientContextMembers |> Map.toList |> List.map fst)
-                                    let availableStr = String.concat ", " available
-                                    failwith $"Context function {ctxFnName} not available in current scope. Available: [{availableStr}]"
-                            (codeAcc @ [code], usedCtxs.Add resolvedName)) ([], Set.empty)
+                        |> List.mapi (fun index ctxFnName -> ctxFnName, instances |> Option.map (fun perMember -> perMember.[index]))
+                        |> List.fold (fun (codeAcc: string list, usedCtxs: Set<string>) (ctxFnName, instance) ->
+                            match instance with
+                            // An instance in scope, as written where it is: the members of a `use` or of the
+                            // context a function's type declares.
+                            | Some (memberName, Some (InstanceInScope written)) ->
+                                let key = contextMemberKey (Some written) memberName
+                                (codeAcc @ [ memberCodeFor ctxFnName key ], usedCtxs.Add key)
+                            // An instance built from the attached definitions: each member is one of them.
+                            | Some (memberName, Some (InstanceSynthesized members)) ->
+                                let definition = members |> List.find (fun (name, _) -> name = memberName) |> snd
+                                let code =
+                                    match env.FunctionWrappers |> Map.tryFind definition with
+                                    | Some wrapper -> closureOver wrapper
+                                    | None -> $"call ${sanitizeIdentifier definition}"
+                                (codeAcc @ [ code ], usedCtxs)
+                            | _ ->
+                                // Try exact match first, then try compatible match
+                                let resolvedName =
+                                    if env.ContextMembers.ContainsKey ctxFnName then ctxFnName
+                                    else
+                                        match findCompatibleContext usedCtxs ctxFnName with
+                                        | Some compatible -> compatible
+                                        | None -> ctxFnName  // Will fail below with better error
+                                (codeAcc @ [ memberCodeFor ctxFnName resolvedName ], usedCtxs.Add resolvedName)) ([], Set.empty)
                     let allArgsCode = argsCode @ ctxArgsCode
                     match allArgsCode with
                     | [] -> $"{call} ${sanitizeIdentifier name}"
@@ -3254,8 +3291,9 @@ module private LambdaLifting =
     /// own, `__use_<key>_N`, and the statement is left as `use (<key> = __use_<key>_N, ...)`, so a binding
     /// can be any function-valued expression: a lambda (which may capture), a top-level function, a
     /// parameter or local. The top-level functions that can stand in for a context member when nothing in
-    /// scope supplies one (the ambient instance, like the runtime's `Console`) get wrappers up front.
-    let lift (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
+    /// scope supplies one (the ambient instance, like the runtime's `Console`) get wrappers up front, as do
+    /// `synthesized`, the top-level functions an instance the compiler builds from attached definitions is made of.
+    let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
         let lifted = System.Collections.Generic.List<TopLevelItem>()
         let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
         let wrappers = System.Collections.Generic.Dictionary<string, string>()
@@ -3516,6 +3554,7 @@ module private LambdaLifting =
             |> List.distinct
             |> List.filter (fun name -> topLevelFunctions.ContainsKey name && not (takesContexts defTypes.[name]))
             |> List.iter (wrapperOf >> ignore)
+        synthesized |> Set.filter topLevelFunctions.ContainsKey |> Set.iter (wrapperOf >> ignore)
 
         items @ List.ofSeq lifted,
         origins |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
@@ -3584,8 +3623,15 @@ let private getLayoutFromTypeExpr (typeLayouts: Map<string, string list>) (typeF
         Some (fieldNames, fieldTypes)
     | _ -> None
 
-let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) : string =
-    let module', liftedOrigins, functionWrappers = LambdaLifting.lift module'
+let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) : string =
+    // The definitions synthesized instances are made of are passed as function values.
+    let synthesizedMembers =
+        contextInstances
+        |> Map.values
+        |> Seq.collect (List.choose (function Some (InstanceSynthesized members) -> Some members | _ -> None) >> List.concat)
+        |> Seq.map snd
+        |> Set.ofSeq
+    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers module'
     let defs =
         module'
         |> List.choose (function
@@ -3626,6 +3672,14 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
     // Calculate context requirements for each function based on TypeWithContext annotations
     // For parameterized contexts like ToString(a), generate qualified keys like "ToString_a_toString"
     // For simple contexts like Println, keep simple member names like "println"
+    let functionContextTypes =
+        defs
+        |> List.choose (fun (name, typeOpt, _) ->
+            match extractContextTypes typeOpt with
+            | [] -> None
+            | contextTypes -> Some (name, contextTypes))
+        |> Map.ofList
+
     let functionContextRequirements =
         defs
         |> List.choose (fun (name, typeOpt, _) ->
@@ -3891,11 +3945,27 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                 requiredContextFns
                 |> List.map (fun ctxFnName -> (ctxFnName, $"__ctx_{sanitizeIdentifier ctxFnName}"))
 
-            // Each member arrives as a closure block in a parameter of its own.
+            // Each member arrives as a closure block in a parameter of its own. A member of a parameterised
+            // context (`Show_a_show`) can also be called by its own name (`show`), as the type checker allows, when
+            // no other context the function declares has a member of that name.
             let contextMembersFromParams =
-                contextParamNames
-                |> List.map (fun (ctxFnName, paramName) -> ctxFnName, $"local.get ${paramName}")
-                |> Map.ofList
+                let qualified = contextParamNames |> List.map (fun (ctxFnName, paramName) -> ctxFnName, $"local.get ${paramName}")
+                let byMemberName =
+                    functionContextTypes
+                    |> Map.tryFind name
+                    |> Option.defaultValue []
+                    |> List.collect (fun ctxType ->
+                        match ctxType.Kind with
+                        | TypeApply(baseName, _) ->
+                            typeLayouts |> Map.tryFind baseName |> Option.defaultValue []
+                            |> List.map (fun memberName -> memberName, contextMemberKey (Some ctxType) memberName)
+                        | _ -> [])
+                    |> List.groupBy fst
+                    |> List.choose (fun (memberName, keys) ->
+                        match keys, qualified |> List.tryFind (fun (key, _) -> key = snd keys.Head) with
+                        | [ _ ], Some (_, code) when not (qualified |> List.exists (fun (key, _) -> key = memberName)) -> Some (memberName, code)
+                        | _ -> None)
+                qualified @ byMemberName |> Map.ofList
 
             let env =
                 { KnownFunctions = knownFunctions
@@ -3914,6 +3984,9 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   RecordLayouts = initialRecordLayouts
                   TypeLayouts = typeLayouts
                   NominalWrappers = nominalWrappers
+                  ContextInstances = contextInstances
+                  FunctionContextTypes = functionContextTypes
+                  FunctionWrappers = functionWrappers
                   TypeFieldTypes = typeFieldTypes
                   RecordFieldTypes = initialRecordFieldTypes
                   ParamTypes = initialParamTypes
@@ -4086,6 +4159,9 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   RecordLayouts = Map.empty
                   TypeLayouts = typeLayouts
                   NominalWrappers = nominalWrappers
+                  ContextInstances = contextInstances
+                  FunctionContextTypes = functionContextTypes
+                  FunctionWrappers = functionWrappers
                   TypeFieldTypes = typeFieldTypes
                   RecordFieldTypes = Map.empty
                   ParamTypes = Map.empty
@@ -4447,7 +4523,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         $"(module\n{body}\n)"
 
 let transpileModuleToWat (module': Module) : string =
-    transpileModuleToWatCore module' Map.empty Map.empty Map.empty Map.empty
+    transpileModuleToWatCore module' Map.empty Map.empty Map.empty Map.empty Map.empty
 
 let transpileTypedModuleToWat (typed: TypedModule) : string =
     let typedBodies =
@@ -4469,4 +4545,4 @@ let transpileTypedModuleToWat (typed: TypedModule) : string =
             | TyFunc(_, returnTy) -> trySimpleTypeName returnTy |> Option.map (fun tyName -> name, tyName)
             | _ -> None)
         |> Map.ofList
-    transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types
+    transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances

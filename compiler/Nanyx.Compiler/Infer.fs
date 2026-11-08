@@ -42,6 +42,9 @@ type InferState =
             HiddenTypeNames: Set<string>;
             ContextDefs: Map<string, TypeExpr>;
             ContextRequirements: Map<string, TypeExpr list>;
+            /// The type each function in `ContextRequirements` declares, without its contexts, where it writes one:
+            /// what a call reads the type arguments of a parameterised context from (`a` in `[Sum(a)] list(a) -> a`).
+            ContextSignatures: Map<string, TypeExpr>;
             /// The imported definitions that are an ambient context instance's members, by name: the definition's
             /// symbol and the context's name. `println` is the runtime's `Console`'s, which `@entry` imports.
             AmbientMembers: Map<string, SymbolId * Identifier>;
@@ -104,7 +107,13 @@ type InferState =
             BlockAliases: Map<string, string>;
             /// The imports each imported definition is brought in by, as where they are written: a `module name =`
             /// block's imports are its own. An import the compiler made up (the prelude's) has no place.
-            ImportSites: Map<SymbolId, SourceSpan list> }
+            ImportSites: Map<SymbolId, SourceSpan list>;
+            /// Where each call to a function that requires a parameterised context finds its instances, by the call's
+            /// node (see `TypedModule.ContextInstances`).
+            ContextInstances: Map<NodeId, ContextInstance option list>;
+            /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
+            /// as written there, by the name they are bound under in the environment (see `instanceBinding`).
+            InstanceContexts: Map<string, TypeExpr> }
 
 let emptyState =
         { NextId = 0;
@@ -114,6 +123,7 @@ let emptyState =
             HiddenTypeNames = Set.empty;
             ContextDefs = Map.empty;
             ContextRequirements = Map.empty;
+            ContextSignatures = Map.empty;
             AmbientMembers = Map.empty;
             CarriedAmbientContexts = Set.empty;
             ContextScope = AmbientScope;
@@ -140,7 +150,9 @@ let emptyState =
             Origin = SourceSpan.none;
             BlockImports = [];
             BlockAliases = Map.empty;
-            ImportSites = Map.empty }
+            ImportSites = Map.empty;
+            ContextInstances = Map.empty;
+            InstanceContexts = Map.empty }
 
 let private freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
@@ -870,8 +882,13 @@ let private ensureContextsExist (state: InferState) (name: Identifier) (span: So
         |> List.map (fun ctxName -> Diagnostics.at DiagnosticCodes.UnknownContext span $"Unknown context '{ctxName}' in the signature of '{name}'")
         |> Error
 
-let private registerContextRequirement (state: InferState) (name: Identifier) (contexts: TypeExpr list) =
-    { state with ContextRequirements = state.ContextRequirements |> Map.add name contexts }
+let private registerContextRequirement (state: InferState) (name: Identifier) (contexts: TypeExpr list) (signature: TypeExpr option) =
+    { state with
+        ContextRequirements = state.ContextRequirements |> Map.add name contexts
+        ContextSignatures =
+            match signature with
+            | Some signature -> state.ContextSignatures |> Map.add name signature
+            | None -> state.ContextSignatures |> Map.remove name }
 
 /// Whether `name` is bound in `env` to the ambient instance's member, not to something nearer that shadows it: a
 /// member of a context the def declares, or of an instance a `use` loads.
@@ -1174,6 +1191,208 @@ let private resolveSoFar (state: InferState) (ty: Ty) : Ty =
         | Ok subst -> Unifier.apply subst ty
         | Error _ -> ty
 
+// Instances of parameterised contexts.
+//
+// A function that requires `[Sum(a)]` is passed an instance of `Sum` for whatever `a` is at each call. The call finds
+// it, nearest first, among the instances in scope (each `use Sum(T) = ...` around the call, and each context the type
+// of the function around the call declares), or else builds it from the definitions attached to the type, as
+// `Point.0` and `Point.+` make a `Sum(Point)`. Where it was found is kept by the call's node, for the backend.
+
+/// What the names of the instances in scope start with, in the environment. No name written in the source can, so
+/// an instance never shadows a name, or is shadowed by one.
+let private instancePrefix = "@instance "
+
+/// Whether `ctx` names a parameterised context: `Sum(a)`, `Show(int)`.
+let private isParameterizedContext (state: InferState) (ctx: TypeExpr) =
+    match ctx.Kind with
+    | TypeApply(name, _ :: _) ->
+        state.ContextDefs.ContainsKey name || (state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext)
+    | _ -> false
+
+/// `env` with the instance `ctx` in scope, if it is one of a parameterised context: bound under a name of its own, with
+/// the context applied to its arguments as its type (`Sum(Point)` is `TyApply("Sum", [Point])`). Of two instances of
+/// one context, the one put in scope later is nearer.
+let private bindInstance (env: TypeEnv) (state: InferState) (ctx: TypeExpr) : TypeEnv * InferState =
+    match ctx.Kind with
+    | TypeApply(ctxName, args) when isParameterizedContext state ctx ->
+        let mutable current = state
+        let argTys =
+            args
+            |> List.map (fun arg ->
+                let ty, next = typeExprToTy current arg
+                current <- next
+                ty)
+        let bindingName = $"{instancePrefix}{ctxName} {current.NextId}"
+        let current = { current with NextId = current.NextId + 1; InstanceContexts = current.InstanceContexts |> Map.add bindingName ctx }
+        TypeEnv.extend bindingName (TypeEnv.mono (TyApply(ctxName, argTys))) env, current
+    | _ -> env, state
+
+/// `env` with each instance of a parameterised context among `contexts` in scope (see `bindInstance`).
+let private bindInstances (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) : TypeEnv * InferState =
+    contexts |> List.fold (fun (env, state) ctx -> bindInstance env state ctx) (env, state)
+
+/// `ty` with each type variable named in `names` replaced by the type it maps to.
+let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
+    let recur = replaceNamedVars names
+    match ty with
+    | TyVar { Name = Some name } when names.ContainsKey name -> names.[name]
+    | TyVar _
+    | TyPrimitive _ -> ty
+    | TyNominal(name, underlying, isPrivate) -> TyNominal(name, recur underlying, isPrivate)
+    | TyAlias(name, args, underlying) -> TyAlias(name, List.map recur args, recur underlying)
+    | TyFunc(arg, ret) -> TyFunc(recur arg, recur ret)
+    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy))
+    | TyOpenRecord(fields, row) -> TyOpenRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy), row)
+    | TyTag(name, payload) -> TyTag(name, Option.map recur payload)
+    | TyApply(name, args) -> TyApply(name, List.map recur args)
+    | TyUnion items -> TyUnion(List.map recur items)
+
+/// The type each named type variable of `general` stands for in `specific`, a type of the same shape: a function's
+/// type as it is declared, against the same type instantiated at a call.
+let rec private namedVarsIn (general: Ty) (specific: Ty) : Map<string, Ty> =
+    let all (pairs: (Ty * Ty) list) =
+        pairs |> List.fold (fun acc (g, s) -> namedVarsIn g s |> Map.fold (fun acc name ty -> acc |> Map.add name ty) acc) Map.empty
+    let fieldPairs (generalFields: Map<string, Ty>) (specificFields: Map<string, Ty>) =
+        [ for KeyValue(name, g) in generalFields do
+            match specificFields |> Map.tryFind name with
+            | Some s -> yield g, s
+            | None -> () ]
+    match general, specific with
+    | TyVar { Name = Some name }, _ -> Map.ofList [ name, specific ]
+    | TyFunc(ga, gr), TyFunc(sa, sr) -> all [ ga, sa; gr, sr ]
+    | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> all (List.zip gs ss)
+    | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
+    | TyNominal(_, gu, _), TyNominal(_, su, _) -> namedVarsIn gu su
+    | TyRecord gf, TyRecord sf -> all (fieldPairs gf sf)
+    | TyOpenRecord(gf, _), TyOpenRecord(sf, _) -> all (fieldPairs gf sf)
+    | TyTag(_, Some g), TyTag(_, Some s) -> namedVarsIn g s
+    | TyUnion gs, TyUnion ss when gs.Length = ss.Length -> all (List.zip gs ss)
+    | _ -> Map.empty
+
+/// Whether the types `a` and `b`, resolved as far as they can be, are the same type.
+let private sameType (a: Ty) (b: Ty) =
+    a = b
+    || ((TypeEnv.freeTyVars a).IsEmpty && (TypeEnv.freeTyVars b).IsEmpty
+        && Unifier.unify [ a, b, Equal, SourceSpan.none ] |> Result.isOk)
+
+/// The instance of `ctxName` applied to `argTys` nearest in scope in `env`, as written where it is put in scope.
+let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : TypeExpr option =
+    let prefix = $"{instancePrefix}{ctxName} "
+    env
+    |> Map.toSeq
+    |> Seq.filter (fun (name, _) -> name.StartsWith prefix)
+    |> Seq.choose (fun (name, scheme) ->
+        match resolveSoFar state scheme.Type with
+        | TyApply(_, instanceArgs) when instanceArgs.Length = argTys.Length && List.forall2 sameType instanceArgs argTys ->
+            Some (int (name.Substring prefix.Length), name)
+        | _ -> None)
+    |> Seq.sortByDescending fst
+    |> Seq.tryHead
+    |> Option.bind (fun (_, name) -> state.InstanceContexts |> Map.tryFind name)
+
+/// The members of the context `ctxName` with its parameters bound to `argTys`, each with its type.
+let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (Identifier * Ty) list option =
+    match state.TypeDefs |> Map.tryFind ctxName with
+    | Some info when info.Parameters.Length = argTys.Length ->
+        let substitution = List.zip info.Parameters argTys |> List.fold (fun acc (param, argTy) -> acc |> Map.add param.Id argTy) Map.empty
+        match Unifier.unalias info.Underlying with
+        | TyRecord fields -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.apply substitution ty))
+        | _ -> None
+    | _ -> None
+
+/// The instance of `ctxName` applied to `argTys` built from the definitions attached to the type it is for, as
+/// `Point.0` and `Point.+` make a `Sum(Point)`: each member's name and the definition it is. The definitions' types
+/// must be the members' types. `calleeName` requires the context at `span`.
+let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<(string * string) list * InferState, Diagnostic list> =
+    let ctxText = $"""{ctxName}({argTys |> List.map Unifier.tyToString |> String.concat ", "})"""
+    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+    match argTys, contextMemberTypes state ctxName argTys with
+    | [ forType ], Some members ->
+        // The name a definition for the type is attached under: `Point`, `$Money`, `Int`.
+        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
+        let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, tryResolveAttachedFunction env forType memberName)
+        match found |> List.filter (fun (_, _, definition) -> definition.IsNone) |> List.map (fun (memberName, _, _) -> $"'{attachTo}.{memberName}'") with
+        | [] ->
+            found
+            |> List.fold (fun result (memberName, memberTy, definition) ->
+                result
+                |> Result.bind (fun (bound, current: InferState) ->
+                    let definition = definition.Value
+                    let definitionTy, next = instantiate current (TypeEnv.tryFind definition env).Value
+                    match Unifier.unify ((memberTy, definitionTy, Equal, span) :: next.Constraints) with
+                    | Ok _ -> Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
+                    | Error _ ->
+                        fail $"'{calleeName}' requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
+        | missing ->
+            let listed =
+                match missing with
+                | [ only ] -> only
+                | _ -> String.concat ", " (List.truncate (missing.Length - 1) missing) + " and " + List.last missing
+            let notDefined = if missing.Length = 1 then "is not defined: define it" else "are not defined: define them"
+            fail $"'{calleeName}' requires the context '{ctxText}', which is not loaded here, and {listed} {notDefined}, or load an instance with `use`"
+    | _ -> fail $"'{calleeName}' requires the context '{ctxText}', which is not loaded here: load an instance with `use`"
+
+/// The type of each of `args`, the arguments of a parameterised context a function requires, at a call where the
+/// function has the type `calleeTy`. `signature` is the type the function declares, which `args` name its type
+/// variables from; it is read afresh, and is the callee's type at the call. Without one, the type variables are
+/// matched by name against `generalTy`, the callee's type before it was instantiated.
+let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option) (generalTy: Ty) (calleeTy: Ty) (args: TypeExpr list) : Ty list * InferState =
+    // Read with no variables in scope, so each variable is a fresh one, shared by the signature and the arguments.
+    let mutable current = { state with TypeVars = Map.empty }
+    let read (typeExpr: TypeExpr) =
+        let ty, next = typeExprToTy current typeExpr
+        current <- next
+        ty
+    let argTys =
+        match signature with
+        | Some signature ->
+            let signatureTy = read signature
+            let argTys = args |> List.map read
+            current <- addConstraint signatureTy calleeTy current
+            argTys
+        | None ->
+            let names = namedVarsIn generalTy calleeTy
+            args |> List.map (read >> replaceNamedVars names)
+    let current = { current with TypeVars = state.TypeVars }
+    argTys |> List.map (resolveSoFar current), current
+
+/// `env` with the instance `use C(T) = ...` loads in scope, when `binding` is one of a parameterised context.
+let private useInstance (env: TypeEnv) (state: InferState) (binding: UseBinding) : TypeEnv * InferState =
+    match binding with
+    | UseContextInstance(ctxType, _) -> bindInstance env state ctxType
+    | UseValue _ -> env, state
+
+/// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
+/// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
+/// for a type inference has not worked out yet is left to be found by its members' names, as one that is not
+/// parameterised is.
+let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
+    let contexts = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+    match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
+    | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
+        contexts
+        |> List.fold (fun result ctx ->
+            result
+            |> Result.bind (fun (found, current: InferState) ->
+                match ctx.Kind with
+                | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
+                    let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
+                    let argTys, current = contextArgTysAtCall current signature scheme.Type calleeTy args
+                    match instanceInScope env current ctxName argTys with
+                    | Some written -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    // A type with a name definitions can be attached to: not a variable, or a record written out.
+                    | None when argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) ->
+                        synthesizeInstance env current name ctxName argTys calleeSpan
+                        |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
+                    | None ->
+                        ensureContextAvailable true env current name [ ctx ] calleeSpan
+                        |> Result.map (fun next -> found @ [ None ], next)
+                | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
+        |> Result.map (fun (found, current) ->
+            if found |> List.forall Option.isNone then current
+            else { current with ContextInstances = current.ContextInstances |> Map.add call.Id found })
+    | _ -> Ok state
+
 /// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
 /// value of no known type yet is taken to be a record with at least that field, and an open record without it
 /// to have it among its others: reading `p.name` makes `p` a `(name: a, ...r)`. `None` when `ty` is known not to
@@ -1290,6 +1509,12 @@ let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) 
     let outer = state.Origin
     let origin = if SourceSpan.isNone expr.Span then outer else expr.Span
     inferExprKind env { state with Origin = origin } expr
+    |> Result.bind (fun (typedExpr, next) ->
+        match expr.Kind with
+        // A call to a function that requires a parameterised context finds its instance once its arguments are typed.
+        | FunctionCall(name, spanOpt, _) ->
+            resolveCallInstances env next expr name (nameSpan spanOpt expr) |> Result.map (fun next -> typedExpr, next)
+        | _ -> Ok (typedExpr, next))
     |> recordExprType
     |> Result.map (fun (typedExpr, next) -> typedExpr, { next with Origin = outer })
 
@@ -1414,7 +1639,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         else
         let contextCheck =
             match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
-            | Some contexts -> ensureContextAvailable true env state name contexts calleeSpan
+            // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
+            | Some contexts -> ensureContextAvailable true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
             | None -> Ok state
             |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) calleeSpan)
         match contextCheck with
@@ -1641,7 +1867,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match inferUseBinding env state binding with
         | Error err -> Error err
         | Ok (typedBinding, nextState) ->
-            let envWithUse = extendEnvWithRecordFields env typedBinding.Type
+            let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedBinding.Type) nextState binding
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) -> Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
             | Error err -> Error err
@@ -2352,7 +2578,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
                         let envWithCtx, nextState =
                             match contextOpt with
-                            | Some contexts -> extendEnvWithContexts env' current contexts
+                            | Some contexts -> extendEnvWithContexts env' current contexts ||> fun env state -> bindInstances env state contexts
                             | None -> env', current
                         let expectedInputOpt, expectedReturnOpt, expectedDeclaredOpt, nextState2 =
                             match declaredTypeExprOpt with
@@ -2376,7 +2602,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 ty, st, TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx, true
                         let nextStateWithReq =
                             match contextOpt with
-                            | Some contexts -> registerContextRequirement preboundState name contexts
+                            | Some contexts -> registerContextRequirement preboundState name contexts declaredTypeExprOpt
                             | None -> preboundState
                         // A local function that writes its type runs in the contexts the type declares; one that does
                         // not runs in those of the def around it.
@@ -2433,8 +2659,9 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then
                     match inferUseBinding env' current binding with
                     | Ok (typedExpr, next) ->
+                        let withUse, next = useInstance (extendEnvWithRecordFields env' typedExpr.Type) next binding
                         current <- next
-                        env' <- extendEnvWithRecordFields env' typedExpr.Type
+                        env' <- withUse
                         typedStatements <- typedStatements @ [ TypedUseStatement(binding, Some typedExpr) ]
                     | Error err -> errors <- err
             | ExprStatement expr ->
@@ -2622,7 +2849,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
                 let envWithCtx, nextState =
                     match contextOpt with
-                    | Some contexts -> extendEnvWithContexts env state contexts
+                    | Some contexts -> extendEnvWithContexts env state contexts ||> fun env state -> bindInstances env state contexts
                     | None -> env, state
                 let expectedInputOpt, expectedReturnOpt, expectedDeclaredOpt, nextState2 =
                     match declaredTypeExprOpt with
@@ -2648,7 +2875,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | None -> envWithCtx
                 let nextStateWithReq =
                     match contextOpt with
-                    | Some contexts -> registerContextRequirement nextState2 name contexts
+                    | Some contexts -> registerContextRequirement nextState2 name contexts declaredTypeExprOpt
                     | None -> nextState2
                 // A function runs in the contexts its type declares, or infers them. A value is computed at the top
                 // level, in the ambient ones.

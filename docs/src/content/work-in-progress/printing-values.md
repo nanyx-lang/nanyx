@@ -4,7 +4,7 @@ description: "Which values can be interpolated into a string, and what dbg print
 order: 5
 ---
 
-> **Status: proposal.** None of this is implemented yet. This page records the intended design and the questions that remain open; see [Open questions](#open-questions) at the end. The work is tracked in [#328](https://github.com/nanyx-lang/nanyx/issues/328), [#329](https://github.com/nanyx-lang/nanyx/issues/329), [#330](https://github.com/nanyx-lang/nanyx/issues/330) and [#331](https://github.com/nanyx-lang/nanyx/issues/331).
+> **Status: proposal.** Synthesizing a context from attached definitions, which `ToString` relies on, is implemented ([#328](https://github.com/nanyx-lang/nanyx/issues/328)); the rest is not yet. This page records the intended design and the questions that remain open; see [Open questions](#open-questions) at the end. The remaining work is tracked in [#329](https://github.com/nanyx-lang/nanyx/issues/329), [#330](https://github.com/nanyx-lang/nanyx/issues/330) and [#331](https://github.com/nanyx-lang/nanyx/issues/331).
 
 Nanyx turns values into text in two places: string interpolation, `"Total: {total}"`, and [`dbg`](../stdlib/io#dbg). They serve different readers, so they follow different rules.
 

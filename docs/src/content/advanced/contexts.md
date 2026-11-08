@@ -194,7 +194,15 @@ Context synthesis occurs when:
 - That type has attached definitions matching every member of the context
 - The types of those definitions are compatible with the context's signatures
 
-If any member is missing or has an incompatible type, synthesis fails and the compiler requires you to load the context explicitly.
+If any member is missing or has an incompatible type, synthesis fails and the compiler requires you to load the context explicitly. The error names the definition that is missing, such as `Point.+`, or the one whose type does not fit.
+
+Each call looks for its instance in this order, and takes the first it finds:
+
+1. An instance for that type loaded with `use` around the call, the nearest first.
+2. An instance the type of the function around the call declares: a generic `def total: [Sum(a)] list(a) -> a` passes its own `Sum(a)` on to the functions it calls.
+3. An instance synthesized from the type's attached definitions.
+
+An instance is for one type: a `use Sum(int)` in scope does not stand in for a `Sum(Point)`.
 
 ## Explicit loading takes priority
 

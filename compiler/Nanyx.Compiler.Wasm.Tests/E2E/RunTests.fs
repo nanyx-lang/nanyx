@@ -242,6 +242,42 @@ let ``Run - use bindings of parameterised contexts and records`` () =
     runSource source |> assertRan "3cm & three\n42\n"
 
 [<Fact>]
+let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Show(a) = (show: a -> string)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
+        "\n" +
+        "type $Money = private int\n" +
+        "def $Money.show: $Money -> string = { m ->\n" +
+        "  def $Money(pence) = m\n" +
+        "  \"{pence}p\"\n" +
+        "}\n" +
+        "\n" +
+        "def describe: [Show(a)] a -> string = { value -> \"<\" ++ Show(a).show(value) ++ \">\" }\n" +
+        "def both: [Show(a) + Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ \" & \" ++ Show(b).show(y) }\n" +
+        "def twice: [Show(a)] a -> string = { value -> describe(value) ++ describe(value) }\n" +
+        "def plain: [Show(a)] a -> string = { value -> show(value) }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def p = Point(x = 1, y = 2)\n" +
+        "  println(plain(p))\n" +
+        "  println(describe(p))\n" +
+        "  println(both($Money(5), p))\n" +
+        "  println(twice(p))\n" +
+        "  println(p \\describe)\n" +
+        "  use Show(Point) = ( show = { q -> \"nearer {q.y}\" } )\n" +
+        "  println(describe(p))\n" +
+        "  println(describe($Money(7)))\n" +
+        "}\n"
+    runSource source
+    |> assertRan "(1, 2)\n<(1, 2)>\n5p & (1, 2)\n<(1, 2)><(1, 2)>\n<(1, 2)>\n<nearer 2>\n<7p>\n"
+
+[<Fact>]
 let ``Run - string concatenation and equality`` () =
     let source =
         "import nanyx/console\n" +
