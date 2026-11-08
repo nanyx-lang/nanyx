@@ -111,7 +111,10 @@ let format (options: Options) (parsed: SourceModule) : string =
             | BlankLines _ -> None)
         |> Array.ofList
 
-    let placed = Array.zeroCreate<bool> comments.Length
+    // The `#!` line and directives at the top are kept as they are, with the comments among them.
+    let headerEnd = Directives.headerEnd source
+
+    let placed = comments |> Array.map (fun (_, span) -> span.Start < headerEnd)
 
     let blankRuns =
         parsed.Trivia
@@ -1093,7 +1096,14 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Expr value -> expr statementPosition value
         | Attribute n -> text $"@{n}"
 
-    Doc.render options.LineWidth (topLevel true 0 source.Length parsed.Items)
+    let code = Doc.render options.LineWidth (topLevel true headerEnd source.Length parsed.Items)
+    if headerEnd = 0 then
+        code
+    else
+        // A blank line between the header and the code is kept, and none is added.
+        let blankLineAfter = blankRuns |> List.exists (fun span -> span.Start = headerEnd + 1)
+        let separator = if code.Trim() = "" then "" elif blankLineAfter then "\n\n" else "\n"
+        source.Substring(0, headerEnd) + separator + code.TrimStart('\n') + (if code.Trim() = "" then "\n" else "")
 
 /// Formats the source of the file at `filePath`, or says why it does not parse.
 let formatSource (options: Options) (filePath: string) (input: string) : Result<string, ParseError> =

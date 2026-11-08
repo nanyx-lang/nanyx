@@ -162,9 +162,10 @@ public sealed class DocumentStore
         var path = uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : null;
         try
         {
-            var analyzers = _settings.AnalyzerOptionsFor(path);
+            var directives = Script.read(path ?? string.Empty, text);
+            var analyzers = _settings.AnalyzerOptionsFor(path, directives);
             var result = path is null ? Compiler.compileWith(analyzers, text) : Compiler.compileSourceWith(analyzers, path, text);
-            return new OpenDocument(text, path ?? string.Empty, result, null);
+            return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null);
         }
         catch (Exception ex)
         {

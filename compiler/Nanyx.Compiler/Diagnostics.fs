@@ -55,6 +55,9 @@ module DiagnosticCodes =
     let InvalidStandardLibraryModule = code 6 "Invalid standard library module" Severity.Error
     let UnknownAttribute = code 7 "Unknown attribute" Severity.Error
     let MisplacedAttribute = code 8 "Misplaced attribute" Severity.Error
+    let InvalidDirective = code 9 "Invalid directive" Severity.Error
+    let DirectiveInPackage = code 10 "Directive in a package" Severity.Error
+    let UnsupportedDirective = code 11 "Unsupported directive" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -84,7 +87,8 @@ module DiagnosticCodes =
     /// Every compiler code, in order.
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
-          InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute
+          InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
+          UnsupportedDirective
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

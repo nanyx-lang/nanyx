@@ -24,6 +24,7 @@
     <Compile Include="Analyzers.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
+    <Compile Include="Script.fs" />
     <Compile Include="Hover.fs" />
     <Compile Include="Definition.fs" />
     <Compile Include="TypeHints.fs" />

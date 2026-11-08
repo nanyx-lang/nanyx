@@ -267,7 +267,16 @@ The script can import other anonymous modules by file path:
 import "./utils" as utils
 ```
 
-For script mode, Nanyx synthesizes a package description in memory rather than requiring a `.nyxpack` file.
+For script mode, Nanyx synthesizes a package description in memory rather than requiring a `.nyxpack` file. A script can add to that description with `#:` directives at the top of the file, each saying what one manifest entry would:
+
+```nanyx
+#:analyzer default.unusedBindings error
+#:formatter indentSize 4
+
+import "./utils" as utils
+```
+
+`#:analyzer` and `#:formatter` stand for the `[analyzers]` and `[formatter]` tables, and `#:package <name> <version>` will stand for `[dependencies]` once dependencies are supported. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 

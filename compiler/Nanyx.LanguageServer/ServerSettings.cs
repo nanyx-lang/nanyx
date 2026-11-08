@@ -7,8 +7,9 @@ namespace Nanyx.LanguageServer;
 /// <param name="TopLevelTypeHints">Where to show the inferred types of top-level defs that do not write theirs.</param>
 /// <param name="Analyzers">
 /// Which analyzers run on each document and how serious their diagnostics are. When <c>null</c>, a document in a package
-/// gets the analyzers its <c>.nyxpack</c> manifest configures, as <c>nanyx build</c> does, and any other document every
-/// analyzer at its rules' default severities, as <c>nanyx run</c> does for a script.
+/// gets the analyzers its <c>.nyxpack</c> manifest configures, as <c>nanyx build</c> does, and any other document those
+/// its <c>#:analyzer</c> directives configure, or every analyzer at its rules' default severities if it has none, as
+/// <c>nanyx run</c> does for a script.
 /// </param>
 /// <param name="StandardLibrarySource">
 /// Where the standard library's source is written for the editor to open; under the user's local application data
@@ -22,9 +23,13 @@ public sealed record ServerSettings(
 {
     public static ServerSettings Default { get; } = new(TypeVarNames.Greek);
 
-    /// <summary>The analyzer options the document at <paramref name="path"/> (<c>null</c> if not on disk) is compiled with.</summary>
-    public AnalyzerOptions AnalyzerOptionsFor(string? path) =>
+    /// <summary>
+    /// The analyzer options the document at <paramref name="path"/> (<c>null</c> if not on disk) is compiled with, given
+    /// its <paramref name="directives"/> (which give none in a package).
+    /// </summary>
+    public AnalyzerOptions AnalyzerOptionsFor(string? path, ScriptDirectives directives) =>
         Analyzers
+        ?? directives.Analyzers?.Value
         ?? (path is null ? null : PackageModule.analyzersFor(path)?.Value)
         ?? NyxCompiler.Analyzers.defaultOptions;
 }

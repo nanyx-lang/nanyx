@@ -4,6 +4,7 @@
   "scopeName": "source.nanyx",
   "fileTypes": ["nyx"],
   "patterns": [
+    { "include": "#directives" },
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#attributes" },
@@ -23,6 +24,36 @@
     { "include": "#punctuation" }
   ],
   "repository": {
+    "directives": {
+      "patterns": [
+        {
+          "comment": "The #! line of a script run directly: `#!/usr/bin/env nanyx run`",
+          "name": "comment.line.shebang.nanyx",
+          "match": "\\A(#!).*$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.nanyx"
+            }
+          }
+        },
+        {
+          "comment": "A script's directive, at the start of a line: `#:analyzer default.unusedBindings error`",
+          "name": "meta.preprocessor.directive.nanyx",
+          "match": "^(#:)([A-Za-z_][A-Za-z0-9_]*)?(.*)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.directive.nanyx"
+            },
+            "2": {
+              "name": "keyword.control.directive.nanyx"
+            },
+            "3": {
+              "name": "string.unquoted.directive.nanyx"
+            }
+          }
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {

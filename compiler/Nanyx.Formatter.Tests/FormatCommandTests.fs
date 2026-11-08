@@ -219,3 +219,38 @@ let ``A manifest that is not valid TOML is an error naming it`` () =
 [<Fact>]
 let ``A formatter key that is not a table is an error naming it`` () =
     Assert.Contains("formatter must be a table", badSettings "formatter = 3\n")
+
+[<Fact>]
+let ``A script's #! line and directives are kept as written, with the comments among them`` () =
+    let header = "#!/usr/bin/env -S nanyx run\n-- Says hello.\n#:analyzer   default.unusedBindings error\n\n#:formatter lineWidth 100"
+    Assert.Equal(header + "\n\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\n\n\ndef add={a,b->a+b}"))
+    Assert.Equal(header + "\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\ndef add={a,b->a+b}"))
+    Assert.Equal(header + "\n", formattedWith Formatter.Options.defaults (header + "\n\n"))
+
+[<Fact>]
+let ``A script's formatter directives set its options`` () =
+    let directory = directoryWith [ "a.nyx", "#:formatter indentSize 4\n#:formatter lineWidth 20\n" + block ]
+    let file = Path.Combine(directory, "a.nyx")
+    Assert.Equal(Result.Ok { Formatter.Options.LineWidth = 20; Formatter.Options.IndentSize = 4 }, Settings.withDirectives file (File.ReadAllText file) Formatter.Options.defaults)
+    run Write [ file ] |> ignore
+    Assert.Equal("#:formatter indentSize 4\n#:formatter lineWidth 20\ndef x =\n    def a = 1\n    a\n", File.ReadAllText file)
+
+[<Theory>]
+[<InlineData("#:formatter tabs 2", "unknown setting #:formatter tabs; the settings are lineWidth and indentSize")>]
+[<InlineData("#:formatter lineWidth 0", "#:formatter lineWidth must be a positive integer, not '0'")>]
+[<InlineData("#:formatter lineWidth", "#:formatter takes a setting and its value")>]
+let ``A formatter directive that is not valid is an error naming the file and line, and the file is left alone`` (directive: string, message: string) =
+    let directory = directoryWith [ "a.nyx", "-- A script.\n" + directive + "\n" + unformatted ]
+    let file = Path.Combine(directory, "a.nyx")
+    match run Write [ file ] with
+    | [ _, Failed(BadSettings error) ] -> Assert.StartsWith($"{file}:2:1: {message}", error)
+    | other -> failwith $"Unexpected results: %A{other}"
+    Assert.Equal("-- A script.\n" + directive + "\n" + unformatted, File.ReadAllText file)
+
+[<Fact>]
+let ``A formatter directive in a file of a package is an error saying to use the manifest`` () =
+    let directory = directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "a.nyx", "#:formatter indentSize 2\n" + block ]
+    let file = Path.Combine(directory, "a.nyx")
+    match run Write [ file ] with
+    | [ _, Failed(BadSettings error) ] -> Assert.Contains("[formatter] table of " + Path.Combine(directory, "app.nyxpack"), error)
+    | other -> failwith $"Unexpected results: %A{other}"

@@ -55,7 +55,16 @@ An analyzer runs only if the manifest has a table for it, so removing `[analyzer
 [analyzers.default]
 ```
 
-A single file run on its own (`nanyx run script.nyx`) has no manifest, so it runs the default analyzer with its defaults.
+A single file run on its own (`nanyx run script.nyx`) has no manifest, so it runs the default analyzer with its defaults, unless it configures its analyzers with `#:analyzer` directives at the top of the file. Each directive says what one manifest entry would: `#:analyzer default` is an empty `[analyzers.default]` table, and `#:analyzer default.unusedBindings error` sets one rule's severity. As in a manifest, only the analyzers the directives name run:
+
+```nanyx
+#:analyzer default.unusedBindings error
+#:analyzer default.nonTailRecursion none
+
+import nanyx/console
+
+println("Hello!")
+```
 
 `nanyx run` shows only errors and warnings before it runs the program. `"info"` and `"hint"` diagnostics are suggestions for code you are working on, so `nanyx check` and the editor show them.
 

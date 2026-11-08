@@ -37,7 +37,8 @@ module Manifest =
 
     let private versionPattern = Regex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
-    let private severities =
+    /// The severities a rule can be given, by name, `none` turning it off.
+    let severities =
         [ "error", Some Severity.Error
           "warning", Some Severity.Warning
           "info", Some Severity.Info
@@ -243,9 +244,24 @@ module Package =
             | Result.Error _ -> None
         | _ -> None
 
+    /// An error for each `#:` directive at the top of the file at `filePath`, whose text is `source`, which is in the
+    /// package whose manifest is at `manifestPath`: directives say what a manifest would, for a script, which has none.
+    let directiveErrors (manifestPath: string) (filePath: string) (source: string) : Diagnostic list =
+        Directives.read (Path.GetFullPath filePath) source
+        |> List.map (fun directive ->
+            Diagnostics.at
+                DiagnosticCodes.DirectiveInPackage
+                directive.Span
+                $"#:{directive.Name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
+
     /// Checks every source file of `package`, running the analyzers its manifest turns on over each.
     let build (package: Package) : PackageBuild =
-        let results = package.Sources |> List.map (fun file -> file, Compiler.compileFileWith package.Manifest.Analyzers file)
+        let results =
+            package.Sources
+            |> List.map (fun file ->
+                let source = File.ReadAllText file
+                let result = Compiler.compileSourceWith package.Manifest.Analyzers file source
+                file, { result with Diagnostics = directiveErrors package.Manifest.Path file source @ result.Diagnostics })
         { Package = package
           Results = results
           Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics) |> List.distinct }

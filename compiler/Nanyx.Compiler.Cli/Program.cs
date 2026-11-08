@@ -233,6 +233,10 @@ internal static class CliCommands
                     case Nanyx.Formatter.FormatCommand.Formatting.NotSafe notSafe:
                         Console.Error.WriteLine($"{DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
                         break;
+                    // A directive's error is the file's own, and starts with where in it the directive is.
+                    case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings when badSettings.Item.StartsWith(file + ":", StringComparison.Ordinal):
+                        Console.Error.WriteLine($"{DisplayPath(file)}{badSettings.Item[file.Length..]}; the file was left as it is.");
+                        break;
                     case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings:
                         if (settingsErrors.Add(badSettings.Item))
                         {
@@ -303,7 +307,8 @@ internal static class CliCommands
             return RunParse(inputFile);
         }
 
-        var result = Compiler.compileFile(inputFile);
+        // Script mode: the file's #: directives say what a package's manifest would.
+        var result = Script.compileFile(inputFile);
 
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
         if (target == Target.Run)
