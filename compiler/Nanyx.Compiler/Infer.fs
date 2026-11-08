@@ -79,6 +79,9 @@ type InferState =
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
             /// `x \trim` on a string calls `String.trim`.
             PipeTargets: Map<NodeId, Identifier>;
+            /// The built-in property each member access reads, by its node, where it reads one rather than a
+            /// record's field: `s.length` on a string.
+            BuiltInProperties: Map<NodeId, BuiltInProperty>;
             /// Where a constraint added now is reported if it cannot be satisfied: the expression being inferred.
             Origin: SourceSpan }
 
@@ -111,6 +114,7 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
+            BuiltInProperties = Map.empty;
             Origin = SourceSpan.none }
 
 let private freshVar (state: InferState) =
@@ -329,6 +333,40 @@ let private tryResolveAttachedFunction (env: TypeEnv) (lhsType: Ty) (funcName: s
         attachedTypeNames lhsType
         |> List.map (fun typeName -> $"{typeName}.{funcName}")
         |> List.tryFind (fun name -> env.ContainsKey name)
+
+/// The names of the built-in properties, whatever type has them.
+let builtInPropertyNames = [ "length" ]
+
+/// The built-in property `name` of a value of type `ty`, and the property's type, if the type has one of that name:
+/// a string's or a list's `length`.
+let builtInProperty (ty: Ty) (name: string) : (BuiltInProperty * Ty) option =
+    match Unifier.unalias ty, name with
+    | TyPrimitive "string", "length" -> Some (StringLength, TyPrimitive "int")
+    | TyApply("list", _), "length" -> Some (ListLength, TyPrimitive "int")
+    | _ -> None
+
+/// The error for reading `memberName` with a dot from a value of type `ty` that has no such field or property.
+/// `receiver` is the value as written, if it is a name. A definition attached to the type under that name is
+/// reached with a pipe, not a dot, so the message says so when there is one.
+let private unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string option) (ty: Ty) (memberName: string) : Diagnostic =
+    let rec isRecord (ty: Ty) =
+        match Unifier.unalias ty with
+        | TyRecord _
+        | TyOpenRecord _ -> true
+        | TyNominal(_, underlying, _) -> isRecord underlying
+        | _ -> false
+    let missing =
+        match receiver with
+        | Some name when isRecord ty -> $"Record '{name}' has no member '{memberName}'"
+        | None when isRecord ty -> $"Unknown member '{memberName}'"
+        | _ -> $"'{Unifier.tyToString ty}' has no property '{memberName}'"
+    let message =
+        match tryResolveAttachedFunction env ty memberName with
+        | Some attached ->
+            let piped = receiver |> Option.defaultValue "x"
+            $"{missing}. '{attached}' is attached to its type: call it with a pipe, as in `{piped} \\{memberName}`"
+        | None -> missing
+    Diagnostics.at DiagnosticCodes.UnknownMember span message
 
 /// The alias `name`, defined by `info`, written without arguments: a generic one is applied to its own parameters.
 let private aliasType (name: string) (info: TypeDefInfo) : Ty =
@@ -1298,7 +1336,22 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
                     else
                         Error errors
-                | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" ]
+                | None ->
+                    // `s.contains("x")` is read as a call to a function named `s.contains`. When `s` is a value, the
+                    // dot was meant to reach a definition attached to its type, which is a pipe's to do.
+                    let dot = name.LastIndexOf '.'
+                    let receiver = if dot > 0 then name.Substring(0, dot) else ""
+                    match TypeEnv.tryFind receiver env with
+                    | Some scheme when dot > 0 && not (receiver.Contains '.') ->
+                        let memberName = name.Substring(dot + 1)
+                        let receiverTy = resolveSoFar state scheme.Type
+                        let message =
+                            match tryResolveAttachedFunction env receiverTy memberName with
+                            | Some attached ->
+                                $"'{receiver}' is a value, so '{name}' is not a function's name. '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
+                            | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
+                        Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
+                    | _ -> Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" ]
     | Lambda(args, body) ->
         inferLambdaWithExpected env state expr args body None None
     | BinaryOp(_, left, right) ->
@@ -1920,20 +1973,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
                 Ok (mkTypedExpr expr ty None None None, next)
-            | None ->
-                match inferExpr env state baseExpr with
-                | Error err -> Error err
-                | Ok (typedBase, next) ->
-                    match fieldTySoFar next typedBase.Type memberName with
-                    | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
-                    | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownMember memberSpan $"Record '{baseName}' has no member '{memberName}'" ]
-        | _ ->
-            match inferExpr env state baseExpr with
-            | Error err -> Error err
-            | Ok (typedBase, next) ->
-                match fieldTySoFar next typedBase.Type memberName with
-                | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
-                | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownMember memberSpan $"Unknown member '{memberName}'" ]
+            | None -> readMember env state expr baseExpr (Some baseName) memberName memberSpan
+        | _ -> readMember env state expr baseExpr None memberName memberSpan
     | ContextMemberAccess(ctxType, memberName) ->
         // TODO: Look up the context type and find the member's type
         // For now, return a fresh type variable
@@ -1953,6 +1994,23 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             Ok (mkTypedExpr expr ty None None None, next)
         else
             Error errors
+
+/// `baseExpr.memberName`, where `expr` is that member access and `receiver` the base as written if it is a name: a
+/// record's field, or else a built-in property of the base's type as far as the code before it settles that type,
+/// as for a pipe. A value of no known type yet is taken to be a record with that field (see `fieldTySoFar`), so
+/// `{ s -> s.length }` reads a field, not a string's length.
+and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (baseExpr: Expression) (receiver: string option) (memberName: string) (memberSpan: SourceSpan) =
+    match inferExpr env state baseExpr with
+    | Error err -> Error err
+    | Ok (typedBase, next) ->
+        match fieldTySoFar next typedBase.Type memberName with
+        | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
+        | None ->
+            let baseTy = resolveSoFar next typedBase.Type
+            match builtInProperty baseTy memberName with
+            | Some (property, propertyTy) ->
+                Ok (mkTypedExpr expr propertyTy None None None, { next with BuiltInProperties = next.BuiltInProperties |> Map.add expr.Id property })
+            | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
 and inferUseBinding (env: TypeEnv) (state: InferState) (binding: UseBinding) : Result<TypedExpr * InferState, Diagnostic list> =
     match binding with

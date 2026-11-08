@@ -26,6 +26,14 @@ type SymbolKind =
     /// a qualified `Context.member`, refers to it.
     | ContextMember
 
+/// A property a built-in type has, read with a dot as a record's field is: `s.length`. A dot on a value reads only
+/// these and a record's fields, never a definition attached to the value's type; that is a pipe's.
+type BuiltInProperty =
+    /// A string's `length`: its number of bytes, as `String.length` gives it.
+    | StringLength
+    /// A list's `length`: its number of elements, as `List.length` gives it.
+    | ListLength
+
 /// Something a name can refer to, and where it is declared. A symbol from an imported module is declared in
 /// that module's file.
 type Symbol =

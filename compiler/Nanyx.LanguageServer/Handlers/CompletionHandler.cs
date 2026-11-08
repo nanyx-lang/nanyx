@@ -172,6 +172,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
                 {
                     Label = member.Name,
                     Kind = member.Kind.IsField ? CompletionItemKind.Field
+                        : member.Kind.IsProperty ? CompletionItemKind.Property
                         : member.Kind.IsPrefix ? CompletionItemKind.Module
                         : member.IsFunction ? CompletionItemKind.Function
                         : CompletionItemKind.Variable,

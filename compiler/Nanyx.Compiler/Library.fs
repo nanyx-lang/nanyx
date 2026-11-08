@@ -196,6 +196,26 @@ module Compiler =
                 | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
                 | other, _ -> other)
 
+    /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
+    /// prelude's `List.length`, which every module imports.
+    let private builtInPropertyFunction (property: BuiltInProperty) : Identifier =
+        match property with
+        | StringLength -> Intrinsics.stringLength
+        | ListLength -> "List.length"
+
+    /// `expr` with each read of a built-in property (`properties`, by the member access's node) written as a call to
+    /// the function that reads it, for the backend, which knows only records' fields: `s.length` is
+    /// `__nanyx_string_length(s)`.
+    let private callBuiltInProperties (properties: Map<NodeId, BuiltInProperty>) (expr: Expression) : Expression =
+        if properties.IsEmpty then
+            expr
+        else
+            expr
+            |> mapExpressionKinds (fun current kind ->
+                match kind, properties |> Map.tryFind current.Id with
+                | MemberAccess(target, _, rangeOpt), Some property -> FunctionCall(builtInPropertyFunction property, rangeOpt, [ target ])
+                | other, _ -> other)
+
     /// Every name an expression may refer to: identifiers, callees and pipe targets, and for a member access
     /// `a.b.c` both the dotted name and the member as `.c`, since the backend may call a definition named either
     /// way. Shadowing is ignored, so this can only over-count.
@@ -765,17 +785,19 @@ module Compiler =
         resolvedTypes, resolvedTypeDefs, resolvedItems
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function written with the name it resolved to (`pipeTargets`), without import statements.
-    let private moduleFromTypedItems (pipeTargets: Map<NodeId, Identifier>) (items: TypedTopLevelItem list) : Module =
+    /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
+    /// call (`properties`), and without import statements.
+    let private moduleFromTypedItems (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (items: TypedTopLevelItem list) : Module =
+        let lower (expr: Expression) = expr |> retargetPipes pipeTargets |> callBuiltInProperties properties
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
             | TypedImport _ -> None
             | TypedDef (TypedValueDef(isExport, name, typeOpt, expr)) ->
-                Some (Def (ValueDef(isExport, name, typeOpt, retargetPipes pipeTargets expr.Expr)))
+                Some (Def (ValueDef(isExport, name, typeOpt, lower expr.Expr)))
             | TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ->
                 Some (Def (TypeDef(name, modifiers, parameters, body)))
-            | TypedExprItem expr -> Some (Expr (retargetPipes pipeTargets expr.Expr)))
+            | TypedExprItem expr -> Some (Expr (lower expr.Expr)))
         |> List.map TopLevelItem.synthetic
 
     let private originKey (origin: ModuleOrigin) =
@@ -981,7 +1003,7 @@ module Compiler =
                     | Error (message, span) -> Error (Typed, [ Diagnostics.at DiagnosticCodes.TypeMismatch span message ])
                     | Ok subst ->
                         let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
-                        let own = moduleFromTypedItems state.PipeTargets resolvedItems
+                        let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties resolvedItems
                         // The module's own definitions win over imported ones of the same name.
                         let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                         let inlined =

@@ -863,6 +863,19 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Completion_after_a_dot_on_a_string_offers_its_length_and_nothing_attached()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-6");
+
+        Open(uri, "import nanyx/text\ndef s = \"abc\"\ndef n = s.length\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(
+            [("length", CompletionItemKind.Property, "int")],
+            (await CompletionsAt(uri, 2, 10)).Select(item => (item.Label, item.Kind, item.Detail)));
+    }
+
+    [Fact]
     public async Task Completion_after_an_imports_alias_offers_its_exports()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-3");

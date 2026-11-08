@@ -83,8 +83,8 @@ what the compiler keeps: exact spans, resolved names and types.
   not): an import's exports under its alias, a dotted export a segment at a time (`t.` offers `String`), and the
   definitions attached to a type (`Result.`). An imported definition's type is its module's (`ImportedTypes`). Only a
   name or a dotted name before the dot is understood, not a call's result. A dot on a value never reaches an
-  attached definition, so none is offered there; a string's or a list's built-in `length` will be, once the
-  compiler has it ([#185](https://github.com/nanyx-lang/nanyx/issues/185)). A value's attached definitions are
+  attached definition, so none is offered there; a string's or a list's built-in `length` is
+  ([#185](https://github.com/nanyx-lang/nanyx/issues/185); `Infer.builtInProperty`). A value's attached definitions are
   reached with a pipe, and offered after `\`.
 - **Completion after a pipe's `\`** ([#269](https://github.com/nanyx-lang/nanyx/issues/269)), triggered by typing
   it. The names just before the `\` are read from the characters (`CompletionContext.PipedPath`), across a line

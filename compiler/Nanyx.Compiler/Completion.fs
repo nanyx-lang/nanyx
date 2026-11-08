@@ -56,6 +56,8 @@ let typedNamesInScope (names: TypeVarNames) (result: CompileResult) (offset: int
 type MemberKind =
     /// A field of a record.
     | Field
+    /// A property a built-in type has: a string's `length`.
+    | Property
     /// A definition written after the prefix: `foo` in `m.foo`, `uppercase` in `String.uppercase`.
     | Definition
     /// A further prefix: `String` in `t.String.uppercase`.
@@ -85,8 +87,8 @@ let private valueType (typed: TypedModule) (result: CompileResult) (offset: int)
 
 /// What can follow `path` and a dot at `offset` in the compiled root module, ordered by name, where `path` is the
 /// names written before the dot (`p`, or `p`, `inner` for `p.inner.`). If the first is a value in scope there, these
-/// are the fields of its record type, followed through the rest of the path; a tuple's numbered items are left out,
-/// and a value whose type is not yet known to be a record has none. Otherwise they are the module's names written
+/// are the fields of its record type, followed through the rest of the path, or the built-in properties of its type
+/// (a string's `length`); a tuple's numbered items are left out, and a value whose type is not yet known has none. Otherwise they are the module's names written
 /// under the path as a prefix (see `TypedModule.ModuleNames`): an import's exports under its alias (`m.`), or
 /// definitions attached to a type (`String.`). A dot on a value never reaches a definition attached to its type:
 /// that is a pipe's (see `pipeTargetsAt`). Empty when the module did not type-check.
@@ -96,14 +98,24 @@ let membersAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path:
     | Some typed ->
         match valueType typed result offset path with
         | Some pathType ->
-            pathType
-            |> Option.bind recordFields
-            |> Option.map (fun fields ->
-                fields
-                |> Map.toList
-                |> List.filter (fun (name, _) -> not (System.Char.IsDigit name.[0]))
-                |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty }))
-            |> Option.defaultValue []
+            let fields =
+                pathType
+                |> Option.bind recordFields
+                |> Option.map (fun fields ->
+                    fields
+                    |> Map.toList
+                    |> List.filter (fun (name, _) -> not (System.Char.IsDigit name.[0]))
+                    |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty }))
+                |> Option.defaultValue []
+            let properties =
+                match pathType with
+                | Some ty ->
+                    Infer.builtInPropertyNames
+                    |> List.choose (fun name ->
+                        Infer.builtInProperty ty name
+                        |> Option.map (fun (_, propertyTy) -> { Name = name; Kind = Property; Type = typeOf propertyTy; IsFunction = false }))
+                | None -> []
+            fields @ properties |> List.sortBy (fun item -> item.Name)
         | None ->
             let prefix = String.concat "." path + "."
             typed.ModuleNames
