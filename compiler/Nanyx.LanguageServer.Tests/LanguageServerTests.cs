@@ -405,6 +405,23 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Hover_on_a_type_name_shows_the_type_definition_even_inside_a_block()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-9");
+
+        Open(uri, "type Point = (x: int, y: int)\ndef local = {\n  def p: Point = (x = 1, y = 2)\n  p.x\n}\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var hover = await _client.TextDocument.RequestHover(
+            new HoverParams { TextDocument = new TextDocumentIdentifier(uri), Position = new Position(2, 10) },
+            _cancellation.Token);
+
+        Assert.NotNull(hover);
+        Assert.Equal("```nanyx\ntype Point = (x: int, y: int)\n```", hover.Contents.MarkupContent?.Value);
+        Assert.Equal(new Range(2, 9, 2, 14), hover.Range);
+    }
+
+    [Fact]
     public void Server_advertises_quick_fixes()
     {
         Assert.Contains(

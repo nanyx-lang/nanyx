@@ -2485,6 +2485,50 @@ let ``References to an import are the alias its names are written with`` () =
         [ "t", offsetOf source "t.String" 0 0; "t", offsetOf source "t.String" 1 0 ],
         referencesAt source (offsetOf source "as t" 0 3))
 
+/// What hovering the type name at `offset` shows, and the text of the name it covers.
+let private typeDefinitionHover (file: string) (result: CompileResult) (source: string) (offset: int) =
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Definition.typeDefinitionAt Greek file result offset
+    |> Option.map (fun info -> info.Type, source.Substring(info.Span.Start, info.Span.End - info.Span.Start))
+
+[<Fact>]
+let ``Hovering a type's name shows its definition`` () =
+    let source =
+        "type Point = (x: int, y: int)\n" +
+        "type Box(a) = (item: a)\n" +
+        "type Shape = #circle(int) | #square(int)\n" +
+        "context Logger = (log: string -> ())\n" +
+        "def origin: Point = (x = 0, y = 0)\n" +
+        "def boxed: Box(Point) = (item = origin)\n" +
+        "def greet: [Logger] string -> () = { s -> log(s) }\n" +
+        "def local = {\n" +
+        "  def p: Point = (x = 1, y = 2)\n" +
+        "  p.x\n" +
+        "}\n"
+    let result = Compiler.compile source
+    let hover text within = typeDefinitionHover "" result source (offsetOf source text 0 within)
+    let point = Some ("type Point = (x: int, y: int)", "Point")
+    // In an annotation, on the type's own name, and in a local def's annotation inside a block.
+    Assert.Equal(point, hover "origin: Point" 9)
+    Assert.Equal(point, hover "type Point" 6)
+    Assert.Equal(point, hover "p: Point" 4)
+    // A type's parameters keep their names, and an applied type is shown as it is defined.
+    Assert.Equal(Some ("type Box(a) = (item: a)", "Box"), hover "Box(Point)" 1)
+    Assert.Equal(point, hover "Box(Point)" 5)
+    Assert.Equal(Some ("type Shape = #circle(int) | #square(int)", "Shape"), hover "type Shape" 6)
+    // A context, in a signature. A function-typed member is bracketed, as the type printer writes any field's.
+    Assert.Equal(Some ("context Logger = (log: (string -> ()))", "Logger"), hover "[Logger]" 2)
+    // Anything else is not a type's name.
+    Assert.Equal(None, hover "def origin" 5)
+    Assert.Equal(None, hover "x: int" 3)
+
+[<Fact>]
+let ``Hovering an imported type's name shows its definition`` () =
+    let source = "def ok: Result(int, string) = #some(1)\n"
+    Assert.Equal(
+        Some ("type Result(a, e) = #some(a) | #error(e)", "Result"),
+        typeDefinitionHover "" (Compiler.compile source) source (offsetOf source "Result" 0 1))
+
 // The outline: what a module declares, as a tree.
 
 /// An outline item as its name, kind, the text its name span covers, and its children likewise.

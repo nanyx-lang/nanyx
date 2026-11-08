@@ -700,7 +700,8 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
             let tyVar, next = freshVar current
             current <- next
             match tyVar with
-            | TyVar var -> paramName, var
+            // The variable keeps the parameter's name, so the type is shown as it is written.
+            | TyVar var -> paramName, { var with Name = Some paramName }
             | _ -> failwith "Expected TyVar")
     let updatedTypeVars =
         paramEntries
@@ -739,7 +740,13 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
         TypeVars = originalTypeVars
         TypeDefs =
             next.TypeDefs
-            |> Map.add name { Parameters = paramVars; Underlying = underlyingTy; IsPrivate = isPrivate; Symbol = symbol; Members = members }
+            |> Map.add name
+                { Parameters = paramVars
+                  Underlying = underlyingTy
+                  IsPrivate = isPrivate
+                  IsContext = isContextDef modifiers
+                  Symbol = symbol
+                  Members = members }
         ContextDefs = nextContexts
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }

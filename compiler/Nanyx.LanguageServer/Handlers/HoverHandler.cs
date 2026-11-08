@@ -2,14 +2,16 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using CompilerHover = NyxCompiler.Hover;
+using Definition = NyxCompiler.Definition;
 
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Shows the inferred type of the expression under the pointer, read from the document's last compile that
 /// type-checked. On a call's function name it shows the function's type instantiated at that call, and on a
-/// declaration's own name (a def, a parameter, a pattern variable) the type of what it declares. Nothing is shown in
-/// a top-level item edited since that compile, nor in a document that has never type-checked.
+/// declaration's own name (a def, a parameter, a pattern variable) the type of what it declares. On a type's name it
+/// shows the type's definition instead, even inside an expression. Nothing is shown in a top-level item edited since
+/// that compile, nor in a document that has never type-checked.
 /// </summary>
 public sealed class HoverHandler : HoverHandlerBase
 {
@@ -28,13 +30,15 @@ public sealed class HoverHandler : HoverHandlerBase
     private Hover? Compute(HoverParams request)
     {
         var document = _documents.TryGet(request.TextDocument.Uri);
-        if (document?.LastGood?.Compiled is not { } compiled
+        if (document?.LastGood is not { Compiled: { } compiled } lastGood
             || document.ToLastGood(document.Positions.ToOffset(request.Position)) is not { } offset)
         {
             return null;
         }
 
-        var info = CompilerHover.typeAt(_settings.TypeVarNames, compiled, offset);
+        // A type's name, in an annotation inside a block say, is about the type, not the block around it.
+        var info = Definition.typeDefinitionAt(_settings.TypeVarNames, lastGood.FileName, compiled, offset)
+            ?? CompilerHover.typeAt(_settings.TypeVarNames, compiled, offset);
         if (info is null || document.FromLastGood(info.Value.Span.Start, info.Value.Span.End) is not { } span)
         {
             return null;

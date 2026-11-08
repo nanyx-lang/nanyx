@@ -38,6 +38,12 @@ what the compiler keeps: exact spans, resolved names and types.
   is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A
   declared signature or doc comment needs name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)),
   and a file that has never type-checked shows no hover.
+- **Hover on a type's name shows its definition** ([#297](https://github.com/nanyx-lang/nanyx/issues/297)):
+  `type Point = (x: int, y: int)`, or `context Logger = (...)` for a context. The type is the one go-to-definition
+  finds (`Definition.typeDefinitionAt`), in an annotation, a type definition or a signature's contexts, whether the
+  module's own, an imported one or the prelude's, printed from its `TypeDefInfo` with the type printer hover uses.
+  A type's parameters keep the names they are written with (`type Box(a) = (item: a)`). On a type's name this
+  takes precedence over the type of an expression around it, such as the block a local def's annotation is in.
 - **The last good compile is kept** ([#210](https://github.com/nanyx-lang/nanyx/issues/210)). While the text does
   not type-check, hover, lenses and inlay hints read the last text of the document that did (`OpenDocument.LastGood`).
   The client sends whole documents, so what changed since is taken as one region, between the texts' common start
