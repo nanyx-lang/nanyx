@@ -37,6 +37,11 @@ type InferState =
             /// The imported definitions that are an ambient context instance's members, by name: the definition's
             /// symbol and the context's name. `println` is the runtime's `Console`'s, which `@entry` imports.
             AmbientMembers: Map<string, SymbolId * Identifier>;
+            /// The ambient contexts an imported function requires that this module cannot name itself, by their
+            /// names in `TypeDefs` (hidden ones): `Console`, required by a function of a module that imports
+            /// `nanyx/console`, in a module that does not. Like any ambient context they are the top level's, and a
+            /// def has them only if it declares them or infers them.
+            CarriedAmbientContexts: Set<Identifier>;
             ContextScope: ContextScope;
             /// The ambient contexts each unannotated top-level def uses itself, by the def's name.
             InferredContexts: Map<Identifier, Set<Identifier>>;
@@ -91,6 +96,7 @@ let emptyState =
             ContextDefs = Map.empty;
             ContextRequirements = Map.empty;
             AmbientMembers = Map.empty;
+            CarriedAmbientContexts = Set.empty;
             ContextScope = AmbientScope;
             InferredContexts = Map.empty;
             UnannotatedDefs = Map.empty;
@@ -607,7 +613,20 @@ let private extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: 
     for ctx in contexts do
         let members, next = collectContextMembers current ctx
         current <- next
-        env' <- members |> List.fold (fun acc (name, ty, symbol) -> TypeEnv.declare name symbol (TypeEnv.mono ty) acc) env'
+        // A context named through an import's alias (`c.Console`) also supplies its members under the alias
+        // (`c.println`), which would otherwise still be the ambient instance's.
+        let qualifier =
+            match ctx.Kind with
+            | TypeName name
+            | TypeApply(name, _) when name.Contains '.' -> Some (name.Substring(0, name.LastIndexOf '.'))
+            | _ -> None
+        env' <-
+            members
+            |> List.fold (fun acc (name, ty, symbol) ->
+                let acc = TypeEnv.declare name symbol (TypeEnv.mono ty) acc
+                match qualifier with
+                | Some qualifier -> TypeEnv.declare $"{qualifier}.{name}" symbol (TypeEnv.mono ty) acc
+                | None -> acc) env'
     env', current
 
 let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Identifier list =
@@ -676,14 +695,18 @@ let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Id
         state.AmbientMembers
         |> Map.toList
         |> List.groupBy (fun (_, (_, ctxName)) -> ctxName)
-    membersByContext
-    |> List.filter (fun (_, members) ->
-        match state.ContextScope with
-        | AmbientScope -> true
-        | DefScope _ ->
-            members |> List.forall (fun (memberName, _) -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName)))
-    |> List.map fst
-    |> Set.ofList
+    let fromMembers =
+        membersByContext
+        |> List.filter (fun (_, members) ->
+            match state.ContextScope with
+            | AmbientScope -> true
+            | DefScope _ ->
+                members |> List.forall (fun (memberName, _) -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName)))
+        |> List.map fst
+        |> Set.ofList
+    match state.ContextScope with
+    | AmbientScope -> Set.union fromMembers state.CarriedAmbientContexts
+    | DefScope _ -> fromMembers
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the def `defName`, whose type does not
 /// declare it.
@@ -708,7 +731,7 @@ let private checkContextUse (env: TypeEnv) (state: InferState) (name: Identifier
         needAmbientContext state ctxName $"'{name}' is a member of" span
     else
         match state.UnannotatedDefs |> Map.tryFind name, TypeEnv.tryFind name env with
-        | Some symbol, Some scheme when scheme.Symbol = Some symbol && not state.AmbientMembers.IsEmpty ->
+        | Some symbol, Some scheme when scheme.Symbol = Some symbol && not (state.AmbientMembers.IsEmpty && state.CarriedAmbientContexts.IsEmpty) ->
             let deferred = { Caller = state.ContextScope; Callee = name; Span = span; Available = availableAmbientContexts env state }
             Ok { state with DeferredContextUses = deferred :: state.DeferredContextUses }
         | _ -> Ok state
@@ -721,8 +744,18 @@ let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: 
         |> List.map (fun ctx ->
             let members, _ = collectContextMembers state ctx
             ctx, members |> List.map (fun (memberName, _, _) -> memberName))
+    let isCarried (ctx: TypeExpr) =
+        match ctx.Kind with
+        | TypeName ctxName
+        | TypeApply(ctxName, _) -> state.CarriedAmbientContexts.Contains ctxName
+        | _ -> false
+    // A carried ambient context is supplied by something nearer only if its members are in scope and not the
+    // instance's; otherwise it is needed from the ambient instance, as a context this module can name is.
+    let suppliedNearer members =
+        members |> List.forall (fun memberName -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName))
     let missing =
         requiredMembers
+        |> List.filter (fst >> isCarried >> not)
         |> List.collect snd
         |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone)
         |> List.distinct
@@ -733,6 +766,8 @@ let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: 
             result
             |> Result.bind (fun current ->
                 match ctx.Kind, members |> List.exists (isAmbientMember env current) with
+                | (TypeName ctxName | TypeApply(ctxName, _)), _ when isCarried ctx && not (suppliedNearer members) ->
+                    needAmbientContext current ctxName $"'{name}' requires" span
                 | (TypeName ctxName | TypeApply(ctxName, _)), true -> needAmbientContext current ctxName $"'{name}' requires" span
                 | _ -> Ok current)) (Ok state)
     else
@@ -1262,7 +1297,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             match Unifier.unalias funcTy with
                             | TyFunc(_, declaredRet) -> declaredRet, current
                             | _ -> freshVar current
-                        let expectedInput, nextState2 = freshVar nextState
+                        // A known input is what the argument must be assignable to. A fresh variable in its place
+                        // would be bound to the argument's own type first (constraints are solved newest first),
+                        // and a nominal argument would then have to equal its parameter's shape.
+                        let expectedInput, nextState2 =
+                            match Unifier.unalias funcTy with
+                            | TyFunc(declaredInput, _) -> declaredInput, nextState
+                            | _ -> freshVar nextState
                         let inputTy = inputTypeFromArgs argTys
                         // A single argument is the call's input: a mismatch is that argument's. So is one with the
                         // callee's type when that is known to be a function, whose result is the call's already.
@@ -2224,10 +2265,14 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 state.TypeDefs
                 |> Map.toList
                 |> List.collect (fun (ctxName, info) ->
+                    // An aliased import's context (`c.Console`) has its members under the alias too (`c.println`).
+                    let qualify memberName =
+                        if ctxName.Contains '.' then $"{ctxName.Substring(0, ctxName.LastIndexOf '.')}.{memberName}" else memberName
                     let bindings =
                         info.Members
                         |> Map.toList
                         |> List.map (fun (memberName, memberSymbol) ->
+                            let memberName = qualify memberName
                             memberName,
                             TypeEnv.tryFind memberName env
                             |> Option.bind (fun scheme -> scheme.Symbol)

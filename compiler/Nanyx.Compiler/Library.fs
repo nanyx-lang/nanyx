@@ -49,7 +49,10 @@ type private CheckedModule =
       /// The symbols of the module's own exported definitions, by name: not those of what it imports.
       Exports: Map<string, Symbol>
       /// The contexts each of the module's own exported definitions requires, written or inferred, by name.
-      ContextRequirements: Map<string, TypeExpr list> }
+      ContextRequirements: Map<string, TypeExpr list>
+      /// The ambient contexts (the runtime's, as `Console`) by the names the module knows them by, with their
+      /// definitions: an importer that cannot name one still needs it where it calls a function that requires it.
+      AmbientContexts: Map<string, TypeDefInfo> }
 
 module Compiler =
     let private normalizeSource (source: string) =
@@ -910,10 +913,28 @@ module Compiler =
                             | Some qualifier -> $"{qualifier}.{name}"
                             | None -> name
                         acc |> Map.add importedName contexts) state.ContextRequirements
+                let typeDefs = mergeTypeDefs typeDefs exportedTypeDefs
+                // The ambient contexts the imported functions require that this module cannot name are carried in
+                // with their definitions, hidden, so a call to one is checked as a call needing the context is here.
+                let carried =
+                    let rec contextNames (ctx: TypeExpr) =
+                        match ctx.Kind with
+                        | TypeContext contexts -> contexts |> List.collect contextNames
+                        | TypeName name
+                        | TypeApply(name, _) -> [ name ]
+                        | _ -> []
+                    imported.ContextRequirements
+                    |> Map.values
+                    |> Seq.collect (List.collect contextNames)
+                    |> Seq.distinct
+                    |> Seq.filter (fun name -> not (typeDefs.ContainsKey name) && not (state.ContextDefs.ContainsKey name))
+                    |> Seq.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info))
+                    |> List.ofSeq
                 state <-
                     { state with
-                        TypeDefs = mergeTypeDefs typeDefs exportedTypeDefs
-                        HiddenTypeNames = hiddenTypeNames
+                        TypeDefs = carried |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
+                        HiddenTypeNames = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
+                        CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
                         Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
                         ImportedThrough = importedThrough
                         ContextRequirements = contextRequirements }
@@ -1056,7 +1077,15 @@ module Compiler =
                                 |> Map.ofSeq
                              ContextRequirements =
                                 let exported = exportedValueNames own
-                                state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name) }
+                                state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name)
+                             AmbientContexts =
+                                state.AmbientMembers
+                                |> Map.values
+                                |> Seq.map snd
+                                |> Set.ofSeq
+                                |> Set.union state.CarriedAmbientContexts
+                                |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
+                                |> Map.ofSeq }
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =

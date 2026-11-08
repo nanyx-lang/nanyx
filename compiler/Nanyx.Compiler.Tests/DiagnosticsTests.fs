@@ -380,12 +380,21 @@ let ``A function that returns a nominal type cannot return its shape`` () =
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
 
-[<Fact(Skip = "The shape is accepted where the nominal type is a type argument: #306")>]
+[<Fact>]
 let ``A list of a nominal type cannot hold its shape`` () =
     let main = "module main\nimport \"people.nyx\"\ndef all: list($Person) = [ $Person.new(\"Ada\"), (name = \"Grace\") ]\n"
     match compiledWithPeople main with
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
+
+[<Fact>]
+let ``A list of a nominal type is assignable to a list of its shape`` () =
+    let main =
+        "module main\nimport \"people.nyx\"\n" +
+        "def namesOf: list((name: string)) -> int = { xs -> List.length(xs) }\n" +
+        "def people: list($Person) = [ $Person.new(\"Ada\") ]\n" +
+        "def n: int = namesOf(people)\n"
+    Assert.Empty(compiledWithPeople main)
 
 [<Fact>]
 let ``A nominal type cannot be constructed outside its module from inside a lambda`` () =
@@ -412,12 +421,21 @@ let ``An aliased import's function still requires its contexts where it is calle
     let main = "module main\nimport \"mod.nyx\" as m\ndef g: () -> () = { m.greet() }\n@entry\ndef main = { g() }\n"
     Assert.Equal<string list>([ "m.greet" ], undeclaredContextsWithMod main)
 
-[<Fact(Skip = "Only reported when the caller's module has Console in scope: #307")>]
+[<Fact>]
 let ``An imported function requires its contexts in a module that does not have them in scope`` () =
     let main = "module main\nimport \"mod.nyx\"\ndef g: () -> () = { greet() }\n"
     Assert.Equal<string list>([ "greet" ], undeclaredContextsWithMod main)
 
-[<Fact(Skip = "Not reported when the context can only be named through an alias: #307")>]
+[<Fact>]
 let ``A standard-library function imported under an alias still requires its context`` () =
     let main = "module main\nimport nanyx/console as c\ndef g: () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
     Assert.Equal<string list>([ "c.println" ], undeclaredContextsWithMod main)
+[<Fact>]
+let ``An imported function's context needs nothing more where the module cannot name it, at the top level or in a def that infers it`` () =
+    let main = "module main\nimport \"mod.nyx\"\ngreet()\ndef h = { greet() }\ndef k: () -> () = { h() }\n"
+    Assert.Equal<string list>([ "h" ], undeclaredContextsWithMod main)
+
+[<Fact>]
+let ``A def that declares an aliased context can use its members under the alias`` () =
+    let main = "module main\nimport nanyx/console as c\ndef g: [c.Console] () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
+    Assert.Equal<string list>([], undeclaredContextsWithMod main)

@@ -452,13 +452,11 @@ module Unifier =
                             loop subst ((lUnderlying, rUnderlying, Equal, origin) :: rest)
                     else
                         Error (mismatchMessage l r, origin)
-                | TyNominal(_, _, true), _
-                | _, TyNominal(_, _, true) ->
+                // A nominal type is a different type from its shape. Only assignability, which is one-way, lets a
+                // nominal value stand for its shape.
+                | TyNominal _, _
+                | _, TyNominal _ ->
                     Error (mismatchMessage l r, origin)
-                | TyNominal(_, underlying, false), _ ->
-                    loop subst ((underlying, r, Equal, origin) :: rest)
-                | _, TyNominal(_, underlying, false) ->
-                    loop subst ((l, underlying, Equal, origin) :: rest)
                 | TyFunc(lArg, lRet), TyFunc(rArg, rRet) ->
                     loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: rest)
                 | TyRecord lFields, TyRecord rFields ->
@@ -615,6 +613,14 @@ module Unifier =
                                     if extraTags.IsEmpty then [] else [ (TyVar restVar, TyUnion(extraTags @ [ freshRest () ]), Equal, origin) ]
                                 loop subst (pairs @ restConstraints @ rest)
                             | _ -> unifyEqual origin l r rest
+                        // Assignability reaches into what types are built from, so a nominal type stays one-way
+                        // there too: `list($Person)` is assignable to `list((name: string))`, but not the reverse.
+                        // Values are immutable, so a type's arguments are covariant; a function's argument is
+                        // contravariant, since the function is given values of the type it expects.
+                        | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->
+                            loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Assignable, origin)) lArgs rArgs) @ rest)
+                        | TyFunc(lArg, lRet), TyFunc(rArg, rRet) ->
+                            loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: rest)
                         | _ ->
                         match l, r with
                         | TyNominal(lName, _, _), TyNominal(rName, _, _) when lName = rName ->
