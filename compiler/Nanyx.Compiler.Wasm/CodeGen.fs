@@ -967,9 +967,6 @@ and private collectStatementLocalNames (statements: Statement list) : string lis
         | TypeDefStatement _
         | UseStatement _ -> [])
 
-let private collectBlockLocalNames (statements: Statement list) =
-    collectStatementLocalNames statements |> List.distinct
-
 /// Every identifier a pattern binds, however deeply nested.
 let rec private nestedPatternIdentifiers (pattern: Pattern) : string list =
     match pattern.Kind with
@@ -3069,7 +3066,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
                     let restCode = transpileStatements updatedEnv tail
                     $"{rhsCode}\n    local.set ${localName}\n    {restCode}"
                 | None ->
-                    failwith $"Unsupported block local for WASM MVP backend: {name}"
+                    failwith $"The WebAssembly backend cannot compile the local '{name}' here yet"
             | ExprStatement expr :: tail ->
                 let exprCode = transpileExpression env expr
                 let restCode = transpileStatements env tail
@@ -3839,12 +3836,12 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
             let parameters, bodyExpr = defBodyAndParameters expr
             let parameterNames = parameters |> List.map fst
             let parameterMap = createNameMap parameterNames
+            // The locals are gathered from the whole body, whatever its shape: a pattern lambda's body is a
+            // `match` over its parameters, and the blocks in its arms declare locals just as a block body does.
             let localNames =
-                match bodyExpr.Kind with
-                | Block statements ->
-                    collectBlockLocalNames statements
-                    |> List.filter (fun n -> not (parameterMap |> Map.containsKey n))
-                | _ -> []
+                collectExprLocalNames bodyExpr
+                |> List.distinct
+                |> List.filter (fun n -> not (parameterMap |> Map.containsKey n))
             let localMap =
                 localNames
                 |> List.fold (fun acc name ->
