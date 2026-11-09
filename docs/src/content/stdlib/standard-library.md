@@ -41,6 +41,41 @@ The `Result` alias exists for the equally common success/error shape:
 type Result(a, e) = #some(a) | #error(e)
 ```
 
+# Converting to text
+
+`int`, `float`, `bool` and `string` each have an attached `toString`. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
+
+```nanyx
+Int.toString: int -> string
+Float.toString: float -> string
+Bool.toString: bool -> string
+String.toString: string -> string
+```
+
+Each writes the value as string interpolation, `"{n}"`, does, and `String.toString` gives back the string itself. Because they are functions, they can be passed where interpolation cannot:
+
+```nanyx
+import nanyx/text
+
+def scores = [3, 14, 15]
+def text = scores \map(Int.toString) \String.join(", ")
+-- "3, 14, 15"
+
+def answer = 42 \toString
+-- "42"
+```
+
+A [context](../advanced/contexts) whose one member is `toString: a -> string` is [synthesized](../advanced/contexts#context-synthesis) for these types from their `toString`, as it is for any other type with one attached, so nothing in the compiler treats them specially:
+
+```nanyx
+context ToString(a) = (toString: a -> string)
+
+def label: [ToString(a)] a -> string = { x -> "<" ++ toString(x) ++ ">" }
+
+label(42)    -- "<42>"
+label(true)  -- "<true>"
+```
+
 # Map literals
 
 Maps are written with the square-bracket literal syntax and the `=>` operator:

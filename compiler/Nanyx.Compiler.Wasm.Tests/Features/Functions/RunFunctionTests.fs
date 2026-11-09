@@ -254,6 +254,19 @@ let ``Run - functions as values and higher-order calls`` () =
     runSource source |> assertRan "dbg: 42\ndbg: 42\ndbg: 42\ndbg: 40\ndbg: 36\ndbg: 12\ndbg: 60\n"
 
 [<Fact>]
+let ``Run - an attached function passed as a value`` () =
+    // `Point.norm` as an argument is read as a member access on `Point`, not as the name of a function.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.norm: Point -> int = { p -> p.x + p.y }\n" +
+        "def apply: ((Point -> int), Point) -> int = { f, p -> f(p) }\n" +
+        "dbg(apply(Point.norm, (x = 3, y = 4)))\n" +
+        "dbg(List.fold([(x = 1, y = 2), (x = 10, y = 20)] \\List.map(Point.norm), 0, { a, b -> a + b }))\n"
+    runSource source |> assertRan "dbg: 7\ndbg: 33\n"
+
+[<Fact>]
 let ``Run - a capturing lambda passed to a function`` () =
     let source =
         "def apply = { f, x -> f(x) }\n" +

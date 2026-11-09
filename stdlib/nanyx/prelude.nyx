@@ -37,6 +37,30 @@ export def Int.parse: string -> #some(int) | #invalidInt = { s ->
       else parseDigits(s, start, 0)
 }
 
+-- Text ------------------------------------------------------------------------------------------
+--
+-- Each built-in type has an attached `toString`, so a value can be turned into text by a function
+-- that can be passed around, `scores \map(Int.toString)`, as well as by interpolation. Each one
+-- writes the value as interpolation does.
+
+-- `n` in decimal, with a leading `-` when it is negative.
+export def Int.toString: int -> string = { n ->
+  "{n}"
+}
+
+-- `x` in decimal.
+export def Float.toString: float -> string = { x ->
+  "{x}"
+}
+
+-- `true` or `false`.
+export def Bool.toString: bool -> string = { b ->
+  "{b}"
+}
+
+-- `s` itself.
+export def String.toString: string -> string = { s -> s }
+
 -- Results ---------------------------------------------------------------------------------------
 
 -- A success carrying an `a`, or an error carrying an `e`.

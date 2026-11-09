@@ -428,6 +428,10 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
             |> RecordExpr
             |> rebuild
         | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
+        // An attached function used as a value, `Int.toString`: the parser reads it as a member access.
+        | MemberAccess(Kind (IdentifierExpr qualifier), field, _) when
+            topLevelFunctions.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
+            closureOf expr (wrapperOf $"{qualifier}.{field}") []
         | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
         | UseIn(binding, body) -> rebuild (UseIn(binding, recur body))
         | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
