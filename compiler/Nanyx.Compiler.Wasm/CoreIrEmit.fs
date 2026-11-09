@@ -36,7 +36,9 @@ let private tempsUsedBy (expr: Expr) : Var list =
     match expr.Kind with
     | Atom atom -> ofAtoms [ atom ]
     | Prim(_, atoms)
-    | Call(_, atoms) -> ofAtoms atoms
+    | Call(_, atoms)
+    | MakeList atoms
+    | CallRuntime(_, atoms, _) -> ofAtoms atoms
     | MakeRecord fields -> ofAtoms (List.map snd fields)
     | UpdateRecord(record, _, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
@@ -154,6 +156,15 @@ type private FunctionEmitter(context: EmitContext) =
                 $"i32.const 4\n    i32.sub\n    i32.const {(fieldCount + 1) * 4}\n    call ${helper Helpers.recordCopy}"
                 yield! stores updates
                 "i32.const 4\n    i32.add" ]
+        | MakeList items ->
+            // The elements left to right, then the empty list, then a cons for each from the back.
+            join "\n    " [
+                atoms items
+                "i32.const 0"
+                yield! items |> List.map (fun _ -> $"call ${helper Helpers.listCons}") ]
+        | CallRuntime(name, args, returnsValue) ->
+            // Every value is an i32, so a helper that returns nothing leaves unit, 0.
+            join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
@@ -180,6 +191,9 @@ type private FunctionEmitter(context: EmitContext) =
     member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
         let tagPayloadCode valueCode = $"{valueCode}\n      i32.load offset=4"
         let fieldCode valueCode slot = $"{valueCode}\n      i32.const {slot * 4}\n      i32.add\n      i32.load"
+        // The list after `count` cells, and the head of the list after `index` cells.
+        let listTailCode valueCode count = valueCode + String.replicate count "\n      i32.const 4\n      i32.add\n      i32.load"
+        let listElementCode valueCode index = $"{listTailCode valueCode index}\n      i32.load"
         let guarded first second =
             $"{first}\n      (if (result i32)\n        (then\n          {second})\n        (else i32.const 0))"
         let allOf conditions =
@@ -204,11 +218,30 @@ type private FunctionEmitter(context: EmitContext) =
                     | "i32.const 1" -> discriminant
                     | payloadCheck -> guarded discriminant payloadCheck
             | PFields fields -> fields |> List.map (fun (slot, inner) -> condition inner (fieldCode valueCode slot)) |> allOf
+            | PString value ->
+                $"{valueCode}\n      i32.const {context.StringOffset value}\n      call ${helper Helpers.stringEquals}"
+            | PList(elements, rest) ->
+                let lengthInstruction = if rest.IsSome then "i32.ge_s" else "i32.eq"
+                let lengthCheck =
+                    $"{valueCode}\n      call ${helper Helpers.listLength}\n      i32.const {elements.Length}\n      {lengthInstruction}"
+                let elementChecks =
+                    elements |> List.mapi (fun index element -> condition element (listElementCode valueCode index)) |> allOf
+                let restCheck =
+                    match rest with
+                    | Some restPattern -> condition restPattern (listTailCode valueCode elements.Length)
+                    | None -> "i32.const 1"
+                // The elements only exist once the length check holds.
+                match allOf [ elementChecks; restCheck ] with
+                | "i32.const 1" -> lengthCheck
+                | elementsAndRest -> guarded lengthCheck elementsAndRest
         let rec binds (pattern: Pattern) (valueCode: string) =
             match pattern with
             | PBind var -> [ $"{valueCode}\n        local.set ${var.Name}" ]
             | PTag(_, Some inner) -> binds inner (tagPayloadCode valueCode)
             | PFields fields -> fields |> List.collect (fun (slot, inner) -> binds inner (fieldCode valueCode slot))
+            | PList(elements, rest) ->
+                (elements |> List.mapi (fun index element -> binds element (listElementCode valueCode index)) |> List.concat)
+                @ (rest |> Option.map (fun restPattern -> binds restPattern (listTailCode valueCode elements.Length)) |> Option.defaultValue [])
             | _ -> []
         let rec emit (remaining: Arm list) =
             match remaining with
@@ -238,6 +271,9 @@ let private declaredLocals (body: Expr) : string list =
         | PBind var -> found.Add var
         | PTag(_, Some inner) -> pattern inner
         | PFields fields -> fields |> List.iter (snd >> pattern)
+        | PList(elements, rest) ->
+            elements |> List.iter pattern
+            rest |> Option.iter pattern
         | _ -> ()
     let rec walk (expr: Expr) =
         match expr.Kind with
@@ -261,7 +297,9 @@ let private declaredLocals (body: Expr) : string list =
         | MakeTag _
         | MakeRecord _
         | Field _
-        | UpdateRecord _ -> ()
+        | UpdateRecord _
+        | MakeList _
+        | CallRuntime _ -> ()
     walk body
     [ Local; MatchTemp; PatternBound ]
     |> List.collect (fun kind -> found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq)
