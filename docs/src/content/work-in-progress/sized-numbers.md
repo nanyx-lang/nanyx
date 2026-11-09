@@ -5,8 +5,7 @@ order: 6
 ---
 
 > **Status: proposal.** Today `int` is a 32-bit integer in the compiled program, and the sized types below do not
-> exist yet. This page records the intended design and the questions that remain open; see
-> [Open questions](#open-questions) at the end. Tracked in [#342](https://github.com/nanyx-lang/nanyx/issues/342) (a 64-bit
+> exist yet. This page records the intended design. Tracked in [#342](https://github.com/nanyx-lang/nanyx/issues/342) (a 64-bit
 > `int`) and [#343](https://github.com/nanyx-lang/nanyx/issues/343) (the sized types).
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
@@ -107,6 +106,7 @@ What a conversion takes and gives depends on what it can lose:
 | Integer to a narrower integer, or between signed and unsigned | `int` to `I32`, `I32` to `U32` | `I64.toI32: I64 -> #some(I32) \| #outOfRange` |
 | Integer to floating point | `int` to `float` | `I64.toFloat: I64 -> float` |
 | Floating point to integer | `float` to `int` | `F64.toInt: F64, #truncate \| #round \| #floor \| #ceil -> I64` |
+| Floating point to integer, checked | `float` to `int` | `F64.tryToInt: F64, #truncate \| #round \| #floor \| #ceil -> #some(I64) \| #outOfRange` |
 | Floating point to a narrower floating point | `float` to `F32` | `F64.toF32: F64 -> F32` |
 
 - **A narrowing integer conversion** is the one that can fail outright, so it returns a tag union and the caller
@@ -114,15 +114,12 @@ What a conversion takes and gives depends on what it can lose:
 - **Integer to floating point** rounds to the nearest representable value. A `float` holds integers exactly up to
   2<sup>53</sup>; past that it rounds, as in every language with IEEE 754 floats.
 - **Floating point to integer** takes a tag saying how to drop the fraction: `x \toInt(#round)`. A value that is
-  NaN, infinite or out of the integer type's range is an overflow, and stops the program.
+  NaN, infinite or out of the integer type's range is an overflow, and stops the program. For input that might be
+  any of those, `tryToInt` takes the same tag and returns `#outOfRange` instead of stopping.
 - **Floating point to a narrower floating point** rounds to the nearest `F32`, and gives infinity past its range.
 
 `int` is `I64`, so `int` values have the conversions attached to `I64`: `I64.toFloat` is the same definition
 whichever name the value's type was written with.
 
-# Open questions
-
-1. **Checked float-to-integer conversion.** Should there also be a form of `F64.toInt` that returns
-   `#some(I64) | #outOfRange` instead of stopping the program, for input that might be NaN or huge?
-2. **Wrapping conversions.** Should narrowing integer conversions have wrapping forms (`I64.wrappingToI32`) for code
-   that wants the low bits, like the wrapping arithmetic?
+Narrowing integer conversions have no wrapping form that keeps only the low bits, as `wrappingAdd` does for
+arithmetic. One can be added later if code needs it.
