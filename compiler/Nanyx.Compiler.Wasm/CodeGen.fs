@@ -561,8 +561,8 @@ let private tryRecordLayoutOfExpr (env: TranspileEnv) (expr: Expression) : strin
     |> Option.map (fun fields -> fields |> Map.toList |> List.map fst)
 
 /// The number of the record layout with `fieldNames` (in storage order), numbering it if it is new.
-let private recordLayoutId (env: TranspileEnv) (fieldNames: string list) =
-    let layouts = env.RecordTable.LayoutIds
+let private recordLayoutId (table: RecordTable) (fieldNames: string list) =
+    let layouts = table.LayoutIds
     match layouts.TryGetValue fieldNames with
     | true, id -> id
     | _ ->
@@ -1394,7 +1394,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
     let allocateRecord (fields: (string * Expression) list) =
         env.UsedHelpers.Add Helpers.alloc |> ignore
         env.UsedHelpers.Add Helpers.recordSet |> ignore
-        let layoutId = recordLayoutId env (fields |> List.map fst)
+        let layoutId = recordLayoutId env.RecordTable (fields |> List.map fst)
         let stores =
             fields
             |> List.mapi (fun index (_, value) ->
@@ -2488,6 +2488,8 @@ let private getLayoutFromTypeExpr (typeLayouts: Map<string, string list>) (typeF
 type CoreIrReport =
     { /// The functions compiled from the core IR, by their names in WebAssembly text, specialisations included.
       FromCoreIr: string list
+      /// The specialisations among them, each with the definition it specialises.
+      Specialisations: (string * string) list
       /// The definitions compiled the old way, and why the core IR could not lower them.
       Fallbacks: (string * string) list }
 
@@ -2672,43 +2674,46 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
 
-    let coreIrHelperName =
-        function
-        | CoreIrEmit.TagBox -> Helpers.tagBox
-        | CoreIrEmit.TagCodeOf -> Helpers.tagCode
+    let coreIrContext (layoutIds: string list -> int) : CoreIrEmit.EmitContext =
+        { TagId =
+            fun name ->
+                match tagIdMap |> Map.tryFind name with
+                | Some id -> id
+                | None -> failwith $"Internal error: missing tag discriminant for #{name}"
+          StringOffset =
+            fun value ->
+                match stringLiteralMap |> Map.tryFind value with
+                | Some offset -> offset
+                | None -> failwith $"Internal error: missing string literal offset for {value}"
+          RecordLayoutId = layoutIds }
+
+    // A specialisation is only called by the functions compiled with it; the definition itself is exported.
+    let emitFromCoreIr (context: CoreIrEmit.EmitContext) (func: CoreIr.Function) =
+        let exportName = if func.TypeArguments.IsEmpty then Some func.Source else None
+        CoreIrEmit.emitFunction context func exportName
 
     // The definitions the core IR can lower go through it, with the specialisations of the generic definitions they
     // call; the rest are compiled below as they always have been. Only a type-checked module has the types it needs.
+    // Each function is emitted once here only to find out whether it can be (layouts get numbers of no consequence),
+    // and again below, in order, for real.
     let coreIr =
         coreIrTypes
         |> Option.map (fun types ->
-            let context: CoreIrEmit.EmitContext =
-                { TagId =
-                    fun name ->
-                        match tagIdMap |> Map.tryFind name with
-                        | Some id -> id
-                        | None -> failwith $"Internal error: missing tag discriminant for #{name}"
-                  StringOffset =
-                    fun value ->
-                        match stringLiteralMap |> Map.tryFind value with
-                        | Some offset -> offset
-                        | None -> failwith $"Internal error: missing string literal offset for {value}"
-                  HelperName = coreIrHelperName }
             let input: CoreIrLower.LowerInput =
                 { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
                   ExprTypes = checkedTypes
                   CalleeTypes = types.CalleeTypes
                   DefinitionTypes = types.DefinitionTypes
-                  RequiresContexts = functionContextRequirements.Keys |> Set.ofSeq }
-            CoreIrLower.lowerModule input (fun func ->
-                // A specialisation is only called by the functions compiled with it; the definition itself is exported.
-                let exportName = if func.TypeArguments.IsEmpty then Some func.Source else None
-                CoreIrEmit.emitFunction context func exportName))
+                  RequiresContexts = functionContextRequirements.Keys |> Set.ofSeq
+                  RecordConstructors = typeLayouts.Keys |> Set.ofSeq
+                  NominalWrappers = nominalWrappers }
+            CoreIrLower.lowerModule input (emitFromCoreIr (coreIrContext (fun _ -> 0)) >> ignore))
 
-    /// The text of a function from the core IR, noting the helpers it calls.
-    let fromCoreIr (emitted: CoreIrEmit.Emitted) =
+    /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
+    let fromCoreIr (func: CoreIr.Function) =
+        let emitted = emitFromCoreIr (coreIrContext (recordLayoutId recordTable)) func
         for helper in emitted.Helpers do
-            usedHelpers.Add(coreIrHelperName helper) |> ignore
+            usedHelpers.Add helper |> ignore
         emitted.Text
 
     // What fails outside any expression of a function is reported at the function's definition.
@@ -3017,13 +3022,13 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         |> List.map (fun (name, typeOpt, expr) ->
             let definition =
                 match coreIr |> Option.bind (fun lowered -> lowered.Roots |> Map.tryFind name) with
-                | Some (_, emitted) -> fromCoreIr emitted
+                | Some (func, ()) -> fromCoreIr func
                 | None -> renderLegacyFunction name typeOpt expr
             let specialisations =
                 coreIr
                 |> Option.bind (fun lowered -> lowered.Specialisations |> Map.tryFind name)
                 |> Option.defaultValue []
-                |> List.map (snd >> fromCoreIr)
+                |> List.map (fst >> fromCoreIr)
             definition :: specialisations |> String.concat "\n\n")
 
     let coreIrReport =
@@ -3034,9 +3039,14 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                 |> List.collect (fun (name, _, _) ->
                     [ yield! lowered.Roots |> Map.tryFind name |> Option.map (fun (func, _) -> func.Name) |> Option.toList
                       yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name) ])
+              Specialisations =
+                defs
+                |> List.collect (fun (name, _, _) ->
+                    lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name, sanitizeIdentifier name))
               Fallbacks = lowered.Fallbacks |> Map.toList }
         | None ->
             { FromCoreIr = []
+              Specialisations = []
               Fallbacks = defs |> List.map (fun (name, _, _) -> name, "the module was not type-checked") }
 
     let renderedFunctions = renderedUserFunctions |> String.concat "\n\n"
