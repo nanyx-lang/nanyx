@@ -70,6 +70,12 @@ let ``A module that imports one with errors is not typed`` () =
     Assert.Equal("Unknown identifier 'missing'", (Assert.Single result.Diagnostics).Message)
 
 [<Fact>]
+let ``The error type is written as the hole ???`` () =
+    Assert.Equal("???", Unifier.tyToString Unifier.errorType)
+    let result = Compiler.compile "def r = (a = 1, b = missing)"
+    Assert.Equal("(a: int, b: ???)", Unifier.tyToString result.Typed.Value.Types.["r"])
+
+[<Fact>]
 let ``The error type agrees with every type`` () =
     let a = TyVar { Id = 1; Name = None }
     let constraints: ConstraintSet =

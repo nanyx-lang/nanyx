@@ -74,8 +74,9 @@ module Unifier =
         match ty with
         // The unit type is written `()`; `unit` is only its internal name.
         | TyPrimitive "unit" -> "()"
-        // What failed to check could be anything.
-        | TyPrimitive "?error" -> "?"
+        // What failed to check could be anything. It is written as the hole `???` is, the placeholder for code not
+        // written yet: a type still to be filled in.
+        | TyPrimitive "?error" -> "???"
         | TyPrimitive name -> name
         // A type variable is written bare, as in an annotation: `(t, a) -> t`.
         | TyVar v ->
