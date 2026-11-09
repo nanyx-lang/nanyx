@@ -1137,6 +1137,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | Import _ -> true
             | _ -> false
         let all = Array.ofList items
+        let blankLineBetween a b = blankRuns |> List.exists (fun span -> a <= span.Start && span.Start < b)
         destructuringRuns (items |> List.map (fun i -> i.Span, defOf i))
         |> List.map (fun (index, count, isDestructuring) ->
             let first = all[index]
@@ -1144,6 +1145,19 @@ let format (options: Options) (parsed: SourceModule) : string =
                 first.Span.Start, first.Span.End, first, fun () -> destructuringDef [ for k in index .. index + count - 1 -> (defOf all[k]).Value ] first.Span
             else
                 first.Span.Start, first.Span.End, first, fun () -> item first)
+        // Imports in a row, with no blank line between them, go in one bracketed import:
+        // `import nanyx/math` and `import nanyx/text` become `import (` / `nanyx/math` / `nanyx/text` / `)`.
+        |> List.fold
+            (fun merged (childStart, childEnd, first: TopLevelItem, build) ->
+                match first.Kind, merged with
+                | Import imports, (runStart, runEnd, runFirst, _, Some run) :: rest when not (blankLineBetween runEnd childStart) ->
+                    let run = run @ imports
+                    (runStart, childEnd, runFirst, (fun () -> importDoc runStart childEnd run), Some run) :: rest
+                | Import imports, _ -> (childStart, childEnd, first, build, Some imports) :: merged
+                | _ -> (childStart, childEnd, first, build, None) :: merged)
+            []
+        |> List.rev
+        |> List.map (fun (childStart, childEnd, first, build, _) -> childStart, childEnd, first, build)
         // An attribute line belongs to the item after it, so nothing comes between them.
         |> List.foldBack
             (fun (childStart, childEnd, first: TopLevelItem, build) children ->
