@@ -183,6 +183,25 @@ let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
     runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#some(-17)\n#some(70000)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
 
 [<Fact>]
+let ``Run - Bool.parse reads true and false and rejects anything else`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def show: [Console] (#some(bool) | #invalidBool) -> () = {\n" +
+        "  | #some(b) -> println(\"#some({b})\")\n" +
+        "  | #invalidBool -> println(\"#invalidBool\")\n" +
+        "}\n" +
+        "\n" +
+        "show(Bool.parse(\"true\"))\n" +
+        "show(Bool.parse(\"false\"))\n" +
+        "show(Bool.parse(\"True\"))\n" +
+        "show(Bool.parse(\"\"))\n" +
+        "show(Bool.parse(\" true\"))\n" +
+        "show(Bool.parse(\"1\"))\n" +
+        "show(\"false\" \\ Bool.parse)\n"
+    runSource source |> assertRan "#some(true)\n#some(false)\n#invalidBool\n#invalidBool\n#invalidBool\n#invalidBool\n#some(false)\n"
+
+[<Fact>]
 let ``Run - toString of an int, a float, a bool and a string, called and piped`` () =
     let source =
         "import nanyx/console\n" +
