@@ -19,6 +19,7 @@
     <Compile Include="Constraints.fs" />
     <Compile Include="Unifier.fs" />
     <Compile Include="InferState.fs" />
+    <Compile Include="Visibility.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />
