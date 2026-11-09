@@ -25,8 +25,8 @@ def requiredArgument: (Arguments, string) -> #some(string) | #error(#missingArgu
 
 def optionalSwitch: (Arguments, string) -> bool = { args, name -> args \contains(name) }
 
-def checkHelp: Arguments -> #some(()) | #error(#helpRequested) = { args ->
-  if optionalSwitch(args, "--help") then #error(#helpRequested) else #some(())
+def checkHelp: Arguments -> #some() | #error(#helpRequested) = { args ->
+  if optionalSwitch(args, "--help") then #error(#helpRequested) else #some()
 }
 
 -- `proc` short-circuits on the first `#error`, so the happy path reads top to bottom

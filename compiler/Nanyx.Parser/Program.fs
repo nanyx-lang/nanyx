@@ -419,11 +419,12 @@ let listExpr =
         | _ -> segments |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", left, right)))
 
 // Tag expression parser: #tagName or #tagName(expr)
-// The payload is written like a call's arguments: several values make a tuple, named ones a record.
+// The payload is written like a call's arguments: several values make a tuple, named ones a record, and none at
+// all, `#some()`, the unit value, as `f()` passes it.
 let tagExpr =
     spanned (
         pstring "#" >>. identifierNoWs >>= fun tagName ->
-        opt parenArguments |>> fun payloadOpt -> TagExpr(tagName, payloadOpt))
+        opt (attempt unitExpr <|> parenArguments) |>> fun payloadOpt -> TagExpr(tagName, payloadOpt))
 
 // If-expression parser: if condition then trueExpr else falseExpr
 // `if cond then a else b`, or if-matching: `if value is pattern then body [else other]` (see the

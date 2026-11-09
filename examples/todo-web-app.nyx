@@ -14,7 +14,7 @@ context TodoStore = (
   find: TodoId -> #some(Todo) | #notFound
   insert: Todo -> #some(Todo) | #error(#insertNotSuccessful)
   update: Todo -> #some(Todo) | #error(#updateNotSuccessful)
-  delete: TodoId -> #some(()) | #error(#deleteNotSuccessful)
+  delete: TodoId -> #some() | #error(#deleteNotSuccessful)
 )
 
 -- The store assigns the id
@@ -50,7 +50,7 @@ export def createProtocol: [TodoStore & Clock] () -> TodoProtocol = {
         return ()
       }
       \match
-        | #some(()) -> #deleted
+        | #some() -> #deleted
         | #error(e) -> #deleteError(e)
     }}
   )
@@ -82,7 +82,7 @@ export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
 
       delete = { id ->
         todos := todos \Map.remove(id)
-        #some(())
+        #some()
       }
     ) in action()
   }

@@ -70,6 +70,12 @@ type AuthResult =
   | #rejected(#invalidCredentials | #expiredToken)
 ```
 
+A tag that carries the unit value `()` is written with empty brackets, in values and in types alike, just as a function that takes nothing is called `f()`. `#some()` is `#some(())`:
+
+```nanyx
+def saved: #some() | #error(string) = #some()
+```
+
 # Tags for function flags
 
 Tag unions are great for readable flags and mode parameters. They make legal options explicit in the function type:

@@ -800,7 +800,7 @@ module Compiler =
             | TypeDefStatement _ -> stmt
         // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
         // block as its continuation, and so on. A block that falls off its end without `return` has the builder's
-        // `zero` as its value there (`#some(())` for `proc`), its last value only run; outside a builder's block, `()`.
+        // `zero` as its value there (`#some()` for `proc`), its last value only run; outside a builder's block, `()`.
         and desugarWorkflowChain (statements: Statement list) =
             let ending =
                 match builder with

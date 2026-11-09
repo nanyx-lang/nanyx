@@ -225,7 +225,7 @@ let ``A try nested in an expression of a proc block is bound before its statemen
         | None -> Assert.True(false, "run not found")
 
 [<Fact>]
-let ``A proc block that ends without return is #some(())`` () =
+let ``A proc block that ends without return is #some()`` () =
     let source =
         "def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }\n" +
         "def run = { x -> proc {\n" +
@@ -237,8 +237,8 @@ let ``A proc block that ends without return is #some(())`` () =
         "} }"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Assert.Equal("int -> #some(()) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
-    Assert.Equal("int -> #some(()) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["check"])
+    Assert.Equal("int -> #some() | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
+    Assert.Equal("int -> #some() | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["check"])
 
 [<Fact>]
 let ``A builder block that can end without return needs the builder's zero`` () =
@@ -286,7 +286,7 @@ let ``A builder's zero is the value of a block that ends without return`` () =
         Assert.Contains(tag, shown)
 [<Fact>]
 let ``A proc block that returns a value on one path and ends without return on another is a mismatch`` () =
-    // `return n` makes the block a `#some(int)`, and ending without `return` makes it `#some(())`.
+    // `return n` makes the block a `#some(int)`, and ending without `return` makes it `#some()`.
     let result = Compiler.compile "def c = { n -> proc {\n  if n > 2 then return n\n} }"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)

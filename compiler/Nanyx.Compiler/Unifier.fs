@@ -127,6 +127,8 @@ module Unifier =
             | Some (TyRecord fields as payload) when not fields.IsEmpty ->
                 let written = printTy false payload
                 $"#{name}{written}"
+            // The unit value is written as no payload in the brackets, as in source: `#some()`.
+            | Some (TyPrimitive "unit") -> $"#{name}()"
             | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy false payload)})"
             | None -> $"#{name}"
         | TyApply(name, [ arg ]) -> $"{name}({printTy false arg})"
@@ -565,7 +567,7 @@ module Unifier =
                             match items with
                             | [] ->
                                 // The rest takes a tag the union does not name; one it names is that member, which
-                                // did not unify (`#some(int)` is not the rest of `#some(()) | r`).
+                                // did not unify (`#some(int)` is not the rest of `#some() | r`).
                                 match lRest with
                                 | Some restVar when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
                                 | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
