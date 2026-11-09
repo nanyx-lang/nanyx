@@ -298,6 +298,32 @@ let ``Run - what the backend cannot compile is reported with its place, like any
         outcome.StandardError)
 
 [<Fact>]
+let ``Run - an interpolated string inside a hole leaves the holes around it alone`` () =
+    // Each hole is evaluated before the string is written; a string inside a later hole used to overwrite the
+    // earlier holes' values (#326), printing them empty or trapping.
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/text\n" +
+        "\n" +
+        "def pad: string, int -> string = { text, width -> String.padStart(text, width, \" \") }\n" +
+        "\n" +
+        "def money: int -> string = { pence ->\n" +
+        "  def pounds = pence / 100\n" +
+        "  def rest = pence % 100\n" +
+        "  \"£{pounds}.{String.padStart(\"{rest}\", 2, \"0\")}\"\n" +
+        "}\n" +
+        "\n" +
+        "def show: [Console] string, int -> () = { name, qty ->\n" +
+        "  println(\"[{pad(name, 6)}][{pad(\"{qty}\", 4)}]\")\n" +
+        "  println(\"{pad(\"{name}!\", 7)}|{pad(\"{qty}\", 3)}|{\"<{\"{qty}\"}>\"}\")\n" +
+        "  println(\"{money(289)} and {money(1205)}\")\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = { show(\"tea\", 2) }\n"
+    runSource source |> assertRan "[   tea][   2]\n   tea!|  2|<2>\n£2.89 and £12.05\n"
+
+[<Fact>]
 let ``Run - string concatenation and equality`` () =
     let source =
         "import nanyx/console\n" +
