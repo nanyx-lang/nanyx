@@ -68,7 +68,7 @@ let forFile (path: string) : Result<Formatter.Options, string> =
 let withDirectives (path: string) (text: string) (options: Formatter.Options) : Result<Formatter.Options, string> =
     let manifest =
         if path = "" then Result.Ok None else manifestIn (Path.GetDirectoryName(Path.GetFullPath path))
-    let directives = Parser.Program.Directives.read path text |> List.filter (fun directive -> directive.Name = "formatter")
+    let directives = Parser.Program.Api.Directives.read path text |> List.filter (fun directive -> directive.Name = "formatter")
     (Result.Ok options, directives)
     ||> List.fold (fun options directive ->
         options

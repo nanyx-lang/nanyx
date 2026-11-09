@@ -56,7 +56,7 @@ let ``A function reading a field rejects a record without it`` () =
 let ``Expressions at a position are innermost first`` () =
     let source = "def value = 1 + 2 * 3"
     let syntax =
-        match Parser.Program.parseModule source with
+        match Parser.Program.Api.parseModule source with
         | Ok syntax -> syntax
         | Error message -> failwith message
     let found = Hover.expressionsAt (offsetOf source "2" 0 0) syntax

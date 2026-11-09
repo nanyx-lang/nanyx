@@ -365,7 +365,7 @@ internal static class CliCommands
 
     private static int RunParse(string inputFile)
     {
-        var parsed = Parser.Program.parseModuleFile(Path.GetFullPath(inputFile), File.ReadAllText(inputFile));
+        var parsed = Parser.Program.Api.parseModuleFile(Path.GetFullPath(inputFile), File.ReadAllText(inputFile));
 
         if (parsed.IsError)
         {
