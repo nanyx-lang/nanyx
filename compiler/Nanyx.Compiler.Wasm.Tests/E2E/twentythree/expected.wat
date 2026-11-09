@@ -89,6 +89,86 @@
     i32.store
     local.get $ptr
   )
+  (func $__nanyx_free (param $ptr i32)
+    (local $size i32)
+    (local $head i32)
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    i32.load
+    local.set $size
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if (result i32)
+      i32.const 4092
+      local.get $size
+      i32.add
+    else
+      i32.const 4128
+    end
+    local.set $head
+    local.get $ptr
+    local.get $head
+    i32.load
+    i32.store
+    local.get $head
+    local.get $ptr
+    i32.store
+  )
+  (func $__nanyx_new_cell (param $size i32) (result i32)
+    (local $block i32)
+    local.get $size
+    i32.const 4
+    i32.add
+    call $__nanyx_alloc
+    local.tee $block
+    i32.const 1
+    i32.store
+    local.get $block
+    i32.const 4
+    i32.add
+  )
+  (func $__nanyx_new_object (param $size i32) (param $info i32) (result i32)
+    (local $block i32)
+    local.get $size
+    i32.const 8
+    i32.add
+    call $__nanyx_alloc
+    local.tee $block
+    i32.const 1
+    i32.store
+    local.get $block
+    local.get $info
+    i32.store offset=4
+    local.get $block
+    i32.const 8
+    i32.add
+  )
+  (func $__nanyx_release (param $count i32) (result i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    i32.eqz
+    if
+      i32.const 0
+      return
+    end
+    local.get $n
+    i32.const 1
+    i32.eq
+    if
+      i32.const 1
+      return
+    end
+    local.get $count
+    local.get $n
+    i32.const 1
+    i32.sub
+    i32.store
+    i32.const 0
+  )
   (func $__nanyx_copy_bytes (param $dst i32) (param $src i32) (param $len i32)
     (local $i i32)
     block $done
@@ -120,25 +200,18 @@
     i32.load
   )
   (func $__nanyx_string_alloc (param $len i32) (result i32)
-    (local $base i32)
+    (local $s i32)
     local.get $len
-    i32.const 5
+    i32.const 1
     i32.add
-    call $__nanyx_alloc
-    local.set $base
-    local.get $base
     local.get $len
-    i32.store
-    local.get $base
-    i32.const 4
-    i32.add
+    call $__nanyx_new_object
+    local.tee $s
     local.get $len
     i32.add
     i32.const 0
     i32.store8
-    local.get $base
-    i32.const 4
-    i32.add
+    local.get $s
   )
   (func $__nanyx_string_byte_at (param $s i32) (param $i i32) (result i32)
     local.get $i
@@ -302,7 +375,7 @@
   (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
     (local $cell i32)
     i32.const 8
-    call $__nanyx_alloc
+    call $__nanyx_new_cell
     local.tee $cell
     local.get $code
     i32.store
@@ -312,8 +385,8 @@
     local.get $cell
   )
 
-  (data (i32.const 256) "\00\00\00\00\00")
-  (data (i32.const 261) "\0d\00\00\00Hello, Nanyx!\00")
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 268) "\00\00\00\00\0d\00\00\00Hello, Nanyx!\00\00\00")
 
   (func $print (param $text i32) (result i32)
     local.get $text
@@ -434,7 +507,7 @@
   (export "console.readLineAfter" (func $console_readLineAfter))
 
   (func $readLine (param $_ i32) (result i32)
-    i32.const 260
+    i32.const 264
     return_call $console_readLineAfter
   )
   (export "readLine" (func $readLine))
@@ -462,7 +535,7 @@
 
   (func $readToEnd (param $_ i32) (result i32)
     i32.const 7
-    i32.const 260
+    i32.const 264
     call $console_readToEndAfter
     call $__nanyx_tag_box
   )
@@ -473,8 +546,94 @@
   )
   (export "flush" (func $flush))
 
+  (func $__nanyx_drop_string (param $p i32)
+    ;; string
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_drop_tags_error_tags_endOfInput_some_string (param $p i32)
+    ;; #error(#endOfInput) | #some(string)
+    local.get $p
+    i32.const 1
+    i32.and
+    if
+      return
+    end
+    local.get $p
+    i32.const 4
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.load
+      i32.const 7
+      i32.eq
+      if
+        local.get $p
+        i32.load offset=4
+        call $__nanyx_drop_string
+      end
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_drop_tags_error_tags_endOfInput (param $p i32)
+    ;; #error(#endOfInput)
+    local.get $p
+    i32.const 1
+    i32.and
+    if
+      return
+    end
+    local.get $p
+    i32.const 4
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_drop_tags_some_string (param $p i32)
+    ;; #some(string)
+    local.get $p
+    i32.const 1
+    i32.and
+    if
+      return
+    end
+    local.get $p
+    i32.const 4
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.load offset=4
+      call $__nanyx_drop_string
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
   (func $__nanyx_start
-    i32.const 265
+    i32.const 276
     call $println
     drop
   )

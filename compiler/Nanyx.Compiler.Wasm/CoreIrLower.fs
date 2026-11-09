@@ -237,25 +237,7 @@ let rec private toIrType (ty: Ty) : IrType =
 
 /// A WebAssembly name for `name` specialised at `typeArguments`, such as `id__int`.
 let private specialisationName (name: string) (typeArguments: IrType list) =
-    let rec mangle ty =
-        match ty with
-        | IrTags tags ->
-            tags
-            |> List.map (fun (tag, payload) ->
-                match payload with
-                | Some payloadTy -> $"{tag}_{mangle payloadTy}"
-                | None -> tag)
-            |> String.concat "_"
-            |> sprintf "tags_%s"
-        | IrRecord fields ->
-            fields
-            |> List.map (fun (field, fieldTy) -> $"{field}_{mangle fieldTy}")
-            |> String.concat "_"
-            |> sprintf "rec_%s"
-        | IrList element -> $"list_{mangle element}"
-        | IrFunction(input, output) -> $"fn_{mangle input}_to_{mangle output}"
-        | _ -> IrType.show ty
-    sanitizeIdentifier name + (typeArguments |> List.map (mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
+    sanitizeIdentifier name + (typeArguments |> List.map (IrType.mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
 
 /// Whether lowering `expr` stores to a local before its value is ready: a block with statements before its last
 /// expression, a `match` (which holds its scrutinees in locals), an interpolated string (which holds its holes), and
@@ -435,15 +417,6 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
 
     /// The name of the function being lowered, in WebAssembly text.
     let mutable selfName = ""
-
-    let atomType (atom: Atom) =
-        match atom with
-        | AVar var -> var.Type
-        | AInt _ -> IrInt
-        | ABool _ -> IrBool
-        | AUnit -> IrUnit
-        | AString _ -> IrString
-        | ATag name -> IrTags [ name, None ]
 
     let bindTemp (value: Expr) (k: Atom -> Expr) : Expr =
         let temp = newTemp value.Type

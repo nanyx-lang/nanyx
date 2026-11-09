@@ -95,18 +95,24 @@ let private escapeWasmData (bytes: byte array) =
             sb.Append(sprintf "\\%02x" b) |> ignore
     sb.ToString()
 
+/// Where each string literal is in the data segment, and the segment's bytes. A literal is laid out as a string on the
+/// heap is (see `WasmRuntime.runtimeHelpers`), with a count of 0 so that it is never freed, and padded so that the
+/// next one is 4-byte aligned.
 let private buildStringLiteralMap (literals: string list) =
     let mutable offset = stringDataBaseOffset
     let entries =
         literals
         |> List.map (fun value ->
             let bytes = Encoding.UTF8.GetBytes value
+            let countBytes = BitConverter.GetBytes 0
             let lengthBytes = BitConverter.GetBytes bytes.Length
-            let dataBytes = Array.concat [ lengthBytes; bytes; [| 0uy |] ]
+            let unpadded = countBytes.Length + lengthBytes.Length + bytes.Length + 1
+            let padding = Array.zeroCreate ((4 - unpadded % 4) % 4)
+            let dataBytes = Array.concat [ countBytes; lengthBytes; bytes; [| 0uy |]; padding ]
             let currentOffset = offset
             offset <- offset + dataBytes.Length
             value, currentOffset, dataBytes)
-    let map = entries |> List.map (fun (value, baseOffset, _) -> value, baseOffset + 4) |> Map.ofList
+    let map = entries |> List.map (fun (value, baseOffset, _) -> value, baseOffset + 8) |> Map.ofList
     map, entries
 
 /// The number of the record layout with `fieldNames` (in storage order), numbering it if it is new.
@@ -548,6 +554,16 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             emitted.Text, "  (start $__nanyx_start)"
         | None -> "", ""
 
+    // A drop function for each type on the heap the functions above use, and for what each of their closures captures.
+    // A tag no function names has no cells to drop.
+    let drops = CoreIrDrop.collect (definitionFunctions @ Option.toList startFunction)
+    let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops |> String.concat "\n\n"
+    if not drops.Types.IsEmpty || not drops.Environments.IsEmpty then
+        usedHelpers.Add Helpers.release |> ignore
+        usedHelpers.Add Helpers.free |> ignore
+    if drops.Types |> List.exists (function CoreIr.IrFunction _ -> true | _ -> false) then
+        functionTable.IndirectArities.Add 1 |> ignore
+
     let report =
         { Functions = [ yield! definitionFunctions |> List.map _.Name; yield! startFunction |> Option.map _.Name |> Option.toList ]
           Specialisations =
@@ -648,7 +664,9 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
     // Add memory if we have string literals, heap allocation or reads of tag cells, but no dbg helpers (dbgPrelude
     // already includes memory)
     let readsTagCells = usedHelperSet.Contains Helpers.tagCode || usedHelperSet.Contains Helpers.tagEquals
-    let needsMemory = (not (List.isEmpty stringLiteralData) || moduleUsesHeap || readsTagCells) && not moduleUsesIoHelpers
+    let freesObjects = usedHelperSet.Contains Helpers.free
+    let needsMemory =
+        (not (List.isEmpty stringLiteralData) || moduleUsesHeap || readsTagCells || freesObjects) && not moduleUsesIoHelpers
     let memorySection =
         if needsMemory then
             "  (memory 1)\n  (export \"memory\" (memory 0))"
@@ -682,6 +700,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             [ if not (String.IsNullOrWhiteSpace allImports) then allImports
               if not (String.IsNullOrWhiteSpace dataSegments) then dataSegments
               if not (String.IsNullOrWhiteSpace renderedFunctions) then renderedFunctions
+              if not (String.IsNullOrWhiteSpace renderedDrops) then renderedDrops
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
         let body = String.concat "\n\n" parts

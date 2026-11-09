@@ -258,6 +258,73 @@
     i32.store
     local.get $ptr
   )
+  (func $__nanyx_free (param $ptr i32)
+    (local $size i32)
+    (local $head i32)
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    i32.load
+    local.set $size
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if (result i32)
+      i32.const 4092
+      local.get $size
+      i32.add
+    else
+      i32.const 4128
+    end
+    local.set $head
+    local.get $ptr
+    local.get $head
+    i32.load
+    i32.store
+    local.get $head
+    local.get $ptr
+    i32.store
+  )
+  (func $__nanyx_new_object (param $size i32) (param $info i32) (result i32)
+    (local $block i32)
+    local.get $size
+    i32.const 8
+    i32.add
+    call $__nanyx_alloc
+    local.tee $block
+    i32.const 1
+    i32.store
+    local.get $block
+    local.get $info
+    i32.store offset=4
+    local.get $block
+    i32.const 8
+    i32.add
+  )
+  (func $__nanyx_release (param $count i32) (result i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    i32.eqz
+    if
+      i32.const 0
+      return
+    end
+    local.get $n
+    i32.const 1
+    i32.eq
+    if
+      i32.const 1
+      return
+    end
+    local.get $count
+    local.get $n
+    i32.const 1
+    i32.sub
+    i32.store
+    i32.const 0
+  )
   (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)
     local.get $base
     local.get $offset
@@ -267,8 +334,8 @@
     local.get $base
   )
 
-  (data (i32.const 256) "\05\00\00\00Alice\00")
-  (data (i32.const 266) "\03\00\00\00Bob\00")
+  (data (i32.const 256) "\00\00\00\00\05\00\00\00Alice\00\00\00")
+  (data (i32.const 272) "\00\00\00\00\03\00\00\00Bob\00")
 
   (func $printPerson (param $p i32) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__dbg_tmp i32)
     local.get $p
@@ -300,45 +367,68 @@
   (export "printPerson" (func $printPerson))
 
   (func $main (result i32) (local $p i32) (local $p2 i32)
-    i32.const 16
-    call $__nanyx_alloc
+    i32.const 12
     i32.const 1
+    call $__nanyx_new_object
+    i32.const 30
     i32.const 0
     call $__nanyx_record_set
-    i32.const 30
+    i32.const 264
     i32.const 4
-    call $__nanyx_record_set
-    i32.const 260
-    i32.const 8
     call $__nanyx_record_set
     i32.const 100
-    i32.const 12
+    i32.const 8
     call $__nanyx_record_set
-    i32.const 4
-    i32.add
     local.set $p
     local.get $p
     call $printPerson
     drop
-    i32.const 16
-    call $__nanyx_alloc
+    i32.const 12
     i32.const 1
+    call $__nanyx_new_object
+    i32.const 25
     i32.const 0
     call $__nanyx_record_set
-    i32.const 25
+    i32.const 280
     i32.const 4
-    call $__nanyx_record_set
-    i32.const 270
-    i32.const 8
     call $__nanyx_record_set
     i32.const 80
-    i32.const 12
+    i32.const 8
     call $__nanyx_record_set
-    i32.const 4
-    i32.add
     local.set $p2
     local.get $p2
     return_call $printPerson
   )
   (export "main" (func $main))
+
+  (func $__nanyx_drop_rec_age_int_name_string_score_int (param $p i32)
+    ;; (age: int, name: string, score: int)
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.load offset=4
+      call $__nanyx_drop_string
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_drop_string (param $p i32)
+    ;; string
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
 )

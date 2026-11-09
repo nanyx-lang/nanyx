@@ -15,6 +15,7 @@
     <Compile Include="CoreIr.fs" />
     <Compile Include="CoreIrFacts.fs" />
     <Compile Include="CoreIrLower.fs" />
+    <Compile Include="CoreIrDrop.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CodeGen.fs" />
   </ItemGroup>

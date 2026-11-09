@@ -26,7 +26,7 @@
     drop
   )
 
-  (data (i32.const 256) "O\00\00\0012:27: error NYX0201: Type mismatch: bool vs int. (deferred from compile time)\0a\00")
+  (data (i32.const 256) "\00\00\00\00O\00\00\0012:27: error NYX0201: Type mismatch: bool vs int. (deferred from compile time)\0a\00")
 
   (func $inRange (param $x i32) (param $lo i32) (param $hi i32) (result i32)
     local.get $x
@@ -78,7 +78,7 @@
     i32.const 1
     i32.eq
     i32.and
-    i32.const 260
+    i32.const 264
     call $__nanyx_write_stderr
     i32.const 1
     call $proc_exit

@@ -87,10 +87,74 @@
     i32.store
     local.get $ptr
   )
+  (func $__nanyx_free (param $ptr i32)
+    (local $size i32)
+    (local $head i32)
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    i32.load
+    local.set $size
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if (result i32)
+      i32.const 4092
+      local.get $size
+      i32.add
+    else
+      i32.const 4128
+    end
+    local.set $head
+    local.get $ptr
+    local.get $head
+    i32.load
+    i32.store
+    local.get $head
+    local.get $ptr
+    i32.store
+  )
+  (func $__nanyx_new_cell (param $size i32) (result i32)
+    (local $block i32)
+    local.get $size
+    i32.const 4
+    i32.add
+    call $__nanyx_alloc
+    local.tee $block
+    i32.const 1
+    i32.store
+    local.get $block
+    i32.const 4
+    i32.add
+  )
+  (func $__nanyx_release (param $count i32) (result i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    i32.eqz
+    if
+      i32.const 0
+      return
+    end
+    local.get $n
+    i32.const 1
+    i32.eq
+    if
+      i32.const 1
+      return
+    end
+    local.get $count
+    local.get $n
+    i32.const 1
+    i32.sub
+    i32.store
+    i32.const 0
+  )
   (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
     (local $cell i32)
     i32.const 8
-    call $__nanyx_alloc
+    call $__nanyx_new_cell
     local.tee $cell
     local.get $code
     i32.store
@@ -153,4 +217,24 @@
     return_call $classify
   )
   (export "main" (func $main))
+
+  (func $__nanyx_drop_tags_some_int (param $p i32)
+    ;; #some(int)
+    local.get $p
+    i32.const 1
+    i32.and
+    if
+      return
+    end
+    local.get $p
+    i32.const 4
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_free
+    end
+  )
 )

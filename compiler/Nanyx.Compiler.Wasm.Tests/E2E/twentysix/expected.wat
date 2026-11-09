@@ -258,10 +258,90 @@
     i32.store
     local.get $ptr
   )
+  (func $__nanyx_free (param $ptr i32)
+    (local $size i32)
+    (local $head i32)
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    i32.load
+    local.set $size
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if (result i32)
+      i32.const 4092
+      local.get $size
+      i32.add
+    else
+      i32.const 4128
+    end
+    local.set $head
+    local.get $ptr
+    local.get $head
+    i32.load
+    i32.store
+    local.get $head
+    local.get $ptr
+    i32.store
+  )
+  (func $__nanyx_new_cell (param $size i32) (result i32)
+    (local $block i32)
+    local.get $size
+    i32.const 4
+    i32.add
+    call $__nanyx_alloc
+    local.tee $block
+    i32.const 1
+    i32.store
+    local.get $block
+    i32.const 4
+    i32.add
+  )
+  (func $__nanyx_new_object (param $size i32) (param $info i32) (result i32)
+    (local $block i32)
+    local.get $size
+    i32.const 8
+    i32.add
+    call $__nanyx_alloc
+    local.tee $block
+    i32.const 1
+    i32.store
+    local.get $block
+    local.get $info
+    i32.store offset=4
+    local.get $block
+    i32.const 8
+    i32.add
+  )
+  (func $__nanyx_release (param $count i32) (result i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    i32.eqz
+    if
+      i32.const 0
+      return
+    end
+    local.get $n
+    i32.const 1
+    i32.eq
+    if
+      i32.const 1
+      return
+    end
+    local.get $count
+    local.get $n
+    i32.const 1
+    i32.sub
+    i32.store
+    i32.const 0
+  )
   (func $__nanyx_list_cons (param $head i32) (param $tail i32) (result i32)
     (local $cell i32)
     i32.const 8
-    call $__nanyx_alloc
+    call $__nanyx_new_cell
     local.set $cell
     local.get $cell
     local.get $head
@@ -320,9 +400,10 @@
     end
   )
 
+  (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
-  (table $ctx_table 1 funcref)
-  (elem (i32.const 0) $__lambda_0)
+  (table $ctx_table 2 funcref)
+  (elem (i32.const 0) $__lambda_0 $__nanyx_drop_env)
 
   (func $List_filter__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32)
     local.get $arg1
@@ -414,7 +495,8 @@
   (func $main (result i32) (local $__match_tmp_0 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__for_cursor_0 i32) (local $__for_end_0 i32) (local $__for___for_element_0 i32) (local $__dbg_tmp i32)
     call $items
     i32.const 4
-    call $__nanyx_alloc
+    i32.const 1
+    call $__nanyx_new_object
     i32.const 0
     i32.const 0
     call $__nanyx_record_set
@@ -463,6 +545,73 @@
     i32.eq
   )
   (export "__lambda_0" (func $__lambda_0))
+
+  (func $__nanyx_drop_list_int (param $p i32)
+    ;; list(int)
+    (local $tail i32)
+    block $done
+      loop $next
+        local.get $p
+        i32.eqz
+        br_if $done
+        local.get $p
+        i32.const 4
+        i32.sub
+        call $__nanyx_release
+        i32.eqz
+        br_if $done
+        local.get $p
+        i32.load offset=4
+        local.set $tail
+        local.get $p
+        i32.const 4
+        i32.sub
+        call $__nanyx_free
+        local.get $tail
+        local.set $p
+        br $next
+      end
+    end
+  )
+
+  (func $__nanyx_drop_fn_int_to_bool (param $p i32)
+    ;; (int -> bool)
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      local.get $p
+      i32.const 4
+      i32.sub
+      i32.load
+      call_indirect (type $ctx_fn_1)
+      drop
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_drop_rec_0_int (param $p i32)
+    ;; (0: int)
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_drop_env (param $p i32) (result i32)
+    i32.const 0
+  )
 
   (func $__nanyx_start
     call $main
