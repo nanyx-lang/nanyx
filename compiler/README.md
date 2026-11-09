@@ -35,7 +35,9 @@ Currently supports parsing:
 ```
 compiler/
 ├── Nanyx.Parser/              # Parser library (F#, FParsec)
-│   └── Program.fs             # Parser implementation and AST
+│   ├── Ast.fs                 # The syntax tree
+│   ├── ParseState.fs, …       # Parse state, lexical rules, patterns, types (see the .fsproj)
+│   └── Program.fs             # Expressions, statements and the public parse functions
 ├── Nanyx.Parser.Tests/        # Parser unit and fixture tests
 ├── Nanyx.Compiler/            # Type checker (F#)
 ├── Nanyx.Compiler.Tests/      # Compiler-level unit/integration tests
