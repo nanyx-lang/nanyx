@@ -195,7 +195,9 @@ let private sortFields (fields: (string * 'a) list) =
     let byName = Map.ofList fields
     storageOrder (List.map fst fields) |> List.map (fun name -> name, byName.[name])
 
-/// The IR type of `ty`, which must be concrete once `subst` is applied.
+/// The IR type of `ty`, once `subst` is applied. A type variable nothing constrains (the element of `[]`, the rest of
+/// an open union that no use closes) has no value of its own at run time, since nothing can make or inspect one, so it
+/// is unit, and the rest of a union adds no tags.
 let rec private toIrType (ty: Ty) : IrType =
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt
@@ -210,13 +212,14 @@ let rec private toIrType (ty: Ty) : IrType =
             match Unifier.unalias ty with
             | TyTag(name, payload) -> [ name, payload |> Option.map toIrType ]
             | TyUnion items -> items |> List.collect members
+            | TyVar _ -> []
             | _ -> cannot "a union of something other than tags"
         IrTags(members tags |> List.distinct |> List.sortBy fst)
     // A `Map`'s keys are in the order a record's fields are stored in.
     | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal(_, underlying, _) -> toIrType underlying
     | TyApply("list", [ element ]) -> IrList(toIrType element)
-    | TyVar _ -> cannot "a type that is not known here"
+    | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc(input, output) -> IrFunction(toIrType input, toIrType output)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
@@ -276,6 +279,49 @@ let private recordExprFields (fields: RecordField list) =
         match field with
         | NamedField(name, value) -> name, value
         | PositionalField value -> string index, value)
+
+/// The messages of the errors deferred to run time inside `expr` (the `__panic` calls that stand for what failed to
+/// check), in the order they are written.
+let rec private deferredMessages (expr: Expression) : string list =
+    let all (exprs: Expression list) = exprs |> List.collect deferredMessages
+    match expr.Kind with
+    | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) -> [ message ]
+    | InterpolatedString parts -> parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None) |> all
+    | Block statements ->
+        statements
+        |> List.choose (fun statement ->
+            match statement.Kind with
+            | DefStatement(_, _, _, value)
+            | ExprStatement value -> Some value
+            | _ -> None)
+        |> all
+    | BinaryOp(_, left, right) -> all [ left; right ]
+    | IfExpr(cond, ifTrue, ifFalse) -> all [ cond; ifTrue; ifFalse ]
+    | FunctionCall(_, _, args)
+    | ContextMemberCall(_, _, args) -> all args
+    | Lambda(_, body)
+    | UseIn(_, body)
+    | MemberAccess(body, _, _)
+    | WorkflowBindExpr(_, body)
+    | WorkflowReturnExpr body -> deferredMessages body
+    | Pipe(value, _, _, args) -> all (value :: args)
+    | TupleExpr items
+    | ListExpr items -> all items
+    | RecordExpr fields -> fields |> List.map (function NamedField(_, value) | PositionalField value -> value) |> all
+    | ExpressionKind.Match(values, arms) -> all (values @ (arms |> List.map snd))
+    | TagExpr(_, payload) -> payload |> Option.toList |> all
+    | ContextMemberAccess _
+    | UnitExpr
+    | LiteralExpr _
+    | IdentifierExpr _ -> []
+
+/// The primitive type a type annotation names, if it names one: `string`, `(int)`.
+let rec private primitiveOfTypeExpr (typeExpr: TypeExpr) : Ty option =
+    match typeExpr.Kind with
+    | TypeName ("int" | "string" | "bool" | "float" | "unit" as name) -> Some (TyPrimitive name)
+    | TypeUnit -> Some (TyPrimitive "unit")
+    | TypeTuple [ single ] -> primitiveOfTypeExpr single
+    | _ -> None
 
 let private flattenCallArgs (args: Expression list) =
     match args with
@@ -367,7 +413,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 |> List.map (fun id ->
                     match bindings |> Map.tryFind id with
                     | Some ty -> toIrType ty
-                    | None -> cannot $"a call to '{name}' that does not fix all of its type arguments")
+                    // A type argument the call does not fix is a type variable nothing constrains (see `toIrType`).
+                    | None -> IrUnit)
             request (name, typeArguments) bindings AsDefined
 
     let mk kind ty : Expr = { Kind = kind; Type = ty }
@@ -465,7 +512,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 match tyOf iterable with
                 | IrList elementTy -> this.Atoms scope [ iterable ] (fun atoms -> loop (OverList atoms.Head) elementTy)
                 | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
-        | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) -> k (mk (Panic [ message ]) (tyOf expr))
+        | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) ->
+            // One the type checker added (the last arm of a match that does not handle every case) has no type.
+            let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
+            k (mk (Panic [ message ]) ty)
         | FunctionCall("dbg", _, args) when not (scope.Vars.ContainsKey "dbg") && not (definitions.ContainsKey "dbg") ->
             // Prints its value and leaves it, by how the value is printed.
             let value =
@@ -485,7 +535,13 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     | LiteralExpr _
                     | InterpolatedString _ -> None
                     | _ -> Some scope.InterpolationDepth
-                match tyOf value with
+                // A name in scope has its variable's type, which may be more than the type checker recorded at the name
+                // (a parameter annotated by lambda lifting, say).
+                let valueTy =
+                    match value.Kind with
+                    | IdentifierExpr name when scope.Vars.ContainsKey name -> scope.Vars.[name].Type
+                    | _ -> tyOf value
+                match valueTy with
                 | IrString -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgString(scratch, holeDepth))) ty))
                 | IrFloat -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgFloat(scratch, holeDepth))) ty))
                 | IrInt
@@ -927,14 +983,35 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               InterpolationDepth = 0
               Members = Map.empty
               ForDepth = 0 }
+        // An expression that holds errors deferred to run time, and cannot be lowered because of them, reports them
+        // when it is reached instead.
+        let lowerExpression (expr: Expression) =
+            try this.Tail scope expr
+            with CannotLower _ when not (deferredMessages expr).IsEmpty -> mk (Panic(deferredMessages expr)) IrError
         let body =
-            List.foldBack (fun (expr: Expression) (rest: Expr) -> mk (Do(this.Tail scope expr, rest)) IrUnit) input.TopLevel (mk (Atom AUnit) IrUnit)
+            List.foldBack (fun (expr: Expression) (rest: Expr) -> mk (Do(lowerExpression expr, rest)) IrUnit) input.TopLevel (mk (Atom AUnit) IrUnit)
         { Name = startFunctionName
           Source = startFunctionName
           TypeArguments = []
           Params = []
           Result = IrUnit
           Body = body }
+
+    /// The definition `name` as a function called `functionName` that reports `messages`, errors deferred to run time,
+    /// as soon as it is called: what a definition that cannot be lowered because of them is instead. It takes the
+    /// parameters the definition does, context members included, as values of no known type.
+    member this.Trap (name: string) (functionName: string) (typeArguments: IrType list) (messages: string list) : Function =
+        let parameterNames, _ = parametersAndBody definitions.[name]
+        let contextParameters = input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
+        let parameters =
+            (parameterNames |> List.map (fun parameterName -> newVar (uniqueName parameterName) Param IrError))
+            @ (contextParameters |> List.map (fun parameter -> newVar parameter.Name Param IrError))
+        { Name = functionName
+          Source = name
+          TypeArguments = typeArguments
+          Params = parameters
+          Result = IrError
+          Body = mk (Panic messages) IrError }
 
     /// The types of the parameters `names` of a function of type `fnTy`, and of its result. Several parameters are the
     /// fields of the input, each named by its position or by its own name when the type names it
@@ -1015,6 +1092,17 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | None -> cannot "a lambda without a type"
             let environment = IrRecord(("0", IrInt) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
             let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail lambdaTy true
+            // A lambda bound to a context member in a `use` may have parameters the type checker left open; lambda
+            // lifting annotates them with the types the member declares.
+            let annotations =
+                match expr.Kind with
+                | Lambda(parameters, _) -> parameters.Tail |> List.map snd
+                | _ -> parameterNames.Tail |> List.map (fun _ -> None)
+            let parameterTys =
+                List.map2 (fun (ty: Ty) annotation ->
+                    match Unifier.unalias ty, annotation |> Option.bind primitiveOfTypeExpr with
+                    | TyVar _, Some annotated -> annotated
+                    | _ -> ty) parameterTys annotations
             let parameters =
                 parameterOf parameterNames.Head environment
                 :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
@@ -1070,7 +1158,7 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
                 pending.Enqueue((specKey, bindings, lowering))
                 candidate
         order.Add key
-        results.[key] <-
+        let attempt () =
             try
                 let lowering = FunctionLowering(input, definitions, subst, key, request)
                 let func = lowering.Function how (fst key) functionName (snd key)
@@ -1080,6 +1168,23 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
             | Failure reason -> Error reason
             // A bug in the lowering or the emitter costs the function its trip through the IR, not the compile.
             | ex -> Error $"internal error: {ex.Message}"
+        // A definition that holds errors deferred to run time may be what cannot be lowered because of them (a value of
+        // no known type to interpolate, say): it reports them as soon as it is called instead.
+        let messages =
+            match definitions |> Map.tryFind (fst key) with
+            | Some expr when how <> AsStart -> deferredMessages expr
+            | _ -> []
+        results.[key] <-
+            match attempt () with
+            | Error _ when not messages.IsEmpty ->
+                try
+                    let lowering = FunctionLowering(input, definitions, subst, key, request)
+                    let func = lowering.Trap (fst key) functionName (snd key) messages
+                    Ok (func, finish func, Set.empty)
+                with
+                | CannotLower reason
+                | Failure reason -> Error reason
+            | result -> result
 
     let isGeneric (name: string) =
         match input.DefinitionTypes |> Map.tryFind name with
