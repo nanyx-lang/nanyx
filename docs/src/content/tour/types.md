@@ -43,6 +43,8 @@ def active: bool = true
 
 There is no separate `number` type. Numeric operations are generic over a `Num(a)` [context](../advanced/contexts), and `int` and `float` are the built-in types that satisfy it.
 
+`int` is a 64-bit integer and `float` a 64-bit floating-point number, on every platform. Numbers of other fixed widths (`I32`, `U8`, `F32` and so on) are planned; see [Sized numbers](../work-in-progress/sized-numbers).
+
 # Record types
 
 Records are structural types with named fields. They have their own Language Tour page covering record types, structural typing, optional fields, and the unified record/tuple model.
