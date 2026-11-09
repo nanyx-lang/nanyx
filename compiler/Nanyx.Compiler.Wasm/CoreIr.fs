@@ -164,6 +164,23 @@ and ExprKind =
     /// Evaluates the expression, then drops each of these variables' values: operands it only borrowed (temporaries
     /// among them), and variables whose last use it was.
     | DropAfter of Expr * Var list
+    /// Gives up an object a `match` arm took apart and does not use itself, then evaluates the expression: what a
+    /// `dup` of the names the arm binds followed by a `drop` of the object does, without them when the arm holds the
+    /// only reference (see `CoreIrReuse`).
+    | Release of Released * Expr
+    /// An allocation that writes into the block the token holds, if it holds one, instead of allocating.
+    | Reuse of token: Var * Expr
+
+/// An object a `match` arm releases (see `Release`).
+and Released =
+    { Object: Var
+      /// Each field of the object on the heap: where it is, the name the arm binds it to and uses, if any, and its
+      /// type.
+      Fields: (int * Var option * IrType) list
+      /// How far before the object's pointer its count is.
+      CountOffset: int
+      /// The local that gets the object's block to reuse, or 0 when the arm did not hold the only reference.
+      Token: Var option }
 
 /// A `for` loop over a list or a range, at a depth (how many loops enclose it) that names its locals.
 and ForLoop =
@@ -357,6 +374,10 @@ module Print =
         | Dup(vars, body) -> $"""dup {vars |> List.map _.Name |> String.concat ", "}\n{indent}{expr indent body}"""
         | Drop(vars, body) -> $"""drop {vars |> List.map _.Name |> String.concat ", "}\n{indent}{expr indent body}"""
         | DropAfter(value, vars) -> $"""{expr indent value} then drop {vars |> List.map _.Name |> String.concat ", "}"""
+        | Release(released, body) ->
+            let token = released.Token |> Option.map (fun token -> $" into {token.Name}") |> Option.defaultValue ""
+            $"release {released.Object.Name}{token}\n{indent}{expr indent body}"
+        | Reuse(token, value) -> $"{expr indent value} reusing {token.Name}"
 
     let func (f: Function) =
         let parameters = f.Params |> List.map (fun p -> $"{p.Name}: {IrType.show p.Type}") |> String.concat ", "

@@ -201,7 +201,23 @@
       i32.load offset=4
         local.set $__payload_value
     local.get $__match_tmp_0
-    call $__nanyx_drop_tags_None_Some_int
+    i32.const 4
+    i32.sub
+    i32.load
+    i32.const 1
+    i32.eq
+    if
+      local.get $__match_tmp_0
+      i32.const 4
+      i32.sub
+      call $__nanyx_free
+    else
+      local.get $__match_tmp_0
+      i32.const 4
+      i32.sub
+      call $__nanyx_release
+      drop
+    end
     local.get $__payload_value
       )
       (else

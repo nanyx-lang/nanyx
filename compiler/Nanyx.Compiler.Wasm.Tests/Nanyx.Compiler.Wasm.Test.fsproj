@@ -25,6 +25,7 @@
     <Compile Include="Features\Memory\DropFunctionTests.fs" />
     <Compile Include="Features\Memory\ReferenceCountingTests.fs" />
     <Compile Include="Features\Memory\ExampleMemoryTests.fs" />
+    <Compile Include="Features\Memory\ReuseTests.fs" />
     <Compile Include="Features\Operators\RunOperatorTests.fs" />
     <Compile Include="Features\Records\RunRecordTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />

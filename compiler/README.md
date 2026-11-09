@@ -276,7 +276,8 @@ Current WASM backend support is intentionally minimal and focused on bootstrappi
 - strings are pointers to length-prefixed UTF-8 bytes; `++` and `==` on strings call emitted helpers
 - list literals, `++` on lists, and list patterns (`[]`, `[x, ...rest]`, `[1, y]`) over heap-allocated cons cells
 - every object on the heap has a reference count in its header, and the compiler inserts `dup` and `drop` (Perceus
-  reference counting), so an object is freed once nothing refers to it (see `compiler/design/memory.md`)
+  reference counting), so an object is freed once nothing refers to it, and one a `match` takes apart and holds
+  the only reference to is rewritten in place into a new one of the same size (see `compiler/design/memory.md`)
 - `dbg(...)` of integers and strings, and `nanyx/console`, write to stdout through WASI `fd_write`
 - `dbg(#tag)` calls a host import `(import "env" "dbg_tag_<tag>" (func))`, which the runtime provides
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a

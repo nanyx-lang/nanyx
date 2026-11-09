@@ -453,6 +453,20 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | TagExpr(name, Some payload) ->
             let ty = tyOf expr
             this.Atoms scope [ payload ] (fun atoms -> k (mk (MakeTag(name, atoms.Head)) ty))
+        | BinaryOp("++", Kind (ListExpr items), rest) when not items.IsEmpty ->
+            // `[a, b] ++ rest`, which is what `[a, b, ...rest]` is: a cell for each element, put in front of `rest`
+            // rather than copied from a list of their own. The elements are evaluated first, then `rest`, as `++`
+            // evaluates them.
+            let ty = tyOf expr
+            this.Atoms scope (items @ [ rest ]) (fun atoms ->
+                let tail = List.last atoms
+                let cons head tail = mk (CallRuntime(Helpers.listCons, [ head; tail ], true)) ty
+                let rec build (heads: Atom list) (k: Expr -> Expr) =
+                    match heads with
+                    | [ head ] -> k (cons head tail)
+                    | head :: others -> build others (fun inner -> bindTemp inner (fun cell -> k (cons head cell)))
+                    | [] -> cannot "an empty list in front of ++"
+                build (List.take items.Length atoms) k)
         | BinaryOp("++", left, right) ->
             // Joining strings or lists: a runtime helper for each.
             let helper =

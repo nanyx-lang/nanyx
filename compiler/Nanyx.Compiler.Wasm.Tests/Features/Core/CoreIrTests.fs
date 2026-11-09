@@ -159,7 +159,8 @@ let ``Strings, lists and intrinsics go through the core IR`` () =
         "\n" +
         "def size: string -> int = { s -> s.length }\n" +
         "\n" +
-        "def main = heads([1, 2] ++ [3]) + word(\"yes\") + size(greet(\"Ada\"))\n"
+        // A list literal in front of `++` is put in front of the rest cell by cell; a list that is not one is copied.
+        "def main = heads(([1, 2] ++ []) ++ [3]) + word(\"yes\") + size(greet(\"Ada\"))\n"
     let wat, report = compileWithReport source
     Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.Functions)
     Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)
