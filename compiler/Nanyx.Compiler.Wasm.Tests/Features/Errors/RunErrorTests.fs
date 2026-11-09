@@ -1,0 +1,171 @@
+module TranspilerWasmTests.Features.Errors.Run
+
+open System
+open System.Diagnostics
+open System.IO
+open Xunit
+open TranspilerWasmTestHelpers
+
+[<Fact>]
+let ``Run - what the backend cannot compile is reported with its place, like any other error`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def explain = {\n" +
+        "  | #badLine(text) -> \"could not read '{text}'\"\n" +
+        "  | _ -> \"something went wrong\"\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = { println(explain(#badLine(\"x\"))) }\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    // `path/to/file.nyx:4:41: error NYX0301: ...`, the column being that of `text` in the hole.
+    Assert.Matches(
+        ":4:41: error NYX0301: The WebAssembly backend cannot tell the type of this interpolated value: annotate the function or value it comes from\\r?\\n$",
+        outcome.StandardError)
+
+[<Fact>]
+let ``Run - importing an unknown standard library module is a diagnostic`` () =
+    let outcome = runSource "import nanyx/sockets\n\ndbg(1)\n"
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Contains("Unknown standard library module 'nanyx/sockets'", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a compile error that cannot be deferred exits 1 with the diagnostic on stderr`` () =
+    // An error in a type definition is not deferred to run time, so nothing runs.
+    let outcome = runSource "import nanyx/console\n\ntype T = (a: Missing)\nprintln(\"never\")\n"
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    // `file:line:col: error CODE: message`, at the type.
+    Assert.Contains(":3:14: error NYX0109: Unknown type 'Missing'", outcome.StandardError)
+    Assert.DoesNotContain("deferred", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a type error that is never reached does not stop the program`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def unused = { x -> missing(x) }\n" +
+        "\n" +
+        "println(\"fine\")\n"
+    let outcome = runSource source
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("fine\n", outcome.StandardOutput)
+    Assert.Contains(":3:21: error NYX0102: Unknown function 'missing'", outcome.StandardError)
+    Assert.Contains("Running with 1 deferred error", outcome.StandardError)
+    Assert.DoesNotContain("(deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - reaching a deferred error reports it and stops the program`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def broken = { x -> missing(x) }\n" +
+        "\n" +
+        "println(\"before\")\n" +
+        "broken(1)\n" +
+        "println(\"after\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains(":3:21: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+    // The error says why the program stopped: there is no trap report after it.
+    Assert.DoesNotContain("Runtime error", outcome.StandardError)
+
+/// A package whose @entry reaches a deferred error, with another file that has one it never reaches.
+let private packageWithDeferredErrors =
+    [ "main.nyx", "module main\n\n@entry\ndef main = {\n  println(\"before\")\n  missing(1)\n  println(\"after\")\n}\n"
+      "other.nyx", "module other\n\ndef unused = { x -> nope }\n" ]
+
+[<Fact>]
+let ``Run - a package with deferred errors runs its entry`` () =
+    let outcome, _ = nanyxOnPackage packageWithDeferredErrors [ "run"; "{package}" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains("Running with 2 deferred errors", outcome.StandardError)
+    Assert.Contains("main.nyx:6:3: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Build - a debug build writes a package with deferred errors, and a release build refuses it`` () =
+    let debug, debugWrote = nanyxOnPackage packageWithDeferredErrors [ "build"; "{package}" ]
+    Assert.Equal(0, debug.ExitCode)
+    Assert.True(debugWrote)
+    Assert.Contains("Built app (2 files) with 2 deferred errors", debug.StandardOutput)
+    let release, releaseWrote = nanyxOnPackage packageWithDeferredErrors [ "build"; "--release"; "{package}" ]
+    Assert.Equal(1, release.ExitCode)
+    Assert.False(releaseWrote)
+    Assert.Contains("Unknown function 'missing'", release.StandardOutput)
+
+[<Fact>]
+let ``Build - an error that cannot be deferred fails a debug build`` () =
+    let outcome, wrote = nanyxOnPackage [ "main.nyx", "module main\n\ntype T = (a: Missing)\n\n@entry\ndef main = { println(\"hi\") }\n" ] [ "build"; "{package}" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.False(wrote)
+
+[<Fact>]
+let ``Wasm - a release build of a file refuses a deferred error`` () =
+    let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-wasm-{Guid.NewGuid():N}.nyx")
+    let outputPath = Path.ChangeExtension(inputPath, ".wat")
+    File.WriteAllText(inputPath, "def broken = { x -> missing(x) }\n")
+    try
+        let debug = nanyxWithInput "" [ "wasm"; inputPath; "-o"; outputPath ]
+        Assert.Equal(0, debug.ExitCode)
+        Assert.Contains("WASM (WAT) emitted with 1 deferred error", debug.StandardOutput)
+        File.Delete outputPath
+        let release = nanyxWithInput "" [ "wasm"; inputPath; "-o"; outputPath; "--release" ]
+        Assert.Equal(1, release.ExitCode)
+        Assert.False(File.Exists outputPath)
+    finally
+        File.Delete inputPath
+        File.Delete outputPath
+
+[<Fact>]
+let ``Run - a non-exhaustive match runs the cases it handles and traps on the rest`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def name: #a | #b | #c -> string = { x ->\n" +
+        "  match x\n" +
+        "  | #a -> \"a\"\n" +
+        "  | #b -> \"b\"\n" +
+        "}\n" +
+        "\n" +
+        "println(name(#a))\n" +
+        "println(name(#b))\n" +
+        "println(name(#c))\n" +
+        "println(\"never\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("a\nb\n", outcome.StandardOutput)
+    Assert.Contains(":4:9: error NYX0203: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - each kind of deferred error traps where it was found`` () =
+    let run body = runSource ("import nanyx/console\n\n" + body + "\nprintln(\"start\")\nprintln(f(1))\n")
+    // A type mismatch, an unknown name inside a def, and a def whose annotation names an unknown type.
+    for body, expected in
+        [ "def f = { x -> if x == 1 then \"one\" else 2 }", "Type mismatch"
+          "def f = { x ->\n  def y = nope\n  \"{y}\"\n}", "Unknown identifier 'nope'"
+          "def f: Missing -> string = { x -> \"one\" }", "Unknown type 'Missing'" ] do
+        let outcome = run body
+        Assert.True((outcome.ExitCode = 1), $"Expected exit code 1 for {body}, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
+        Assert.Equal("start\n", outcome.StandardOutput)
+        Assert.Contains($"{expected}", outcome.StandardError)
+        Assert.Contains("(deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
+    let source =
+        "def pick = { x ->\n" +
+        "    match x\n" +
+        "    | 1 -> 10\n" +
+        "}\n" +
+        "\n" +
+        "dbg(pick(2))\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains("Runtime error", outcome.StandardError)
+    Assert.Contains("unreachable", outcome.StandardError)
