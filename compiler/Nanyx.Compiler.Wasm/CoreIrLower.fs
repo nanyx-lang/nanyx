@@ -318,6 +318,7 @@ let rec private deferredMessages (expr: Expression) : string list =
     | ListExpr items -> all items
     | RecordExpr fields -> fields |> List.map (function NamedField(_, value) | PositionalField value -> value) |> all
     | ExpressionKind.Match(values, arms) -> all (values @ (arms |> List.map snd))
+    | Except(value, arms) -> all (value :: (arms |> List.map snd))
     | TagExpr(_, payload) -> payload |> Option.toList |> all
     | ContextMemberAccess _
     | UnitExpr

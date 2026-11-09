@@ -243,6 +243,9 @@ and ExpressionKind =
     | Pipe of Expression * Identifier * SourceSpan option * Expression list  // expr \func or expr \func(args)
     | Block of Statement list
     | Match of Expression list * MatchArm list  // Can match on multiple values
+    /// `value except | pattern -> replacement ...`: the cases of `value` the arms match are replaced by their arms'
+    /// values, and every other case passes through unchanged. Desugaring makes it a `match` (see `Except.fs`).
+    | Except of Expression * MatchArm list
     | TupleExpr of Expression list  // Positional-only tuple (for backward compat with existing tests)
     | RecordExpr of RecordField list  // Mixed tuple/record with named and/or positional fields
     | ListExpr of Expression list

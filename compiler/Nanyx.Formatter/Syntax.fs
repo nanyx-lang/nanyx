@@ -46,6 +46,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | Pipe(value, n, span, args) -> Pipe(expr value, n, span, List.map expr args)
             | Block statements -> Block(List.map statement statements)
             | Match(scrutinees, arms) -> Match(List.map expr scrutinees, arms |> List.map (fun (ps, body) -> List.map pattern ps, expr body))
+            | Except(value, arms) -> Except(expr value, arms |> List.map (fun (ps, body) -> List.map pattern ps, expr body))
             | TupleExpr items -> TupleExpr(List.map expr items)
             | RecordExpr fields -> RecordExpr(List.map field fields)
             | ListExpr items -> ListExpr(List.map expr items)

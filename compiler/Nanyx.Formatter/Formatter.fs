@@ -324,6 +324,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     and isOpenEnded (e: Expression) =
         match e.Kind with
         | Match _
+        | Except _
         | IfExpr _
         | UseIn _
         | WorkflowBindExpr _
@@ -363,6 +364,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             match ifArm e with
             | Some _ -> ifDoc e
             | None -> matchDoc e scrutinees arms
+        | Except(value, arms) -> exceptDoc position e value arms
         | IfExpr _ -> ifDoc e
         | TupleExpr items -> fieldsDoc e.Span.Start e.Span.End (List.map PositionalField items)
         | RecordExpr fields -> fieldsDoc e.Span.Start e.Span.End fields
@@ -664,6 +666,16 @@ let format (options: Options) (parsed: SourceModule) : string =
         | [ scrutinee ] when (match scrutinee.Kind with Block _ -> true | _ -> false) ->
             cat [ text "match"; Doc.nest (2 * options.IndentSize) (cat [ hard; block scrutinee ]); armsDoc ]
         | _ -> cat [ text "match "; commaJoin (List.map (expr { full with Tail = false }) scrutinees); armsDoc ]
+
+    /// `value except pattern -> replacement` when there is one arm (perhaps with alternatives), and otherwise `value
+    /// except` with the arms on the lines after it, as a match has them.
+    and exceptDoc (position: Position) (e: Expression) (value: Expression) (arms: MatchArm list) : Doc =
+        let valueDoc = expr { position with Tail = false; Prec = 0 } value
+        match List.distinctBy (fun (_, body: Expression) -> body.Id) arms with
+        | [ _, body ] ->
+            let patterns = arms |> List.map (fun (ps, _) -> commaJoin (List.map pattern ps)) |> Doc.join (text " | ")
+            cat [ valueDoc; text " except "; patterns; armBody true body ]
+        | _ -> cat [ valueDoc; text " except"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
 
     /// An `if` as its head, its `then` branch and its `else` branch if it has one (a left-out `else` is `()` made up at
     /// the `then` branch). `if x is pattern then a else b` is parsed as a match of `x` against the pattern and `_`.

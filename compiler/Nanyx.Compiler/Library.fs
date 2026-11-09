@@ -158,6 +158,8 @@ module Compiler =
                 let mappedValues = values |> List.map mapExpr
                 let mappedArms = arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr)
                 Match(mappedValues, mappedArms)
+            | Except(value, arms) ->
+                Except(mapExpr value, arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr))
             | TupleExpr items -> TupleExpr(items |> List.map mapExpr)
             | RecordExpr fields ->
                 RecordExpr(
@@ -290,6 +292,7 @@ module Compiler =
         | Match(values, arms) ->
             (values |> List.collect referencedNames)
             @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencedNamesInPattern) @ referencedNames body))
+        | Except(value, arms) -> referencedNames { expr with Kind = Match([ value ], arms) }
         | TupleExpr items
         | ListExpr items -> items |> List.collect referencedNames
         | RecordExpr fields ->
@@ -606,6 +609,9 @@ module Compiler =
             | Match(values, arms) ->
                 let prefix, values' = liftAll values
                 prefix, rebuild (Match(values', arms))
+            | Except(value, arms) ->
+                let prefix, value' = liftBinds value
+                prefix, rebuild (Except(value', arms))
             | InterpolatedString parts ->
                 let lifted =
                     parts
@@ -666,6 +672,7 @@ module Compiler =
             | BinaryOp(_, left, right) -> usesKeyword left || usesKeyword right
             | IfExpr(cond, thenExpr, elseExpr) -> usesKeyword cond || usesKeyword thenExpr || usesKeyword elseExpr
             | Match(values, arms) -> List.exists usesKeyword values || arms |> List.exists (snd >> usesKeyword)
+            | Except(value, arms) -> usesKeyword value || arms |> List.exists (snd >> usesKeyword)
             | Block statements -> List.exists inValue statements
             | TupleExpr items
             | ListExpr items -> List.exists usesKeyword items
@@ -685,7 +692,8 @@ module Compiler =
         let branchesUseKeywords (expr: Expression) =
             match expr.Kind with
             | IfExpr(_, thenExpr, elseExpr) -> usesKeyword thenExpr || usesKeyword elseExpr
-            | Match(_, arms) -> arms |> List.exists (snd >> usesKeyword)
+            | Match(_, arms)
+            | Except(_, arms) -> arms |> List.exists (snd >> usesKeyword)
             | _ -> false
 
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
@@ -741,6 +749,7 @@ module Compiler =
                         PatternSpace.ofArm exprs.Length patterns |> List.map (Pattern.mapExpressions desugarExpr),
                         within InConditionalPart (fun () -> desugarExpr expr))
                 Match(mappedExprs, mappedArms)
+            | Except(value, arms) -> desugarKind { expr with Kind = Except.asMatch expr value arms }
             | TupleExpr items -> TupleExpr(items |> List.map desugarExpr)
             | RecordExpr fields ->
                 let mappedFields =
@@ -888,7 +897,11 @@ module Compiler =
                     | _ -> [ Statement.from body (ExprStatement body) ]
                 desugarChain (statements |> List.collect liftStatementBinds) goOn
             let branched =
-                match expr.Kind with
+                let kind =
+                    match expr.Kind with
+                    | Except(value, arms) -> Except.asMatch expr value arms
+                    | kind -> kind
+                match kind with
                 | IfExpr(cond, thenExpr, elseExpr) -> IfExpr(desugarExpr cond, branch thenExpr, branch elseExpr)
                 | Match(values, arms) ->
                     let desugarArm (patterns, body) =

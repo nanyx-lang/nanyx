@@ -103,6 +103,7 @@ let rec private collectExprLocalNames (expr: Expression) : string list =
         |> List.collect (function
             | NamedField(_, value) -> collectExprLocalNames value
             | PositionalField value -> collectExprLocalNames value)
+    | Except(value, arms) -> collectExprLocalNames { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         let valueLocals = values |> List.collect collectExprLocalNames
         let armLocals =
@@ -194,6 +195,7 @@ let private exprChildren (expr: Expression) : Expression list =
         |> List.map (function
             | NamedField(_, value) -> value
             | PositionalField value -> value)
+    | Except(value, arms) -> value :: Pattern.armExpressions arms @ (arms |> List.map snd)
     | Match(values, arms) -> values @ Pattern.armExpressions arms @ (arms |> List.map snd)
     | UseIn(_, body) -> [ body ]
     | MemberAccess(inner, _, _) -> [ inner ]
@@ -247,6 +249,7 @@ let rec private existsExpr (predicate: Expression -> bool) (expr: Expression) : 
            |> List.exists (function
                | NamedField(_, value) -> recurse value
                | PositionalField value -> recurse value)
+       | Except(value, arms) -> recurse { expr with Kind = Match([ value ], arms) }
        | Match(values, arms) ->
            (values @ Pattern.armExpressions arms |> List.exists recurse) || (arms |> List.exists (fun (_, armExpr) -> recurse armExpr))
        | UseIn(_, body) -> recurse body
@@ -292,6 +295,7 @@ let rec private containsDbgCallExpr (expr: Expression) : bool =
         |> List.exists (function
             | NamedField(_, value) -> containsDbgCallExpr value
             | PositionalField value -> containsDbgCallExpr value)
+    | Except(value, arms) -> containsDbgCallExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values @ Pattern.armExpressions arms |> List.exists containsDbgCallExpr)
         || (arms |> List.exists (fun (_, armExpr) -> containsDbgCallExpr armExpr))
@@ -333,6 +337,7 @@ let rec private usesHeapAllocationExpr (expr: Expression) : bool =
     | Block statements -> usesHeapAllocationStatements statements
     | Lambda(_, body) -> usesHeapAllocationExpr body
     | Pipe(value, _, _, args) -> usesHeapAllocationExpr value || (flattenCallArgs args |> List.exists usesHeapAllocationExpr)
+    | Except(value, arms) -> usesHeapAllocationExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values @ Pattern.armExpressions arms |> List.exists usesHeapAllocationExpr)
         || (arms |> List.exists (fun (_, armExpr) -> usesHeapAllocationExpr armExpr))
@@ -382,6 +387,7 @@ let rec private collectDbgTagNamesExpr (expr: Expression) : string list =
         |> List.collect (function
             | NamedField(_, value) -> collectDbgTagNamesExpr value
             | PositionalField value -> collectDbgTagNamesExpr value)
+    | Except(value, arms) -> collectDbgTagNamesExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         let valueTags = values @ Pattern.armExpressions arms |> List.collect collectDbgTagNamesExpr
         let armTags = arms |> List.collect (fun (_, armExpr) -> collectDbgTagNamesExpr armExpr)
@@ -419,6 +425,7 @@ and private collectStringLiteralsExpr (expr: Expression) : string list =
         |> List.collect (function
             | NamedField(_, value) -> collectStringLiteralsExpr value
             | PositionalField value -> collectStringLiteralsExpr value)
+    | Except(value, arms) -> collectStringLiteralsExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         let valueStrings = values |> List.collect collectStringLiteralsExpr
         let armStrings =
@@ -508,6 +515,7 @@ let rec private collectDbgTagPayloadNamesExpr (expr: Expression) : string list =
         |> List.collect (function
             | NamedField(_, value) -> collectDbgTagPayloadNamesExpr value
             | PositionalField value -> collectDbgTagPayloadNamesExpr value)
+    | Except(value, arms) -> collectDbgTagPayloadNamesExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         let valueTags = values @ Pattern.armExpressions arms |> List.collect collectDbgTagPayloadNamesExpr
         let armTags = arms |> List.collect (fun (_, armExpr) -> collectDbgTagPayloadNamesExpr armExpr)
@@ -562,6 +570,7 @@ let rec private containsRegularDbgExpr (expr: Expression) : bool =
         |> List.exists (function
             | NamedField(_, value) -> containsRegularDbgExpr value
             | PositionalField value -> containsRegularDbgExpr value)
+    | Except(value, arms) -> containsRegularDbgExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values @ Pattern.armExpressions arms |> List.exists containsRegularDbgExpr)
         || (arms |> List.exists (fun (_, armExpr) -> containsRegularDbgExpr armExpr))
@@ -611,6 +620,7 @@ and private containsDbgStringLiteralExpr (expr: Expression) : bool =
         |> List.exists (function
             | NamedField(_, value) -> containsDbgStringLiteralExpr value
             | PositionalField value -> containsDbgStringLiteralExpr value)
+    | Except(value, arms) -> containsDbgStringLiteralExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values @ Pattern.armExpressions arms |> List.exists containsDbgStringLiteralExpr)
         || (arms |> List.exists (fun (_, armExpr) -> containsDbgStringLiteralExpr armExpr))
@@ -659,6 +669,7 @@ let rec private collectTagNamesExpr (expr: Expression) : string list =
         |> List.collect (function
             | NamedField(_, value) -> collectTagNamesExpr value
             | PositionalField value -> collectTagNamesExpr value)
+    | Except(value, arms) -> collectTagNamesExpr { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         let valueTags = values |> List.collect collectTagNamesExpr
         let armTags =

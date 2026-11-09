@@ -35,6 +35,30 @@ let ``Unifier allows record width subtyping`` () =
     | Error (message, _) -> Assert.True(false, message)
 
 [<Fact>]
+let ``A lone tag equal to an open union that names it leaves the union's rest empty`` () =
+    let rest = { Id = 7; Name = None }
+    let named = { Id = 8; Name = Some "r" }
+    let notFound = TyTag("notFound", None)
+    match Unifier.unify [ (notFound, TyUnion [ notFound; TyVar rest ], Equal, SourceSpan.none) ] with
+    | Ok subst -> Assert.Equal(Some (TyUnion []), subst |> Map.tryFind rest.Id)
+    | Error (message, _) -> Assert.True(false, message)
+    // Given where the union is expected, the tag says nothing of the rest; nor does it of a rest an annotation names.
+    match Unifier.unify [ (notFound, TyUnion [ notFound; TyVar rest ], Assignable, SourceSpan.none) ] with
+    | Ok subst -> Assert.Equal(None, subst |> Map.tryFind rest.Id)
+    | Error (message, _) -> Assert.True(false, message)
+    match Unifier.unify [ (notFound, TyUnion [ notFound; TyVar named ], Equal, SourceSpan.none) ] with
+    | Ok subst -> Assert.Equal(None, subst |> Map.tryFind named.Id)
+    | Error (message, _) -> Assert.True(false, message)
+
+[<Fact>]
+let ``A union leaves out a tag whose payload has no values, and a tag its rest repeats`` () =
+    let payload = { Id = 9; Name = None }
+    let rest = { Id = 10; Name = None }
+    let some = TyTag("some", Some (TyPrimitive "int"))
+    let subst = Map.ofList [ payload.Id, TyUnion []; rest.Id, some ]
+    Assert.Equal(some, Unifier.apply subst (TyUnion [ some; TyTag("error", Some (TyVar payload)); TyVar rest ]))
+
+[<Fact>]
 let ``Unifier matches unions by set and width`` () =
     let unionA = TyUnion [ TyTag("some", Some (TyPrimitive "int")); TyTag("notFound", None) ]
     let unionB = TyUnion [ TyTag("notFound", None); TyTag("some", Some (TyPrimitive "int")) ]

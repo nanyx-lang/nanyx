@@ -21,6 +21,7 @@
     <Compile Include="InferState.fs" />
     <Compile Include="Visibility.fs" />
     <Compile Include="PatternSpace.fs" />
+    <Compile Include="Except.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />

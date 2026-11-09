@@ -178,6 +178,7 @@ let rec private expressionsOfKind (kind: ExpressionKind) : Expression list =
     | Match (values, arms) ->
         (values |> List.collect expressions)
         @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect expressionsOfPattern) @ expressions body))
+    | Except (value, arms) -> expressionsOfKind (Match ([ value ], arms))
     | TupleExpr items
     | ListExpr items -> items |> List.collect expressions
     | RecordExpr fields ->
