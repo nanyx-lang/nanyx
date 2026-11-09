@@ -7,8 +7,44 @@ module NyxCompiler.TypeHints
 
 open Parser.Program
 
-/// The inferred type of a declaration and the span of the name it declares.
-type TypeHint = { Name: string; Type: string; Span: SourceSpan }
+/// The inferred type of a declaration and the span of the name it declares. `Context` is the span of an annotation
+/// the declaration writes that names only its contexts (`def f: [Console] = ...`): the type is the rest of that
+/// annotation, so it is shown after it rather than after the name.
+type TypeHint = { Name: string; Type: string; Span: SourceSpan; Context: SourceSpan option }
+
+/// Each def in `syntax` whose annotation names only contexts, as the span of the def and of the annotation.
+let private contextOnlyAnnotations (syntax: Module) : (SourceSpan * SourceSpan) list =
+    let isContextOnly (typeExpr: TypeExpr) =
+        match typeExpr.Kind with
+        | TypeContext _ -> not (SourceSpan.isNone typeExpr.Span)
+        | _ -> false
+    let topLevel =
+        syntax
+        |> List.choose (fun item ->
+            match item.Kind with
+            | Def (ValueDef(_, _, Some annotation, _)) when isContextOnly annotation -> Some (item.Span, annotation.Span)
+            | _ -> None)
+    let local =
+        Hover.allExpressions syntax
+        |> List.collect (fun expr ->
+            match expr.Kind with
+            | Block statements ->
+                statements
+                |> List.choose (fun statement ->
+                    match statement.Kind with
+                    | DefStatement(_, _, Some annotation, _) when isContextOnly annotation -> Some (statement.Span, annotation.Span)
+                    | _ -> None)
+            | _ -> [])
+    topLevel @ local
+
+/// The context-only annotation `declaration`'s def writes after its name, if it writes one.
+let private contextOf (annotations: (SourceSpan * SourceSpan) list) (declaration: SourceSpan) : SourceSpan option =
+    annotations
+    |> List.filter (fun (def, annotation) -> SourceSpan.contains def declaration && declaration.End <= annotation.Start)
+    // A def inside another starts after the other's annotation, so only its own is left; the narrowest def wins anyway.
+    |> List.sortBy (fun (def, _) -> def.End - def.Start)
+    |> List.tryHead
+    |> Option.map snd
 
 /// The hints for the root module, as top-level defs (for lenses) and everything else (for inlay hints), each in
 /// source order.
@@ -51,13 +87,15 @@ let private hints (names: TypeVarNames) (file: string) (result: CompileResult) :
                         && symbol.Declaration.Start < finish
                         && isInferred symbol)
                 def, members)
+        let annotations = contextOnlyAnnotations syntax
         let lensesAndHints =
             runs
             |> List.map (fun (def, members) ->
                 let defType = def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id)
                 let types = Option.toList defType @ (members |> List.map (fun symbol -> typed.SymbolTypes.[symbol.Id]))
                 let written = Unifier.tysToDisplayStrings names types
-                let hint (symbol: Symbol) ty = { Name = symbol.Name; Type = ty; Span = symbol.Declaration }
+                let hint (symbol: Symbol) ty =
+                    { Name = symbol.Name; Type = ty; Span = symbol.Declaration; Context = contextOf annotations symbol.Declaration }
                 let lens, memberTypes =
                     match def, defType, written with
                     | Some symbol, Some _, defWritten :: rest ->

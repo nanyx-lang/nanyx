@@ -48,6 +48,32 @@ let ``Inlay hints show the types of locals, parameters and pattern variables`` (
         typeHints TypeHints.inlayHints source)
 
 [<Fact>]
+let ``A def that writes only its contexts has its type shown after them`` () =
+    let source =
+        "context Log = (log: string -> ())\n" +
+        "def greet: [Log] = { name -> log(name) }\n" +
+        "def twice: [Log] = { s ->\n" +
+        "  def say: [Log] = { line -> log(line) }\n" +
+        "  say(s)\n" +
+        "  say(s)\n" +
+        "}\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let hints =
+        TypeHints.inlayHintsWithTopLevel Greek "" result
+        |> List.map (fun hint -> hint.Name, hint.Type, hint.Context |> Option.map (fun span -> span.Start))
+    let contextAt occurrence = Some (offsetOf source "[Log]" occurrence 0)
+    Assert.Equal<(string * string * int option) list>(
+        [ "greet", "string -> ()", contextAt 0
+          // A parameter writes no context of its own, though its def does.
+          "name", "string", None
+          "twice", "string -> ()", contextAt 1
+          "s", "string", None
+          "say", "string -> ()", contextAt 2
+          "line", "string", None ],
+        hints)
+
+[<Fact>]
 let ``Hints name type variables as their top-level def's type does`` () =
     let source =
         "def pair = { a, b -> (a, b) }\n" +

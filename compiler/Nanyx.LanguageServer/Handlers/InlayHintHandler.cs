@@ -43,15 +43,32 @@ public sealed class InlayHintHandler : InlayHintsHandlerBase
             : TypeHints.inlayHints(_settings.TypeVarNames, document.FileName, compiled);
         return new InlayHintContainer(
             hints
-                .Select(hint => (hint, span: document.FromLastGood(hint.Span.Start, hint.Span.End)))
-                .Where(mapped => mapped.span is not null)
-                .Select(mapped => new InlayHint
-                {
-                    Position = document.Positions.ToPosition(mapped.span!.Value.End),
-                    Label = new StringOrInlayHintLabelParts($": {mapped.hint.Type}"),
-                    Kind = InlayHintKind.Type
-                })
+                .Select(hint => ToInlayHint(document, hint))
+                .OfType<InlayHint>()
                 .Where(hint => Contains(request.Range, hint.Position)));
+    }
+
+    /// <summary>
+    /// The inlay hint for <paramref name="hint"/>: <c>: type</c> after the name, or, where the declaration writes only
+    /// its contexts (<c>def f: [Console] = ...</c>), the type after those, as the rest of the annotation.
+    /// <c>null</c> if what it is shown after has been edited since the last good compile.
+    /// </summary>
+    private static InlayHint? ToInlayHint(OpenDocument document, TypeHints.TypeHint hint)
+    {
+        var context = hint.Context?.Value;
+        var after = context ?? hint.Span;
+        if (document.FromLastGood(after.Start, after.End) is not { } span)
+        {
+            return null;
+        }
+
+        return new InlayHint
+        {
+            Position = document.Positions.ToPosition(span.End),
+            Label = new StringOrInlayHintLabelParts(context is null ? $": {hint.Type}" : hint.Type),
+            PaddingLeft = context is not null,
+            Kind = InlayHintKind.Type
+        };
     }
 
     private static bool Contains(Range range, Position position) =>
