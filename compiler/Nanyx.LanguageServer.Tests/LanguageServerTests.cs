@@ -68,6 +68,9 @@ public sealed class LanguageServerTests : IAsyncLifetime
             }));
 
         await _client.Initialize(_cancellation.Token);
+
+        // Starting a server is slow on a busy CI runner, so the test's own requests get the whole timeout after it.
+        _cancellation.CancelAfter(Timeout);
     }
 
     public async Task DisposeAsync()
