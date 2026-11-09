@@ -6,6 +6,12 @@ open FParsec
 // After the libraries, so that the parser's names shadow theirs (`identifier`, `Attribute`) as they did in one file.
 open Parser.Program
 
+/// The parameters of a shorthand lambda: the operand its body leaves out (`{ * 2 }`, `{ .name }`), or the two
+/// operands of an operator written alone (`{ + }`). Like `???`, they are names no code can write, so a shorthand
+/// lambda never captures a name the code around it declares.
+let implicitArgument = "<arg>"
+let implicitSecondArgument = "<arg2>"
+
 // Forward references for recursive expression parsing
 let expression, expressionRef = createParserForwardedToRef<Expression, ParseState>()
 let exprWithoutCrossingNewlines, exprWithoutCrossingNewlinesRef = createParserForwardedToRef<Expression, ParseState>()

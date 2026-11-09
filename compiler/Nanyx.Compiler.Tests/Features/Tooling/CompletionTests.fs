@@ -143,6 +143,21 @@ let ``After the dot that starts a shorthand lambda come the members of its argum
     Assert.Empty(members "person")
 
 [<Fact>]
+let ``After the dot that starts a guard pattern come the members of the value matched`` () =
+    let source =
+        "def size: (name: string, age: int) -> string = { p ->\n" +
+        "  match p\n" +
+        "    | { .age > 17 } -> \"adult\"\n" +
+        "    | _ -> \"minor\"\n" +
+        "}\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "age", Completion.Field, Some "int"; "name", Completion.Field, Some "string" ],
+        Completion.implicitArgumentMembersAt Greek result (offsetOf source "age >" 0 0)
+        |> List.map (fun item -> item.Name, item.Kind, item.Type))
+
+[<Fact>]
 let ``After an import's alias come its exports, and after a prefix the names under it`` () =
     withTempDir (fun dir ->
         let modulePath = Path.Combine(dir, "mod.nyx")

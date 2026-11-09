@@ -827,9 +827,11 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ListSplatMiddle(before, after) ->
             cat [ text "["; commaJoin (List.map pattern before @ [ text "..." ] @ List.map pattern after); text "]" ]
         | RangePattern(a, b) -> cat [ expr full a; text ".."; expr full b ]
-        | GuardPattern(op, value) ->
-            if valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' then cat [ text op; text " "; expr full value ]
-            else cat [ text "{ "; text op; text " "; expr full value; text " }" ]
+        // The bare `> 5` is kept bare: it is the shorthand lambda `{ > 5 }` without its braces.
+        | GuardPattern(Kind (Lambda([ (only, None) ], body))) when
+            only = implicitArgument && valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' ->
+            expr full body
+        | GuardPattern predicate -> expr full predicate
         | TagPattern(n, None) -> text ("#" + n)
         | TagPattern(n, Some (Kind UnitPattern)) -> text $"#{n}()"
         | TagPattern(n, Some payload) ->

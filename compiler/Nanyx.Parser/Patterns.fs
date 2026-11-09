@@ -123,10 +123,9 @@ let private listPatternKind =
 
 let listPattern = spannedPattern listPatternKind
 
-// Range pattern: 1..10
-// Must use attempt to ensure proper backtracking if ".." is not found
-// Guard pattern: `{ < 0 }`, `{ >= limit }` (the pattern-matching page writes a guard as a predicate in the
-// shorthand-lambda style). The value may be any expression. The older bare form `> 5` is still accepted.
+// Guard pattern: any lambda is a predicate on the value matched (the pattern-matching page: "arbitrary function
+// bodies"), most often a shorthand one, `{ < 0 }`, `{ % 2 == 0 }` or `{ .length > 5 }`. The older bare form `> 5`
+// is still accepted, and is the shorthand lambda `{ > 5 }`, its argument made up at the operator.
 let guardPattern =
     let guardOp =
         choice [
@@ -137,15 +136,14 @@ let guardPattern =
             pstring ">"
             pstring "<"
         ]
-    let braced =
-        attempt (
-            between (pstring "{" .>> ws) (pstring "}") (guardOp .>>. (ws >>. expression .>> ws))
-            |>> fun (op, value) -> GuardPattern(op, value))
     let bare =
         attempt (
-            guardOp .>>. (ws >>. spanned (literalNoWs |>> LiteralExpr))
-            |>> fun (op, value) -> GuardPattern(op, value))
-    spannedPattern (braced <|> bare)
+            withSpan guardOp .>>. (ws >>. spanned (literalNoWs |>> LiteralExpr))
+            |>> fun ((op, opSpan), value) ->
+                let argument = Expression.at opSpan (IdentifierExpr implicitArgument)
+                let body = Expression.at (SourceSpan.between opSpan value.Span) (BinaryOp(op, argument, value))
+                Expression.at body.Span (Lambda([ (implicitArgument, None) ], body)))
+    spannedPattern (lambda <|> bare |>> GuardPattern)
 
 /// `()`, the unit value.
 let unitPattern = spannedPattern (pstring "(" >>. ws >>. pstring ")" >>% UnitPattern)

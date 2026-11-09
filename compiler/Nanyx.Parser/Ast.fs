@@ -139,7 +139,7 @@ and PatternKind =
     | ListPattern of Pattern list * Pattern option  // patterns, optional splat at end
     | ListSplatMiddle of Pattern list * Pattern list  // patterns before ..., patterns after
     | RangePattern of Expression * Expression  // start..end (inclusive)
-    | GuardPattern of string * Expression  // operator (>, <, >=, <=, ==, !=) and value
+    | GuardPattern of Expression  // a predicate lambda, `{ < 0 }` or `{ x -> x % 2 == 0 }`: matches when it returns true
     | TagPattern of Identifier * Pattern option  // #tagName or #tagName(pattern)
 
 /// A statement in a block and where it came from. Like `Expression`, equality and comparison look only at `Kind`,
@@ -309,6 +309,47 @@ module Pattern =
     /// A pattern written at `span`.
     let at (span: SourceSpan) (kind: PatternKind) : Pattern =
         { Pattern.Kind = kind; Span = span; Id = NodeId.next () }
+
+    /// The expressions written in `pattern` and the patterns inside it: each guard's predicate and each range's ends.
+    let rec expressions (pattern: Pattern) : Expression list =
+        match pattern.Kind with
+        | GuardPattern predicate -> [ predicate ]
+        | RangePattern(low, high) -> [ low; high ]
+        | TuplePattern patterns
+        | RecordPattern(_, patterns) -> patterns |> List.collect expressions
+        | RecordMemberPattern members -> members |> List.collect (snd >> expressions)
+        | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressions
+        | ListSplatMiddle(before, after) -> (before @ after) |> List.collect expressions
+        | TagPattern(_, payload) -> payload |> Option.toList |> List.collect expressions
+        | LiteralPattern _
+        | IdentifierPattern _
+        | WildcardPattern
+        | UnitPattern
+        | ElsePattern -> []
+
+    /// The expressions written in the patterns of match arms, as `expressions` gives them.
+    let armExpressions (arms: (Pattern list * Expression) list) : Expression list =
+        arms |> List.collect (fst >> List.collect expressions)
+
+    /// `pattern` with `f` applied to each of the expressions written in it, as `expressions` gives them.
+    let rec mapExpressions (f: Expression -> Expression) (pattern: Pattern) : Pattern =
+        let recur = mapExpressions f
+        let kind =
+            match pattern.Kind with
+            | GuardPattern predicate -> GuardPattern(f predicate)
+            | RangePattern(low, high) -> RangePattern(f low, f high)
+            | TuplePattern patterns -> TuplePattern(List.map recur patterns)
+            | RecordPattern(name, patterns) -> RecordPattern(name, List.map recur patterns)
+            | RecordMemberPattern members -> RecordMemberPattern(members |> List.map (fun (name, p) -> name, recur p))
+            | ListPattern(patterns, rest) -> ListPattern(List.map recur patterns, Option.map recur rest)
+            | ListSplatMiddle(before, after) -> ListSplatMiddle(List.map recur before, List.map recur after)
+            | TagPattern(name, payload) -> TagPattern(name, Option.map recur payload)
+            | LiteralPattern _
+            | IdentifierPattern _
+            | WildcardPattern
+            | UnitPattern
+            | ElsePattern -> pattern.Kind
+        { pattern with Kind = kind }
 
 module Statement =
     /// A statement written at `span`.

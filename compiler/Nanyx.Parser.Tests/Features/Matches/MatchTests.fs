@@ -6,14 +6,41 @@ open Parser.Program
 open ParserTestHelpers
 open System.IO
 
+/// The predicate of each guard among the arms' patterns of `source`'s one def, a lambda that matches.
+let private guardsOf (source: string) =
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms))))))) ] ->
+        arms |> List.collect fst |> List.choose (function Kind (GuardPattern predicate) -> Some predicate.Kind | _ -> None)
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+let private implicitArg = IdentifierExpr implicitArgument
+
 [<Fact>]
-let ``a braced guard pattern takes any expression and the bare form still parses`` () =
-    match parseModule "def f = { | { < 0 } -> 1 | { >= limit * 2 } -> 2 | > 5 -> 3 | _ -> 4 }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Match (_, arms))))))) ] ->
+let ``a braced guard pattern is a shorthand lambda and the bare form still parses as one`` () =
+    match guardsOf "def f = { | { < 0 } -> 1 | { >= limit * 2 } -> 2 | > 5 -> 3 | _ -> 4 }" with
+    | [ Lambda ([ (a, None) ], Kind (BinaryOp ("<", Kind (IdentifierExpr a'), Kind (LiteralExpr (IntLit 0)))))
+        Lambda ([ (b, None) ], Kind (BinaryOp (">=", Kind (IdentifierExpr b'), Kind (BinaryOp ("*", Kind (IdentifierExpr "limit"), _)))))
+        Lambda ([ (c, None) ], Kind (BinaryOp (">", Kind (IdentifierExpr c'), Kind (LiteralExpr (IntLit 5))))) ]
+        when List.forall ((=) implicitArgument) [ a; a'; b; b'; c; c' ] -> ()
+    | other -> failwith $"Unexpected guards: %A{other}"
+
+[<Fact>]
+let ``a guard pattern may be any predicate lambda`` () =
+    match guardsOf "def f = { | { % 2 == 0 } -> 1 | { .length > 5 } -> 2 | { x -> x > limit } -> 3 | _ -> 4 }" with
+    | [ Lambda ([ (_, None) ], Kind (BinaryOp ("==", Kind (BinaryOp ("%", Kind left, _)), _)))
+        Lambda ([ (_, None) ], Kind (BinaryOp (">", Kind (MemberAccess (Kind field, "length", _)), _)))
+        Lambda ([ ("x", None) ], Kind (BinaryOp (">", Kind (IdentifierExpr "x"), Kind (IdentifierExpr "limit")))) ]
+        when left = implicitArg && field = implicitArg -> ()
+    | other -> failwith $"Unexpected guards: %A{other}"
+
+[<Fact>]
+let ``a guard pattern nests inside other patterns`` () =
+    match parseModule "def f = { | (0, { < 0 }) -> 1 | [{ % 2 == 0 }, ...] -> 2 | _ -> 3 }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms))))))) ] ->
         match arms |> List.map fst with
-        | [ [ Kind (GuardPattern ("<", Kind (LiteralExpr (IntLit 0)))) ]
-            [ Kind (GuardPattern (">=", Kind (BinaryOp ("*", Kind (IdentifierExpr "limit"), _)))) ]
-            [ Kind (GuardPattern (">", Kind (LiteralExpr (IntLit 5)))) ]
+        | [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit 0)); Kind (GuardPattern (Kind (Lambda _))) ]) ]
+            [ Kind (ListPattern ([ Kind (GuardPattern (Kind (Lambda _))) ], Some _)) ]
             [ Kind WildcardPattern ] ] -> ()
         | other -> failwith $"Unexpected arms: %A{other}"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"

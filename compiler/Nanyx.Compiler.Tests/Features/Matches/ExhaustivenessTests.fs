@@ -50,6 +50,52 @@ let ``Match checks exhaustiveness when the scrutinee is a call result or a local
     Assert.True(complete.Diagnostics.IsEmpty, sprintf "%A" complete.Diagnostics)
 
 [<Fact>]
+let ``A guard pattern covers nothing for certain, whatever its predicate`` () =
+    // #428: the check cannot tell that `{ % 2 == 0 }` and `{ % 2 != 0 }` between them cover every int.
+    let guardsOnly =
+        Compiler.compile (
+            "def parity: int -> string = { n ->\n" +
+            "  match n\n" +
+            "    | { % 2 == 0 } -> \"even\"\n" +
+            "    | { x -> x % 2 != 0 } -> \"odd\"\n" +
+            "}\n")
+    Assert.Contains("Non-exhaustive match", (Assert.Single guardsOnly.Diagnostics).Message)
+    let nested =
+        Compiler.compile (
+            "def f: #some(string) | #none -> int = { o ->\n" +
+            "  match o\n" +
+            "    | #some({ .length > 5 }) -> 1\n" +
+            "    | #none -> 0\n" +
+            "}\n")
+    Assert.Contains("Non-exhaustive match", (Assert.Single nested.Diagnostics).Message)
+    let withCatchAll =
+        Compiler.compile (
+            "def f: #some(string) | #none -> int = { o ->\n" +
+            "  match o\n" +
+            "    | #some({ .length > 5 }) -> 2\n" +
+            "    | #some(_) -> 1\n" +
+            "    | #none -> 0\n" +
+            "}\n")
+    Assert.True(withCatchAll.Diagnostics.IsEmpty, sprintf "%A" withCatchAll.Diagnostics)
+
+[<Fact>]
+let ``A guard pattern's predicate is checked as a function from the value matched to bool`` () =
+    let notBool = Compiler.compile "def f: int -> int = { n ->\n  match n\n    | { + 1 } -> 1\n    | _ -> 0\n}\n"
+    Assert.False(notBool.Diagnostics.IsEmpty, "a predicate must return a bool")
+    let wrongType = Compiler.compile "def f: int -> int = { n ->\n  match n\n    | { .length > 5 } -> 1\n    | _ -> 0\n}\n"
+    Assert.False(wrongType.Diagnostics.IsEmpty, "an int has no length")
+    let twoParametersSource = "def f: int -> int = { n ->\n  match n\n    | { a, b -> a > b } -> 1\n    | _ -> 0\n}\n"
+    let diagnostic = Assert.Single (Compiler.compile twoParametersSource).Diagnostics
+    Assert.Equal(DiagnosticCodes.GuardNotAPredicate.Code, diagnostic.Code)
+    Assert.Equal(twoParametersSource.IndexOf "{ a, b", diagnostic.Span.Value.Start)
+    // The predicate sees what is in scope at the match, not what its own arm binds: those are bound only once the
+    // arm has matched.
+    let armName = Compiler.compile "def f: (int, int) -> int = { p ->\n  match p\n    | (a, { > a }) -> 1\n    | _ -> 0\n}\n"
+    Assert.False(armName.Diagnostics.IsEmpty, "`a` is not in scope in the predicate")
+    let ok = Compiler.compile "def f: int, string -> int = { n, s ->\n  match n\n    | { > s.length } -> 1\n    | _ -> 0\n}\n"
+    Assert.True(ok.Diagnostics.IsEmpty, sprintf "%A" ok.Diagnostics)
+
+[<Fact>]
 let ``Match accepts exhaustive tag unions`` () =
     let source =
         "def value: #some(int) | #none = #none\n" +

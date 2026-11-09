@@ -157,6 +157,44 @@ let ``Run - guard patterns in the documented form`` () =
     runSource source |> assertRan "negative zero positive\nhuge big small\n"
 
 [<Fact>]
+let ``Run - any predicate lambda as a guard pattern`` () =
+    // #428: a guard is any predicate on the value matched, not only one comparison against it.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def parity: int -> string = { n ->\n" +
+        "  match n\n" +
+        "    | { % 2 == 0 } -> \"even\"\n" +
+        "    | _ -> \"odd\"\n" +
+        "}\n" +
+        "def size: string -> string = { s ->\n" +
+        "  match s\n" +
+        "    | { .length > 5 } -> \"long\"\n" +
+        "    | { x -> x == \"\" } -> \"empty\"\n" +
+        "    | _ -> \"short\"\n" +
+        "}\n" +
+        "def nested: (int, #some(string) | #none) -> string = { p ->\n" +
+        "  match p\n" +
+        "    | ({ < 0 }, _) -> \"negative\"\n" +
+        "    | (n, #some({ .length > 2 })) -> \"long at {n}\"\n" +
+        "    | _ -> \"other\"\n" +
+        "}\n" +
+        "def busy: list(int), int -> string = { xs, threshold ->\n" +
+        "  match xs\n" +
+        "    | { ys -> (ys \\filter { > threshold }).length > 1 } -> \"busy\"\n" +
+        "    | [] -> \"empty\"\n" +
+        "    | _ -> \"quiet\"\n" +
+        "}\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(parity(4) ++ \" \" ++ parity(7) ++ \" \" ++ parity(-2))\n" +
+        "  println(size(\"marvellous\") ++ \" \" ++ size(\"\") ++ \" \" ++ size(\"hi\"))\n" +
+        "  println(nested((-1, #none)) ++ \" \" ++ nested((2, #some(\"abc\"))) ++ \" \" ++ nested((5, #some(\"ab\"))))\n" +
+        "  println(busy([1, 9, 9], 5) ++ \" \" ++ busy([1, 9], 5) ++ \" \" ++ busy([], 5))\n" +
+        "}\n"
+    runSource source |> assertRan "even odd even\nlong empty short\nnegative long at 2 other\nbusy quiet empty\n"
+
+[<Fact>]
 let ``Run - or-patterns in match arms`` () =
     // #43: `| a | b -> ...` is one arm matching either alternative.
     let source =

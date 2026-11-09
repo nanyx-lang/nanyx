@@ -163,6 +163,21 @@ def describeNumber: int -> string = { n ->
 }
 ```
 
+A guard is any lambda that takes the value being matched and returns a `bool`; the arm matches when it returns `true`. Most often it is a [shorthand lambda](./lambdas-and-higher-order-functions) that leaves out the value, but it can name it too, and it can be nested inside other patterns:
+
+```nanyx
+def describe: (int, string) -> string = {
+  | ({ % 2 == 0 }, _) -> "an even number"
+  | (_, { .length > 5 }) -> "a long name"
+  | ({ x -> x > 0 and x < 10 }, _) -> "a small number"
+  | _ -> "something else"
+}
+```
+
+The guard sees whatever is in scope where the `match` is written, but not the names its own arm binds: those are only bound once the whole arm has matched.
+
+Since the compiler cannot know what a guard will return, an arm with a guard never counts towards making a `match` exhaustive. A `match` whose only arms for some values are guarded still needs an arm that catches the rest, such as `_`.
+
 # Pattern-matching functions
 
 Since a function whose entire body is a pattern match is so common, you can merge the function definition and match patterns together:

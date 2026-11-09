@@ -156,7 +156,7 @@ module Compiler =
                 Block(statements |> List.map mapStatement)
             | Match(values, arms) ->
                 let mappedValues = values |> List.map mapExpr
-                let mappedArms = arms |> List.map (fun (patterns, armExpr) -> patterns, mapExpr armExpr)
+                let mappedArms = arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr)
                 Match(mappedValues, mappedArms)
             | TupleExpr items -> TupleExpr(items |> List.map mapExpr)
             | RecordExpr fields ->
@@ -322,7 +322,7 @@ module Compiler =
 
     and private referencedNamesInPattern (pattern: Pattern) : string list =
         match pattern.Kind with
-        | GuardPattern(_, value) -> referencedNames value
+        | GuardPattern predicate -> referencedNames predicate
         | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
         | TagPattern(_, Some payload) -> referencedNamesInPattern payload
         | TuplePattern patterns
@@ -735,7 +735,11 @@ module Compiler =
             // A lone `else` in a match on several values becomes one per value (`PatternSpace.ofArm`).
             | Match(exprs, arms) ->
                 let mappedExprs = exprs |> List.map desugarExpr
-                let mappedArms = arms |> List.map (fun (patterns, expr) -> PatternSpace.ofArm exprs.Length patterns, within InConditionalPart (fun () -> desugarExpr expr))
+                let mappedArms =
+                    arms
+                    |> List.map (fun (patterns, expr) ->
+                        PatternSpace.ofArm exprs.Length patterns |> List.map (Pattern.mapExpressions desugarExpr),
+                        within InConditionalPart (fun () -> desugarExpr expr))
                 Match(mappedExprs, mappedArms)
             | TupleExpr items -> TupleExpr(items |> List.map desugarExpr)
             | RecordExpr fields ->
@@ -886,7 +890,10 @@ module Compiler =
             let branched =
                 match expr.Kind with
                 | IfExpr(cond, thenExpr, elseExpr) -> IfExpr(desugarExpr cond, branch thenExpr, branch elseExpr)
-                | Match(values, arms) -> Match(values |> List.map desugarExpr, arms |> List.map (fun (patterns, body) -> PatternSpace.ofArm values.Length patterns, branch body))
+                | Match(values, arms) ->
+                    let desugarArm (patterns, body) =
+                        PatternSpace.ofArm values.Length patterns |> List.map (Pattern.mapExpressions desugarExpr), branch body
+                    Match(values |> List.map desugarExpr, arms |> List.map desugarArm)
                 | other -> other
             Expression.from expr (
                 Block [

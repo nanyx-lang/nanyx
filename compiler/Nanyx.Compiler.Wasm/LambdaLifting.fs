@@ -51,7 +51,7 @@ and private referencedNamesBinding (binding: UseBinding) : string list =
 
 and private referencedNamesPattern (pattern: Pattern) : string list =
     match pattern.Kind with
-    | GuardPattern(_, value) -> referencedNames value
+    | GuardPattern predicate -> referencedNames predicate
     | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
     | TagPattern(_, Some payload) -> referencedNamesPattern payload
     | TuplePattern patterns
@@ -77,9 +77,10 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
     | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNamesPattern
     | RecordPattern(_, patterns) -> patterns |> List.collect boundNamesPattern
     | RecordMemberPattern members -> members |> List.collect (fun (name, p) -> name :: boundNamesPattern p)
+    // A guard's predicate is inlined where the arm is tested, so what it binds is bound there.
+    | GuardPattern predicate -> boundNames predicate
     | TagPattern(_, None)
     | LiteralPattern _
-    | GuardPattern _
     | RangePattern _
     | WildcardPattern
     | UnitPattern
@@ -87,7 +88,7 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
 
 /// Every name bound anywhere inside an expression: local defs, lambda parameters and pattern variables.
 /// (An over-approximation of what a nested lambda could capture, which errs on the side of not lifting.)
-let rec private boundNames (expr: Expression) : string list =
+and private boundNames (expr: Expression) : string list =
     match expr.Kind with
     | Lambda(args, body) -> (args |> List.map fst) @ boundNames body
     | Block statements ->
@@ -154,7 +155,8 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
             | _ -> statement)
         |> Block
         |> rebuild
-    | Match(values, arms) -> rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns, recur body)))
+    | Match(values, arms) ->
+        rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions recur), recur body)))
     | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
     | ListExpr items -> rebuild (ListExpr(items |> List.map recur))
     | RecordExpr fields ->
@@ -399,7 +401,17 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
                 | ImportStatement _ | TypeDefStatement _ -> [ statement ])
             |> Block
             |> rebuild
-        | Match(values, arms) -> rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns, recur body)))
+        | Match(values, arms) ->
+            // A guard's predicate is inlined by the backend where its arm is tested, as a `for` loop's lambda is,
+            // never lifted; lift inside it.
+            let liftGuard (predicate: Expression) =
+                match predicate.Kind with
+                | Lambda(args, body) ->
+                    let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
+                    { predicate with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) }
+                | _ -> recur predicate
+            let liftArm (patterns, body) = patterns |> List.map (Pattern.mapExpressions liftGuard), recur body
+            rebuild (Match(values |> List.map recur, arms |> List.map liftArm))
         | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
         | ListExpr items -> rebuild (ListExpr(items |> List.map recur))
         | RecordExpr fields ->

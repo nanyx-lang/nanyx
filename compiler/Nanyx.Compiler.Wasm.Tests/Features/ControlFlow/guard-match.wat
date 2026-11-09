@@ -1,10 +1,12 @@
 (module
-  (func $g (param $x i32) (result i32) (local $__match_tmp_0 i32)
+  (func $g (param $x i32) (result i32) (local $__match_tmp_0 i32) (local $__guard i32)
     local.get $x
     local.set $__match_tmp_0
     local.get $__match_tmp_0
-      i32.const 5
-      i32.gt_s
+      local.set $__guard
+      local.get $__guard
+    i32.const 5
+    i32.gt_s
     (if (result i32)
       (then
         i32.const 1

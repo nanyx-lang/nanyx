@@ -962,11 +962,11 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     PBind var
                 | LiteralPattern(IntLit value) -> PInt(int64 value)
                 | LiteralPattern(StringLit value) -> PString value
-                | GuardPattern(op, guard) ->
-                    // `| > 5 ->`, `| { >= limit * 2 } ->`: compared, as the old path compares it, as ints, to what the
-                    // expression computes each time the arm is tested.
-                    if (wasmBinaryInstruction op).IsNone then cannot $"the guard operator {op}"
-                    PGuard(op, this.Tail armScope guard)
+                // `| { % 2 == 0 } ->`: the predicate is inlined, its parameter a local the value matched here is put
+                // in each time the arm is tested. It sees what is in scope at the match, not what the arm binds.
+                | GuardPattern(Kind (Lambda([ (parameter, _) ], predicateBody))) ->
+                    let var = newVar (uniqueName "__guard") Scratch valueTy
+                    PGuard(var, this.Tail { armScope with Vars = armScope.Vars |> Map.add parameter var } predicateBody)
                 | ListPattern(elements, rest) ->
                     let elementTy =
                         match valueTy with

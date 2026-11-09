@@ -321,7 +321,7 @@ let ``A type variable that nothing constrains is unit in the core IR`` () =
     Assert.Contains("List_length__unit", report.Functions)
 
 [<Fact>]
-let ``A guard compares to what any expression computes, in the core IR`` () =
+let ``A guard's predicate is inlined with the value matched in a local, in the core IR`` () =
     let source =
         "def limit = 10\n" +
         "\n" +
@@ -333,7 +333,7 @@ let ``A guard compares to what any expression computes, in the core IR`` () =
         "}\n"
     let wat, report = compileWithReport source
     Assert.Contains("size", report.Functions)
-    Assert.Contains("call $limit\n    i32.const 2\n    i32.mul\n      i32.ge_s", wat)
+    Assert.Contains("local.set $__guard\n      local.get $__guard\n    call $limit\n    i32.const 2\n    i32.mul\n    i32.ge_s", wat)
 
 [<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
