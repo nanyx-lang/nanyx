@@ -163,3 +163,17 @@ let ``nanyx/math exports int functions with their types`` () =
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     for name in [ "a"; "b"; "c"; "d"; "e" ] do
         Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])
+
+[<Fact>]
+let ``nanyx/math exports float functions with their types`` () =
+    let result =
+        Compiler.compile (
+            "import nanyx/math as math\n" +
+            "def s = math.sqrt(81.0)\n" +
+            "def f = math.floor(3.9)\n" +
+            "def c = math.ceil(3.1)\n" +
+            "def r = math.round(3.5)")
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["s"])
+    for name in [ "f"; "c"; "r" ] do
+        Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])

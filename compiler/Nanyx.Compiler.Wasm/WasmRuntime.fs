@@ -26,6 +26,11 @@ module Helpers =
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
     let listCons = NyxCompiler.Intrinsics.listCons
+    let floatSqrt = NyxCompiler.Intrinsics.floatSqrt
+    let floatFloor = NyxCompiler.Intrinsics.floatFloor
+    let floatCeil = NyxCompiler.Intrinsics.floatCeil
+    let floatTrunc = NyxCompiler.Intrinsics.floatTrunc
+    let floatToInt = NyxCompiler.Intrinsics.floatToInt
     let free = "__nanyx_free"
     let newCell = "__nanyx_new_cell"
     let newObject = "__nanyx_new_object"
@@ -807,6 +812,29 @@ let runtimeHelpers : Map<string, string> =
             "  i32.const 4"
             "  i32.add"
             ")" ]
+      // The float intrinsics that are one WebAssembly instruction on the unboxed value, boxed again.
+      yield!
+          [ Helpers.floatSqrt, "f64.sqrt"
+            Helpers.floatFloor, "f64.floor"
+            Helpers.floatCeil, "f64.ceil"
+            Helpers.floatTrunc, "f64.trunc" ]
+          |> List.map (fun (name, instruction) ->
+              name,
+              lines
+                  [ $"(func ${name} (param $box i32) (result i32)"
+                    "  local.get $box"
+                    "  f64.load"
+                    $"  {instruction}"
+                    $"  call ${Helpers.floatBox}"
+                    ")" ])
+      // A boxed float as an int: `i32.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
+      Helpers.floatToInt,
+      lines
+          [ $"(func ${Helpers.floatToInt} (param $box i32) (result i32)"
+            "  local.get $box"
+            "  f64.load"
+            "  i32.trunc_f64_s"
+            ")" ]
       Helpers.listCons,
       lines
           [ $"(func ${Helpers.listCons} (param $head i32) (param $tail i32) (result i32)"
@@ -905,7 +933,12 @@ let helperDependencies =
       Helpers.floatBox, [ Helpers.newCell ]
       Helpers.floatToString, [ Helpers.newObject ]
       Helpers.listLength, []
-      Helpers.listConcat, [ Helpers.listCons ] ]
+      Helpers.listConcat, [ Helpers.listCons ]
+      Helpers.floatSqrt, [ Helpers.floatBox ]
+      Helpers.floatFloor, [ Helpers.floatBox ]
+      Helpers.floatCeil, [ Helpers.floatBox ]
+      Helpers.floatTrunc, [ Helpers.floatBox ]
+      Helpers.floatToInt, [] ]
 let rec closeHelpers (acc: Set<string>) (pending: string list) =
     match pending with
     | [] -> acc

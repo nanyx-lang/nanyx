@@ -189,7 +189,7 @@ let ``Run - interpolating a call to a function with a deferred error runs up to 
         "\n" +
         "type Point = (x: int, y: int)\n" +
         "\n" +
-        "def Point.dist = { p -> sqrt(p.x * p.x + p.y * p.y) }\n" +
+        "def Point.dist = { p -> hypot(p.x, p.y) }\n" +
         "\n" +
         "def a = Point(x = 5, y = 4)\n" +
         "\n" +
@@ -198,7 +198,7 @@ let ``Run - interpolating a call to a function with a deferred error runs up to 
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("x = 5, y = 4\n", outcome.StandardOutput)
-    Assert.Contains(":8:25: error NYX0102: Unknown function 'sqrt' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":8:25: error NYX0102: Unknown function 'hypot' (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - interpolating a value of no known type that does not stop the program stops it there`` () =
