@@ -12,11 +12,16 @@ open Parser.Program
 module PatternSpace =
     /// The patterns of an arm of a match on `valueCount` values. A lone `else` is the arm for anything else, whatever
     /// every value is, so in a match on several values it stands for a catch-all at each position: one `else` per
-    /// value, each written where the `else` is. Any other arm is as written.
+    /// value, each written where the `else` is. Brackets around a tuple are optional, as in `def x, y = pair`, so
+    /// several values and a tuple of them are matched alike: in a match on one value, `| x, y` is `| (x, y)`, and in a
+    /// match on two, `| (x, y)` is `| x, y`. Any other arm is as written.
     let ofArm (valueCount: int) (patterns: Pattern list) : Pattern list =
         match patterns with
         | [ Kind ElsePattern as orElse ] when valueCount > 1 ->
             orElse :: List.init (valueCount - 1) (fun _ -> Pattern.at orElse.Span ElsePattern)
+        | first :: _ :: _ when valueCount = 1 ->
+            [ Pattern.at (SourceSpan.between first.Span (List.last patterns).Span) (TuplePattern patterns) ]
+        | [ Kind (TuplePattern elements) ] when valueCount > 1 && elements.Length = valueCount -> elements
         | _ -> patterns
 
     /// Whether `pattern` matches every value of its type. `(a, _)` matches every tuple: a tuple pattern is irrefutable

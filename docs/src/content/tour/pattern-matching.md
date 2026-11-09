@@ -84,6 +84,14 @@ match p
 
 Note how the patterns `(0, y)` and `(x, 0)` use a combination of literal matching and variable binding to match specific shapes of the tuple. 
 
+A `match` can also take several values at once, separated by commas, with an arm giving a pattern for each. Matching several values is the same as matching a tuple of them, so the brackets are optional on either side: a tuple can be matched with `| x, y`, and several values with `| (x, y)`.
+
+```nanyx
+match a, b
+  | 0, y -> "a is zero, b is {y}"
+  | x, y -> "a is {x}, b is {y}"
+```
+
 The final pattern `(x, y)` matches any tuple and binds both elements to variables.
 
 ## Records

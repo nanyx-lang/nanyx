@@ -238,6 +238,23 @@ let ``Run - a lone else in a match on several values`` () =
     runSource source |> assertRan "origin, on the y axis, elsewhere\n"
 
 [<Fact>]
+let ``Run - several values and a tuple of them are matched alike, brackets or not`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "match (1, 2)\n" +
+        "  | (x, y) -> println(\"{x}, {y}\")\n" +
+        "match 1, 2\n" +
+        "  | x, y -> println(\"{x}, {y}\")\n" +
+        "match (1, 2)\n" +
+        "  | 0, _ -> println(\"zero\")\n" +
+        "  | x, y -> println(\"{x}, {y}\")\n" +
+        "match 1, 2\n" +
+        "  | (0, _) -> println(\"zero\")\n" +
+        "  | (x, y) -> println(\"{x}, {y}\")\n"
+    runSource source |> assertRan "1, 2\n1, 2\n1, 2\n1, 2\n"
+
+[<Fact>]
 let ``Run - an arm for a tag the value cannot have never matches`` () =
     let source =
         "import nanyx/console\n" +
