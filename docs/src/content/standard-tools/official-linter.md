@@ -59,11 +59,13 @@ match response
 ```nanyx
 import (
   nanyx/math as m
-  nanyx/string as s -- Linter warning: import `s` is never used
+  nanyx/text as t -- Linter warning: `t` is imported but never used
 )
 
-def x = m.sqrt(16)
+def x = m.sqrt(16.0)
 ```
+
+The rule (`unusedImports`) reports an import that nothing in the module uses. A value, type or context it brings in counts as a use, whether it is written through the import's alias (`m.sqrt`, `m.Shape`) or unqualified, and a type named only in an annotation counts too. The prelude, which every module imports, is never reported, and neither is the import `@entry` adds for you, nor an alias starting with `_`. Its fix removes the import: the whole `import` line when it is the only one there, or just that module's line from an `import (...)` group.
 
 ## Unreachable match branch
 

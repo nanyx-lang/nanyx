@@ -5,6 +5,7 @@ open System.IO
 open Xunit
 open NyxCompiler
 open Parser.Program
+open Nanyx.Compiler.Tests.TestSupport
 
 let private rule id severity =
     { Id = id; Title = $"Title of {id}"; DefaultSeverity = severity; Description = "" }
@@ -39,7 +40,7 @@ let private textAt (source: string) (span: SourceSpan) = source.Substring(span.S
 let ``The official linter is registered, and runs only when turned on`` () =
     let official = Assert.Single(Linters.all)
     Assert.Equal("default", official.Name)
-    Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion"; "unreachableArms" ], official.Rules |> List.map (fun rule -> rule.Id))
+    Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports" ], official.Rules |> List.map (fun rule -> rule.Id))
     // Linters are opt-in: compiling without saying which to run runs none.
     Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
     Assert.Empty((compileWithOfficial source).Diagnostics)
@@ -165,10 +166,7 @@ let private unusedIn (source: string) =
 let private fixed' (source: string) =
     let diagnostic = Assert.Single((compileWithOfficial source).Diagnostics)
     let fix = Assert.Single(diagnostic.Fixes)
-    fix.Edits
-    |> List.sortByDescending (fun edit -> edit.Span.Start)
-    |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source,
-    fix.Title
+    applyFix source fix, fix.Title
 
 [<Fact>]
 let ``An unused local def, argument or pattern variable is reported once, at its name`` () =

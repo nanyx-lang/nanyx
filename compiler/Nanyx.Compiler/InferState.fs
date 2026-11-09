@@ -81,9 +81,11 @@ type InferState =
             AnnotatedSymbols: Set<SymbolId>;
             /// The symbol each name resolved to, by the node of the name.
             References: Map<NodeId, SymbolId>;
-            /// The import that brought each imported definition into scope, by the definition's symbol.
+            /// The import that brought each imported definition into scope, by the definition's symbol: a value, a
+            /// type or context, or a context's member.
             ImportedThrough: Map<SymbolId, SymbolId>;
-            /// The import each name brought in by an import came through, by the node of the name.
+            /// The import each name brought in by an import came through, by the node of the name: an expression,
+            /// or a type expression that names an imported type.
             ImportReferences: Map<NodeId, SymbolId>;
             /// The names more than one import brings in unqualified: the symbol the environment holds for the name,
             /// and each candidate written as `module.name`. A reference that still resolves to that symbol is
@@ -226,10 +228,20 @@ let internal recordAnnotated (symbol: SymbolId option) (isAnnotated: bool) (stat
     | Some symbol when isAnnotated -> { state with AnnotatedSymbols = state.AnnotatedSymbols |> Set.add symbol }
     | _ -> state
 
-/// Records that the type expression `typeExpr` names the type definition `info`, if it declares a symbol.
+/// `state.ImportReferences`, with the node `node` recorded as naming `symbol` through its import if it was imported.
+let private importReferenceOf (node: NodeId) (symbol: SymbolId) (state: InferState) =
+    match state.ImportedThrough |> Map.tryFind symbol with
+    | Some import -> state.ImportReferences |> Map.add node import
+    | None -> state.ImportReferences
+
+/// Records that the type expression `typeExpr` names the type definition `info`, if it declares a symbol, and the
+/// import it came through if it was imported.
 let internal recordTypeReference (typeExpr: TypeExpr) (info: TypeDefInfo) (state: InferState) =
     match info.Symbol with
-    | Some symbol -> { state with References = state.References |> Map.add typeExpr.Id symbol }
+    | Some symbol ->
+        { state with
+            References = state.References |> Map.add typeExpr.Id symbol
+            ImportReferences = importReferenceOf typeExpr.Id symbol state }
     | None -> state
 
 /// Records that `expr`, a qualified `Context.member`, names that member of the context `ctxType` names, and that
@@ -252,11 +264,9 @@ let internal recordReference (expr: Expression) (scheme: TypeScheme) (state: Inf
     match scheme.Symbol with
     | None -> state
     | Some symbol ->
-        let importReferences =
-            match state.ImportedThrough |> Map.tryFind symbol with
-            | Some import -> state.ImportReferences |> Map.add expr.Id import
-            | None -> state.ImportReferences
-        { state with References = state.References |> Map.add expr.Id symbol; ImportReferences = importReferences }
+        { state with
+            References = state.References |> Map.add expr.Id symbol
+            ImportReferences = importReferenceOf expr.Id symbol state }
 
 let internal addConstraint left right (state: InferState) =
     { state with Constraints = (left, right, Equal, state.Origin) :: state.Constraints }

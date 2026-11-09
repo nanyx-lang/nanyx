@@ -485,6 +485,26 @@ public sealed class LanguageServerTests : IAsyncLifetime
             Applied(text, Assert.Single(import.Edit!.Changes![uri])));
     }
 
+    [Fact]
+    public async Task An_unused_import_has_a_quick_fix_that_removes_it()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-13");
+        const string text = "::linter default\nimport (\n  nanyx/math as m\n  nanyx/text as t\n)\ndef x = m.abs(3)\n";
+
+        Open(uri, text);
+        var published = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal(("default/unusedImports", new Range(3, 2, 3, 17)), (published.Code?.String, published.Range));
+
+        var remove = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)));
+        Assert.Equal(("Remove the import of `t`", CodeActionKind.QuickFix), (remove.Title, remove.Kind));
+        Assert.Equal(
+            "::linter default\nimport (\n  nanyx/math as m\n)\ndef x = m.abs(3)\n",
+            Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
+
+        // The import that is used has none.
+        Assert.Empty(await CodeActionsIn(uri, new Range(2, 4, 2, 4)));
+    }
+
     /// <summary><paramref name="text"/> with <paramref name="edit"/> made to it.</summary>
     private static string Applied(string text, TextEdit edit)
     {

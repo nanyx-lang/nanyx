@@ -128,6 +128,22 @@ module private SyntaxTree =
         | Import _
         | Attribute _ -> []
 
+/// The edits the official linter's fixes make.
+module private SourceEdits =
+    /// An edit that removes what `span` covers with its lines: from the start of its first line to the end of its
+    /// last, with a comment after it, when nothing else is written on them. Otherwise it removes the span alone.
+    let removal (source: string) (span: SourceSpan) : TextEdit =
+        let lineStart = span.Start - span.StartColumn
+        let lineEnd =
+            match source.IndexOf('\n', span.End) with
+            | -1 -> source.Length
+            | newline -> newline + 1
+        let after = source.Substring(span.End, lineEnd - span.End).Trim()
+        if String.IsNullOrWhiteSpace(source.Substring(lineStart, span.StartColumn)) && (after = "" || after.StartsWith "--") then
+            { Span = { span with Start = lineStart; End = lineEnd; StartColumn = 0 }; NewText = "" }
+        else
+            { Span = span; NewText = "" }
+
 /// The official linter's `unusedBindings` rule: a local def, a lambda's argument or a variable a pattern binds that
 /// nothing refers to. Top-level defs are left alone, since another module may use them, and so are names starting
 /// with `_`, which say they are unused on purpose.
@@ -146,21 +162,6 @@ module UnusedBindings =
         @ (children |> List.collect blocksWithin)
         @ (statements |> List.collect SyntaxTree.ofStatement |> List.collect blocksWithin)
 
-    /// An edit that removes `statement`'s lines: from the start of its first line to the end of its last, with a
-    /// comment after it, when nothing else is written on them. Otherwise it removes the statement alone.
-    let private removal (source: string) (statement: Statement) : TextEdit =
-        let span = statement.Span
-        let lineStart = span.Start - span.StartColumn
-        let lineEnd =
-            match source.IndexOf('\n', span.End) with
-            | -1 -> source.Length
-            | newline -> newline + 1
-        let after = source.Substring(span.End, lineEnd - span.End).Trim()
-        if String.IsNullOrWhiteSpace(source.Substring(lineStart, span.StartColumn)) && (after = "" || after.StartsWith "--") then
-            { Span = { span with Start = lineStart; End = lineEnd; StartColumn = 0 }; NewText = "" }
-        else
-            { Span = span; NewText = "" }
-
     /// The fix for an unused `symbol`. A def is removed, unless removing it would change more than the def: when it is
     /// one of the defs a destructuring def stands for (they share its span), or the last statement of its block (whose
     /// value it is). Those, and any other name, become `_`.
@@ -171,7 +172,7 @@ module UnusedBindings =
         | LocalValue ->
             let defs = removableDefs |> Map.toSeq |> Seq.tryFind (fun (span, _) -> SourceSpan.contains span declaration)
             match defs with
-            | Some (_, [ def ]) -> { Title = $"Remove `{symbol.Name}`"; Edits = [ removal model.Source def ] }
+            | Some (_, [ def ]) -> { Title = $"Remove `{symbol.Name}`"; Edits = [ SourceEdits.removal model.Source def.Span ] }
             | _ -> rename
         | Parameter
         | PatternVariable
@@ -423,12 +424,68 @@ module UnreachableArms =
             | _ -> [])
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `unusedImports` rule: an import that nothing in the module refers to. A name it brings
+/// in, unqualified or through its alias, and a type it brings in named in a type, are uses (`ImportReferences`).
+/// Only the imports the module writes are symbols, so the prelude and the import `@entry` adds are never reported.
+module UnusedImports =
+    let rule =
+        { Id = "unusedImports"
+          Title = "Unused import"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "An import that nothing in the module uses: no value, type or context it brings in is referred to, under its alias or unqualified. An alias starting with `_` is not reported." }
+
+    /// Each import statement of the module, a `module name =` block's among them, with its items.
+    let rec private importsOf (items: TopLevelItem list) : (TopLevelItem * ImportItem list) list =
+        items
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Import imports -> [ item, imports ]
+            | ModuleBlock(_, items) -> importsOf items
+            | _ -> [])
+
+    /// An edit that removes the import `item`: the whole statement when it is the statement's only import, and
+    /// otherwise the item, with its line when it has one to itself, or with the space before it.
+    let private removal (source: string) (statement: TopLevelItem) (siblings: ImportItem list) (item: ImportItem) : TextEdit =
+        match siblings with
+        | [ _ ] -> SourceEdits.removal source statement.Span
+        | _ ->
+            let edit = SourceEdits.removal source item.Span
+            if edit.Span <> item.Span then
+                edit
+            else
+                let mutable start = item.Span.Start
+                while start > 0 && (source.[start - 1] = ' ' || source.[start - 1] = '\t') do
+                    start <- start - 1
+                { edit with Span = { item.Span with Start = start; StartColumn = item.Span.StartColumn - (item.Span.Start - start) } }
+
+    let lint (model: SemanticModel) : Report list =
+        let used = model.ImportReferences |> Map.values |> Set.ofSeq
+        let statements = importsOf model.Syntax
+        model.Symbols
+        |> Map.values
+        |> Seq.filter (fun symbol -> symbol.Kind = ImportedModule && not (symbol.Name.StartsWith "_") && not (used.Contains symbol.Id))
+        |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
+        |> Seq.choose (fun symbol ->
+            statements
+            |> List.tryPick (fun (statement, items) ->
+                items |> List.tryFind (fun item -> item.Span = symbol.Declaration) |> Option.map (fun item -> statement, items, item))
+            |> Option.map (fun (statement, items, item) ->
+                { Rule = rule.Id
+                  Span = item.Span
+                  Message = $"`{symbol.Name}` is imported but never used"
+                  Related = []
+                  Fixes = [ { Title = $"Remove the import of `{symbol.Name}`"; Edits = [ removal model.Source statement items item ] } ] }))
+        |> List.ofSeq
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
-          Rules = [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule ]
-          Lint = fun model -> UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model }
+          Rules = [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule ]
+          Lint =
+            fun model ->
+                UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linter` directives
     /// can turn on.
