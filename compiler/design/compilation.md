@@ -35,6 +35,9 @@ Out of scope here, with their own workstreams:
   `parser`, `type checker` and `wasm backend` labels; most of those are closed.
 - **The backend is an MVP.** It covers integers, strings, tags, lists, records, closures and pattern matching
   (see the WebAssembly section of the [compiler README](../README.md)). Floats and other value types are partial.
+- **Any error stops the build.** The type checker reports one type error per module and the CLI will not run a
+  program with errors, although the principles promise a debug build that runs in spite of them; see
+  [deferred-errors.md](deferred-errors.md).
 - **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
   it. The language server needs recovery too.
 - **Most of the standard library is designed but not written.** The docs describe it; `stdlib/nanyx/` holds a
@@ -59,6 +62,8 @@ _To do._ Candidate items, not yet filed:
    AST and WebAssembly. Designed in [memory.md](memory.md).
 6. **Tail calls.** Keep the language's promise that a tail call uses no stack, with `return_call`. Designed in
    [tail-calls.md](tail-calls.md).
+7. **Deferred errors.** Keep a debug build running in the face of name and type errors, by compiling each error
+   to a trap where it was found. Designed in [deferred-errors.md](deferred-errors.md).
 
 ## Open questions
 

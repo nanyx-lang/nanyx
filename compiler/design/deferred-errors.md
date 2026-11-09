@@ -1,0 +1,144 @@
+# Deferred errors
+
+> **Status: proposal.** This page decides how a debug build keeps running in the face of name and type errors, as
+> the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
+> Nothing here is built yet; see the [plan](#plan). It is part of the [compilation](compilation.md) workstream, and
+> its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
+
+## Summary
+
+A name or type error does not stop a debug build. The compiler reports it as usual, and compiles the expression
+where it was found to a trap that reports the same diagnostic if it is ever reached. Everything around the error
+compiles and runs normally, so the parts of a program that do type-check can be run and tested while the
+parts that don't are being fixed.
+
+A release build still refuses to compile a program with any error.
+
+The approach is the one GHC takes with `-fdefer-type-errors`, and a pragmatic cousin of Hazel's marked holes: the
+error becomes a node in the typed program, with a type that fits anywhere, and evaluating it fails.
+
+## Where we are today
+
+Any error stops the build, at three points:
+
+- **Inference stops at an error.** `Infer.inferModuleWithEnv` returns `Ok` with a typed module or `Error` with
+  diagnostics, never both. Inside it, an item or expression with an error is not checked further (the many
+  `if errors.IsEmpty then` in `Infer.fs`).
+- **Unification stops at the first failure.** `Unifier.unify` solves the module's constraints together and returns
+  one `Error (message, span)` ([Library.fs](../Nanyx.Compiler/Library.fs), in `typecheckModule`). The editor sees
+  one type error per module, and nothing typed after it.
+- **The CLI stops on errors.** `nanyx run` and `nanyx build` print the diagnostics and exit with 1 if any is an
+  error ([Program.cs](../Nanyx.Compiler.Cli/Program.cs)). There is no debug or release mode.
+
+Non-exhaustive matches are a hard error today too, although the principles say a debug build should panic when
+an unhandled case is reached. They fall under this design.
+
+The backend's code is type-directed, which rules out the obvious shortcut. Values are unboxed (`i64` for `int`,
+`f64` for `float`, `i32` for pointers into linear memory), and which instructions an operator becomes depends on
+its operand types (`+` on strings calls the concatenation helper). Badly typed code cannot be lowered "dynamically"
+without a second, boxed representation of every value and runtime type checks on every operation. That is a large
+second backend to keep in step with the first, for code that is about to be fixed; this design does not do it.
+
+## Design
+
+### Every expression gets a type
+
+The type checker recovers from errors instead of stopping:
+
+- **An error type.** `TyError` unifies with any type without failing and without binding anything, so one mistake
+  does not cascade into errors about everything that uses the result.
+- **Unknown names.** A name that does not resolve is reported, and becomes an error node of type `TyError`.
+- **Failed constraints.** When unification fails, the unifier records the diagnostic against the constraint's
+  span, binds the type variables involved to `TyError`, and carries on with the remaining constraints. Which of two
+  conflicting constraints is blamed depends on the order they are solved, as it does today.
+- **The result.** Checking a module always produces a typed module, alongside its diagnostics. The expressions an
+  error was reported at are marked in the typed AST, with the diagnostic.
+
+This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
+editor, which sees every error in a module, and hover types and completions past the first one. It is also where
+almost all of the work is.
+
+### Errors become traps
+
+A pass between the typed AST and code generation (or a step of the core IR, once
+[memory management](memory.md) introduces one) rewrites each marked expression to `Panic(diagnostic)`. At run
+time `Panic` writes the diagnostic to stderr, as the compiler printed it, and traps:
+
+```
+error E001: Type mismatch at src/main.nyx:10:5 (deferred from compile time)
+  Expected type `int` but found type `string` in the expression `x + 1`
+```
+
+WebAssembly's `unreachable` fits wherever an instruction of any type is expected, so a trap can stand in for an
+expression of any type. Two rules keep the rest of the function valid:
+
+- **A panic does not return.** WebAssembly still validates the code after `unreachable`, so the code that would
+  use the broken value cannot simply follow it: in `let x = <error>; x + 1`, `x` has no representation to load
+  into `i64.add`. The pass treats `Panic` as diverging and cuts off the rest of its enclosing sequence, as it would
+  after any expression of type `never`.
+- **Effects to its left still happen.** Evaluation order is kept up to the error: `println("a"); f(bad)` prints
+  `a` and then traps, and in `f(a(), bad, c())` the call `a()` runs and `c()` does not.
+
+### Broken definitions
+
+The unit of deferral above is an expression. A definition whose own type cannot be settled (its signature
+mismatches its body, or its inferred type contains `TyError`) is deferred whole: its body is not compiled, and
+every reference to it becomes a `Panic` with a diagnostic naming the definition and the original error. A
+definition whose signature is sound (written down, or inferred without error) compiles normally, with traps only
+where its body has errors. This keeps a broken helper from poisoning the types of the functions that call it, and
+a call to it fails at the call, with a message that says why.
+
+### What is deferred
+
+| Error | Deferred? |
+|-------|-----------|
+| Unknown name, type mismatch, wrong number of arguments, missing field | Yes, as an expression |
+| Unsatisfied context | Yes, as an expression (the call that needs the context traps) |
+| Non-exhaustive match | Yes: the match traps on a case no arm handles |
+| An error in a definition's type | Yes, as a definition |
+| Syntax error | No, as the principles say; see [parser error recovery](compilation.md#plan) |
+| Error in a type definition, such as a field of an unknown type | No, at first. A later version could make the type `TyError` |
+| Import not found, import cycle, error inside an imported module | No, at first. A later version could defer the names the import brings in |
+
+### Debug and release
+
+| Command | Errors |
+|---------|--------|
+| `nanyx run` | Debug: diagnostics go to stderr, then the program runs, with deferred errors as traps |
+| `nanyx build` | Debug by default, like `run`, writing a program that traps where the errors were |
+| `nanyx build --release` | Refuses any error, and writes nothing |
+| `nanyx check` | Unchanged: reports diagnostics and runs nothing |
+
+Before running a program with deferred errors, `run` says so in one line after the diagnostics (for example
+"Running with 2 deferred errors"), so a run that happens to avoid them is not mistaken for a clean one.
+
+When there is a test runner, it should run every test in a debug build: a test that reaches a deferred error fails
+with that error's message, and the others pass or fail on their own merits. This is what makes the feature useful
+for red-green iteration.
+
+## Plan
+
+1. **Type checker recovery.** Add `TyError`; make unknown names and failed constraints recorded diagnostics rather
+   than early returns; let the unifier carry on past a failure; return a typed module with its diagnostics. Tests:
+   a module with several independent errors reports all of them, and one mistake reports one error, not a cascade.
+   The backend still refuses programs with errors.
+2. **Deferral pass and `Panic`.** Mark erroneous expressions and definitions in the typed AST, rewrite them to
+   `Panic`, add the runtime helper (write to stderr, then `unreachable`), and cut sequences off after a panic.
+   Make non-exhaustive matches deferred too.
+3. **CLI modes.** Make `run` and `build` debug, add `--release`, and print the deferred-error count.
+4. **Wider deferral,** if it is wanted: type definitions and imports, then (with parser recovery) a top-level
+   definition that does not parse.
+
+## Open questions
+
+- **Exit status.** A debug run that never reaches a deferred error: is its exit status the program's own, or
+  non-zero because the build had errors? The program's own is more honest about the run, but makes it easy for a
+  script or CI job to pass on a program that does not type-check. One answer is to keep the program's status and
+  have CI use `--release`, or a `nanyx check`.
+- **Blame.** With constraints solved together, the error is reported at whichever constraint fails, which is not
+  always the expression the programmer got wrong. The trap is at the same place as the diagnostic, so it is
+  consistent, but it may trap later (or earlier) than the real mistake. Is that acceptable, or does deferral want
+  blame that follows annotations, as some bidirectional checkers do?
+- **Generic definitions.** A generic definition with an error in its body is instantiated once per use by the
+  backend. Its traps are the same in each instance; confirm that monomorphisation does not need the definition's
+  type to be free of `TyError` anywhere else.
