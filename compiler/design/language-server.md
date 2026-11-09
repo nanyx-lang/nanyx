@@ -30,7 +30,7 @@ what the compiler keeps: exact spans, resolved names and types.
   only one type error shows at a time. See [The language server](../README.md#the-language-server).
 - **Hover shows inferred types** ([#120](https://github.com/nanyx-lang/nanyx/issues/120)). Inference records the
   resolved type of every expression by `NodeId` (`TypedModule.ExprTypes`, the `Types` table of the planned
-  [semantic model](analyzers.md#3-the-semantic-model)), and the callee's type at each call (`CalleeTypes`), for
+  [semantic model](linters.md#3-the-semantic-model)), and the callee's type at each call (`CalleeTypes`), for
   the root module of a compile. Hover shows the narrowest typed expression under the pointer, or a call's
   function at that call site. On a declaration's own name (a def, a parameter, a pattern variable) it shows the
   type of what that declares, recorded by symbol (`SymbolTypes`). A desugared workflow bind or return gets a node id of its own, so the bind as
@@ -118,7 +118,7 @@ what the compiler keeps: exact spans, resolved names and types.
   that does not parse shows the last good text's outline, less the items edited since.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
-  published, with a diagnostic's first fix preferred. Only analyzers offer fixes so far (`default/unusedBindings`
+  published, with a diagnostic's first fix preferred. Only linters offer fixes so far (`default/unusedBindings`
   removes an unused local or renames an unused name to `_`); a compiler error's fixes will appear the same way
   once it has them. A fix that edits another file is not offered.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.

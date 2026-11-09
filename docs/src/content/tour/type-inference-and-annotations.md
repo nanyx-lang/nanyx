@@ -106,12 +106,12 @@ By convention, exported values should be annotated:
 
 ```nanyx
 export def add = { a, b -> a + b }
--- Analyzer warning: missing type annotation
+-- Linter warning: missing type annotation
 
 export def add: (int, int) -> int = { a, b -> a + b }
 ```
 
-Although the language itself doesn't mandate this practice, the [official style analyzer](../standard-tools/official-analyzer) will emit a warning if this is not followed.
+Although the language itself doesn't mandate this practice, the [official style linter](../standard-tools/official-linter) will emit a warning if this is not followed.
 
 # Target typing
 

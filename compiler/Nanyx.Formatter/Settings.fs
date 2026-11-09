@@ -1,5 +1,5 @@
 /// The formatter's settings for a file: the `[formatter]` table of the package's `.nyxpack` manifest, the nearest one
-/// in the file's directory or above it, or for a script its `#:formatter` directives. Only that table is read; the
+/// in the file's directory or above it, or for a script its `::formatter` directives. Only that table is read; the
 /// rest of the manifest is the packaging workstream's, whose reader will replace this one.
 module Nanyx.Formatter.Settings
 
@@ -62,8 +62,8 @@ let forFile (path: string) : Result<Formatter.Options, string> =
         | Some manifest -> read manifest
         | None -> Result.Ok Formatter.Options.defaults)
 
-/// `options` with the `#:formatter` directives at the top of `text`, the source of the file at `path`, applied:
-/// `#:formatter lineWidth 100`. They are a script's `[formatter]` table, so a file in a package may not have any; the
+/// `options` with the `::formatter` directives at the top of `text`, the source of the file at `path`, applied:
+/// `::formatter lineWidth 100`. They are a script's `[formatter]` table, so a file in a package may not have any; the
 /// other directives are the compiler's. An error names the file, the line and the directive.
 let withDirectives (path: string) (text: string) (options: Formatter.Options) : Result<Formatter.Options, string> =
     let manifest =
@@ -77,13 +77,13 @@ let withDirectives (path: string) (text: string) (options: Formatter.Options) : 
             let positive (key: string) (value: string) =
                 match Int32.TryParse value with
                 | true, n when n > 0 -> Result.Ok n
-                | _ -> error $"#:formatter {key} must be a positive integer, not '{value}'"
+                | _ -> error $"::formatter {key} must be a positive integer, not '{value}'"
             match manifest, directive.Arguments with
-            | Result.Ok (Some manifest), _ -> error $"#:formatter is for a script; in a package, set it in the [formatter] table of {manifest}"
+            | Result.Ok (Some manifest), _ -> error $"::formatter is for a script; in a package, set it in the [formatter] table of {manifest}"
             | _, [ "lineWidth" as key; value ] -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
             | _, [ "indentSize" as key; value ] -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
-            | _, [ key; _ ] -> error $"unknown setting #:formatter {key}; the settings are lineWidth and indentSize"
-            | _ -> error "#:formatter takes a setting and its value: #:formatter lineWidth 100"))
+            | _, [ key; _ ] -> error $"unknown setting ::formatter {key}; the settings are lineWidth and indentSize"
+            | _ -> error "::formatter takes a setting and its value: ::formatter lineWidth 100"))
 
 /// `forFile`, reading each manifest once, for formatting many files.
 let cached () : string -> Result<Formatter.Options, string> =

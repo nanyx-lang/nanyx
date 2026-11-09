@@ -163,8 +163,8 @@ public sealed class DocumentStore
         try
         {
             var directives = Script.read(path ?? string.Empty, text);
-            var analyzers = _settings.AnalyzerOptionsFor(path, directives);
-            var result = path is null ? Compiler.compileWith(analyzers, text) : Compiler.compileSourceWith(analyzers, path, text);
+            var linters = _settings.LinterOptionsFor(path, directives);
+            var result = path is null ? Compiler.compileWith(linters, text) : Compiler.compileSourceWith(linters, path, text);
             return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null);
         }
         catch (Exception ex)

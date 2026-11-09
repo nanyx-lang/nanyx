@@ -334,7 +334,7 @@ internal static class CliCommands
             return RunParse(inputFile);
         }
 
-        // Script mode: the file's #: directives say what a package's manifest would.
+        // Script mode: the file's :: directives say what a package's manifest would.
         var result = Script.compileFile(inputFile);
 
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
@@ -460,7 +460,7 @@ internal static class CliCommands
         Console.WriteLine("Inferred types:");
         PrintTypes(result.Typed.Value.Types);
 
-        // The module type-checked, but an analyzer rule configured as an error fails the check all the same.
+        // The module type-checked, but a linter rule configured as an error fails the check all the same.
         return HasErrors(result.Diagnostics) ? 1 : 0;
     }
 

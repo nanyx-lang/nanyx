@@ -1,4 +1,4 @@
-module Nanyx.Compiler.AnalyzerTests
+module Nanyx.Compiler.LinterTests
 
 open System
 open System.IO
@@ -13,7 +13,7 @@ let private rule id severity =
 let private everyDef =
     { Name = "test"
       Rules = [ rule "everyDef" Severity.Warning; rule "neverReported" Severity.Hint ]
-      Analyze =
+      Lint =
         fun model ->
             model.Syntax
             |> List.choose (function
@@ -22,25 +22,25 @@ let private everyDef =
                 | _ -> None) }
 
 let private throwing =
-    { Name = "broken"; Rules = [ rule "anything" Severity.Warning ]; Analyze = fun _ -> failwith "boom" }
+    { Name = "broken"; Rules = [ rule "anything" Severity.Warning ]; Lint = fun _ -> failwith "boom" }
 
-let private options analyzers severities =
-    { Analyzers = analyzers; Severities = Map.ofList severities }
+let private options linters severities =
+    { Linters = linters; Severities = Map.ofList severities }
 
 let private source = "def one = 1\ndef two = one + 1"
 
-/// Compiles `source` with every analyzer the compiler has turned on, at its defaults.
-let private compileWithOfficial (source: string) = Compiler.compileWith Analyzers.everyAnalyzer source
+/// Compiles `source` with every linter the compiler has turned on, at its defaults.
+let private compileWithOfficial (source: string) = Compiler.compileWith Linters.everyLinter source
 
 /// The text `span` covers in `source`.
 let private textAt (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
 [<Fact>]
-let ``The official analyzer is registered, and runs only when turned on`` () =
-    let official = Assert.Single(Analyzers.all)
+let ``The official linter is registered, and runs only when turned on`` () =
+    let official = Assert.Single(Linters.all)
     Assert.Equal("default", official.Name)
     Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion" ], official.Rules |> List.map (fun rule -> rule.Id))
-    // Analyzers are opt-in: compiling without saying which to run runs none.
+    // Linters are opt-in: compiling without saying which to run runs none.
     Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
     Assert.Empty((compileWithOfficial source).Diagnostics)
     let unused = Assert.Single((compileWithOfficial "def f = { x -> 1 }").Diagnostics)
@@ -73,7 +73,7 @@ let ``A rule can be given another severity, turned off, or promoted to an error`
     Assert.True(promoted.TypeChecked)
 
 [<Fact>]
-let ``The analyzers do not look at a module that does not type-check`` () =
+let ``The linters do not look at a module that does not type-check`` () =
     let result = Compiler.compileWith (options [ everyDef ] []) "def one = missing\ndef two = 2"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal("Unknown identifier 'missing'", diagnostic.Message)
@@ -85,34 +85,34 @@ let ``Configuring another code leaves a rule at its default`` () =
     Assert.Equal(2, result.Diagnostics.Length)
 
 [<Fact>]
-let ``An analyzer that throws is reported once and does not stop the others`` () =
+let ``A linter that throws is reported once and does not stop the others`` () =
     let result = Compiler.compileWith (options [ throwing; everyDef ] []) source
     Assert.True(result.Typed.IsSome)
     match result.Diagnostics with
     | failure :: rest ->
-        Assert.Equal("broken/analyzerFailed", failure.Code)
+        Assert.Equal("broken/linterFailed", failure.Code)
         Assert.Equal(Severity.Warning, failure.Severity)
         Assert.Contains("'broken'", failure.Message)
         Assert.Contains("boom", failure.Message)
         Assert.Equal(None, failure.Span)
         Assert.Equal<string list>([ "test/everyDef"; "test/everyDef" ], rest |> List.map (fun diagnostic -> diagnostic.Code))
     | [] -> failwith "Expected the failure"
-    // A broken analyzer can be turned off like any rule.
-    let silenced = Compiler.compileWith (options [ throwing ] [ "broken/analyzerFailed", None ]) source
+    // A broken linter can be turned off like any rule.
+    let silenced = Compiler.compileWith (options [ throwing ] [ "broken/linterFailed", None ]) source
     Assert.Empty(silenced.Diagnostics)
 
 [<Fact>]
-let ``An analyzer that reports a rule it does not declare fails, and its reports are left out`` () =
+let ``A linter that reports a rule it does not declare fails, and its reports are left out`` () =
     let undeclared =
         { everyDef with
             Name = "sloppy"
-            Analyze = fun model -> everyDef.Analyze model |> List.map (fun report -> { report with Rule = "madeUp" }) }
+            Lint = fun model -> everyDef.Lint model |> List.map (fun report -> { report with Rule = "madeUp" }) }
     let diagnostic = Assert.Single(Compiler.compileWith (options [ undeclared ] []) source |> fun result -> result.Diagnostics)
-    Assert.Equal("sloppy/analyzerFailed", diagnostic.Code)
+    Assert.Equal("sloppy/linterFailed", diagnostic.Code)
     Assert.Contains("'madeUp'", diagnostic.Message)
 
 [<Fact>]
-let ``Analyzers do not run on a module that does not type-check`` () =
+let ``Linters do not run on a module that does not type-check`` () =
     let result = Compiler.compileWith (options [ everyDef ] []) "def one = missing"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
@@ -123,7 +123,7 @@ let ``The model is the module as written, with what type checking found`` () =
     let recorder =
         { Name = "recorder"
           Rules = []
-          Analyze = fun model -> seen <- Some model; [] }
+          Lint = fun model -> seen <- Some model; [] }
     let source = "@entry\ndef main = {\n  def x = 1\n  x + 1\n}"
     Assert.Empty((Compiler.compileWith (options [ recorder ] []) source).Diagnostics)
     let model = seen.Value
@@ -138,7 +138,7 @@ let ``The model is the module as written, with what type checking found`` () =
 
 [<Fact>]
 let ``Only the module being compiled is analyzed, not the modules it imports`` () =
-    let dir = Path.Combine(Path.GetTempPath(), $"nyx-analyzers-{Guid.NewGuid():N}")
+    let dir = Path.Combine(Path.GetTempPath(), $"nyx-linters-{Guid.NewGuid():N}")
     Directory.CreateDirectory dir |> ignore
     try
         File.WriteAllText(Path.Combine(dir, "lib.nyx"), "module lib\nexport def helper = 1\n")
@@ -151,7 +151,7 @@ let ``Only the module being compiled is analyzed, not the modules it imports`` (
     finally
         Directory.Delete(dir, true)
 
-// The official analyzer's `unusedBindings` rule.
+// The official linter's `unusedBindings` rule.
 
 /// What `default/unusedBindings` reports for `source`: each message with the text it is reported at.
 let private unusedIn (source: string) =
@@ -172,7 +172,7 @@ let private fixed' (source: string) =
 
 [<Fact>]
 let ``An unused local def, argument or pattern variable is reported once, at its name`` () =
-    // The examples from the official analyzer's page in the docs.
+    // The examples from the official linter's page in the docs.
     let source =
         "def total =\n  def taxRate = 0.2\n  100\n" +
         "def greet: (string, string) -> string = { name, title ->\n  \"Hello, {name}!\"\n}\n" +
@@ -248,7 +248,7 @@ let ``The fix for an unused def that ends its block renames it, since the block'
     Assert.Equal("def f = { x ->\n  def _ = x\n}", text)
     Assert.Empty((compileWithOfficial text).Diagnostics)
 
-// The official analyzer's `nonTailRecursion` rule.
+// The official linter's `nonTailRecursion` rule.
 
 /// What `default/nonTailRecursion` reports for `source`: each message with the text it is reported at.
 let private nonTailIn (source: string) =

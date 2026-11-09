@@ -165,7 +165,7 @@ GitHub Actions build and test the compiler on Linux and Windows for every pull r
 
 ## Design
 
-Nanyx aims to feel small: few rules, few exceptions, and features that compose rather than special cases. The compiler emits only errors, never warnings, and a debug build still runs in the face of type errors so iteration stays fast; style and quality checks come from pluggable [analyzers][analyzers]. There is no function overloading, no currying by default, and no arbitrary unions, each for reasons written up in the docs.
+Nanyx aims to feel small: few rules, few exceptions, and features that compose rather than special cases. The compiler emits only errors, never warnings, and a debug build still runs in the face of type errors so iteration stays fast; style and quality checks come from pluggable [linters][linters]. There is no function overloading, no currying by default, and no arbitrary unions, each for reasons written up in the docs.
 
 [Principles][principles] · [Why no overloading?][overloading] · [Why no currying?][currying] · [Why no `string | int`?][unions]
 
@@ -178,7 +178,7 @@ Nanyx aims to feel small: few rules, few exceptions, and features that compose r
 [attached]: https://nanyx.dev/docs/advanced/attached-definitions
 [memory]: https://nanyx.dev/docs/advanced/memory
 [workflows]: https://nanyx.dev/docs/advanced/workflows
-[analyzers]: https://nanyx.dev/docs/advanced/analyzers
+[linters]: https://nanyx.dev/docs/advanced/linters
 [stdlib]: https://nanyx.dev/docs/stdlib/standard-library
 [principles]: https://nanyx.dev/docs/foundations/principles
 [classes]: https://nanyx.dev/docs/coming-from-other-languages/classes

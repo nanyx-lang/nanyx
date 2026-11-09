@@ -1,34 +1,34 @@
-# Analyzers: compiler design
+# Linters: compiler design
 
-> **Status: draft.** This is the compiler-side design for analyzers. The user-facing model is described in
-> [Analyzers](../../docs/src/content/advanced/analyzers.md) and
-> [Official style analyzer](../../docs/src/content/standard-tools/official-analyzer.md); this document is about
+> **Status: draft.** This is the compiler-side design for linters. The user-facing model is described in
+> [Linters](../../docs/src/content/advanced/linters.md) and
+> [Official style linter](../../docs/src/content/standard-tools/official-linter.md); this document is about
 > what the compiler has to provide so that model can be built without reworking the front end later.
 
 ## Summary
 
-Analyzers inspect a checked module and report diagnostics that are not compile errors: unused bindings,
+Linters inspect a checked module and report diagnostics that are not compile errors: unused bindings,
 unreachable branches, style rules. The docs promise that they are written in Nanyx, configured per project, and
 show up in the editor next to compiler errors.
 
-Most of what analyzers need is not an analyzer API. It is the substrate under it: exact source spans, a
+Most of what linters need is not a linter API. It is the substrate under it: exact source spans, a
 structured diagnostic, and a semantic model that relates every name to its declaration. Those are cheap to add
 while the compiler is small and expensive to add later, because every phase and every test touches them. So the
-plan is to build the substrate first, prove it with a handful of analyzers written in F# inside the compiler, and
-only then design the public contract that Nanyx-authored analyzers will be written against.
+plan is to build the substrate first, prove it with a handful of linters written in F# inside the compiler, and
+only then design the public contract that Nanyx-authored linters will be written against.
 
 ## Goals
 
-- Analyzer diagnostics are positioned exactly (start and end), in the right file, and can carry fixes.
-- Every diagnostic, compiler or analyzer, has a stable code, so projects can configure, promote or suppress it.
-- Analyzers see the program as the user wrote it, with types and resolved names.
-- An analyzer can never break compilation: a crashing analyzer produces a diagnostic, not a failed build.
+- Linter diagnostics are positioned exactly (start and end), in the right file, and can carry fixes.
+- Every diagnostic, compiler or linter, has a stable code, so projects can configure, promote or suppress it.
+- Linters see the program as the user wrote it, with types and resolved names.
+- A linter can never break compilation: a crashing linter produces a diagnostic, not a failed build.
 - The compiler itself emits only errors (see [No warnings](../../docs/src/content/foundations/principles.md)).
 
 ## Non-goals (for now)
 
-- The public, versioned API for analyzers written in Nanyx. It is the last step, not the first.
-- Running analyzers on code that does not type-check (see [Code with errors](#code-with-errors)).
+- The public, versioned API for linters written in Nanyx. It is the last step, not the first.
+- Running linters on code that does not type-check (see [Code with errors](#code-with-errors)).
 
 ## Where the compiler is today
 
@@ -120,7 +120,7 @@ type TextEdit = { Span: SourceSpan; NewText: string }
 type Fix = { Title: string; Edits: TextEdit list }
 
 type Diagnostic =
-    { Code: string                              // "NYX0001", or "<analyzer>/<rule>" for analyzer diagnostics
+    { Code: string                              // "NYX0001", or "<linter>/<rule>" for linter diagnostics
       Severity: Severity
       Title: string                             // short and generic: "Type mismatch"
       Message: string                           // detailed, with the actual names
@@ -132,11 +132,11 @@ type Diagnostic =
 
 Rules:
 
-- The compiler emits only `Critical` and `Error`. `Warning`, `Info` and `Hint` exist for analyzers.
+- The compiler emits only `Critical` and `Error`. `Warning`, `Info` and `Hint` exist for linters.
 - Compiler codes are `NYX` plus four digits, allocated in a single table in `Diagnostics.fs`
   (`DiagnosticCodes`) so they are stable and documentable. They are numbered by phase: `NYX00xx` for reading a
   module and its imports (syntax, imports, attributes), `NYX01xx` for resolving names, `NYX02xx` for types. Each
-  entry gives the code its title and severity. Analyzer codes are `<analyzer>/<rule>` (`default/unusedBindings`),
+  entry gives the code its title and severity. Linter codes are `<linter>/<rule>` (`default/unusedBindings`),
   matching the manifest keys in the docs.
 - `Critical` is for a compilation that has nothing to check (the file does not exist); every other compiler
   diagnostic is an `Error`.
@@ -148,7 +148,7 @@ is changed to take a span.
 
 ### 3. The semantic model
 
-Analyzers, hover and go-to-definition all ask the same questions: what is the type of this node, and what does
+Linters, hover and go-to-definition all ask the same questions: what is the type of this node, and what does
 this name refer to. The semantic model answers them for one module:
 
 ```fsharp
@@ -184,38 +184,38 @@ How it is produced:
   declared at their names in the context's record type (the parser records a record type's field names by its
   node), and carried with the context's `TypeDefInfo` so an imported context's members keep their module's symbols.
 - **Desugaring keeps provenance.** Every node `desugar` and `applyAttributes` synthesize gets the span (and
-  originating `NodeId`) of the syntax it replaced, and `Lowered` records the mapping. Analyzers walk `Syntax`; the
+  originating `NodeId`) of the syntax it replaced, and `Lowered` records the mapping. Linters walk `Syntax`; the
   type of a workflow bind is found through `Lowered`. This is much cheaper than teaching inference to check
-  surface syntax directly, and it can be replaced by that later without changing what analyzers see.
+  surface syntax directly, and it can be replaced by that later without changing what linters see.
 - **Import inlining stays where it is.** `CheckedModule` already separates the module's own items from the ones
-  inlined for the backend; analyzers read the semantic model of the module's own items, so inlining does not hide
+  inlined for the backend; linters read the semantic model of the module's own items, so inlining does not hide
   anything once references to imports are recorded.
 
 Whether `TypedExpr` survives alongside the side tables, or is replaced by them, is an implementation choice for
 the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two trees in step.
 
-### 4. The analyzer host (internal)
+### 4. The linter host (internal)
 
-> **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Analyzers.fs`). The official `default`
-> analyzer's first rule is `unusedBindings` ([#101](https://github.com/nanyx-lang/nanyx/issues/101)), whose fixes are
+> **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Linters.fs`). The official `default`
+> linter's first rule is `unusedBindings` ([#101](https://github.com/nanyx-lang/nanyx/issues/101)), whose fixes are
 > the first any diagnostic offers; the language server shows them as quick fixes. Its second is `nonTailRecursion`
 > ([tail-calls.md](tail-calls.md#checking-tail-position)). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
 >
 > - Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its
 >   diagnostics are not repeated in every importer (the language server would show them at the top of each one).
-> - A failing analyzer is reported under a rule every analyzer has, `<analyzer>/analyzerFailed`, a warning by
->   default, so it can be configured or turned off like any rule. Throwing, or reporting a rule the analyzer does
->   not declare, both count as failing, and the analyzer's other reports for the module are left out.
+> - A failing linter is reported under a rule every linter has, `<linter>/linterFailed`, a warning by
+>   default, so it can be configured or turned off like any rule. Throwing, or reporting a rule the linter does
+>   not declare, both count as failing, and the linter's other reports for the module are left out.
 > - The `SemanticModel` has no `Lowered` table yet ([#99](https://github.com/nanyx-lang/nanyx/issues/99)).
-> - The configuration is `AnalyzerOptions` (the analyzers to run, and severities by code), passed to
+> - The configuration is `LinterOptions` (the linters to run, and severities by code), passed to
 >   `Compiler.compileWith` and its file and source variants. A package's `.nyxpack` sets it with an
->   `[analyzers.<name>]` table per analyzer to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
->   `nanyx build`, `nanyx run` and the language server; without the table, the analyzer does not run. A file
->   outside any package turns analyzers on with `#:analyzer` directives in the same way, and without them runs
->   none. Analyzers are opt-in everywhere, including `Compiler.compile` and its variants.
+>   `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
+>   `nanyx build`, `nanyx run` and the language server; without the table, the linter does not run. A file
+>   outside any package turns linters on with `::linter` directives in the same way, and without them runs
+>   none. Linters are opt-in everywhere, including `Compiler.compile` and its variants.
 
-Before any public contract, analyzers are F# values compiled into the compiler:
+Before any public contract, linters are F# values compiled into the compiler:
 
 ```fsharp
 type Rule =
@@ -231,27 +231,27 @@ type Report =
       Related: (SourceSpan * string) list
       Fixes: Fix list }
 
-type Analyzer =
+type Linter =
     { Name: string                  // "default"
       Rules: Rule list
-      Analyze: SemanticModel -> Report list }
+      Lint: SemanticModel -> Report list }
 ```
 
 The host:
 
 - runs after a module type-checks, once per user module (not standard-library modules);
 - looks up each report's severity in the configuration (rule default, overridden per project, `none` drops it),
-  and stamps the code `<analyzer>/<rule>`;
-- catches an analyzer exception and turns it into one diagnostic naming the analyzer, so a broken analyzer never
+  and stamps the code `<linter>/<rule>`;
+- catches a linter exception and turns it into one diagnostic naming the linter, so a broken linter never
   breaks the build;
-- returns analyzer diagnostics in `CompileResult.Diagnostics` alongside compiler ones, so `nanyx check`,
+- returns linter diagnostics in `CompileResult.Diagnostics` alongside compiler ones, so `nanyx check`,
   `nanyx run` and the language server need no special handling.
 
 Configuration is a compiler option (`Map<string, Severity option>` keyed by code) until the package manifest
 exists; then the manifest is parsed into the same value. A rule promoted to `error` fails `nanyx run`/build like a
 compiler error does.
 
-The first analyzer is the official one from the docs, built rule by rule. The first rules are chosen to exercise
+The first linter is the official one from the docs, built rule by rule. The first rules are chosen to exercise
 different parts of the model:
 
 | Rule | Needs |
@@ -264,23 +264,23 @@ different parts of the model:
 
 ### 5. The public contract (later)
 
-Once the internal analyzers have shaken out the semantic model, the public contract can be designed with
+Once the internal linters have shaken out the semantic model, the public contract can be designed with
 evidence rather than guesses. The direction so far:
 
-- Analyzers are Nanyx packages, compiled to WebAssembly and run at compile time on the embedded Wasmtime engine
+- Linters are Nanyx packages, compiled to WebAssembly and run at compile time on the embedded Wasmtime engine
   the compiler already ships.
 - They see the semantic model through query functions (type of a node, symbol of a reference, references to a
   symbol, children of a node) rather than a serialized copy of the whole tree. Queries keep the compiler's internal
   representation free to change, and avoid copying large trees across the WASM boundary.
-- The contract is versioned from day one, and an analyzer declares the version it targets.
+- The contract is versioned from day one, and a linter declares the version it targets.
 
 ## Code with errors
 
-Today any error stops compilation before a typed module exists, so analyzers can only run on modules with no
-errors. That is the right first step and keeps analyzers simple. Its cost is in the editor: analyzer diagnostics
+Today any error stops compilation before a typed module exists, so linters can only run on modules with no
+errors. That is the right first step and keeps linters simple. Its cost is in the editor: linter diagnostics
 disappear while the file has a type error, and reappear when it is fixed.
 
-Running analyzers on code with errors needs parser error recovery and an inference that keeps going after an
+Running linters on code with errors needs parser error recovery and an inference that keeps going after an
 error, which the language server wants for its own reasons. It is out of scope here, but the semantic model
 should not assume every node has a type: `Types` is a map, and a missing entry means "unknown".
 
@@ -288,12 +288,12 @@ should not assume every node has a type: `Types` is a map, and a missing entry m
 
 1. **Foundations.** Spans on every node; structured diagnostics with codes; diagnostics carry their file.
 2. **Semantic model.** Record name resolution as symbols and references; keep desugaring provenance.
-3. **Host and first rules.** The internal analyzer host with configuration through compiler options, then the
+3. **Host and first rules.** The internal linter host with configuration through compiler options, then the
    rules in the table above, one at a time.
-4. **Public analyzers.** Design the contract for Nanyx-authored analyzers, based on what steps 1 to 3 taught us.
+4. **Public linters.** Design the contract for Nanyx-authored linters, based on what steps 1 to 3 taught us.
 
 Steps 1 and 2 are useful on their own: the language server needs exact ranges and symbols for hover and
-go-to-definition regardless of analyzers.
+go-to-definition regardless of linters.
 
 ## Open questions
 
@@ -301,7 +301,7 @@ go-to-definition regardless of analyzers.
   only the convention that a `_`-prefixed name is intentionally unused? The docs already use `_` patterns.
 - ~~**Compiler error codes.** One flat `NYX0001` sequence, or ranges per phase?~~ Ranges per phase (see
   [section 2](#2-structured-diagnostics)).
-- **Where analyzers run in the CLI.** Always, or only for `check` and build, with `run` skipping them for speed?
-- **Analyzers across modules.** "Exported but never used anywhere in the project" needs every module's semantic
+- **Where linters run in the CLI.** Always, or only for `check` and build, with `run` skipping them for speed?
+- **Linters across modules.** "Exported but never used anywhere in the project" needs every module's semantic
   model at once; per-module analysis is enough for the first rules.
 - **Fix application.** Fixes are text edits; does the CLI get a `--fix`, or are fixes editor-only at first?

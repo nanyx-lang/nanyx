@@ -37,9 +37,9 @@
           }
         },
         {
-          "comment": "A script's directive, at the start of a line: `#:analyzer default.unusedBindings error`",
+          "comment": "A script's directive, at the start of a line: `::linter default.unusedBindings error`",
           "name": "meta.preprocessor.directive.nanyx",
-          "match": "^(#:)([A-Za-z_][A-Za-z0-9_]*)?(.*)$",
+          "match": "^(::)([A-Za-z_][A-Za-z0-9_]*)?(.*)$",
           "captures": {
             "1": {
               "name": "punctuation.definition.directive.nanyx"

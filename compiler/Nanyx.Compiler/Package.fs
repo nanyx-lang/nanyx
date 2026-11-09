@@ -9,7 +9,7 @@ open Tomlyn
 open Tomlyn.Model
 
 /// A package's `.nyxpack` manifest, as far as it is read so far: what the package is called, which files are its
-/// sources, and which analyzers check them. The `[formatter]` table is the formatter's, which reads it itself.
+/// sources, and which linters check them. The `[formatter]` table is the formatter's, which reads it itself.
 type Manifest =
     { /// The manifest's full path.
       Path: string
@@ -19,8 +19,8 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
-      /// The analyzers the manifest turns on, each with a table under `[analyzers]`, and the severities it sets.
-      Analyzers: AnalyzerOptions }
+      /// The linters the manifest turns on, each with a table under `[linters]`, and the severities it sets.
+      Linters: LinterOptions }
 
 module Manifest =
     /// The manifest's file extension.
@@ -28,7 +28,7 @@ module Manifest =
 
     /// The top-level tables a manifest may have. Those not read yet are refused when they say anything, rather
     /// than ignored, so a manifest never seems to work when it does not.
-    let private tables = [ "package"; "dependencies"; "project-references"; "analyzers"; "formatter" ]
+    let private tables = [ "package"; "dependencies"; "project-references"; "linters"; "formatter" ]
 
     let private packageKeys = [ "name"; "version"; "sources"; "public-modules" ]
 
@@ -68,40 +68,40 @@ module Manifest =
 
     let private quoted (names: string seq) = names |> Seq.map (fun name -> $"'{name}'") |> String.concat ", "
 
-    /// The analyzer options of an `[analyzers]` table: one table per analyzer to run, of rule ids and severities.
-    let private readAnalyzers (path: string) (table: TomlTable) : Result<AnalyzerOptions, string list> =
+    /// The linter options of a `[linters]` table: one table per linter to run, of rule ids and severities.
+    let private readLinters (path: string) (table: TomlTable) : Result<LinterOptions, string list> =
         let configured =
             table
             |> Seq.map (fun entry ->
-                match Analyzers.all |> List.tryFind (fun analyzer -> analyzer.Name = entry.Key), entry.Value with
+                match Linters.all |> List.tryFind (fun linter -> linter.Name = entry.Key), entry.Value with
                 | None, _ ->
-                    Result.Error [ $"{path}: unknown analyzer [analyzers.{entry.Key}]; the analyzers are {quoted (Analyzers.all |> List.map _.Name)}" ]
-                | Some analyzer, (:? TomlTable as rules) ->
-                    let known = analyzer.Rules @ [ Analyzers.failedRule ] |> List.map _.Id
+                    Result.Error [ $"{path}: unknown linter [linters.{entry.Key}]; the linters are {quoted (Linters.all |> List.map _.Name)}" ]
+                | Some linter, (:? TomlTable as rules) ->
+                    let known = linter.Rules @ [ Linters.failedRule ] |> List.map _.Id
                     let settings =
                         rules
                         |> Seq.map (fun rule ->
-                            let key = $"[analyzers.{analyzer.Name}] {rule.Key}"
+                            let key = $"[linters.{linter.Name}] {rule.Key}"
                             if not (List.contains rule.Key known) then
                                 Result.Error $"{path}: unknown rule {key}; the rules are {quoted known}"
                             else
                                 match rule.Value with
                                 | :? string as name when severities |> List.exists (fst >> (=) name) ->
-                                    Result.Ok(Analyzers.code analyzer rule.Key, severities |> List.find (fst >> (=) name) |> snd)
+                                    Result.Ok(Linters.code linter rule.Key, severities |> List.find (fst >> (=) name) |> snd)
                                 | value -> Result.Error $"{path}: {key} must be {quoted (List.map fst severities)}, not {describe value}")
                         |> List.ofSeq
                     match settings |> List.choose (function Result.Error e -> Some e | Result.Ok _ -> None) with
-                    | [] -> Result.Ok(analyzer, settings |> List.choose (function Result.Ok s -> Some s | Result.Error _ -> None))
+                    | [] -> Result.Ok(linter, settings |> List.choose (function Result.Ok s -> Some s | Result.Error _ -> None))
                     | errors -> Result.Error errors
-                | Some analyzer, value ->
-                    Result.Error [ $"{path}: analyzers.{analyzer.Name} must be a table, [analyzers.{analyzer.Name}], not {describe value}" ])
+                | Some linter, value ->
+                    Result.Error [ $"{path}: linters.{linter.Name} must be a table, [linters.{linter.Name}], not {describe value}" ])
             |> List.ofSeq
         match configured |> List.collect (function Result.Error e -> e | Result.Ok _ -> []) with
         | [] ->
             let chosen = configured |> List.choose (function Result.Ok c -> Some c | Result.Error _ -> None)
             // In the order the compiler has them, so diagnostics come out in the same order whatever the manifest's.
             Result.Ok
-                { Analyzers = Analyzers.all |> List.filter (fun analyzer -> chosen |> List.exists (fun (a, _) -> a.Name = analyzer.Name))
+                { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
                   Severities = chosen |> List.collect snd |> Map.ofList }
         | errors -> Result.Error errors
 
@@ -161,14 +161,14 @@ module Manifest =
                 | false, _ -> defaults
             let sources = strings "sources" [ "**/*.nyx" ]
             strings "public-modules" [] |> ignore
-            // No [analyzers] table means no analyzers: a package turns on the official one with [analyzers.default].
-            let analyzers =
-                match table "analyzers" |> Option.map (readAnalyzers path) with
+            // No [linters] table means no linters: a package turns on the official one with [linters.default].
+            let linters =
+                match table "linters" |> Option.map (readLinters path) with
                 | Some (Result.Ok options) -> options
                 | Some (Result.Error problems) ->
                     errors.AddRange problems
-                    { Analyzers = []; Severities = Map.empty }
-                | None -> { Analyzers = []; Severities = Map.empty }
+                    { Linters = []; Severities = Map.empty }
+                | None -> { Linters = []; Severities = Map.empty }
             if errors.Count > 0 then
                 Result.Error(List.ofSeq errors)
             else
@@ -178,7 +178,7 @@ module Manifest =
                       Name = name
                       Version = version
                       Sources = sources
-                      Analyzers = analyzers }
+                      Linters = linters }
 
 /// A package on disk: its manifest, its source files, and the one that declares its `@entry`, if any.
 type Package =
@@ -238,16 +238,16 @@ module Package =
         else
             Result.Error [ $"Not a directory or a {Manifest.extension} manifest: {path}" ]
 
-    /// The analyzer options for a file: those of the package manifest it is under, if it has one that reads.
-    let analyzersFor (filePath: string) : AnalyzerOptions option =
+    /// The linter options for a file: those of the package manifest it is under, if it has one that reads.
+    let lintersFor (filePath: string) : LinterOptions option =
         match Manifest.tryFind (Path.GetDirectoryName(Path.GetFullPath filePath)) with
         | Result.Ok (Some manifest) ->
             match Manifest.read manifest with
-            | Result.Ok manifest -> Some manifest.Analyzers
+            | Result.Ok manifest -> Some manifest.Linters
             | Result.Error _ -> None
         | _ -> None
 
-    /// An error for each `#:` directive at the top of the file at `filePath`, whose text is `source`, which is in the
+    /// An error for each `::` directive at the top of the file at `filePath`, whose text is `source`, which is in the
     /// package whose manifest is at `manifestPath`: directives say what a manifest would, for a script, which has none.
     let directiveErrors (manifestPath: string) (filePath: string) (source: string) : Diagnostic list =
         Directives.read (Path.GetFullPath filePath) source
@@ -255,21 +255,21 @@ module Package =
             Diagnostics.at
                 DiagnosticCodes.DirectiveInPackage
                 directive.Span
-                $"#:{directive.Name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
+                $"::{directive.Name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
 
-    /// Checks every source file of `package`, running the analyzers its manifest turns on over each.
+    /// Checks every source file of `package`, running the linters its manifest turns on over each.
     let build (package: Package) : PackageBuild =
         let results =
             package.Sources
             |> List.map (fun file ->
                 let source = File.ReadAllText file
-                let result = Compiler.compileSourceWith package.Manifest.Analyzers file source
+                let result = Compiler.compileSourceWith package.Manifest.Linters file source
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
                 { result with
                     Diagnostics = directives @ result.Diagnostics
                     ErrorsDeferred = result.ErrorsDeferred && directives.IsEmpty })
-        // A file's errors are deferred when it did not type-check and each of its errors was placed; an analyzer rule
+        // A file's errors are deferred when it did not type-check and each of its errors was placed; a linter rule
         // configured as an error, in a file that did type-check, is not deferred.
         let deferred (result: CompileResult) =
             not (result.Diagnostics |> List.exists Diagnostics.isError) || (not result.TypeChecked && result.ErrorsDeferred)

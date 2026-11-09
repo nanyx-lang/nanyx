@@ -30,12 +30,12 @@ You can run this file with `nanyx run filename.nyx`. The compiler treats the fil
 
 ## Directives
 
-A script has no package manifest, but it can say what a manifest would with _directives_: lines starting `#:` at the top of the file, before its first line of code. They may come after a `#!` line and among comments and blank lines.
+A script has no package manifest, but it can say what a manifest would with _directives_: lines starting `::` at the top of the file, before its first line of code. They may come after a `#!` line and among comments and blank lines.
 
 ```nanyx
 #!/usr/bin/env -S nanyx run
-#:analyzer default.unusedBindings error
-#:formatter lineWidth 80
+::linter default.unusedBindings error
+::formatter lineWidth 80
 
 import nanyx/console
 
@@ -44,12 +44,12 @@ println("Hello!")
 
 | Directive | What it does | In a manifest |
 | --- | --- | --- |
-| `#:analyzer default` | Turns an analyzer on, with every rule at its default severity | `[analyzers.default]` |
-| `#:analyzer default.unusedBindings error` | Turns the analyzer on and sets one rule's severity (`error`, `warning`, `info`, `hint` or `none`) | `unusedBindings = "error"` under `[analyzers.default]` |
-| `#:formatter lineWidth 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `lineWidth = 80` under `[formatter]` |
-| `#:package acme.json 1.2` | Depends on a package: not supported yet, so it is an error for now | `[dependencies]` |
+| `::linter default` | Turns a linter on, with every rule at its default severity | `[linters.default]` |
+| `::linter default.unusedBindings error` | Turns the linter on and sets one rule's severity (`error`, `warning`, `info`, `hint` or `none`) | `unusedBindings = "error"` under `[linters.default]` |
+| `::formatter lineWidth 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `lineWidth = 80` under `[formatter]` |
+| `::package acme.json 1.2` | Depends on a package: not supported yet, so it is an error for now | `[dependencies]` |
 
-As in a manifest, only the analyzers a script's `#:analyzer` directives name run, so a script without one runs none. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
+As in a manifest, only the linters a script's `::linter` directives name run, so a script without one runs none. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
 
 # Importing by file path
 

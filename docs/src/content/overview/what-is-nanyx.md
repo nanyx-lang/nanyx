@@ -88,5 +88,5 @@ Nanyx is built on the principle that code should be **clear, composable, and cor
 
 - **Correctness above all**: Static type checking, exhaustive pattern matching, and no null values ensure fewer runtime errors.
 - **Simple ≠ Easy**: The language may take longer to learn, but its consistency pays dividends over time.
-- **Inform, don't block**: Compiler errors block a release build, but debug builds can still execute for tight feedback loops. The compiler itself never warns; style and quality checks come from [analyzers](/docs/advanced/analyzers).
+- **Inform, don't block**: Compiler errors block a release build, but debug builds can still execute for tight feedback loops. The compiler itself never warns; style and quality checks come from [linters](/docs/advanced/linters).
 - **Explicitness over cleverness**: Names are short, types are readable, and workflows are designed to be traced.

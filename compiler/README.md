@@ -234,7 +234,7 @@ What it does today:
 - `textDocument/documentSymbol` gives the outline: top-level defs, types, contexts and `module name =`
   blocks, with their local defs, fields and members nested (`NyxCompiler.Outline`). It needs only a parse,
   so a type error does not empty it; while the text does not parse, the last good text's outline is shown.
-- `textDocument/codeAction` offers each fix of a diagnostic in the range as a quick fix (an analyzer's, such
+- `textDocument/codeAction` offers each fix of a diagnostic in the range as a quick fix (a linter's, such
   as removing an unused local; compiler errors have none yet).
 - `textDocument/codeLens` shows the inferred type above each top-level def that does not write its own
   (`α -> α` above `def id = { x -> x }`); a destructuring def's lenses say which name each is for

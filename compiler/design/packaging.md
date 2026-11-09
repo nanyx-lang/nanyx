@@ -42,10 +42,10 @@ Out of scope here:
 A first slice of `.nyxpack` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
 
 - **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
-  `sources`; `public-modules` is accepted but not used) and `[analyzers]` table are read, with an error naming the
+  `sources`; `public-modules` is accepted but not used) and `[linters]` table are read, with an error naming the
   key for anything wrong or unknown. `nanyx build` and `nanyx run` without a file (or with a directory or manifest)
   check every source file, and `run` runs the one `@entry`; `build` writes it to `out/<name>.wat`. The language
-  server reads the manifest's analyzer configuration too. `[dependencies]` and `[project-references]` are refused
+  server reads the manifest's linter configuration too. `[dependencies]` and `[project-references]` are refused
   when non-empty, source files need not be named modules yet, and there is no `.nyxproj`, `nanyx new` or `restore`.
   The formatter still reads its `[formatter]` table itself.
 - **Imports resolve two ways only** (`resolveImportPath` and `StandardLibrary.tryModuleName` in `Library.fs`).
@@ -115,7 +115,7 @@ module in `public-modules`, with their types. Removing or changing a definition 
 adding one requires at least a minor. `nanyx publish` proposes the version number and refuses a wrong one.
 
 This needs the type of every exported definition, which inference already has, and it is one more reason for the
-analyzer rule that asks for annotations on exported definitions
+linter rule that asks for annotations on exported definitions
 ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an inferred type can change by accident.
 
 ### What a package is
@@ -228,7 +228,7 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
   exhaustive matches in dependants)? Elm says yes.
 - **Hosts and capabilities.** Should a package declare the contexts it requires in its manifest, so the index can
   show "this package needs `FileSystem`" before anyone installs it?
-- **Analyzers as packages.** [analyzers.md](analyzers.md) wants analyzers distributed as packages. Are they
-  ordinary dependencies, or a separate `[analyzers]` table resolved the same way?
+- **Linters as packages.** [linters.md](linters.md) wants linters distributed as packages. Are they
+  ordinary dependencies, or a separate `[linters]` table resolved the same way?
 - **Private packages.** Should the client support more than one index (a company's own) from the start? The
   static protocol makes it cheap: a list of index URLs in user configuration.

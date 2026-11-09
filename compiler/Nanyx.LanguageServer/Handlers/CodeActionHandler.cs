@@ -9,7 +9,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Offers the fixes of the diagnostics in the requested range as quick fixes: each fix's edits, applied to the
 /// document, with the diagnostic it resolves as published. A diagnostic's first fix is the preferred one. Only
-/// analyzers offer fixes so far (removing an unused local, renaming an unused name to <c>_</c>). A fix that would
+/// linters offer fixes so far (removing an unused local, renaming an unused name to <c>_</c>). A fix that would
 /// edit another file is not offered.
 /// </summary>
 public sealed class CodeActionHandler : CodeActionHandlerBase

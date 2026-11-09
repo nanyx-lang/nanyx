@@ -20,7 +20,7 @@ says, where it points, and how the CLI and the editor show it.
 - A reference page in the docs for each error code.
 
 The `Diagnostic` type itself (code, span, related locations, fixes) is designed in
-[Analyzers: structured diagnostics](analyzers.md#2-structured-diagnostics) and tracked there, because analyzers
+[Linters: structured diagnostics](linters.md#2-structured-diagnostics) and tracked there, because linters
 need it first. This workstream fills it with content.
 
 ## Where the compiler is today
@@ -58,6 +58,6 @@ _To do._ Candidate items, not yet filed:
 
 ## Open questions
 
-- One flat `NYX0001` sequence, or ranges per phase? (Also open in [Analyzers](analyzers.md#open-questions).)
+- One flat `NYX0001` sequence, or ranges per phase? (Also open in [Linters](linters.md#open-questions).)
 - Should the error reference pages live in the docs site and be linked from the LSP `codeDescription`?
 - Are error message snapshots part of the compiler tests, so wording changes are reviewed deliberately?

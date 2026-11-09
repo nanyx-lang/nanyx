@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 
 /// How serious a diagnostic is. The compiler reports only `Critical` and `Error` (there are no compiler warnings);
-/// `Warning`, `Info` and `Hint` are for analyzers.
+/// `Warning`, `Info` and `Hint` are for linters.
 [<RequireQualifiedAccess>]
 type Severity =
     /// Compilation cannot go on at all: there is no source to check.
@@ -20,7 +20,7 @@ type TextEdit = { Span: SourceSpan; NewText: string }
 type Fix = { Title: string; Edits: TextEdit list }
 
 type Diagnostic =
-    { /// `NYX` and four digits for the compiler's own (see `DiagnosticCodes`), `<analyzer>/<rule>` for an analyzer's.
+    { /// `NYX` and four digits for the compiler's own (see `DiagnosticCodes`), `<linter>/<rule>` for a linter's.
       Code: string
       Severity: Severity
       /// Short and the same for every diagnostic with this code: "Type mismatch".

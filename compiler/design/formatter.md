@@ -29,7 +29,7 @@ decides where lines break, and how it guarantees it never changes what a program
 Out of scope here:
 
 - Style diagnostics (naming, unused code, preferring one construct to another): the
-  [official analyzer](../../docs/src/content/standard-tools/official-analyzer.md), in the analyzers workstream. The
+  [official linter](../../docs/src/content/standard-tools/official-linter.md), in the linters workstream. The
   formatter only moves whitespace and comments, adds or removes parentheses and blank lines, and sorts imports. It
   never renames anything or reorders anything else.
 - Reading the rest of `.nyxpack`: the packaging workstream. The formatter reads only its `[formatter]` table.
