@@ -123,6 +123,43 @@ let ``Wasm - a release build of a file refuses a deferred error`` () =
         File.Delete outputPath
 
 [<Fact>]
+let ``Run - interpolating a call to a function with a deferred error runs up to the call`` () =
+    // `dist` cannot be typed, so neither can `a \dist`: the line before it still runs, and the call reports the error.
+    let source =
+        "import (\n" +
+        "  nanyx/console\n" +
+        "  nanyx/math\n" +
+        ")\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "\n" +
+        "def Point.dist = { p -> sqrt(p.x * p.x + p.y * p.y) }\n" +
+        "\n" +
+        "def a = Point(x = 5, y = 4)\n" +
+        "\n" +
+        "println(\"x = {a.x}, y = {a.y}\")\n" +
+        "println(\"dist = {a \\dist}\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("x = 5, y = 4\n", outcome.StandardOutput)
+    Assert.Contains(":8:25: error NYX0102: Unknown function 'sqrt' (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - interpolating a value of no known type that does not stop the program stops it there`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def g = { x -> if x == 0 then nope else x }\n" +
+        "\n" +
+        "println(\"start\")\n" +
+        "println(\"g = {g(5)}\")\n" +
+        "println(\"never\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Contains(":6:15: error: the value interpolated here has no known type, because of an error deferred from compile time", outcome.StandardError)
+
+[<Fact>]
 let ``Run - a non-exhaustive match runs the cases it handles and traps on the rest`` () =
     let source =
         "import nanyx/console\n" +
