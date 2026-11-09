@@ -340,12 +340,97 @@ module NonTailRecursion =
             | _ -> [])
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `unreachableArms` rule: a match arm that can never be chosen, because the arms before it
+/// already match every value it matches (`PatternSpace.coveringArms`). An arm with a guard never counts as covering
+/// another, since whether it matches depends on more than the value's shape.
+module UnreachableArms =
+    let rule =
+        { Id = "unreachableArms"
+          Title = "Unreachable match arm"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them handle every tag, boolean or length of list." }
+
+    /// The span from `start` to `end'` of `source`, in the file of `like`.
+    let private spanBetween (source: string) (like: SourceSpan) (start: int) (end': int) : SourceSpan =
+        let lineStart = source.LastIndexOf('\n', max 0 (start - 1)) + 1
+        let line = source.Substring(0, start) |> Seq.filter ((=) '\n') |> Seq.length
+        { like with Start = start; End = end'; StartLine = line; StartColumn = start - (if start = 0 then 0 else lineStart) }
+
+    /// An edit that removes the arm whose patterns are `patterns` and whose value is `body`: from its `|` to the end of
+    /// its value, and its lines with them when nothing else is written on them (a comment after it goes too). `None`
+    /// when no `|` comes before the arm, as for the `else` of an `if ... is`, which is no arm to remove.
+    let private removal (source: string) (patterns: Pattern list) (body: Expression) : TextEdit option =
+        let first = (List.head patterns).Span
+        let mutable bar = first.Start - 1
+        while bar >= 0 && (source.[bar] = ' ' || source.[bar] = '\t') do
+            bar <- bar - 1
+        if bar < 0 || source.[bar] <> '|' || SourceSpan.isNone body.Span then
+            None
+        else
+            let lineStart = source.LastIndexOf('\n', bar) + 1
+            let lineEnd =
+                match source.IndexOf('\n', body.Span.End) with
+                | -1 -> source.Length
+                | newline -> newline + 1
+            let after = source.Substring(body.Span.End, lineEnd - body.Span.End).Trim()
+            if String.IsNullOrWhiteSpace(source.Substring(lineStart, bar - lineStart)) && (after = "" || after.StartsWith "--") then
+                Some { Span = spanBetween source first lineStart lineEnd; NewText = "" }
+            else
+                // On a line with other arms: the arm and the space before its `|`.
+                let start = if bar > 0 && source.[bar - 1] = ' ' then bar - 1 else bar
+                Some { Span = spanBetween source first start body.Span.End; NewText = "" }
+
+    /// Whether the arm at `index` is one the parser made up: the `()` an `if ... is` without an `else` stands for,
+    /// which is reported at the `then` branch, where nothing can be done about it.
+    let private isMadeUp (arms: MatchArm list) (index: int) =
+        match arms with
+        | [ _, thenBranch; _, (Kind UnitExpr as madeUp) ] -> index = 1 && madeUp.Span = thenBranch.Span
+        | _ -> false
+
+    let lint (model: SemanticModel) : Report list =
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.expressionsWithin
+        |> List.collect (fun expr ->
+            match expr.Kind with
+            | Match(values, arms) ->
+                let types = values |> List.map (fun value -> model.Types |> Map.tryFind value.Id)
+                let indexed = arms |> List.mapi (fun index (patterns, body) -> index, patterns, body)
+                let spanOf (patterns: Pattern list) = SourceSpan.between (List.head patterns).Span (List.last patterns).Span
+                indexed
+                |> List.choose (fun (index, patterns, body) ->
+                    if index = 0 || patterns.IsEmpty || isMadeUp arms index then
+                        None
+                    else
+                        let earlier = indexed |> List.take index |> List.map (fun (i, others, _) -> i, others)
+                        PatternSpace.coveringArms earlier types patterns
+                        |> Option.map (fun covering ->
+                            let message =
+                                match covering with
+                                | [ _ ] -> "This arm can never match: an arm before it matches every value it does."
+                                | _ -> "This arm can never match: the arms before it match every value it does between them."
+                            { Rule = rule.Id
+                              Span = spanOf patterns
+                              Message = message
+                              Related =
+                                covering
+                                |> List.map (fun i ->
+                                    let _, others, _ = indexed.[i]
+                                    spanOf others, (if covering.Length = 1 then "matches every value first" else "matches some of them first"))
+                              Fixes =
+                                removal model.Source patterns body
+                                |> Option.map (fun edit -> { Title = "Remove the unreachable arm"; Edits = [ edit ] })
+                                |> Option.toList }))
+            | _ -> [])
+        |> List.sortBy (fun report -> report.Span.Start)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
-          Rules = [ UnusedBindings.rule; NonTailRecursion.rule ]
-          Lint = fun model -> UnusedBindings.lint model @ NonTailRecursion.lint model }
+          Rules = [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule ]
+          Lint = fun model -> UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linter` directives
     /// can turn on.

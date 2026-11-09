@@ -70,9 +70,10 @@ def x = m.sqrt(16)
 ```nanyx
 match n
   | _ -> "always"
-  | 0 -> "never reached"
--- Linter warning: unreachable pattern branch
+  | 0 -> "never reached" -- Linter warning: this arm can never match: an arm before it matches every value it does
 ```
+
+The rule (`unreachableArms`) reports an arm that the arms before it already match every value of: one after a catch-all such as `_` or a name, one after an arm that matches everything it does (`#some(5)` after `#some(_)`, `5` after `1..10`), and one after arms that between them handle every tag of a union, both booleans or every length of list. It points at the arms that cover it, and its fix removes the arm. An arm with a guard (`{ > 0 }`) never counts as covering another, since whether it matches depends on more than the value's shape.
 
 ## Unreachable code path
 
