@@ -1,0 +1,254 @@
+[<AutoOpen>]
+module Parser.Program.Types
+
+open System
+open FParsec
+// After the libraries, so that the parser's names shadow theirs (`identifier`, `Attribute`) as they did in one file.
+open Parser.Program
+
+// Type expression parser
+/// Fills `typeExpr`, `typeList` and `typeSignature`. Called by `Api`: a file's top-level code runs only when one of
+/// its own values is first used.
+let internal fillTypeRefs () =
+    // A type an aliased import brings in is qualified with the alias: `m.$Email`, `m.Shape`.
+    let qualifiedTypeName =
+        pipe2
+            typeNameIdentifier
+            (many (attempt (pchar '.' >>. typeNameIdentifier)))
+            (fun head tail -> String.concat "." (head :: tail))
+
+    let typeIdentifier =
+        spannedType (
+            qualifiedTypeName |>> fun name ->
+                if name.Length = 1 && Char.IsLower name.[0] then TypeVar name
+                else TypeName name)
+
+    let typeParam =
+        pipe2
+            identifierNoWs
+            (opt (attempt (ws >>. pstring "::" >>. ws >>. typeExpr)))
+            (fun name typeOpt -> (name, typeOpt))
+
+    let typeMemberField =
+        pipe2
+            (pstring "type" >>. ws >>. identifierNoWs .>> wsNoNl())
+            (opt (attempt (pstring "=" >>. wsNoNl() >>. typeExpr)))
+            (fun name typeOpt -> TypeMember(name, typeOpt))
+
+    // A named field's name is noted, for the record type it is in to declare.
+    let typeField =
+        pipe5
+            (opt (pstring "mut" >>. ws))
+            (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% name)
+            (opt (pstring "?" >>% true))
+            (wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
+            (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
+            (fun mutOpt name optFlag typeValue defaultOpt ->
+                let isMutable = mutOpt.IsSome
+                let isOptional = optFlag.IsSome
+                TypeField(name, isMutable, isOptional, Some typeValue, defaultOpt))
+
+    let recordFieldSeparator =
+        attempt (pstring "," >>. ws >>% ()) <|> (skipMany1 (skipAnyOf " \t\r\n") >>. ws)
+
+    // Positional fields come before the named ones, as in a record value: `(int, step: int)`. They are named by
+    // position, `0`, `1`, ..., as a tuple's are. Brackets with no named field are a tuple or a grouping instead.
+    let positionalTypeFields =
+        many (attempt (typeExpr .>> ws .>> pstring "," .>> ws))
+        |>> List.mapi (fun index typeValue -> TypeField(string index, false, false, Some typeValue, None))
+
+    // The names noted while a record type is parsed are its named fields: a record nested in it takes its own.
+    let typeRecord =
+        collectingNames (
+            spannedType (
+                between
+                    (pstring "(")
+                    (ws >>. pstring ")")
+                    (pipe3
+                        (ws >>. positionalTypeFields)
+                        (attempt typeMemberField <|> typeField)
+                        (many (attempt (recordFieldSeparator >>. (attempt typeMemberField <|> typeField))))
+                        (fun positional first rest -> TypeRecord(positional @ first :: rest)))))
+        >>= fun (record, fields) -> declare RecordTypeFields record.Id fields >>% record
+
+    // Brackets group: `(int, a -> b)` is a function of two parameters, as it is without them, and `()` is unit.
+    // A bracketed tuple spans its brackets, as a tuple pattern does; any other type in brackets is just that type.
+    let typeTupleOrParen =
+        withSpan (
+            between
+                (pstring "(")
+                (ws >>. pstring ")")
+                (ws >>. opt (attempt typeSignature)))
+        |>> fun (inner, span) ->
+            match inner with
+            | None -> TypeExpr.at span TypeUnit
+            | Some ({ TypeExpr.Kind = TypeTuple _ } as tuple) -> { tuple with Span = span }
+            | Some single -> single
+
+    let typeTag =
+        let namedField =
+            pipe3
+                identifierNoWs
+                (opt (pstring "?" >>% true))
+                ((wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr))
+                (fun name optFlag typeValue ->
+                    let isOptional = optFlag.IsSome
+                    TypeField(name, false, isOptional, Some typeValue, None))
+        // A payload is a record of named fields, or the types in the brackets: `#pair(int, string)` carries a
+        // tuple and `#apply(a, b -> c)` a function.
+        let payload =
+            between
+                (pstring "(")
+                (ws >>. pstring ")")
+                (attempt (ws >>. spannedType (sepBy1 namedField (pstring "," .>> ws) |>> TypeRecord)) <|> (ws >>. typeList |>> typeListToType))
+        spannedType (pipe2 (pstring "#" >>. identifierNoWs) (opt payload) (fun tagName payloadOpt -> TypeTag(tagName, payloadOpt)))
+
+    // `map(string, int)` has two arguments; `map(string, a -> b)` has one, a function, as `,` binds tighter.
+    let typeApply =
+        spannedType (
+            pipe2
+                (pipe2 identifierNoWs (many (attempt (pchar '.' >>. identifierNoWs))) (fun head tail -> String.concat "." (head :: tail)))
+                (between (pstring "(") (ws >>. pstring ")") (ws >>. typeList))
+                (fun name ((args, resultOpt), span) ->
+                    match resultOpt with
+                    | None -> TypeApply(name, args)
+                    | Some _ -> TypeApply(name, [ typeListToType ((args, resultOpt), span) ])))
+
+    let contextSet =
+        spannedType (
+            between
+                (pstring "[")
+                (wsNoNl() >>. pstring "]")
+                (sepBy1
+                    (wsNoNl() >>. (attempt typeApply <|> typeIdentifier))
+                    (wsNoNl() >>. pstring "+" >>. wsNoNl()))
+            |>> TypeContext)
+
+    let contextsOf (contextSet: TypeExpr) =
+        match contextSet.Kind with
+        | TypeContext items -> items
+        | _ -> []
+
+    let typeConstraint =
+        spannedType (
+            pipe3
+                identifierNoWs
+                (pstring "::" >>. ws >>. typeExpr)
+                (ws >>. pstring "where" >>. ws >>. expression)
+                (fun name baseType predicate -> TypeConstraint(name, baseType, predicate)))
+
+    // `typeof x` takes a value, not a type, so its operand is a name or a path of fields (`config.server`) and
+    // never an arbitrary expression. Brackets only group: `typeof(x)` is `typeof x`.
+    let typeOf =
+        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
+        let path =
+            withSpan (spanned (identifierNoWs |>> IdentifierExpr)) >>= fun (head, headText) ->
+                many (attempt (pstring "." >>. withSpan identifierNoWs)) |>> fun fields ->
+                    fields
+                    |> List.fold (fun ((expr: Expression), text) (field, fieldSpan) ->
+                        let span = SourceSpan.between text fieldSpan
+                        Expression.at span (MemberAccess(expr, field, Some fieldSpan)), span) (head, headText)
+                    |> fst
+        let bracketed = between (pstring "(" >>. ws) (ws >>. pstring ")") path
+        spannedType (pstring "typeof" >>. keywordEnd >>. wsInline >>. (bracketed <|> path) |>> TypeOf)
+
+    let typeAtom =
+        choice [
+            attempt typeOf
+            attempt typeConstraint
+            attempt typeTag
+            attempt typeApply
+            attempt contextSet
+            attempt typeRecord
+            attempt typeTupleOrParen
+            typeIdentifier
+        ]
+
+    let typePostfix =
+        withSpan (typeAtom .>>. opt (pchar '?')) |>> fun ((baseType, optFlag), span) ->
+            match optFlag with
+            | Some _ -> TypeExpr.at span (TypeOptional baseType)
+            | None -> baseType
+
+    let typeIntersection =
+        singleOrCombined TypeIntersection (sepBy1 typePostfix (attempt (ws >>. pstring "&" >>. ws)))
+
+    let typeUnion =
+        opt (pstring "|" >>. ws) >>. singleOrCombined TypeUnion (sepBy1 typeIntersection (attempt (ws >>. pstring "|" >>. ws)))
+
+    let typeArrow =
+        withSpan (typeUnion .>>. opt (attempt (ws >>. pstring "->" >>. ws >>. typeExpr))) |>> fun ((left, rightOpt), span) ->
+            match rightOpt with
+            | None -> left
+            | Some right -> TypeExpr.at span (TypeFunc(left, right))
+
+    let typeWithContext =
+        (attempt (
+            withSpan ((contextSet .>> ws) .>>. opt (attempt typeArrow)) |>> fun ((ctx, typeOpt), span) ->
+                match typeOpt with
+                | Some t -> TypeExpr.at span (TypeWithContext(contextsOf ctx, t))
+                | None -> ctx))
+        <|> typeArrow
+
+    typeExprRef := typeWithContext
+
+    // `,` binds tighter than `->` wherever types are listed (see the types page), so `int, int -> int` means
+    // `(int, int) -> int` in a def's annotation, in brackets, in type arguments and in a tag's payload alike. A
+    // function that is one of the items has brackets of its own. A record's fields and a lambda's parameters
+    // are separated by commas themselves, so a type there is a `typeExpr`, which takes no bare list.
+    typeListRef :=
+        withSpan (
+            sepBy1 typeUnion (attempt (wsInline >>. pstring "," >>. ws))
+            .>>. opt (attempt (ws >>. pstring "->" >>. ws >>. typeExpr)))
+
+    // A def's annotation: a type list, possibly after the contexts it needs.
+    typeSignatureRef :=
+        attempt (
+            withSpan ((contextSet .>> ws) .>>. typeList) |>> fun ((ctx, list), span) ->
+                TypeExpr.at span (TypeWithContext(contextsOf ctx, typeListToType list)))
+        <|> (typeList |>> typeListToType)
+    ()
+
+let typedIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
+    pipe2
+        identifierNoWs
+        (opt (attempt (wsInline >>. pstring ":" >>. ws >>. typeExpr)))
+        (fun name typeOpt -> (name, typeOpt))
+
+/// A def's name with an optional same-line annotation. Unlike `typedIdentifier` (lambda parameters), the
+/// annotation is a `typeSignature`.
+let typedDefIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
+    pipe2
+        identifierNoWs
+        (opt (attempt (wsInline >>. pstring ":" >>. ws >>. typeSignature)))
+        (fun name typeOpt -> (name, typeOpt))
+
+let typedQualifiedIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
+    pipe2
+        qualifiedIdentifier
+        (opt (attempt (wsInline >>. pstring ":" >>. ws >>. typeSignature)))
+        (fun name typeOpt -> (name, typeOpt))
+
+// A def's name and type annotation. The annotation may follow the name on the same line or start an
+// indented continuation line (`def f` / `  : T` / `  = ...`), like the `=` does.
+let defNameAndType (lineStartCol: int64) (identParser: Parser<Identifier * TypeExpr option, ParseState>) =
+    identParser .>> wsNoNl()
+    >>= fun (name, typeOpt) ->
+        match typeOpt with
+        | Some _ -> preturn (name, typeOpt)
+        | None ->
+            opt (attempt (newlineIndentedContinuation lineStartCol >>. pstring ":" >>. ws >>. typeSignature .>> wsNoNl()))
+            |>> fun continuationType -> (name, continuationType)
+
+/// `def name = value`. The def's name is declared by its value.
+let parseDefWith (lineStartCol: int64) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
+    (pstring "def" >>. ws >>. getPosition .>>. defNameAndType lineStartCol identParser)
+    >>= fun (start, (name, typeOpt)) ->
+        defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser
+        >>= fun expr -> declare DefValue expr.Id [ name, nameSpan start name ] >>% (name, typeOpt, expr)
+
+let typeParam: Parser<Identifier * TypeExpr option, ParseState> =
+    pipe2
+        identifierNoWs
+        (opt (attempt (ws >>. pstring "::" >>. ws >>. typeExpr)))
+        (fun name typeOpt -> (name, typeOpt))
