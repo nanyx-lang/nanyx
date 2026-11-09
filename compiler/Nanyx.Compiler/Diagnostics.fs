@@ -71,6 +71,7 @@ module DiagnosticCodes =
     let UnknownContext = code 108 "Unknown context" Severity.Error
     let UnknownType = code 109 "Unknown type" Severity.Error
     let OutsideModuleBlock = code 110 "Name from outside a module block" Severity.Error
+    let NotImplemented = code 111 "Not implemented" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -96,7 +97,7 @@ module DiagnosticCodes =
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
           UnsupportedDirective; CodeInModuleBlock
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
-          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock
+          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
