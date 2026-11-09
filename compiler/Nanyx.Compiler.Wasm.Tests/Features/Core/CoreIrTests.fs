@@ -46,20 +46,18 @@ let ``A function the core IR can lower goes through it, and one it cannot falls 
         "    | #small -> 0\n" +
         "}\n" +
         "\n" +
-        "def shout: int -> float = { n -> 1.5 }\n"
+        "def shout: list(int) -> int = { xs -> List.length(xs) }\n"
     let _, report = compileWithReport source
     Assert.Equal<string list>([ "add"; "classify"; "size" ], report.FromCoreIr)
     let reason = report.Fallbacks |> List.find (fst >> (=) "shout") |> snd
-    Assert.Equal("a value of type float", reason)
+    // The prelude's generic functions have no types by node to be specialised from (#397).
+    Assert.Equal("it calls 'List.length' at a type the IR could not lower it at", reason)
 
 [<Fact>]
 let ``A function that calls one the core IR cannot specialise falls back too`` () =
     // `show` is generic and its body is out of the core IR's reach, so `main` cannot call a specialisation of it.
     let source =
-        "def show = { x ->\n" +
-        "  def scale = 1.5\n" +
-        "  x\n" +
-        "}\n" +
+        "def show = { x -> List.length([x]) }\n" +
         "\n" +
         "def main = show(1)\n"
     let wat, report = compileWithReport source
@@ -254,6 +252,30 @@ let ``Functions that require contexts, and their callers, go through the core IR
         Assert.Contains(name, report.FromCoreIr)
     // Each member arrives in a parameter of its own, after the function's own parameters.
     Assert.Contains("(func $twice (param $__ctx_ask i32) (result i32)", wat)
+
+[<Fact>]
+let ``Floats, pipes, guards and for loops go through the core IR`` () =
+    let source =
+        "def area: float -> float = { r -> r * r * 3.14 }\n" +
+        "\n" +
+        "def size = { n ->\n" +
+        "  match n\n" +
+        "    | > 100 -> 2\n" +
+        "    | < 0 -> 0\n" +
+        "    | _ -> 1\n" +
+        "}\n" +
+        "\n" +
+        "def double: int -> int = { n -> n * 2 }\n" +
+        "\n" +
+        "def total: list(int) -> int = { xs ->\n" +
+        "  for xs | n -> size(n \\double)\n" +
+        "  for 1..3 | i -> dbg(area(1.5))\n" +
+        "  0\n" +
+        "}\n"
+    let wat, report = compileWithReport source
+    Assert.Equal<string list>([ "area"; "size"; "double"; "total" ], report.FromCoreIr)
+    Assert.Contains("loop $__for_next_0", wat)
+    Assert.Contains("f64.mul\n    call $__nanyx_float_box", wat)
 
 [<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =

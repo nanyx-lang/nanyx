@@ -23,3 +23,24 @@ let wasmBinaryInstruction op =
 /// A tag's code: odd, so a tag without a payload (which is its code) can't be mistaken for a pointer to the cell
 /// of a tag with one.
 let tagCode (id: int) = (id <<< 1) ||| 1
+
+/// The f64 instruction for an operator on floats; comparisons leave an i32, arithmetic an f64 to box.
+let wasmFloatInstruction op =
+    match op with
+    | "+" -> Some "f64.add"
+    | "-" -> Some "f64.sub"
+    | "*" -> Some "f64.mul"
+    | "/" -> Some "f64.div"
+    | "==" -> Some "f64.eq"
+    | "!=" -> Some "f64.ne"
+    | "<" -> Some "f64.lt"
+    | "<=" -> Some "f64.le"
+    | ">" -> Some "f64.gt"
+    | ">=" -> Some "f64.ge"
+    | _ -> None
+
+let wasmFloatConst (value: float) =
+    if System.Double.IsNaN value then "nan"
+    elif System.Double.IsPositiveInfinity value then "inf"
+    elif System.Double.IsNegativeInfinity value then "-inf"
+    else value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)

@@ -10,6 +10,8 @@ type IrType =
     | IrBool
     | IrUnit
     | IrString
+    /// A float, in a box of its own: the value is a pointer to the `f64`.
+    | IrFloat
     /// A value that is one of these tags, each with the type of its payload if it has one, sorted by name. A single
     /// tag's type is a union of one.
     | IrTags of (string * IrType option) list
@@ -41,6 +43,9 @@ type VarKind =
     | InterpolationHole
     /// A local some construct needs for its own use, such as the one `dbg` holds its value in.
     | Scratch
+    /// A local of a `for` loop: where it is in its list, where its range ends, or its element. Loops that are never in
+    /// progress at once share these, numbered by how many loops enclose them.
+    | ForLoop
 
 type Var =
     { Id: int
@@ -62,6 +67,8 @@ type Atom =
 type PrimOp =
     /// An operator on ints or booleans: `+`, `==`, `and`, ...
     | Binary of string
+    /// An operator on floats: each operand is unboxed, and an arithmetic result boxed.
+    | FloatBinary of string
     | Not
 
 type Pattern =
@@ -74,6 +81,8 @@ type Pattern =
     | PFields of (int * Pattern) list
     /// A string equal to this literal.
     | PString of string
+    /// A value that compares to this one by the operator: `| > 5 ->`.
+    | PGuard of string * Atom
     /// A list whose first elements match these patterns, and the rest of which matches the last pattern if there is
     /// one, or is empty if not.
     | PList of Pattern list * Pattern option
@@ -85,6 +94,8 @@ type HoleType =
     | HoleString
     | HoleInt
     | HoleBool
+    /// A float, formatted to a string when the hole is evaluated.
+    | HoleFloat
     /// A tag: each case the hole's type names, in the order the type names them, with the type of its payload if it
     /// has one (a string, an int or a bool).
     | HoleTag of (string * IrType option) list
@@ -101,6 +112,8 @@ type DbgForm =
     | DbgNumber of Var * int option
     /// A string, printed as it is. `Some depth` as for a number.
     | DbgString of Var * int option
+    /// A float, formatted and printed. `Some depth` as for a number.
+    | DbgFloat of Var * int option
     /// A tag literal without a payload, printed by a host function of its own.
     | DbgTag of string * Var
     /// A tag literal with a payload (the atom), printed by a host function of its own.
@@ -146,6 +159,10 @@ and ExprKind =
     | Interpolate of InterpolationPart list
     /// `dbg(value)`: prints the value (the atom, unless the form says otherwise) and leaves it.
     | Dbg of Atom * DbgForm
+    /// Boxes a float constant.
+    | BoxFloat of float
+    /// A `for` loop: evaluates its body for each element, and is unit.
+    | ForEach of ForLoop
     /// `let x = value in body`. The value is never a `Let` itself: blocks are flattened.
     | Let of Var * Expr * Expr
     /// Evaluates the first expression for its effects, drops its value, then evaluates the second.
@@ -153,6 +170,20 @@ and ExprKind =
     | If of Atom * Expr * Expr
     /// Tests the scrutinees against each arm's patterns in turn and evaluates the first arm that matches.
     | Match of Var list * Arm list
+
+/// A `for` loop over a list or a range, at a depth (how many loops enclose it) that names its locals.
+and ForLoop =
+    { Source: ForSource
+      Depth: int
+      Cursor: Var
+      End: Var
+      Element: Var
+      Body: Expr }
+
+and ForSource =
+    | OverList of Atom
+    /// The ints from the first to the second, both included.
+    | OverRange of Atom * Atom
 
 and Arm =
     { Patterns: Pattern list
@@ -178,6 +209,7 @@ module IrType =
         | IrBool -> "bool"
         | IrUnit -> "unit"
         | IrString -> "string"
+        | IrFloat -> "float"
         | IrTags tags ->
             tags
             |> List.map (fun (name, payload) ->
@@ -213,6 +245,7 @@ module Print =
             let shown = fields |> List.map (fun (slot, inner) -> $"{slot}: {pattern inner}") |> String.concat ", "
             $"({shown})"
         | PString value -> $"\"{value}\""
+        | PGuard(op, value) -> $"{op} {atom value}"
         | PList(elements, rest) ->
             let shown = elements |> List.map pattern
             let shownRest = rest |> Option.map (fun r -> [ $"...{pattern r}" ]) |> Option.defaultValue []
@@ -226,6 +259,7 @@ module Print =
         | Atom a -> atom a
         | Prim(Binary op, [ left; right ]) -> $"{atom left} {op} {atom right}"
         | Prim(Binary op, operands) -> $"({op} {atoms operands})"
+        | Prim(FloatBinary op, operands) -> $"(float {op} {atoms operands})"
         | Prim(Not, operands) -> $"not({atoms operands})"
         | Call(name, args) -> $"{name}({atoms args})"
         | MakeTag(name, payload) -> $"#{name}({atom payload})"
@@ -249,6 +283,14 @@ module Print =
             |> String.concat ""
             |> sprintf "\"%s\""
         | Dbg(value, _) -> $"dbg({atom value})"
+        | BoxFloat value -> string value
+        | ForEach loop ->
+            let inner = indent + "  "
+            let source =
+                match loop.Source with
+                | OverList list -> atom list
+                | OverRange(first, last) -> $"{atom first}..{atom last}"
+            $"for {loop.Element.Name} in {source} do\n{inner}{expr inner loop.Body}"
         | Let(v, value, body) -> $"let {v.Name}: {IrType.show v.Type} = {expr indent value}\n{indent}{expr indent body}"
         | Do(first, rest) -> $"do {expr indent first}\n{indent}{expr indent rest}"
         | If(cond, ifTrue, ifFalse) ->

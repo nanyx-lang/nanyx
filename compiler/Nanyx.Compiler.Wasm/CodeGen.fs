@@ -152,26 +152,6 @@ let private unwrapContextType (typeExpr: TypeExpr option) : TypeExpr option =
     | Some (Kind (TypeContext _)) -> None  // TypeContext alone has no inner type
     | other -> other
 
-/// The f64 instruction for an operator on floats; comparisons leave an i32, arithmetic an f64 to box.
-let private wasmFloatInstruction op =
-    match op with
-    | "+" -> Some "f64.add"
-    | "-" -> Some "f64.sub"
-    | "*" -> Some "f64.mul"
-    | "/" -> Some "f64.div"
-    | "==" -> Some "f64.eq"
-    | "!=" -> Some "f64.ne"
-    | "<" -> Some "f64.lt"
-    | "<=" -> Some "f64.le"
-    | ">" -> Some "f64.gt"
-    | ">=" -> Some "f64.ge"
-    | _ -> None
-
-let private wasmFloatConst (value: float) =
-    if System.Double.IsNaN value then "nan"
-    elif System.Double.IsPositiveInfinity value then "inf"
-    elif System.Double.IsNegativeInfinity value then "-inf"
-    else value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
 
 /// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`).
 let private isNominalTypeName (name: string) =
