@@ -10,7 +10,7 @@ The `collections` module provides functions for working with lists, maps, sets, 
 
 Since lists are immutable, all transform operations on lists return new lists.
 
-These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
+These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed (all but `groupBy`, `select` and `selectOne`, which are not there yet).
 
 ## all
 
@@ -73,6 +73,10 @@ Returns a new list with duplicate values removed, keeping first occurrence order
 List.distinct([1, 2, 2, 3, 1])
 -- [1, 2, 3]
 ```
+
+Elements are compared with `==`, so for now the elements must be numbers, bools, strings or tags: the compiler does not compare records or lists yet ([#424](https://github.com/nanyx-lang/nanyx/issues/424)).
+
+---
 
 ## filter
 
@@ -177,6 +181,8 @@ Groups elements of a list by a key function, returning a map from keys to lists 
 -- Map [ 0 => [2, 4], 1 => [1, 3] ]
 ```
 
+Not in the prelude yet: it waits on the `map` type ([#477](https://github.com/nanyx-lang/nanyx/issues/477)).
+
 ---
 
 ## length
@@ -245,12 +251,14 @@ List.skip([1, 2, 3, 4], 2)
 List.sortBy: (list(a), (a -> b)) -> list(a)
 ```
 
-Sorts a list using the projection function as the key.
+Sorts a list in ascending order of the key the projection function gives each element. The sort is stable: elements with equal keys keep their order.
 
 ```nanyx
 List.sortBy(["bbb", "a", "cc"], { .length })
 -- ["a", "cc", "bbb"]
 ```
+
+For now the prelude's `List.sortBy` takes `(a -> int)`: the key must be an `int`, since `<` does not order other types yet ([#476](https://github.com/nanyx-lang/nanyx/issues/476)).
 
 ---
 
@@ -289,6 +297,8 @@ def f: list(Color) -> list(string) = { items ->
 }
 ```
 
+Not in the prelude yet: it waits on the `Yield` context ([#478](https://github.com/nanyx-lang/nanyx/issues/478)).
+
 ---
 
 ## selectOne
@@ -310,6 +320,8 @@ def f: list(Color) -> #some(string) | #emptyList = { items ->
     }
 }
 ```
+
+Not in the prelude yet: it waits on the `Yield` context ([#478](https://github.com/nanyx-lang/nanyx/issues/478)).
 
 ---
 

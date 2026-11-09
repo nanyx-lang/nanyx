@@ -116,3 +116,58 @@ let ``Run - the prelude's List functions`` () =
     |> assertRan (
         "6 2 4 []\n3 2 []\n2 1 3 []\n1 2 3 []\n3 1 [] | 2 [] | 3 1 2 9 []\n" +
         "6 -6 3 2\nall\nnone\nfound 1\nempty\n")
+
+/// Prints a list of ints, for the tests of the prelude's List functions below.
+let private showInts =
+    "import nanyx/console\n" +
+    "import nanyx/text\n" +
+    "\n" +
+    "def show: list(int) -> string = {\n" +
+    "  | [] -> \"[]\"\n" +
+    "  | [y, ...rest] -> \"{y} \" ++ show(rest)\n" +
+    "}\n"
+
+[<Fact>]
+let ``Run - List.distinct keeps the first of each value`` () =
+    // The tags are bound to annotated names first: a list literal of different tags doesn't type-check yet (#481).
+    let source =
+        showInts +
+        "type Color = #red | #green\n" +
+        "def red: Color = #red\n" +
+        "def green: Color = #green\n" +
+        "println(show(List.distinct([1, 2, 2, 3, 1])))\n" +
+        "println(String.join(List.distinct([\"b\", \"a\", \"b\"]), \",\"))\n" +
+        "dbg(List.length(List.distinct([red, green, red, red])))\n" +
+        "dbg(List.length(List.distinct([true, true])))\n" +
+        "println(show(List.distinct([])))\n"
+    runSource source |> assertRan "1 2 3 []\nb,a\ndbg: 2\ndbg: 1\n[]\n"
+
+[<Fact>]
+let ``Run - List.sortBy sorts by an int key and keeps equal keys in order`` () =
+    // `{ s -> String.length(s) }` rather than the docs' `{ .length }` (#479).
+    let source =
+        showInts +
+        "type Person = (name: string, age: int)\n" +
+        "def people: list(Person) = [\n" +
+        "  Person(name = \"Ann\", age = 40), Person(name = \"Bob\", age = 30),\n" +
+        "  Person(name = \"Cy\", age = 40), Person(name = \"Di\", age = 20)]\n" +
+        "println(show(List.sortBy([5, 3, 9, 1, 3, 0, 7], { x -> x })))\n" +
+        "println(String.join(List.sortBy([\"bbb\", \"a\", \"cc\"], { s -> String.length(s) }), \",\"))\n" +
+        "println(String.join(List.map(people \\ sortBy({ .age }), { p -> p.name }), \",\"))\n" +
+        "println(show(List.sortBy([], { x -> x })))\n"
+    runSource source |> assertRan "0 1 3 3 5 7 9 []\na,cc,bbb\nDi,Bob,Ann,Cy\n[]\n"
+
+[<Fact>]
+let ``Run - List.unfold builds a list from a state until #done`` () =
+    // The docs' `{ current, next -> ... }` takes the tuple apart in the parameters, which the backend can't call yet
+    // (#441), so this one takes it apart in a tuple pattern.
+    let source =
+        showInts +
+        "def fibonacci = List.unfold((0, 1)) { (current, next) ->\n" +
+        "  if current > 100 then #done\n" +
+        "  else #some(current, (next, current + next))\n" +
+        "}\n" +
+        "println(show(fibonacci))\n" +
+        "println(show(List.unfold(3, { n -> if n == 0 then #done else #some(n, n - 1) })))\n" +
+        "println(show(List.unfold(0, { n -> #done })))\n"
+    runSource source |> assertRan "0 1 1 2 3 5 8 13 21 34 55 89 []\n3 2 1 []\n[]\n"
