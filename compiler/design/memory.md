@@ -174,6 +174,8 @@ an expression with a type on every node:
 | `updateRecord(atom, slot = atom, ...)` | copies a record with some fields replaced (`record with f = v`) |
 | `makeList(atoms)` | builds a list |
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
+| `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
+| `dbg(atom, form)` | prints a value as `dbg` does for its type, and leaves it |
 | `let x = value in body` | names a value; the value is never a `let` itself |
 | `do value; rest` | evaluates a value for its effects and drops it |
 | `if atom then e1 else e2` | |
@@ -200,14 +202,15 @@ emitted, so functions from the IR are emitted in definition order with the rest,
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if anything in it is beyond the IR (closures, interpolated strings, `dbg`, pipes,
-  contexts and so on), if it requires contexts, or if it calls a specialisation that could not be lowered. A
-  function and the functions it calls through the IR are kept or dropped together.
+- A definition falls back if anything in it is beyond the IR (closures, pipes, floats, contexts and so on), if it
+  requires contexts, or if it calls a specialisation that could not be lowered. A function and the functions it calls
+  through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
   compiled from the IR call its specialisations instead.
 - Both ways give the same calling convention, so a function from either can call one from the other. A function from
   the IR compiles to the same text the old way would give it, apart from calling specialisations, and a test holds
-  them to that.
+  them to that. (The hole locals of interpolated strings are declared by depth, which can order them differently from
+  the old path when a function has strings nested in others' holes.)
 - Only a type-checked module is lowered: `transpileModuleToWat`, which compiles an untyped module, uses the old path
   throughout. `transpileTypedModuleWithReport` says which way each function was compiled, and why a definition fell
   back.

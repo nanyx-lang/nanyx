@@ -46,17 +46,23 @@ let ``A function the core IR can lower goes through it, and one it cannot falls 
         "    | #small -> 0\n" +
         "}\n" +
         "\n" +
-        "def shout: int -> int = { n -> dbg(n) }\n"
+        "def shout: int -> int = { n ->\n" +
+        "  def twice = { x -> x * 2 }\n" +
+        "  twice(n)\n" +
+        "}\n"
     let _, report = compileWithReport source
     Assert.Equal<string list>([ "add"; "classify"; "size" ], report.FromCoreIr)
     let reason = report.Fallbacks |> List.find (fst >> (=) "shout") |> snd
-    Assert.Equal("a call to 'dbg'", reason)
+    Assert.Equal("a function value", reason)
 
 [<Fact>]
 let ``A function that calls one the core IR cannot specialise falls back too`` () =
     // `show` is generic and its body is out of the core IR's reach, so `main` cannot call a specialisation of it.
     let source =
-        "def show = { x -> dbg(x) }\n" +
+        "def show = { x ->\n" +
+        "  def same = { y -> y }\n" +
+        "  same(x)\n" +
+        "}\n" +
         "\n" +
         "def main = show(1)\n"
     let wat, report = compileWithReport source
@@ -173,6 +179,29 @@ let ``Strings, lists and intrinsics go through the core IR`` () =
     Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)
     Assert.Contains("call $__nanyx_list_concat", wat)
     Assert.Contains("call $__nanyx_tag_equals", wat)
+
+[<Fact>]
+let ``Interpolated strings and dbg go through the core IR`` () =
+    let source =
+        "def pick = { n -> if n > 0 then #some(\"yes\") else #none }\n" +
+        "\n" +
+        "def describe: int -> string = { n -> \"n is {n}, positive {n > 0}, pick {pick(n)}\" }\n" +
+        "\n" +
+        "def nested: string -> string = { s -> \"outer {\"inner {s}\"} end\" }\n" +
+        "\n" +
+        "def debugs: int -> int = { n ->\n" +
+        "  dbg(n)\n" +
+        "  dbg(\"text\")\n" +
+        "  dbg(#ok)\n" +
+        "  dbg(#some(n))\n" +
+        "  dbg(pick(n))\n" +
+        "  n\n" +
+        "}\n"
+    let wat, report = compileWithReport source
+    Assert.Equal<string list>([ "pick"; "describe"; "nested"; "debugs" ], report.FromCoreIr)
+    // A string inside another's hole keeps to its own hole locals.
+    Assert.Contains("local.set $__interp_hole_1_0", wat)
+    Assert.Contains("call $dbg_tag_payload_some", wat)
 
 [<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =

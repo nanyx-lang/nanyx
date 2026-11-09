@@ -165,3 +165,32 @@ let ``Run - strings and lists through the core IR`` () =
         "\n" +
         "main()\n"
     runSource source |> assertRan "Hello, Ada\n30\n7\nagreed\ndeclined\n4\ndifferent\n"
+
+[<Fact>]
+let ``Run - interpolated strings and dbg through the core IR`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def pick = { n -> if n > 0 then #some(\"yes\") else #none }\n" +
+        "\n" +
+        "def describe: int -> string = { n -> \"n is {n}, positive {n > 0}, pick {pick(n)}\" }\n" +
+        "\n" +
+        "def nested: string -> string = { s -> \"outer {\"inner {s}\"} end\" }\n" +
+        "\n" +
+        "def debugs: int -> int = { n ->\n" +
+        "  dbg(n)\n" +
+        "  dbg(#some(n))\n" +
+        "  dbg(pick(n))\n" +
+        "  n\n" +
+        "}\n" +
+        "\n" +
+        "def main = {\n" +
+        "  println(describe(3))\n" +
+        "  println(describe(-1))\n" +
+        "  println(nested(\"x\"))\n" +
+        "  debugs(2)\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source
+    |> assertRan "n is 3, positive true, pick #some(\"yes\")\nn is -1, positive false, pick #none\nouter inner x end\ndbg: 2\ndbg: #some(2)\ndbg: #some(\"yes\")\n"

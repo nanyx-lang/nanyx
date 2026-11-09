@@ -122,7 +122,11 @@ let holeWrite (kind: HoleKind) (valueCode: string) =
     | TagHole cases -> tagHole valueCode cases textWrite tagPayloadWrite
     | BoolHole -> boolWrite valueCode
 
-/// The whole string, once `evalCode` has evaluated its holes into their locals: the length pass, the allocation (by
-/// `Helpers.stringAlloc`) and the write pass, leaving the string's pointer.
+/// The string, once its holes are in their locals: the length pass, the allocation (by `Helpers.stringAlloc`) and the
+/// write pass, leaving the string's pointer.
+let measureAndWrite (lengthCode: string) (writeCode: string) =
+    $"i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    local.get $__interp_len\n    call ${Helpers.stringAlloc}\n    local.tee $__interp_base\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_base"
+
+/// The whole string: `evalCode` evaluates its holes into their locals, then `measureAndWrite`.
 let build (evalCode: string) (lengthCode: string) (writeCode: string) =
-    $"{evalCode}\n    i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    local.get $__interp_len\n    call ${Helpers.stringAlloc}\n    local.tee $__interp_base\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_base"
+    $"{evalCode}\n    {measureAndWrite lengthCode writeCode}"

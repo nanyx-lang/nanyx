@@ -190,6 +190,8 @@ let rec private storesBeforeValue (expr: Expression) =
     | ExpressionKind.Match _ -> true
     | IfExpr(cond, _, _) -> storesBeforeValue cond
     | BinaryOp(_, left, right) -> storesBeforeValue left || storesBeforeValue right
+    // `dbg` of a tag value stores it in a hole local, as an interpolated string does.
+    | FunctionCall("dbg", _, _) -> true
     | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue
     | TupleExpr items
     | ListExpr items -> items |> List.exists storesBeforeValue
@@ -197,6 +199,8 @@ let rec private storesBeforeValue (expr: Expression) =
         fields |> List.exists (function NamedField(_, value) | PositionalField value -> storesBeforeValue value)
     | MemberAccess(inner, _, _) -> storesBeforeValue inner
     | TagExpr(_, Some payload) -> storesBeforeValue payload
+    // Each hole is stored in its local before the string is built.
+    | InterpolatedString parts -> parts |> List.exists (function StringExpr _ -> true | StringText _ -> false)
     | _ -> false
 
 /// The fields of a record expression by name, a positional field named by its position.
@@ -224,7 +228,9 @@ type private Scope =
       MatchDepth: int
       /// The names of the pattern-bound locals of the arms that enclose the expression, which a nested arm must not
       /// reuse.
-      LivePayloads: Set<string> }
+      LivePayloads: Set<string>
+      /// How many interpolated strings' holes enclose the expression (see `Interpolation.holeLocalName`).
+      InterpolationDepth: int }
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type private FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, request: SpecKey -> Map<int, Ty> -> string) =
@@ -249,6 +255,16 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     let newTemp (ty: IrType) =
         let var = newVar "" Temp ty
         { var with Name = $"__t{var.Id}" }
+
+    /// The local every `dbg` in the function holds its value in, made when the first needs it.
+    let mutable dbgScratch: Var option = None
+    let dbgLocal () =
+        match dbgScratch with
+        | Some var -> var
+        | None ->
+            let var = newVar (uniqueName "__dbg_tmp") Scratch IrInt
+            dbgScratch <- Some var
+            var
 
     let tyOf (expr: Expression) : IrType =
         match input.ExprTypes |> Map.tryFind expr.Id with
@@ -344,6 +360,38 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
         | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
+        | FunctionCall("dbg", _, args) when not (scope.Vars.ContainsKey "dbg") && not (definitions.ContainsKey "dbg") ->
+            // Prints its value and leaves it, by how the value is printed.
+            let value =
+                match flattenCallArgs args with
+                | [ single ] -> single
+                | _ -> cannot "`dbg` of more than one value"
+            let ty = tyOf expr
+            let scratch = dbgLocal ()
+            match value.Kind with
+            | TagExpr(name, None) -> k (mk (Dbg(ATag name, DbgTag(name, scratch))) ty)
+            | TagExpr(name, Some payload) ->
+                this.Atoms scope [ payload ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgTagPayload(name, scratch))) ty))
+            | _ ->
+                // For any value but a literal, the old path declares the locals it would print a tag with.
+                let holeDepth =
+                    match value.Kind with
+                    | LiteralExpr _
+                    | InterpolatedString _ -> None
+                    | _ -> Some scope.InterpolationDepth
+                match tyOf value with
+                | IrString -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgString(scratch, holeDepth))) ty))
+                | IrInt
+                | IrBool
+                | IrUnit -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgNumber(scratch, holeDepth))) ty))
+                | IrTags _ ->
+                    // A tag value prints as `"{value}"` would: evaluated into a hole, a level deeper.
+                    let holeType = this.HoleType value
+                    let hole = newVar (Interpolation.holeLocalName scope.InterpolationDepth 0) InterpolationHole (tyOf value)
+                    this.Complex { scope with InterpolationDepth = scope.InterpolationDepth + 1 } value (fun lowered ->
+                        let body = k (mk (Dbg(AVar hole, DbgTagValue(hole, holeType, scratch))) ty)
+                        mk (Let(hole, lowered, body)) body.Type)
+                | other -> cannot $"`dbg` of a value of type {IrType.show other}"
         | FunctionCall("__with", _, [ record; Kind (RecordExpr updates) ]) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.
             let ty = tyOf expr
@@ -450,9 +498,59 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | Block statements -> this.Block scope (statements |> List.map _.Kind) k
         | ExpressionKind.Match(values, arms) -> this.Match scope expr values arms k
         | Pipe _ -> cannot "a pipe"
-        | InterpolatedString _ -> cannot "an interpolated string"
+        | InterpolatedString parts ->
+            // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
+            // A string inside a hole is a level deeper, so that it keeps to its own hole locals.
+            let depth = scope.InterpolationDepth
+            let insideHole = { scope with InterpolationDepth = depth + 1 }
+            let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
+            let rec evaluateHoles (index: int) (remaining: Expression list) (evaluated: (Var * HoleType) list) =
+                match remaining with
+                | [] ->
+                    let mutable next = List.rev evaluated
+                    let irParts =
+                        parts
+                        |> List.map (function
+                            | StringText text -> Text text
+                            | StringExpr _ ->
+                                let var, holeType = next.Head
+                                next <- next.Tail
+                                Hole(var, holeType))
+                    k (mk (Interpolate irParts) IrString)
+                | hole :: rest ->
+                    let holeType = this.HoleType hole
+                    let local = newVar (Interpolation.holeLocalName depth index) InterpolationHole (tyOf hole)
+                    this.Complex insideHole hole (fun value ->
+                        let body = evaluateHoles (index + 1) rest ((local, holeType) :: evaluated)
+                        mk (Let(local, value, body)) body.Type)
+            evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
         | _ -> cannot "this kind of expression"
+
+    /// How the hole `hole` of an interpolated string is printed, from its type. A tag's cases are in the order its type
+    /// names them, which is the order they are tested in.
+    member this.HoleType (hole: Expression) : HoleType =
+        match tyOf hole with
+        | IrString -> HoleString
+        | IrInt -> HoleInt
+        | IrBool -> HoleBool
+        | IrTags _ ->
+            let rec cases (ty: Ty) =
+                match Unifier.unalias ty with
+                | TyTag(name, payload) -> [ name, payload ]
+                | TyUnion items -> items |> List.collect cases
+                | _ -> cannot "interpolating a union with tags not known here"
+            let ty = substitute subst input.ExprTypes.[hole.Id]
+            cases ty
+            |> List.distinctBy fst
+            |> List.map (fun (name, payload) ->
+                let payloadTy = payload |> Option.map toIrType
+                match payloadTy with
+                | None
+                | Some (IrString | IrInt | IrBool) -> name, payloadTy
+                | Some other -> cannot $"interpolating #{name} with a payload of type {IrType.show other}")
+            |> HoleTag
+        | other -> cannot $"interpolating a value of type {IrType.show other}"
 
     /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`.
     member this.Record (scope: Scope) (fields: (string * Expression) list) (ty: IrType) (k: Expr -> Expr) : Expr =
@@ -599,7 +697,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         let scope =
             { Vars = List.zip parameterNames parameters |> Map.ofList
               MatchDepth = 0
-              LivePayloads = Set.empty }
+              LivePayloads = Set.empty
+              InterpolationDepth = 0 }
         { Name = functionName
           Source = name
           TypeArguments = typeArguments
