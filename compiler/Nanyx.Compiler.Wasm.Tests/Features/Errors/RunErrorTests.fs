@@ -233,7 +233,7 @@ let ``Run - a non-exhaustive match runs the cases it handles and traps on the re
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("a\nb\n", outcome.StandardOutput)
-    Assert.Contains(":4:9: error NYX0203: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":4:3: error NYX0203: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - each kind of deferred error traps where it was found`` () =

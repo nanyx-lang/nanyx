@@ -63,7 +63,7 @@ let ``An unknown member is reported at the member name`` () =
     Assert.Equal(1, (spanOf diagnostic).StartLine)
 
 [<Fact>]
-let ``A non-exhaustive match is reported at its scrutinee`` () =
+let ``A non-exhaustive match is reported at its head`` () =
     let source =
         "def value: #some(int) | #none = #none\n" +
         "def result = match value\n" +
@@ -71,8 +71,8 @@ let ``A non-exhaustive match is reported at its scrutinee`` () =
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
     let span = spanOf diagnostic
-    Assert.Equal((1, 19), (span.StartLine, span.StartColumn))
-    Assert.Equal("value", textAt source span)
+    Assert.Equal((1, 13), (span.StartLine, span.StartColumn))
+    Assert.Equal("match value", textAt source span)
 
 [<Fact>]
 let ``A pattern of the wrong type is reported at the pattern`` () =

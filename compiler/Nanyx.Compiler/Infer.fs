@@ -1833,13 +1833,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         let unionTy = TyUnion unionItems
                         scrutineeOverrides <- scrutineeOverrides |> Map.add index unionTy
                         current <- addConstraint scrutineeTy unionTy stateForUnion
-            // A match on a value the compiler made up is reported at the whole match.
-            let scrutineeSpan index =
-                match List.tryItem index scrutinees with
-                | Some scrutinee when not (SourceSpan.isNone scrutinee.Span) -> scrutinee.Span
-                | _ -> expr.Span
-            // A value no arm matches (`PatternSpace.missingCase`) is reported at the one value that makes it so, or at
-            // the match when it is a combination of values.
+            // What is wrong with the match as a whole is reported at its head (`match a`), not over its arms.
+            let headSpan = MatchHead.span expr scrutinees arms
+            // A value no arm matches (`PatternSpace.missingCase`) is described as the one value that makes it so, or
+            // as the combination of values.
             let exhaustivenessDiagnostics () =
                 match PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some) with
                 | None -> []
@@ -1847,10 +1844,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
                     | [ index, witness ] ->
                         let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}" ]
+                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}" ]
                     | _ ->
                         let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
-                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch expr.Span $"Non-exhaustive match, missing case: {missing}" ]
+                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}" ]
             // A tag that an earlier arm handles in full (its payload and every other position are catch-alls)
             // cannot reach a later arm, so a name bound by a catch-all in a later arm has the scrutinee's union
             // without those tags; with only the rest left, it has the rest's type. That is what lets
@@ -1926,7 +1923,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         if hasCatchAll then
                             None
                         else
-                            Some (Diagnostics.at DiagnosticCodes.MissingCatchAllArm expr.Span "Tag union rest parameters require a catch-all match arm")
+                            Some (Diagnostics.at DiagnosticCodes.MissingCatchAllArm headSpan "Tag union rest parameters require a catch-all match arm")
                     else
                         None
                 let exhaustivenessErrors =
