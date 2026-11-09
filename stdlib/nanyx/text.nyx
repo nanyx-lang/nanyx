@@ -3,7 +3,8 @@ module text
 -- nanyx/text: functions on strings.
 --
 -- Each is attached to `String`, so with `import nanyx/text` it is called as `String.trim(s)`, or as
--- `s \trim` or `s.trim` when `s` is known to be a string.
+-- `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
+-- `s.trim` is an error.
 --
 -- Strings are UTF-8. This first slice works byte by byte: `length` counts bytes (not grapheme
 -- clusters, as the language docs promise), indices and widths are byte offsets, `uppercase` and
