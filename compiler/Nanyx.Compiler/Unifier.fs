@@ -71,6 +71,16 @@ module Unifier =
                 | Some tupleItems, [] -> Some (items tupleItems)
                 | _ -> None
             | _ -> None
+        // The only argument of an application or alias. A record of named fields is written in the application's
+        // own brackets, as a tag's payload is: `list(name: string, ...)`. A tuple is not, as its items would read as
+        // more arguments.
+        let soleArgument ty =
+            match ty with
+            | TyRecord fields
+            | TyOpenRecord(fields, _) when not fields.IsEmpty && (fst (tryTupleLikeRecord fields)).IsNone ->
+                let written = printTy false ty
+                written.Substring(1, written.Length - 2)
+            | _ -> printTy false ty
         match ty with
         // The unit type is written `()`; `unit` is only its internal name.
         | TyPrimitive "unit" -> "()"
@@ -86,6 +96,7 @@ module Unifier =
         | TyNominal(name, _, _) -> name
         // An alias is written by name, as the user wrote it: `Customer`, `Validator(int)`.
         | TyAlias(name, [], _) -> name
+        | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
         | TyAlias(name, args, _) -> $"{name}({items args})"
         | TyFunc(arg, ret) ->
             let argText =
@@ -114,7 +125,8 @@ module Unifier =
                 |> List.map (fun (name, fieldTy) -> $"{name}: {grouped fieldTy}")
                 |> String.concat ", "
                 |> fun inner -> $"({inner})"
-        // An open record's other fields are written as a spread of its row: `(name: string, ...ω)`.
+        // An open record's other fields are written as a spread of its row: `(name: string, ...ω)`. A row named
+        // nothing (see `displayRenaming`) is written as a bare spread: `(name: string, ...)`.
         | TyOpenRecord(fields, row) ->
             let rowText = $"...{printTy false (TyVar row)}"
             match printTy false (TyRecord fields) with
@@ -131,7 +143,7 @@ module Unifier =
             | Some (TyPrimitive "unit") -> $"#{name}()"
             | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy false payload)})"
             | None -> $"#{name}"
-        | TyApply(name, [ arg ]) -> $"{name}({printTy false arg})"
+        | TyApply(name, [ arg ]) -> $"{name}({soleArgument arg})"
         | TyApply(name, args) -> $"{name}({items args})"
         // A union of no tags has no values: the bottom type.
         | TyUnion [] -> "undefined"
@@ -143,9 +155,10 @@ module Unifier =
     /// `ty` as it would be written in a def's annotation: see `printTy`.
     let tyToString (ty: Ty) : string = printTy true ty
 
-    /// The type variables of `ty` in the order `tyToString` prints them, each once. A nominal's or alias's
-    /// underlying type is not printed, so its variables are not included (an alias's arguments' are).
-    let private varsInPrintOrder (ty: Ty) : TyVar list =
+    /// The type variables of `ty` in the order `tyToString` prints them, each as many times as it is printed. A
+    /// nominal's or alias's underlying type is not printed, so its variables are not included (an alias's arguments'
+    /// are).
+    let private varOccurrences (ty: Ty) : TyVar list =
         let rec collect ty =
             match ty with
             | TyVar v -> [ v ]
@@ -162,7 +175,11 @@ module Unifier =
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | TyApply(_, args) -> args |> List.collect collect
             | TyUnion items -> items |> List.collect collect
-        collect ty |> List.distinctBy (fun v -> v.Id)
+        collect ty
+
+    /// The type variables of `ty` in the order `tyToString` prints them, each once.
+    let private varsInPrintOrder (ty: Ty) : TyVar list =
+        varOccurrences ty |> List.distinctBy (fun v -> v.Id)
 
     let private mismatchMessage left right =
         $"Type mismatch: {tyToString left} vs {tyToString right}."
@@ -284,8 +301,8 @@ module Unifier =
     let private latinLetters = "abcdefghijklmnopqrstuvwxyz"
 
     /// The ids of the variables in `ty` that stand for the rest of a union or record: `r` in `#some(a) | r` and
-    /// in `(name: a, ...r)`.
-    let private restVarIds (ty: Ty) : Set<int> =
+    /// in `(name: a, ...r)`; with `ofUnions` false, only a record's.
+    let private restVarIds (ofUnions: bool) (ty: Ty) : Set<int> =
         let rec collect ty =
             match ty with
             | TyVar _
@@ -298,9 +315,23 @@ module Unifier =
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue Set.empty
             | TyApply(_, args) -> args |> List.map collect |> Set.unionMany
             | TyUnion items ->
-                let rests = items |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
+                let rests =
+                    if ofUnions then items |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
+                    else Set.empty
                 items |> List.map collect |> Set.unionMany |> Set.union rests
         collect ty
+
+    /// The ids of the made-up variables in `ty` that stand for the rest of an open record and appear nowhere else in
+    /// it. Such a row only says the record may have more fields, so it needs no name: `(name: α, ...) -> α`.
+    let private loneRecordRows (ty: Ty) : Set<int> =
+        let occurrences = varOccurrences ty
+        let once =
+            occurrences
+            |> List.countBy (fun v -> v.Id)
+            |> List.choose (fun (id, count) -> if count = 1 then Some id else None)
+            |> Set.ofList
+        let unnamed = occurrences |> List.filter (fun v -> v.Name.IsNone) |> List.map (fun v -> v.Id) |> Set.ofList
+        restVarIds false ty |> Set.intersect once |> Set.intersect unnamed
 
     /// Replaces the type variables the compiler made up in `ty` with primitives that print as their names for a
     /// reader. They are named in the order they appear, through the Greek (`α`, `β`, ...) or Latin (`a`, `b`, ...)
@@ -309,7 +340,9 @@ module Unifier =
     ///
     /// When the two ends run into each other, the alphabet is split where they met while giving out its letters
     /// the first time, and each end goes round its own part again with a suffix: `α₁`, `ω₁` (`a1`, `z1`).
-    let private displayRenaming (names: TypeVarNames) (ty: Ty) : Subst =
+    ///
+    /// The record rows in `unnamedRows` are given no name and no letter, so they print as a bare `...`.
+    let private displayRenaming (names: TypeVarNames) (unnamedRows: Set<int>) (ty: Ty) : Subst =
         let alphabet, suffix =
             match names with
             | Greek -> greekLetters, subscript
@@ -321,8 +354,8 @@ module Unifier =
             match alphabet |> String.filter (fun letter -> not (taken.Contains (string letter))) with
             | "" -> alphabet
             | free -> free
-        let unnamed = vars |> List.filter (fun v -> v.Name.IsNone)
-        let rests = restVarIds ty
+        let unnamed = vars |> List.filter (fun v -> v.Name.IsNone && not (unnamedRows.Contains v.Id))
+        let rests = restVarIds true ty
         let isRest (v: TyVar) = rests.Contains v.Id
         let ordinary, rest = unnamed |> List.partition (isRest >> not)
         // The front's share of the alphabet: the letters it gave out before meeting the back, keeping at least
@@ -345,17 +378,26 @@ module Unifier =
         // Each made-up variable is replaced by a primitive that prints as its new name.
         Seq.append (Seq.zip ordinary (free fromFront)) (Seq.zip rest (free fromBack))
         |> Seq.map (fun (v, name) -> v.Id, TyPrimitive name)
+        |> Seq.append (unnamedRows |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
 
-    /// `ty` for a reader, with the variables the compiler made up named as `displayRenaming` describes.
+    /// `ty` for a reader, with the variables the compiler made up named as `displayRenaming` describes, and a record
+    /// row that appears nowhere else written as a bare `...`.
     let tyToDisplayString (names: TypeVarNames) (ty: Ty) : string =
-        tyToString (apply (displayRenaming names ty) ty)
+        tyToString (apply (displayRenaming names (loneRecordRows ty) ty) ty)
 
     /// Each of `tys` for a reader, as `tyToDisplayString` writes it, with a variable they share given the same name
     /// in each. The first one's variables are named first, so it reads as it would alone unless the others use a
-    /// name from an annotation that it would have been given.
+    /// name from an annotation that it would have been given. A record row is a bare `...` only where it is in
+    /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStrings (names: TypeVarNames) (tys: Ty list) : string list =
-        let renamed = displayRenaming names (TyApply("", tys))
+        let lone =
+            let loneIn = tys |> List.map (fun ty -> loneRecordRows ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
+            loneIn
+            |> List.map fst
+            |> Set.unionMany
+            |> Set.filter (fun id -> loneIn |> List.forall (fun (lone, all) -> lone.Contains id || not (all.Contains id)))
+        let renamed = displayRenaming names lone (TyApply("", tys))
         tys |> List.map (apply renamed >> tyToString)
 
     /// The rest variables of `ty` that only stand for tags it gives out: ones that appear in no function's input.
