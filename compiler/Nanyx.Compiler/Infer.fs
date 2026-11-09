@@ -1592,8 +1592,29 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     Ok typedExpr
                 | Error err -> Error err)
         let scrutineeErrors = scrutineeResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
+        // Each arm has a pattern for each value matched (`desugar` has made a lone `else` one per value).
+        let wrongPatternCounts =
+            let count n noun = if n = 1 then $"1 {noun}" else $"{n} {noun}s"
+            arms
+            |> List.choose (fun (patterns, _) ->
+                if patterns.Length = scrutinees.Length then
+                    None
+                else
+                    let span =
+                        match patterns with
+                        | [] -> expr.Span
+                        | _ -> SourceSpan.between (List.head patterns).Span (List.last patterns).Span
+                    let written = count patterns.Length "pattern"
+                    let values = count scrutinees.Length "value"
+                    Some (
+                        Diagnostics.at
+                            DiagnosticCodes.WrongPatternCount
+                            span
+                            $"This arm has {written}, but the match is on {values}: an arm needs a pattern for each value, or a lone `else` for anything else"))
         if not scrutineeErrors.IsEmpty then
             Error scrutineeErrors
+        elif not wrongPatternCounts.IsEmpty then
+            Error wrongPatternCounts
         else
             let scrutineeExprs = scrutineeResults |> List.choose (function Ok ty -> Some ty | _ -> None)
             let scrutineeTypes = scrutineeExprs |> List.map (fun typedExpr -> typedExpr.Type)

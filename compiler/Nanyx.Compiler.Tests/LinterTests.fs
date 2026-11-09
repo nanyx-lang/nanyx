@@ -379,3 +379,8 @@ let ``The fix for an unreachable arm removes it, with its line when it has one t
     Assert.Empty((compileWithOfficial text).Diagnostics)
     let sameLine, _ = fixed' "def f: int -> int = { | _ -> 1 | 0 -> 2 }"
     Assert.Equal("def f: int -> int = { | _ -> 1 }", sameLine)
+
+[<Fact>]
+let ``A lone else in a match on several values is unreachable after arms that match everything`` () =
+    let source = "def f: int, int -> int = { x, y ->\n  match x, y\n    | 0, _ -> 0\n    | _, _ -> 1\n    | else -> 2\n}"
+    Assert.Equal<(string * string list) list>([ "else", [ "_, _" ] ], unreachableIn source)

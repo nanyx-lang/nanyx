@@ -85,6 +85,7 @@ module DiagnosticCodes =
     let MisplacedTypeof = code 210 "Misplaced typeof" Severity.Error
     let UndeclaredContext = code 211 "Undeclared context" Severity.Error
     let NominalConstructedOutsideItsModule = code 212 "Nominal type constructed outside its module" Severity.Error
+    let WrongPatternCount = code 213 "Wrong number of patterns" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -98,7 +99,7 @@ module DiagnosticCodes =
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
-          MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule
+          MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
           UnsupportedByBackend ]
 
 module Diagnostics =

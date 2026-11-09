@@ -727,9 +727,10 @@ module Compiler =
                 Block(desugarBlock statements)
             // An arm, like a branch of an `if`, only runs when it is chosen. One that is a statement of its own is
             // desugared by `desugarBranching` instead when it uses a keyword.
+            // A lone `else` in a match on several values becomes one per value (`PatternSpace.ofArm`).
             | Match(exprs, arms) ->
                 let mappedExprs = exprs |> List.map desugarExpr
-                let mappedArms = arms |> List.map (fun (patterns, expr) -> patterns, within InConditionalPart (fun () -> desugarExpr expr))
+                let mappedArms = arms |> List.map (fun (patterns, expr) -> PatternSpace.ofArm exprs.Length patterns, within InConditionalPart (fun () -> desugarExpr expr))
                 Match(mappedExprs, mappedArms)
             | TupleExpr items -> TupleExpr(items |> List.map desugarExpr)
             | RecordExpr fields ->
@@ -870,7 +871,7 @@ module Compiler =
             let branched =
                 match expr.Kind with
                 | IfExpr(cond, thenExpr, elseExpr) -> IfExpr(desugarExpr cond, branch thenExpr, branch elseExpr)
-                | Match(values, arms) -> Match(values |> List.map desugarExpr, arms |> List.map (fun (patterns, body) -> patterns, branch body))
+                | Match(values, arms) -> Match(values |> List.map desugarExpr, arms |> List.map (fun (patterns, body) -> PatternSpace.ofArm values.Length patterns, branch body))
                 | other -> other
             Expression.from expr (
                 Block [

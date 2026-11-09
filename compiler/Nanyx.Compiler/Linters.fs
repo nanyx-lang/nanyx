@@ -396,7 +396,8 @@ module UnreachableArms =
             match expr.Kind with
             | Match(values, arms) ->
                 let types = values |> List.map (fun value -> model.Types |> Map.tryFind value.Id)
-                let indexed = arms |> List.mapi (fun index (patterns, body) -> index, patterns, body)
+                // A lone `else` matches whatever every value is, as `desugar` has it for the compiler.
+                let indexed = arms |> List.mapi (fun index (patterns, body) -> index, PatternSpace.ofArm values.Length patterns, body)
                 let spanOf (patterns: Pattern list) = SourceSpan.between (List.head patterns).Span (List.last patterns).Span
                 indexed
                 |> List.choose (fun (index, patterns, body) ->
