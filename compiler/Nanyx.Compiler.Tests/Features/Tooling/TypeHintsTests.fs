@@ -54,6 +54,27 @@ let ``A shorthand lambda's argument is not written, so it has no inlay hint`` ()
         [ "n", "int", offsetOf source "n ->" 0 0 ], typeHints TypeHints.inlayHints source)
 
 [<Fact>]
+let ``Each hint says what kind of declaration it is for`` () =
+    let source =
+        "def scale = { factor ->\n" +
+        "  def offset = 1\n" +
+        "  factor * offset\n" +
+        "}\n" +
+        "def rest = { items -> match items\n" +
+        "  | [_, ...tail] -> tail\n" +
+        "  | _ -> items }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal<(string * SymbolKind) list>(
+        [ "scale", TopLevelValue
+          "factor", Parameter
+          "offset", LocalValue
+          "rest", TopLevelValue
+          "items", Parameter
+          "tail", PatternVariable ],
+        TypeHints.inlayHintsWithTopLevel Greek "" result |> List.map (fun hint -> hint.Name, hint.Kind))
+
+[<Fact>]
 let ``A def that writes only its contexts has its type shown after them`` () =
     let source =
         "context Log = (log: string -> ())\n" +

@@ -69,7 +69,9 @@ what the compiler keeps: exact spans, resolved names and types.
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). A def that writes only its contexts
   (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,
-  without a colon (`[Log] string -> ()`), rather than after the name. Like hover, they come from the current text
+  without a colon (`[Log] string -> ()`), rather than after the name. Each hint carries its declaration's
+  `SymbolKind`, so the server's settings can turn off the hints for local defs, parameters or pattern variables
+  one kind at a time. Like hover, they come from the current text
   when it parses, with `???` where an error left a type unknown (`α -> ???`), and from the last good compile while
   it does not, so then only the def being edited loses its lens.
 - **Completion of the names in scope** ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), with their

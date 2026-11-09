@@ -97,6 +97,21 @@
           ],
           "default": "codeLens",
           "markdownDescription": "Where to show the inferred type of a top-level definition that does not write its type. `off` and `inlayHint` pass `--top-level-type-hints` to `nanyx lsp`, which needs a compiler that has it."
+        },
+        "nanyx.inlayHints.localDefinitions": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show an inlay hint with the inferred type of each local definition (a `def` in a block) that does not write its type. Turning it off passes `--no-local-type-hints` to `nanyx lsp`, which needs a compiler that has it."
+        },
+        "nanyx.inlayHints.parameters": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show an inlay hint with the inferred type of each lambda parameter that does not write its type. Turning it off passes `--no-parameter-type-hints` to `nanyx lsp`, which needs a compiler that has it."
+        },
+        "nanyx.inlayHints.patternVariables": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show an inlay hint with the inferred type of each variable a pattern binds. Turning it off passes `--no-pattern-variable-type-hints` to `nanyx lsp`, which needs a compiler that has it."
         }
       }
     }

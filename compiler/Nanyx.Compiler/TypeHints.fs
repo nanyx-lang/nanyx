@@ -7,10 +7,11 @@ module NyxCompiler.TypeHints
 
 open Parser.Program
 
-/// The inferred type of a declaration and the span of the name it declares. `Context` is the span of an annotation
-/// the declaration writes that names only its contexts (`def f: [Console] = ...`): the type is the rest of that
-/// annotation, so it is shown after it rather than after the name.
-type TypeHint = { Name: string; Type: string; Span: SourceSpan; Context: SourceSpan option }
+/// The inferred type of a declaration, the span of the name it declares and what kind of declaration it is, so an
+/// editor can show some kinds and not others. `Context` is the span of an annotation the declaration writes that
+/// names only its contexts (`def f: [Console] = ...`): the type is the rest of that annotation, so it is shown after it
+/// rather than after the name.
+type TypeHint = { Name: string; Type: string; Span: SourceSpan; Kind: SymbolKind; Context: SourceSpan option }
 
 /// Each def in `syntax` whose annotation names only contexts, as the span of the def and of the annotation.
 let private contextOnlyAnnotations (syntax: Module) : (SourceSpan * SourceSpan) list =
@@ -95,7 +96,11 @@ let private hints (names: TypeVarNames) (file: string) (result: CompileResult) :
                 let types = Option.toList defType @ (members |> List.map (fun symbol -> typed.SymbolTypes.[symbol.Id]))
                 let written = Unifier.tysToDisplayStrings names types
                 let hint (symbol: Symbol) ty =
-                    { Name = symbol.Name; Type = ty; Span = symbol.Declaration; Context = contextOf annotations symbol.Declaration }
+                    { Name = symbol.Name
+                      Type = ty
+                      Span = symbol.Declaration
+                      Kind = symbol.Kind
+                      Context = contextOf annotations symbol.Declaration }
                 let lens, memberTypes =
                     match def, defType, written with
                     | Some symbol, Some _, defWritten :: rest ->
