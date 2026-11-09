@@ -716,6 +716,28 @@ let rec private deferredErrorMessages (expr: Expression) : string list =
     | FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]) -> [ message ]
     | _ -> exprChildren expr |> List.collect deferredErrorMessages
 
+/// Whether `inner`, an interpolated string's hole, has the error type: the type checker could not tell what it is,
+/// because of an error deferred to run time (in a function it calls, say), so there is no way to print it.
+let private isErrorTypedHole (checkedTypes: Map<NodeId, Ty>) (inner: Expression) =
+    checkedTypes |> Map.tryFind inner.Id |> Option.exists Unifier.isError
+
+/// What a debug build writes when it reaches the hole at `span` (see `isErrorTypedHole`) and the hole did not stop the
+/// program itself: the location as a deferred error's, then why.
+let private unknownHoleMessage (span: SourceSpan) =
+    let location =
+        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
+        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
+    $"{location}error: the value interpolated here has no known type, because of an error deferred from compile time\n"
+
+/// The holes in the interpolated strings of `expr` that have the error type (see `isErrorTypedHole`).
+let rec private errorTypedHoles (checkedTypes: Map<NodeId, Ty>) (expr: Expression) : Expression list =
+    let own =
+        match expr.Kind with
+        | InterpolatedString parts ->
+            parts |> List.choose (function StringExpr inner when isErrorTypedHole checkedTypes inner -> Some inner | _ -> None)
+        | _ -> []
+    own @ (exprChildren expr |> List.collect (errorTypedHoles checkedTypes))
+
 /// Whether lowering `expr` needs the interpolation scratch locals (see `Interpolation.scratchLocals`).
 /// Used for function bodies and for the script start function alike, so both declare the same locals.
 /// `dbg` of a value that may be a tag prints it as `"{value}"` does (see the `dbg` case of
@@ -1493,6 +1515,15 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
     | LiteralExpr(BoolLit value) ->
         if value then "i32.const 1" else "i32.const 0"
     | LiteralExpr(StringLit value) -> stringLiteralCode value
+    // A hole of no known type cannot be printed. The holes are evaluated in order up to it, for what they do (the
+    // hole itself most likely stops the program, through the deferred error that left its type unknown), and if the
+    // program is still running then, it stops there.
+    | InterpolatedString parts when parts |> List.exists (function StringExpr inner -> isErrorTypedHole env.CheckedTypes inner | _ -> false) ->
+        let holes = parts |> List.choose (function StringExpr inner -> Some inner | StringText _ -> None)
+        let before = holes |> List.takeWhile (isErrorTypedHole env.CheckedTypes >> not)
+        let unknown = holes |> List.find (isErrorTypedHole env.CheckedTypes)
+        let evaluated = before @ [ unknown ] |> List.map (fun inner -> $"{transpileExpression insideHole inner}\n    drop")
+        evaluated @ [ deferredErrorCode env [ unknownHoleMessage unknown.Span ] ] |> String.concat "\n    "
     | InterpolatedString parts ->
         // Pair every part with the index of the hole local it reads (text parts get a dummy index).
         let indexedParts =
@@ -2583,7 +2614,11 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
 
     let stringLiterals =
         (defs |> List.collect (fun (_, _, expr) -> collectStringLiteralsExpr expr)) @
-         (topLevelExprs |> List.collect collectStringLiteralsExpr)
+         (topLevelExprs |> List.collect collectStringLiteralsExpr) @
+         // What each hole of no known type writes, if a debug build reaches it.
+         ((defs |> List.map (fun (_, _, expr) -> expr)) @ topLevelExprs
+          |> List.collect (errorTypedHoles checkedTypes)
+          |> List.map (fun hole -> unknownHoleMessage hole.Span))
         |> List.distinct
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
