@@ -123,6 +123,21 @@ let ``Wasm - a release build of a file refuses a deferred error`` () =
         File.Delete outputPath
 
 [<Fact>]
+let ``Run - ??? runs until it is reached, and stops the program there`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def replace: string, string, string -> string = { s, pattern, replacement -> ??? }\n" +
+        "\n" +
+        "println(\"start\")\n" +
+        "println(replace(\"a\", \"b\", \"c\"))\n" +
+        "println(\"never\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Contains(":3:78: error NYX0111: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
 let ``Run - interpolating a call to a function with a deferred error runs up to the call`` () =
     // `dist` cannot be typed, so neither can `a \dist`: the line before it still runs, and the call reports the error.
     let source =

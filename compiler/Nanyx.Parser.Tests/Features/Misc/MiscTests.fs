@@ -30,6 +30,14 @@ let ``try can be applied inside an expression, and takes in the rest of it`` () 
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``??? is the placeholder for code not written yet`` () =
+    match parseModule "def f = { a, b -> ??? }\ndef g = h(???, 1)\n" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda (_, Kind (IdentifierExpr "???"))))))
+                  Kind (Def (ValueDef (_, "g", None, Kind (FunctionCall ("h", _, [ Kind (TupleExpr [ Kind (IdentifierExpr "???"); _ ]) ]))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
 let ``a name that starts with try is not the keyword`` () =
     match parseModule "def f = { s -> tryParse(s) }\n" with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda (_, Kind (FunctionCall ("tryParse", _, _))))))) ] -> ()

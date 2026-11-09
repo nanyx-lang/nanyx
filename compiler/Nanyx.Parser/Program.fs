@@ -356,6 +356,13 @@ let private fieldsToExpr (fields, span) =
 let private parenArguments =
     between (pstring "(") (pstring ")") (ws >>. withSpan recordFields |>> fieldsToExpr .>> ws)
 
+/// `???`, the placeholder for code not written yet. It is read as a name no other code can write, so every pass that
+/// handles names handles it; the type checker reports it as not implemented.
+let notImplemented = "???"
+
+let private notImplementedExpr =
+    spanned (pstring notImplemented >>% IdentifierExpr notImplemented)
+
 // Unit literal: ()
 let unitExpr =
     spanned (between (pstring "(") (ws >>. pstring ")") (preturn ()) |>> fun _ -> UnitExpr)
@@ -606,6 +613,7 @@ let primaryExprNoWs =
         listExpr
         tupleOrParenExpr
         workflowKeywordApplication
+        notImplementedExpr
         spanned (identifierNoWs |>> IdentifierExpr)
     ]
 
