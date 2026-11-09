@@ -180,8 +180,6 @@ On the IR, following the paper:
 
 ## Open questions
 
-- **Overflow.** Does integer arithmetic wrap, as WebAssembly's does, or trap? Open in
-  [Sized numbers](../../docs/src/content/work-in-progress/sized-numbers.md).
 - **Code size.** Monomorphisation multiplies generic functions; how much does that grow the examples, and when
   should the boxing fallback kick in?
 - **Should reuse be visible?** Koka's `fip` annotation lets a function promise it runs fully in place, and the
