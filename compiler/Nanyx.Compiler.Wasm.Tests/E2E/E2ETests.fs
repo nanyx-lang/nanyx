@@ -123,3 +123,7 @@ let ``E2E - twentyfour - entry attribute runs main at start`` () =
 [<Fact>]
 let ``E2E - twentyfive - list literals and patterns`` () =
     runE2ETest "twentyfive"
+
+[<Fact>]
+let ``E2E - twentysix - filter with a shorthand lambda`` () =
+    runE2EFileTest "twentysix"

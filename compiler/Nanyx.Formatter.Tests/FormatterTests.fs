@@ -65,6 +65,16 @@ let ``Shorthand lambdas are printed as written`` () =
     unchanged "def d = { }\n"
     unchanged "def e = { | 0 -> 1 }\n"
     unchanged (lines [ "def f = {"; "  | 0 -> 1"; "  | _ -> 2"; "}" ])
+    unchanged "def g = items \\filter { % 2 == 0 }\n"
+    unchanged "def h = people \\filter { .age > 18 } \\map { .name.length }\n"
+    unchanged "def i = xs \\map { * 2 + 1 \\abs }\n"
+    unchanged "def j = xs \\foldBack(0) { - }\n"
+    unchanged "def k = { -> -1 }\n"
+
+[<Fact>]
+let ``A shorthand lambda's spacing is tidied`` () =
+    Assert.Equal("def a = xs \\map { * 2 }\n", format "def a = xs \\map {   *   2   }")
+    Assert.Equal("def b = { .name }\n", format "def b = {.name}")
 
 [<Fact>]
 let ``A lambda argument stays in brackets or after them, as written`` () =

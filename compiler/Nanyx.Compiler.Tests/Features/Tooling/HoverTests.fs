@@ -179,6 +179,16 @@ let ``A shorthand match lambda shows its own type, not that of the parameters it
     Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapOption" 1 0))
 
 [<Fact>]
+let ``A shorthand lambda shows its own type, and its operator the argument written there`` () =
+    let source = "def isEven = { % 2 == 0 }\ndef name = { .name }\n"
+    Assert.Equal(Some "int -> bool", hoverType source (offsetOf source "{" 0 0))
+    // The argument is left out where the operator is, so the operator shows the argument's type.
+    Assert.Equal(Some "int", hoverType source (offsetOf source "%" 0 0))
+    Assert.Equal(Some "bool", hoverType source (offsetOf source "==" 0 0))
+    Assert.Equal(Some "(name: α, ...ω) -> α", hoverType source (offsetOf source "{ .name" 0 0))
+    Assert.Equal(Some "α", hoverType source (offsetOf source "name }" 0 0))
+
+[<Fact>]
 let ``A rest variable nothing can add tags to is empty`` () =
     // `#some(5)` has no other tags, so neither has what `mapOption` gives back.
     let source =

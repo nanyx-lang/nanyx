@@ -48,6 +48,12 @@ let ``Inlay hints show the types of locals, parameters and pattern variables`` (
         typeHints TypeHints.inlayHints source)
 
 [<Fact>]
+let ``A shorthand lambda's argument is not written, so it has no inlay hint`` () =
+    let source = "def divisibleBy = { n -> { % n == 0 } }\n"
+    Assert.Equal<(string * string * int) list>(
+        [ "n", "int", offsetOf source "n ->" 0 0 ], typeHints TypeHints.inlayHints source)
+
+[<Fact>]
 let ``A def that writes only its contexts has its type shown after them`` () =
     let source =
         "context Log = (log: string -> ())\n" +

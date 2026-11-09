@@ -92,30 +92,36 @@ let private valueType (typed: TypedModule) (result: CompileResult) (offset: int)
 /// under the path as a prefix (see `TypedModule.ModuleNames`): an import's exports under its alias (`m.`), or
 /// definitions attached to a type (`String.`). A dot on a value never reaches a definition attached to its type:
 /// that is a pipe's (see `pipeTargetsAt`). Empty when the module did not type-check.
+/// What can follow a dot on a value of type `valueType`, ordered by name: the fields of its record type, or the
+/// built-in properties of its type. A tuple's numbered items are left out, and a value whose type is not yet known
+/// has none.
+let private valueMembers (names: TypeVarNames) (valueType: Ty option) : Member list =
+    let typeOf ty = Some (Unifier.tyToDisplayString names ty)
+    let fields =
+        valueType
+        |> Option.bind recordFields
+        |> Option.map (fun fields ->
+            fields
+            |> Map.toList
+            |> List.filter (fun (name, _) -> not (System.Char.IsDigit name.[0]))
+            |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty }))
+        |> Option.defaultValue []
+    let properties =
+        match valueType with
+        | Some ty ->
+            Infer.builtInPropertyNames
+            |> List.choose (fun name ->
+                Infer.builtInProperty ty name
+                |> Option.map (fun (_, propertyTy) -> { Name = name; Kind = Property; Type = typeOf propertyTy; IsFunction = false }))
+        | None -> []
+    fields @ properties |> List.sortBy (fun item -> item.Name)
+
 let membersAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path: string list) : Member list =
     let typeOf ty = Some (Unifier.tyToDisplayString names ty)
     match result.Typed with
     | Some typed ->
         match valueType typed result offset path with
-        | Some pathType ->
-            let fields =
-                pathType
-                |> Option.bind recordFields
-                |> Option.map (fun fields ->
-                    fields
-                    |> Map.toList
-                    |> List.filter (fun (name, _) -> not (System.Char.IsDigit name.[0]))
-                    |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty }))
-                |> Option.defaultValue []
-            let properties =
-                match pathType with
-                | Some ty ->
-                    Infer.builtInPropertyNames
-                    |> List.choose (fun name ->
-                        Infer.builtInProperty ty name
-                        |> Option.map (fun (_, propertyTy) -> { Name = name; Kind = Property; Type = typeOf propertyTy; IsFunction = false }))
-                | None -> []
-            fields @ properties |> List.sortBy (fun item -> item.Name)
+        | Some pathType -> valueMembers names pathType
         | None ->
             let prefix = String.concat "." path + "."
             typed.ModuleNames
@@ -132,6 +138,25 @@ let membersAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path:
             |> List.sortBy (fun item -> item.Name, item.Kind <> Definition)
             |> List.distinctBy (fun item -> item.Name)
     | None -> []
+
+/// What can follow a dot that starts a shorthand lambda's body (`{ .name }`) at `offset` in the compiled root module:
+/// the members of the innermost such lambda's argument there, as `membersAt` gives them for a value. Empty when there
+/// is no such lambda at `offset`, or the module did not type-check.
+let implicitArgumentMembersAt (names: TypeVarNames) (result: CompileResult) (offset: int) : Member list =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        Hover.expressionsAt offset syntax
+        |> List.tryFind (fun expr ->
+            match expr.Kind with
+            | Lambda([ (name, _) ], _) -> name = implicitArgument
+            | _ -> false)
+        |> Option.bind (fun lambda -> typed.ExprTypes |> Map.tryFind lambda.Id)
+        |> Option.map (fun ty ->
+            match Unifier.unalias ty with
+            | TyFunc(argument, _) -> valueMembers names (Some argument)
+            | _ -> [])
+        |> Option.defaultValue []
+    | _ -> []
 
 /// A function a pipe can call, with its type as hover writes it, if it has one. `IsAttached` when it is a definition
 /// attached to the piped value's type, written without the type's name.

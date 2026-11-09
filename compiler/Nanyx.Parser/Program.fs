@@ -360,6 +360,12 @@ let private parenArguments =
 /// handles names handles it; the type checker reports it as not implemented.
 let notImplemented = "???"
 
+/// The parameters of a shorthand lambda: the operand its body leaves out (`{ * 2 }`, `{ .name }`), or the two
+/// operands of an operator written alone (`{ + }`). Like `???`, they are names no code can write, so a shorthand
+/// lambda never captures a name the code around it declares.
+let implicitArgument = "<arg>"
+let implicitSecondArgument = "<arg2>"
+
 let private notImplementedExpr =
     spanned (pstring notImplemented >>% IdentifierExpr notImplemented)
 
@@ -635,8 +641,17 @@ let memberAccessChain =
         attempt (wsInline >>. pstring "with" >>. keywordEnd >>. ws >>. withSpan (sepBy1 update (pstring "," .>> ws)))
     // `..` is the range operator, not a member access.
     let dotField = attempt (pstring "." >>. notFollowedBy (pchar '.') >>. withSpan fieldOrIndex)
+    // The argument a shorthand lambda's body leaves out is the first operand of that body, as `x` is in
+    // `x % 2 == 0` or `x.name`. It takes up no text, so it is made up at the operator or `.` written in its place.
+    let implicitArgumentOperand =
+        getUserState >>= fun state ->
+            match state.ImplicitArgumentNext with
+            | Some span ->
+                setUserState { state with ImplicitArgumentNext = None }
+                >>% (Expression.at span (IdentifierExpr implicitArgument), span)
+            | None -> pzero
     // Each access spans from the start of the base's text, so `(a + b).x` takes in the opening parenthesis.
-    withSpan primaryExprNoWs >>= fun (baseExpr, baseText) ->
+    (implicitArgumentOperand <|> withSpan primaryExprNoWs) >>= fun (baseExpr, baseText) ->
         many dotField >>= fun fields ->
             let accessed, accessedText =
                 fields
@@ -816,37 +831,30 @@ do
     // `{ }`, possibly spanning lines, is a lambda that does nothing
     let emptyLambda = skipMany (skipAnyOf " \t\r\n") >>. followedBy (pstring "}") >>% fun span -> Lambda([], Expression.at span UnitExpr)
 
-    // Shorthand lambda: { * } means { x, y -> x * y }
-    let shorthandBinaryOp =
-        // "++" before "+" so the longer operator wins
-        let operators = ["*"; "/"; "++"; "+"; "-"; "<"; ">"; "<="; ">="; "=="; "!="]
-        choice (operators |> List.map (fun op ->
-            pstring op >>. ws >>. notFollowedBy (skipAnyOf "0123456789.\"'([{") >>% fun span ->
-                let made kind = Expression.at span kind
-                Lambda([("x", None); ("y", None)], made (BinaryOp(op, made (IdentifierExpr "x"), made (IdentifierExpr "y"))))
-        ))
-    
-    // Shorthand lambda: { * 2 } means { x -> x * 2 }
-    // Also supports comparison operators: { > 10 } means { x -> x > 10 }
-    let shorthandUnaryOp =
-        let operators = [
-            ("*", "*"); ("/", "/"); ("++", "++"); ("+", "+"); ("-", "-");
-            ("<=", "<="); (">=", ">="); ("<", "<"); (">", ">");
-            ("==", "=="); ("!=", "!=")
-        ]
-        choice (operators |> List.map (fun (op, opStr) ->
-            pstring op >>. ws >>. primaryExpr |>> (fun rightExpr span ->
-                let made kind = Expression.at span kind
-                Lambda([("x", None)], made (BinaryOp(opStr, made (IdentifierExpr "x"), rightExpr)))
-            )
-        ))
+    // The infix operators written with operator characters (see the operators page of the docs), longer ones before
+    // the shorter ones they start with.
+    let shorthandOperators = [ "++"; "+"; "-"; "*"; "/"; "%"; "<="; ">="; "<"; ">"; "=="; "!=" ]
+    let shorthandOperator =
+        notFollowedBy (pstring "->" <|> pstring "--")
+        >>. choice (shorthandOperators |> List.map pstring)
+        .>> notFollowedBy (anyOf "+-*/%^~<>=!")
 
-    // Shorthand lambda: { .name } means { x -> x.name }
-    let shorthandPropertyAccess =
-        pstring "." >>. identifier |>> (fun propName span ->
+    // Shorthand lambda: an operator alone stands for itself, so `{ + }` means `{ a, b -> a + b }`.
+    let shorthandBinaryOp =
+        shorthandOperator .>> ws .>> followedBy (pstring "}") |>> fun op span ->
             let made kind = Expression.at span kind
-            Lambda([("x", None)], made (MemberAccess(made (IdentifierExpr "x"), propName, None)))
-        )
+            Lambda(
+                [ (implicitArgument, None); (implicitSecondArgument, None) ],
+                made (BinaryOp(op, made (IdentifierExpr implicitArgument), made (IdentifierExpr implicitSecondArgument))))
+
+    // Shorthand lambda: a body that starts with an operator or a member access has left out its first operand, which is
+    // the argument. The rest of the body follows as it would after that operand, so `{ % 2 == 0 }` means
+    // `{ x -> x % 2 == 0 }` and `{ .age > 18 }` means `{ x -> x.age > 18 }`.
+    let shorthandWithArgument =
+        lookAhead (withSpan (attempt shorthandOperator <|> (pstring "." .>> followedBy identifierNoWs)))
+        >>= fun (_, operatorSpan) -> updateUserState (fun state -> { state with ImplicitArgumentNext = Some operatorSpan })
+        >>. expression .>> skipMany (skipAnyOf " \t\r\n")
+        |>> fun body _ -> Lambda([ (implicitArgument, None) ], body)
 
     // Shorthand match lambda: { | pat -> expr ... }
     let shorthandMatchLambda =
@@ -873,9 +881,8 @@ do
                     (pstring "}" .>> updateUserState (fun state -> { state with LambdaDepth = state.LambdaDepth - 1 })) (
                     skipMany (skipAnyOf " \t") >>. choice [
                         attempt emptyLambda
-                        attempt shorthandUnaryOp
                         attempt shorthandBinaryOp
-                        attempt shorthandPropertyAccess
+                        attempt shorthandWithArgument
                         attempt shorthandMatchLambda
                         attempt lambdaWithParams
                         lambdaNoParams

@@ -77,7 +77,8 @@ let ``&& and || are aliases for and and or`` () =
 [<Fact>]
 let ``++ shorthand lambda is the two-argument concatenation`` () =
     match parseModule "def f = { ++ }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ ("x", None); ("y", None) ], Kind (BinaryOp ("++", _, _))))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ (a, None); (b, None) ], Kind (BinaryOp ("++", _, _))))))) ]
+        when a = implicitArgument && b = implicitSecondArgument -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
