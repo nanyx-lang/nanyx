@@ -56,6 +56,16 @@ type private CheckedModule =
       /// definitions: an importer that cannot name one still needs it where it calls a function that requires it.
       AmbientContexts: Map<string, TypeDefInfo> }
 
+/// Where in a builder's block a workflow keyword is when the rest of the block cannot be its continuation.
+type Unreachable =
+    /// Inside a lambda, which runs when it is called, not where it is written.
+    | InLambda
+    /// In the body of a `for` loop, which runs once per element.
+    | InLoopBody
+    /// In a part of an expression that may not run: a branch of an `if` or an arm of a `match` that is part of a
+    /// larger expression, or the right of `and` or `or`.
+    | InConditionalPart
+
 module Compiler =
     let private normalizeSource (source: string) =
         source.Replace("\r\n", "\n").Replace("\r", "\n")
@@ -454,13 +464,41 @@ module Compiler =
         | Result.Ok parsed -> Ok parsed
         | Result.Error err -> Error [ syntaxError err ]
 
-    let desugar (module': Module) =
+    /// Desugars `module'`, with the errors in what it desugars: a workflow keyword the rest of its builder's block
+    /// cannot follow (see `Unreachable`).
+    let desugarWithDiagnostics (module': Module) : Module * Diagnostic list =
         let isReturnKeyword keyword = keyword = "return"
+        let diagnostics = ResizeArray<Diagnostic>()
 
         // The builder whose block is being desugared (`proc` in `proc { ... }`), and whether that block used a
         // workflow keyword. A keyword `k` in the block calls the builder's member `k`, `return` its member `return`.
         let mutable builder: string option = None
         let mutable builderUsed = false
+
+        // Where the expression being desugared is, when the rest of the builder's block cannot follow a keyword
+        // there: inside a lambda, which runs when it is called; in the body of a `for` loop, which runs once per
+        // element; or in a part of an expression that may not run, as a branch of an `if` that is not a statement
+        // of its own. A builder block nested there starts afresh. The outermost place is the one that says why: a `try`
+        // in an arm of a `for` loop's patterns is in the loop's body, whatever else it is in.
+        let mutable unreachable: Unreachable option = None
+        let within (place: Unreachable) (desugarIt: unit -> 'a) : 'a =
+            let outer = unreachable
+            unreachable <- outer |> Option.orElse (Some place)
+            let result = desugarIt ()
+            unreachable <- outer
+            result
+
+        // The error for the keyword `keyword` at `expr`, which the rest of the block of the builder `builderName`
+        // cannot follow from `place`.
+        let reportUnreachable (expr: Expression) (keyword: string) (builderName: string) (place: Unreachable) =
+            let where, advice =
+                match place with
+                | InLambda -> "inside a lambda", "move it out of the lambda, or handle the value with a `match` there"
+                | InLoopBody -> "in the body of a `for` loop", "handle the value with a `match` in the loop's body"
+                | InConditionalPart -> "in a part of an expression that may not run", "make the `if` or `match` it is in a statement of its own"
+            diagnostics.Add(
+                Diagnostics.at DiagnosticCodes.InvalidWorkflow expr.Span
+                    $"`{keyword}` is {where}, so the rest of the `{builderName}` block cannot follow it: {advice}")
         let mutable freshNames = 0
         let freshName prefix =
             freshNames <- freshNames + 1
@@ -587,6 +625,50 @@ module Compiler =
             | ImportStatement _
             | TypeDefStatement _ -> [ statement ]
 
+        // Whether `expr` uses a workflow keyword of the block it is in: one not inside a lambda, or inside a builder
+        // block of its own.
+        let rec usesKeyword (expr: Expression) : bool =
+            let inValue (statement: Statement) =
+                match statement.Kind with
+                | DefStatement(_, _, _, value)
+                | ExprStatement value
+                | UseStatement (UseValue value)
+                | UseStatement (UseContextInstance(_, value)) -> usesKeyword value
+                | ImportStatement _
+                | TypeDefStatement _ -> false
+            match expr.Kind with
+            | WorkflowBindExpr _
+            | WorkflowReturnExpr _ -> true
+            | Lambda _ -> false
+            | FunctionCall(name, _, [ Kind (Lambda([], _)) ]) when not (name.StartsWith "__") -> false
+            | FunctionCall(_, _, args)
+            | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
+            | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
+            | BinaryOp(_, left, right) -> usesKeyword left || usesKeyword right
+            | IfExpr(cond, thenExpr, elseExpr) -> usesKeyword cond || usesKeyword thenExpr || usesKeyword elseExpr
+            | Match(values, arms) -> List.exists usesKeyword values || arms |> List.exists (snd >> usesKeyword)
+            | Block statements -> List.exists inValue statements
+            | TupleExpr items
+            | ListExpr items -> List.exists usesKeyword items
+            | RecordExpr fields -> fields |> List.exists (function NamedField(_, value) | PositionalField value -> usesKeyword value)
+            | TagExpr(_, Some payload) -> usesKeyword payload
+            | MemberAccess(baseExpr, _, _) -> usesKeyword baseExpr
+            | UseIn(_, body) -> usesKeyword body
+            | InterpolatedString parts -> parts |> List.exists (function StringExpr value -> usesKeyword value | StringText _ -> false)
+            | TagExpr(_, None)
+            | ContextMemberAccess _
+            | UnitExpr
+            | LiteralExpr _
+            | IdentifierExpr _ -> false
+
+        // Whether `expr` is an `if` or a `match` with a workflow keyword in a branch: as a statement of its own, each
+        // branch goes on to the rest of the block (see `desugarBranching`).
+        let branchesUseKeywords (expr: Expression) =
+            match expr.Kind with
+            | IfExpr(_, thenExpr, elseExpr) -> usesKeyword thenExpr || usesKeyword elseExpr
+            | Match(_, arms) -> arms |> List.exists (snd >> usesKeyword)
+            | _ -> false
+
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
         // written (a bind's call is the whole rest of the workflow), so that call is a node of its own, with a new id.
         // Everything else keeps its node's id.
@@ -601,28 +683,39 @@ module Compiler =
             // is the block itself, with its keywords calling the builder's members (see `workflowCall`). The
             // documented `proc.apply({ ... })` around it is not made yet: the block runs where it is written.
             | FunctionCall(name, rangeOpt, [ Kind (Lambda([], body)) as lambda ]) when not (name.StartsWith "__") ->
-                let outerBuilder, outerUsed = builder, builderUsed
+                let outerBuilder, outerUsed, outerUnreachable = builder, builderUsed, unreachable
                 builder <- Some name
                 builderUsed <- false
+                unreachable <- None
                 let body' = desugarExpr body
                 let used = builderUsed
                 builder <- outerBuilder
                 builderUsed <- outerUsed
+                unreachable <- outerUnreachable
                 if used then body'.Kind
                 else FunctionCall(name, rangeOpt, [ { lambda with Kind = Lambda([], body') } ])
+            // A `for` loop's body is a lambda of the element, which the loop runs once per element.
+            | FunctionCall("__for", rangeOpt, [ iterable; Kind (Lambda(parameters, body)) as loop ]) ->
+                let body' = within InLoopBody (fun () -> desugarExpr body)
+                FunctionCall("__for", rangeOpt, [ desugarExpr iterable; { loop with Kind = Lambda(parameters, body') } ])
             | FunctionCall(name, rangeOpt, args) ->
                 FunctionCall(name, rangeOpt, args |> List.map desugarExpr)
             | Lambda(args, body) ->
-                Lambda(args, desugarExpr body)
+                Lambda(args, within InLambda (fun () -> desugarExpr body))
+            // The right of `and` and `or` only runs when the left does not settle the result.
+            | BinaryOp(("and" | "or") as op, left, right) ->
+                BinaryOp(op, desugarExpr left, within InConditionalPart (fun () -> desugarExpr right))
             | BinaryOp(op, left, right) ->
                 BinaryOp(op, desugarExpr left, desugarExpr right)
             | Pipe(value, name, rangeOpt, args) ->
                 Pipe(desugarExpr value, name, rangeOpt, args |> List.map desugarExpr)
             | Block statements ->
                 Block(desugarBlock statements)
+            // An arm, like a branch of an `if`, only runs when it is chosen. One that is a statement of its own is
+            // desugared by `desugarBranching` instead when it uses a keyword.
             | Match(exprs, arms) ->
                 let mappedExprs = exprs |> List.map desugarExpr
-                let mappedArms = arms |> List.map (fun (patterns, expr) -> patterns, desugarExpr expr)
+                let mappedArms = arms |> List.map (fun (patterns, expr) -> patterns, within InConditionalPart (fun () -> desugarExpr expr))
                 Match(mappedExprs, mappedArms)
             | TupleExpr items -> TupleExpr(items |> List.map desugarExpr)
             | RecordExpr fields ->
@@ -635,15 +728,30 @@ module Compiler =
             | ListExpr items -> ListExpr(items |> List.map desugarExpr)
             | TagExpr(name, payload) -> TagExpr(name, payload |> Option.map desugarExpr)
             | IfExpr(cond, thenExpr, elseExpr) ->
-                IfExpr(desugarExpr cond, desugarExpr thenExpr, desugarExpr elseExpr)
+                IfExpr(
+                    desugarExpr cond,
+                    within InConditionalPart (fun () -> desugarExpr thenExpr),
+                    within InConditionalPart (fun () -> desugarExpr elseExpr))
             | MemberAccess(baseExpr, field, rangeOpt) -> MemberAccess(desugarExpr baseExpr, field, rangeOpt)
             | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(ctxType, field)
             | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(ctxType, field, args |> List.map desugarExpr)
             | UseIn(binding, body) ->
                 let binding' = desugarUseBinding binding
                 UseIn(binding', desugarExpr body)
-            | WorkflowBindExpr(keyword, value) -> (workflowCall expr keyword [desugarExpr value]).Kind
-            | WorkflowReturnExpr value -> (workflowCall expr "return" [desugarExpr value]).Kind
+            // A keyword the rest of its builder's block cannot follow is an error; the value stands in for it, as
+            // nothing is checked once desugaring fails.
+            | WorkflowBindExpr(keyword, value) ->
+                match builder, unreachable with
+                | Some builderName, Some place ->
+                    reportUnreachable expr (if isReturnKeyword keyword then "return" else keyword) builderName place
+                    (desugarExpr value).Kind
+                | _ -> (workflowCall expr keyword [desugarExpr value]).Kind
+            | WorkflowReturnExpr value ->
+                match builder, unreachable with
+                | Some builderName, Some place ->
+                    reportUnreachable expr "return" builderName place
+                    (desugarExpr value).Kind
+                | _ -> (workflowCall expr "return" [desugarExpr value]).Kind
             | InterpolatedString parts ->
                 let mappedParts =
                     parts
@@ -671,37 +779,90 @@ module Compiler =
             | UseStatement binding -> { stmt with Kind = UseStatement (desugarUseBinding binding) }
             | ImportStatement _
             | TypeDefStatement _ -> stmt
+        // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
+        // block as its continuation, and so on. The block then ends in `()`, its last value only run.
         and desugarWorkflowChain (statements: Statement list) =
+            desugarChain statements (fun last ->
+                match last with
+                | Some value -> Expression.from value (Block [ Statement.from value (ExprStatement value); Statement.synthetic (ExprStatement (Expression.synthetic UnitExpr)) ])
+                | None -> Expression.synthetic UnitExpr)
+        // `statements` as a workflow chain that goes on to `next` at its end, given the value of its last statement
+        // if that is an expression. A keyword takes the rest of the chain as its continuation; `return` ends the
+        // whole block, so what follows it, `next` included, never runs.
+        and desugarChain (statements: Statement list) (next: Expression option -> Expression) : Expression =
             match statements with
-            | [] -> Expression.synthetic UnitExpr
+            | [] -> next None
             | statement :: rest ->
+                let restOfChain () = desugarChain rest next
                 match statement.Kind with
                 | DefStatement(isExport, name, typeOpt, expr) ->
                     match expr.Kind with
                     | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr "return" [desugarExpr bindExpr]
                     | WorkflowBindExpr(keyword, bindExpr) ->
-                        let nextExpr = desugarWorkflowChain rest
-                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([name, None], nextExpr))]
+                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([name, None], restOfChain ()))]
+                    | _ when branchesUseKeywords expr -> desugarBranching expr (Some name) rest next
                     | _ ->
-                        let nextExpr = desugarWorkflowChain rest
-                        chainBlock statement nextExpr { statement with Kind = DefStatement(isExport, name, typeOpt, desugarExpr expr) }
+                        chainBlock statement (restOfChain ()) { statement with Kind = DefStatement(isExport, name, typeOpt, desugarExpr expr) }
                 | ExprStatement expr ->
                     match expr.Kind with
                     | WorkflowReturnExpr value -> workflowCall expr "return" [desugarExpr value]
                     | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr "return" [desugarExpr bindExpr]
+                    // The last statement's bound value is the chain's value.
+                    | WorkflowBindExpr(keyword, bindExpr) when rest.IsEmpty ->
+                        let value = freshName "value"
+                        let continuation = next (Some (Expression.from expr (IdentifierExpr value)))
+                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([value, None], continuation))]
                     | WorkflowBindExpr(keyword, bindExpr) ->
-                        let nextExpr = desugarWorkflowChain rest
-                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([("_", None)], nextExpr))]
+                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([("_", None)], restOfChain ()))]
+                    | _ when branchesUseKeywords expr -> desugarBranching expr None rest next
+                    | _ when rest.IsEmpty -> next (Some (desugarExpr expr))
                     | _ ->
-                        let nextExpr = desugarWorkflowChain rest
-                        chainBlock statement nextExpr { statement with Kind = ExprStatement (desugarExpr expr) }
+                        chainBlock statement (restOfChain ()) { statement with Kind = ExprStatement (desugarExpr expr) }
                 | UseStatement _
                 | ImportStatement _
                 | TypeDefStatement _ ->
-                    let nextExpr = desugarWorkflowChain rest
-                    chainBlock statement nextExpr (desugarStatement statement)
+                    chainBlock statement (restOfChain ()) (desugarStatement statement)
+        // An `if` or a `match` statement with a workflow keyword in a branch, `expr`, followed by `rest`. The rest of
+        // the block, up to `next`, is bound once to a local function, and each branch is a chain of its own that goes
+        // on to it: a keyword in a branch has the rest of the block as its continuation, as one outside does, and a
+        // `return` in a branch ends the whole block. `name` is what a `def` binds the statement's value to.
+        //
+        //   def __rest_1 = { name -> <rest of the block> }
+        //   if cond then <then branch, then __rest_1(its value)> else <else branch, then __rest_1(its value)>
+        and desugarBranching (expr: Expression) (name: Identifier option) (rest: Statement list) (next: Expression option -> Expression) : Expression =
+            freshNames <- freshNames + 1
+            let restName = $"{NyxCompiler.Infer.workflowRestPrefix}{freshNames}"
+            let parameter = name |> Option.defaultValue "_"
+            let restFunction = Expression.from expr (Lambda([ parameter, None ], desugarChain rest next))
+            // A branch goes on to the rest with its value when a `def` binds it, and with `()` otherwise, so that
+            // branches of different types can still be a statement.
+            let goOn (last: Expression option) =
+                let argument =
+                    match last, name with
+                    | Some value, Some _ -> value
+                    | _ -> Expression.from expr UnitExpr
+                let call = Expression.from expr (FunctionCall(restName, None, [ argument ]))
+                match last, name with
+                | Some value, None -> Expression.from value (Block [ Statement.from value (ExprStatement value); Statement.from call (ExprStatement call) ])
+                | _ -> call
+            let branch (body: Expression) =
+                let statements =
+                    match body.Kind with
+                    | Block statements -> statements
+                    | _ -> [ Statement.from body (ExprStatement body) ]
+                desugarChain (statements |> List.collect liftStatementBinds) goOn
+            let branched =
+                match expr.Kind with
+                | IfExpr(cond, thenExpr, elseExpr) -> IfExpr(desugarExpr cond, branch thenExpr, branch elseExpr)
+                | Match(values, arms) -> Match(values |> List.map desugarExpr, arms |> List.map (fun (patterns, body) -> patterns, branch body))
+                | other -> other
+            Expression.from expr (
+                Block [
+                    Statement.from expr (DefStatement(false, restName, None, restFunction))
+                    Statement.from expr (ExprStatement { expr with Kind = branched })
+                ])
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =
@@ -709,25 +870,39 @@ module Compiler =
                 if SourceSpan.isNone nextExpr.Span then statement.Span
                 else SourceSpan.between statement.Span nextExpr.Span
             Expression.at span (Block [ desugared; Statement.from nextExpr (ExprStatement nextExpr) ])
+        // A block, from its first workflow keyword on, as a workflow chain (see `desugarWorkflowChain`): a statement
+        // that is a keyword, or an `if` or `match` with one in a branch. Where the rest of a builder's block cannot
+        // follow (see `unreachable`), its keywords are left to be reported.
         and desugarBlock statements =
+            let startsChain (statement: Statement) =
+                (unreachable.IsNone || builder.IsNone)
+                && (match statement.Kind with
+                    | DefStatement(_, _, _, Kind (WorkflowBindExpr _))
+                    | ExprStatement (Kind (WorkflowBindExpr _))
+                    | ExprStatement (Kind (WorkflowReturnExpr _)) -> true
+                    | DefStatement(_, _, _, value)
+                    | ExprStatement value -> branchesUseKeywords value
+                    | _ -> false)
             let rec split prefix remaining =
                 match remaining with
                 | [] -> List.rev prefix
-                | Kind (DefStatement(_, _, _, Kind (WorkflowBindExpr _))) :: _
-                | Kind (ExprStatement (Kind (WorkflowBindExpr _))) :: _
-                | Kind (ExprStatement (Kind (WorkflowReturnExpr _))) :: _ ->
+                | stmt :: _ when startsChain stmt ->
                     let chainExpr = desugarWorkflowChain remaining
                     List.rev prefix @ [ Statement.from chainExpr (ExprStatement chainExpr) ]
                 | stmt :: rest ->
                     split (desugarStatement stmt :: prefix) rest
             split [] (statements |> List.collect liftStatementBinds)
 
-        module'
-        |> List.map (function
-            | Kind (Def (ValueDef(isExport, name, typeOpt, expr))) as item ->
-                { item with Kind = Def (ValueDef(isExport, name, typeOpt, desugarExpr expr)) }
-            | Kind (Expr expr) as item -> { item with Kind = Expr (desugarExpr expr) }
-            | other -> other)
+        let desugared =
+            module'
+            |> List.map (function
+                | Kind (Def (ValueDef(isExport, name, typeOpt, expr))) as item ->
+                    { item with Kind = Def (ValueDef(isExport, name, typeOpt, desugarExpr expr)) }
+                | Kind (Expr expr) as item -> { item with Kind = Expr (desugarExpr expr) }
+                | other -> other)
+        desugared, List.ofSeq diagnostics
+
+    let desugar (module': Module) : Module = desugarWithDiagnostics module' |> fst
 
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
@@ -855,9 +1030,12 @@ module Compiler =
             parseWithDiagnostics (sourceFileName origin) source
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             |> Result.bind (fun (ast, declared, moduleBlocks) ->
-                applyAttributes (desugar ast)
-                |> Result.map (fun desugared -> ast, declared, moduleBlocks, desugared)
-                |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
+                match desugarWithDiagnostics ast with
+                | _, (_ :: _ as errors) -> Error (Desugared, errors)
+                | desugaredAst, [] ->
+                    applyAttributes desugaredAst
+                    |> Result.map (fun desugared -> ast, declared, moduleBlocks, desugared)
+                    |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
         | Result.Ok (ast, declared, moduleBlocks, desugared) ->

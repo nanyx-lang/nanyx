@@ -1355,6 +1355,66 @@ let ``Typecheck rejects a tag union with a rest where a string is expected`` () 
     Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
 
 [<Fact>]
+let ``A workflow keyword in a branch of an if or match statement has the rest of the block as its continuation`` () =
+    // Each branch goes on to the rest of the block (#348): a `try` in one branch widens the block's failures, and the
+    // value a branch ends with is what a `def` of the statement binds.
+    let source =
+        "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+        "def negative: int -> #some(int) | #negative = { n -> if n < 0 then #negative else #some(n) }\n" +
+        "def check = { n -> proc {\n" +
+        "  if n < 0 then try negative(n)\n" +
+        "  def half = try halve(n)\n" +
+        "  return half\n" +
+        "} }\n" +
+        // Annotated: inferred, a failure only one branch adds is dropped (#354).
+        "def label: int -> #some(string) | #odd = { n -> proc {\n" +
+        "  def text = match n\n" +
+        "    | 0 -> \"zero\"\n" +
+        "    | _ ->\n" +
+        "      def h = try halve(n)\n" +
+        "      \"half is {h}\"\n" +
+        "  return text\n" +
+        "} }"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("int -> #some(int) | #negative | #odd", Unifier.tyToString result.Typed.Value.Types.["check"])
+
+[<Fact>]
+let ``A workflow keyword the rest of its block cannot follow is reported where it is written`` () =
+    // It used to become a call to the builder's member with no continuation, and fail as a type mismatch (#347).
+    let reported (body: string) =
+        let source =
+            "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+            "def f: list(int) -> #some(int) | #odd = { xs -> proc {\n" + body + "\n  return 0\n} }"
+        match (Compiler.compile source).Diagnostics with
+        | [ diagnostic ] ->
+            Assert.Equal(DiagnosticCodes.InvalidWorkflow.Code, diagnostic.Code)
+            let span = diagnostic.Span.Value
+            Assert.Equal("try", source.Substring(span.Start, 3))
+            diagnostic.Message
+        | other -> failwith $"Expected one diagnostic, got %A{other}"
+    Assert.Equal(
+        "`try` is in the body of a `for` loop, so the rest of the `proc` block cannot follow it: handle the value with a `match` in the loop's body",
+        reported "  for xs | x -> halve(try halve(x))")
+    Assert.Equal(
+        "`try` is inside a lambda, so the rest of the `proc` block cannot follow it: move it out of the lambda, or handle the value with a `match` there",
+        reported "  def halves = List.map(xs, { x -> try halve(x) })")
+    Assert.Equal(
+        "`try` is in a part of an expression that may not run, so the rest of the `proc` block cannot follow it: make the `if` or `match` it is in a statement of its own",
+        reported "  def m = 1 + (if true then try halve(2) else 0)")
+    // A builder block of its own inside a lambda has its own continuation.
+    let nested =
+        "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+        "def f = { xs -> proc {\n" +
+        "  def results = List.map(xs, { x -> proc {\n" +
+        "    def h = try halve(x)\n" +
+        "    return h\n" +
+        "  } })\n" +
+        "  return results\n" +
+        "} }"
+    Assert.Empty((Compiler.compile nested).Diagnostics)
+
+[<Fact>]
 let ``Desugar workflow bind and return`` () =
     let source =
         "def result = async {\n" +

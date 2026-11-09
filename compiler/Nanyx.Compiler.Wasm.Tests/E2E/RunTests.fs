@@ -374,6 +374,59 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
     runSource source |> assertRan "[   tea][   2]\n   tea!|  2|<2>\n£2.89 and £12.05\n"
 
 [<Fact>]
+let ``Run - workflow keywords in the branches of an if or match end or continue the whole block`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+        "\n" +
+        "def check: int -> #some(int) | #negative | #odd = { n -> proc {\n" +
+        "  if n < 0 then try #negative\n" +
+        "  if n == 0 then return 0\n" +
+        "  def half = try halve(n)\n" +
+        "  return half\n" +
+        "} }\n" +
+        "\n" +
+        "def pick: [Console] string, int -> #some(string) | #odd | #unknown = { which, n -> proc {\n" +
+        "  match which\n" +
+        "    | \"half\" ->\n" +
+        "      def h = try halve(n)\n" +
+        "      if h > 2 then println(\"big half {h}\") else try halve(h)\n" +
+        "    | \"same\" -> println(\"kept {n}\")\n" +
+        "    | _ -> try #unknown\n" +
+        "  return \"done with {which}\"\n" +
+        "} }\n" +
+        "\n" +
+        "def showCheck: #some(int) | #negative | #odd -> string = {\n" +
+        "  | #some(v) -> \"some({v})\"\n" +
+        "  | #negative -> \"negative\"\n" +
+        "  | #odd -> \"odd\"\n" +
+        "}\n" +
+        "\n" +
+        "def showPick: #some(string) | #odd | #unknown -> string = {\n" +
+        "  | #some(v) -> \"some({v})\"\n" +
+        "  | #odd -> \"odd\"\n" +
+        "  | #unknown -> \"unknown\"\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(showCheck(check(10)))\n" +
+        "  println(showCheck(check(-4)))\n" +
+        "  println(showCheck(check(0)))\n" +
+        "  println(showCheck(check(7)))\n" +
+        "  println(showPick(pick(\"half\", 12)))\n" +
+        "  println(showPick(pick(\"half\", 4)))\n" +
+        "  println(showPick(pick(\"half\", 2)))\n" +
+        "  println(showPick(pick(\"same\", 9)))\n" +
+        "  println(showPick(pick(\"other\", 9)))\n" +
+        "}\n"
+    runSource source
+    |> assertRan (
+        "some(5)\nnegative\nsome(0)\nodd\n" +
+        "big half 6\nsome(done with half)\nsome(done with half)\nodd\nkept 9\nsome(done with same)\nunknown\n")
+
+[<Fact>]
 let ``Run - string concatenation and equality`` () =
     let source =
         "import nanyx/console\n" +
