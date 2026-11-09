@@ -78,6 +78,25 @@ let ``Typecheck tag union width and rest regression`` () =
     | other -> Assert.True(false, $"Unexpected l2 type: %A{other}")
 
 [<Fact>]
+let ``A piped lambda can match only the tags left of a union's rest`` () =
+    // `parsed` widens into `#some(α) | ω`, which leaves `ω` as `#invalidInt` and room for more. The lambda handles
+    // `#invalidInt` alone, as it may when the same call is written with its arguments in parentheses (#452).
+    let source =
+        "def mapError: #some(α) | ω, (ω -> #some(α) | b) -> #some(α) | b = {\n" +
+        "  | #some(x), _ -> #some(x)\n" +
+        "  | other, f -> f(other)\n" +
+        "}\n" +
+        "def parsed: #some(int) | #invalidInt = #invalidInt\n" +
+        "def direct = mapError(parsed, { #invalidInt -> #bad(\"y\") })\n" +
+        "def piped = parsed \\mapError({ #invalidInt -> #bad(\"y\") })"
+    let result = Compiler.compile source
+    Assert.Empty(result.Diagnostics)
+    let typed = result.Typed.Value
+    let expected = TyUnion [ TyTag("some", Some (TyPrimitive "int")); TyTag("bad", Some (TyPrimitive "string")) ]
+    Assert.Equal(expected, typed.Types.["direct"])
+    Assert.Equal(expected, typed.Types.["piped"])
+
+[<Fact>]
 let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
     // `other` cannot be a `#some`, so it is the rest `r`: returning it does not force `a` and `b` together.
     let source =
