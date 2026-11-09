@@ -10,6 +10,7 @@
     <Compile Include="TestHelpers.fs" />
     <Compile Include="Features\Core\FunctionAndLocalsTests.fs" />
     <Compile Include="Features\Core\AllocatorTests.fs" />
+    <Compile Include="Features\Core\CoreIrTests.fs" />
     <Compile Include="Features\ControlFlow\ControlFlowFixtureTests.fs" />
     <Compile Include="E2E\E2ETests.fs" />
     <Compile Include="E2E\RunTests.fs" />

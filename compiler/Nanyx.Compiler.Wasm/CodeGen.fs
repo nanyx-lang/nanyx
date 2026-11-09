@@ -6,6 +6,7 @@ open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
+open Transpiler.Wasm.Wat
 
 /// Something the backend cannot compile, and where it is written: what `tryTranspileTypedModuleToWat` reports as a
 /// diagnostic. A failure anywhere in the backend becomes one of these at the innermost expression it happened in that
@@ -172,23 +173,6 @@ let private wasmFloatConst (value: float) =
     elif System.Double.IsNegativeInfinity value then "-inf"
     else value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
 
-let private wasmBinaryInstruction op =
-    match op with
-    | "+" -> Some "i32.add"
-    | "-" -> Some "i32.sub"
-    | "*" -> Some "i32.mul"
-    | "/" -> Some "i32.div_s"
-    | "%" -> Some "i32.rem_s"
-    | "==" -> Some "i32.eq"
-    | "!=" -> Some "i32.ne"
-    | "<" -> Some "i32.lt_s"
-    | "<=" -> Some "i32.le_s"
-    | ">" -> Some "i32.gt_s"
-    | ">=" -> Some "i32.ge_s"
-    | "and" -> Some "i32.and"
-    | "or" -> Some "i32.or"
-    | _ -> None
-
 /// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`).
 let private isNominalTypeName (name: string) =
     let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
@@ -329,9 +313,6 @@ let private createNameMap (names: string list) =
 
 let private sanitizeImportSuffix (name: string) = sanitizeIdentifier name
 
-/// A tag's code: odd, so a tag without a payload (which is its code) can't be mistaken for a pointer to the cell
-/// of a tag with one.
-let private tagCode (id: int) = (id <<< 1) ||| 1
 
 let private escapeWasmData (bytes: byte array) =
     let sb = StringBuilder()
@@ -2502,7 +2483,21 @@ let private getLayoutFromTypeExpr (typeLayouts: Map<string, string list>) (typeF
         Some (fieldNames, fieldTypes)
     | _ -> None
 
-let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) (checkedTypes: Map<NodeId, Ty>) : string =
+/// Which way each function of a module was compiled: from the core IR, or the old way, straight from the syntax tree
+/// (see "Core IR" in `compiler/design/memory.md`).
+type CoreIrReport =
+    { /// The functions compiled from the core IR, by their names in WebAssembly text, specialisations included.
+      FromCoreIr: string list
+      /// The definitions compiled the old way, and why the core IR could not lower them.
+      Fallbacks: (string * string) list }
+
+/// What the core IR needs that the old path does not: the type of the function at each call, by node, and each
+/// definition's generalised type, by name. Only a type-checked module has them.
+type private CoreIrTypes =
+    { CalleeTypes: Map<NodeId, Ty>
+      DefinitionTypes: Map<string, Ty> }
+
+let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) (checkedTypes: Map<NodeId, Ty>) (coreIrTypes: CoreIrTypes option) : string * CoreIrReport =
     // The definitions synthesized instances are made of are passed as function values.
     let synthesizedMembers =
         contextInstances
@@ -2676,6 +2671,45 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         |> List.distinct
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
+
+    let coreIrHelperName =
+        function
+        | CoreIrEmit.TagBox -> Helpers.tagBox
+        | CoreIrEmit.TagCodeOf -> Helpers.tagCode
+
+    // The definitions the core IR can lower go through it, with the specialisations of the generic definitions they
+    // call; the rest are compiled below as they always have been. Only a type-checked module has the types it needs.
+    let coreIr =
+        coreIrTypes
+        |> Option.map (fun types ->
+            let context: CoreIrEmit.EmitContext =
+                { TagId =
+                    fun name ->
+                        match tagIdMap |> Map.tryFind name with
+                        | Some id -> id
+                        | None -> failwith $"Internal error: missing tag discriminant for #{name}"
+                  StringOffset =
+                    fun value ->
+                        match stringLiteralMap |> Map.tryFind value with
+                        | Some offset -> offset
+                        | None -> failwith $"Internal error: missing string literal offset for {value}"
+                  HelperName = coreIrHelperName }
+            let input: CoreIrLower.LowerInput =
+                { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
+                  ExprTypes = checkedTypes
+                  CalleeTypes = types.CalleeTypes
+                  DefinitionTypes = types.DefinitionTypes
+                  RequiresContexts = functionContextRequirements.Keys |> Set.ofSeq }
+            CoreIrLower.lowerModule input (fun func ->
+                // A specialisation is only called by the functions compiled with it; the definition itself is exported.
+                let exportName = if func.TypeArguments.IsEmpty then Some func.Source else None
+                CoreIrEmit.emitFunction context func exportName))
+
+    /// The text of a function from the core IR, noting the helpers it calls.
+    let fromCoreIr (emitted: CoreIrEmit.Emitted) =
+        for helper in emitted.Helpers do
+            usedHelpers.Add(coreIrHelperName helper) |> ignore
+        emitted.Text
 
     // What fails outside any expression of a function is reported at the function's definition.
     let rec renderFunction (name: string) (defTypeOpt: TypeExpr option) (expr: Expression) (typedExprOpt: TypedExpr option) (exportFn: bool) =
@@ -2924,9 +2958,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
             else
                 $"  (func ${fn} {functionHeader}\n    {bodyCode}\n  )"
 
-    let renderedUserFunctions =
-        defs
-        |> List.map (fun (name, typeOpt, expr) ->
+    let renderLegacyFunction (name: string) (typeOpt: TypeExpr option) (expr: Expression) =
             let typedExprOpt =
                 typedFunctionBodies
                 |> Map.tryFind name
@@ -2977,7 +3009,35 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                             let inputTy = TyRecord (Map.ofList (("0", envTy) :: parameterTys))
                             { Expr = expr; Type = TyFunc(inputTy, returnTy); Body = sourceTyped |> Option.bind (fun typed -> typed.Body)
                               Statements = None; MatchArms = None; Arguments = None })))
-            renderFunction name typeOpt expr typedExprOpt true)
+            renderFunction name typeOpt expr typedExprOpt true
+
+    // Each definition, from the core IR if it lowered it and the old way if not, followed by its specialisations.
+    let renderedUserFunctions =
+        defs
+        |> List.map (fun (name, typeOpt, expr) ->
+            let definition =
+                match coreIr |> Option.bind (fun lowered -> lowered.Roots |> Map.tryFind name) with
+                | Some (_, emitted) -> fromCoreIr emitted
+                | None -> renderLegacyFunction name typeOpt expr
+            let specialisations =
+                coreIr
+                |> Option.bind (fun lowered -> lowered.Specialisations |> Map.tryFind name)
+                |> Option.defaultValue []
+                |> List.map (snd >> fromCoreIr)
+            definition :: specialisations |> String.concat "\n\n")
+
+    let coreIrReport =
+        match coreIr with
+        | Some lowered ->
+            { FromCoreIr =
+                defs
+                |> List.collect (fun (name, _, _) ->
+                    [ yield! lowered.Roots |> Map.tryFind name |> Option.map (fun (func, _) -> func.Name) |> Option.toList
+                      yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name) ])
+              Fallbacks = lowered.Fallbacks |> Map.toList }
+        | None ->
+            { FromCoreIr = []
+              Fallbacks = defs |> List.map (fun (name, _, _) -> name, "the module was not type-checked") }
 
     let renderedFunctions = renderedUserFunctions |> String.concat "\n\n"
 
@@ -3194,7 +3254,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         |> String.concat "\n\n"
 
     if String.IsNullOrWhiteSpace renderedFunctions && String.IsNullOrWhiteSpace allImports && String.IsNullOrWhiteSpace dataSegments then
-        "(module)"
+        "(module)", coreIrReport
     else
         let parts =
             [ if not (String.IsNullOrWhiteSpace allImports) then allImports
@@ -3203,12 +3263,19 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
         let body = String.concat "\n\n" parts
-        $"(module\n{body}\n)"
+        $"(module\n{body}\n)", coreIrReport
 
 let transpileModuleToWat (module': Module) : string =
-    transpileModuleToWatCore module' Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
+    transpileModuleToWatCore module' Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty None |> fst
 
-let transpileTypedModuleToWat (typed: TypedModule) : string =
+/// How the backend compiles a type-checked module.
+type BackendOptions =
+    { /// Whether definitions go through the core IR where it can lower them. Without it, every definition is
+      /// compiled the old way, which is what the core IR's output is compared with in tests.
+      UseCoreIr: bool }
+
+/// `typed` as WebAssembly text, and which way each of its functions was compiled.
+let transpileTypedModuleWithReport (options: BackendOptions) (typed: TypedModule) : string * CoreIrReport =
     let typedBodies =
         typed.Items
         |> List.choose (function
@@ -3228,7 +3295,13 @@ let transpileTypedModuleToWat (typed: TypedModule) : string =
             | TyFunc(_, returnTy) -> trySimpleTypeName returnTy |> Option.map (fun tyName -> name, tyName)
             | _ -> None)
         |> Map.ofList
-    transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances typed.ExprTypes
+    let coreIrTypes =
+        if options.UseCoreIr then Some { CalleeTypes = typed.CalleeTypes; DefinitionTypes = typed.Types }
+        else None
+    transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances typed.ExprTypes coreIrTypes
+
+let transpileTypedModuleToWat (typed: TypedModule) : string =
+    transpileTypedModuleWithReport { UseCoreIr = true } typed |> fst
 
 /// `transpileTypedModuleToWat`, with what the backend cannot compile reported as a diagnostic at the place in the source
 /// it is written: the innermost expression it is in that has one, or else the definition.

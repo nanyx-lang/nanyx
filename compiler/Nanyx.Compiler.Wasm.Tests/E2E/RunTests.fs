@@ -1908,3 +1908,31 @@ let ``Run - a tail call that passes contexts on uses no stack`` () =
         "\n" +
         "main()\n"
     runSource source |> assertRan "1000000\n"
+
+[<Fact>]
+let ``Run - a generic function specialised at two types gives each its own result`` () =
+    // `orElse` is specialised for ints and for strings, and `main` calls both specialisations (see CoreIrTests.fs).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def orElse = { o, fallback ->\n" +
+        "  match o\n" +
+        "    | #some(v) -> v\n" +
+        "    | #none -> fallback\n" +
+        "}\n" +
+        "\n" +
+        "def pick = { n -> if n > 0 then #some(n) else #none }\n" +
+        "\n" +
+        "def name = { n -> if n > 0 then #some(\"positive\") else #none }\n" +
+        "\n" +
+        "def describe = { n -> \"{n * 1}\" }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  println(describe(orElse(pick(5), 0)))\n" +
+        "  println(describe(orElse(pick(-5), 0)))\n" +
+        "  println(orElse(name(1), \"none\"))\n" +
+        "  println(orElse(name(0), \"none\"))\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "5\n0\npositive\nnone\n"

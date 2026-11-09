@@ -10,6 +10,10 @@
     <Compile Include="Identifiers.fs" />
     <Compile Include="LambdaLifting.fs" />
     <Compile Include="WasmRuntime.fs" />
+    <Compile Include="Wat.fs" />
+    <Compile Include="CoreIr.fs" />
+    <Compile Include="CoreIrLower.fs" />
+    <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CodeGen.fs" />
   </ItemGroup>
 
