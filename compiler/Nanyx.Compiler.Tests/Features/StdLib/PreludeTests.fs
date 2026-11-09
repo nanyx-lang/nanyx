@@ -45,6 +45,31 @@ let ``Int.parse is in the prelude`` () =
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
+let ``Each built-in type has an attached toString in the prelude`` () =
+    let source =
+        "def i = Int.toString(1)\n" +
+        "def f = 1.5 \\ toString\n" +
+        "def b = true \\ toString\n" +
+        "def s = String.toString(\"a\")\n" +
+        "def texts = [1, 2] \\ map(Int.toString)"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    for name in [ "i"; "f"; "b"; "s" ] do
+        Assert.Equal("string", typeOf name)
+    Assert.Equal("list(string)", typeOf "texts")
+
+[<Fact>]
+let ``A context of toString is synthesized for a built-in type from its attached toString`` () =
+    let source =
+        "context ToString(a) = (toString: a -> string)\n" +
+        "def label: [ToString(a)] a -> string = { x -> \"<\" ++ toString(x) ++ \">\" }\n" +
+        "def text = label(42)"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["text"])
+
+[<Fact>]
 let ``The prelude's List functions are found by a pipe on a list`` () =
     let source =
         "def xs = [3, 1, 2]\n" +

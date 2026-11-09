@@ -344,8 +344,10 @@ module Compiler =
     /// The inlined items `own` uses: the value definitions it reaches, directly or through other inlined
     /// definitions, and every type definition, in their original order. A definition named like a member of a
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the
-    /// runtime's `Console`, say) without anything naming it.
-    let private reachedItems (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
+    /// runtime's `Console`, say) without anything naming it. So is each of `synthesized`, the attached definitions
+    /// an instance the type checker built is made of (`Int.toString` for a `ToString(int)`), which the backend
+    /// passes where the instance is required, again without anything naming it.
+    let private reachedItems (synthesized: string list) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
         let bodies =
             inlined
             |> List.choose (function
@@ -376,7 +378,7 @@ module Compiler =
             else
                 let referenced = newlyReached |> List.collect (snd >> referencedNames) |> List.fold (fun acc name -> Set.add name acc) referenced
                 reach referenced (newlyReached |> List.fold (fun acc (name, _) -> Set.add name acc) reached)
-        let reached = reach (Set.ofList rootNames) Set.empty
+        let reached = reach (Set.ofList (rootNames @ synthesized)) Set.empty
         inlined
         |> List.filter (function
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name
@@ -1378,13 +1380,18 @@ module Compiler =
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
+                let synthesizedMembers =
+                    Seq.append (Map.values state.ContextInstances) (Map.values inlinedInstances)
+                    |> Seq.concat
+                    |> Seq.collect (function Some (InstanceSynthesized members) -> members |> List.map snd | _ -> [])
+                    |> List.ofSeq
                 let inlined =
                     inlined @ preludeInlined
                     |> List.filter (function
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> distinctDefinitions
-                    |> reachedItems own
+                    |> reachedItems synthesizedMembers own
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.

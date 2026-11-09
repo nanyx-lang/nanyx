@@ -183,6 +183,50 @@ let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
     runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#some(-17)\n#some(70000)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
 
 [<Fact>]
+let ``Run - toString of an int, a float, a bool and a string, called and piped`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "println(Int.toString(42))\n" +
+        "println(Int.toString(-17))\n" +
+        "println(Float.toString(1.5))\n" +
+        "println(Bool.toString(true))\n" +
+        "println(Bool.toString(false))\n" +
+        "println(String.toString(\"Ada\"))\n" +
+        "println(7 \\toString)\n" +
+        "println(2.25 \\toString)\n" +
+        "println(false \\toString)\n" +
+        "println(\"text\" \\toString)\n"
+    runSource source |> assertRan "42\n-17\n1.5\ntrue\nfalse\nAda\n7\n2.25\nfalse\ntext\n"
+
+[<Fact>]
+let ``Run - toString of each built-in type passed as a function`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/text\n" +
+        "\n" +
+        "println(String.join([1, 2, 3] \\List.map(Int.toString), \", \"))\n" +
+        "println(String.join([0.5, 2.0] \\List.map(Float.toString), \", \"))\n" +
+        "println(String.join([true, false] \\List.map(Bool.toString), \", \"))\n" +
+        "println(String.join([\"a\", \"b\"] \\List.map(String.toString), \", \"))\n" +
+        "println(String.join([4, 5] \\map(Int.toString), \"+\"))\n"
+    runSource source |> assertRan "1, 2, 3\n0.5, 2.0\ntrue, false\na, b\n4+5\n"
+
+[<Fact>]
+let ``Run - a ToString of each built-in type is synthesized from the prelude's toString`` () =
+    // Nothing names `Int.toString` here: the instance the type checker builds from it must still be compiled.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context ToString(a) = (toString: a -> string)\n" +
+        "def label: [ToString(a)] a -> string = { x -> \"<\" ++ toString(x) ++ \">\" }\n" +
+        "println(label(42))\n" +
+        "println(label(true))\n" +
+        "println(label(1.5))\n" +
+        "println(label(\"s\"))\n"
+    runSource source |> assertRan "<42>\n<true>\n<1.5>\n<s>\n"
+
+[<Fact>]
 let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
     let source =
         "import nanyx/console\n" +
