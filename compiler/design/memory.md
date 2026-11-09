@@ -99,6 +99,11 @@ With every type known, values no longer have to fit one `i32`. Integers, floats 
 their own width, in locals, fields and payloads alike, and a record's fields get a layout of their own (no longer a
 4-byte slot each). Floats stop being boxed.
 
+`int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`
+and so on; see [Sized numbers](../../docs/src/content/work-in-progress/sized-numbers.md)). Each maps to the Wasm
+type of its width: `I64` and `int` to `i64`, `F64` and `float` to `f64`, the narrower integers to `i32` in locals and
+to their own width in fields.
+
 Pointers stay 32-bit: linear memory stays `memory32`. A 64-bit address space (Wasm `memory64`) only matters past
 4 GB of heap, and would double the size of every pointer field.
 
@@ -175,11 +180,8 @@ On the IR, following the paper:
 
 ## Open questions
 
-- **Integer width.** `int` is 32-bit today, implicitly: nothing in the docs says. 32 bits overflow at about
-  2.1 billion, which real programs reach (millisecond timestamps, file sizes, IDs). The recommendation is a 64-bit
-  `int`: WebAssembly has native `i64` arithmetic whatever the pointer width, and with monomorphisation an `i64` is
-  stored unboxed. It needs a decision in the language docs.
-- **Overflow.** Does integer arithmetic wrap, as WebAssembly's does, or trap?
+- **Overflow.** Does integer arithmetic wrap, as WebAssembly's does, or trap? Open in
+  [Sized numbers](../../docs/src/content/work-in-progress/sized-numbers.md).
 - **Code size.** Monomorphisation multiplies generic functions; how much does that grow the examples, and when
   should the boxing fallback kick in?
 - **Should reuse be visible?** Koka's `fip` annotation lets a function promise it runs fully in place, and the
