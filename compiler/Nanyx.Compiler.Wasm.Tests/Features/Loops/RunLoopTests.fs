@@ -50,3 +50,28 @@ let ``Run - rec local loops`` () =
         "  say(2)\n" +
         "}\n"
     runSource source |> assertRan "55\n2\n1\n"
+
+[<Fact>]
+let ``Run - loops, floats, pipes and guards through the core IR`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def area: float -> float = { r -> r * r * 2.0 }\n" +
+        "\n" +
+        "def size = { n ->\n" +
+        "  match n\n" +
+        "    | > 100 -> \"big\"\n" +
+        "    | < 0 -> \"negative\"\n" +
+        "    | _ -> \"small\"\n" +
+        "}\n" +
+        "\n" +
+        "def double: int -> int = { n -> n * 2 }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  for [1, 60, -3] | n -> println(size(n \\double))\n" +
+        "  for 1..2 | i -> println(\"{i}: {area(1.5)}\")\n" +
+        "  if area(1.0) > 1.5 then println(\"yes\") else println(\"no\")\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "small\nbig\nnegative\n1: 4.5\n2: 4.5\nyes\n"

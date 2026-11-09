@@ -51,10 +51,13 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | Field(atom, _)
     | Dbg(atom, _)
     | If(atom, _, _) -> ofAtoms [ atom ]
+    | ForEach { Source = OverList list } -> ofAtoms [ list ]
+    | ForEach { Source = OverRange(first, last) } -> ofAtoms [ first; last ]
     | Let _
     | Do _
     | Match _
-    | Interpolate _ -> []
+    | Interpolate _
+    | BoxFloat _ -> []
 
 type private FunctionEmitter(context: EmitContext) =
     let helpers = HashSet<string>()
@@ -71,6 +74,7 @@ type private FunctionEmitter(context: EmitContext) =
         | HoleString -> Interpolation.StringHole
         | HoleInt -> Interpolation.IntHole
         | HoleBool -> Interpolation.BoolHole
+        | HoleFloat -> Interpolation.FloatHole
         | HoleTag cases ->
             helper Helpers.tagCode |> ignore
             cases
@@ -175,6 +179,17 @@ type private FunctionEmitter(context: EmitContext) =
             | Some instruction -> join "\n    " [ atoms operands; instruction ]
             | None -> failwith $"Internal error: no instruction for the operator {op}"
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
+        | Prim(FloatBinary op, [ left; right ]) ->
+            // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves.
+            match wasmFloatInstruction op with
+            | Some instruction ->
+                let compute = join "\n    " [ atoms [ left ]; "f64.load"; atomsAfter true [ right ]; "f64.load"; instruction ]
+                if [ "eq"; "ne"; "lt"; "le"; "gt"; "ge" ] |> List.exists instruction.EndsWith then compute
+                else $"{compute}\n    call ${helper Helpers.floatBox}"
+            | None -> failwith $"Internal error: no instruction for the operator {op} on floats"
+        | Prim(FloatBinary op, _) -> failwith $"Internal error: the operator {op} on floats with other than two operands"
+        | BoxFloat value -> $"f64.const {wasmFloatConst value}\n    call ${helper Helpers.floatBox}"
+        | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | Call(name, args) ->
             let call = if tail then "return_call" else "call"
             join "\n    " [ atoms args; $"{call} ${name}" ]
@@ -230,6 +245,8 @@ type private FunctionEmitter(context: EmitContext) =
             match form with
             | DbgNumber(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg\n    local.get ${scratch.Name}" ]
             | DbgString(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg_str\n    local.get ${scratch.Name}" ]
+            | DbgFloat(scratch, _) ->
+                join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call ${helper Helpers.floatToString}\n    call $dbg_str\n    local.get ${scratch.Name}" ]
             | DbgTag(name, scratch) ->
                 // The host has a function per tag that `dbg` prints.
                 $"i32.const {tagCode (context.TagId name)}\n    local.set ${scratch.Name}\n    call $dbg_tag_{sanitizeIdentifier name}\n    local.get ${scratch.Name}"
@@ -262,6 +279,20 @@ type private FunctionEmitter(context: EmitContext) =
         | AUnit -> "i32.const 0"
         | AString value -> $"i32.const {context.StringOffset value}"
         | ATag name -> $"i32.const {tagCode (context.TagId name)}"
+
+    /// A `for` loop, as `CodeGen.fs` lays it out: the body's value is dropped each time round, and the loop is unit.
+    member this.ForLoop (loop: ForLoop) (atomCode: Atom -> string) : string =
+        let depth = loop.Depth
+        let cursor, finish, element = loop.Cursor.Name, loop.End.Name, loop.Element.Name
+        let bodyCode = this.Sequence false loop.Body
+        match loop.Source with
+        | OverRange(first, last) ->
+            let firstCode = atomCode first
+            let lastCode = atomCode last
+            $"{firstCode}\n    local.set ${element}\n    {lastCode}\n    local.set ${finish}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${element}\n        local.get ${finish}\n        i32.gt_s\n        br_if $__for_done_{depth}\n        {bodyCode}\n        drop\n        local.get ${element}\n        i32.const 1\n        i32.add\n        local.set ${element}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
+        | OverList list ->
+            let listCode = atomCode list
+            $"{listCode}\n    local.set ${cursor}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${cursor}\n        i32.eqz\n        br_if $__for_done_{depth}\n        local.get ${cursor}\n        i32.load\n        local.set ${element}\n        {bodyCode}\n        drop\n        local.get ${cursor}\n        i32.const 4\n        i32.add\n        i32.load\n        local.set ${cursor}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
 
     /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
@@ -296,6 +327,10 @@ type private FunctionEmitter(context: EmitContext) =
             | PFields fields -> fields |> List.map (fun (slot, inner) -> condition inner (fieldCode valueCode slot)) |> allOf
             | PString value ->
                 $"{valueCode}\n      i32.const {context.StringOffset value}\n      call ${helper Helpers.stringEquals}"
+            | PGuard(op, value) ->
+                match wasmBinaryInstruction op with
+                | Some instruction -> $"{valueCode}\n      {this.Atom (Dictionary()) (HashSet()) value}\n      {instruction}"
+                | None -> failwith $"Internal error: no instruction for the guard operator {op}"
             | PList(elements, rest) ->
                 let lengthInstruction = if rest.IsSome then "i32.ge_s" else "i32.eq"
                 let lengthCheck =
@@ -346,6 +381,9 @@ let private declaredLocals (body: Expr) : string list =
     // The holes of the interpolated strings, and of the strings `dbg` would print a tag through, by depth and place.
     let holes = ResizeArray<int * int>()
     let interpolates = ref false
+    // The locals of the `for` loops, in the order the old path declares them: each loop's, then those of the loops in
+    // its body.
+    let loops = ResizeArray<Var>()
     let holeAt depth =
         interpolates.Value <- true
         holes.Add((depth, 0))
@@ -391,12 +429,19 @@ let private declaredLocals (body: Expr) : string list =
         | MakeList _
         | CallRuntime _
         | MakeClosure _
-        | CallClosure _ -> ()
+        | CallClosure _
+        | BoxFloat _ -> ()
         | Interpolate _ -> interpolates.Value <- true
+        | ForEach loop ->
+            loops.Add loop.Cursor
+            loops.Add loop.End
+            loops.Add loop.Element
+            walk loop.Body
         | Dbg(_, form) ->
             match form with
             | DbgNumber(scratch, holeDepth)
-            | DbgString(scratch, holeDepth) ->
+            | DbgString(scratch, holeDepth)
+            | DbgFloat(scratch, holeDepth) ->
                 found.Add scratch
                 holeDepth |> Option.iter holeAt
             | DbgTag(_, scratch)
@@ -411,7 +456,12 @@ let private declaredLocals (body: Expr) : string list =
             Interpolation.scratchLocals
             @ (holes |> Seq.distinct |> Seq.sort |> Seq.map (fun (depth, index) -> Interpolation.holeLocalName depth index) |> List.ofSeq)
         else []
-    [ yield! ofKind Local; yield! ofKind MatchTemp; yield! ofKind PatternBound; yield! interpolationLocals; yield! ofKind Scratch ]
+    [ yield! ofKind Local
+      yield! ofKind MatchTemp
+      yield! ofKind PatternBound
+      yield! interpolationLocals
+      yield! loops |> Seq.map _.Name
+      yield! ofKind Scratch ]
     |> List.distinct
 
 /// `func` as a WebAssembly function, exported under `exportName` if given.

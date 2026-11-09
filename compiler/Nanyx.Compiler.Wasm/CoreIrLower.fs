@@ -185,6 +185,7 @@ let rec private toIrType (ty: Ty) : IrType =
     | TyPrimitive "bool" -> IrBool
     | TyPrimitive "unit" -> IrUnit
     | TyPrimitive "string" -> IrString
+    | TyPrimitive "float" -> IrFloat
     | TyTag _
     | TyUnion _ as tags ->
         let rec members ty =
@@ -236,8 +237,9 @@ let rec private storesBeforeValue (expr: Expression) =
     | ExpressionKind.Match _ -> true
     | IfExpr(cond, _, _) -> storesBeforeValue cond
     | BinaryOp(_, left, right) -> storesBeforeValue left || storesBeforeValue right
-    // `dbg` of a tag value stores it in a hole local, as an interpolated string does.
-    | FunctionCall("dbg", _, _) -> true
+    // `dbg` of a tag value stores it in a hole local, as an interpolated string does, and a loop stores its elements.
+    | FunctionCall("dbg", _, _)
+    | FunctionCall("__for", _, _) -> true
     | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue
     | TupleExpr items
     | ListExpr items -> items |> List.exists storesBeforeValue
@@ -279,7 +281,9 @@ type private Scope =
       InterpolationDepth: int
       /// The context members in scope, by key (and by the other names they can be called by): each a variable holding
       /// the member's closure.
-      Members: Map<string, Var> }
+      Members: Map<string, Var>
+      /// How many `for` loops enclose the expression, which names a loop's locals.
+      ForDepth: int }
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type private FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
@@ -374,7 +378,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | LiteralExpr(IntLit value) -> k (mk (Atom(AInt(int64 value))) IrInt)
         | LiteralExpr(BoolLit value) -> k (mk (Atom(ABool value)) IrBool)
         | LiteralExpr(StringLit value) -> k (mk (Atom(AString value)) IrString)
-        | LiteralExpr(FloatLit _) -> cannot "a float"
+        | LiteralExpr(FloatLit value) -> k (mk (BoxFloat value) IrFloat)
         | IdentifierExpr name ->
             match scope.Vars |> Map.tryFind name with
             | Some var -> k (mk (Atom(AVar var)) var.Type)
@@ -410,6 +414,11 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 let equal = mk (CallRuntime(helper, atoms, true)) IrBool
                 if op = "==" then k equal
                 else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
+        | BinaryOp(op, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
+            // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
+            if (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
+            let ty = tyOf expr
+            this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(FloatBinary op, atoms)) ty))
         | BinaryOp(op, left, right) ->
             if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
             for operand in [ left; right ] do
@@ -420,6 +429,24 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
         | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
+        | FunctionCall("__for", _, [ iterable; Kind (Lambda([ (parameter, _) ], body)) ]) ->
+            // `for iterable | arms`: the body runs for each element, in a local the body names by the parameter. A
+            // range counts from its start to its end; a list walks its cells.
+            let depth = scope.ForDepth
+            let cursor = newVar $"__for_cursor_{depth}" ForLoop IrInt
+            let finish = newVar $"__for_end_{depth}" ForLoop IrInt
+            let loop (source: ForSource) (elementTy: IrType) =
+                let element = newVar $"__for_{sanitizeIdentifier parameter}_{depth}" ForLoop elementTy
+                let bodyScope = { scope with Vars = scope.Vars |> Map.add parameter element; ForDepth = depth + 1 }
+                let forLoop: ForLoop = { Source = source; Depth = depth; Cursor = cursor; End = finish; Element = element; Body = this.Tail bodyScope body }
+                k (mk (ForEach forLoop) IrUnit)
+            match iterable.Kind with
+            | FunctionCall("__range", _, [ first; last ]) ->
+                this.Atoms scope [ first; last ] (fun atoms -> loop (OverRange(atoms.[0], atoms.[1])) IrInt)
+            | _ ->
+                match tyOf iterable with
+                | IrList elementTy -> this.Atoms scope [ iterable ] (fun atoms -> loop (OverList atoms.Head) elementTy)
+                | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
         | FunctionCall("dbg", _, args) when not (scope.Vars.ContainsKey "dbg") && not (definitions.ContainsKey "dbg") ->
             // Prints its value and leaves it, by how the value is printed.
             let value =
@@ -441,6 +468,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     | _ -> Some scope.InterpolationDepth
                 match tyOf value with
                 | IrString -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgString(scratch, holeDepth))) ty))
+                | IrFloat -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgFloat(scratch, holeDepth))) ty))
                 | IrInt
                 | IrBool
                 | IrUnit -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgNumber(scratch, holeDepth))) ty))
@@ -630,7 +658,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             | None -> cannot $"the context member {key}, which is not in scope"
         // A lambda of no parameters that is not a function's own runs where it is written, as the old path runs it.
         | Lambda([], body) -> this.Complex scope body k
-        | Pipe _ -> cannot "a pipe"
+        // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
+        | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
         | InterpolatedString parts ->
             // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
             // A string inside a hole is a level deeper, so that it keeps to its own hole locals.
@@ -652,10 +681,14 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     k (mk (Interpolate irParts) IrString)
                 | hole :: rest ->
                     let holeType = this.HoleType hole
-                    let local = newVar (Interpolation.holeLocalName depth index) InterpolationHole (tyOf hole)
-                    this.Complex insideHole hole (fun value ->
+                    // A float is formatted to a string as its hole is evaluated, since that allocates.
+                    let local = newVar (Interpolation.holeLocalName depth index) InterpolationHole (if holeType = HoleFloat then IrString else tyOf hole)
+                    let store (value: Expr) =
                         let body = evaluateHoles (index + 1) rest ((local, holeType) :: evaluated)
-                        mk (Let(local, value, body)) body.Type)
+                        mk (Let(local, value, body)) body.Type
+                    if holeType = HoleFloat then
+                        this.Atoms insideHole [ hole ] (fun atoms -> store (mk (CallRuntime(Helpers.floatToString, atoms, true)) IrString))
+                    else this.Complex insideHole hole store
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
         | _ -> cannot "this kind of expression"
@@ -680,6 +713,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | IrString -> HoleString
         | IrInt -> HoleInt
         | IrBool -> HoleBool
+        | IrFloat -> HoleFloat
         | IrTags _ ->
             let rec cases (ty: Ty) =
                 match Unifier.unalias ty with
@@ -781,6 +815,15 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     PBind var
                 | LiteralPattern(IntLit value) -> PInt(int64 value)
                 | LiteralPattern(StringLit value) -> PString value
+                | GuardPattern(op, guard) ->
+                    // `| > 5 ->`: compared, as the old path compares it, as ints. Only a literal or a name is
+                    // compared to, since a pattern's condition has no room for what computing anything else needs.
+                    if (wasmBinaryInstruction op).IsNone then cannot $"the guard operator {op}"
+                    match guard.Kind with
+                    | LiteralExpr(IntLit value) -> PGuard(op, AInt(int64 value))
+                    | LiteralExpr(BoolLit value) -> PGuard(op, ABool value)
+                    | IdentifierExpr name when armScope.Vars.ContainsKey name -> PGuard(op, AVar armScope.Vars.[name])
+                    | _ -> cannot "a guard compared to something other than a literal or a name"
                 | ListPattern(elements, rest) ->
                     let elementTy =
                         match valueTy with
@@ -859,7 +902,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               MatchDepth = 0
               LivePayloads = Set.empty
               InterpolationDepth = 0
-              Members = Map.empty }
+              Members = Map.empty
+              ForDepth = 0 }
         let make (parameters: Var list) (result: IrType) (body: Expr) =
             { Name = functionName
               Source = name

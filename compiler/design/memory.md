@@ -159,9 +159,9 @@ works from the IR. This is worth doing for its own sake: later optimisations, a 
 backend and a simpler `CodeGen.fs` all benefit.
 
 **Shape.** The IR is in `compiler/Nanyx.Compiler.Wasm/CoreIr.fs`. A function has typed parameters, a result type and
-a body. Types are concrete (`int`, `bool`, `unit`, `string`, a union of tags, a record, a list, a function), with no
-type variables. A tuple is a record whose fields are its positions, and a nominal type is the type of its shape. A
-body is an expression with a type on every node:
+a body. Types are concrete (`int`, `bool`, `unit`, `string`, `float`, a union of tags, a record, a list, a function),
+with no type variables. A tuple is a record whose fields are its positions, and a nominal type is the type of its
+shape. A body is an expression with a type on every node:
 
 | Node | Meaning |
 |------|---------|
@@ -176,12 +176,14 @@ body is an expression with a type on every node:
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
 | `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures |
 | `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
+| `boxFloat(value)` | boxes a float constant (floats are boxed, and `prim` on floats unboxes its operands) |
+| `forEach(loop)` | a `for` loop over a list or a range, its body run for each element |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
 | `dbg(atom, form)` | prints a value as `dbg` does for its type, and leaves it |
 | `let x = value in body` | names a value; the value is never a `let` itself |
 | `do value; rest` | evaluates a value for its effects and drops it |
 | `if atom then e1 else e2` | |
-| `match x1, ..., xn \| arms` | tests variables against each arm's patterns (`_`, a literal, a tag with a payload pattern, a tuple, a list, a nominal type's shape, a binding) |
+| `match x1, ..., xn \| arms` | tests variables against each arm's patterns (`_`, a literal, a guard such as `> 5`, a tag with a payload pattern, a tuple, a list, a nominal type's shape, a binding) |
 
 Every operand is an atom, so every intermediate value has a name. Each variable says what kind it is: a parameter, a
 local the program declares, a scrutinee, a name a pattern binds, or a temporary (a value the source does not name).
@@ -218,9 +220,9 @@ old path does.
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if anything in it is beyond the IR (pipes, floats, `for` loops and so on), or if it calls a
-  specialisation that could not be lowered. A function and the functions it calls through the IR are kept or dropped
-  together.
+- A definition falls back if anything in it is beyond the IR (errors deferred to run time, for now), or if it calls a
+  specialisation that could not be lowered, such as one of a generic definition imported from another module. A
+  function and the functions it calls through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
   compiled from the IR call its specialisations instead.
 - Both ways give the same calling convention, so a function from either can call one from the other. A function from
