@@ -9,6 +9,7 @@
 module Transpiler.Wasm.CoreIrEmit
 
 open System.Collections.Generic
+open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
@@ -43,10 +44,12 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | UpdateRecord(record, _, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
     | Field(atom, _)
+    | Dbg(atom, _)
     | If(atom, _, _) -> ofAtoms [ atom ]
     | Let _
     | Do _
-    | Match _ -> []
+    | Match _
+    | Interpolate _ -> []
 
 type private FunctionEmitter(context: EmitContext) =
     let helpers = HashSet<string>()
@@ -56,6 +59,42 @@ type private FunctionEmitter(context: EmitContext) =
         name
 
     member _.Helpers = Set.ofSeq helpers
+
+    /// How a hole of type `holeType` is measured and written (see `Interpolation`).
+    member _.HoleKind (holeType: HoleType) : Interpolation.HoleKind =
+        match holeType with
+        | HoleString -> Interpolation.StringHole
+        | HoleInt -> Interpolation.IntHole
+        | HoleBool -> Interpolation.BoolHole
+        | HoleTag cases ->
+            helper Helpers.tagCode |> ignore
+            cases
+            |> List.map (fun (name, payload) ->
+                let payloadKind =
+                    payload
+                    |> Option.map (function
+                        | IrString -> "string"
+                        | IrInt -> "int"
+                        | _ -> "bool")
+                name, tagCode (context.TagId name), payloadKind)
+            |> Interpolation.TagHole
+
+    /// The string built from `parts`, whose holes are already in their locals.
+    member this.Interpolation (parts: InterpolationPart list) =
+        let lengthCode =
+            parts
+            |> List.map (function
+                | Text text -> Interpolation.textLength text
+                | Hole(var, holeType) -> Interpolation.holeLength (this.HoleKind holeType) $"local.get ${var.Name}")
+            |> String.concat "\n    "
+        let writeCode =
+            parts
+            |> List.map (function
+                | Text text -> Interpolation.textWrite text
+                | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) $"local.get ${var.Name}")
+            |> String.concat "\n    "
+        helper Helpers.stringAlloc |> ignore
+        Interpolation.measureAndWrite lengthCode writeCode
 
     /// The code of a sequence: lets and `do`s ending in a value. `tail` says whether that value is what the
     /// function returns, so that a call there is a tail call.
@@ -165,6 +204,22 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, args, returnsValue) ->
             // Every value is an i32, so a helper that returns nothing leaves unit, 0.
             join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]
+        | Interpolate parts -> this.Interpolation parts
+        | Dbg(value, form) ->
+            match form with
+            | DbgNumber(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg\n    local.get ${scratch.Name}" ]
+            | DbgString(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg_str\n    local.get ${scratch.Name}" ]
+            | DbgTag(name, scratch) ->
+                // The host has a function per tag that `dbg` prints.
+                $"i32.const {tagCode (context.TagId name)}\n    local.set ${scratch.Name}\n    call $dbg_tag_{sanitizeIdentifier name}\n    local.get ${scratch.Name}"
+            | DbgTagPayload(name, scratch) ->
+                join "\n    " [
+                    atoms [ value ]
+                    $"local.tee ${scratch.Name}\n    call $dbg_tag_payload_{sanitizeIdentifier name}\n    i32.const {tagCode (context.TagId name)}\n    local.get ${scratch.Name}\n    call ${helper Helpers.tagBox}" ]
+            | DbgTagValue(hole, holeType, _) ->
+                // Printed through the string `"{value}"` would build; the hole still holds the value to leave.
+                helper Helpers.alloc |> ignore
+                $"{this.Interpolation [ Hole(hole, holeType) ]}\n    call $dbg_str\n    local.get ${hole.Name}"
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
@@ -262,10 +317,21 @@ type private FunctionEmitter(context: EmitContext) =
                 $"{allConditions}\n    (if (result i32)\n      (then\n        {armCode}\n      )\n      (else\n        {emit rest}\n      )\n    )"
         emit arms
 
-/// The locals a function declares beyond its parameters, in the order `CodeGen.fs` declares them: its own locals, then
-/// the scrutinees' and then what patterns bind.
+/// The locals a function declares beyond its parameters, in the order `CodeGen.fs` declares them: its own locals, the
+/// scrutinees', what patterns bind, what interpolated strings need (their scratch locals, then their holes by depth),
+/// and its scratch locals.
 let private declaredLocals (body: Expr) : string list =
     let found = ResizeArray<Var>()
+    // The holes of the interpolated strings, and of the strings `dbg` would print a tag through, by depth and place.
+    let holes = ResizeArray<int * int>()
+    let interpolates = ref false
+    let holeAt depth =
+        interpolates.Value <- true
+        holes.Add((depth, 0))
+    let holePlace (name: string) =
+        match name.Substring("__interp_hole_".Length).Split('_') with
+        | [| depth; index |] -> int depth, int index
+        | _ -> failwith $"Internal error: {name} is not a hole local"
     let rec pattern (p: Pattern) =
         match p with
         | PBind var -> found.Add var
@@ -278,7 +344,10 @@ let private declaredLocals (body: Expr) : string list =
     let rec walk (expr: Expr) =
         match expr.Kind with
         | Let(var, value, body) ->
-            if var.Kind <> Temp then found.Add var
+            match var.Kind with
+            | Temp -> ()
+            | InterpolationHole -> holes.Add(holePlace var.Name)
+            | _ -> found.Add var
             walk value
             walk body
         | Do(value, rest) ->
@@ -300,9 +369,26 @@ let private declaredLocals (body: Expr) : string list =
         | UpdateRecord _
         | MakeList _
         | CallRuntime _ -> ()
+        | Interpolate _ -> interpolates.Value <- true
+        | Dbg(_, form) ->
+            match form with
+            | DbgNumber(scratch, holeDepth)
+            | DbgString(scratch, holeDepth) ->
+                found.Add scratch
+                holeDepth |> Option.iter holeAt
+            | DbgTag(_, scratch)
+            | DbgTagPayload(_, scratch) -> found.Add scratch
+            | DbgTagValue(_, _, scratch) ->
+                interpolates.Value <- true
+                found.Add scratch
     walk body
-    [ Local; MatchTemp; PatternBound ]
-    |> List.collect (fun kind -> found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq)
+    let ofKind kind = found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq
+    let interpolationLocals =
+        if interpolates.Value then
+            Interpolation.scratchLocals
+            @ (holes |> Seq.distinct |> Seq.sort |> Seq.map (fun (depth, index) -> Interpolation.holeLocalName depth index) |> List.ofSeq)
+        else []
+    [ yield! ofKind Local; yield! ofKind MatchTemp; yield! ofKind PatternBound; yield! interpolationLocals; yield! ofKind Scratch ]
     |> List.distinct
 
 /// `func` as a WebAssembly function, exported under `exportName` if given.

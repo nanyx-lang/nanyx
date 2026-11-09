@@ -33,6 +33,11 @@ type VarKind =
     /// An intermediate value that the source does not name: an argument, an operand, a payload. It is used exactly
     /// once, by the next instruction to need it, so it never needs a local of its own: its value stays on the stack.
     | Temp
+    /// The local a hole of an interpolated string is evaluated into, named by how deeply the string is nested in
+    /// other strings' holes and by its place among the string's holes (see `Interpolation.holeLocalName`).
+    | InterpolationHole
+    /// A local some construct needs for its own use, such as the one `dbg` holds its value in.
+    | Scratch
 
 type Var =
     { Id: int
@@ -72,6 +77,34 @@ type Pattern =
     /// Binds the value matched here to a variable.
     | PBind of Var
 
+/// How a hole of an interpolated string is printed.
+type HoleType =
+    | HoleString
+    | HoleInt
+    | HoleBool
+    /// A tag: each case the hole's type names, in the order the type names them, with the type of its payload if it
+    /// has one (a string, an int or a bool).
+    | HoleTag of (string * IrType option) list
+
+type InterpolationPart =
+    | Text of string
+    /// A hole, already evaluated into its local.
+    | Hole of Var * HoleType
+
+/// How `dbg` prints its value, which it then leaves. Each holds the value in a scratch local meanwhile.
+type DbgForm =
+    /// An int or a bool, printed as a number. `Some depth` when the value is not a literal: the old path then
+    /// declares the locals it would print a tag through (an interpolated string at that depth), whatever the type.
+    | DbgNumber of Var * int option
+    /// A string, printed as it is. `Some depth` as for a number.
+    | DbgString of Var * int option
+    /// A tag literal without a payload, printed by a host function of its own.
+    | DbgTag of string * Var
+    /// A tag literal with a payload (the atom), printed by a host function of its own.
+    | DbgTagPayload of string * Var
+    /// A value of a union of tags, printed as `"{value}"` would print it: the hole is already evaluated.
+    | DbgTagValue of Var * HoleType * Var
+
 type Expr =
     { Kind: ExprKind
       Type: IrType }
@@ -94,6 +127,10 @@ and ExprKind =
     /// A call to a runtime helper (see `WasmRuntime.Helpers`): an intrinsic, or the helper an operator on strings, lists
     /// or tags needs. One that returns nothing (an intrinsic whose result is unit) leaves unit, as every value must.
     | CallRuntime of string * Atom list * returnsValue: bool
+    /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
+    | Interpolate of InterpolationPart list
+    /// `dbg(value)`: prints the value (the atom, unless the form says otherwise) and leaves it.
+    | Dbg of Atom * DbgForm
     /// `let x = value in body`. The value is never a `Let` itself: blocks are flattened.
     | Let of Var * Expr * Expr
     /// Evaluates the first expression for its effects, drops its value, then evaluates the second.
@@ -185,6 +222,14 @@ module Print =
             $"{atom record} with {shown}"
         | MakeList items -> $"[{atoms items}]"
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
+        | Interpolate parts ->
+            parts
+            |> List.map (function
+                | Text text -> text
+                | Hole(v, _) -> "{" + v.Name + "}")
+            |> String.concat ""
+            |> sprintf "\"%s\""
+        | Dbg(value, _) -> $"dbg({atom value})"
         | Let(v, value, body) -> $"let {v.Name}: {IrType.show v.Type} = {expr indent value}\n{indent}{expr indent body}"
         | Do(first, rest) -> $"do {expr indent first}\n{indent}{expr indent rest}"
         | If(cond, ifTrue, ifFalse) ->
