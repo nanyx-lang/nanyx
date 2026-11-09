@@ -17,7 +17,7 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 ## Where we are today
 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/CodeGen.fs`; see Allocator below), but nothing calls `free` yet, so a long-running
+`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), but nothing calls `free` yet, so a long-running
 program's memory only grows.
 
 Every value is an `i32`. On the heap:
@@ -35,9 +35,8 @@ String literals live in the data segment. A tag without a payload is not on the 
 `(id << 1) | 1`. Codes are odd and allocations are 4-byte aligned, so a tag value is a code exactly when its low
 bit is set ([#181](https://github.com/nanyx-lang/nanyx/issues/181)).
 
-Code generation goes straight from the parser's `Expression` tree to WebAssembly text, with types looked up from
-the type checker's results on the side. Generic functions are compiled once, over this uniform `i32`
-representation.
+Code generation goes from the typed module through the core IR (see Core IR below) to WebAssembly text. Generic
+functions are specialised for each set of type arguments they are used at, though every value is still an `i32`.
 
 ## Why Perceus
 
@@ -198,7 +197,8 @@ many calls ask for it, and a definition can have at most 32 (polymorphic recursi
 A type variable that nothing constrains (the element of `[]`, the rest of an open union no use closes) is `unit`:
 nothing can make or inspect a value of such a type.
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
-reads its fields from where they are stored rather than looking them up at run time (`__nanyx_open_field`).
+reads its fields from where they are stored. A generic definition exists only as its specialisations: it is neither
+compiled nor exported as it is.
 
 A definition inlined from an imported module (the prelude's `List.map`, say) is specialised the same way. Only the root
 module's types by node are resolved for the editor's sake, so the types of the inlined definitions' nodes are resolved
@@ -208,47 +208,36 @@ Lambda lifting still runs on the syntax tree first (`LambdaLifting.fs`): a lambd
 takes a closure block as its environment, and the lambda is replaced by a closure over it. The IR lowers a lifted
 function where a closure over it is made, since only there are the types of what it captures known. A lambda written
 in a generic definition is specialised along with it (`__lambda_0__int`), and the wrapper that lets a top-level
-function be passed as a value is lowered for each type it is passed at.
+function be passed as a value is lowered for each type it is passed at. Lifting lambdas in the IR instead is
+[#425](https://github.com/nanyx-lang/nanyx/issues/425).
 
 A function that requires contexts takes each of their members as a closure, in a parameter of its own after its
 others, typed from the context's definition. A call finds each member the callee requires where the type checker
 found its context (a `use`, the caller's own members, an instance built from attached definitions, or the ambient
-`Console`), by the same function the old path uses. A lambda of no parameters that is not a function's own runs where
-it is written, as the old path runs it, which is what workflow blocks lower to.
+`Console`). A lambda of no parameters that is not a function's own runs where it is written, which is what workflow
+blocks lower to.
 
 The module's top-level expressions are lowered as one more function, the start function, which evaluates each in
 turn and drops its value. A module with type or name errors is compiled all the same in a debug build: what failed to
 check is a `panic` that reports the error when it is reached, and a value of no known type because of it has a type of
-its own (still an `i32`). A definition (or top-level expression) that holds such errors and cannot be lowered because
-of them is lowered to a trap that reports them as soon as it is called, as the old path does.
+its own (still an `i32`). Matching on or interpolating such a value stops the program there, if the error has not
+already. A definition (or top-level expression) that holds such errors and cannot be lowered because of them is
+lowered to a trap that reports them as soon as it is called. A definition that is generic only because an error left
+its type open, and is not specialised, is lowered with its type variables defaulted, so that it still exists.
 
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
 as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
 or an interpolated string among a call's arguments, say) is one temporary whose value is the whole sequence, stores
 and all, so nothing waits on the stack across a store. Record layouts and function table slots are numbered as
-functions are emitted, so functions from the IR are emitted in definition order with the rest, to number them as the
-old path does.
+functions are emitted, in definition order, each definition followed by its specialisations.
 
-**Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
-the old way (`CodeGen.fs` straight from the syntax tree) when not:
-
-- A definition falls back if it calls a specialisation that could not be lowered, or if anything else in it cannot be:
-  the few things the IR declines to copy from the old path (`==` on records, `dbg` of a record, which compare and print
-  pointers). A function and the functions it calls through the IR are kept or dropped together.
-- A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
-  compiled from the IR call its specialisations instead.
-- Both ways give the same calling convention, so a function from either can call one from the other. A function from
-  the IR compiles to the same text the old way would give it, apart from calling specialisations, and a test holds
-  them to that. (A lambda in a specialisation takes a function table slot of its own, which renumbers the slots after
-  it; such a program is only compared by what it does. And the hole locals of interpolated strings are declared by
-  depth, which can order them differently from the old path when a function has strings nested in others' holes.)
-- Only a type-checked module is lowered: `transpileModuleToWat`, which compiles an untyped module, uses the old path
-  throughout. `transpileTypedModuleWithReport` says which way each function was compiled, and why a definition fell
-  back.
-
-The fallback goes once the IR lowers every construct; the remaining constructs and its removal are tracked from
-[#293](https://github.com/nanyx-lang/nanyx/issues/293).
+**What cannot be compiled.** Every function is compiled from the IR; there is no other way. What the IR cannot lower
+(`use ... in`, a local function, `==` on records and lists, `dbg` of a record, and the like) is an error,
+`UnsupportedByBackend`, reported where it is written: `tryTranspileTypedModuleToWat` gives the first one. `==` is built
+in only for numbers, strings and tags; comparing and printing records and lists structurally is
+[#424](https://github.com/nanyx-lang/nanyx/issues/424). Only a type-checked module is compiled.
+`transpileTypedModuleWithReport` also lists the functions it was compiled into, specialisations among them.
 
 ### Inserting counts
 
@@ -281,8 +270,8 @@ On the IR, following the paper:
    - ~~Keep a tag's payload in full~~ ([#181](https://github.com/nanyx-lang/nanyx/issues/181), done).
    - ~~Replace the bump allocator with one that can free~~
      ([#292](https://github.com/nanyx-lang/nanyx/issues/292), done).
-2. **Core IR and monomorphisation.** Introduce the IR, specialising generic functions as it is built, and move code
-   generation onto it with no change in behaviour ([#293](https://github.com/nanyx-lang/nanyx/issues/293)).
+2. ~~**Core IR and monomorphisation.** Introduce the IR, specialising generic functions as it is built, and move code
+   generation onto it~~ ([#293](https://github.com/nanyx-lang/nanyx/issues/293), done).
 3. **Headers and drop functions.** Give every heap object a count, and generate a drop function per type
    ([#291](https://github.com/nanyx-lang/nanyx/issues/291)). Needs step 2.
 4. **Reference counting.** Insert `dup` and `drop` with inferred ownership. Programs now free memory

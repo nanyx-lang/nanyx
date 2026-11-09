@@ -13,8 +13,6 @@ module Helpers =
     let listConcat = "__nanyx_list_concat"
     let recordSet = "__nanyx_record_set"
     let recordCopy = "__nanyx_record_copy"
-    /// Generated per module rather than kept in `runtimeHelpers`: see `renderOpenFieldHelper`.
-    let openField = "__nanyx_open_field"
     let tagBox = "__nanyx_tag_box"
     let tagCode = "__nanyx_tag_code"
     let tagEquals = "__nanyx_tag_equals"

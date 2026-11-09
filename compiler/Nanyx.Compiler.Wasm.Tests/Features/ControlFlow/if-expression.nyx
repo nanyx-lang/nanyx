@@ -2,4 +2,4 @@ module M
 
 def choose = { flag, a, b -> if flag then a else b }
 
-def main = choose(1, 10, 20)
+def main = choose(true, 10, 20)

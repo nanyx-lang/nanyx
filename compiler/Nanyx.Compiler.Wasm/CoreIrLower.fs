@@ -81,13 +81,16 @@ type Lowered<'T> =
       Roots: Map<string, Function * 'T>
       /// The specialisations of each generic definition, by the definition's name, in the order they were asked for.
       Specialisations: Map<string, (Function * 'T) list>
-      /// Why each definition that is not among the roots was left to the old path.
-      Fallbacks: Map<string, string> }
+      /// What could not be lowered, in the order it was met: the function (by its definition's name), why, and where.
+      Failures: (string * string * SourceSpan option) list }
 
 /// Something the IR cannot lower yet, and why.
 exception CannotLower of string
 
 let private cannot message = raise (CannotLower message)
+
+/// A pattern the value it is matched against can never match.
+exception private NeverMatches
 
 /// A generic definition at some type arguments: what a specialisation is.
 type private SpecKey = string * IrType list
@@ -426,6 +429,9 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
 
     let mk kind ty : Expr = { Kind = kind; Type = ty }
 
+    /// The place in the source of the expression being lowered, where a failure to lower is reported.
+    let mutable current: SourceSpan option = None
+
     /// The name of the function being lowered, in WebAssembly text.
     let mutable selfName = ""
 
@@ -443,8 +449,17 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         let body = k (AVar temp)
         mk (Let(temp, value, body)) body.Type
 
+    /// Where the expression being lowered is written, for reporting what cannot be lowered.
+    member _.CurrentSpan = current
+
     /// Lowers `expr` to a value that is not a `Let` (its own lets go around it), and passes that to `k`.
     member this.Complex (scope: Scope) (expr: Expression) (k: Expr -> Expr) : Expr =
+        // What fails once `expr` is lowered, in the expression around it, is reported there.
+        let around = current
+        if not (SourceSpan.isNone expr.Span) then current <- Some expr.Span
+        let k (value: Expr) =
+            current <- around
+            k value
         match expr.Kind with
         | UnitExpr -> k (mk (Atom AUnit) IrUnit)
         | LiteralExpr(IntLit value) -> k (mk (Atom(AInt(int64 value))) IrInt)
@@ -806,6 +821,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     else this.Complex insideHole hole store
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
+        | UseIn _ -> cannot "`use ... in`"
         | _ -> cannot "this kind of expression"
 
     /// A closure over the wrapper `wrapper` of a top-level function, at the function's own type.
@@ -963,7 +979,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                         | IrTags tags ->
                             match tags |> List.tryFind (fst >> (=) name) with
                             | Some (_, payloadTy) -> payloadTy
-                            | None -> cannot $"the pattern #{name}, which is not among the value's tags"
+                            | None -> raise NeverMatches
                         | _ -> cannot $"the pattern #{name} on a value that is not a tag"
                     match payload, payloadTy with
                     | Some inner, Some innerTy -> PTag(name, Some (lowerPattern false scrutinee innerTy inner))
@@ -983,18 +999,32 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | RecordPattern(typeName, [ inner ]) when (typeName.Split('.') |> Array.last).StartsWith "$" ->
                     lowerPattern false scrutinee valueTy inner
                 | _ -> cannot "this kind of pattern"
-            let loweredPatterns = List.map2 (fun scrutinee pattern -> lowerPattern true scrutinee scrutinee.Type pattern) scrutinees patterns
-            let bodyScope = { armScope with Vars = armVars; LivePayloads = Set.union armScope.LivePayloads payloads }
-            { Patterns = loweredPatterns; Body = this.Tail bodyScope body }
+            // An arm for a tag the value cannot have never matches, so it is left out.
+            match (try Some (List.map2 (fun scrutinee pattern -> lowerPattern true scrutinee scrutinee.Type pattern) scrutinees patterns) with NeverMatches -> None) with
+            | Some loweredPatterns ->
+                let bodyScope = { armScope with Vars = armVars; LivePayloads = Set.union armScope.LivePayloads payloads }
+                Some { Patterns = loweredPatterns; Body = this.Tail bodyScope body }
+            | None -> None
         // The scrutinees are evaluated in order, each into its local, before any arm is tested.
         let rec bindScrutinees (remaining: (Var * Expression) list) =
             match remaining with
-            | [] -> k (mk (Match(scrutinees, arms |> List.map lowerArm)) ty)
+            | [] -> k (mk (Match(scrutinees, arms |> List.choose lowerArm)) ty)
             | (scrutinee, value) :: rest ->
                 this.Complex scope value (fun lowered ->
                     let body = bindScrutinees rest
                     mk (Let(scrutinee, lowered, body)) body.Type)
-        bindScrutinees (List.zip scrutinees values)
+        match values |> List.tryFindIndex (fun value -> tyOf value = IrError) with
+        | Some unknown ->
+            // A value of no known type cannot be matched. The values are evaluated in order up to it, for what they do
+            // (it most likely stops the program itself, through the deferred error that left its type unknown), and
+            // if the program is still running then, it stops there.
+            let stop = mk (Panic [ Interpolation.unknownScrutineeMessage values.[unknown].Span ]) ty
+            values
+            |> List.take (unknown + 1)
+            |> List.rev
+            |> List.fold (fun (rest: Expr) value -> this.Complex scope value (fun lowered -> mk (Do(lowered, rest)) rest.Type)) stop
+            |> k
+        | None -> bindScrutinees (List.zip scrutinees values)
 
     /// The start function: each top-level expression in turn, its value dropped. The start function returns nothing,
     /// so nothing in it is a tail call; its body ends in unit, which the emitter leaves out (see `emitStart`).
@@ -1145,10 +1175,9 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
             let call = mk (Call(callee wrapped instanceTy, parameters.Tail |> List.map AVar)) (toIrType resultTy)
             make parameters (toIrType resultTy) call
-/// Lowers every definition the IR can, with the specialisations they need, and runs `finish` over each function
-/// (the emitter, which can still fail). A function is kept only when it and every specialisation it calls,
-/// directly or not, lowered and finished: one that calls a specialisation that did not is left to the old path, as is
-/// any generic definition (the old path still compiles it, unspecialised, for the callers it compiles).
+/// Lowers every definition that is not generic, the start function, and the specialisations and lifted functions they
+/// need, and runs `finish` over each function (the emitter, which can still fail). A generic definition exists only as
+/// its specialisations. What cannot be lowered or finished is in `Failures`, where it is written as far as is known.
 let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     let definitions = input.Definitions |> Map.ofList
     let names = System.Collections.Generic.Dictionary<SpecKey, string>()
@@ -1156,13 +1185,11 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
     let pending = System.Collections.Generic.Queue<SpecKey * Map<int, Ty> * Lowering>()
     let counts = System.Collections.Generic.Dictionary<string, int>()
     // Every function lowered, by its key, with the specialisations it calls; or why it could not be.
-    let results = System.Collections.Generic.Dictionary<SpecKey, Result<Function * 'T * Set<SpecKey>, string>>()
+    let results = System.Collections.Generic.Dictionary<SpecKey, Result<Function * 'T, string * SourceSpan option>>()
     let order = ResizeArray<SpecKey>()
 
     let lowerOne (key: SpecKey) (subst: Map<int, Ty>) (how: Lowering) (functionName: string) =
-        let calls = System.Collections.Generic.HashSet<SpecKey>()
         let request (specKey: SpecKey) (bindings: Map<int, Ty>) (lowering: Lowering) =
-            calls.Add specKey |> ignore
             match names.TryGetValue specKey with
             | true, existing -> existing
             | _ ->
@@ -1186,16 +1213,15 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
                 pending.Enqueue((specKey, bindings, lowering))
                 candidate
         order.Add key
+        let lowering = FunctionLowering(input, definitions, subst, key, request)
         let attempt () =
             try
-                let lowering = FunctionLowering(input, definitions, subst, key, request)
                 let func = lowering.Function how (fst key) functionName (snd key)
-                Ok (func, finish func, Set.ofSeq calls)
+                Ok (func, finish func)
             with
-            | CannotLower reason -> Error reason
-            | Failure reason -> Error reason
-            // A bug in the lowering or the emitter costs the function its trip through the IR, not the compile.
-            | ex -> Error $"internal error: {ex.Message}"
+            | CannotLower reason -> Error (reason, lowering.CurrentSpan)
+            | Failure reason -> Error ($"internal error: {reason}", lowering.CurrentSpan)
+            | ex -> Error ($"internal error: {ex.Message}", lowering.CurrentSpan)
         // A definition that holds errors deferred to run time may be what cannot be lowered because of them (a value of
         // no known type to interpolate, say): it reports them as soon as it is called instead.
         let messages =
@@ -1205,13 +1231,13 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
         results.[key] <-
             match attempt () with
             | Error _ when not messages.IsEmpty ->
+                let trap = FunctionLowering(input, definitions, subst, key, request)
                 try
-                    let lowering = FunctionLowering(input, definitions, subst, key, request)
-                    let func = lowering.Trap (fst key) functionName (snd key) messages
-                    Ok (func, finish func, Set.empty)
+                    let func = trap.Trap (fst key) functionName (snd key) messages
+                    Ok (func, finish func)
                 with
                 | CannotLower reason
-                | Failure reason -> Error reason
+                | Failure reason -> Error (reason, None)
             | result -> result
 
     let isGeneric (name: string) =
@@ -1225,66 +1251,49 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
             let key, bindings, how = pending.Dequeue()
             lowerOne key bindings how names.[key]
 
+    // A generic definition is only lowered at the type arguments it is used at, and a lifted function where a closure
+    // over it is made: what it captures is known there.
     for (name, _) in input.Definitions do
-        if input.Lifted.ContainsKey name then
-            // Lowered where a closure over it is made, if that is lowered: what it captures is known there.
-            ()
-        elif isGeneric name then
-            results.[(name, [])] <- Error "it is generic: each instantiation is lowered where it is called"
-            order.Add((name, []))
-        else
+        if not (input.Lifted.ContainsKey name) && not (isGeneric name) then
             lowerOne (name, []) Map.empty AsDefined (sanitizeIdentifier name)
         while pending.Count > 0 do
             let key, bindings, how = pending.Dequeue()
             lowerOne key bindings how names.[key]
 
-    // Keep what lowered and finished and calls only specialisations that are kept, until nothing changes.
-    let mutable kept =
-        results
-        |> Seq.choose (fun (KeyValue(key, result)) -> match result with Ok _ -> Some key | Error _ -> None)
-        |> Set.ofSeq
-    let mutable changed = true
-    while changed do
-        let next =
-            kept
-            |> Set.filter (fun key ->
-                match results.[key] with
-                | Ok (_, _, calls) -> calls |> Set.forall kept.Contains
-                | Error _ -> false)
-        changed <- next.Count <> kept.Count
-        kept <- next
+    // A definition may be generic only because an error left its type open. Unless it was specialised, it is lowered
+    // with its type variables defaulted, so that it still exists, and reports its errors when it is called.
+    for (name, expr) in input.Definitions do
+        let specialised = names.Keys |> Seq.exists (fun (defName, _) -> defName = name)
+        if not (input.Lifted.ContainsKey name) && isGeneric name && not specialised && not (deferredMessages expr).IsEmpty then
+            lowerOne (name, []) Map.empty AsDefined (sanitizeIdentifier name)
+            while pending.Count > 0 do
+                let key, bindings, how = pending.Dequeue()
+                lowerOne key bindings how names.[key]
 
-    let fallbackReason (key: SpecKey) =
-        match results.[key] with
-        | Error reason -> reason
-        | Ok (_, _, calls) ->
-            let missing = calls |> Seq.find (kept.Contains >> not)
-            $"it calls '{fst missing}' at a type the IR could not lower it at"
-
-    let keptFunctions =
+    let lowered =
         order
         |> Seq.distinct
-        |> Seq.filter kept.Contains
-        |> Seq.map (fun key -> match results.[key] with Ok (func, finished, _) -> key, (func, finished) | Error _ -> failwith "unreachable")
+        |> Seq.choose (fun key -> match results.[key] with Ok lowered -> Some (key, lowered) | Error _ -> None)
         |> List.ofSeq
     { Roots =
-        keptFunctions
+        lowered
         |> List.filter (fun ((_, typeArguments), _) -> typeArguments.IsEmpty)
         |> List.map (fun ((name, _), lowered) -> name, lowered)
         |> Map.ofList
       Specialisations =
-        keptFunctions
+        lowered
         |> List.filter (fun ((_, typeArguments), _) -> not typeArguments.IsEmpty)
         |> List.groupBy (fun ((name, _), _) -> name)
         |> List.map (fun (name, items) -> name, items |> List.map snd)
         |> Map.ofList
-      Fallbacks =
+      Failures =
         order
         |> Seq.distinct
-        |> Seq.filter (fun ((_, typeArguments) as key) -> typeArguments.IsEmpty && not (kept.Contains key))
-        |> Seq.map (fun ((name, _) as key) -> name, fallbackReason key)
-        |> Map.ofSeq }
-
+        |> Seq.choose (fun ((name, _) as key) ->
+            match results.[key] with
+            | Error (reason, span) -> Some (name, reason, span |> Option.orElse (definitions |> Map.tryFind name |> Option.map _.Span))
+            | Ok _ -> None)
+        |> List.ofSeq }
 /// Runs `action` on a thread with a stack large enough for the lowering, which recurses once per statement of a block
 /// (each statement's lowering continues into the next) and so goes deep in a long function.
 let private withLargeStack (action: unit -> 'T) : 'T =

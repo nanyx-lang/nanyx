@@ -198,3 +198,20 @@ let ``Run - a lone else in a match on several values`` () =
         "}\n" +
         "println(describe(0, 0) ++ \", \" ++ describe(0, 5) ++ \", \" ++ describe(3, 4))\n"
     runSource source |> assertRan "origin, on the y axis, elsewhere\n"
+
+[<Fact>]
+let ``Run - an arm for a tag the value cannot have never matches`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def simple = #nil\n" +
+        "\n" +
+        "def check = match simple\n" +
+        "  | #nil -> \"empty\"\n" +
+        "  | #some x -> \"has value\"\n" +
+        "  | else -> \"other\"\n" +
+        "\n" +
+        "println(check)\n"
+    let outcome = runSource source
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("empty\n", outcome.StandardOutput)

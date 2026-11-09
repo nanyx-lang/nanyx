@@ -1,6 +1,5 @@
 module TranspilerWasmTests.Features.Core.CoreIr
 
-open System.IO
 open System.Text.RegularExpressions
 open Xunit
 open NyxCompiler
@@ -14,24 +13,20 @@ let private typedModule (source: string) =
     Assert.True(errors.IsEmpty, $"Unexpected errors: %A{errors}")
     result.Typed.Value
 
-let private compileWithReport (source: string) =
-    transpileTypedModuleWithReport { UseCoreIr = true } (typedModule source)
+let private compileWithReport (source: string) = transpileTypedModuleWithReport (typedModule source)
 
 let private count (text: string) (wat: string) = Regex.Matches(wat, Regex.Escape text).Count
 
-/// `wat` with the specialisations the core IR made taken out, and calls to them made to the definition they
-/// specialise: what the old path compiles a generic definition's callers to.
-let private withoutSpecialisations (report: CoreIrReport) (wat: string) =
-    report.Specialisations
-    |> List.fold (fun (text: string) (specialisation, definition) ->
-        let start = text.IndexOf($"\n\n  (func ${specialisation} ")
-        let text =
-            if start < 0 then text
-            else text.Remove(start, text.IndexOf("\n  )", start) + "\n  )".Length - start)
-        Regex.Replace(text, $@"\${Regex.Escape specialisation}(?![\w$])", "$" + definition)) wat
+/// The diagnostic the backend gives `source`, which type-checks but which it cannot compile.
+let private backendError (source: string) =
+    match tryTranspileTypedModuleToWat (typedModule source) with
+    | Ok _ -> failwith "Expected the backend to fail"
+    | Error diagnostic ->
+        Assert.Equal(DiagnosticCodes.UnsupportedByBackend.Code, diagnostic.Code)
+        diagnostic.Message
 
 [<Fact>]
-let ``A function the core IR can lower goes through it, and one it cannot falls back`` () =
+let ``Every function goes through the core IR`` () =
     let source =
         "def add = { x, y -> x + y }\n" +
         "\n" +
@@ -44,29 +39,22 @@ let ``A function the core IR can lower goes through it, and one it cannot falls 
         "  match classify(n)\n" +
         "    | #big(d) -> d\n" +
         "    | #small -> 0\n" +
-        "}\n" +
-        "\n" +
-        "def shout: (int, int) -> (int, int) = { t -> dbg(t) }\n"
+        "}\n"
     let _, report = compileWithReport source
-    Assert.Equal<string list>([ "add"; "classify"; "size" ], report.FromCoreIr)
-    let reason = report.Fallbacks |> List.find (fst >> (=) "shout") |> snd
-    // The old path prints a tuple's pointer; the IR does not print a record at all.
-    Assert.Equal("`dbg` of a value of type (0: int, 1: int)", reason)
+    Assert.Equal<string list>([ "add"; "classify"; "size" ], report.Functions)
 
 [<Fact>]
-let ``A function that calls one the core IR cannot specialise falls back too`` () =
-    // `show` is generic and its body is out of the core IR's reach, so `main` cannot call a specialisation of it.
-    let source =
-        "def show = { x ->\n" +
-        "  def pair = (x, 1)\n" +
-        "  dbg(pair).1\n" +
-        "}\n" +
-        "\n" +
-        "def main = show(1)\n"
-    let wat, report = compileWithReport source
-    Assert.Empty(report.FromCoreIr)
-    Assert.Equal("it calls 'show' at a type the IR could not lower it at", report.Fallbacks |> List.find (fst >> (=) "main") |> snd)
-    Assert.Contains("call $show", wat)
+let ``Comparing or printing a record is a compile error`` () =
+    // `==` is built in only for numbers, strings and tags, and `dbg` prints no record.
+    Assert.Equal(
+        "The WebAssembly backend cannot compile `dbg` of a value of type (0: int, 1: int) yet",
+        backendError "def shout: (int, int) -> (int, int) = { t -> dbg(t) }\n")
+    Assert.Equal(
+        "The WebAssembly backend cannot compile the operator == on a value of type (a: int) yet",
+        backendError "def same: (a: int), (a: int) -> bool = { x, y -> x == y }\n")
+    Assert.Equal(
+        "The WebAssembly backend cannot compile the operator == on a value of type list(int) yet",
+        backendError "def same: list(int), list(int) -> bool = { x, y -> x == y }\n")
 
 [<Fact>]
 let ``A generic function is emitted once per instantiation`` () =
@@ -81,14 +69,14 @@ let ``A generic function is emitted once per instantiation`` () =
         "  b\n" +
         "}\n"
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "id__int"; "id__string"; "id__tags_ok"; "main" ], report.FromCoreIr)
+    Assert.Equal<string list>([ "id__int"; "id__string"; "id__tags_ok"; "main" ], report.Functions)
     Assert.Equal(1, count "(func $id__int " wat)
     Assert.Equal(1, count "(func $id__string " wat)
     Assert.Equal(1, count "(func $id__tags_ok " wat)
     Assert.Equal(2, count "call $id__int\n" wat)
-    // The definition itself is still compiled the old way, unspecialised, for the callers the core IR cannot lower.
-    Assert.Equal(1, count "(func $id " wat)
-    Assert.Equal("it is generic: each instantiation is lowered where it is called", report.Fallbacks |> List.find (fst >> (=) "id") |> snd)
+    // A generic definition exists only as its specialisations.
+    Assert.Equal(0, count "(func $id " wat)
+    Assert.Equal(0, count "(export \"id\"" wat)
 
 [<Fact>]
 let ``A specialisation specialises the generic functions it calls`` () =
@@ -110,7 +98,7 @@ let ``A specialisation specialises the generic functions it calls`` () =
         "}\n"
     let wat, report = compileWithReport source
     for name in [ "wrap__int"; "wrap__string"; "orElse__int"; "orElse__string"; "roundTrip__int"; "roundTrip__string" ] do
-        Assert.Contains(name, report.FromCoreIr)
+        Assert.Contains(name, report.Functions)
         Assert.Equal(1, count $"(func ${name} " wat)
     Assert.Contains("call $wrap__string\n    local.get $fallback\n    return_call $orElse__string", wat)
 
@@ -145,7 +133,7 @@ let ``Records, tuples and nominal values go through the core IR`` () =
         "  older(make(3)).age + pence($Money(250)) + add(pair) + named + swapped(pair).0\n" +
         "}\n"
     let _, report = compileWithReport source
-    Assert.Equal<string list>([ "make"; "older"; "swapped"; "pence"; "add"; "stepped"; "main" ], report.FromCoreIr)
+    Assert.Equal<string list>([ "make"; "older"; "swapped"; "pence"; "add"; "stepped"; "main" ], report.Functions)
 
 [<Fact>]
 let ``Strings, lists and intrinsics go through the core IR`` () =
@@ -173,7 +161,7 @@ let ``Strings, lists and intrinsics go through the core IR`` () =
         "\n" +
         "def main = heads([1, 2] ++ [3]) + word(\"yes\") + size(greet(\"Ada\"))\n"
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.FromCoreIr)
+    Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.Functions)
     Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)
     Assert.Contains("call $__nanyx_list_concat", wat)
     Assert.Contains("call $__nanyx_tag_equals", wat)
@@ -196,7 +184,7 @@ let ``Interpolated strings and dbg go through the core IR`` () =
         "  n\n" +
         "}\n"
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "pick"; "describe"; "nested"; "debugs" ], report.FromCoreIr)
+    Assert.Equal<string list>([ "pick"; "describe"; "nested"; "debugs" ], report.Functions)
     // A string inside another's hole keeps to its own hole locals.
     Assert.Contains("local.set $__interp_hole_1_0", wat)
     Assert.Contains("call $dbg_tag_payload_some", wat)
@@ -223,7 +211,7 @@ let ``Lambdas, closures and function values go through the core IR`` () =
     let wat, report = compileWithReport source
     // A lambda written in a generic function is specialised with it; one written in `main` keeps its own name.
     for name in [ "compose__int__int__int"; "__lambda_0__int__int__int"; "__rec_loop_1"; "__lambda_2"; "__fn_double"; "main" ] do
-        Assert.Contains(name, report.FromCoreIr)
+        Assert.Contains(name, report.Functions)
     // Calls through function values, and closure blocks holding a table slot and what they capture.
     Assert.Contains("call_indirect (type $ctx_fn_2)", wat)
     Assert.Contains("call $__nanyx_alloc", wat)
@@ -252,7 +240,7 @@ let ``Functions that require contexts, and their callers, go through the core IR
     let wat, report = compileWithReport source
     // `plain` is specialised for `Point`, with the instance built from `Point.show` passed as its member.
     for name in [ "twice"; "plain__rec_x_int_y_int"; "main"; "__fn_Point_show" ] do
-        Assert.Contains(name, report.FromCoreIr)
+        Assert.Contains(name, report.Functions)
     // Each member arrives in a parameter of its own, after the function's own parameters.
     Assert.Contains("(func $twice (param $__ctx_ask i32) (result i32)", wat)
 
@@ -276,7 +264,7 @@ let ``Floats, pipes, guards and for loops go through the core IR`` () =
         "  0\n" +
         "}\n"
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "area"; "size"; "double"; "total" ], report.FromCoreIr)
+    Assert.Equal<string list>([ "area"; "size"; "double"; "total" ], report.Functions)
     Assert.Contains("loop $__for_next_0", wat)
     Assert.Contains("f64.mul\n    call $__nanyx_float_box", wat)
 
@@ -292,8 +280,8 @@ let ``The start function and errors deferred to run time go through the core IR`
         "dbg(fine(1))\n" +
         "dbg(broken(2))\n"
     let result = Compiler.compile source
-    let wat, report = transpileTypedModuleWithReport { UseCoreIr = true } result.Typed.Value
-    Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], report.FromCoreIr)
+    let wat, report = transpileTypedModuleWithReport result.Typed.Value
+    Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], report.Functions)
     Assert.Contains("call $proc_exit\n    unreachable", wat)
     Assert.Contains("(start $__nanyx_start)", wat)
 
@@ -307,8 +295,8 @@ let ``A generic function imported from another module is specialised where it is
     let _, report = compileWithReport source
     let mapSpecialisations = report.Specialisations |> List.filter (snd >> (=) "List_map") |> List.map fst
     Assert.Equal<string list>([ "List_map__int__int"; "List_map__bool__int" ], mapSpecialisations)
-    Assert.Contains("doubled", report.FromCoreIr)
-    Assert.Contains("positives", report.FromCoreIr)
+    Assert.Contains("doubled", report.Functions)
+    Assert.Contains("positives", report.Functions)
 
 [<Fact>]
 let ``A generic function over an open union, and a list's length, go through the core IR`` () =
@@ -319,8 +307,8 @@ let ``A generic function over an open union, and a list's length, go through the
         "\n" +
         "def count: list(int) -> int = { xs -> xs.length }\n"
     let _, report = compileWithReport source
-    Assert.Contains("bump", report.FromCoreIr)
-    Assert.Contains("count", report.FromCoreIr)
+    Assert.Contains("bump", report.Functions)
+    Assert.Contains("count", report.Functions)
     Assert.Contains("Option_map", report.Specialisations |> List.map snd)
     Assert.Contains("List_length", report.Specialisations |> List.map snd)
 
@@ -329,8 +317,8 @@ let ``A type variable that nothing constrains is unit in the core IR`` () =
     // The element of `[]` is fixed by nothing: no value of it can be made or inspected.
     let source = "def none: () -> int = { List.length([]) }\n"
     let _, report = compileWithReport source
-    Assert.Contains("none", report.FromCoreIr)
-    Assert.Contains("List_length__unit", report.FromCoreIr)
+    Assert.Contains("none", report.Functions)
+    Assert.Contains("List_length__unit", report.Functions)
 
 [<Fact>]
 let ``A guard compares to what any expression computes, in the core IR`` () =
@@ -344,7 +332,7 @@ let ``A guard compares to what any expression computes, in the core IR`` () =
         "    | else -> 0\n" +
         "}\n"
     let wat, report = compileWithReport source
-    Assert.Contains("size", report.FromCoreIr)
+    Assert.Contains("size", report.Functions)
     Assert.Contains("call $limit\n    i32.const 2\n    i32.mul\n      i32.ge_s", wat)
 
 [<Fact>]
@@ -358,7 +346,7 @@ let ``A function that reads a field of any record is specialised for each layout
         "}\n"
     let wat, report = compileWithReport source
     // One specialisation per layout, named by the record's other fields.
-    Assert.Equal<string list>([ "nOf__int__rec_"; "nOf__int__rec_a_int"; "nOf__int__rec_a_int_b_int"; "main" ], report.FromCoreIr)
+    Assert.Equal<string list>([ "nOf__int__rec_"; "nOf__int__rec_a_int"; "nOf__int__rec_a_int_b_int"; "main" ], report.Functions)
     // Each reads `n` from where its layout puts it, rather than looking the field up at run time.
     for name, offset in [ "nOf__int__rec_", 0; "nOf__int__rec_a_int", 4; "nOf__int__rec_a_int_b_int", 8 ] do
         Assert.Contains($"(func ${name} (param $r i32) (result i32)\n    local.get $r\n    i32.const {offset}\n    i32.add\n    i32.load\n  )", wat)
@@ -390,26 +378,3 @@ let ``Every intermediate value in the core IR is named`` () =
         "  let __t4: int = y - 2\n" +
         "  __t3 * __t4"
     Assert.Equal(expected, printed)
-
-/// The E2E programs that type-check on their own, compiled with and without the core IR.
-let private e2ePrograms () =
-    let root = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "E2E")
-    Directory.GetDirectories root
-    |> Array.sort
-    |> Array.choose (fun dir ->
-        let result = Compiler.compileFile (Path.Combine(dir, "input.nyx"))
-        match result.Typed with
-        | Some typed when result.Diagnostics |> List.forall (fun d -> d.Severity <> Severity.Error) -> Some (Path.GetFileName dir, typed)
-        | _ -> None)
-
-[<Fact>]
-let ``The core IR compiles what it lowers as the old path does`` () =
-    let programs = e2ePrograms ()
-    let mutable lowered = 0
-    for name, typed in programs do
-        let withCoreIr, report = transpileTypedModuleWithReport { UseCoreIr = true } typed
-        let withoutCoreIr, _ = transpileTypedModuleWithReport { UseCoreIr = false } typed
-        lowered <- lowered + report.FromCoreIr.Length
-        Assert.True((withoutSpecialisations report withCoreIr = withoutCoreIr), $"{name} compiles differently through the core IR")
-    // Not a vacuous comparison: the programs give the core IR plenty to lower.
-    Assert.True(lowered >= 10, $"Only {lowered} functions went through the core IR")
