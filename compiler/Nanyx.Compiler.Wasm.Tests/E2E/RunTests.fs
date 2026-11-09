@@ -887,12 +887,78 @@ let ``Run - importing an unknown standard library module is a diagnostic`` () =
     Assert.Contains("Unknown standard library module 'nanyx/sockets'", outcome.StandardError)
 
 [<Fact>]
-let ``Run - a compile error exits 1 with the diagnostic on stderr`` () =
-    let outcome = runSource "import nanyx/console\n\nprintln(42)\n"
+let ``Run - a compile error that cannot be deferred exits 1 with the diagnostic on stderr`` () =
+    // An error in a type definition is not deferred to run time, so nothing runs.
+    let outcome = runSource "import nanyx/console\n\ntype T = (a: Missing)\nprintln(\"never\")\n"
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    // `file:line:col: error CODE: message`, at the argument.
-    Assert.Contains(":3:9: error NYX0201: Type mismatch", outcome.StandardError)
+    // `file:line:col: error CODE: message`, at the type.
+    Assert.Contains(":3:14: error NYX0109: Unknown type 'Missing'", outcome.StandardError)
+    Assert.DoesNotContain("deferred", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a type error that is never reached does not stop the program`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def unused = { x -> missing(x) }\n" +
+        "\n" +
+        "println(\"fine\")\n"
+    let outcome = runSource source
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("fine\n", outcome.StandardOutput)
+    Assert.Contains(":3:21: error NYX0102: Unknown function 'missing'", outcome.StandardError)
+    Assert.Contains("Running with 1 deferred error", outcome.StandardError)
+    Assert.DoesNotContain("(deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - reaching a deferred error reports it and stops the program`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def broken = { x -> missing(x) }\n" +
+        "\n" +
+        "println(\"before\")\n" +
+        "broken(1)\n" +
+        "println(\"after\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains(":3:21: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a non-exhaustive match runs the cases it handles and traps on the rest`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def name: #a | #b | #c -> string = { x ->\n" +
+        "  match x\n" +
+        "  | #a -> \"a\"\n" +
+        "  | #b -> \"b\"\n" +
+        "}\n" +
+        "\n" +
+        "println(name(#a))\n" +
+        "println(name(#b))\n" +
+        "println(name(#c))\n" +
+        "println(\"never\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("a\nb\n", outcome.StandardOutput)
+    Assert.Contains(":4:9: error NYX0203: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - each kind of deferred error traps where it was found`` () =
+    let run body = runSource ("import nanyx/console\n\n" + body + "\nprintln(\"start\")\nprintln(f(1))\n")
+    // A type mismatch, an unknown name inside a def, and a def whose annotation names an unknown type.
+    for body, expected in
+        [ "def f = { x -> if x == 1 then \"one\" else 2 }", "Type mismatch"
+          "def f = { x ->\n  def y = nope\n  \"{y}\"\n}", "Unknown identifier 'nope'"
+          "def f: Missing -> string = { x -> \"one\" }", "Unknown type 'Missing'" ] do
+        let outcome = run body
+        Assert.True((outcome.ExitCode = 1), $"Expected exit code 1 for {body}, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
+        Assert.Equal("start\n", outcome.StandardOutput)
+        Assert.Contains($"{expected}", outcome.StandardError)
+        Assert.Contains("(deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - matching on string literals`` () =

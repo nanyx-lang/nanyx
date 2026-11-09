@@ -2,8 +2,8 @@
 
 > **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
 > the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
-> The type checker recovers from errors (stage 1 of the [plan](#plan)): it reports every error in a module and
-> types the module all the same. Turning the errors into traps is next. It is part of the [compilation](compilation.md) workstream, and
+> The type checker recovers from errors, and `nanyx run` on a file runs a program whose errors are all deferred to
+> traps (stages 1 and 2 of the [plan](#plan)). The CLI's debug and release modes are next. It is part of the [compilation](compilation.md) workstream, and
 > its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 ## Summary
@@ -34,11 +34,11 @@ Any error stops the build, at three points:
 Non-exhaustive matches are a hard error today too, although the principles say a debug build should panic when
 an unhandled case is reached. They fall under this design.
 
-The backend's code is type-directed, which rules out the obvious shortcut. Values are unboxed (`i64` for `int`,
-`f64` for `float`, `i32` for pointers into linear memory), and which instructions an operator becomes depends on
-its operand types (`+` on strings calls the concatenation helper). Badly typed code cannot be lowered "dynamically"
-without a second, boxed representation of every value and runtime type checks on every operation. That is a large
-second backend to keep in step with the first, for code that is about to be fixed; this design does not do it.
+The backend's code is type-directed, which rules out the obvious shortcut: which instructions an operator becomes
+depends on its operand types (`+` on strings calls the concatenation helper). Badly typed code cannot be lowered
+"dynamically" without runtime type checks on every operation. That is a second backend to keep in step with the
+first, for code that is about to be fixed; this design does not do it. (Every value is the same size, an `i32`,
+which [makes traps easy](#errors-become-traps).)
 
 ## Design
 
@@ -69,8 +69,10 @@ How it is built:
 - **What is done with an error-typed value** is not another error: reading a member of it, or piping it to a name
   attached to no type, gives the error type again (the pipe's arguments are still checked).
 - **A def that fails to check** before its body is inferred (its annotation names an unknown type, say) is
-  reported, and the module is checked on without it. An unannotated one is bound at the error type from then on;
-  an annotated one stays bound at its annotation.
+  reported, and bound at the error type from then on, annotated or not, since its annotation may be what failed.
+  It stays in the module, with its body (or, for a value, the whole def) recorded in `FailedExprs`.
+- **A match that does not handle every case** is reported and typed as if it did, and recorded in
+  `UnhandledMatches`.
 - **A conflict among the constraints** is reported, and the constraints from where it was found are set aside
   before the rest are solved again (`Unifier.solve`). The constraints solved part-way through inference, to read a
   record's fields say, are solved the same way, so a conflict in one def does not leave the types in the next
@@ -108,6 +110,26 @@ expression of any type. Two rules keep the rest of the function valid:
   after any expression of type `never`.
 - **Effects to its left still happen.** Evaluation order is kept up to the error: `println("a"); f(bad)` prints
   `a` and then traps, and in `f(a(), bad, c())` the call `a()` runs and `c()` does not.
+
+How it is built:
+
+- **The values are uniform,** which makes the first rule above unnecessary. Every Nanyx value is an `i32` in the
+  backend: an immediate or a pointer (a float is boxed), so a trap's `unreachable` stands in for any expression and
+  the code after it still validates. Nothing is cut off after a trap.
+- **The deferral pass** is `Compiler.deferErrors` in [Library.fs](../Nanyx.Compiler/Library.fs), run as the typed
+  module's items are lowered for the backend. Each node in `FailedExprs` becomes `__panic("<message>")`. A conflict
+  among the constraints is only known by where it was found, so it replaces the outermost expression at that span.
+  A match in `UnhandledMatches` gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message
+  is the diagnostic as `nanyx` prints it, with `(deferred from compile time)`.
+- **`__panic`** lowers to a write of its message to stderr and `unreachable`.
+- **What the backend cannot lower because of an error.** The backend still looks at types in places: an
+  interpolated value of the error type has no known way to print. A function body or top-level expression that
+  holds a deferred error and that the backend cannot lower traps with the errors in it, as soon as it runs.
+- **What cannot be deferred.** An error the pass places nowhere (one in a type definition, or a conflict found at a
+  pattern) leaves `CompileResult.ErrorsDeferred` false, and the program is not run.
+- **`nanyx run`** on a file runs the program when every error was deferred, after the diagnostics and a line
+  saying how many there are ("Running with 2 deferred errors"). Reaching one writes it again and exits with 1,
+  followed for now by Wasmtime's trap report.
 
 ### Broken definitions
 
@@ -158,7 +180,12 @@ for red-green iteration.
 2. **Deferral pass and `Panic`.** Mark erroneous expressions and definitions in the typed AST, rewrite them to
    `Panic`, add the runtime helper (write to stderr, then `unreachable`), and cut sequences off after a panic.
    Make non-exhaustive matches deferred too.
+   - [x] Done, with no cutting off needed (see [Errors become traps](#errors-become-traps)); `nanyx run` on a file
+     runs a program whose errors are all deferred.
 3. **CLI modes.** Make `run` and `build` debug, add `--release`, and print the deferred-error count.
+   - [x] `run` on a file, with the count.
+   - [ ] `run` on a package, `build` and `build --release`.
+   - [ ] Report reaching a deferred error without Wasmtime's trap report after it.
 4. **Wider deferral,** if it is wanted: type definitions and imports, then (with parser recovery) a top-level
    definition that does not parse.
 

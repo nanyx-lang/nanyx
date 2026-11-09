@@ -1447,6 +1447,12 @@ let private exprChildren (expr: Expression) : Expression list =
     | LiteralExpr _
     | IdentifierExpr _ -> []
 
+/// The messages of the errors deferred to run time inside `expr` (see the `__panic` case of `transpileExpression`).
+let rec private deferredErrorMessages (expr: Expression) : string list =
+    match expr.Kind with
+    | FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]) -> [ message ]
+    | _ -> exprChildren expr |> List.collect deferredErrorMessages
+
 /// Whether lowering `expr` needs the interpolation scratch locals (see `interpolationLocalNames`).
 /// Used for function bodies and for the script start function alike, so both declare the same locals.
 /// `dbg` of a value that may be a tag prints it as `"{value}"` does (see the `dbg` case of
@@ -2731,6 +2737,12 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
               yield! stores
               "i32.const 4\n    i32.add" ]
             |> String.concat "\n    "
+    // A type or name error deferred to run time (see `Compiler.deferErrors`): its message goes to stderr, then the
+    // program traps. Every value is 32-bit, and `unreachable` fits wherever one is expected, so the code around it
+    // stays valid.
+    | FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]) ->
+        env.UsedHelpers.Add Helpers.writeStderr |> ignore
+        $"{stringLiteralCode message}\n    call ${Helpers.writeStderr}\n    unreachable"
     | FunctionCall("__range", _, _) ->
         failwith "Unsupported for WASM MVP backend: a range is only supported as the iterable of a for loop"
     | FunctionCall("__closure", _, fields) ->
@@ -3126,6 +3138,22 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
 /// written in the source.
 and private transpileExpression (env: TranspileEnv) (expr: Expression) : string =
     locatedAt expr.Span (fun () -> transpileExpressionUnplaced env expr)
+
+/// `transpileExpression`, for a function's body or a top-level expression. One that holds an error deferred to run
+/// time may be what the backend cannot lower because of that error (a value of no known type to interpolate, say),
+/// so then it traps with the errors in it, as soon as it runs, instead.
+let private transpileDeferring (env: TranspileEnv) (expr: Expression) : string =
+    match deferredErrorMessages expr with
+    | [] -> transpileExpression env expr
+    | messages ->
+        try
+            transpileExpression env expr
+        with
+        | UnsupportedConstruct _
+        | Failure _ ->
+            env.UsedHelpers.Add Helpers.writeStderr |> ignore
+            let writes = messages |> List.map (fun message -> $"i32.const {env.StringLiterals.[message]}\n    call ${Helpers.writeStderr}")
+            writes @ [ "unreachable" ] |> String.concat "\n    "
 
 let private defBodyAndParameters (expr: Expression) =
     match expr.Kind with
@@ -4093,7 +4121,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   "(result i32)"
                   if not (String.IsNullOrWhiteSpace localsSig) then localsSig ]
                 |> String.concat " "
-            let bodyCode = transpileExpression env bodyExpr
+            let bodyCode = transpileDeferring env bodyExpr
             if exportFn then
                 $"  (func ${fn} {functionHeader}\n    {bodyCode}\n  )\n  (export \"{name}\" (func ${fn}))"
             else
@@ -4237,7 +4265,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   TailCalls = Set.empty }
             let bodyCode =
                 topLevelExprs
-                |> List.map (fun expr -> $"{transpileExpression env expr}\n    drop")
+                |> List.map (fun expr -> $"{transpileDeferring env expr}\n    drop")
                 |> String.concat "\n    "
             let header =
                 if String.IsNullOrWhiteSpace localsSig then ""

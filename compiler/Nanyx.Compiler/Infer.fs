@@ -123,7 +123,10 @@ type InferState =
             InstanceContexts: Map<string, TypeExpr>;
             /// The expressions that failed to check, each by its node with its diagnostics, the latest first. Each is
             /// typed as anything, and checking carries on around it.
-            FailedExprs: (NodeId * Diagnostic list) list }
+            FailedExprs: (NodeId * Diagnostic list) list;
+            /// The matches that do not handle every case, each by its node with its diagnostics, the latest first.
+            /// Each is typed as if it did.
+            UnhandledMatches: (NodeId * Diagnostic list) list }
 
 let emptyState =
         { NextId = 0;
@@ -164,7 +167,8 @@ let emptyState =
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
             InstanceContexts = Map.empty;
-            FailedExprs = [] }
+            FailedExprs = [];
+            UnhandledMatches = [] }
 
 let private freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
@@ -2449,15 +2453,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         []
                     else
                         exhaustivenessDiagnostics ()
-                match restError with
-                | Some diag -> Error [ diag ]
-                | None ->
-                    if not exhaustivenessErrors.IsEmpty then
-                        Error exhaustivenessErrors
-                    else
-                    let armTypes = armExprs |> List.rev |> List.map (fun typedExpr -> typedExpr.Type)
-                    let resultTy, constrained = joinBranchTypes rowVars current armTypes
-                    Ok (mkTypedExpr expr resultTy None None (Some typedArms), constrained)
+                let armTypes = armExprs |> List.rev |> List.map (fun typedExpr -> typedExpr.Type)
+                let resultTy, constrained = joinBranchTypes rowVars current armTypes
+                // A match that does not handle every case is reported, and typed as if it did: a debug build gives it
+                // an arm that traps on the cases it leaves out.
+                let unhandled = Option.toList restError @ exhaustivenessErrors
+                let constrained =
+                    if unhandled.IsEmpty then constrained
+                    else { constrained with UnhandledMatches = (expr.Id, unhandled) :: constrained.UnhandledMatches }
+                Ok (mkTypedExpr expr resultTy None None (Some typedArms), constrained)
             else
                 Error errors
     | MemberAccess(baseExpr, memberName, spanOpt) ->
@@ -2867,13 +2871,22 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some info -> acc |> Map.add alias info
                     | None -> acc) state.TypeDefs }
 
-    // A def that fails to check is reported, and the module is checked on without it. An unannotated one is bound at
-    // the error type from then on, so the uses of a broken def are not errors too.
-    let abandon (name: string) (diagnostics: Diagnostic list) =
-        errors <- errors @ diagnostics
-        match preboundFreshVars |> Map.tryFind name, TypeEnv.tryFind name env with
-        | Some _, Some scheme -> env <- declareTopLevel name scheme.Symbol (TypeEnv.mono Unifier.errorType) env
-        | _ -> ()
+    // A def that fails to check is reported, and bound at the error type from then on, so its uses are not errors too:
+    // its annotation may be what failed.
+    //
+    // It stays in the module, failed as a whole, so a debug build can defer it: a function's body traps, so calls to
+    // it still compile, and a value traps where it is computed. It keeps no annotation.
+    let abandon isExport (name: string) (expr: Expression) (diagnostics: Diagnostic list) =
+        let failedNode =
+            match expr.Kind with
+            | Lambda(_, body) -> body
+            | _ -> expr
+        state <- { state with FailedExprs = (failedNode.Id, diagnostics) :: state.FailedExprs }
+        types <- types |> Map.add name Unifier.errorType
+        items <- items @ [ TypedDef (TypedValueDef(isExport, name, None, mkTypedExpr expr Unifier.errorType None None None)) ]
+        match TypeEnv.tryFind name env with
+        | Some scheme -> env <- declareTopLevel name scheme.Symbol (TypeEnv.mono Unifier.errorType) env
+        | None -> ()
 
     for item in module' do
         match item.Kind with
@@ -2888,7 +2901,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 | Some typeExpr -> inferTypeOfValues (withoutTopLevel name env) state typeExpr
                 | None -> Ok state
             match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
-            | Error err -> abandon name err
+            | Error err -> abandon isExport name expr err
             | Ok inferredState ->
                 state <- inferredState
                 let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
@@ -2970,7 +2983,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr
                         | None -> Ok ()
                     match rigidResult with
-                    | Error err -> abandon name err
+                    | Error err -> abandon isExport name expr err
                     | Ok () ->
                         // Generalize against an env without this def's own pre-binding, so the fresh
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
@@ -2981,7 +2994,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         env <- declareTopLevel name symbol scheme env
                         types <- types |> Map.add name declaredTy
                         items <- items @ [ TypedDef (TypedValueDef(isExport, name, typeOpt, typedExpr)) ]
-                | Error err -> abandon name err
+                | Error err -> abandon isExport name expr err
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
@@ -3040,7 +3053,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
 
     // The defs that failed and the expressions that failed inside the others, in the order they are in the source. An
     // expression inferred more than once (a lambda checked again against its expected type) is reported once.
-    let failedExprErrors = state.FailedExprs |> List.rev |> List.collect snd
+    let failedExprErrors = state.FailedExprs @ state.UnhandledMatches |> List.rev |> List.collect snd
     let allErrors =
         errors @ failedExprErrors
         |> List.distinct

@@ -83,9 +83,12 @@ module Script =
                           Severities = settings |> List.choose snd |> Map.ofList }
               Diagnostics = results |> List.choose (function Result.Error diagnostic -> Some diagnostic | Result.Ok _ -> None) }
 
-    /// `result` with the problems with `directives` before its own diagnostics.
+    /// `result` with the problems with `directives` before its own diagnostics. An error in a directive is not
+    /// deferred: it stops a debug run too.
     let withDirectives (directives: ScriptDirectives) (result: CompileResult) : CompileResult =
-        { result with Diagnostics = directives.Diagnostics @ result.Diagnostics }
+        { result with
+            Diagnostics = directives.Diagnostics @ result.Diagnostics
+            ErrorsDeferred = result.ErrorsDeferred && not (directives.Diagnostics |> List.exists Diagnostics.isError) }
 
     /// Compiles `source` as the script at `filePath`, with the analyzers its directives give, or every analyzer at its
     /// defaults if they give none, as `nanyx run` does.
