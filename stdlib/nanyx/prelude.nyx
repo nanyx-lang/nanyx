@@ -63,11 +63,7 @@ export type Result(a, e) = #some(a) | #error(e)
 -- `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
 -- `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
 export def proc
-  : (
-    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r
-    return: a -> #some(a) | r
-    zero: #some(()) | r
-  )
+  : (try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some(()) | r)
   = (
     try = {
       | #some(value), continue -> continue(value)
