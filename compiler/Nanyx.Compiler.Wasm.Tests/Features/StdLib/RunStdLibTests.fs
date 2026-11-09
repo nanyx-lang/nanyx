@@ -183,6 +183,18 @@ let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
     runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#some(-17)\n#some(70000)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
 
 [<Fact>]
+let ``Run - Int.sort and Int.sort3 return values in ascending order`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def a, b = Int.sort(3, -1)\n" +
+        "def c, d = Int.sort(-2, -2)\n" +
+        "def e, f, g = Int.sort3(3, -1, 2)\n" +
+        "def h, i, j = Int.sort3(5, 1, 3)\n" +
+        "println(\"{a} {b} {c} {d} {e} {f} {g} {h} {i} {j}\")\n"
+    runSource source |> assertRan "-1 3 -2 -2 -1 2 3 1 3 5\n"
+
+[<Fact>]
 let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
     let source =
         "import nanyx/console\n" +

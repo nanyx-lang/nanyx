@@ -32,9 +32,9 @@ let interpolatedStringExprNoWs: Parser<Expression, ParseState> =
             LiteralExpr (StringLit text)
     spanned (between (pstring "\"") (pstring "\"") partsParser |>> toKind)
 
-// `def (x, y) = value` binds each element of a tuple. It is desugared in the parser into a binding of the
-// whole value plus one `def` per element (`def x = __tuple.0`), so the rest of the compiler only ever sees
-// plain defs. This form takes only names, `_` and nested tuples, which cannot fail to match; any other pattern
+// `def (x, y) = value` and `def x, y = value` bind each element of a tuple. They are desugared in the parser into a
+// binding of the whole value plus one `def` per element (`def x = __tuple.0`), so the rest of the compiler only ever
+// sees plain defs. These forms take only names, `_` and nested tuples, which cannot fail to match; any other pattern
 // is bound through a match instead (see `matchingBindings`).
 let private destructuringBindings (position: Position) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
     let temp = $"__tuple_{position.Line}_{position.Column}"
@@ -76,9 +76,15 @@ let private matchingBindings (position: Position) (pattern: Pattern) (names: Ide
 /// `[export] def pattern = value`, as the export flag and the bindings it stands for. A bare name is not a
 /// pattern here: that is an ordinary def.
 let destructuringDefWith (lineStartCol: int64) (exprParser: Parser<Expression, ParseState>) : Parser<bool * (Identifier * Expression) list, ParseState> =
+    let patternList =
+        withSpan (sepBy1 pattern (pstring "," .>> ws))
+        |>> fun (patterns, span) ->
+            match patterns with
+            | [ single ] -> single
+            | several -> Pattern.at span (TuplePattern several)
     pipe3
         (opt (attempt (pstring "export" >>. ws)))
-        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames pattern .>> wsNoNl()))
+        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames patternList .>> wsNoNl()))
         (defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser)
         (fun exportOpt (position, pattern) value -> exportOpt.IsSome, position, pattern, value)
     >>= fun (isExport, position, (pattern, names), value) ->
@@ -1542,4 +1548,3 @@ let parseModuleFile (filePath: string) (input: string) : Result<Module, string> 
 
 /// Parses source that has no file of its own.
 let parseModule (input: string) : Result<Module, string> = parseModuleFile "" input
-

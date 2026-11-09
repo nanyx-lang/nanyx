@@ -17,6 +17,17 @@ let ``def (x, y) desugars into a whole-value binding and one def per element`` (
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``def x, y destructures a tuple into separate bindings`` () =
+    match parseModule "def x, y = pair" with
+    | Result.Ok [ Kind (Def (ValueDef (_, temp, None, Kind (IdentifierExpr "pair"))))
+                  Kind (Def (ValueDef (_, "x", None, Kind (MemberAccess (Kind (IdentifierExpr temp1), "0", None)))))
+                  Kind (Def (ValueDef (_, "y", None, Kind (MemberAccess (Kind (IdentifierExpr temp2), "1", None))))) ] ->
+        temp1 |> should equal temp
+        temp2 |> should equal temp
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
 let ``def with a nested tuple pattern destructures through member access chains`` () =
     match parseModule "def main = {\n  def (a, (b, c)) = v\n  a\n}" with
     | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, _, None, Kind (IdentifierExpr "v")))

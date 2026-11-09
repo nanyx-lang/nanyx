@@ -45,6 +45,19 @@ let ``Int.parse is in the prelude`` () =
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
+let ``Int.sort and Int.sort3 are attached functions in the prelude`` () =
+    let source =
+        "def pair = Int.sort(3, -1)\n" +
+        "def triple = Int.sort3(3, -1, 2)\n" +
+        "def piped = 3 \\ sort(-1)"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    Assert.Equal("(int, int)", typeOf "pair")
+    Assert.Equal("(int, int, int)", typeOf "triple")
+    Assert.Equal("(int, int)", typeOf "piped")
+
+[<Fact>]
 let ``The prelude's List functions are found by a pipe on a list`` () =
     let source =
         "def xs = [3, 1, 2]\n" +

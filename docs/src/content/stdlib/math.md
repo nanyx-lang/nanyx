@@ -8,6 +8,18 @@ The `math` module provides common numeric and floating-point operations.
 
 Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts); `int` and `float` are its built-in instances, so these functions accept either without conversion. Functions that only make sense for floating-point values take `float` directly.
 
+# Sorting integers
+
+`Int.sort` and `Int.sort3` are attached definitions in the [prelude](../tour/modules#modules-in-the-standard-library), so they need no import. Each returns its inputs in ascending order:
+
+```nanyx
+def a, b = Int.sort(3, -1)
+-- a is -1, b is 3
+
+def x, y, z = Int.sort3(3, -1, 2)
+-- x is -1, y is 2, z is 3
+```
+
 # abs
 
 ```nanyx

@@ -8,6 +8,18 @@ module prelude
 
 -- Numbers ---------------------------------------------------------------------------------------
 
+-- The two integers in ascending order.
+export def Int.sort: int, int -> (int, int) = { a, b ->
+  if a <= b then (a, b) else (b, a)
+}
+
+-- The three integers in ascending order.
+export def Int.sort3: int, int, int -> (int, int, int) = { a, b, c ->
+  def low, middle = Int.sort(a, b)
+  def first, second = Int.sort(middle, c)
+  if first < low then (first, low, second) else (low, first, second)
+}
+
 -- The value of the ASCII digit `b`, or -1 when `b` is not one.
 def digitValue: int -> int = { b ->
   if b >= 48 and b <= 57 then b - 48 else -1
