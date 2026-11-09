@@ -32,10 +32,10 @@ let interpolatedStringExprNoWs: Parser<Expression, ParseState> =
             LiteralExpr (StringLit text)
     spanned (between (pstring "\"") (pstring "\"") partsParser |>> toKind)
 
-// `def (x, y) = value` binds each element of a tuple. It is desugared in the parser into a binding of the
-// whole value plus one `def` per element (`def x = __tuple.0`), so the rest of the compiler only ever sees
-// plain defs. This form takes only names, `_` and nested tuples, which cannot fail to match; any other pattern
-// is bound through a match instead (see `matchingBindings`).
+// `def (x, y) = value`, or `def x, y = value` without the brackets, binds each element of a tuple. It is desugared
+// in the parser into a binding of the whole value plus one `def` per element (`def x = __tuple.0`), so the rest of
+// the compiler only ever sees plain defs. This form takes only names, `_` and nested tuples, which cannot fail to
+// match; any other pattern is bound through a match instead (see `matchingBindings`).
 let private destructuringBindings (position: Position) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
     let temp = $"__tuple_{position.Line}_{position.Column}"
     let rec bind (pattern: Pattern) (source: Expression) =
@@ -76,9 +76,16 @@ let private matchingBindings (position: Position) (pattern: Pattern) (names: Ide
 /// `[export] def pattern = value`, as the export flag and the bindings it stands for. A bare name is not a
 /// pattern here: that is an ordinary def.
 let destructuringDefWith (lineStartCol: int64) (exprParser: Parser<Expression, ParseState>) : Parser<bool * (Identifier * Expression) list, ParseState> =
+    // `def x, y = value` is `def (x, y) = value`: patterns separated by commas are the elements of a tuple.
+    let patterns =
+        withSpan (sepBy1 pattern (pstring "," .>> ws))
+        |>> fun (elements, span) ->
+            match elements with
+            | [ single ] -> single
+            | several -> Pattern.at span (TuplePattern several)
     pipe3
         (opt (attempt (pstring "export" >>. ws)))
-        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames pattern .>> wsNoNl()))
+        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames patterns .>> wsNoNl()))
         (defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser)
         (fun exportOpt (position, pattern) value -> exportOpt.IsSome, position, pattern, value)
     >>= fun (isExport, position, (pattern, names), value) ->

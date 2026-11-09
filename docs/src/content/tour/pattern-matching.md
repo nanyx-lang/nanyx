@@ -65,6 +65,14 @@ In this example, the pattern `[head, ...tail]` matches a non-empty list, binding
 def (x, y) = (10, 20)
 ```
 
+The brackets around the outermost tuple can be left off, so `def x, y = (10, 20)` is the same binding. Nested tuples still need theirs:
+
+```nanyx
+def low, high = sort(3, -1)
+
+def name, (street, city) = person
+```
+
 Destructuring is available in pattern matching, allowing for simultaneous testing of data and extracting values at the same time:
 
 ```nanyx
