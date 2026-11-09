@@ -57,19 +57,26 @@ let internal fillTypeRefs () =
         many (attempt (typeExpr .>> ws .>> pstring "," .>> ws))
         |>> List.mapi (fun index typeValue -> TypeField(string index, false, false, Some typeValue, None))
 
+    let namedTypeFields =
+        pipe2
+            (attempt typeMemberField <|> typeField)
+            (many (attempt (recordFieldSeparator >>. (attempt typeMemberField <|> typeField))))
+            (fun first rest -> first :: rest)
+
     // The names noted while a record type is parsed are its named fields: a record nested in it takes its own.
+    let declaringFields (record: Parser<TypeExpr, ParseState>) =
+        collectingNames record >>= fun (record, fields) -> declare RecordTypeFields record.Id fields >>% record
+
     let typeRecord =
-        collectingNames (
+        declaringFields (
             spannedType (
                 between
                     (pstring "(")
                     (ws >>. pstring ")")
-                    (pipe3
+                    (pipe2
                         (ws >>. positionalTypeFields)
-                        (attempt typeMemberField <|> typeField)
-                        (many (attempt (recordFieldSeparator >>. (attempt typeMemberField <|> typeField))))
-                        (fun positional first rest -> TypeRecord(positional @ first :: rest)))))
-        >>= fun (record, fields) -> declare RecordTypeFields record.Id fields >>% record
+                        namedTypeFields
+                        (fun positional named -> TypeRecord(positional @ named)))))
 
     // Brackets group: `(int, a -> b)` is a function of two parameters, as it is without them, and `()` is unit.
     // A bracketed tuple spans its brackets, as a tuple pattern does; any other type in brackets is just that type.
@@ -105,16 +112,24 @@ let internal fillTypeRefs () =
                 (attempt (ws >>. spannedType (sepBy1 namedField (pstring "," .>> ws) |>> TypeRecord)) <|> (ws >>. typeList |>> typeListToType))
         spannedType (pipe2 (pstring "#" >>. identifierNoWs) (opt payload) (fun tagName payloadOpt -> TypeTag(tagName, payloadOpt)))
 
-    // `map(string, int)` has two arguments; `map(string, a -> b)` has one, a function, as `,` binds tighter.
+    // `map(string, int)` has two arguments; `map(string, a -> b)` has one, a function, as `,` binds tighter. Named
+    // fields are one argument, a record, in the application's own brackets as in a tag's payload: `list(name: string)`
+    // is `list((name: string))`.
     let typeApply =
+        // Only when the fields fill the brackets: `type` alone reads as the start of a member field in `typeof x`.
+        let recordArgument =
+            declaringFields (spannedType (namedTypeFields |>> TypeRecord)) .>> followedBy (ws >>. pstring ")")
+            |>> List.singleton
+        let typeArguments =
+            typeList |>> fun ((args, resultOpt), span) ->
+                match resultOpt with
+                | None -> args
+                | Some _ -> [ typeListToType ((args, resultOpt), span) ]
         spannedType (
             pipe2
                 (pipe2 identifierNoWs (many (attempt (pchar '.' >>. identifierNoWs))) (fun head tail -> String.concat "." (head :: tail)))
-                (between (pstring "(") (ws >>. pstring ")") (ws >>. typeList))
-                (fun name ((args, resultOpt), span) ->
-                    match resultOpt with
-                    | None -> TypeApply(name, args)
-                    | Some _ -> TypeApply(name, [ typeListToType ((args, resultOpt), span) ])))
+                (between (pstring "(") (ws >>. pstring ")") (ws >>. (attempt recordArgument <|> typeArguments)))
+                (fun name args -> TypeApply(name, args)))
 
     let contextSet =
         spannedType (
