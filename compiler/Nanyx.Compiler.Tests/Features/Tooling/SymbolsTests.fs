@@ -60,6 +60,26 @@ let ``Names in a guard pattern's predicate refer to its parameter and to what is
     Assert.Equal(Some (Parameter, offsetOf source "limit" 0 0), resolvesTo source (offsetOf source "limit *" 0 0))
 
 [<Fact>]
+let ``Names refer to the variables a pattern parameter binds`` () =
+    let source =
+        "type $Email = string\n" +
+        "def value = { $Email(s) -> s }\n" +
+        "def add = { (a, b), c -> a + b + c }\n"
+    Assert.Equal(Some (PatternVariable, offsetOf source "s)" 0 0), resolvesTo source (offsetOf source "-> s" 0 3))
+    Assert.Equal(Some (PatternVariable, offsetOf source "b)" 0 0), resolvesTo source (offsetOf source "b +" 0 0))
+    Assert.Equal(Some (Parameter, offsetOf source "c ->" 0 0), resolvesTo source (offsetOf source "+ c" 0 2))
+    // The parameter that stands in the pattern's place is made up, so it is no symbol.
+    let declared =
+        (Compiler.compile source).Typed.Value.Symbols
+        |> Map.values
+        |> Seq.filter (fun symbol -> symbol.Declaration.File = "")
+        |> Seq.map (fun symbol -> symbol.Name)
+        |> Set.ofSeq
+    for name in [ "value"; "s"; "add"; "a"; "b"; "c" ] do
+        Assert.Contains(name, declared)
+    Assert.DoesNotContain(declared, fun name -> name.StartsWith "<")
+
+[<Fact>]
 let ``The nearest declaration of a name wins`` () =
     let source =
         "def x = 1\n" +

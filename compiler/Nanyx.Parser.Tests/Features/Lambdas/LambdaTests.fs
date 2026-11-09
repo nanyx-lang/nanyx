@@ -335,6 +335,51 @@ let ``a shorthand lambda is a pipe's trailing lambda`` () =
     | other -> failwith $"Unexpected pipe: %A{other}"
 
 [<Fact>]
+let ``a pattern parameter is taken apart by a match at the top of the body`` () =
+    let source = "def f = { $Email(s) -> s }"
+    match (onlyValue source).Kind with
+    | Lambda ([ (parameter, None) ], Kind (Match ([ scrutinee ], [ [ Kind (RecordPattern ("$Email", [ Kind (IdentifierPattern "s") ])) ], Kind (IdentifierExpr "s") ])))
+        when parameter = patternArgument 1 && scrutinee.Kind = IdentifierExpr parameter ->
+        // The scrutinee is made up where the pattern is written.
+        source.Substring(scrutinee.Span.Start, scrutinee.Span.End - scrutinee.Span.Start) |> should equal "$Email(s)"
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``pattern parameters and named ones may be mixed, and one match takes every pattern apart`` () =
+    match (onlyValue "def f = { (a, b), c, [x, ...rest] -> a }").Kind with
+    | Lambda ([ (first, None); ("c", None); (third, None) ], Kind (Match ([ Kind (IdentifierExpr s1); Kind (IdentifierExpr s3) ], [ [ Kind (TuplePattern _); Kind (ListPattern _) ], _ ])))
+        when first = patternArgument 1 && third = patternArgument 3 && s1 = first && s3 = third -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``a name, _ or a bracketed annotated name is an ordinary parameter, not a pattern`` () =
+    match (onlyValue "def f = { x, _, (y: int) -> x }").Kind with
+    | Lambda ([ ("x", None); ("_", None); ("y", Some _) ], Kind (IdentifierExpr "x")) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    match (onlyValue "def f = { (x) -> x }").Kind with
+    | Lambda ([ ("x", None) ], Kind (IdentifierExpr "x")) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``a unit pattern alone is a lambda without parameters`` () =
+    match (onlyValue "def f = { () -> 5 }").Kind with
+    | Lambda ([], Kind (LiteralExpr (IntLit 5))) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    // Beside other parameters, it is a pattern like any other.
+    match (onlyValue "def f = { (), n -> n }").Kind with
+    | Lambda ([ (unit, None); ("n", None) ], Kind (Match ([ _ ], [ [ Kind UnitPattern ], _ ]))) when unit = patternArgument 1 -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``a body that only looks like a pattern is still a body`` () =
+    match (onlyValue "def f = { (1, 2) }").Kind with
+    | Lambda ([], Kind (TupleExpr _)) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    match (onlyValue "def f = { #some(1) }").Kind with
+    | Lambda ([], Kind (TagExpr _)) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
 let ``the implicit argument is made up at the operator written in its place`` () =
     let source = "def f = { % 2 == 0 }"
     match (onlyValue source).Kind with

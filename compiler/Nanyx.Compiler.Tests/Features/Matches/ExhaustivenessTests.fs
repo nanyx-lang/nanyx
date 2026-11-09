@@ -248,6 +248,27 @@ let ``A def with a pattern that is not total is a non-exhaustive match`` () =
     Assert.Contains("list cases", list)
 
 [<Fact>]
+let ``A lambda's pattern parameter must be total, as a destructuring def's pattern must`` () =
+    let total =
+        Compiler.compile (
+            "type $Email = string\n" +
+            "def value: $Email -> string = { $Email(s) -> s }\n" +
+            "def add = { (a, b), c -> a + b + c }\n" +
+            "def ignore = { (), n -> n }\n")
+    Assert.True(total.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{total.Diagnostics}")
+    Assert.Equal("(int, int), int -> int", Unifier.tyToString total.Typed.Value.Types.["add"])
+    // One that is not is reported where the pattern is written; `{ | ... }` is the lambda for several cases.
+    let source = "def first = { [x, ...rest] -> x }\n"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Contains("Non-exhaustive match", diagnostic.Message)
+        Assert.Contains("list cases", diagnostic.Message)
+        Assert.Equal(Some (offsetOf source "[x" 0 0), diagnostic.Span |> Option.map (fun span -> span.Start))
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+    let tag = Compiler.compile "def unwrap: #some(int) | #none -> int = { #some(n) -> n }\n"
+    Assert.Contains(tag.Diagnostics, fun diag -> diag.Message.Contains "Non-exhaustive match" && diag.Message.Contains "none")
+
+[<Fact>]
 let ``A match on an alias of a tag union is checked for exhaustiveness`` () =
     let source =
         "type Lookup = #found(int) | #missing\n" +

@@ -192,6 +192,16 @@ let ``A shorthand match lambda shows its own type, not that of the parameters it
     Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapOption" 1 0))
 
 [<Fact>]
+let ``A lambda with a pattern parameter shows its own type, and the pattern what it takes apart`` () =
+    let source =
+        "def add = { (a, b), c -> a + b * c }\n" +
+        "def g = add\n"
+    Assert.Equal(Some "(int, int), int -> int", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "(int, int)", hoverType source (offsetOf source "(a, b)" 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "b)" 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "c ->" 0 0))
+
+[<Fact>]
 let ``A shorthand lambda shows its own type, and its operator the argument written there`` () =
     let source = "def isEven = { % 2 == 0 }\ndef name = { .name }\n"
     Assert.Equal(Some "int -> bool", hoverType source (offsetOf source "{" 0 0))
