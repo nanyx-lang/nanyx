@@ -291,3 +291,41 @@ let ``A proc block that returns a value on one path and ends without return on a
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Contains("() vs int", diagnostic.Message)
+[<Fact>]
+let ``An if or match keeps every tag of a branch whose type is an open union`` () =
+    // A branch that is `#nothing | r` used to be made equal to a `#some(...)` one, which dropped `#nothing` (#433).
+    let source =
+        "def nothing: () -> #nothing | r = { #nothing }\n" +
+        "def h = { c -> if c then #some(1) else nothing() }\n" +
+        "def m = { n -> match n\n  | 0 -> #some(\"zero\")\n  | _ -> nothing()\n}\n" +
+        "def k = { c ->\n  def __rest_1 = { _ -> nothing() }\n  if c then #some(1) else __rest_1(())\n}"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("bool -> #some(int) | #nothing", Unifier.tyToString result.Typed.Value.Types.["h"])
+    Assert.Equal("int -> #some(string) | #nothing", Unifier.tyToString result.Typed.Value.Types.["m"])
+    Assert.Equal("bool -> #some(int) | #nothing", Unifier.tyToString result.Typed.Value.Types.["k"])
+
+[<Fact>]
+let ``A builder's zero is part of the block's type when a branch returns a value`` () =
+    let source =
+        "def opt\n" +
+        "  : (\n" +
+        "    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r\n" +
+        "    return: a -> #some(a) | r\n" +
+        "    zero: #nothing | r\n" +
+        "  )\n" +
+        "  = (\n" +
+        "  try = {\n" +
+        "    | #some(value), continue -> continue(value)\n" +
+        "    | failure, _ -> failure\n" +
+        "  }\n" +
+        "  return = { value -> #some(value) }\n" +
+        "  zero = #nothing\n" +
+        ")\n" +
+        "def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+        "def show = { n -> opt {\n  def h = try half(n)\n  if h > 2 then return h\n} }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let shown = Unifier.tyToString result.Typed.Value.Types.["show"]
+    for tag in [ "#some(int)"; "#nothing"; "#odd" ] do
+        Assert.Contains(tag, shown)
