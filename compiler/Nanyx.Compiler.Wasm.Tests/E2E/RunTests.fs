@@ -129,6 +129,24 @@ let ``Run - a nominal value over a primitive is made and taken apart with its ty
     runSource source |> assertRan "2.89\n289p\nfree\n294\n"
 
 [<Fact>]
+let ``Run - an interpolated value of a type only the type checker knows`` () =
+    // The backend works a hole's type out from what it sees, and asks the type checker when that is not enough
+    // (#193): a generic call's result, a for loop's element, a value bound by a match at the top of a script.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def xs = [1, 2, 3]\n" +
+        "def total = List.fold(xs, 0, { acc, x -> acc + x })\n" +
+        "println(\"{total} [{List.fold(xs, 1, { acc, x -> acc * x })}]\")\n" +
+        "for [\"a\", \"b\"] | s ->\n" +
+        "  println(\"[{s}]\")\n" +
+        "def found = xs \\find({ x -> x > 1 })\n" +
+        "match found\n" +
+        "  | #some(n) -> println(\"found {n}\")\n" +
+        "  | #notFound -> println(\"none\")\n"
+    runSource source |> assertRan "6 [6]\n[a]\n[b]\nfound 2\n"
+
+[<Fact>]
 let ``Run - console print and println write to stdout`` () =
     let source =
         "import nanyx/console\n" +
