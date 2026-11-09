@@ -63,6 +63,20 @@ let ``A match that is not the last arm's body is bracketed`` () =
     unchanged (lines [ "def f = { x, y ->"; "  match x"; "    | 0 -> (match y"; "      | 0 -> 1"; "      | _ -> 2)"; "    | _ -> 3"; "}" ])
 
 [<Fact>]
+let ``An except keeps one arm on its line and puts several on the lines after it`` () =
+    unchanged "def v = Int.parse(s) except #invalidInt -> #invalidVersionNumber\n"
+    unchanged "def v = xs \\find(p) except #notFound | #empty -> #none\n"
+    unchanged (lines [ "def v = load(n) except"; "  | #error(#notFound) -> #some(0)"; "  | #error(#io(message)) -> #some(1)" ])
+    unchanged (lines [ "def f = { s ->"; "  def n = Int.parse(s) except #invalidInt -> #some(0)"; "  n"; "}" ])
+    Assert.Equal("def v = x except #a -> #b\n", format "def v = x   except   #a->#b")
+
+[<Fact>]
+let ``An except that is not the last thing in its construct is bracketed`` () =
+    unchanged "def v = (x except #a -> #b) \\describe\n"
+    unchanged "def v = f((x except #a -> #b), y)\n"
+    unchanged "def v = x except #a -> y except #b -> #c\n"
+
+[<Fact>]
 let ``Loops, ranges and with are printed as written`` () =
     unchanged (lines [ "def f = { xs ->"; "  for xs"; "    | 0 -> println(\"zero\")"; "    | _ -> println(\"other\")"; "}" ])
     unchanged (lines [ "def g = {"; "  for 1..3 -> println(\"again\")"; "}" ])

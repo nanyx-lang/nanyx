@@ -93,6 +93,7 @@ module private SyntaxTree =
         | Pipe(value, _, _, args) -> value :: args, []
         | Block statements -> [], statements
         | Match(values, arms) -> values @ Pattern.armExpressions arms @ (arms |> List.map snd), []
+        | Except(value, arms) -> value :: Pattern.armExpressions arms @ (arms |> List.map snd), []
         | RecordExpr fields -> fields |> List.map (function NamedField(_, value) | PositionalField value -> value), []
         | TagExpr(_, payload) -> Option.toList payload, []
         | IfExpr(condition, ifTrue, ifFalse) -> [ condition; ifTrue; ifFalse ], []
@@ -246,6 +247,7 @@ module NonTailRecursion =
         | BinaryOp(op, _, _) -> $"its result is an operand of `{op}`"
         | IfExpr _ -> "the `if` decides on its result"
         | Match _ -> "the `match` matches on its result"
+        | Except _ -> "the `except` matches on its result"
         | Block _ -> "the block goes on after it"
         | ListExpr _ -> "its result goes into a list"
         | TupleExpr _ -> "its result goes into a tuple"
@@ -277,7 +279,8 @@ module NonTailRecursion =
         let keepTail =
             match expr.Kind with
             | IfExpr(_, ifTrue, ifFalse) -> set [ ifTrue.Id; ifFalse.Id ]
-            | Match(_, arms) -> arms |> List.map (fun (_, arm) -> arm.Id) |> Set.ofList
+            | Match(_, arms)
+            | Except(_, arms) -> arms |> List.map (fun (_, arm) -> arm.Id) |> Set.ofList
             | UseIn(_, body) -> set [ body.Id ]
             | _ -> Set.empty
         let childWhy = why |> Option.orElse (Some (whyNotTail expr))

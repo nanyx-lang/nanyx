@@ -17,6 +17,7 @@ let rec private referencedNames (expr: Expression) : string list =
     | BinaryOp(_, left, right) -> referencedNames left @ referencedNames right
     | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
     | Block statements -> statements |> List.collect referencedNamesStatement
+    | Except(value, arms) -> referencedNames { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values |> List.collect referencedNames)
         @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencedNamesPattern) @ referencedNames body))
@@ -101,6 +102,7 @@ and private boundNames (expr: Expression) : string list =
             | UseStatement _
             | ImportStatement _
             | TypeDefStatement _ -> [])
+    | Except(value, arms) -> boundNames { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         (values |> List.collect boundNames)
         @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect boundNamesPattern) @ boundNames body))
@@ -157,6 +159,7 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
             | _ -> statement)
         |> Block
         |> rebuild
+    | Except(value, arms) -> redirectSelfReferences from to' { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
         rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions recur), recur body)))
     | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
@@ -403,6 +406,7 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
                 | ImportStatement _ | TypeDefStatement _ -> [ statement ])
             |> Block
             |> rebuild
+        | Except(value, arms) -> recur { expr with Kind = Match([ value ], arms) }
         | Match(values, arms) ->
             // A guard's predicate is inlined by the backend where its arm is tested, as a `for` loop's lambda is,
             // never lifted; lift inside it.

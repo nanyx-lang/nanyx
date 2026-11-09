@@ -1524,6 +1524,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     // match in the else branch of a multi-branch if.
                     let children = [ condExpr; thenExprTyped; elseExprTyped ] |> List.map TypedExprStatement
                     Ok (mkTypedExpr expr resultTy None (Some children) None, constrained)
+    // Desugaring has made each `except` a `match`; one checked before then is checked as that match.
+    | Except(value, arms) -> inferExprKind env state { expr with Kind = Except.asMatch expr value arms }
     | Match(scrutinees, arms) ->
         let mutable current = state
         let scrutineeResults =

@@ -65,7 +65,28 @@ def findUser: int -> #some(User) | #none = { id ->
 
 # The `except` keyword
 
-The `except` keyword is a `match` that doesn't require exhaustive handling: any case you don't handle passes through unchanged. The result type is therefore the input union _minus_ the handled tags. Each handled tag has an arm, and the arm's value must fit that narrowed type.
+`value except pattern -> replacement` handles some of the cases of `value` and lets the rest through. A case the pattern matches becomes the replacement, and every other case passes through unchanged. It's a `match` that doesn't have to handle every case.
+
+```nanyx
+def parseNumber = { s ->
+  Int.parse(s) except #invalidInt -> #invalidVersionNumber
+}
+```
+
+`Int.parse(s)` is `#some(int) | #invalidInt`. The handled tag leaves the union and the replacement's type joins it, so `parseNumber` returns `#some(int) | #invalidVersionNumber`.
+
+To handle several cases, write the arms on the lines after `except`, as a `match` has them. An arm may bind the parts of what it matches, and may list alternatives:
+
+```nanyx
+def load: string -> #some(Config) | #error(#notFound | #unreadable(string) | #denied) = ...
+
+def config = load(path) except
+  | #error(#notFound) -> #some(Config.default)
+  | #error(#unreadable(reason)) -> #some(Config.default with note = reason)
+-- `config` is `#some(Config) | #error(#denied)`
+```
+
+A pattern can reach inside a tag. Handling `#error(#notFound)` takes `#notFound` out of the error's payload and leaves the other errors. When every error is handled, `#error` leaves the union altogether.
 
 Because the narrowed type often has a single case left, `except` combines naturally with a destructuring binding, which requires its pattern to be total:
 
@@ -81,14 +102,13 @@ def g = {
 }
 ```
 
-Inside a `proc` block the arm can exit early instead of supplying a replacement value:
+`except` binds more loosely than every operator and pipe, so it applies to the whole expression before it:
 
 ```nanyx
-def g = proc {
-  def #some(result) = f() except #error(#notFound) -> return 0
-  return result
-}
+def #some(shift) = scores \indexOf(scores \max) except #notFound -> #some(0)
 ```
+
+A pattern that the value can never match is a type error, as it is in a `match`. An `except` whose arms handle every case is a `match`, so write it as one.
 
 # Chaining with pipelines
 

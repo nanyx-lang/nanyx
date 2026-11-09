@@ -195,19 +195,39 @@ let valueDefCore: Parser<Definition, ParseState> =
 // `| p1 | p2 -> body` on one line or with each `|` on its own line; every arm ends in `->`, so a `|` that is
 // not preceded by `->` continues the current arm rather than starting a new one. The arm is desugared into one
 // arm per alternative, all sharing the body, so the rest of the compiler only ever sees plain arms.
-let matchArmAlternatives : Parser<(Pattern list * Expression) list, ParseState> =
+let private armAlternativesAfter (leading: Parser<unit, ParseState>) : Parser<(Pattern list * Expression) list, ParseState> =
     let alternative = sepBy1 pattern (pstring "," .>> ws)
     pipe2
-        (pstring "|" >>. ws >>. collectingNames (sepBy1 alternative (attempt (ws >>. pstring "|" >>. ws))))
+        (leading >>. collectingNames (sepBy1 alternative (attempt (ws >>. pstring "|" >>. ws))))
         (pstring "->" >>. matchArmBody)
         (fun (alternatives, names) body -> alternatives, names, body)
     >>= fun (alternatives, names, body) ->
         declare ArmBody body.Id names >>% (alternatives |> List.map (fun patterns -> patterns, body))
     <?> "match arm"
 
+let matchArmAlternatives : Parser<(Pattern list * Expression) list, ParseState> =
+    armAlternativesAfter (pstring "|" >>. ws)
+
 /// One or more arms, each possibly an or-pattern, flattened into plain arms.
 let matchArms : Parser<(Pattern list * Expression) list, ParseState> =
     many1 (attempt (ws >>. matchArmAlternatives)) |>> List.concat
+
+// `value except pattern -> replacement`, or `value except` followed by `| pattern -> replacement` arms as a match
+// has them, replaces the cases of `value` the arms match and passes every other case through. It binds looser
+// than every operator and pipe, and may start a line of its own, as a pipe may: `xs \find(p)` and then
+// `except #notFound -> #none` on the next line. Its arms take one value each.
+let private exceptArms : Parser<(Pattern list * Expression) list, ParseState> =
+    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
+    pstring "except" >>. keywordEnd >>. (attempt matchArms <|> (ws >>. armAlternativesAfter (preturn ())))
+    <?> "except"
+
+/// `value` followed by the `except` arms `leadingWs` lets it be separated from, if there are any.
+let private withExcept (leadingWs: Parser<unit, ParseState>) (valueParser: Parser<Expression, ParseState>) : Parser<Expression, ParseState> =
+    withSpan valueParser .>>. opt (attempt (leadingWs >>. withSpan exceptArms))
+    |>> fun ((value, valueText), exceptOpt) ->
+        match exceptOpt with
+        | Some (arms, armsText) -> Expression.at (SourceSpan.between valueText armsText) (Except(value, arms))
+        | None -> value
 
 // `for iterable | arms` runs the arms' bodies for each element (the element is matched against the arms, as
 // the loops page shows with `| { < 5 } -> ... | _ -> ...`), and `for iterable -> body` ignores the element.
@@ -574,8 +594,8 @@ let contextMemberAccess =
 // `pattern string -> ...` is some other mistake.
 let private workflowKeywordApplication =
     let reservedWords =
-        set [ "and"; "as"; "context"; "def"; "else"; "export"; "for"; "if"; "import"; "in"; "is"; "match"; "module"
-              "mut"; "not"; "or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
+        set [ "and"; "as"; "context"; "def"; "else"; "except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
+              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
     let operandStart c = isLetter c || isDigit c || c = '_' || c = '"' || c = '#' || c = '(' || c = '['
     let keyword =
         identifierNoWs >>= fun name ->
@@ -760,15 +780,17 @@ let private applyPipes (value: Operand) pipes =
         Expression.at span (Pipe(acc, funcName, nameSpan, args)), span) value
     |> fst
 
+let private pipeLeadingWs =
+    skipMany (skipAnyOf " \t") >>.
+    skipMany (attempt (newline >>. skipMany (skipAnyOf " \t")))
+
 let pipeExpr =
-    let pipeLeadingWs =
-        skipMany (skipAnyOf " \t") >>.
-        skipMany (attempt (newline >>. skipMany (skipAnyOf " \t")))
     let pipeOp = pipeLeadingWs >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
     pipe2
         opp.ExpressionParser
         (many (attempt (pipeOp .>> wsInline)))
         applyPipes
+    |> withExcept pipeLeadingWs
 
 let inlinePipeExpr =
     let pipeOp = pstring "\\" >>. wsInline >>. withSpan pipeTarget
@@ -776,6 +798,7 @@ let inlinePipeExpr =
         oppInline.ExpressionParser
         (many (attempt (pipeOp .>> wsInline)))
         applyPipes
+    |> withExcept wsInline
 
 do inlineExpressionRef := inlinePipeExpr
 
@@ -1203,6 +1226,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         | Pipe(value, funcName, range, args) -> Pipe(rewrite value, rewriteName funcName, range, args |> List.map rewrite)
         | Block statements -> Block (statements |> List.map (fun statement -> { statement with Kind = rewriteStatement statement.Kind }))
         | Match(values, arms) -> Match(values |> List.map rewrite, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions rewrite), rewrite body))
+        | Except(value, arms) -> Except(rewrite value, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions rewrite), rewrite body))
         | TupleExpr items -> TupleExpr (items |> List.map rewrite)
         | RecordExpr fields ->
             RecordExpr (

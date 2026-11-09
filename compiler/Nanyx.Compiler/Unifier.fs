@@ -254,7 +254,9 @@ module Unifier =
         | TyApply(name, args) -> TyApply(name, args |> List.map (apply subst))
         // A rest variable solved to a union (`r` := `#notFound`) is spliced into the union it is the rest of. One
         // solved to the empty union leaves the others; when that is just one, the union is that one. A member that
-        // is an alias of a tag or union is spliced in as what it stands for, as a union's members are tags.
+        // is an alias of a tag or union is spliced in as what it stands for, as a union's members are tags. A tag
+        // whose payload is the empty union has no values, so it is left out (`#error(#notFound)` taken from
+        // `#error(#notFound)` leaves `#error` of nothing), and a tag the rest adds again is there once.
         | TyUnion items ->
             let spliced =
                 items
@@ -264,6 +266,8 @@ module Unifier =
                     | TyUnion inner -> inner
                     | TyTag _ as tag -> [ tag ]
                     | _ -> [ applied ])
+                |> List.filter (function TyTag(_, Some (TyUnion [])) -> false | _ -> true)
+                |> List.distinct
             match spliced with
             // A union with a member that failed to check is an error too, and so agrees with everything.
             | _ when spliced |> List.exists isError -> errorType
@@ -440,7 +444,15 @@ module Unifier =
                     loop subst (pairConstraints @ rest)
                 else
                     Error (recordKeyMessage lKeys rKeys left right, origin)
-            let unifyEqual origin l r rest =
+            // `exact` when the two types are to be the same (an `Equal` constraint), and not only one given where the
+            // other is expected. A lone tag is then the same as an open union only when the union's rest adds nothing:
+            // `#notFound` is `#notFound | r` with `r` empty. A rest an annotation names is left alone, as the
+            // annotation says it may be more.
+            let unifyEqual (exact: bool) origin l r rest =
+                let emptyRest (restVar: TyVar option) =
+                    match restVar with
+                    | Some restVar when exact && restVar.Name.IsNone -> [ (TyVar restVar, TyUnion [], Equal, origin) ]
+                    | _ -> []
                 match l, r with
                 | TyVar v, ty
                 | ty, TyVar v ->
@@ -539,12 +551,12 @@ module Unifier =
                                   | Some restVar when not extraRight.IsEmpty ->
                                       let extraTags = extraRight |> Seq.map (fun key -> rMap.[key]) |> Seq.toList
                                       yield (TyVar restVar, TyUnion extraTags, Equal, origin)
-                                  | _ -> ()
+                                  | _ -> yield! emptyRest lRest
                                   match rRest with
                                   | Some restVar when not extraLeft.IsEmpty ->
                                       let extraTags = extraLeft |> Seq.map (fun key -> lMap.[key]) |> Seq.toList
                                       yield (TyVar restVar, TyUnion extraTags, Equal, origin)
-                                  | _ -> () ]
+                                  | _ -> yield! emptyRest rRest ]
                         if lRest.IsNone && rRest.IsNone then
                             if extraLeft.IsEmpty || extraRight.IsEmpty then
                                 loop subst (pairs @ rest)
@@ -572,7 +584,7 @@ module Unifier =
                                 | Some restVar when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
                                 | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
                             | item :: restItems ->
-                                match loop subst ((item, ty, Equal, origin) :: rest) with
+                                match loop subst ((item, ty, Equal, origin) :: emptyRest lRest @ rest) with
                                 | Ok result -> Ok result
                                 | Error inner -> tryItems restItems (Some inner)
                         tryItems tags None
@@ -588,7 +600,7 @@ module Unifier =
                                 | Some restVar when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
                                 | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
                             | item :: restItems ->
-                                match loop subst ((ty, item, Equal, origin) :: rest) with
+                                match loop subst ((ty, item, Equal, origin) :: emptyRest rRest @ rest) with
                                 | Ok result -> Ok result
                                 | Error inner -> tryItems restItems (Some inner)
                         tryItems tags None
@@ -610,7 +622,7 @@ module Unifier =
                         match l, r with
                         | TyVar _, _
                         | _, TyVar _ ->
-                            unifyEqual origin l r rest
+                            unifyEqual false origin l r rest
                         | TyAlias(_, _, underlying), _ ->
                             loop subst ((underlying, r, Assignable, origin) :: rest)
                         | _, TyAlias(_, _, underlying) ->
@@ -633,7 +645,7 @@ module Unifier =
                                 let restConstraints =
                                     if extraTags.IsEmpty then [] else [ (TyVar restVar, TyUnion(extraTags @ [ freshRest () ]), Equal, origin) ]
                                 loop subst (pairs @ restConstraints @ rest)
-                            | _ -> unifyEqual origin l r rest
+                            | _ -> unifyEqual false origin l r rest
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
                         // there too: `list($Person)` is assignable to `list((name: string))`, but not the reverse.
                         // Values are immutable, so a type's arguments are covariant; a function's argument is
@@ -656,9 +668,9 @@ module Unifier =
                         | TyNominal _, TyNominal _ ->
                             Error (mismatchMessage l r, origin)
                         | _ ->
-                            unifyEqual origin l r rest
+                            unifyEqual false origin l r rest
                     | Equal ->
-                        unifyEqual origin l r rest
+                        unifyEqual true origin l r rest
         loop empty constraints
 
     /// Solves `constraints` as `unify` does, carrying on past a failure: the constraints from where it failed are

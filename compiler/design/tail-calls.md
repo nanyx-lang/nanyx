@@ -63,7 +63,8 @@ own.
 
 - The body of a function is in tail position.
 - When an `if` is in tail position, so are its `then` and `else` branches.
-- When a `match` (including a `\match` in a pipeline) is in tail position, so is the body of each arm.
+- When a `match` (including a `\match` in a pipeline) is in tail position, so is the body of each arm. So is
+  each arm of an `except`, which is a `match` with an arm that passes the other cases through.
 - When a block is in tail position, so is its last expression.
 - When `use C(...) in body` is in tail position, so is `body`: loading a context only binds it.
 - A pipe `x \f(y)` is the call `f(x, y)`, and is a tail call when it is in tail position.

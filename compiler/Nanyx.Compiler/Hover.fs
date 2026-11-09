@@ -25,6 +25,7 @@ let rec private children (expr: Expression) : Expression list =
     | Block statements -> statements |> List.collect statementExpressions
     | Match(values, arms) ->
         values @ (arms |> List.collect (fun (patterns, armExpr) -> (patterns |> List.collect Pattern.expressions) @ [ armExpr ]))
+    | Except(value, arms) -> value :: Pattern.armExpressions arms @ (arms |> List.map snd)
     | TupleExpr items
     | ListExpr items -> items
     | RecordExpr fields ->
