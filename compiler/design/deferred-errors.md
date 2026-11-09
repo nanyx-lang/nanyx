@@ -2,8 +2,9 @@
 
 > **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
 > the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
-> The type checker recovers from errors, and `nanyx run` on a file runs a program whose errors are all deferred to
-> traps (stages 1 and 2 of the [plan](#plan)). The CLI's debug and release modes are next. It is part of the [compilation](compilation.md) workstream, and
+> Built: the type checker recovers from errors, they are compiled to traps, and `nanyx run`, `build` and `wasm`
+> are debug builds with `--release` to refuse errors (stages 1 to 3 of the [plan](#plan)). Wider deferral is
+> left for when it is wanted. It is part of the [compilation](compilation.md) workstream, and
 > its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 ## Summary
@@ -30,6 +31,8 @@ Any error stops the build, at three points:
   one type error per module, and nothing typed after it.
 - **The CLI stops on errors.** `nanyx run` and `nanyx build` print the diagnostics and exit with 1 if any is an
   error ([Program.cs](../Nanyx.Compiler.Cli/Program.cs)). There is no debug or release mode.
+
+(This section is how things were when the design was written; the rest of the page says what changed.)
 
 Non-exhaustive matches are a hard error today too, although the principles say a debug build should panic when
 an unhandled case is reached. They fall under this design.
@@ -121,15 +124,18 @@ How it is built:
   among the constraints is only known by where it was found, so it replaces the outermost expression at that span.
   A match in `UnhandledMatches` gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message
   is the diagnostic as `nanyx` prints it, with `(deferred from compile time)`.
-- **`__panic`** lowers to a write of its message to stderr and `unreachable`.
+- **`__panic`** lowers to a write of its message to stderr, then WASI's `proc_exit(1)`, then `unreachable` (which
+  `proc_exit`, never returning, never reaches). The runner reports an exit as `RunError.Exited`, and the CLI exits
+  with its code and nothing more: the error has already said why the program stopped. A trap is still a runtime
+  error, with Wasmtime's report.
 - **What the backend cannot lower because of an error.** The backend still looks at types in places: an
   interpolated value of the error type has no known way to print. A function body or top-level expression that
   holds a deferred error and that the backend cannot lower traps with the errors in it, as soon as it runs.
 - **What cannot be deferred.** An error the pass places nowhere (one in a type definition, or a conflict found at a
   pattern) leaves `CompileResult.ErrorsDeferred` false, and the program is not run.
-- **`nanyx run`** on a file runs the program when every error was deferred, after the diagnostics and a line
-  saying how many there are ("Running with 2 deferred errors"). Reaching one writes it again and exits with 1,
-  followed for now by Wasmtime's trap report.
+- **The CLI** is described in [Debug and release](#debug-and-release). A package's errors are deferred
+  (`PackageBuild.ErrorsDeferred`) when each file's are: a file with an analyzer rule configured as an error, or an
+  error in a directive, is not.
 
 ### Broken definitions
 
@@ -157,12 +163,16 @@ a call to it fails at the call, with a message that says why.
 | Command | Errors |
 |---------|--------|
 | `nanyx run` | Debug: diagnostics go to stderr, then the program runs, with deferred errors as traps |
-| `nanyx build` | Debug by default, like `run`, writing a program that traps where the errors were |
-| `nanyx build --release` | Refuses any error, and writes nothing |
+| `nanyx build`, `nanyx wasm` | Debug by default, like `run`, writing a program that traps where the errors were |
+| `nanyx build --release`, `nanyx wasm --release` | Refuses any error, and writes nothing |
 | `nanyx check` | Unchanged: reports diagnostics and runs nothing |
 
 Before running a program with deferred errors, `run` says so in one line after the diagnostics (for example
-"Running with 2 deferred errors"), so a run that happens to avoid them is not mistaken for a clean one.
+"Running with 2 deferred errors"), so a run that happens to avoid them is not mistaken for a clean one. `build` and
+`wasm` say so in the line that names what they wrote ("Built app (2 files) with 2 deferred errors: ..."). A debug
+`build` of a package with no `@entry` writes nothing, so it is only a check, and errors fail it.
+
+Every one of these still refuses an error that is not deferred.
 
 When there is a test runner, it should run every test in a debug build: a test that reaches a deferred error fails
 with that error's message, and the others pass or fail on their own merits. This is what makes the feature useful
@@ -184,17 +194,17 @@ for red-green iteration.
      runs a program whose errors are all deferred.
 3. **CLI modes.** Make `run` and `build` debug, add `--release`, and print the deferred-error count.
    - [x] `run` on a file, with the count.
-   - [ ] `run` on a package, `build` and `build --release`.
-   - [ ] Report reaching a deferred error without Wasmtime's trap report after it.
+   - [x] `run` on a package, `build` and `wasm`, each with `--release` where it writes a program.
+   - [x] Report reaching a deferred error without Wasmtime's trap report after it.
 4. **Wider deferral,** if it is wanted: type definitions and imports, then (with parser recovery) a top-level
    definition that does not parse.
 
 ## Open questions
 
-- **Exit status.** A debug run that never reaches a deferred error: is its exit status the program's own, or
-  non-zero because the build had errors? The program's own is more honest about the run, but makes it easy for a
-  script or CI job to pass on a program that does not type-check. One answer is to keep the program's status and
-  have CI use `--release`, or a `nanyx check`.
+- **Exit status.** A debug run that never reaches a deferred error exits with the program's own status, for now, and
+  a debug build that writes a program exits with 0. That is honest about the run, but makes it easy for a script or
+  CI job to pass on a program that does not type-check: CI should use `--release`, or `nanyx check`. Should a debug
+  build or run with errors exit non-zero instead?
 - **Blame.** With constraints solved together, the error is reported at whichever constraint fails, which is not
   always the expression the programmer got wrong. The trap is at the same place as the diagnostic, so it is
   consistent, but it may trap later (or earlier) than the real mistake. Is that acceptable, or does deferral want

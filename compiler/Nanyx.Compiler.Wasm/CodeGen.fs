@@ -130,6 +130,8 @@ module private Helpers =
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
     let listCons = NyxCompiler.Intrinsics.listCons
     let free = "__nanyx_free"
+    /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
+    let procExit = "proc_exit"
 
 let private heapBaseOffset = 4096  // Start heap after string data region
 
@@ -1524,6 +1526,15 @@ let private exprChildren (expr: Expression) : Expression list =
     | LiteralExpr _
     | IdentifierExpr _ -> []
 
+/// Writes each of `messages` (string literals) to stderr, then ends the program with exit code 1: what a type or name
+/// error deferred to run time does when it is reached. `unreachable` after the exit, which never returns, lets the
+/// code stand wherever a value is expected: every value is 32-bit, so the code around it stays valid.
+let private deferredErrorCode (env: TranspileEnv) (messages: string list) =
+    env.UsedHelpers.Add Helpers.writeStderr |> ignore
+    env.UsedHelpers.Add Helpers.procExit |> ignore
+    let writes = messages |> List.map (fun message -> $"i32.const {env.StringLiterals.[message]}\n    call ${Helpers.writeStderr}")
+    writes @ [ "i32.const 1"; $"call ${Helpers.procExit}"; "unreachable" ] |> String.concat "\n    "
+
 /// The messages of the errors deferred to run time inside `expr` (see the `__panic` case of `transpileExpression`).
 let rec private deferredErrorMessages (expr: Expression) : string list =
     match expr.Kind with
@@ -2817,11 +2828,9 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
               "i32.const 4\n    i32.add" ]
             |> String.concat "\n    "
     // A type or name error deferred to run time (see `Compiler.deferErrors`): its message goes to stderr, then the
-    // program traps. Every value is 32-bit, and `unreachable` fits wherever one is expected, so the code around it
-    // stays valid.
+    // program exits.
     | FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]) ->
-        env.UsedHelpers.Add Helpers.writeStderr |> ignore
-        $"{stringLiteralCode message}\n    call ${Helpers.writeStderr}\n    unreachable"
+        deferredErrorCode env [ message ]
     | FunctionCall("__range", _, _) ->
         failwith "Unsupported for WASM MVP backend: a range is only supported as the iterable of a for loop"
     | FunctionCall("__closure", _, fields) ->
@@ -3229,10 +3238,7 @@ let private transpileDeferring (env: TranspileEnv) (expr: Expression) : string =
             transpileExpression env expr
         with
         | UnsupportedConstruct _
-        | Failure _ ->
-            env.UsedHelpers.Add Helpers.writeStderr |> ignore
-            let writes = messages |> List.map (fun message -> $"i32.const {env.StringLiterals.[message]}\n    call ${Helpers.writeStderr}")
-            writes @ [ "unreachable" ] |> String.concat "\n    "
+        | Failure _ -> deferredErrorCode env messages
 
 let private defBodyAndParameters (expr: Expression) =
     match expr.Kind with
@@ -4101,6 +4107,8 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
             [ "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))"
               if moduleReadsStdin then
                   "  (import \"wasi_snapshot_preview1\" \"fd_read\" (func $fd_read (param i32 i32 i32 i32) (result i32)))"
+              if usedHelperSet.Contains Helpers.procExit then
+                  "  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func $proc_exit (param i32)))"
               "  (memory 1)"
               "  (export \"memory\" (memory 0))"
               if moduleUsesDbgHelpers then

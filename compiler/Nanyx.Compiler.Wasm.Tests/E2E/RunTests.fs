@@ -11,16 +11,16 @@ type private RunOutcome =
       StandardOutput: string
       StandardError: string }
 
-/// Runs the real CLI (built next to the tests through the project reference) in a child process, so the
-/// program's stdout, the diagnostics on stderr and the exit code are all observed exactly as a user would.
+/// Runs the real CLI (built next to the tests through the project reference) in a child process with `arguments`, so
+/// the program's stdout, the diagnostics on stderr and the exit code are all observed exactly as a user would.
 /// `standardInput` is written to the program's stdin, which is then closed.
-let private nanyxRunWithInput (standardInput: string) (inputPath: string) : RunOutcome =
+let private nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
     let cliPath = Path.Combine(AppContext.BaseDirectory, "nanyx.dll")
     if not (File.Exists cliPath) then
         failwith $"The nanyx CLI was not found at {cliPath}"
     let startInfo =
         ProcessStartInfo("dotnet", RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false)
-    for argument in [ cliPath; "run"; inputPath ] do
+    for argument in cliPath :: arguments do
         startInfo.ArgumentList.Add argument
     use proc = Process.Start startInfo
     let stdout = proc.StandardOutput.ReadToEndAsync()
@@ -32,7 +32,25 @@ let private nanyxRunWithInput (standardInput: string) (inputPath: string) : RunO
       StandardOutput = stdout.Result
       StandardError = stderr.Result }
 
+let private nanyxRunWithInput (standardInput: string) (inputPath: string) : RunOutcome =
+    nanyxWithInput standardInput [ "run"; inputPath ]
+
 let private nanyxRun (inputPath: string) : RunOutcome = nanyxRunWithInput "" inputPath
+
+/// Runs `nanyx` with `arguments` (with `{package}` standing for the package's directory) on a package of `files`
+/// (paths under its `src` directory, with their text), made in a directory of its own and removed afterwards. Gives
+/// what it printed and whether it wrote the program to out/app.wat.
+let private nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
+    let root = Path.Combine(Path.GetTempPath(), $"nanyx-package-{Guid.NewGuid():N}")
+    Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
+    try
+        File.WriteAllText(Path.Combine(root, "app.nyxpack"), "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"src/**/*.nyx\"]\n")
+        for path, text in files do
+            File.WriteAllText(Path.Combine(root, "src", path), text)
+        let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
+        outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
+    finally
+        Directory.Delete(root, true)
 
 let private runE2E testName =
     nanyxRun (Path.Combine(__SOURCE_DIRECTORY__, testName, "input.nyx"))
@@ -925,6 +943,55 @@ let ``Run - reaching a deferred error reports it and stops the program`` () =
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
     Assert.Contains(":3:21: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+    // The error says why the program stopped: there is no trap report after it.
+    Assert.DoesNotContain("Runtime error", outcome.StandardError)
+
+/// A package whose @entry reaches a deferred error, with another file that has one it never reaches.
+let private packageWithDeferredErrors =
+    [ "main.nyx", "module main\n\n@entry\ndef main = {\n  println(\"before\")\n  missing(1)\n  println(\"after\")\n}\n"
+      "other.nyx", "module other\n\ndef unused = { x -> nope }\n" ]
+
+[<Fact>]
+let ``Run - a package with deferred errors runs its entry`` () =
+    let outcome, _ = nanyxOnPackage packageWithDeferredErrors [ "run"; "{package}" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains("Running with 2 deferred errors", outcome.StandardError)
+    Assert.Contains("main.nyx:6:3: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Build - a debug build writes a package with deferred errors, and a release build refuses it`` () =
+    let debug, debugWrote = nanyxOnPackage packageWithDeferredErrors [ "build"; "{package}" ]
+    Assert.Equal(0, debug.ExitCode)
+    Assert.True(debugWrote)
+    Assert.Contains("Built app (2 files) with 2 deferred errors", debug.StandardOutput)
+    let release, releaseWrote = nanyxOnPackage packageWithDeferredErrors [ "build"; "--release"; "{package}" ]
+    Assert.Equal(1, release.ExitCode)
+    Assert.False(releaseWrote)
+    Assert.Contains("Unknown function 'missing'", release.StandardOutput)
+
+[<Fact>]
+let ``Build - an error that cannot be deferred fails a debug build`` () =
+    let outcome, wrote = nanyxOnPackage [ "main.nyx", "module main\n\ntype T = (a: Missing)\n\n@entry\ndef main = { println(\"hi\") }\n" ] [ "build"; "{package}" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.False(wrote)
+
+[<Fact>]
+let ``Wasm - a release build of a file refuses a deferred error`` () =
+    let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-wasm-{Guid.NewGuid():N}.nyx")
+    let outputPath = Path.ChangeExtension(inputPath, ".wat")
+    File.WriteAllText(inputPath, "def broken = { x -> missing(x) }\n")
+    try
+        let debug = nanyxWithInput "" [ "wasm"; inputPath; "-o"; outputPath ]
+        Assert.Equal(0, debug.ExitCode)
+        Assert.Contains("WASM (WAT) emitted with 1 deferred error", debug.StandardOutput)
+        File.Delete outputPath
+        let release = nanyxWithInput "" [ "wasm"; inputPath; "-o"; outputPath; "--release" ]
+        Assert.Equal(1, release.ExitCode)
+        Assert.False(File.Exists outputPath)
+    finally
+        File.Delete inputPath
+        File.Delete outputPath
 
 [<Fact>]
 let ``Run - a non-exhaustive match runs the cases it handles and traps on the rest`` () =

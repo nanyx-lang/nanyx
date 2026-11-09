@@ -45,12 +45,14 @@ internal static class CliCommands
     /// </summary>
     /// <param name="inputFile">The path to the .nyx file to compile.</param>
     /// <param name="outputPath">Optional output path for generated artifacts.</param>
+    /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     [Consolo("wasm")]
     public static int Wasm(
         string inputFile,
-        [Consolo("out", Alias = "o")] string? outputPath = null)
+        [Consolo("out", Alias = "o")] string? outputPath = null,
+        [Consolo("release")] bool release = false)
     {
-        return Execute(inputFile, Target.Wasm, outputPath);
+        return Execute(inputFile, Target.Wasm, outputPath, release);
     }
 
     /// <summary>
@@ -81,7 +83,8 @@ internal static class CliCommands
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
         var build = PackageModule.build(package);
         PrintDiagnostics(WorthStoppingFor(build.Diagnostics), Console.Error);
-        if (HasErrors(build.Diagnostics))
+        var deferred = HasErrors(build.Diagnostics) && build.ErrorsDeferred;
+        if (HasErrors(build.Diagnostics) && !deferred)
         {
             return 1;
         }
@@ -93,7 +96,12 @@ internal static class CliCommands
             return 1;
         }
 
-        return RunProgram(entry.Value);
+        if (deferred)
+        {
+            Console.Error.WriteLine($"Running with {DeferredErrors(build.Diagnostics)}");
+        }
+
+        return RunProgram(entry.Value, deferred);
     }
 
     /// <summary>
@@ -101,9 +109,11 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">The package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
+    /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     [Consolo("build")]
     public static int Build(
         [Consolo("out", Alias = "o")] string? outputPath = null,
+        [Consolo("release")] bool release = false,
         params string[] path)
     {
         if (!TrySinglePath(path, out var single) || !TryFindPackage(single, out var package))
@@ -113,7 +123,8 @@ internal static class CliCommands
 
         var build = PackageModule.build(package);
         PrintDiagnostics(build.Diagnostics, Console.Out);
-        if (HasErrors(build.Diagnostics))
+        var deferred = !release && HasErrors(build.Diagnostics) && build.ErrorsDeferred;
+        if (HasErrors(build.Diagnostics) && !deferred)
         {
             return 1;
         }
@@ -122,11 +133,12 @@ internal static class CliCommands
         var files = package.Sources.Length == 1 ? "1 file" : $"{package.Sources.Length} files";
         if (entry is null)
         {
+            // With no program to write, the build is only a check, and errors fail it.
             Console.WriteLine($"Checked {package.Manifest.Name} ({files}); it has no @entry, so no program was written.");
-            return 0;
+            return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(entry.Value, Console.Out, out var wat))
+        if (!TryEmitWat(entry.Value, Console.Out, out var wat, deferred))
         {
             return 1;
         }
@@ -136,7 +148,8 @@ internal static class CliCommands
             : outputPath!;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(finalOutputPath))!);
         File.WriteAllText(finalOutputPath, wat);
-        Console.WriteLine($"Built {package.Manifest.Name} ({files}): {DisplayPath(Path.GetFullPath(finalOutputPath))}");
+        var withDeferred = deferred ? $" with {DeferredErrors(build.Diagnostics)}" : "";
+        Console.WriteLine($"Built {package.Manifest.Name} ({files}){withDeferred}: {DisplayPath(Path.GetFullPath(finalOutputPath))}");
         return 0;
     }
 
@@ -288,7 +301,21 @@ internal static class CliCommands
         return 0;
     }
 
-    private static int Execute(string inputFile, Target target, string? outputPath)
+    /// <summary>
+    /// Whether a debug build can run a file's program in spite of its errors: each is a type or name error the compiler
+    /// deferred, to be reported if the program reaches it.
+    /// </summary>
+    private static bool ErrorsDeferred(CompileResult result) =>
+        result.Typed is not null && !result.TypeChecked && result.ErrorsDeferred;
+
+    /// <summary>"2 deferred errors": the errors among <paramref name="diagnostics"/>, every one of them deferred.</summary>
+    private static string DeferredErrors(FSharpList<Diagnostic> diagnostics)
+    {
+        var count = diagnostics.Count(diagnostic => diagnostic.Severity.IsError);
+        return $"{count} deferred error{(count == 1 ? "" : "s")}";
+    }
+
+    private static int Execute(string inputFile, Target target, string? outputPath, bool release = false)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -314,13 +341,12 @@ internal static class CliCommands
         if (target == Target.Run)
         {
             PrintDiagnostics(WorthStoppingFor(result.Diagnostics), Console.Error);
-            // A debug run: type and name errors the compiler deferred to traps do not stop it. Each is reported again
-            // if the program reaches it.
-            var deferred = !result.TypeChecked && result.ErrorsDeferred && result.Typed is not null;
+            // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
+            // program reaches it.
+            var deferred = ErrorsDeferred(result);
             if (deferred)
             {
-                var count = result.Diagnostics.Count(diagnostic => diagnostic.Severity.IsError);
-                Console.Error.WriteLine($"Running with {count} deferred error{(count == 1 ? "" : "s")}");
+                Console.Error.WriteLine($"Running with {DeferredErrors(result.Diagnostics)}");
             }
 
             return RunProgram(result, deferred);
@@ -332,7 +358,7 @@ internal static class CliCommands
         return target switch
         {
             Target.Check => RunCheck(result),
-            Target.Wasm => RunWasm(result, inputFile, outputPath),
+            Target.Wasm => RunWasm(result, inputFile, outputPath, release),
             _ => UnsupportedTarget(target.ToString())
         };
     }
@@ -438,16 +464,18 @@ internal static class CliCommands
         return HasErrors(result.Diagnostics) ? 1 : 0;
     }
 
-    private static int RunWasm(CompileResult result, string inputFile, string? outputPath)
+    private static int RunWasm(CompileResult result, string inputFile, string? outputPath, bool release)
     {
-        if (!TryEmitWat(result, Console.Out, out var wat))
+        var deferred = !release && ErrorsDeferred(result);
+        if (!TryEmitWat(result, Console.Out, out var wat, deferred))
         {
             return 1;
         }
 
         var finalOutputPath = string.IsNullOrWhiteSpace(outputPath) ? DefaultWasmOutputPath(inputFile) : outputPath!;
         File.WriteAllText(finalOutputPath, wat);
-        Console.WriteLine($"WASM (WAT) emitted: {finalOutputPath}");
+        var withDeferred = deferred ? $" with {DeferredErrors(result.Diagnostics)}" : "";
+        Console.WriteLine($"WASM (WAT) emitted{withDeferred}: {finalOutputPath}");
         return 0;
     }
 
@@ -472,6 +500,9 @@ internal static class CliCommands
             case RunError.Trapped trapped:
                 Console.Error.WriteLine($"Runtime error: {trapped.Item}");
                 return 1;
+            // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
+            case RunError.Exited exited:
+                return exited.Item;
             default:
                 Console.Error.WriteLine($"Run failed: {outcome.ErrorValue}");
                 return 1;

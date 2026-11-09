@@ -8,6 +8,9 @@ type RunError =
     | InvalidModule of string
     /// The program trapped (for example `unreachable` from a match with no matching arm) or failed to instantiate.
     | Trapped of string
+    /// The program ended itself with a non-zero exit code, through WASI `proc_exit`: a deferred error does, once it
+    /// has written itself to stderr.
+    | Exited of int
 
 /// Runs WebAssembly text emitted by the Nanyx backend on an embedded Wasmtime engine.
 ///
@@ -61,4 +64,7 @@ module WasmRunner =
                 defineHostImports linker module'
                 linker.Instantiate(store, module') |> ignore
                 Ok ()
-            with :? WasmtimeException as ex -> Error (Trapped ex.Message)
+            with
+            | :? WasmtimeException as ex when ex.ExitCode.HasValue ->
+                if ex.ExitCode.Value = 0 then Ok () else Error (Exited ex.ExitCode.Value)
+            | :? WasmtimeException as ex -> Error (Trapped ex.Message)

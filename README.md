@@ -97,6 +97,8 @@ nanyx run hello.nyx
 
 `nanyx wasm hello.nyx` writes the WebAssembly text to `hello.wat` instead of running it, and `nanyx check hello.nyx` type-checks and prints the inferred types.
 
+A type or name error does not stop `nanyx run`: the program runs, and reports the error if it reaches the code where it was found. `nanyx wasm` and `nanyx build` take `--release` to refuse any error.
+
 ### 3. Set up your editor
 
 The Nanyx extension for VS Code (search for "Nanyx" in the Marketplace; its source is in `extension/`) gives you syntax highlighting and type errors as you type.

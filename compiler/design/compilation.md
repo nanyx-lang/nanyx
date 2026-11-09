@@ -35,9 +35,9 @@ Out of scope here, with their own workstreams:
   `parser`, `type checker` and `wasm backend` labels; most of those are closed.
 - **The backend is an MVP.** It covers integers, strings, tags, lists, records, closures and pattern matching
   (see the WebAssembly section of the [compiler README](../README.md)). Floats and other value types are partial.
-- **Any error stops the build.** The type checker reports one type error per module and the CLI will not run a
-  program with errors, although the principles promise a debug build that runs in spite of them; see
-  [deferred-errors.md](deferred-errors.md).
+- **Type and name errors are deferred.** The type checker reports every error in a module, and a debug build
+  (`nanyx run`, `build`, `wasm`) runs in spite of them, reporting each if the program reaches it; `--release`
+  refuses them. See [deferred-errors.md](deferred-errors.md).
 - **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
   it. The language server needs recovery too.
 - **Most of the standard library is designed but not written.** The docs describe it; `stdlib/nanyx/` holds a
