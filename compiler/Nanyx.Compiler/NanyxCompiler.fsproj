@@ -30,6 +30,7 @@
     <Compile Include="ImportFixes.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
+    <Compile Include="NewPackage.fs" />
     <Compile Include="Script.fs" />
     <Compile Include="Hover.fs" />
     <Compile Include="Definition.fs" />

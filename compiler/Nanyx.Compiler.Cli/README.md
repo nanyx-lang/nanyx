@@ -5,8 +5,11 @@ The `nanyx` executable: a small C# CLI over the compiler pipeline, implemented w
 ## Usage
 
 ```
-nanyx <run|wasm|check|parse> <file.nyx> [--out <path>]
+nanyx <run|wasm|parse> <file.nyx> [--out <path>]
+nanyx check <file.nyx>
 nanyx <run|build> [<directory or .nyxp>] [--out <path>]
+nanyx check [<directory or .nyxp>]
+nanyx new <name> [<directory>]
 ```
 
 - `run` compiles the file and executes it on the embedded Wasmtime engine. The program's output is the
@@ -21,13 +24,19 @@ quick check that the compiler and runtime work.
 
 ## Packages
 
-Given a directory or a `.nyxp` manifest instead of a file, or nothing at all, `run` and `build` work on
-a package: the manifest in that directory (the current one by default) or the nearest directory above it.
+Given a directory or a `.nyxp` manifest instead of a file, or nothing at all, `run`, `build` and `check`
+work on a package: the manifest in that directory (the current one by default) or the nearest directory
+above it.
 
 - `build` checks every source file the manifest's `sources` select, with the linters its `[linters]`
   table turns on, and writes the program of the package's `@entry` to `out/<package name>.wat` beside the
   manifest (or to `--out`). A package without an `@entry` is only checked.
 - `run` does the same checks, then runs the `@entry`.
+- `check` does the same checks and writes nothing. Any error fails it, including one a debug build would defer.
+
+`nanyx new acme.demo` makes a package in a new directory, `demo` (the name's last segment) unless another
+is given: `acme.demo.nyxp`, with the official linter on, and `src/main.nyx`, whose `@entry` prints
+"Hello, World!". The name must be one the manifest accepts, and the directory must be new or empty.
 
 A package runs only the linters its manifest names (`[linters.default]` for the official one), and a file
 run on its own only those its `::linters` directives name (`::linters.default`, or

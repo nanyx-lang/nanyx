@@ -54,13 +54,15 @@ type RunOutcome =
 
 /// Runs the real CLI (built next to the tests through the project reference) in a child process with `arguments`, so
 /// the program's stdout, the diagnostics on stderr and the exit code are all observed exactly as a user would.
-/// `standardInput` is written to the program's stdin, which is then closed.
-let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
+/// `standardInput` is written to the program's stdin, which is then closed. It runs in `workingDirectory`, or the
+/// tests' own when that is `None`.
+let private nanyxProcess (workingDirectory: string option) (standardInput: string) (arguments: string list) : RunOutcome =
     let cliPath = Path.Combine(AppContext.BaseDirectory, "nanyx.dll")
     if not (File.Exists cliPath) then
         failwith $"The nanyx CLI was not found at {cliPath}"
     let startInfo =
         ProcessStartInfo("dotnet", RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false)
+    workingDirectory |> Option.iter (fun directory -> startInfo.WorkingDirectory <- directory)
     for argument in cliPath :: arguments do
         startInfo.ArgumentList.Add argument
     use proc = Process.Start startInfo
@@ -73,25 +75,38 @@ let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome
       StandardOutput = stdout.Result
       StandardError = stderr.Result }
 
+let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
+    nanyxProcess None standardInput arguments
+
+/// Runs `nanyx` with `arguments` in `directory`, as a user does who has changed to it.
+let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
+    nanyxProcess (Some directory) "" arguments
+
 let nanyxRunWithInput (standardInput: string) (inputPath: string) : RunOutcome =
     nanyxWithInput standardInput [ "run"; inputPath ]
 
 let nanyxRun (inputPath: string) : RunOutcome = nanyxRunWithInput "" inputPath
 
+/// A new, empty directory of its own, removed with everything in it when disposed.
+type TempDirectory() =
+    let path = Path.Combine(Path.GetTempPath(), $"nanyx-{Guid.NewGuid():N}")
+    do Directory.CreateDirectory path |> ignore
+    member _.Path = path
+    interface IDisposable with
+        member _.Dispose() = try Directory.Delete(path, true) with _ -> ()
+
 /// Runs `nanyx` with `arguments` (with `{package}` standing for the package's directory) on a package of `files`
 /// (paths under its `src` directory, with their text), made in a directory of its own and removed afterwards. Gives
 /// what it printed and whether it wrote the program to out/app.wat.
 let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
-    let root = Path.Combine(Path.GetTempPath(), $"nanyx-package-{Guid.NewGuid():N}")
+    use directory = new TempDirectory()
+    let root = directory.Path
     Directory.CreateDirectory(Path.Combine(root, "src")) |> ignore
-    try
-        File.WriteAllText(Path.Combine(root, "app.nyxp"), "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"src/**/*.nyx\"]\n")
-        for path, text in files do
-            File.WriteAllText(Path.Combine(root, "src", path), text)
-        let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
-        outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
-    finally
-        Directory.Delete(root, true)
+    File.WriteAllText(Path.Combine(root, "app.nyxp"), "[package]\nname = \"app\"\nversion = \"0.1.0\"\nsources = [\"src/**/*.nyx\"]\n")
+    for path, text in files do
+        File.WriteAllText(Path.Combine(root, "src", path), text)
+    let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
+    outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
 
 let runE2E testName =
     nanyxRun (Path.Combine(__SOURCE_DIRECTORY__, "E2E", testName, "input.nyx"))

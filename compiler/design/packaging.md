@@ -43,10 +43,11 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 
 - **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
   `sources`; `public-modules` is accepted but not used) and `[linters]` table are read, with an error naming the
-  key for anything wrong or unknown. `nanyx build` and `nanyx run` without a file (or with a directory or manifest)
-  check every source file, and `run` runs the one `@entry`; `build` writes it to `out/<name>.wat`. The language
-  server reads the manifest's linter configuration too. `[dependencies]` and `[project-references]` are refused
-  when non-empty, source files need not be named modules yet, and there is no `.nyxproj`, `nanyx new` or `restore`.
+  key for anything wrong or unknown. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
+  directory or manifest) check every source file, and `run` runs the one `@entry`; `build` writes it to
+  `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
+  configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, source files need not
+  be named modules yet, and there is no `.nyxproj` or `restore`.
   The formatter still reads its `[formatter]` table itself.
 - **Imports resolve two ways only** (`resolveImportPath` and `StandardLibrary.tryModuleName` in `Library.fs`).
   A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file, with `.` and `/` treated
@@ -199,8 +200,7 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 
 1. **Imports by module name within a package.** Read `.nyxp` (`name`, `version`, `sources`,
    `public-modules`), require named modules, check a module's declared name against its import, and resolve
-   `package/module` names through the manifest instead of the file system. `nanyx run` and `check` without a file
-   use the manifest in the current directory. `nanyx new` creates one.
+   `package/module` names through the manifest instead of the file system.
 2. **The rest of the import syntax.** `as (a, b)`, `as m & (a, b)` and re-exports, which `public-modules` relies
    on (compilation workstream).
 3. **Local dependencies and projects.** `.nyxproj`, project references and path dependencies; one version per
