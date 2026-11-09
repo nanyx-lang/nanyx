@@ -1592,8 +1592,29 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     Ok typedExpr
                 | Error err -> Error err)
         let scrutineeErrors = scrutineeResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
+        // Each arm has a pattern for each value matched (`desugar` has made a lone `else` one per value).
+        let wrongPatternCounts =
+            let count n noun = if n = 1 then $"1 {noun}" else $"{n} {noun}s"
+            arms
+            |> List.choose (fun (patterns, _) ->
+                if patterns.Length = scrutinees.Length then
+                    None
+                else
+                    let span =
+                        match patterns with
+                        | [] -> expr.Span
+                        | _ -> SourceSpan.between (List.head patterns).Span (List.last patterns).Span
+                    let written = count patterns.Length "pattern"
+                    let values = count scrutinees.Length "value"
+                    Some (
+                        Diagnostics.at
+                            DiagnosticCodes.WrongPatternCount
+                            span
+                            $"This arm has {written}, but the match is on {values}: an arm needs a pattern for each value, or a lone `else` for anything else"))
         if not scrutineeErrors.IsEmpty then
             Error scrutineeErrors
+        elif not wrongPatternCounts.IsEmpty then
+            Error wrongPatternCounts
         else
             let scrutineeExprs = scrutineeResults |> List.choose (function Ok ty -> Some ty | _ -> None)
             let scrutineeTypes = scrutineeExprs |> List.map (fun typedExpr -> typedExpr.Type)
@@ -1784,64 +1805,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let mutable armExprs: TypedExpr list = []
             let mutable typedArms: TypedMatchArm list = []
             let mutable errors: Diagnostic list = []
-            let rec isCatchAllPattern (pattern: Pattern) =
-                match pattern.Kind with
-                | WildcardPattern
-                | ElsePattern
-                | IdentifierPattern _ -> true
-                // `(a, _)` matches every tuple: a tuple pattern is irrefutable when each element is. So are a record
-                // pattern (`$Money(pence)`, `(x = a)`) whose parts all are: the type says the value has that shape.
-                | TuplePattern elements
-                | RecordPattern(_, elements) -> elements |> List.forall isCatchAllPattern
-                | RecordMemberPattern members -> members |> List.forall (snd >> isCatchAllPattern)
-                | _ -> false
-            let tryGetTagName (pattern: Pattern) =
-                match pattern.Kind with
-                | TagPattern(tagName, _) -> Some tagName
-                | _ -> None
-            let tryGetTagUnion ty =
-                let rec unwrap ty =
-                    match ty with
-                    | TyNominal(_, underlying, _)
-                    | TyAlias(_, _, underlying) -> unwrap underlying
-                    | TyUnion items ->
-                        if items |> List.forall (function TyTag _ -> true | _ -> false) then
-                            items
-                            |> List.choose (function TyTag(name, _) -> Some name | _ -> None)
-                            |> Set.ofList
-                            |> Some
-                        else
-                            None
-                    | _ -> None
-                unwrap ty
-            let isListType ty =
-                let rec unwrap ty =
-                    match ty with
-                    | TyNominal(_, underlying, _)
-                    | TyAlias(_, _, underlying) -> unwrap underlying
-                    | TyApply("list", _) -> true
-                    | _ -> false
-                unwrap ty
-            let listPatternsCoverAll patternsAtPos =
-                let hasEmpty =
-                    patternsAtPos
-                    |> List.exists (function
-                        | Kind (ListPattern(patterns, None)) when patterns.IsEmpty -> true
-                        | _ -> false)
-                let hasSplat =
-                    patternsAtPos
-                    |> List.exists (function
-                        | Kind (ListPattern(_, Some _)) -> true
-                        | _ -> false)
-                hasEmpty && hasSplat
-            let isRecordType ty =
-                let rec unwrap ty =
-                    match ty with
-                    | TyNominal(_, underlying, _)
-                    | TyAlias(_, _, underlying) -> unwrap underlying
-                    | TyRecord _ -> true
-                    | _ -> false
-                unwrap ty
+            // What patterns match is worked out in `PatternSpace`, which the `unreachableArms` linter rule uses too.
+            let isCatchAllPattern = PatternSpace.isCatchAll
             let patternsForIndex index =
                 arms
                 |> List.choose (fun (patterns, _) ->
@@ -1895,40 +1860,19 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match List.tryItem index scrutinees with
                 | Some scrutinee when not (SourceSpan.isNone scrutinee.Span) -> scrutinee.Span
                 | _ -> expr.Span
+            // A value no arm matches (`PatternSpace.missingCase`) is reported at the one value that makes it so, or at
+            // the match when it is a combination of values.
             let exhaustivenessDiagnostics () =
-                resolvedScrutineeTypes
-                |> List.mapi (fun index scrutineeTy ->
-                    let patternsAtPos = patternsForIndex index
-                    let hasCatchAll = patternsAtPos |> List.exists isCatchAllPattern
-                    if hasCatchAll then
-                        None
-                    else
-                        match tryGetTagUnion scrutineeTy with
-                        | Some tagUnion ->
-                            let coveredTags =
-                                patternsAtPos
-                                |> List.choose tryGetTagName
-                                |> Set.ofList
-                            let missing = Set.difference tagUnion coveredTags |> Set.toList
-                            if missing.IsEmpty then
-                                None
-                            else
-                                let missingText = missing |> String.concat ", "
-                                let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                                Some (Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, missing tags: {missingText}")
-                        | None ->
-                            if isListType scrutineeTy then
-                                if listPatternsCoverAll patternsAtPos then
-                                    None
-                                else
-                                    let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                                    Some (Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, missing list cases")
-                            elif isRecordType scrutineeTy then
-                                let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                                Some (Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, missing record cases")
-                            else
-                                None)
-                |> List.choose id
+                match PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some) with
+                | None -> []
+                | Some witnesses ->
+                    match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
+                    | [ index, witness ] ->
+                        let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
+                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}" ]
+                    | _ ->
+                        let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
+                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch expr.Span $"Non-exhaustive match, missing case: {missing}" ]
             // A tag that an earlier arm handles in full (its payload and every other position are catch-alls)
             // cannot reach a later arm, so a name bound by a catch-all in a later arm has the scrutinee's union
             // without those tags; with only the rest left, it has the rest's type. That is what lets
@@ -1936,13 +1880,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let tagsHandledBefore armIndex index =
                 arms
                 |> List.take armIndex
-                |> List.choose (fun (patterns, _) ->
-                    let othersCatchAll =
-                        patterns |> List.indexed |> List.forall (fun (i, pat) -> i = index || isCatchAllPattern pat)
-                    match List.tryItem index patterns with
-                    | Some (Kind (TagPattern(tagName, payloadOpt))) when othersCatchAll && payloadOpt |> Option.forall isCatchAllPattern ->
-                        Some tagName
-                    | _ -> None)
+                |> List.choose (fun (patterns, _) -> PatternSpace.tagHandled patterns index)
                 |> Set.ofList
             let restRowTy index =
                 match scrutineeOverrides |> Map.tryFind index with
