@@ -201,18 +201,26 @@ function where a closure over it is made, since only there are the types of what
 in a generic definition is specialised along with it (`__lambda_0__int`), and the wrapper that lets a top-level
 function be passed as a value is lowered for each type it is passed at.
 
+A function that requires contexts takes each of their members as a closure, in a parameter of its own after its
+others, typed from the context's definition. A call finds each member the callee requires where the type checker
+found its context (a `use`, the caller's own members, an instance built from attached definitions, or the ambient
+`Console`), by the same function the old path uses. A lambda of no parameters that is not a function's own runs where
+it is written, as the old path runs it, which is what workflow blocks lower to.
+
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
 as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
-it, so its value is computed where it is used. When a local is stored in between (a `match` among a call's arguments,
-say), the temporaries waiting are computed first and left on the stack. Record layouts are numbered as functions are
-emitted, so functions from the IR are emitted in definition order with the rest, to number layouts as the old path does.
+it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
+or an interpolated string among a call's arguments, say) is one temporary whose value is the whole sequence, stores
+and all, so nothing waits on the stack across a store. Record layouts and function table slots are numbered as
+functions are emitted, so functions from the IR are emitted in definition order with the rest, to number them as the
+old path does.
 
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if anything in it is beyond the IR (pipes, floats, contexts, workflows and so on), if it
-  requires contexts, or if it calls a specialisation that could not be lowered. A function and the functions it calls
-  through the IR are kept or dropped together.
+- A definition falls back if anything in it is beyond the IR (pipes, floats, `for` loops and so on), or if it calls a
+  specialisation that could not be lowered. A function and the functions it calls through the IR are kept or dropped
+  together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
   compiled from the IR call its specialisations instead.
 - Both ways give the same calling convention, so a function from either can call one from the other. A function from

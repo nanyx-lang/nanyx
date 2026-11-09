@@ -1351,6 +1351,86 @@ and private collectTagNamesPattern (pattern: Pattern) : string list =
     | WildcardPattern
     | ElsePattern -> []
 
+/// Where a call to `name`, the call at node `callId`, finds each member of the contexts the callee requires, in the
+/// order it requires them, given the keys of the members in scope there (`scopeKeys`). Each is found where the type
+/// checker found its context: an instance in scope (a `use`, or a context the caller's type declares), or one built
+/// from attached definitions. One the type checker left to be found by name is the member of that key in scope, or a
+/// compatible one (the same context and member, at other type arguments), or else the ambient instance's member.
+let private contextArguments
+    (requirements: Map<string, string list>)
+    (contextTypes: Map<string, TypeExpr list>)
+    (typeLayouts: Map<string, string list>)
+    (contextInstances: Map<NodeId, ContextInstance option list>)
+    (functionWrappers: Map<string, string>)
+    (ambientMembers: Map<string, string>)
+    (scopeKeys: Set<string>)
+    (name: string)
+    (callId: NodeId)
+    : CoreIrLower.ContextArgument list =
+    let required = requirements |> Map.tryFind name |> Option.defaultValue []
+
+    // A member of the same context at other type arguments, not already passed: a required `ToString_a_toString`
+    // can be an available `ToString_int_toString`.
+    let findCompatible (used: Set<string>) (requiredKey: string) : string option =
+        let parts = requiredKey.Split('_')
+        if parts.Length < 2 then None
+        else
+            let baseName = parts.[0]
+            let memberName = parts.[parts.Length - 1]
+            scopeKeys
+            |> Seq.tryFind (fun availableKey ->
+                not (used.Contains availableKey) &&
+                let availableParts = availableKey.Split('_')
+                availableParts.Length >= 2 &&
+                availableParts.[0] = baseName &&
+                availableParts.[availableParts.Length - 1] = memberName)
+
+    // The member in scope, else the ambient instance's.
+    let memberFor (requiredKey: string) (resolvedKey: string) =
+        if scopeKeys.Contains resolvedKey then CoreIrLower.MemberInScope resolvedKey
+        else
+            match ambientMembers |> Map.tryFind resolvedKey with
+            | Some wrapper -> CoreIrLower.ClosureOverWrapper wrapper
+            | None ->
+                let available = (List.ofSeq scopeKeys) @ (ambientMembers |> Map.toList |> List.map fst) |> String.concat ", "
+                failwith $"Context function {requiredKey} not available in current scope. Available: [{available}]"
+
+    // Where the type checker found each context the callee requires, as each required member's instance, in the order
+    // of `required`: none for a call it found nothing for.
+    let instances =
+        match contextInstances |> Map.tryFind callId, contextTypes |> Map.tryFind name with
+        | Some found, Some types when found.Length = types.Length ->
+            List.zip types found
+            |> List.collect (fun (contextType, instance) ->
+                let baseName = match contextType.Kind with TypeName n | TypeApply(n, _) -> n | _ -> "unknown"
+                typeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))
+            |> fun (perMember: (string * ContextInstance option) list) -> if perMember.Length = required.Length then Some perMember else None
+        | _ -> None
+
+    required
+    |> List.mapi (fun index requiredKey -> requiredKey, instances |> Option.map (fun perMember -> perMember.[index]))
+    |> List.fold (fun (acc: CoreIrLower.ContextArgument list, used: Set<string>) (requiredKey, instance) ->
+        match instance with
+        // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
+        // declares.
+        | Some (memberName, Some (InstanceInScope written)) ->
+            let key = contextMemberKey (Some written) memberName
+            acc @ [ memberFor requiredKey key ], used.Add key
+        // An instance built from the attached definitions: each member is one of them.
+        | Some (memberName, Some (InstanceSynthesized members)) ->
+            let definition = members |> List.find (fun (n, _) -> n = memberName) |> snd
+            let argument =
+                match functionWrappers |> Map.tryFind definition with
+                | Some wrapper -> CoreIrLower.ClosureOverWrapper wrapper
+                | None -> CoreIrLower.DefinitionValue definition
+            acc @ [ argument ], used
+        | _ ->
+            let resolvedKey =
+                if scopeKeys.Contains requiredKey then requiredKey
+                else findCompatible used requiredKey |> Option.defaultValue requiredKey
+            acc @ [ memberFor requiredKey resolvedKey ], used.Add resolvedKey) ([], Set.empty)
+    |> fst
+
 let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expression) : string =
     /// The pointer to a string literal's bytes in the data section.
     let stringLiteralCode (value: string) =
@@ -2108,84 +2188,18 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
                 if not (env.KnownFunctions.Contains name) then
                     failwith $"The WebAssembly backend cannot compile a call to '{name}' yet"
                 else
-                    // Check if this function requires contexts - if so, pass them
-                    let requiredCtxFns = env.FunctionContextRequirements |> Map.tryFind name |> Option.defaultValue []
-                    
-                    // Helper to find a compatible context for a required context function, excluding already-used ones
-                    // Required might be "ToString_a_toString" (with type param), available might be "ToString_int_toString"
-                    let findCompatibleContext (usedContexts: Set<string>) (requiredCtxFnName: string) : string option =
-                        // Extract base context name and member from qualified key like "ToString_a_toString"
-                        let parts = requiredCtxFnName.Split('_')
-                        if parts.Length < 2 then None
-                        else
-                            let baseName = parts.[0]
-                            let memberName = parts.[parts.Length - 1]
-                            // Look for an available context with same base name and member name, not already used
-                            env.ContextMembers
-                            |> Map.toList
-                            |> List.map fst
-                            |> List.tryFind (fun availKey ->
-                                not (usedContexts.Contains availKey) &&
-                                let availParts = availKey.Split('_')
-                                availParts.Length >= 2 &&
-                                availParts.[0] = baseName &&
-                                availParts.[availParts.Length - 1] = memberName)
-                    
+                    // A function that requires contexts takes their members after its arguments.
                     let closureOver wrapper =
                         transpileExpression env (Expression.from expr (FunctionCall("__closure", None, [ Expression.from expr (FunctionCall("__slot", None, [ Expression.from expr (IdentifierExpr wrapper) ])) ])))
 
-                    // The member's closure: one in scope (a parameter or a `use`), else the ambient instance's.
-                    let memberCodeFor (ctxFnName: string) (resolvedName: string) =
-                        match env.ContextMembers |> Map.tryFind resolvedName, env.AmbientContextMembers |> Map.tryFind resolvedName with
-                        | Some memberCode, _ -> memberCode
-                        | None, Some wrapper -> closureOver wrapper
-                        | None, None ->
-                            let available =
-                                (env.ContextMembers |> Map.toList |> List.map fst) @
-                                (env.AmbientContextMembers |> Map.toList |> List.map fst)
-                            let availableStr = String.concat ", " available
-                            failwith $"Context function {ctxFnName} not available in current scope. Available: [{availableStr}]"
-
-                    // Where the type checker found each context the callee requires, as each required member's
-                    // instance, in the order of `requiredCtxFns`: none for a call it found nothing for.
-                    let instances =
-                        match env.ContextInstances |> Map.tryFind expr.Id, env.FunctionContextTypes |> Map.tryFind name with
-                        | Some found, Some contextTypes when found.Length = contextTypes.Length ->
-                            List.zip contextTypes found
-                            |> List.collect (fun (ctxType, instance) ->
-                                let baseName = match ctxType.Kind with TypeName n | TypeApply(n, _) -> n | _ -> "unknown"
-                                env.TypeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))
-                            |> fun (perMember: (string * ContextInstance option) list) -> if perMember.Length = requiredCtxFns.Length then Some perMember else None
-                        | _ -> None
-
-                    // Use fold to process required contexts while tracking which have been used
-                    let (ctxArgsCode, _) =
-                        requiredCtxFns
-                        |> List.mapi (fun index ctxFnName -> ctxFnName, instances |> Option.map (fun perMember -> perMember.[index]))
-                        |> List.fold (fun (codeAcc: string list, usedCtxs: Set<string>) (ctxFnName, instance) ->
-                            match instance with
-                            // An instance in scope, as written where it is: the members of a `use` or of the
-                            // context a function's type declares.
-                            | Some (memberName, Some (InstanceInScope written)) ->
-                                let key = contextMemberKey (Some written) memberName
-                                (codeAcc @ [ memberCodeFor ctxFnName key ], usedCtxs.Add key)
-                            // An instance built from the attached definitions: each member is one of them.
-                            | Some (memberName, Some (InstanceSynthesized members)) ->
-                                let definition = members |> List.find (fun (name, _) -> name = memberName) |> snd
-                                let code =
-                                    match env.FunctionWrappers |> Map.tryFind definition with
-                                    | Some wrapper -> closureOver wrapper
-                                    | None -> $"call ${sanitizeIdentifier definition}"
-                                (codeAcc @ [ code ], usedCtxs)
-                            | _ ->
-                                // Try exact match first, then try compatible match
-                                let resolvedName =
-                                    if env.ContextMembers.ContainsKey ctxFnName then ctxFnName
-                                    else
-                                        match findCompatibleContext usedCtxs ctxFnName with
-                                        | Some compatible -> compatible
-                                        | None -> ctxFnName  // Will fail below with better error
-                                (codeAcc @ [ memberCodeFor ctxFnName resolvedName ], usedCtxs.Add resolvedName)) ([], Set.empty)
+                    let ctxArgsCode =
+                        contextArguments
+                            env.FunctionContextRequirements env.FunctionContextTypes env.TypeLayouts env.ContextInstances
+                            env.FunctionWrappers env.AmbientContextMembers (env.ContextMembers |> Map.keys |> Set.ofSeq) name expr.Id
+                        |> List.map (function
+                            | CoreIrLower.MemberInScope key -> env.ContextMembers.[key]
+                            | CoreIrLower.ClosureOverWrapper wrapper -> closureOver wrapper
+                            | CoreIrLower.DefinitionValue definition -> $"call ${sanitizeIdentifier definition}")
                     let allArgsCode = argsCode @ ctxArgsCode
                     match allArgsCode with
                     | [] -> $"{call} ${sanitizeIdentifier name}"
@@ -2411,7 +2425,9 @@ type CoreIrReport =
 /// definition's generalised type, by name. Only a type-checked module has them.
 type private CoreIrTypes =
     { CalleeTypes: Map<NodeId, Ty>
-      DefinitionTypes: Map<string, Ty> }
+      DefinitionTypes: Map<string, Ty>
+      /// The type definitions, contexts among them, by name.
+      TypeDefs: Map<string, TypeDefInfo> }
 
 let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) (checkedTypes: Map<NodeId, Ty>) (coreIrTypes: CoreIrTypes option) : string * CoreIrReport =
     // The definitions synthesized instances are made of are passed as function values.
@@ -2588,6 +2604,91 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
 
+    /// The other names a function can call the members of the contexts it requires by, each with the key it stands
+    /// for: a member of a parameterised context (`Show_a_show`) by its own name (`show`), as the type checker allows,
+    /// when no other context the function declares has a member of that name.
+    let contextMemberAliases (name: string) : (string * string) list =
+        let keys = functionContextRequirements |> Map.tryFind name |> Option.defaultValue []
+        functionContextTypes
+        |> Map.tryFind name
+        |> Option.defaultValue []
+        |> List.collect (fun ctxType ->
+            match ctxType.Kind with
+            | TypeApply(baseName, _) ->
+                typeLayouts |> Map.tryFind baseName |> Option.defaultValue []
+                |> List.map (fun memberName -> memberName, contextMemberKey (Some ctxType) memberName)
+            | _ -> [])
+        |> List.groupBy fst
+        |> List.choose (fun (memberName, aliased) ->
+            match aliased with
+            | [ (_, key) ] when List.contains key keys && not (List.contains memberName keys) -> Some (memberName, key)
+            | _ -> None)
+
+    /// The members of the contexts `name` requires, as the core IR takes them: each with its type, from the context's
+    /// definition with its parameters as the function's annotation gives them, where that can be worked out.
+    let coreIrContextParameters (typeDefs: Map<string, TypeDefInfo>) (definitionTypes: Map<string, Ty>) (name: string) =
+        // The function's own type variables, by the names its annotation gives them.
+        let rec namedVars (ty: Ty) : (string * Ty) list =
+            match ty with
+            | TyVar { Name = Some varName } -> [ varName, ty ]
+            | TyVar _ | TyPrimitive _ -> []
+            | TyNominal(_, underlying, _) -> namedVars underlying
+            | TyFunc(input, output) -> namedVars input @ namedVars output
+            | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> namedVars)
+            | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
+            | TyTag(_, payload) -> payload |> Option.map namedVars |> Option.defaultValue []
+            | TyApply(_, args) -> args |> List.collect namedVars
+            | TyUnion items -> items |> List.collect namedVars
+            | TyAlias(_, args, underlying) -> (args |> List.collect namedVars) @ namedVars underlying
+        let vars = definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue [] |> Map.ofList
+        let argumentTy (argument: TypeExpr) =
+            match argument.Kind with
+            | TypeName ("int" | "string" | "bool" | "unit" | "float" as primitive) -> Some (TyPrimitive primitive)
+            | TypeName varName
+            | TypeVar varName -> vars |> Map.tryFind varName
+            | _ -> None
+        let memberTypes =
+            functionContextTypes
+            |> Map.tryFind name
+            |> Option.defaultValue []
+            |> List.collect (fun ctxType ->
+                let baseName, arguments =
+                    match ctxType.Kind with
+                    | TypeApply(baseName, arguments) -> baseName, arguments
+                    | TypeName baseName -> baseName, []
+                    | _ -> "unknown", []
+                let memberTy (memberName: string) =
+                    match typeDefs |> Map.tryFind baseName with
+                    | Some info when info.Parameters.Length = arguments.Length ->
+                        let argumentTys = arguments |> List.map argumentTy
+                        if argumentTys |> List.forall Option.isSome then
+                            let parameters = List.zip (info.Parameters |> List.map _.Id) (argumentTys |> List.map Option.get) |> Map.ofList
+                            let rec bind (ty: Ty) =
+                                match ty with
+                                | TyVar v when parameters.ContainsKey v.Id -> parameters.[v.Id]
+                                | TyFunc(input, output) -> TyFunc(bind input, bind output)
+                                | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> bind))
+                                | TyTag(tag, payload) -> TyTag(tag, payload |> Option.map bind)
+                                | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)
+                                | TyUnion items -> TyUnion(items |> List.map bind)
+                                | TyAlias(alias, args, underlying) -> TyAlias(alias, args |> List.map bind, bind underlying)
+                                | other -> other
+                            match Unifier.unalias info.Underlying with
+                            | TyRecord members -> members |> Map.tryFind memberName |> Option.map bind
+                            | _ -> None
+                        else None
+                    | _ -> None
+                typeLayouts |> Map.tryFind baseName |> Option.defaultValue []
+                |> List.map (fun memberName -> contextMemberKey (Some ctxType) memberName, memberTy memberName))
+            |> Map.ofList
+        let parameters =
+            functionContextRequirements.[name]
+            |> List.map (fun key ->
+                { CoreIrLower.ContextParameter.Key = key
+                  CoreIrLower.ContextParameter.Name = $"__ctx_{sanitizeIdentifier key}"
+                  CoreIrLower.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
+        parameters, contextMemberAliases name |> Map.ofList
+
     let coreIrContext (layoutIds: string list -> int) (functionSlots: string -> int -> int) (indirectCalls: int -> unit) : CoreIrEmit.EmitContext =
         { TagId =
             fun name ->
@@ -2620,7 +2721,16 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   ExprTypes = checkedTypes
                   CalleeTypes = types.CalleeTypes
                   DefinitionTypes = types.DefinitionTypes
-                  RequiresContexts = functionContextRequirements.Keys |> Set.ofSeq
+                  ContextParameters =
+                    functionContextRequirements
+                    |> Map.map (fun name _ -> coreIrContextParameters types.TypeDefs types.DefinitionTypes name)
+                  ContextArguments =
+                    fun name callId scopeKeys ->
+                        try
+                            Ok (contextArguments
+                                    functionContextRequirements functionContextTypes typeLayouts contextInstances functionWrappers
+                                    ambientContextMembers scopeKeys name callId)
+                        with Failure message -> Error message
                   RecordConstructors = typeLayouts.Keys |> Set.ofSeq
                   NominalWrappers = nominalWrappers
                   Lifted =
@@ -2790,26 +2900,12 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                 requiredContextFns
                 |> List.map (fun ctxFnName -> (ctxFnName, $"__ctx_{sanitizeIdentifier ctxFnName}"))
 
-            // Each member arrives as a closure block in a parameter of its own. A member of a parameterised
-            // context (`Show_a_show`) can also be called by its own name (`show`), as the type checker allows, when
-            // no other context the function declares has a member of that name.
+            // Each member arrives as a closure block in a parameter of its own, and can be called by its key or by the
+            // other name it has (see `contextMemberAliases`).
             let contextMembersFromParams =
                 let qualified = contextParamNames |> List.map (fun (ctxFnName, paramName) -> ctxFnName, $"local.get ${paramName}")
                 let byMemberName =
-                    functionContextTypes
-                    |> Map.tryFind name
-                    |> Option.defaultValue []
-                    |> List.collect (fun ctxType ->
-                        match ctxType.Kind with
-                        | TypeApply(baseName, _) ->
-                            typeLayouts |> Map.tryFind baseName |> Option.defaultValue []
-                            |> List.map (fun memberName -> memberName, contextMemberKey (Some ctxType) memberName)
-                        | _ -> [])
-                    |> List.groupBy fst
-                    |> List.choose (fun (memberName, keys) ->
-                        match keys, qualified |> List.tryFind (fun (key, _) -> key = snd keys.Head) with
-                        | [ _ ], Some (_, code) when not (qualified |> List.exists (fun (key, _) -> key = memberName)) -> Some (memberName, code)
-                        | _ -> None)
+                    contextMemberAliases name |> List.map (fun (alias, key) -> alias, (qualified |> List.find (fst >> (=) key) |> snd))
                 qualified @ byMemberName |> Map.ofList
 
             let env =
@@ -3229,7 +3325,7 @@ let transpileTypedModuleWithReport (options: BackendOptions) (typed: TypedModule
             | _ -> None)
         |> Map.ofList
     let coreIrTypes =
-        if options.UseCoreIr then Some { CalleeTypes = typed.CalleeTypes; DefinitionTypes = typed.Types }
+        if options.UseCoreIr then Some { CalleeTypes = typed.CalleeTypes; DefinitionTypes = typed.Types; TypeDefs = typed.TypeDefs }
         else None
     transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances typed.ExprTypes coreIrTypes
 

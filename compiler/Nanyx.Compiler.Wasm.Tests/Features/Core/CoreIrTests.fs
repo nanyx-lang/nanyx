@@ -228,6 +228,34 @@ let ``Lambdas, closures and function values go through the core IR`` () =
     Assert.Contains("call $__nanyx_alloc", wat)
 
 [<Fact>]
+let ``Functions that require contexts, and their callers, go through the core IR`` () =
+    let source =
+        "context Ask = (ask: () -> int)\n" +
+        "\n" +
+        "context Show(a) = (show: a -> string)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "\n" +
+        "def Point.show: Point -> string = { p -> \"point\" }\n" +
+        "\n" +
+        "def twice: [Ask] () -> int = { ask() + ask() }\n" +
+        "\n" +
+        "def plain: [Show(a)] a -> string = { value -> show(value) }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  use Ask(ask = { 21 })\n" +
+        "  def p = Point(x = 1, y = 2)\n" +
+        "  def s = plain(p)\n" +
+        "  twice()\n" +
+        "}\n"
+    let wat, report = compileWithReport source
+    // `plain` is specialised for `Point`, with the instance built from `Point.show` passed as its member.
+    for name in [ "twice"; "plain__rec_x_int_y_int"; "main"; "__fn_Point_show" ] do
+        Assert.Contains(name, report.FromCoreIr)
+    // Each member arrives in a parameter of its own, after the function's own parameters.
+    Assert.Contains("(func $twice (param $__ctx_ask i32) (result i32)", wat)
+
+[<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
     let source =
         "def nOf = { r -> r.n }\n" +
@@ -254,7 +282,8 @@ let ``Every intermediate value in the core IR is named`` () =
           ExprTypes = typed.ExprTypes
           CalleeTypes = typed.CalleeTypes
           DefinitionTypes = typed.Types
-          RequiresContexts = Set.empty
+          ContextParameters = Map.empty
+          ContextArguments = fun _ _ _ -> Ok []
           RecordConstructors = Set.empty
           NominalWrappers = Set.empty
           Lifted = Map.empty }
