@@ -354,12 +354,6 @@ module UnreachableArms =
           Description =
             "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them match every tag, boolean, int, length of list or combination of them it does." }
 
-    /// The span from `start` to `end'` of `source`, in the file of `like`.
-    let private spanBetween (source: string) (like: SourceSpan) (start: int) (end': int) : SourceSpan =
-        let lineStart = source.LastIndexOf('\n', max 0 (start - 1)) + 1
-        let line = source.Substring(0, start) |> Seq.filter ((=) '\n') |> Seq.length
-        { like with Start = start; End = end'; StartLine = line; StartColumn = start - (if start = 0 then 0 else lineStart) }
-
     /// An edit that removes the arm whose patterns are `patterns` and whose value is `body`: from its `|` to the end of
     /// its value, and its lines with them when nothing else is written on them (a comment after it goes too). `None`
     /// when no `|` comes before the arm, as for the `else` of an `if ... is`, which is no arm to remove.
@@ -378,11 +372,11 @@ module UnreachableArms =
                 | newline -> newline + 1
             let after = source.Substring(body.Span.End, lineEnd - body.Span.End).Trim()
             if String.IsNullOrWhiteSpace(source.Substring(lineStart, bar - lineStart)) && (after = "" || after.StartsWith "--") then
-                Some { Span = spanBetween source first lineStart lineEnd; NewText = "" }
+                Some { Span = TextEdit.spanBetween source first lineStart lineEnd; NewText = "" }
             else
                 // On a line with other arms: the arm and the space before its `|`.
                 let start = if bar > 0 && source.[bar - 1] = ' ' then bar - 1 else bar
-                Some { Span = spanBetween source first start body.Span.End; NewText = "" }
+                Some { Span = TextEdit.spanBetween source first start body.Span.End; NewText = "" }
 
     /// Whether the arm at `index` is one the parser made up: the `()` an `if ... is` without an `else` stands for,
     /// which is reported at the `then` branch, where nothing can be done about it.

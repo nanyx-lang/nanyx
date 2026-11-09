@@ -127,9 +127,15 @@ what the compiler keeps: exact spans, resolved names and types.
   that does not parse shows the last good text's outline, less the items edited since.
 - **Quick fixes** ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). Each fix of a diagnostic in the
   requested range is a `quickfix` code action: its edits applied to the document, carrying the diagnostic as
-  published, with a diagnostic's first fix preferred. Only linters offer fixes so far (`default/unusedBindings`
-  removes an unused local or renames an unused name to `_`); a compiler error's fixes will appear the same way
-  once it has them. A fix that edits another file is not offered.
+  published, with a diagnostic's first fix preferred. Linters offer fixes (`default/unusedBindings` removes an
+  unused local or renames an unused name to `_`), and so does one compiler error so far
+  ([#497](https://github.com/nanyx-lang/nanyx/issues/497)): an unknown name (`NYX0101`, `NYX0102`) that a
+  standard-library module exports offers the import that brings it in, one fix per module that exports it.
+  `String.trim(s)` offers `import nanyx/text`; a name qualified by a module's name, as `math.abs(x)`, offers
+  `import nanyx/math as math`. The import goes on the line after the file's last import, else after its `module`
+  line, else at the top. `NyxCompiler.ImportFixes` attaches these fixes in the compiler, from an index of the
+  library's exports built once; the prelude is left out, since its names are always in scope. A fix that edits
+  another file is not offered.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
   *Download the compiler* and *Restart the language server*.
@@ -165,8 +171,9 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths
    ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), and a value's attached definitions after a pipe's `\`
    ([#269](https://github.com/nanyx-lang/nanyx/issues/269)).
-6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)); compiler
-   errors have no fixes yet.
+6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). The first
+   compiler error with fixes is an unknown name the standard library exports, which offers its import
+   ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
 
 ## Open questions
