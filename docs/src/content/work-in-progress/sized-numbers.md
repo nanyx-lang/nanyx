@@ -53,22 +53,76 @@ def ratio: F32 = 0.5     -- an F32
 
 A literal that does not fit its type is a compile error: `def small: U8 = 300` is rejected.
 
-# Arithmetic and conversions
+# Arithmetic
 
 Arithmetic and comparison work on two values of the same type, through the [`Num(a)`](../advanced/contexts)
 context that every numeric type satisfies. Nothing is converted implicitly, so adding an `I32` to an `int` is a type
-error until one side is converted. Conversions are explicit:
-
-- A conversion that cannot lose information, such as `I32` to `I64`, always succeeds.
-- A conversion that can returns a tag union, with the value when it fits: `#some(I32) | #outOfRange`.
+error until one side is [converted](#conversions).
 
 [Units](./units-and-dimensions) attach to any of these types: `I64(Bytes)`, `F32(Time)`.
 
+## Overflow
+
+Integer arithmetic whose result does not fit its type stops the program with a runtime error, as division by zero
+does. It never wraps around silently:
+
+```nanyx
+def big: I32 = 2_000_000_000
+def bigger = big + big  -- runtime error: I32 overflow
+```
+
+This holds for every integer type, unsigned ones included: subtracting a larger `U32` from a smaller one is an
+overflow like any other, not a wrap to 4 billion. A program that needs a negative difference converts to a signed type
+first.
+
+Code that wants arithmetic that wraps on purpose, such as a hash function, asks for it by name: `I32.wrappingAdd`,
+`I32.wrappingSub` and `I32.wrappingMul`, on each integer type. That is the only way to get it, so a wrap is always
+visible in the code.
+
+Swift checks every operation in the same way; Rust checks in debug builds and wraps in release builds. Nanyx checks
+in every build, so a program behaves the same however it was compiled. Checking costs a compare and a branch per
+operation, which the [principles](../foundations/principles) accept in exchange for never computing a wrong answer
+silently.
+
+Floating-point arithmetic does not stop: it follows IEEE 754, giving infinities and NaN.
+
+# Conversions
+
+Conversions are [attached definitions](../advanced/attached-definitions) on the type being converted, named after
+the type converted to: `I32.toInt`, `U8.toI32`, `I64.toFloat`, `F64.toF32`. The target is named by its short name
+where it has one (`toInt` and `toFloat`, not `toI64` and `toF64`). Like any attached definition, a conversion can be
+called by its qualified name or piped into:
+
+```nanyx
+def count: I32 = 7
+def wide = I32.toInt(count)
+def same = count \toInt
+```
+
+What a conversion takes and gives depends on what it can lose:
+
+| Conversion | Example | Signature |
+|------------|---------|-----------|
+| Lossless: every value fits | `I32` to `int`, `U8` to `I32`, `F32` to `float` | `I32.toInt: I32 -> int` |
+| Integer to a narrower integer, or between signed and unsigned | `int` to `I32`, `I32` to `U32` | `I64.toI32: I64 -> #some(I32) \| #outOfRange` |
+| Integer to floating point | `int` to `float` | `I64.toFloat: I64 -> float` |
+| Floating point to integer | `float` to `int` | `F64.toInt: F64, #truncate \| #round \| #floor \| #ceil -> I64` |
+| Floating point to a narrower floating point | `float` to `F32` | `F64.toF32: F64 -> F32` |
+
+- **A narrowing integer conversion** is the one that can fail outright, so it returns a tag union and the caller
+  decides what to do when the value doesn't fit.
+- **Integer to floating point** rounds to the nearest representable value. A `float` holds integers exactly up to
+  2<sup>53</sup>; past that it rounds, as in every language with IEEE 754 floats.
+- **Floating point to integer** takes a tag saying how to drop the fraction: `x \toInt(#round)`. A value that is
+  NaN, infinite or out of the integer type's range is an overflow, and stops the program.
+- **Floating point to a narrower floating point** rounds to the nearest `F32`, and gives infinity past its range.
+
+`int` is `I64`, so `int` values have the conversions attached to `I64`: `I64.toFloat` is the same definition
+whichever name the value's type was written with.
+
 # Open questions
 
-1. **Overflow.** Does integer arithmetic that leaves its type's range wrap around (as WebAssembly's does), or stop
-   the program? Wrapping is free but silent; stopping is safer and costs a check per operation.
-2. **Conversion names.** What are the conversion functions called, and should there also be a wrapping conversion
-   for code that wants the low bits on purpose?
-3. **Unsigned arithmetic.** Is subtraction that goes below zero on a `U32` an overflow like any other, or are
-   unsigned types limited to storage and bit operations?
+1. **Checked float-to-integer conversion.** Should there also be a form of `F64.toInt` that returns
+   `#some(I64) | #outOfRange` instead of stopping the program, for input that might be NaN or huge?
+2. **Wrapping conversions.** Should narrowing integer conversions have wrapping forms (`I64.wrappingToI32`) for code
+   that wants the low bits, like the wrapping arithmetic?
