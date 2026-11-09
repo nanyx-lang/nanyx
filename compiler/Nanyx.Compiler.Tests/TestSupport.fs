@@ -6,14 +6,6 @@ open Xunit
 open NyxCompiler
 open Parser.Program
 
-/// The compiler without its analyzers. These tests are about what the compiler checks, and many of their programs
-/// leave names unused (a lambda that ignores its argument, say), which the official analyzer would warn about.
-/// `AnalyzerTests` tests the analyzers.
-module Compiler =
-    let private options = { Analyzers.defaultOptions with Analyzers = [] }
-    let compile (source: string) = NyxCompiler.Compiler.compileWith options source
-    let compileFile (filePath: string) = NyxCompiler.Compiler.compileFileWith options filePath
-
 let withTempDir (action: string -> unit) =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
     Directory.CreateDirectory dir |> ignore

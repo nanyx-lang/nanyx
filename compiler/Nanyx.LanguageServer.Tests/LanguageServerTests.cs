@@ -433,25 +433,26 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task Code_actions_are_the_fixes_of_the_diagnostics_in_the_range()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-8");
-        const string text = "def f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
+        const string text = "#:analyzer default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
 
+        // The official analyzer runs only where something turns it on: here, a directive.
         Open(uri, text);
         var published = (await NextPublished(uri)).Diagnostics!;
         Assert.Equal(2, published.Count());
 
         // An unused local is removed, line and all.
-        var remove = Assert.Single(await CodeActionsIn(uri, new Range(1, 8, 1, 8)));
+        var remove = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)));
         Assert.Equal(("Remove `unused`", CodeActionKind.QuickFix, true), (remove.Title, remove.Kind, remove.IsPreferred));
         Assert.Equal("default/unusedBindings", Assert.Single(remove.Diagnostics!).Code?.String);
-        Assert.Equal("def f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
+        Assert.Equal("#:analyzer default\ndef f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // An unused parameter is renamed to `_`.
-        var rename = Assert.Single(await CodeActionsIn(uri, new Range(4, 10, 4, 11)));
+        var rename = Assert.Single(await CodeActionsIn(uri, new Range(5, 10, 5, 11)));
         Assert.Equal("Rename `x` to `_`", rename.Title);
-        Assert.Equal("def f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
+        Assert.Equal("#:analyzer default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
 
         // Nothing where no diagnostic is.
-        Assert.Empty(await CodeActionsIn(uri, new Range(2, 2, 2, 3)));
+        Assert.Empty(await CodeActionsIn(uri, new Range(3, 2, 3, 3)));
     }
 
     /// <summary><paramref name="text"/> with <paramref name="edit"/> made to it.</summary>

@@ -1480,9 +1480,9 @@ module Compiler =
             compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)
 
     /// Compiles the file at `filePath` up to the typed module, resolving its imports (standard-library modules
-    /// from the embedded library, everything else relative to the file), and runs every analyzer over it.
+    /// from the embedded library, everything else relative to the file). It runs no analyzers: `compileFileWith` runs those it is given.
     let compileFile (filePath: string) : CompileResult =
-        compileFileWith Analyzers.defaultOptions filePath
+        compileFileWith Analyzers.none filePath
 
     /// `compileSource` with the analyzers and severities `options` gives.
     let compileSourceWith (options: AnalyzerOptions) (filePath: string) (source: string) : CompileResult =
@@ -1491,13 +1491,13 @@ module Compiler =
     /// Compiles `source` as if it were the contents of the file at `filePath` (which need not exist, or may hold
     /// older text: an editor's unsaved buffer, say). Imports are resolved exactly as `compileFile` resolves them.
     let compileSource (filePath: string) (source: string) : CompileResult =
-        compileSourceWith Analyzers.defaultOptions filePath source
+        compileSourceWith Analyzers.none filePath source
 
     /// `compile` with the analyzers and severities `options` gives.
     let compileWith (options: AnalyzerOptions) (source: string) : CompileResult =
         compileFrom options InMemory source
 
-    /// Compiles source given directly, up to the typed module, and runs every analyzer over it. Standard-library
+    /// Compiles source given directly, up to the typed module, without analyzers. Standard-library
     /// imports are resolved; imports by path cannot be, since there is no file for them to be relative to.
     let compile (source: string) : CompileResult =
-        compileWith Analyzers.defaultOptions source
+        compileWith Analyzers.none source

@@ -6,8 +6,8 @@ open Parser.Program
 /// What a script's `#:` directives say: what a package's manifest would, for a file run on its own, which has none.
 type ScriptDirectives =
     { /// The analyzers the `#:analyzer` directives turn on and the severities they set, as an `[analyzers]` table
-      /// would. None when there is no `#:analyzer` directive: then every analyzer runs at its defaults, as for any
-      /// script.
+      /// would. None when there is no `#:analyzer` directive: then no analyzer runs, as for a package whose manifest
+      /// has no `[analyzers]` table.
       Analyzers: AnalyzerOptions option
       /// What is wrong with the directives, each at its line.
       Diagnostics: Diagnostic list }
@@ -90,11 +90,11 @@ module Script =
             Diagnostics = directives.Diagnostics @ result.Diagnostics
             ErrorsDeferred = result.ErrorsDeferred && not (directives.Diagnostics |> List.exists Diagnostics.isError) }
 
-    /// Compiles `source` as the script at `filePath`, with the analyzers its directives give, or every analyzer at its
-    /// defaults if they give none, as `nanyx run` does.
+    /// Compiles `source` as the script at `filePath`, with the analyzers its directives turn on (none if they turn none
+    /// on), as `nanyx run` does.
     let compileSource (filePath: string) (source: string) : CompileResult =
         let directives = read filePath source
-        Compiler.compileSourceWith (directives.Analyzers |> Option.defaultValue Analyzers.defaultOptions) filePath source
+        Compiler.compileSourceWith (directives.Analyzers |> Option.defaultValue Analyzers.none) filePath source
         |> withDirectives directives
 
     /// `compileSource` for the file at `filePath` as it is on disk.

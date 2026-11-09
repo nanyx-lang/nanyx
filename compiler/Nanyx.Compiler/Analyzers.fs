@@ -347,11 +347,15 @@ module Analyzers =
           Rules = [ UnusedBindings.rule; NonTailRecursion.rule ]
           Analyze = fun model -> UnusedBindings.analyze model @ NonTailRecursion.analyze model }
 
-    /// The analyzers the compiler runs unless told otherwise.
+    /// The analyzers the compiler has, which a manifest's `[analyzers]` table or a script's `#:analyzer` directives
+    /// can turn on.
     let all = [ official ]
 
+    /// No analyzers: what runs where nothing turns any on. Analyzers are opt-in, like a package's dependencies.
+    let none = { Analyzers = []; Severities = Map.empty }
+
     /// Every analyzer the compiler has, each rule at its default severity.
-    let defaultOptions = { Analyzers = all; Severities = Map.empty }
+    let everyAnalyzer = { Analyzers = all; Severities = Map.empty }
 
     /// The code of a rule of an analyzer.
     let code (analyzer: Analyzer) (ruleId: string) = $"{analyzer.Name}/{ruleId}"

@@ -49,7 +49,7 @@ println("Hello!")
 | `#:formatter lineWidth 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `lineWidth = 80` under `[formatter]` |
 | `#:package acme.json 1.2` | Depends on a package: not supported yet, so it is an error for now | `[dependencies]` |
 
-As in a manifest, once a script has an `#:analyzer` directive only the analyzers it names run; a script without one runs every analyzer at its defaults. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
+As in a manifest, only the analyzers a script's `#:analyzer` directives name run, so a script without one runs none. A directive the compiler does not understand, or one after the first line of code, is an error naming its line. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things.
 
 # Importing by file path
 
