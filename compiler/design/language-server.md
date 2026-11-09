@@ -63,8 +63,10 @@ what the compiler keeps: exact spans, resolved names and types.
   its type gets a lens above it with its whole type; a local def, lambda parameter or pattern variable gets an
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
-  the `α` in its def's lens (see `NyxCompiler.TypeHints`). Like hover, they come from the last good compile, so
-  while the file is broken only the def being edited loses its lens.
+  the `α` in its def's lens (see `NyxCompiler.TypeHints`). A def that writes only its contexts
+  (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,
+  without a colon (`[Log] string -> ()`), rather than after the name. Like hover, they come from the last good
+  compile, so while the file is broken only the def being edited loses its lens.
 - **Completion of the names in scope** ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), with their
   types, and the keywords. Inference records where each name can be written (`TypedModule.Scopes`,
   [#211](https://github.com/nanyx-lang/nanyx/issues/211)): a local from its def to the end of its block, a

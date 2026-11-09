@@ -680,6 +680,24 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Top_level_inlay_hint_of_a_def_that_writes_only_its_contexts_follows_them()
+    {
+        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        var uri = DocumentUri.Parse("untitled:Untitled-10");
+
+        Open(uri, "context Log = (log: string -> ())\ndef greet: [Log] = { name -> log(name) }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // `def greet: [Log] string -> () = { name: string -> ...`, the type completing the annotation.
+        Assert.Equal(
+            [
+                (new Position(1, 16), "string -> ()", true),
+                (new Position(1, 25), ": string", false)
+            ],
+            (await InlayHintsIn(uri, new Range(1, 0, 2, 0))).Select(hint => (hint.Position, hint.Label.String, hint.PaddingLeft)));
+    }
+
+    [Fact]
     public async Task Top_level_type_hints_off_shows_no_lenses_and_only_the_locals_inlay_hints()
     {
         await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Off });
