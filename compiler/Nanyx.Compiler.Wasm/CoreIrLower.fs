@@ -65,7 +65,12 @@ type LowerInput =
       /// value, so its constructor and the pattern that takes it apart are no-ops.
       NominalWrappers: Set<string>
       /// The functions lambda lifting made, by name.
-      Lifted: Map<string, LiftedFunction> }
+      Lifted: Map<string, LiftedFunction>
+      /// The module's top-level expressions, which its start function evaluates in order when the module is loaded.
+      TopLevel: Expression list }
+
+/// The name of the start function, which evaluates the module's top-level expressions.
+let startFunctionName = "__nanyx_start"
 
 /// A function the IR lowered, and what it was finished into (see `lowerModule`).
 type Lowered<'T> =
@@ -92,6 +97,8 @@ type private Lowering =
     | LiftedCapturing of IrType list
     /// As the wrapper of a top-level function, which it calls at this type.
     | WrapperCalling of string * Ty
+    /// As the start function, from the module's top-level expressions.
+    | AsStart
 
 /// The most specialisations one definition may have: a definition that calls itself at ever bigger types
 /// (polymorphic recursion) would otherwise have no end of them.
@@ -186,6 +193,7 @@ let rec private toIrType (ty: Ty) : IrType =
     | TyPrimitive "unit" -> IrUnit
     | TyPrimitive "string" -> IrString
     | TyPrimitive "float" -> IrFloat
+    | TyPrimitive "?error" -> IrError
     | TyTag _
     | TyUnion _ as tags ->
         let rec members ty =
@@ -423,7 +431,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
             for operand in [ left; right ] do
                 match tyOf operand with
-                | IrInt | IrBool | IrUnit -> ()
+                | IrInt | IrBool | IrUnit | IrError -> ()
                 | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
@@ -447,6 +455,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 match tyOf iterable with
                 | IrList elementTy -> this.Atoms scope [ iterable ] (fun atoms -> loop (OverList atoms.Head) elementTy)
                 | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
+        | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) -> k (mk (Panic [ message ]) (tyOf expr))
         | FunctionCall("dbg", _, args) when not (scope.Vars.ContainsKey "dbg") && not (definitions.ContainsKey "dbg") ->
             // Prints its value and leaves it, by how the value is printed.
             let value =
@@ -660,6 +669,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | Lambda([], body) -> this.Complex scope body k
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
+        | InterpolatedString parts when parts |> List.exists (function StringExpr hole -> tyOf hole = IrError | StringText _ -> false) ->
+            // A hole of no known type cannot be printed. The holes are evaluated in order up to it, for what they do (the
+            // hole itself most likely stops the program, through the deferred error that left its type unknown), and if
+            // the program is still running then, it stops there.
+            let insideHole = { scope with InterpolationDepth = scope.InterpolationDepth + 1 }
+            let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
+            let before = holes |> List.takeWhile (fun hole -> tyOf hole <> IrError)
+            let unknown = holes |> List.find (fun hole -> tyOf hole = IrError)
+            let stop = mk (Panic [ Interpolation.unknownHoleMessage unknown.Span ]) IrString
+            (before @ [ unknown ])
+            |> List.rev
+            |> List.fold (fun (rest: Expr) hole -> this.Complex insideHole hole (fun value -> mk (Do(value, rest)) rest.Type)) stop
+            |> k
         | InterpolatedString parts ->
             // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
             // A string inside a hole is a level deeper, so that it keeps to its own hole locals.
@@ -870,6 +892,25 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     mk (Let(scrutinee, lowered, body)) body.Type)
         bindScrutinees (List.zip scrutinees values)
 
+    /// The start function: each top-level expression in turn, its value dropped. The start function returns nothing,
+    /// so nothing in it is a tail call; its body ends in unit, which the emitter leaves out (see `emitStart`).
+    member this.StartFunction () : Function =
+        let scope =
+            { Vars = Map.empty
+              MatchDepth = 0
+              LivePayloads = Set.empty
+              InterpolationDepth = 0
+              Members = Map.empty
+              ForDepth = 0 }
+        let body =
+            List.foldBack (fun (expr: Expression) (rest: Expr) -> mk (Do(this.Tail scope expr, rest)) IrUnit) input.TopLevel (mk (Atom AUnit) IrUnit)
+        { Name = startFunctionName
+          Source = startFunctionName
+          TypeArguments = []
+          Params = []
+          Result = IrUnit
+          Body = body }
+
     /// The types of the parameters `names` of a function of type `fnTy`, and of its result. Several parameters are the
     /// fields of the input, each named by its position or by its own name when the type names it
     /// (`(int, step: int) -> int`).
@@ -893,6 +934,9 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     /// Lowers the definition `name` to a function called `functionName`, as `lowering` says.
     member this.Function (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) : Function =
         selfName <- functionName
+        match lowering with
+        | AsStart -> this.StartFunction ()
+        | _ ->
         let expr = definitions.[name]
         let parameterNames, body = parametersAndBody expr
         let isLambda = match expr.Kind with Lambda _ -> true | _ -> false
@@ -912,6 +956,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               Result = result
               Body = body }
         match lowering with
+        | AsStart -> this.StartFunction ()
         | AsDefined ->
             let defTy =
                 match input.ExprTypes |> Map.tryFind expr.Id with
@@ -1015,6 +1060,12 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
         match input.DefinitionTypes |> Map.tryFind name with
         | Some ty -> not (freeVars ty).IsEmpty
         | None -> false
+
+    if not input.TopLevel.IsEmpty then
+        lowerOne (startFunctionName, []) Map.empty AsStart startFunctionName
+        while pending.Count > 0 do
+            let key, bindings, how = pending.Dequeue()
+            lowerOne key bindings how names.[key]
 
     for (name, _) in input.Definitions do
         if input.Lifted.ContainsKey name then

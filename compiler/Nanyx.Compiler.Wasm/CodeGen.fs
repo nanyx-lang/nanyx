@@ -701,13 +701,6 @@ let rec private deferredErrorMessages (expr: Expression) : string list =
 let private isErrorTypedHole (checkedTypes: Map<NodeId, Ty>) (inner: Expression) =
     checkedTypes |> Map.tryFind inner.Id |> Option.exists Unifier.isError
 
-/// What a debug build writes when it reaches the hole at `span` (see `isErrorTypedHole`) and the hole did not stop the
-/// program itself: the location as a deferred error's, then why.
-let private unknownHoleMessage (span: SourceSpan) =
-    let location =
-        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
-        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-    $"{location}error: the value interpolated here has no known type, because of an error deferred from compile time\n"
 
 /// The holes in the interpolated strings of `expr` that have the error type (see `isErrorTypedHole`).
 let rec private errorTypedHoles (checkedTypes: Map<NodeId, Ty>) (expr: Expression) : Expression list =
@@ -1583,7 +1576,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
         let before = holes |> List.takeWhile (isErrorTypedHole env.CheckedTypes >> not)
         let unknown = holes |> List.find (isErrorTypedHole env.CheckedTypes)
         let evaluated = before @ [ unknown ] |> List.map (fun inner -> $"{transpileExpression insideHole inner}\n    drop")
-        evaluated @ [ deferredErrorCode env [ unknownHoleMessage unknown.Span ] ] |> String.concat "\n    "
+        evaluated @ [ deferredErrorCode env [ Interpolation.unknownHoleMessage unknown.Span ] ] |> String.concat "\n    "
     | InterpolatedString parts ->
         // Pair every part with the index of the hole local it reads (text parts get a dummy index).
         let indexedParts =
@@ -2614,7 +2607,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
          // What each hole of no known type writes, if a debug build reaches it.
          ((defs |> List.map (fun (_, _, expr) -> expr)) @ topLevelExprs
           |> List.collect (errorTypedHoles checkedTypes)
-          |> List.map (fun hole -> unknownHoleMessage hole.Span))
+          |> List.map (fun hole -> Interpolation.unknownHoleMessage hole.Span))
         |> List.distinct
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
@@ -2751,7 +2744,8 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   Lifted =
                     [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLower.LiftedLambda(origin.Lambda, origin.Captured))
                       yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLower.FunctionWrapper wrapped) ]
-                    |> Map.ofList }
+                    |> Map.ofList
+                  TopLevel = topLevelExprs }
             CoreIrLower.lowerModule input (emitFromCoreIr (coreIrContext (fun _ -> 0) (fun _ _ -> 0) ignore) >> ignore))
 
     /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
@@ -3069,10 +3063,12 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         match coreIr with
         | Some lowered ->
             { FromCoreIr =
-                defs
-                |> List.collect (fun (name, _, _) ->
-                    [ yield! lowered.Roots |> Map.tryFind name |> Option.map (fun (func, _) -> func.Name) |> Option.toList
-                      yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name) ])
+                [ yield!
+                    defs
+                    |> List.collect (fun (name, _, _) ->
+                        [ yield! lowered.Roots |> Map.tryFind name |> Option.map (fun (func, _) -> func.Name) |> Option.toList
+                          yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name) ])
+                  yield! lowered.Roots |> Map.tryFind CoreIrLower.startFunctionName |> Option.map (fun (func, _) -> func.Name) |> Option.toList ]
               Specialisations =
                 defs
                 |> List.collect (fun (name, _, _) ->
@@ -3089,6 +3085,16 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         if topLevelExprs.IsEmpty then
             "", ""
         else
+        match coreIr |> Option.bind (fun lowered -> lowered.Roots |> Map.tryFind CoreIrLower.startFunctionName) with
+        | Some (func, ()) ->
+            let emitted =
+                CoreIrEmit.emitStart
+                    (coreIrContext (recordLayoutId recordTable) (functionValueSlot functionTable) (functionTable.IndirectArities.Add >> ignore))
+                    func
+            for helper in emitted.Helpers do
+                usedHelpers.Add helper |> ignore
+            emitted.Text, "  (start $__nanyx_start)"
+        | None ->
             let localNames =
                 topLevelExprs
                 |> List.collect collectExprLocalNames

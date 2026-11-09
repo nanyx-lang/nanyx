@@ -57,7 +57,8 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | Do _
     | Match _
     | Interpolate _
-    | BoxFloat _ -> []
+    | BoxFloat _
+    | Panic _ -> []
 
 type private FunctionEmitter(context: EmitContext) =
     let helpers = HashSet<string>()
@@ -189,6 +190,11 @@ type private FunctionEmitter(context: EmitContext) =
             | None -> failwith $"Internal error: no instruction for the operator {op} on floats"
         | Prim(FloatBinary op, _) -> failwith $"Internal error: the operator {op} on floats with other than two operands"
         | BoxFloat value -> $"f64.const {wasmFloatConst value}\n    call ${helper Helpers.floatBox}"
+        | Panic messages ->
+            // Writes each message to stderr and exits with 1. `unreachable` after the exit, which never returns, lets
+            // the code stand wherever a value is expected.
+            let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
+            writes @ [ "i32.const 1"; $"call ${helper Helpers.procExit}"; "unreachable" ] |> String.concat "\n    "
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | Call(name, args) ->
             let call = if tail then "return_call" else "call"
@@ -430,7 +436,8 @@ let private declaredLocals (body: Expr) : string list =
         | CallRuntime _
         | MakeClosure _
         | CallClosure _
-        | BoxFloat _ -> ()
+        | BoxFloat _
+        | Panic _ -> ()
         | Interpolate _ -> interpolates.Value <- true
         | ForEach loop ->
             loops.Add loop.Cursor
@@ -478,3 +485,22 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         | Some exported -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )\n  (export \"{exported}\" (func ${func.Name}))"
         | None -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )"
     { Text = text; Helpers = emitter.Helpers }
+
+/// The start function, `func` (see `CoreIrLower.StartFunction`): each top-level expression in turn, its value
+/// dropped, as `CodeGen.fs` lays it out. It takes nothing and returns nothing.
+let emitStart (context: EmitContext) (func: Function) : Emitted =
+    let emitter = FunctionEmitter(context)
+    let rec expressions (expr: Expr) =
+        match expr.Kind with
+        | Do(value, rest) -> value :: expressions rest
+        | Atom AUnit -> []
+        | _ -> failwith "Internal error: the start function is not a sequence of top-level expressions"
+    let bodyCode =
+        expressions func.Body
+        |> List.map (fun value -> $"{emitter.Sequence false value}\n    drop")
+        |> String.concat "\n    "
+    let header =
+        match declaredLocals func.Body |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " with
+        | "" -> ""
+        | locals -> " " + locals
+    { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers }

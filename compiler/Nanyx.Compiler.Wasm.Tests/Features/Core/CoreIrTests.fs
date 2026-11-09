@@ -278,6 +278,23 @@ let ``Floats, pipes, guards and for loops go through the core IR`` () =
     Assert.Contains("f64.mul\n    call $__nanyx_float_box", wat)
 
 [<Fact>]
+let ``The start function and errors deferred to run time go through the core IR`` () =
+    // A module with a type error is still compiled: the expression that failed writes the error and stops the program
+    // when it is reached.
+    let source =
+        "def broken: int -> string = { n -> n ++ \"x\" }\n" +
+        "\n" +
+        "def fine: int -> int = { n -> n + 1 }\n" +
+        "\n" +
+        "dbg(fine(1))\n" +
+        "dbg(broken(2))\n"
+    let result = Compiler.compile source
+    let wat, report = transpileTypedModuleWithReport { UseCoreIr = true } result.Typed.Value
+    Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], report.FromCoreIr)
+    Assert.Contains("call $proc_exit\n    unreachable", wat)
+    Assert.Contains("(start $__nanyx_start)", wat)
+
+[<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
     let source =
         "def nOf = { r -> r.n }\n" +
@@ -308,7 +325,8 @@ let ``Every intermediate value in the core IR is named`` () =
           ContextArguments = fun _ _ _ -> Ok []
           RecordConstructors = Set.empty
           NominalWrappers = Set.empty
-          Lifted = Map.empty }
+          Lifted = Map.empty
+          TopLevel = [] }
     let lowered = CoreIrLower.lowerModule input id
     let func, _ = lowered.Roots.["f"]
     let printed = CoreIr.Print.func func
