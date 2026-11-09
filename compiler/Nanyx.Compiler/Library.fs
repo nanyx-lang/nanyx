@@ -1016,17 +1016,14 @@ module Compiler =
                 | FunctionCall(_, _, [ Kind (Lambda([], body)) ]) when blocks.Contains current.Id -> body.Kind
                 | other -> other)
 
-    /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
-    /// call (`properties`), each builder block that uses no keyword as its block (`workflowBlocks`), and without
-    /// import statements.
+    /// Where `span` is, as `nanyx` prints a diagnostic's place: `file:line:column: `.
+    let private deferredLocation (span: SourceSpan) =
+        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
+        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
+
     /// What a deferred error writes when it is reached: the diagnostic as `nanyx` prints it, marked as deferred.
     let private deferredMessage (diagnostic: Diagnostic) =
-        let location =
-            match diagnostic.Span with
-            | Some span when span.File = "" -> $"{span.StartLine + 1}:{span.StartColumn + 1}: "
-            | Some span -> $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-            | None -> ""
+        let location = diagnostic.Span |> Option.map deferredLocation |> Option.defaultValue ""
         $"{location}error {diagnostic.Code}: {diagnostic.Message} (deferred from compile time)\n"
 
     /// `expr` with each expression that failed to check replaced by a call to `__panic`, which writes the errors
@@ -1035,11 +1032,17 @@ module Compiler =
     /// constraints conflicted, so one in `mismatches` replaces the outermost expression written there. Each
     /// diagnostic placed is added to `placed`, by `deferredMessage`. A match in `unhandled`, which does not handle
     /// every case, is given a last arm that catches the rest and traps.
-    let private deferErrors (failed: Map<NodeId, Diagnostic list>) (mismatches: Map<SourceSpan, Diagnostic>) (unhandled: Map<NodeId, Diagnostic list>) (placed: System.Collections.Generic.HashSet<string>) (expr: Expression) =
+    ///
+    /// An expression in `unknownTypeUses` needs the type of a value that has none, because of an error (piping it,
+    /// or reading a member of it): the backend could not compile it, so it traps too. It is not an error of its own,
+    /// so it writes why it stopped without a code.
+    let private deferErrors (failed: Map<NodeId, Diagnostic list>) (mismatches: Map<SourceSpan, Diagnostic>) (unhandled: Map<NodeId, Diagnostic list>) (unknownTypeUses: Set<NodeId>) (placed: System.Collections.Generic.HashSet<string>) (expr: Expression) =
+        let panicWith (node: Expression) (message: string) =
+            FunctionCall("__panic", None, [ Expression.from node (LiteralExpr (StringLit message)) ])
         let panic (node: Expression) (diagnostics: Diagnostic list) =
             let messages = diagnostics |> List.map deferredMessage
             messages |> List.iter (placed.Add >> ignore)
-            FunctionCall("__panic", None, [ Expression.from node (LiteralExpr (StringLit (String.concat "" messages))) ])
+            panicWith node (String.concat "" messages)
         expr
         |> mapExpressionKinds (fun node kind ->
             let diagnostics =
@@ -1051,8 +1054,14 @@ module Compiler =
             | [], Match(values, arms), Some missing ->
                 let catchAll = values |> List.map (fun _ -> Pattern.at node.Span WildcardPattern)
                 Match(values, arms @ [ catchAll, Expression.from node (panic node missing) ])
+            | [], _, _ when unknownTypeUses.Contains node.Id ->
+                panicWith node $"{deferredLocation node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
             | _ -> kind)
 
+    /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
+    /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
+    /// call (`properties`), each builder block that uses no keyword as its block (`workflowBlocks`), and without
+    /// import statements. `defer` compiles the module's errors to traps first, for a debug build.
     let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
             expr |> defer |> retargetPipes pipeTargets |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
@@ -1325,7 +1334,7 @@ module Compiler =
                         let failed = state.FailedExprs |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         let bySpan = mismatchErrors |> List.choose (fun diagnostic -> diagnostic.Span |> Option.map (fun span -> span, diagnostic)) |> Map.ofList
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
-                        deferErrors failed bySpan unhandled placed
+                        deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
                 let own = moduleFromTypedItems defer state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
