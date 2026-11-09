@@ -245,3 +245,40 @@ export def List.zip: list(a), list(b) -> list((a, b)) = {
   | [x, ...xs], [y, ...ys] -> [(x, y), ...List.zip(xs, ys)]
   | _, _ -> []
 }
+
+-- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
+-- so this works for lists of the types `==` compiles for: numbers, bools, strings and tags. Records
+-- and lists are not compared yet (#424).
+export def List.distinct: list(a) -> list(a) = { xs ->
+  List.reverse(
+    List.fold(xs, [], { seen, x -> if List.any(seen, { y -> y == x }) then seen else [x, ...seen] })
+  )
+}
+
+-- `xs` and `ys`, each already in order of `key`, merged into one list in that order. Of two
+-- elements with the same key, the one from `xs` comes first.
+def mergeBy: list(a), list(a), (a -> int) -> list(a) = {
+  | [], ys, _ -> ys
+  | xs, [], _ -> xs
+  | [x, ...xs], [y, ...ys], key -> if key(y) < key(x)
+    then [y, ...mergeBy([x, ...xs], ys, key)]
+    else [x, ...mergeBy(xs, [y, ...ys], key)]
+}
+
+-- The elements in ascending order of `key`. The sort is stable: elements with the same key keep
+-- their order. Keys are ints for now, since `<` only orders ints (#476).
+export def List.sortBy: list(a), (a -> int) -> list(a) = { xs, key ->
+  def half = List.length(xs) / 2
+
+  if half == 0
+    then xs
+    else mergeBy(List.sortBy(List.take(xs, half), key), List.sortBy(List.skip(xs, half), key), key)
+}
+
+-- The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
+-- `next`, and `#done` ends the list.
+export def List.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
+  match step(state)
+    | #some(x, next) -> [x, ...List.unfold(next, step)]
+    | #done -> []
+}
