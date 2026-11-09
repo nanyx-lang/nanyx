@@ -147,6 +147,11 @@ type ContextInstance =
 /// and the prelude bring in, under the import's alias where it has one (`m.foo`), less what the module declares
 /// itself. `ImportedTypes` holds the type each imported definition among them has, as its module gave it.
 ///
+/// `InlinedExprTypes` and `InlinedCalleeTypes` are as `ExprTypes` and `CalleeTypes`, for the nodes of the definitions
+/// inlined from the modules the module imports (see `Module`): each resolved as the module it came from resolved it, so
+/// that the backend can compile an imported generic definition from its types as it does one of the module's own.
+/// Filled in for the root module only, and kept apart from its own types so that what reads those sees only them.
+///
 /// `ContextInstances` says, by the node of each call (or pipe) to a function that requires a parameterised context,
 /// where the call finds each context the callee's type declares, in the order it declares them: `None` for one that is
 /// not parameterised, or whose instance is left to be found by its members' names.
@@ -165,4 +170,6 @@ type TypedModule =
       Scopes: Map<SymbolId, SourceSpan>
       ModuleNames: Map<string, SymbolId>
       ImportedTypes: Map<SymbolId, Ty>
-      ContextInstances: Map<NodeId, ContextInstance option list> }
+      ContextInstances: Map<NodeId, ContextInstance option list>
+      InlinedExprTypes: Map<NodeId, Ty>
+      InlinedCalleeTypes: Map<NodeId, Ty> }
