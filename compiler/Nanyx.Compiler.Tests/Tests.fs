@@ -2041,6 +2041,50 @@ let ``Unifier matches unions by set and width`` () =
     | Error (message, _) -> Assert.True(false, message)
 
 [<Fact>]
+let ``Solving carries on past a conflict to find the next`` () =
+    let spanAt start = { SourceSpan.none with Start = start; End = start + 1 }
+    let a = TyVar { Id = 1; Name = None }
+    let b = TyVar { Id = 2; Name = None }
+    let constraints: ConstraintSet =
+        [ (a, TyPrimitive "int", Equal, spanAt 0)
+          (a, TyPrimitive "string", Equal, spanAt 10)
+          (b, TyPrimitive "bool", Equal, spanAt 20)
+          (b, TyPrimitive "int", Equal, spanAt 30) ]
+    let subst, failures = Unifier.solve constraints
+    Assert.Equal<int list>([ 10; 30 ], failures |> List.map (fun (_, span) -> span.Start))
+    // What the other constraints say still holds.
+    Assert.Equal(Some (TyPrimitive "int"), subst |> Map.tryFind 1)
+    Assert.Equal(Some (TyPrimitive "bool"), subst |> Map.tryFind 2)
+
+[<Fact>]
+let ``Solving constraints that agree gives what unify gives`` () =
+    let a = TyVar { Id = 1; Name = None }
+    let constraints: ConstraintSet = [ (a, TyFunc(TyPrimitive "int", TyPrimitive "string"), Equal, SourceSpan.none) ]
+    let subst, failures = Unifier.solve constraints
+    Assert.Empty(failures)
+    Assert.Equal(Unifier.unify constraints, Ok subst)
+
+[<Fact>]
+let ``Every type mismatch in a module is reported`` () =
+    let result = Compiler.compile "def a: int = \"x\"\ndef b: string = 1"
+    let mismatches = result.Diagnostics |> List.filter (fun diag -> diag.Code = DiagnosticCodes.TypeMismatch.Code)
+    Assert.Equal(2, mismatches.Length)
+    Assert.Equal<int list>([ 0; 1 ], mismatches |> List.map (fun diag -> diag.Span.Value.StartLine))
+
+[<Fact>]
+let ``A def that fails to check does not hide errors in the defs after it`` () =
+    let result = Compiler.compile "def a = missing\ndef b: string = 1"
+    Assert.Equal(2, result.Diagnostics.Length)
+    Assert.Contains("Unknown identifier", result.Diagnostics.[0].Message)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, result.Diagnostics.[1].Code)
+
+[<Fact>]
+let ``The uses of a def that fails to check are not errors too`` () =
+    let result = Compiler.compile "def broken = { x -> missing(x) }\ndef a = broken(1)\ndef b = broken(\"s\")"
+    let diag = Assert.Single(result.Diagnostics)
+    Assert.Contains("Unknown function 'missing'", diag.Message)
+
+[<Fact>]
 let ``Typecheck allows mutual recursion between annotated top-level defs`` () =
     let source =
         "def isEven: int -> bool = { n -> if n == 0 then true else isOdd(n - 1) }\n" +

@@ -1,8 +1,8 @@
 # Deferred errors
 
-> **Status: proposal.** This page decides how a debug build keeps running in the face of name and type errors, as
+> **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
 > the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
-> Nothing here is built yet; see the [plan](#plan). It is part of the [compilation](compilation.md) workstream, and
+> The type checker reports every error in a module, item by item; see the [plan](#plan) for the rest. It is part of the [compilation](compilation.md) workstream, and
 > its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 ## Summary
@@ -53,6 +53,20 @@ The type checker recovers from errors instead of stopping:
   conflicting constraints is blamed depends on the order they are solved, as it does today.
 - **The result.** Checking a module always produces a typed module, alongside its diagnostics. The expressions an
   error was reported at are marked in the typed AST, with the diagnostic.
+
+The first step of this works at the level of items and constraints, without `TyError`:
+
+- **A def that fails to check** is reported, and the module is checked on without it. An unannotated one stays
+  bound at the fresh variable it was pre-bound at, generalised, so each use of it can be anything and none is an
+  error; an annotated one stays bound at its annotation.
+- **A conflict among the constraints** is reported, and the constraints from where it was found are set aside
+  before the rest are solved again (`Unifier.solve`). The expressions there are typed by their other constraints,
+  or not at all, which is what `TyError` would make them. The constraints solved part-way through inference, to
+  read a record's fields say, are solved the same way, so a conflict in one def does not leave the types in the
+  next unresolved.
+
+An error inside a def's body still fails the whole def. Recovering within it needs the error nodes and `TyError`
+above.
 
 This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
 editor, which sees every error in a module, and hover types and completions past the first one. It is also where
@@ -122,6 +136,9 @@ for red-green iteration.
    than early returns; let the unifier carry on past a failure; return a typed module with its diagnostics. Tests:
    a module with several independent errors reports all of them, and one mistake reports one error, not a cascade.
    The backend still refuses programs with errors.
+   - [x] Carry on past a def that fails to check, and past a conflict among the constraints.
+   - [ ] Recover within an expression: `TyError` and error nodes.
+   - [ ] Return the typed module alongside its diagnostics.
 2. **Deferral pass and `Panic`.** Mark erroneous expressions and definitions in the typed AST, rewrite them to
    `Panic`, add the runtime helper (write to stderr, then `unreachable`), and cut sequences off after a panic.
    Make non-exhaustive matches deferred too.
