@@ -716,11 +716,18 @@ let rec private joinBranchTypes (rowVars: Set<int>) (state: InferState) (branchT
         | TyTag _ -> true
         | TyVar v -> rowVars.Contains v.Id
         | _ -> false
+    // A union's members are tags and at most one rest, whatever variable that is: `#nothing | r` is joined with
+    // `#some(int)` into `#some(int) | #nothing | r`, not made equal to it, which would drop `#nothing`.
+    let isUnionMember ty =
+        match Unifier.unalias ty with
+        | TyTag _
+        | TyVar _ -> true
+        | _ -> false
     let tagsOf ty =
         match Unifier.unalias ty with
         | TyTag _ as tag -> Some [ tag ]
         | TyVar v as var when rowVars.Contains v.Id -> Some [ var ]
-        | TyUnion items when items |> List.forall isUnionItem -> Some (items |> List.map Unifier.unalias)
+        | TyUnion items when items |> List.forall isUnionMember -> Some (items |> List.map Unifier.unalias)
         | _ -> None
     match branchTypes with
     | [] -> TyPrimitive "unit", state
