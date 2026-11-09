@@ -21,6 +21,27 @@ type LiftedFunction =
     /// What lets the top-level function of this name be passed as a value: it takes an environment and ignores it.
     | FunctionWrapper of string
 
+/// A member of a context a function requires, which it takes as a parameter of its own after its others.
+type ContextParameter =
+    { /// The member's key (see `Identifiers.contextMemberKey`): its name, or `<context key>_<name>` for a member of a
+      /// parameterised context.
+      Key: string
+      /// The parameter's name in WebAssembly text.
+      Name: string
+      /// The member's type, in the function's own type variables; none when it cannot be worked out from the
+      /// annotation.
+      Type: Ty option }
+
+/// Where a call finds a member of a context its callee requires.
+type ContextArgument =
+    /// The member in scope under this key: a parameter of the function, or a `use` binding.
+    | MemberInScope of string
+    /// A closure over this wrapper of a top-level function: a member of the ambient instance (the runtime's
+    /// `Console`), or of an instance the compiler built from attached definitions.
+    | ClosureOverWrapper of string
+    /// The value of this top-level definition.
+    | DefinitionValue of string
+
 /// What the lowering reads from the typed module.
 type LowerInput =
     { /// The module's top-level definitions as the backend compiles them, in order: a function is a lambda.
@@ -31,8 +52,13 @@ type LowerInput =
       CalleeTypes: Map<NodeId, Ty>
       /// Each definition's type, generalised (`TypedModule.Types`).
       DefinitionTypes: Map<string, Ty>
-      /// The definitions that take context members as extra parameters, which the IR does not lower or call yet.
-      RequiresContexts: Set<string>
+      /// The context members each definition that requires contexts takes, in order, and the other names it can call
+      /// them by (a member of a parameterised context, by its own name, when no other context it requires has one of
+      /// that name).
+      ContextParameters: Map<string, ContextParameter list * Map<string, string>>
+      /// Where a call to the definition of this name, at this node, finds each context member it requires, given the
+      /// keys of the members in scope there; or why it cannot.
+      ContextArguments: string -> NodeId -> Set<string> -> Result<ContextArgument list, string>
       /// The record types the module defines, whose names construct a record: `Person(name = "Ada", age = 36)`.
       RecordConstructors: Set<string>
       /// The nominal types whose shape is not a record (`type $Money = private int`). A value of one is its shape's
@@ -201,8 +227,8 @@ let private specialisationName (name: string) (typeArguments: IrType list) =
     sanitizeIdentifier name + (typeArguments |> List.map (mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
 
 /// Whether lowering `expr` stores to a local before its value is ready: a block with statements before its last
-/// expression, or a `match` (which holds its scrutinees in locals). Operands evaluated before such an operand are
-/// bound to temporaries, so that the emitter keeps them on the stack while the store happens (see `CoreIrEmit.fs`).
+/// expression, a `match` (which holds its scrutinees in locals), an interpolated string (which holds its holes), and
+/// so on. Such an operand is lowered whole into one temporary (see `Atoms`).
 let rec private storesBeforeValue (expr: Expression) =
     match expr.Kind with
     | Block [ Kind (ExprStatement last) ] -> storesBeforeValue last
@@ -250,7 +276,10 @@ type private Scope =
       /// reuse.
       LivePayloads: Set<string>
       /// How many interpolated strings' holes enclose the expression (see `Interpolation.holeLocalName`).
-      InterpolationDepth: int }
+      InterpolationDepth: int
+      /// The context members in scope, by key (and by the other names they can be called by): each a variable holding
+      /// the member's closure.
+      Members: Map<string, Var> }
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type private FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
@@ -303,7 +332,6 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
 
     /// The name to call `name` by at the instance type `instanceTy`: its own, or a specialisation's.
     let callee (name: string) (instanceTy: Ty) =
-        if input.RequiresContexts.Contains name then cannot $"a call to '{name}', which requires contexts"
         let scheme =
             match input.DefinitionTypes |> Map.tryFind name with
             | Some scheme -> scheme
@@ -451,6 +479,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             match flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
             | _ -> cannot $"the type constructor {name} without a record of its fields"
+        | FunctionCall(name, _, args) when scope.Members.ContainsKey name ->
+            // A context member in scope: a function value like any other.
+            let ty = tyOf expr
+            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar scope.Members.[name], atoms)) ty))
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name.
@@ -506,7 +538,23 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | None -> cannot $"a call to '{name}' whose type is not known"
             let target = callee name instanceTy
             let ty = tyOf expr
-            let call atoms = k (mk (Call(target, atoms)) ty)
+            // The context members the callee requires follow its arguments, each found where the type checker found it.
+            let call atoms =
+                match input.ContextParameters |> Map.tryFind name with
+                | None -> k (mk (Call(target, atoms)) ty)
+                | Some _ ->
+                    match input.ContextArguments name expr.Id (scope.Members |> Map.keys |> Set.ofSeq) with
+                    | Error reason -> cannot reason
+                    | Ok arguments ->
+                        let rec pass (remaining: ContextArgument list) (acc: Atom list) =
+                            match remaining with
+                            | [] -> k (mk (Call(target, atoms @ List.rev acc)) ty)
+                            | MemberInScope key :: rest -> pass rest (AVar scope.Members.[key] :: acc)
+                            | ClosureOverWrapper wrapper :: rest ->
+                                let closure = this.WrapperClosure wrapper
+                                bindTemp closure (fun atom -> pass rest (atom :: acc))
+                            | DefinitionValue definition :: _ -> cannot $"the context member '{definition}' passed by its value"
+                        pass arguments []
             let parameters = parameterNames name
             // The arguments as the callee takes them, in the shapes the old path accepts.
             match flattenCallArgs args with
@@ -573,6 +621,15 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 k (mk (If(atoms.Head, this.Tail scope ifTrue, this.Tail scope ifFalse)) ty))
         | Block statements -> this.Block scope (statements |> List.map _.Kind) k
         | ExpressionKind.Match(values, arms) -> this.Match scope expr values arms k
+        | ContextMemberCall(contextType, memberName, args) ->
+            // `C(T).f(args)`: the member of that instance of the context, which must be in scope.
+            let key = contextMemberKey (Some contextType) memberName
+            let ty = tyOf expr
+            match scope.Members |> Map.tryFind key with
+            | Some memberVar -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar memberVar, atoms)) ty))
+            | None -> cannot $"the context member {key}, which is not in scope"
+        // A lambda of no parameters that is not a function's own runs where it is written, as the old path runs it.
+        | Lambda([], body) -> this.Complex scope body k
         | Pipe _ -> cannot "a pipe"
         | InterpolatedString parts ->
             // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
@@ -602,6 +659,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
         | _ -> cannot "this kind of expression"
+
+    /// A closure over the wrapper `wrapper` of a top-level function, at the function's own type.
+    member this.WrapperClosure (wrapper: string) : Expr =
+        let wrapped =
+            match input.Lifted |> Map.tryFind wrapper with
+            | Some (FunctionWrapper wrapped) -> wrapped
+            | _ -> cannot $"'{wrapper}' is not a function's wrapper"
+        let wrappedTy =
+            match input.DefinitionTypes |> Map.tryFind wrapped with
+            | Some ty when (freeVars ty).IsEmpty -> ty
+            | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
+        let name = request (wrapper, []) subst (WrapperCalling(wrapped, wrappedTy))
+        mk (MakeClosure(name, parameterNames wrapper |> List.length, [])) (toIrType wrappedTy)
 
     /// How the hole `hole` of an interpolated string is printed, from its type. A tag's cases are in the order its type
     /// names them, which is the order they are tested in.
@@ -635,16 +705,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     /// Lowers `expr` in tail position: the whole of what is left to do.
     member this.Tail (scope: Scope) (expr: Expression) : Expr = this.Complex scope expr id
 
-    /// Lowers `exprs` in order to atoms, binding each value that is not one to a temporary.
+    /// Lowers `exprs` in order to atoms, binding each value that is not one to a temporary. An operand that stores to a
+    /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
+    /// temporary: it is computed where it is used, as the old path computes it, so nothing computed before it waits on
+    /// the stack across its stores.
     member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
         let rec go (acc: Atom list) (remaining: Expression list) =
             match remaining with
             | [] -> k (List.rev acc)
+            | expr :: rest when storesBeforeValue expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
             | expr :: rest ->
-                let storesLater = rest |> List.exists storesBeforeValue
                 this.Complex scope expr (fun value ->
                     match value.Kind with
-                    | Atom atom when not storesLater -> go (atom :: acc) rest
+                    | Atom atom -> go (atom :: acc) rest
                     | _ -> bindTemp value (fun atom -> go (atom :: acc) rest))
         go [] exprs
 
@@ -665,7 +738,17 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Complex scope first (fun value ->
                 let body = this.Block scope rest k
                 mk (Do(value, body)) body.Type)
-        | UseStatement _ :: _ -> cannot "a `use` statement"
+        | UseStatement(UseValue(Kind (RecordExpr fields))) :: rest ->
+            // Lambda lifting has evaluated each binding into a local; the members are those locals.
+            let members =
+                fields
+                |> List.fold (fun (acc: Map<string, Var>) field ->
+                    match field with
+                    | NamedField(key, Kind (IdentifierExpr local)) when scope.Vars.ContainsKey local -> acc |> Map.add key scope.Vars.[local]
+                    | NamedField(key, _) -> cannot $"the `use` binding of '{key}'"
+                    | PositionalField _ -> cannot "a `use` binding without a name") scope.Members
+            this.Block { scope with Members = members } rest k
+        | UseStatement _ :: _ -> cannot "this kind of `use`"
         | _ -> cannot "this kind of statement"
 
     member this.Match (scope: Scope) (expr: Expression) (values: Expression list) (arms: (Parser.Program.Pattern list * Expression) list) (k: Expr -> Expr) : Expr =
@@ -772,10 +855,11 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         let isLambda = match expr.Kind with Lambda _ -> true | _ -> false
         let parameterOf (parameterName: string) (ty: IrType) = newVar (uniqueName parameterName) Param ty
         let scopeOf (parameters: Var list) =
-            { Vars = List.zip parameterNames parameters |> Map.ofList
+            { Vars = List.zip parameterNames (parameters |> List.truncate parameterNames.Length) |> Map.ofList
               MatchDepth = 0
               LivePayloads = Set.empty
-              InterpolationDepth = 0 }
+              InterpolationDepth = 0
+              Members = Map.empty }
         let make (parameters: Var list) (result: IrType) (body: Expr) =
             { Name = functionName
               Source = name
@@ -791,7 +875,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | None -> cannot "a definition without a type"
             let parameterTys, resultTy = this.ParameterTypes parameterNames defTy isLambda
             let parameters = List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames parameterTys
-            make parameters (toIrType resultTy) (this.Tail (scopeOf parameters) body)
+            // The members of the contexts it requires follow, each a closure in a parameter of its own.
+            let contextParameters, aliases = input.ContextParameters |> Map.tryFind name |> Option.defaultValue ([], Map.empty)
+            let members =
+                contextParameters
+                |> List.map (fun parameter ->
+                    match parameter.Type with
+                    | Some ty -> parameter.Key, newVar parameter.Name Param (toIrType (substitute subst ty))
+                    | None -> cannot $"the context member {parameter.Key}, whose type is not known")
+            let memberScope =
+                aliases
+                |> Map.fold (fun acc alias key -> acc |> Map.add alias (Map.ofList members).[key]) (Map.ofList members)
+            let scope = { scopeOf parameters with Members = memberScope }
+            make (parameters @ List.map snd members) (toIrType resultTy) (this.Tail scope body)
         | LiftedCapturing capturedTys ->
             // The environment first: the function's table slot, then what it captures. The rest are the lambda's
             // parameters, typed as the lambda was where it was written.
@@ -811,6 +907,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             make parameters (toIrType resultTy) (this.Tail (scopeOf parameters) body)
         | WrapperCalling(wrapped, instanceTy) ->
             // Takes an environment, ignores it, and calls the function with the rest.
+            if input.ContextParameters.ContainsKey wrapped then cannot $"a wrapper of '{wrapped}', which requires contexts"
             let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail instanceTy true
             let environment = IrRecord [ "0", IrInt ]
             let parameters =
@@ -822,7 +919,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
 /// (the emitter, which can still fail). A function is kept only when it and every specialisation it calls,
 /// directly or not, lowered and finished: one that calls a specialisation that did not is left to the old path, as is
 /// any generic definition (the old path still compiles it, unspecialised, for the callers it compiles).
-let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
+let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     let definitions = input.Definitions |> Map.ofList
     let names = System.Collections.Generic.Dictionary<SpecKey, string>()
     let usedNames = System.Collections.Generic.HashSet<string>(input.Definitions |> Seq.map (fst >> sanitizeIdentifier))
@@ -879,9 +976,6 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
         if input.Lifted.ContainsKey name then
             // Lowered where a closure over it is made, if that is lowered: what it captures is known there.
             ()
-        elif input.RequiresContexts.Contains name then
-            results.[(name, [])] <- Error "it requires contexts"
-            order.Add((name, []))
         elif isGeneric name then
             results.[(name, [])] <- Error "it is generic: each instantiation is lowered where it is called"
             order.Add((name, []))
@@ -937,3 +1031,23 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
         |> Seq.filter (fun ((_, typeArguments) as key) -> typeArguments.IsEmpty && not (kept.Contains key))
         |> Seq.map (fun ((name, _) as key) -> name, fallbackReason key)
         |> Map.ofSeq }
+
+/// Runs `action` on a thread with a stack large enough for the lowering, which recurses once per statement of a block
+/// (each statement's lowering continues into the next) and so goes deep in a long function.
+let private withLargeStack (action: unit -> 'T) : 'T =
+    let mutable result = Unchecked.defaultof<'T>
+    let mutable error: exn option = None
+    let thread =
+        System.Threading.Thread(
+            (fun () ->
+                try result <- action ()
+                with ex -> error <- Some ex),
+            256 * 1024 * 1024)
+    thread.Start()
+    thread.Join()
+    match error with
+    | Some ex -> raise ex
+    | None -> result
+
+let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
+    withLargeStack (fun () -> lowerModuleOnThisThread input finish)

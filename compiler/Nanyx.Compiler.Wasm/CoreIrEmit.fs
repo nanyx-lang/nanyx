@@ -2,10 +2,9 @@
 ///
 /// Every value is still an `i32`, as in `CodeGen.fs`, and the code is laid out as `CodeGen.fs` lays it out, so that a
 /// function compiles to the same text whichever path it takes. A temporary is not stored: its value is computed
-/// where it is used, as a nested expression would be. When a local is stored between a temporary's definition and its
-/// use (a `def` or a `match` among a call's arguments, say), the temporaries waiting to be used are computed first and
-/// left on the stack beneath the store; the lowering binds the operands before such an operand to temporaries so
-/// that this keeps them in order (see `storesBeforeValue` in `CoreIrLower.fs`).
+/// where it is used, as a nested expression would be. An operand that stores to a local on the way to its value (a
+/// `def` or a `match` among a call's arguments, say) is a temporary whose value is the whole sequence, stores and all
+/// (see `Atoms` in `CoreIrLower.fs`), so no store ever happens while a temporary waits to be used.
 module Transpiler.Wasm.CoreIrEmit
 
 open System.Collections.Generic
@@ -116,13 +115,10 @@ type private FunctionEmitter(context: EmitContext) =
             for temp in tempsUsedBy value do
                 waiting.RemoveAll(fun v -> v.Id = temp.Id) |> ignore
 
-        // Computes the waiting temporaries, leaving their values on the stack for what uses them later.
+        // A store with a temporary still waiting to be used would have to leave it on the stack beneath the store,
+        // under whatever its user pushes first. The lowering never makes one (see `Atoms` in `CoreIrLower.fs`).
         let flush () =
-            for temp in List.ofSeq waiting do
-                parts.Add(this.Value false deferred onStack (deferred.[temp.Id]))
-                deferred.Remove temp.Id |> ignore
-                onStack.Add temp.Id |> ignore
-            waiting.Clear()
+            if waiting.Count > 0 then failwith "Internal error: a store in the core IR while a temporary waits to be used"
 
         let rec walk (expr: Expr) =
             match expr.Kind with

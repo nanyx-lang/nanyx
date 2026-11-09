@@ -143,3 +143,29 @@ let ``Run - a call synthesizes a context's instance from attached definitions, a
         "}\n"
     runSource source
     |> assertRan "(1, 2)\n<(1, 2)>\n5p & (1, 2)\n<(1, 2)><(1, 2)>\n<(1, 2)>\n<nearer 2>\n<7p>\n"
+
+[<Fact>]
+let ``Run - contexts through the core IR, with arguments that store on the way`` () =
+    // A context member called with an argument that interpolates, and a record whose field is computed through a
+    // match, after another computed by a call: each operand that stores to a local is computed where it is used.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Ask = (ask: () -> int)\n" +
+        "\n" +
+        "def twice: [Ask] () -> int = { ask() + ask() }\n" +
+        "\n" +
+        "def inc: int -> int = { n -> n + 1 }\n" +
+        "\n" +
+        "def report: [Console] int -> () = { n -> println(\"n = \" ++ \"{n}\" ++ \"!\") }\n" +
+        "\n" +
+        "def pair: int -> (int, int) = { n -> (inc(n) + (match n | 0 -> 0 | m -> m * 10), 7) }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  use Ask(ask = { 21 })\n" +
+        "  report(twice())\n" +
+        "  report(pair(2).0)\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "n = 42!\nn = 23!\n"
