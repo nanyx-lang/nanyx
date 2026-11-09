@@ -23,7 +23,12 @@ type LowerInput =
       /// Each definition's type, generalised (`TypedModule.Types`).
       DefinitionTypes: Map<string, Ty>
       /// The definitions that take context members as extra parameters, which the IR does not lower or call yet.
-      RequiresContexts: Set<string> }
+      RequiresContexts: Set<string>
+      /// The record types the module defines, whose names construct a record: `Person(name = "Ada", age = 36)`.
+      RecordConstructors: Set<string>
+      /// The nominal types whose shape is not a record (`type $Money = private int`). A value of one is its shape's
+      /// value, so its constructor and the pattern that takes it apart are no-ops.
+      NominalWrappers: Set<string> }
 
 /// A function the IR lowered, and what it was finished into (see `lowerModule`).
 type Lowered<'T> =
@@ -67,7 +72,13 @@ let rec private substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     | TyNominal(name, underlying, isPrivate) -> TyNominal(name, go underlying, isPrivate)
     | TyFunc(input, output) -> TyFunc(go input, go output)
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> go))
-    | TyOpenRecord(fields, rest) -> TyOpenRecord(fields |> Map.map (fun _ -> go), rest)
+    | TyOpenRecord(fields, rest) ->
+        let fields = fields |> Map.map (fun _ -> go)
+        // A record whose other fields are now known is closed.
+        match subst |> Map.tryFind rest.Id |> Option.map Unifier.unalias with
+        | Some (TyRecord others) -> TyRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields)
+        | Some (TyOpenRecord(others, rest')) -> TyOpenRecord(Map.fold (fun acc name fieldTy -> acc |> Map.add name fieldTy) others fields, rest')
+        | _ -> TyOpenRecord(fields, rest)
     | TyTag(name, payload) -> TyTag(name, payload |> Option.map go)
     | TyApply(name, args) -> TyApply(name, args |> List.map go)
     | TyUnion items -> TyUnion(items |> List.map go)
@@ -84,6 +95,11 @@ let rec private bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) 
     | TyFunc(input, output), TyFunc(input', output') -> bindScheme (bindScheme bindings input input') output output'
     | TyRecord fields, TyRecord fields' when Set.ofSeq fields.Keys = Set.ofSeq fields'.Keys ->
         fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
+    // A function that reads fields of any record that has them, used at a record: its other fields are the rest.
+    | TyOpenRecord(fields, rest), TyRecord fields' when fields.Keys |> Seq.forall fields'.ContainsKey ->
+        let bound = fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
+        let others = fields' |> Map.filter (fun key _ -> not (fields.ContainsKey key))
+        bindScheme bound (TyVar rest) (TyRecord others)
     | TyTag(name, payload), TyTag(name', payload') when name = name' ->
         match payload, payload' with
         | Some p, Some p' -> bindScheme bindings p p'
@@ -105,6 +121,17 @@ let rec private bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) 
         bindScheme bindings underlying underlying'
     | _ -> cannot "a generic definition's type does not fit how it is used"
 
+/// The order a record's fields are stored in: by position for a tuple, by name for anything else.
+let private storageOrder (names: string list) =
+    let positions = names |> List.map (fun name -> match System.Int32.TryParse name with | true, index -> Some index | _ -> None)
+    if positions |> List.forall Option.isSome then List.zip positions names |> List.sortBy fst |> List.map snd
+    else names |> List.sortWith (fun a b -> System.String.CompareOrdinal(a, b))
+
+/// `fields` (name and whatever goes with it) in the order they are stored.
+let private sortFields (fields: (string * 'a) list) =
+    let byName = Map.ofList fields
+    storageOrder (List.map fst fields) |> List.map (fun name -> name, byName.[name])
+
 /// The IR type of `ty`, which must be concrete once `subst` is applied.
 let rec private toIrType (ty: Ty) : IrType =
     match Unifier.unalias ty with
@@ -120,13 +147,14 @@ let rec private toIrType (ty: Ty) : IrType =
             | TyUnion items -> items |> List.collect members
             | _ -> cannot "a union of something other than tags"
         IrTags(members tags |> List.distinct |> List.sortBy fst)
+    // A `Map`'s keys are in the order a record's fields are stored in.
+    | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
+    | TyNominal(_, underlying, _) -> toIrType underlying
     | TyVar _ -> cannot "a type that is not known here"
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc _ -> cannot "a function value"
-    | TyRecord _
-    | TyOpenRecord _ -> cannot "a record"
+    | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
-    | TyNominal(name, _, _) -> cannot $"a value of the nominal type {name}"
     | TyAlias _ -> cannot "an alias"
 
 /// A WebAssembly name for `name` specialised at `typeArguments`, such as `id__int`.
@@ -141,6 +169,11 @@ let private specialisationName (name: string) (typeArguments: IrType list) =
                 | None -> tag)
             |> String.concat "_"
             |> sprintf "tags_%s"
+        | IrRecord fields ->
+            fields
+            |> List.map (fun (field, fieldTy) -> $"{field}_{mangle fieldTy}")
+            |> String.concat "_"
+            |> sprintf "rec_%s"
         | _ -> IrType.show ty
     sanitizeIdentifier name + (typeArguments |> List.map (mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
 
@@ -156,8 +189,19 @@ let rec private storesBeforeValue (expr: Expression) =
     | BinaryOp(_, left, right) -> storesBeforeValue left || storesBeforeValue right
     | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue
     | TupleExpr items -> items |> List.exists storesBeforeValue
+    | RecordExpr fields ->
+        fields |> List.exists (function NamedField(_, value) | PositionalField value -> storesBeforeValue value)
+    | MemberAccess(inner, _, _) -> storesBeforeValue inner
     | TagExpr(_, Some payload) -> storesBeforeValue payload
     | _ -> false
+
+/// The fields of a record expression by name, a positional field named by its position.
+let private recordExprFields (fields: RecordField list) =
+    fields
+    |> List.mapi (fun index field ->
+        match field with
+        | NamedField(name, value) -> name, value
+        | PositionalField value -> string index, value)
 
 let private flattenCallArgs (args: Expression list) =
     match args with
@@ -212,10 +256,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | Lambda _ -> true
         | _ -> false
 
-    let arityOf (name: string) =
+    let parameterNames (name: string) =
         match definitions.[name].Kind with
-        | Lambda(parameters, _) -> parameters.Length
-        | _ -> 0
+        | Lambda(parameters, _) -> parameters |> List.map fst
+        | _ -> []
 
     /// The name to call `name` by at the instance type `instanceTy`: its own, or a specialisation's.
     let callee (name: string) (instanceTy: Ty) =
@@ -274,19 +318,96 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
         | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
+        | FunctionCall("__with", _, [ record; Kind (RecordExpr updates) ]) ->
+            // `record with f = v, ...`: a copy of the record with those fields replaced.
+            let ty = tyOf expr
+            let fields =
+                match tyOf record with
+                | IrRecord fields -> fields
+                | other -> cannot $"`with` on a value of type {IrType.show other}"
+            let slotsAndValues =
+                updates
+                |> List.map (function
+                    | NamedField(name, value) ->
+                        match fields |> List.tryFindIndex (fst >> (=) name) with
+                        | Some slot -> slot, value
+                        | None -> cannot $"an update of '{name}', which the record does not have"
+                    | PositionalField _ -> cannot "a positional field in a record update")
+            this.Atoms scope (record :: List.map snd slotsAndValues) (fun atoms ->
+                let updated = List.zip (List.map fst slotsAndValues) atoms.Tail
+                k (mk (UpdateRecord(atoms.Head, fields.Length, updated)) ty))
+        | FunctionCall(name, _, args) when input.NominalWrappers.Contains name && not (scope.Vars.ContainsKey name) ->
+            // `$Money(pence)`: a nominal value is its shape's value.
+            match flattenCallArgs args with
+            | [ single ] -> this.Complex scope single k
+            | several -> this.Record scope (several |> List.mapi (fun index value -> string index, value)) (tyOf expr) k
+        | FunctionCall(name, _, args) when input.RecordConstructors.Contains name && not (scope.Vars.ContainsKey name) ->
+            match flattenCallArgs args with
+            | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
+            | _ -> cannot $"the type constructor {name} without a record of its fields"
         | FunctionCall(name, _, args) ->
             if scope.Vars.ContainsKey name then cannot $"a call through the function value '{name}'"
             if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
             if not (isFunction name) then cannot $"a call to the value '{name}'"
-            let flatArgs = flattenCallArgs args
-            if flatArgs.Length <> arityOf name then cannot $"a call to '{name}' with its arguments in another shape"
             let instanceTy =
                 match input.CalleeTypes |> Map.tryFind expr.Id with
                 | Some ty -> ty
                 | None -> cannot $"a call to '{name}' whose type is not known"
             let target = callee name instanceTy
             let ty = tyOf expr
-            this.Atoms scope flatArgs (fun atoms -> k (mk (Call(target, atoms)) ty))
+            let call atoms = k (mk (Call(target, atoms)) ty)
+            let parameters = parameterNames name
+            // The arguments as the callee takes them, in the shapes the old path accepts.
+            match flattenCallArgs args with
+            | [ Kind (IdentifierExpr record) ] when parameters.Length > 1 && scope.Vars.ContainsKey record ->
+                // A record passed to a function of several parameters: each parameter takes a field.
+                let var = scope.Vars.[record]
+                match var.Type with
+                | IrRecord fields when fields.Length = parameters.Length ->
+                    let rec loadFields (slot: int) (acc: Atom list) =
+                        if slot = fields.Length then call (List.rev acc)
+                        else bindTemp (mk (Field(AVar var, slot)) (snd fields.[slot])) (fun atom -> loadFields (slot + 1) (atom :: acc))
+                    loadFields 0 []
+                | _ -> cannot $"a call to '{name}' with one argument for its {parameters.Length} parameters"
+            | [ Kind (RecordExpr fields) ] when parameters.Length > 1 && fields.Length = parameters.Length ->
+                // `f(a, step = 2)`: each parameter takes the field of its name, or else the positional field in its
+                // place.
+                let positional = fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None)
+                let named = fields |> List.choose (function NamedField(n, value) -> Some (n, value) | PositionalField _ -> None) |> Map.ofList
+                let ordered =
+                    parameters
+                    |> List.mapi (fun index parameter ->
+                        match named |> Map.tryFind parameter, positional |> List.tryItem index with
+                        | Some value, _
+                        | None, Some value -> value
+                        | None, None -> cannot $"a call to '{name}' with no argument for {parameter}")
+                this.Atoms scope ordered call
+            | several when parameters.Length = 1 && several.Length > 1 ->
+                // `f(a, b)` and `f((a, b))` parse alike; a function of one parameter takes the whole tuple.
+                let tupleTy = IrRecord(several |> List.mapi (fun index value -> string index, tyOf value))
+                this.Record scope (several |> List.mapi (fun index value -> string index, value)) tupleTy (fun tuple ->
+                    bindTemp tuple (fun atom -> call [ atom ]))
+            | [] when parameters.Length = 1 ->
+                // `f()` on a function written `{ _ -> ... }`: its one parameter is the unit.
+                call [ AUnit ]
+            | flatArgs when flatArgs.Length = parameters.Length -> this.Atoms scope flatArgs call
+            | _ -> cannot $"a call to '{name}' with its arguments in another shape"
+        | TupleExpr items -> this.Record scope (items |> List.mapi (fun index item -> string index, item)) (tyOf expr) k
+        | RecordExpr fields -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
+        | MemberAccess(Kind (IdentifierExpr qualifier), fieldName, _) when
+            not (scope.Vars.ContainsKey qualifier) && definitions.ContainsKey $"{qualifier}.{fieldName}" ->
+            // A value of another module, named through it.
+            this.Complex scope { expr with Kind = IdentifierExpr $"{qualifier}.{fieldName}" } k
+        | MemberAccess(record, fieldName, _) ->
+            let ty = tyOf expr
+            let slot =
+                match tyOf record with
+                | IrRecord fields ->
+                    match fields |> List.tryFindIndex (fst >> (=) fieldName) with
+                    | Some slot -> slot
+                    | None -> cannot $"the field '{fieldName}', which the record does not have"
+                | other -> cannot $"the field '{fieldName}' of a value of type {IrType.show other}"
+            this.Atoms scope [ record ] (fun atoms -> k (mk (Field(atoms.Head, slot)) ty))
         | IfExpr(cond, ifTrue, ifFalse) ->
             let ty = tyOf expr
             this.Atoms scope [ cond ] (fun atoms ->
@@ -297,6 +418,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | InterpolatedString _ -> cannot "an interpolated string"
         | Lambda _ -> cannot "a lambda"
         | _ -> cannot "this kind of expression"
+
+    /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`.
+    member this.Record (scope: Scope) (fields: (string * Expression) list) (ty: IrType) (k: Expr -> Expr) : Expr =
+        this.Atoms scope (List.map snd fields) (fun atoms -> k (mk (MakeRecord(List.zip (List.map fst fields) atoms)) ty))
 
     /// Lowers `expr` in tail position: the whole of what is left to do.
     member this.Tail (scope: Scope) (expr: Expression) : Expr = this.Complex scope expr id
@@ -375,6 +500,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     | Some inner, Some innerTy -> PTag(name, Some (lowerPattern false scrutinee innerTy inner))
                     | None, _ -> PTag(name, None)
                     | Some _, None -> cannot $"a payload pattern on #{name}, which has none"
+                | TuplePattern elements ->
+                    let fields =
+                        match valueTy with
+                        | IrRecord fields when fields.Length = elements.Length -> fields
+                        | other -> cannot $"a tuple pattern on a value of type {IrType.show other}"
+                    let slotOf index = fields |> List.findIndex (fst >> (=) (string index))
+                    PFields(elements |> List.mapi (fun index element ->
+                        let slot = slotOf index
+                        slot, lowerPattern false scrutinee (snd fields.[slot]) element))
+                // `$Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
+                // local even at the top of an arm, as the old path gives it one.
+                | RecordPattern(typeName, [ inner ]) when (typeName.Split('.') |> Array.last).StartsWith "$" ->
+                    lowerPattern false scrutinee valueTy inner
                 | _ -> cannot "this kind of pattern"
             let loweredPatterns = List.map2 (fun scrutinee pattern -> lowerPattern true scrutinee scrutinee.Type pattern) scrutinees patterns
             let bodyScope = { armScope with Vars = armVars; LivePayloads = Set.union armScope.LivePayloads payloads }
@@ -405,10 +543,14 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             | several, TyFunc(input, result) ->
                 match Unifier.unalias input with
                 | TyRecord fields when fields.Count = several.Length ->
-                    List.init several.Length (fun index ->
-                        match fields |> Map.tryFind (string index) with
-                        | Some ty -> ty
-                        | None -> cannot "a function whose parameters are named fields"), result
+                    // A parameter is a field of the input named by its position, or by its own name when the type
+                    // names it (`(int, step: int) -> int`).
+                    several
+                    |> List.mapi (fun index parameterName ->
+                        match fields |> Map.tryFind (string index), fields |> Map.tryFind parameterName with
+                        | Some ty, _
+                        | None, Some ty -> ty
+                        | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
                 | _ -> cannot "a function whose parameters are not a tuple"
             | _ -> cannot "a definition whose type is not a function"
         let parameters = List.map2 (fun parameterName ty -> newVar (uniqueName parameterName) Param (toIrType ty)) parameterNames parameterTys

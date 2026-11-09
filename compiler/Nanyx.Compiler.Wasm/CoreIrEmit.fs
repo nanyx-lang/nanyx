@@ -9,13 +9,9 @@
 module Transpiler.Wasm.CoreIrEmit
 
 open System.Collections.Generic
+open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
-
-/// The runtime helpers code from the IR calls (see `runtimeHelpers` in `CodeGen.fs`).
-type RuntimeHelper =
-    | TagBox
-    | TagCodeOf
 
 /// What the emitter needs from the module being compiled.
 type EmitContext =
@@ -23,13 +19,13 @@ type EmitContext =
       TagId: string -> int
       /// Where a string literal's bytes are in the data segment.
       StringOffset: string -> int
-      /// The name of a runtime helper.
-      HelperName: RuntimeHelper -> string }
+      /// The number of the record layout with these fields, in the order they are stored, numbering it if it is new.
+      RecordLayoutId: string list -> int }
 
-/// A function as WebAssembly text, and the runtime helpers it calls.
+/// A function as WebAssembly text, and the runtime helpers (see `WasmRuntime.Helpers`) it calls.
 type Emitted =
     { Text: string
-      Helpers: Set<RuntimeHelper> }
+      Helpers: Set<string> }
 
 let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
@@ -41,18 +37,21 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | Atom atom -> ofAtoms [ atom ]
     | Prim(_, atoms)
     | Call(_, atoms) -> ofAtoms atoms
+    | MakeRecord fields -> ofAtoms (List.map snd fields)
+    | UpdateRecord(record, _, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
+    | Field(atom, _)
     | If(atom, _, _) -> ofAtoms [ atom ]
     | Let _
     | Do _
     | Match _ -> []
 
 type private FunctionEmitter(context: EmitContext) =
-    let helpers = HashSet<RuntimeHelper>()
+    let helpers = HashSet<string>()
 
-    let helper (h: RuntimeHelper) =
-        helpers.Add h |> ignore
-        context.HelperName h
+    let helper (name: string) =
+        helpers.Add name |> ignore
+        name
 
     member _.Helpers = Set.ofSeq helpers
 
@@ -121,6 +120,11 @@ type private FunctionEmitter(context: EmitContext) =
                     this.Atom deferred onStack atom)
             |> join "\n    "
         let atoms = atomsAfter false
+        // Each value, then its store into its slot of the record whose pointer is on the stack.
+        let stores (slotsAndValues: (int * Atom) list) =
+            slotsAndValues
+            |> List.map (fun (slot, value) ->
+                join "\n    " [ atomsAfter true [ value ]; $"i32.const {(slot + 1) * 4}\n    call ${helper Helpers.recordSet}" ])
         match expr.Kind with
         | Atom atom -> atoms [ atom ]
         | Prim(Binary op, operands) ->
@@ -132,7 +136,24 @@ type private FunctionEmitter(context: EmitContext) =
             let call = if tail then "return_call" else "call"
             join "\n    " [ atoms args; $"{call} ${name}" ]
         | MakeTag(name, payload) ->
-            join "\n    " [ $"i32.const {tagCode (context.TagId name)}"; atomsAfter true [ payload ]; $"call ${helper TagBox}" ]
+            join "\n    " [ $"i32.const {tagCode (context.TagId name)}"; atomsAfter true [ payload ]; $"call ${helper Helpers.tagBox}" ]
+        | MakeRecord fields ->
+            // A slot for the layout's number, then one per field, with the pointer left at the first field. The
+            // record is allocated before its fields are evaluated, and its pointer stays on the stack meanwhile.
+            let layoutId = context.RecordLayoutId (List.map fst fields)
+            join "\n    " [
+                $"i32.const {(fields.Length + 1) * 4}\n    call ${helper Helpers.alloc}"
+                $"i32.const {layoutId}\n    i32.const 0\n    call ${helper Helpers.recordSet}"
+                yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value))
+                "i32.const 4\n    i32.add" ]
+        | Field(record, slot) -> join "\n    " [ atoms [ record ]; $"i32.const {slot * 4}\n    i32.add\n    i32.load" ]
+        | UpdateRecord(record, fieldCount, updates) ->
+            // A copy of the whole block, layout slot and all, with the updated fields overwritten in place.
+            join "\n    " [
+                atoms [ record ]
+                $"i32.const 4\n    i32.sub\n    i32.const {(fieldCount + 1) * 4}\n    call ${helper Helpers.recordCopy}"
+                yield! stores updates
+                "i32.const 4\n    i32.add" ]
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
@@ -158,8 +179,14 @@ type private FunctionEmitter(context: EmitContext) =
     /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
         let tagPayloadCode valueCode = $"{valueCode}\n      i32.load offset=4"
+        let fieldCode valueCode slot = $"{valueCode}\n      i32.const {slot * 4}\n      i32.add\n      i32.load"
         let guarded first second =
             $"{first}\n      (if (result i32)\n        (then\n          {second})\n        (else i32.const 0))"
+        let allOf conditions =
+            match conditions |> List.filter (fun condition -> condition <> "i32.const 1") with
+            | [] -> "i32.const 1"
+            | [ single ] -> single
+            | many -> (many |> String.concat "\n      ") + String.replicate (many.Length - 1) "\n      i32.and"
         let rec condition (pattern: Pattern) (valueCode: string) =
             match pattern with
             | PWildcard
@@ -168,7 +195,7 @@ type private FunctionEmitter(context: EmitContext) =
             | PBool value -> $"""{valueCode}\n      i32.const {if value then 1 else 0}\n      i32.eq"""
             | PTag(name, payload) ->
                 let discriminant =
-                    $"{valueCode}\n      call ${helper TagCodeOf}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
+                    $"{valueCode}\n      call ${helper Helpers.tagCode}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
                 match payload with
                 | None -> discriminant
                 | Some inner ->
@@ -176,10 +203,12 @@ type private FunctionEmitter(context: EmitContext) =
                     match condition inner (tagPayloadCode valueCode) with
                     | "i32.const 1" -> discriminant
                     | payloadCheck -> guarded discriminant payloadCheck
+            | PFields fields -> fields |> List.map (fun (slot, inner) -> condition inner (fieldCode valueCode slot)) |> allOf
         let rec binds (pattern: Pattern) (valueCode: string) =
             match pattern with
             | PBind var -> [ $"{valueCode}\n        local.set ${var.Name}" ]
             | PTag(_, Some inner) -> binds inner (tagPayloadCode valueCode)
+            | PFields fields -> fields |> List.collect (fun (slot, inner) -> binds inner (fieldCode valueCode slot))
             | _ -> []
         let rec emit (remaining: Arm list) =
             match remaining with
@@ -208,6 +237,7 @@ let private declaredLocals (body: Expr) : string list =
         match p with
         | PBind var -> found.Add var
         | PTag(_, Some inner) -> pattern inner
+        | PFields fields -> fields |> List.iter (snd >> pattern)
         | _ -> ()
     let rec walk (expr: Expr) =
         match expr.Kind with
@@ -228,7 +258,10 @@ let private declaredLocals (body: Expr) : string list =
         | Atom _
         | Prim _
         | Call _
-        | MakeTag _ -> ()
+        | MakeTag _
+        | MakeRecord _
+        | Field _
+        | UpdateRecord _ -> ()
     walk body
     [ Local; MatchTemp; PatternBound ]
     |> List.collect (fun kind -> found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq)

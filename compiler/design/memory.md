@@ -159,8 +159,9 @@ works from the IR. This is worth doing for its own sake: later optimisations, a 
 backend and a simpler `CodeGen.fs` all benefit.
 
 **Shape.** The IR is in `compiler/Nanyx.Compiler.Wasm/CoreIr.fs`. A function has typed parameters, a result type and
-a body. Types are concrete (`int`, `bool`, `unit`, `string`, a union of tags), with no type variables. A body is an
-expression with a type on every node:
+a body. Types are concrete (`int`, `bool`, `unit`, `string`, a union of tags, a record), with no type variables. A
+tuple is a record whose fields are its positions, and a nominal type is the type of its shape. A body is an expression
+with a type on every node:
 
 | Node | Meaning |
 |------|---------|
@@ -168,10 +169,13 @@ expression with a type on every node:
 | `prim(op, atoms)` | an operator on ints or booleans |
 | `call(f, atoms)` | a call to a top-level function, by its name in WebAssembly text |
 | `makeTag(tag, atom)` | allocates the cell of a tag with a payload |
+| `makeRecord(f1 = atom, ...)` | allocates a record, its fields in the order they are stored |
+| `field(atom, slot)` | reads the field stored in a slot of a record |
+| `updateRecord(atom, slot = atom, ...)` | copies a record with some fields replaced (`record with f = v`) |
 | `let x = value in body` | names a value; the value is never a `let` itself |
 | `do value; rest` | evaluates a value for its effects and drops it |
 | `if atom then e1 else e2` | |
-| `match x1, ..., xn \| arms` | tests variables against each arm's patterns (`_`, a literal, a tag with a payload pattern, a binding) |
+| `match x1, ..., xn \| arms` | tests variables against each arm's patterns (`_`, a literal, a tag with a payload pattern, a tuple, a nominal type's shape, a binding) |
 
 Every operand is an atom, so every intermediate value has a name. Each variable says what kind it is: a parameter, a
 local the program declares, a scrutinee, a name a pattern binds, or a temporary (a value the source does not name).
@@ -182,16 +186,19 @@ definition whose type is concrete is lowered as it is. A call to a generic defin
 variables to the types at the call, and asks for the specialisation at those type arguments (`id__int`,
 `id__string`), which is lowered in turn with the variables replaced. Each specialisation is lowered once, however
 many calls ask for it, and a definition can have at most 32 (polymorphic recursion would otherwise never end).
+A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
+reads its fields from where they are stored rather than looking them up at run time (`__nanyx_open_field`).
 
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
 as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. When a local is stored in between (a `match` among a call's arguments,
-say), the temporaries waiting are computed first and left on the stack.
+say), the temporaries waiting are computed first and left on the stack. Record layouts are numbered as functions are
+emitted, so functions from the IR are emitted in definition order with the rest, to number layouts as the old path does.
 
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if anything in it is beyond the IR (records, lists, closures, strings beyond literals,
+- A definition falls back if anything in it is beyond the IR (lists, closures, strings beyond literals,
   `dbg`, pipes, contexts and so on), if it requires contexts, or if it calls a specialisation that could not be
   lowered. A function and the functions it calls through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers

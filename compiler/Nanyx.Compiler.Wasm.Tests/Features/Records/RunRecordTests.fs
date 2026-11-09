@@ -162,3 +162,41 @@ let ``Run - a function reading fields takes any record that has them`` () =
         "def people = [(name = \"g\", city = \"X\"), (name = \"h\", city = \"Y\")]\n" +
         "for people \\ List.map(label) | s -> println(s)\n"
     runSource source |> assertRan "a from Leeds\nb from York\nc one\nd two\ne from Ely\nf from Hull; f from Hull\ng from X\nh from Y\n"
+
+[<Fact>]
+let ``Run - records, tuples and nominal values through the core IR`` () =
+    // `nOf` is specialised for each record it is given (see CoreIrTests.fs).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "type Person = (name: string, age: int)\n" +
+        "\n" +
+        "type $Money = private int\n" +
+        "\n" +
+        "def older: Person -> Person = { p -> p with age = p.age + 1 }\n" +
+        "\n" +
+        "def nOf = { r -> r.n }\n" +
+        "\n" +
+        "def pence: $Money -> int = { m ->\n" +
+        "  def $Money(p) = m\n" +
+        "  p\n" +
+        "}\n" +
+        "\n" +
+        "def swapped: (int, int) -> (int, int) = { t ->\n" +
+        "  match t\n" +
+        "    | (a, b) -> (b, a)\n" +
+        "}\n" +
+        "\n" +
+        "def show = { n -> \"{n * 1}\" }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  def ada = older(Person(name = \"Ada\", age = 36))\n" +
+        "  println(ada.name)\n" +
+        "  println(show(ada.age))\n" +
+        "  println(show(nOf((n = 1)) + nOf((a = 20, n = 2)) + nOf((a = 30, b = 40, n = 3))))\n" +
+        "  println(show(pence($Money(250))))\n" +
+        "  println(show(swapped((1, 2)).0))\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "Ada\n37\n6\n250\n2\n"
