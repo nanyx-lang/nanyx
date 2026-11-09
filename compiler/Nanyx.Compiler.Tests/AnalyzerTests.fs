@@ -29,16 +29,21 @@ let private options analyzers severities =
 
 let private source = "def one = 1\ndef two = one + 1"
 
+/// Compiles `source` with every analyzer the compiler has turned on, at its defaults.
+let private compileWithOfficial (source: string) = Compiler.compileWith Analyzers.everyAnalyzer source
+
 /// The text `span` covers in `source`.
 let private textAt (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
 [<Fact>]
-let ``The official analyzer is registered and runs by default`` () =
+let ``The official analyzer is registered, and runs only when turned on`` () =
     let official = Assert.Single(Analyzers.all)
     Assert.Equal("default", official.Name)
     Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion" ], official.Rules |> List.map (fun rule -> rule.Id))
-    Assert.Empty((Compiler.compile source).Diagnostics)
-    let unused = Assert.Single((Compiler.compile "def f = { x -> 1 }").Diagnostics)
+    // Analyzers are opt-in: compiling without saying which to run runs none.
+    Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
+    Assert.Empty((compileWithOfficial source).Diagnostics)
+    let unused = Assert.Single((compileWithOfficial "def f = { x -> 1 }").Diagnostics)
     Assert.Equal("default/unusedBindings", unused.Code)
 
 [<Fact>]
@@ -150,7 +155,7 @@ let ``Only the module being compiled is analyzed, not the modules it imports`` (
 
 /// What `default/unusedBindings` reports for `source`: each message with the text it is reported at.
 let private unusedIn (source: string) =
-    (Compiler.compile source).Diagnostics
+    (compileWithOfficial source).Diagnostics
     |> List.map (fun diagnostic ->
         Assert.Equal("default/unusedBindings", diagnostic.Code)
         Assert.Equal(Severity.Warning, diagnostic.Severity)
@@ -158,7 +163,7 @@ let private unusedIn (source: string) =
 
 /// `source` with the edits of the only fix of the only diagnostic for it applied.
 let private fixed' (source: string) =
-    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    let diagnostic = Assert.Single((compileWithOfficial source).Diagnostics)
     let fix = Assert.Single(diagnostic.Fixes)
     fix.Edits
     |> List.sortByDescending (fun edit -> edit.Span.Start)
@@ -214,7 +219,7 @@ let ``The fix for an unused local def removes its line, with a comment after it`
     let text, title = fixed' source
     Assert.Equal("Remove `taxRate`", title)
     Assert.Equal("def total = { x ->\n  def y = 1\n  x + y\n}\n", text)
-    Assert.Empty((Compiler.compile text).Diagnostics)
+    Assert.Empty((compileWithOfficial text).Diagnostics)
 
 [<Fact>]
 let ``The fix for an unused argument or pattern variable renames it to an underscore`` () =
@@ -223,31 +228,31 @@ let ``The fix for an unused argument or pattern variable renames it to an unders
     Assert.Equal("def f = { x, _ -> x }", argument)
     let pattern, _ = fixed' "def f: #some(int) | #none -> int = { o ->\n  match o\n    | #some(n) -> 1\n    | #none -> 0\n}"
     Assert.Contains("| #some(_) -> 1", pattern)
-    Assert.Empty((Compiler.compile pattern).Diagnostics)
+    Assert.Empty((compileWithOfficial pattern).Diagnostics)
     // After a list pattern's `...` too: without a name, `[x, ...]` would be a list of one.
     let rest, _ = fixed' "def f: list(int) -> int = { xs ->\n  match xs\n    | [x, ...rest] -> x\n    | [] -> 0\n}"
     Assert.Contains("| [x, ..._] -> x", rest)
-    Assert.Empty((Compiler.compile rest).Diagnostics)
+    Assert.Empty((compileWithOfficial rest).Diagnostics)
 
 [<Fact>]
 let ``The fix for one unused name of a destructuring def renames it rather than removing the def`` () =
     let text, title = fixed' "def f = { pair ->\n  def (a, b) = pair\n  b\n}"
     Assert.Equal("Rename `a` to `_`", title)
     Assert.Equal("def f = { pair ->\n  def (_, b) = pair\n  b\n}", text)
-    Assert.Empty((Compiler.compile text).Diagnostics)
+    Assert.Empty((compileWithOfficial text).Diagnostics)
 
 [<Fact>]
 let ``The fix for an unused def that ends its block renames it, since the block's value is the def`` () =
     let text, title = fixed' "def f = { x ->\n  def y = x\n}"
     Assert.Equal("Rename `y` to `_`", title)
     Assert.Equal("def f = { x ->\n  def _ = x\n}", text)
-    Assert.Empty((Compiler.compile text).Diagnostics)
+    Assert.Empty((compileWithOfficial text).Diagnostics)
 
 // The official analyzer's `nonTailRecursion` rule.
 
 /// What `default/nonTailRecursion` reports for `source`: each message with the text it is reported at.
 let private nonTailIn (source: string) =
-    (Compiler.compile source).Diagnostics
+    (compileWithOfficial source).Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = "default/nonTailRecursion")
     |> List.map (fun diagnostic ->
         Assert.Equal(Severity.Info, diagnostic.Severity)

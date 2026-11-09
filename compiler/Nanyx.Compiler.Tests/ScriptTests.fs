@@ -20,13 +20,13 @@ let private compile (source: string) = Script.compileSource (scriptPath ()) sour
 let private codesOf (result: CompileResult) = result.Diagnostics |> List.map _.Code
 
 [<Fact>]
-let ``Without directives a script runs every analyzer at its defaults`` () =
+let ``Without directives a script runs no analyzers, as a manifest without an analyzers table does`` () =
     let directives = Script.read "" unusedBinding
     Assert.Equal(None, directives.Analyzers)
     Assert.Empty(directives.Diagnostics)
-    let diagnostic = Assert.Single((compile unusedBinding).Diagnostics)
-    Assert.Equal("default/unusedBindings", diagnostic.Code)
-    Assert.Equal(Severity.Warning, diagnostic.Severity)
+    Assert.Empty((compile unusedBinding).Diagnostics)
+    // A directive in a comment is just a comment.
+    Assert.Empty((compile ("--#:analyzer default\n\n" + unusedBinding)).Diagnostics)
 
 [<Fact>]
 let ``An analyzer directive turns the analyzer on, as an empty table in a manifest does`` () =
