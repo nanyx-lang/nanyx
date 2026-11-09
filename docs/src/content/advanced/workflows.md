@@ -179,7 +179,7 @@ def main = {
 }
 ```
 
-The block above never calls `return`, so its value is the builder's `zero`.
+The block above never calls `return`, so its value is the builder's `zero`. A builder without a `zero` can only be used for blocks that always end in `return`: one that can end without it is a compile error, which says to add a `return` or give the builder a `zero`. The standard library's `proc` has one, `#some(())`.
 
 # Error and option chaining
 

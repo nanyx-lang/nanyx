@@ -55,20 +55,22 @@ export type Result(a, e) = #some(a) | #error(e)
 -- A workflow builder is a record of keyword members. A block written after the builder's name
 -- has each `try x` (and each `try x` nested inside an expression) turned into a call to the
 -- builder's `try` member, with the rest of the block as its continuation, and each `return x`
--- into a call to its `return` member.
+-- into a call to its `return` member. A block that ends without `return` has `zero` as its
+-- value, `#some(())`, so a `proc` that is only run for what it does needs no `return`.
 --
 -- Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
 -- `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
 -- `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
 -- `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
 export def proc
-  : (try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r)
+  : (try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some(()) | r)
   = (
     try = {
       | #some(value), continue -> continue(value)
       | failure, _ -> failure
     }
     return = { value -> #some(value) }
+    zero = #some(())
   )
 
 -- Applies `f` to a success, and leaves an error as it is.

@@ -263,6 +263,8 @@ module Unifier =
                     | TyTag _ as tag -> [ tag ]
                     | _ -> [ applied ])
             match spliced with
+            // A union with a member that failed to check is an error too, and so agrees with everything.
+            | _ when spliced |> List.exists isError -> errorType
             | [ single ] when items.Length > 1 -> single
             | _ -> TyUnion spliced
         | TyPrimitive _ -> ty
@@ -562,8 +564,10 @@ module Unifier =
                         let rec tryItems items (lastError: (string * SourceSpan) option) =
                             match items with
                             | [] ->
+                                // The rest takes a tag the union does not name; one it names is that member, which
+                                // did not unify (`#some(int)` is not the rest of `#some(()) | r`).
                                 match lRest with
-                                | Some restVar when isTagLike ty -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
+                                | Some restVar when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
                                 | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
                             | item :: restItems ->
                                 match loop subst ((item, ty, Equal, origin) :: rest) with
@@ -579,7 +583,7 @@ module Unifier =
                             match items with
                             | [] ->
                                 match rRest with
-                                | Some restVar when isTagLike ty -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
+                                | Some restVar when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
                                 | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
                             | item :: restItems ->
                                 match loop subst ((ty, item, Equal, origin) :: rest) with

@@ -2021,6 +2021,12 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             // What failed to check was reported where it failed; reading from it is not another error.
             | None when Unifier.isError baseTy ->
                 Ok (mkTypedExpr expr Unifier.errorType None None None, { next with UnknownTypeUses = expr.Id :: next.UnknownTypeUses })
+            // A builder block that can end without `return` needs the builder's `zero` to be its value there.
+            | None when next.WorkflowZeros.ContainsKey expr.Id ->
+                let builderName = receiver |> Option.defaultValue "builder"
+                let place = next.WorkflowZeros.[expr.Id]
+                [ Diagnostics.at DiagnosticCodes.InvalidWorkflow place $"This `{builderName}` block can end here without `return`, and `{builderName}` has no `zero` to be its value then: end the block with `return`, or give `{builderName}` a `zero`" ]
+                |> Error
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
 and inferUseBinding (env: TypeEnv) (state: InferState) (binding: UseBinding) : Result<TypedExpr * InferState, Diagnostic list> =
