@@ -46,18 +46,21 @@ let ``A function the core IR can lower goes through it, and one it cannot falls 
         "    | #small -> 0\n" +
         "}\n" +
         "\n" +
-        "def shout: list(int) -> int = { xs -> List.length(xs) }\n"
+        "def shout: (int, int) -> (int, int) = { t -> dbg(t) }\n"
     let _, report = compileWithReport source
     Assert.Equal<string list>([ "add"; "classify"; "size" ], report.FromCoreIr)
     let reason = report.Fallbacks |> List.find (fst >> (=) "shout") |> snd
-    // The prelude's generic functions have no types by node to be specialised from (#397).
-    Assert.Equal("it calls 'List.length' at a type the IR could not lower it at", reason)
+    // The old path prints a tuple's pointer; the IR does not print a record at all.
+    Assert.Equal("`dbg` of a value of type (0: int, 1: int)", reason)
 
 [<Fact>]
 let ``A function that calls one the core IR cannot specialise falls back too`` () =
     // `show` is generic and its body is out of the core IR's reach, so `main` cannot call a specialisation of it.
     let source =
-        "def show = { x -> List.length([x]) }\n" +
+        "def show = { x ->\n" +
+        "  def pair = (x, 1)\n" +
+        "  dbg(pair).1\n" +
+        "}\n" +
         "\n" +
         "def main = show(1)\n"
     let wat, report = compileWithReport source
@@ -293,6 +296,19 @@ let ``The start function and errors deferred to run time go through the core IR`
     Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], report.FromCoreIr)
     Assert.Contains("call $proc_exit\n    unreachable", wat)
     Assert.Contains("(start $__nanyx_start)", wat)
+
+[<Fact>]
+let ``A generic function imported from another module is specialised where it is called`` () =
+    // `List.map` comes from the prelude, inlined into the module with the types its own module gave its nodes.
+    let source =
+        "def doubled: list(int) -> list(int) = { xs -> List.map(xs, { x -> x * 2 }) }\n" +
+        "\n" +
+        "def positives: list(int) -> list(bool) = { xs -> List.map(xs, { x -> x > 0 }) }\n"
+    let _, report = compileWithReport source
+    let mapSpecialisations = report.Specialisations |> List.filter (snd >> (=) "List_map") |> List.map fst
+    Assert.Equal<string list>([ "List_map__int__int"; "List_map__bool__int" ], mapSpecialisations)
+    Assert.Contains("doubled", report.FromCoreIr)
+    Assert.Contains("positives", report.FromCoreIr)
 
 [<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =

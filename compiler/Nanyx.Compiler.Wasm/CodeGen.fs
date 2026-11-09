@@ -2431,7 +2431,10 @@ type private CoreIrTypes =
     { CalleeTypes: Map<NodeId, Ty>
       DefinitionTypes: Map<string, Ty>
       /// The type definitions, contexts among them, by name.
-      TypeDefs: Map<string, TypeDefInfo> }
+      TypeDefs: Map<string, TypeDefInfo>
+      /// The types by node of the definitions inlined from imported modules, which only the core IR reads.
+      InlinedExprTypes: Map<NodeId, Ty>
+      InlinedCalleeTypes: Map<NodeId, Ty> }
 
 let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) (checkedTypes: Map<NodeId, Ty>) (coreIrTypes: CoreIrTypes option) : string * CoreIrReport =
     // The definitions synthesized instances are made of are passed as function values.
@@ -2726,8 +2729,8 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         |> Option.map (fun types ->
             let input: CoreIrLower.LowerInput =
                 { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
-                  ExprTypes = checkedTypes
-                  CalleeTypes = types.CalleeTypes
+                  ExprTypes = types.InlinedExprTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
+                  CalleeTypes = types.InlinedCalleeTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) types.CalleeTypes
                   DefinitionTypes = types.DefinitionTypes
                   ContextParameters =
                     functionContextRequirements
@@ -3346,7 +3349,13 @@ let transpileTypedModuleWithReport (options: BackendOptions) (typed: TypedModule
             | _ -> None)
         |> Map.ofList
     let coreIrTypes =
-        if options.UseCoreIr then Some { CalleeTypes = typed.CalleeTypes; DefinitionTypes = typed.Types; TypeDefs = typed.TypeDefs }
+        if options.UseCoreIr then
+            Some
+                { CalleeTypes = typed.CalleeTypes
+                  DefinitionTypes = typed.Types
+                  TypeDefs = typed.TypeDefs
+                  InlinedExprTypes = typed.InlinedExprTypes
+                  InlinedCalleeTypes = typed.InlinedCalleeTypes }
         else None
     transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances typed.ExprTypes coreIrTypes
 

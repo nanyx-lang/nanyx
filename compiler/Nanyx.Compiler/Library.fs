@@ -1385,7 +1385,10 @@ module Compiler =
                           Scopes = scopes
                           ModuleNames = moduleNames
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
-                          ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances }
+                          ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                          // Filled in for the root module only, by `compileWith`.
+                          InlinedExprTypes = Map.empty
+                          InlinedCalleeTypes = Map.empty }
                      Errors = moduleErrors
                      Undeferred = undeferred
                      Own = own
@@ -1439,7 +1442,8 @@ module Compiler =
     /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
     /// diagnostics are not repeated in every module that imports it, and the standard library never is.
     let private compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        match typecheckModule (CheckedModules()) origin source Set.empty with
+        let checkedModules = CheckedModules()
+        match typecheckModule checkedModules origin source Set.empty with
         | Result.Error (phase, diagnostics) ->
             { Phase = phase
               Diagnostics = diagnostics
@@ -1451,11 +1455,27 @@ module Compiler =
             // Types by node are only read for the root module, so only its are resolved: not those of every
             // imported module (the standard library included) on every compile.
             let resolve = Map.map (fun _ ty -> Unifier.apply checkedModule.Subst ty)
+            // Nor are an imported module's resolved but for the nodes of its definitions that are inlined here, each by the
+            // substitution of the module it came from.
+            let inlinedNodes = System.Collections.Generic.HashSet<NodeId>()
+            for item in checkedModule.Inlined do
+                match item.Kind with
+                | Def (ValueDef(_, _, _, expr)) ->
+                    expr |> mapExpressionKinds (fun node kind -> inlinedNodes.Add node.Id |> ignore; kind) |> ignore
+                | _ -> ()
+            let imported = checkedModules.Values |> Seq.choose (function Result.Ok m -> Some m | Result.Error _ -> None) |> List.ofSeq
+            let resolveInlined (raw: CheckedModule -> Map<NodeId, Ty>) =
+                inlinedNodes
+                |> Seq.choose (fun id ->
+                    imported |> List.tryPick (fun m -> raw m |> Map.tryFind id |> Option.map (fun ty -> id, Unifier.apply m.Subst ty)))
+                |> Map.ofSeq
             let typed =
                 { checkedModule.Typed with
                     ExprTypes = resolve checkedModule.RawExprTypes
                     CalleeTypes = resolve checkedModule.RawCalleeTypes
-                    SymbolTypes = resolve checkedModule.RawSymbolTypes }
+                    SymbolTypes = resolve checkedModule.RawSymbolTypes
+                    InlinedExprTypes = resolveInlined _.RawExprTypes
+                    InlinedCalleeTypes = resolveInlined _.RawCalleeTypes }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
             // there for the editor's features. The linters only look at a module that type-checked; a rule
             // configured as an error fails the compile as a compiler error does.

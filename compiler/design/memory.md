@@ -198,6 +198,10 @@ many calls ask for it, and a definition can have at most 32 (polymorphic recursi
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
 reads its fields from where they are stored rather than looking them up at run time (`__nanyx_open_field`).
 
+A definition inlined from an imported module (the prelude's `List.map`, say) is specialised the same way. Only the root
+module's types by node are resolved for the editor's sake, so the types of the inlined definitions' nodes are resolved
+apart, each by the module it came from, and only the IR reads them (`TypedModule.InlinedExprTypes`).
+
 Lambda lifting still runs on the syntax tree first (`LambdaLifting.fs`): a lambda becomes a top-level function that
 takes a closure block as its environment, and the lambda is replaced by a closure over it. The IR lowers a lifted
 function where a closure over it is made, since only there are the types of what it captures known. A lambda written
@@ -226,16 +230,17 @@ old path does.
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if it calls a specialisation that could not be lowered (one of a generic definition imported
-  from another module, say) or if anything else in it cannot be: a body that holds an error deferred to run time and
-  cannot be lowered because of it, which the old path compiles to a trap. A function and the functions it calls
-  through the IR are kept or dropped together.
+- A definition falls back if it calls a specialisation that could not be lowered, or if anything else in it cannot be:
+  a body that holds an error deferred to run time and cannot be lowered because of it, which the old path compiles to a
+  trap, and the few things the IR declines to copy from the old path (`dbg` of a record, say, which prints a pointer).
+  A function and the functions it calls through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
   compiled from the IR call its specialisations instead.
 - Both ways give the same calling convention, so a function from either can call one from the other. A function from
   the IR compiles to the same text the old way would give it, apart from calling specialisations, and a test holds
-  them to that. (The hole locals of interpolated strings are declared by depth, which can order them differently from
-  the old path when a function has strings nested in others' holes.)
+  them to that. (A lambda in a specialisation takes a function table slot of its own, which renumbers the slots after
+  it; such a program is only compared by what it does. And the hole locals of interpolated strings are declared by
+  depth, which can order them differently from the old path when a function has strings nested in others' holes.)
 - Only a type-checked module is lowered: `transpileModuleToWat`, which compiles an untyped module, uses the old path
   throughout. `transpileTypedModuleWithReport` says which way each function was compiled, and why a definition fell
   back.
