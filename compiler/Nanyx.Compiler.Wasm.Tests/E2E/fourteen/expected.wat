@@ -2,18 +2,64 @@
   (memory 1)
   (export "memory" (memory 0))
 
-  (global $heap_ptr (mut i32) (i32.const 4096))
+  (global $heap_ptr (mut i32) (i32.const 4132))
 
   (func $__nanyx_alloc (param $size i32) (result i32)
+    (local $link i32)
     (local $ptr i32)
-    global.get $heap_ptr
-    local.set $ptr
-    local.get $ptr
     local.get $size
     i32.const 3
     i32.add
     i32.const -4
     i32.and
+    local.tee $size
+    i32.eqz
+    if
+      i32.const 4
+      local.set $size
+    end
+    local.get $size
+    i32.const 32
+    i32.le_u
+    if (result i32)
+      i32.const 4092
+      local.get $size
+      i32.add
+    else
+      i32.const 4128
+    end
+    local.set $link
+    block $empty
+      loop $search
+        local.get $link
+        i32.load
+        local.tee $ptr
+        i32.eqz
+        br_if $empty
+        local.get $ptr
+        i32.const 4
+        i32.sub
+        i32.load
+        local.get $size
+        i32.ge_u
+        if
+          local.get $link
+          local.get $ptr
+          i32.load
+          i32.store
+          local.get $ptr
+          return
+        end
+        local.get $ptr
+        local.set $link
+        br $search
+      end
+    end
+    global.get $heap_ptr
+    i32.const 4
+    i32.add
+    local.tee $ptr
+    local.get $size
     i32.add
     global.set $heap_ptr
     block $fits
@@ -34,6 +80,11 @@
         br $grow
       end
     end
+    local.get $ptr
+    i32.const 4
+    i32.sub
+    local.get $size
+    i32.store
     local.get $ptr
   )
   (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)

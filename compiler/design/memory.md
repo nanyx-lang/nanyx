@@ -16,9 +16,9 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 
 ## Where we are today
 
-The WebAssembly backend allocates from a bump allocator: `$heap_ptr` starts after the data segment and moves
-forward on every allocation, growing linear memory when it runs out (`__nanyx_alloc` in
-`compiler/Nanyx.Compiler.Wasm/CodeGen.fs`). Nothing is freed, so a long-running program's memory only grows.
+The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
+`compiler/Nanyx.Compiler.Wasm/CodeGen.fs`; see Allocator below), but nothing calls `free` yet, so a long-running
+program's memory only grows.
 
 Every value is an `i32`. On the heap:
 
@@ -118,9 +118,29 @@ alone and it is never freed.
 
 ### Allocator
 
-Replace the bump allocator with one that can free: segregated free lists by size class, falling back to bumping
-`$heap_ptr` (and growing memory) when a class's list is empty. Most objects are a handful of words, so a few small
-classes cover them; larger objects (long strings, wide records) take a general free list.
+Segregated free lists by size class, falling back to bumping `$heap_ptr` (and growing memory) when a class's list
+has nothing to give ([#292](https://github.com/nanyx-lang/nanyx/issues/292), done). Most objects are a handful of
+words, so a few small classes cover them; larger objects (long strings, wide records) take a general free list.
+
+- **Sizes.** `alloc(n)` rounds `n` up to a multiple of 4 (and at least 4), so blocks stay 4-byte aligned and
+  pointers stay even.
+- **Size word.** A block's rounded size is stored in the word just before the block `alloc` returns, so
+  `free(b)` needs only the pointer. The object header is part of the block: once objects have one, a block holds
+  the count, then the info word (if any), then the fields, so the size word sits just before the count. For a
+  string, say, that puts the count at `p - 8`, the length at `p - 4`, and the size at `p - 12`. Until headers
+  land, the size word is at `p - 8` for strings and records and `p - 4` for the rest.
+  The drop functions will know each object's size from its type, so the size word could later go; it costs 4
+  bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
+  asked for and still take all of it back.
+- **Classes.** Each size from 4 to 32 bytes (8 words) has its own list, so a freed block goes back to exactly the
+  size Perceus will next ask for. Larger blocks share one list, searched first-fit; a block found there is not
+  split and keeps its own size.
+- **Lists.** The heads are a table of 9 words at the start of the heap (address 4096), and `$heap_ptr` starts
+  after it. A free block keeps the next block of its list in its first word. `free` pushes onto the front of the
+  list and `alloc` takes from the front, so the most recently freed block is reused first.
+
+Nothing coalesces adjacent free blocks or returns memory to the host; neither matters for the small,
+same-sized objects that dominate, and both can come later if measurements on the examples call for them.
 
 ### Core IR
 
@@ -167,8 +187,8 @@ On the IR, following the paper:
 
 1. **Groundwork.**
    - ~~Keep a tag's payload in full~~ ([#181](https://github.com/nanyx-lang/nanyx/issues/181), done).
-   - Replace the bump allocator with one that can free
-     ([#292](https://github.com/nanyx-lang/nanyx/issues/292)). Independent of the rest.
+   - ~~Replace the bump allocator with one that can free~~
+     ([#292](https://github.com/nanyx-lang/nanyx/issues/292), done).
 2. **Core IR and monomorphisation.** Introduce the IR, specialising generic functions as it is built, and move code
    generation onto it with no change in behaviour ([#293](https://github.com/nanyx-lang/nanyx/issues/293)).
 3. **Headers and drop functions.** Give every heap object a count, and generate a drop function per type
