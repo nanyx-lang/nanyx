@@ -10,13 +10,12 @@
 
   <ItemGroup>
     <Compile Include="TestHelpers.fs" />
-    <Compile Include="ParserTests.fs" />
     <Compile Include="Features\Attributes\AttributeTests.fs" />
-    <Compile Include="Features\Blocks\BlockTests.fs" />
     <Compile Include="Features\Bindings\BindingTests.fs" />
+    <Compile Include="Features\Blocks\BlockTests.fs" />
+    <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\FieldAccess\FieldAccessTests.fs" />
     <Compile Include="Features\Functions\FunctionCallTests.fs" />
-  <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\If\IfTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Integration\IntegrationTests.fs" />
@@ -31,11 +30,11 @@
     <Compile Include="Features\Ranges\RangeTests.fs" />
     <Compile Include="Features\Records\RecordTests.fs" />
     <Compile Include="Features\Samples\SampleTests.fs" />
+    <Compile Include="Features\Spans\SpanTests.fs" />
     <Compile Include="Features\Tags\TagTests.fs" />
+    <Compile Include="Features\Trivia\TriviaTests.fs" />
     <Compile Include="Features\Tuples\TupleTests.fs" />
     <Compile Include="Features\Types\TypeTests.fs" />
-    <Compile Include="Features\Trivia\TriviaTests.fs" />
-    <Compile Include="Features\Spans\SpanTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

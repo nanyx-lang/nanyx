@@ -72,3 +72,60 @@ let ``Parse misc feature files`` () =
         | Result.Error err -> failwith $"Parse failed for {filePath}: {err}"
         | _ -> ()
     )
+
+// Whitespace Tests
+[<Fact>]
+let ``Parse with leading whitespace`` () =
+    let result = parseModule "   def x = 1"
+    result |> isOk |> should equal true
+
+[<Fact>]
+let ``Parse with trailing whitespace`` () =
+    let result = parseModule "def x = 1   "
+    result |> isOk |> should equal true
+
+[<Fact>]
+let ``Parse with extra whitespace around equals`` () =
+    let result = parseModule "def x    =    1"
+    result |> isOk |> should equal true
+
+[<Fact>]
+let ``Parse empty input`` () =
+    let result = parseModule ""
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should be Empty
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse only whitespace`` () =
+    let result = parseModule "   \n  \n  "
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should be Empty
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+// Error Tests
+[<Fact>]
+let ``Error on missing equals`` () =
+    let result = parseModule "def x 42"
+    result |> isError |> should equal true
+
+[<Fact>]
+let ``Error on missing value`` () =
+    let result = parseModule "def x ="
+    result |> isError |> should equal true
+
+[<Fact>]
+let ``Error on missing identifier`` () =
+    let result = parseModule "def = 42"
+    result |> isError |> should equal true
+
+[<Fact>]
+let ``Error on unterminated string`` () =
+    let result = parseModule "def x = \"unterminated"
+    result |> isError |> should equal true
