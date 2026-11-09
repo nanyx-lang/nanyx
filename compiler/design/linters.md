@@ -219,7 +219,7 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 >   `Compiler.compileWith` and its file and source variants. A package's `.nyxpack` sets it with an
 >   `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
 >   `nanyx build`, `nanyx run` and the language server; without the table, the linter does not run. A file
->   outside any package turns linters on with `::linter` directives in the same way, and without them runs
+>   outside any package turns linters on with `::linters` directives in the same way, and without them runs
 >   none. Linters are opt-in everywhere, including `Compiler.compile` and its variants.
 
 Before any public contract, linters are F# values compiled into the compiler:

@@ -37,9 +37,9 @@
           }
         },
         {
-          "comment": "A script's directive, at the start of a line: `::linter default.unusedBindings error`",
+          "comment": "A script's directive, at the start of a line: a manifest's dotted key, and a TOML value to set one: `::linters.default.unusedBindings = \"error\"`",
           "name": "meta.preprocessor.directive.nanyx",
-          "match": "^(::)([A-Za-z_][A-Za-z0-9_]*)?(.*)$",
+          "match": "^(::)([^=]*?)\\s*(?:(=)\\s*(.*?))?\\s*$",
           "captures": {
             "1": {
               "name": "punctuation.definition.directive.nanyx"
@@ -48,7 +48,20 @@
               "name": "keyword.control.directive.nanyx"
             },
             "3": {
-              "name": "string.unquoted.directive.nanyx"
+              "name": "keyword.operator.assignment.directive.nanyx"
+            },
+            "4": {
+              "name": "meta.value.directive.nanyx",
+              "patterns": [
+                {
+                  "name": "string.quoted.double.directive.nanyx",
+                  "match": "\"[^\"]*\""
+                },
+                {
+                  "name": "constant.numeric.directive.nanyx",
+                  "match": "\\b\\d+\\b"
+                }
+              ]
             }
           }
         }

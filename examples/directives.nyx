@@ -1,8 +1,8 @@
 #!/usr/bin/env -S nanyx run
 -- A script says what a package's manifest would with directives before its first line of code: here, that an unused
 -- binding stops it running, and that it is formatted to 80 columns. Run it with `nanyx run examples/directives.nyx`.
-::linter default.unusedBindings error
-::formatter lineWidth 80
+::linters.default.unusedBindings = "error"
+::formatter.lineWidth = 80
 
 import nanyx/console
 

@@ -449,7 +449,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task Code_actions_are_the_fixes_of_the_diagnostics_in_the_range()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-8");
-        const string text = "::linter default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
+        const string text = "::linters.default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
 
         // The official linter runs only where something turns it on: here, a directive.
         Open(uri, text);
@@ -460,12 +460,12 @@ public sealed class LanguageServerTests : IAsyncLifetime
         var remove = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)));
         Assert.Equal(("Remove `unused`", CodeActionKind.QuickFix, true), (remove.Title, remove.Kind, remove.IsPreferred));
         Assert.Equal("default/unusedBindings", Assert.Single(remove.Diagnostics!).Code?.String);
-        Assert.Equal("::linter default\ndef f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
+        Assert.Equal("::linters.default\ndef f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // An unused parameter is renamed to `_`.
         var rename = Assert.Single(await CodeActionsIn(uri, new Range(5, 10, 5, 11)));
         Assert.Equal("Rename `x` to `_`", rename.Title);
-        Assert.Equal("::linter default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
+        Assert.Equal("::linters.default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
 
         // Nothing where no diagnostic is.
         Assert.Empty(await CodeActionsIn(uri, new Range(3, 2, 3, 3)));
@@ -492,7 +492,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task An_unused_import_has_a_quick_fix_that_removes_it()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-13");
-        const string text = "::linter default\nimport (\n  nanyx/math as m\n  nanyx/text as t\n)\ndef x = m.abs(3)\n";
+        const string text = "::linters.default\nimport (\n  nanyx/math as m\n  nanyx/text as t\n)\ndef x = m.abs(3)\n";
 
         Open(uri, text);
         var published = Assert.Single((await NextPublished(uri)).Diagnostics!);
@@ -501,7 +501,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
         var remove = Assert.Single(await CodeActionsIn(uri, new Range(3, 4, 3, 4)));
         Assert.Equal(("Remove the import of `t`", CodeActionKind.QuickFix), (remove.Title, remove.Kind));
         Assert.Equal(
-            "::linter default\nimport (\n  nanyx/math as m\n)\ndef x = m.abs(3)\n",
+            "::linters.default\nimport (\n  nanyx/math as m\n)\ndef x = m.abs(3)\n",
             Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // The import that is used has none.
@@ -1067,11 +1067,11 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task Formatting_a_script_keeps_its_directives_and_uses_its_formatter_directives()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-format-directives");
-        Open(uri, "::formatter indentSize 4\ndef x =\n  def a = 1\n  a\n");
+        Open(uri, "::formatter.indentSize = 4\ndef x =\n  def a = 1\n  a\n");
         await NextPublished(uri);
 
         var edit = Assert.Single(await FormattingEdits(uri));
-        Assert.Equal("::formatter indentSize 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
+        Assert.Equal("::formatter.indentSize = 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
     }
 
     [Fact]
@@ -1079,11 +1079,11 @@ public sealed class LanguageServerTests : IAsyncLifetime
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "directives.nyx"));
 
-        Open(uri, "::linter default.unusedBindings error\n::linter nope\ndef f = {\n  def unused = 1\n  2\n}\n");
+        Open(uri, "::linters.default.unusedBindings = \"error\"\n::linters.nope\ndef f = {\n  def unused = 1\n  2\n}\n");
 
         var diagnostics = (await NextPublished(uri)).Diagnostics!.ToList();
         Assert.Equal(["NYX0009", "default/unusedBindings"], diagnostics.Select(d => d.Code?.String));
-        Assert.Equal(new Range(1, 0, 1, 13), diagnostics[0].Range);
+        Assert.Equal(new Range(1, 0, 1, 14), diagnostics[0].Range);
         Assert.Equal(DiagnosticSeverity.Error, diagnostics[1].Severity);
     }
 

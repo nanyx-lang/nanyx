@@ -487,7 +487,7 @@ module Linters =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model }
 
-    /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linter` directives
+    /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.
     let all = [ official ]
 

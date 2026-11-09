@@ -55,11 +55,11 @@ A linter runs only if the manifest has a table for it, so removing `[linters.def
 [linters.default]
 ```
 
-A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linter` directives at the top of the file; without any, it runs none. Each directive says what one manifest entry would: `::linter default` is an empty `[linters.default]` table, and `::linter default.unusedBindings error` sets one rule's severity. As in a manifest, only the linters the directives name run:
+A single file run on its own (`nanyx run script.nyx`) has no manifest, so it turns its linters on with `::linters` directives at the top of the file; without any, it runs none. Each directive is written as the manifest's dotted key: `::linters.default` is an empty `[linters.default]` table, and `::linters.default.unusedBindings = "error"` sets one rule's severity. As in a manifest, only the linters the directives name run:
 
 ```nanyx
-::linter default.unusedBindings error
-::linter default.nonTailRecursion none
+::linters.default.unusedBindings = "error"
+::linters.default.nonTailRecursion = "none"
 
 import nanyx/console
 
