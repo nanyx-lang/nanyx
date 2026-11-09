@@ -131,6 +131,19 @@ let ``Inlay hints with top-level defs have the lenses' types too, in source orde
         typeHints TypeHints.inlayHintsWithTopLevel source)
 
 [<Fact>]
+let ``A record's rest is left unnamed in every hint of a def when it is named nowhere else`` () =
+    let source =
+        "def names = { people -> match people\n" +
+        "  | [] -> []\n" +
+        "  | [p, ...rest] -> [p.name, ...names(rest)] }\n"
+    Assert.Equal<(string * string) list>(
+        [ "names", "list(name: α, ...) -> list(α)"
+          "people", "list(name: α, ...)"
+          "p", "(name: α, ...)"
+          "rest", "list(name: α, ...)" ],
+        typeHints TypeHints.inlayHintsWithTopLevel source |> List.map (fun (name, ty, _) -> name, ty))
+
+[<Fact>]
 let ``Hints keep the names of type aliases`` () =
     let source =
         "type Customer = (name: string)\n" +

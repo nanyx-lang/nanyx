@@ -27,8 +27,19 @@ let ``Reading fields of a parameter makes it a record with at least those fields
     let source =
         "def name = { p -> p.name }\n" +
         "def label = { p -> p.name ++ \" \" ++ p.city }\n"
-    Assert.Equal(Some "(name: α, ...ω) -> α", hoverType source (offsetOf source "{ p -> p.name }" 0 0))
-    Assert.Equal(Some "(city: string, name: string, ...ω) -> string", hoverType source (offsetOf source "{ p -> p.name ++" 0 0))
+    Assert.Equal(Some "(name: α, ...) -> α", hoverType source (offsetOf source "{ p -> p.name }" 0 0))
+    Assert.Equal(Some "(city: string, name: string, ...) -> string", hoverType source (offsetOf source "{ p -> p.name ++" 0 0))
+
+[<Fact>]
+let ``A record's rest is named only where it appears more than once`` () =
+    let source =
+        "def names = { people -> match people\n" +
+        "  | [] -> []\n" +
+        "  | [p, ...rest] -> [p.name, ...names(rest)] }\n" +
+        "def keep = { p -> (p.name, p) }\n"
+    Assert.Equal(Some "list(name: α, ...) -> list(α)", hoverType source (offsetOf source "names" 0 0))
+    // What it is given it gives back, other fields and all, so the rest is named to say it is the same in both.
+    Assert.Equal(Some "(name: α, ...ω) -> (α, (name: α, ...ω))", hoverType source (offsetOf source "keep" 0 0))
 
 [<Fact>]
 let ``A function reading fields takes any record that has them`` () =
@@ -220,7 +231,7 @@ let ``A shorthand lambda shows its own type, and its operator the argument writt
     // The argument is left out where the operator is, so the operator shows the argument's type.
     Assert.Equal(Some "int", hoverType source (offsetOf source "%" 0 0))
     Assert.Equal(Some "bool", hoverType source (offsetOf source "==" 0 0))
-    Assert.Equal(Some "(name: α, ...ω) -> α", hoverType source (offsetOf source "{ .name" 0 0))
+    Assert.Equal(Some "(name: α, ...) -> α", hoverType source (offsetOf source "{ .name" 0 0))
     Assert.Equal(Some "α", hoverType source (offsetOf source "name }" 0 0))
 
 [<Fact>]
@@ -375,5 +386,11 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     Assert.Equal("#some(int)", Unifier.tyToString (TyTag("some", Some (TyPrimitive "int"))))
     Assert.Equal("#pair(int, (a -> b))", Unifier.tyToString (TyTag("pair", Some (pair (TyPrimitive "int") (TyFunc(a, b))))))
     Assert.Equal("#apply((int, a) -> b)",Unifier.tyToString (TyTag("apply", Some (TyFunc(pair (TyPrimitive "int") a, b)))))
+    // A lone record argument's fields are in the application's own brackets, as a payload's are; a tuple's are not,
+    // as its items would read as more arguments.
+    let named = Map.ofList [ "name", a ]
+    Assert.Equal("list(name: a)", Unifier.tyToString (TyApply("list", [ TyRecord named ])))
+    Assert.Equal("list(name: a, ...r)", Unifier.tyToString (TyApply("list", [ TyOpenRecord(named, { Id = 4; Name = Some "r" }) ])))
+    Assert.Equal("list((a, b))", Unifier.tyToString (TyApply("list", [ pair a b ])))
     // The unit type is written `()`.
     Assert.Equal("() -> ()", Unifier.tyToString (TyFunc(TyPrimitive "unit", TyPrimitive "unit")))
