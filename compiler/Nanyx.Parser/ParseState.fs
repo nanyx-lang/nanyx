@@ -1,0 +1,236 @@
+[<AutoOpen>]
+module Parser.Program.ParseState
+
+open System
+open FParsec
+// After the libraries, so that the parser's names shadow theirs (identifier, Attribute) as they did in one file.
+open Parser.Program
+
+/// What the parser keeps beside the input. FParsec restores it when it backtracks, so a declaration parsed on
+/// a path that failed is forgotten with it.
+type ParseState =
+    { Declared: DeclaredNames
+      /// Names parsed for a construct that has not been built yet (a lambda's parameters, a pattern's
+      /// variables), most recent first. The construct takes them with `collectingNames`.
+      PendingNames: (Identifier * SourceSpan) list
+      /// How many lambdas the parser is inside.
+      LambdaDepth: int
+      /// The text of each `module name =` block parsed so far, with the block's name.
+      ModuleBlocks: (ModuleName * SourceSpan) list
+      /// The furthest workflow keyword applied to a value, where it is and what to say about it. It is a cell
+      /// shared by every copy of the state, so backtracking does not forget it (see `workflowKeywordApplication`).
+      WorkflowKeyword: (Position * string) option ref
+      /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
+      /// line break), most recent first. For the formatter, which puts them back: see `parseModuleWithTrivia`.
+      Comments: (int * int) list
+      /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
+      /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
+      StringTexts: (int * int) list }
+
+module ParseState =
+    let empty () =
+        { Declared = Map.empty
+          PendingNames = []
+          LambdaDepth = 0
+          ModuleBlocks = []
+          WorkflowKeyword = ref None
+          Comments = []
+          StringTexts = [] }
+
+/// Runs `p`, noting the offsets of the text it consumed with `note`.
+let private noting (note: int * int -> ParseState -> ParseState) (p: Parser<'a, ParseState>) : Parser<'a, ParseState> =
+    pipe3 getPosition p getPosition (fun start value finish -> value, (int start.Index, int finish.Index))
+    >>= fun (value, range) -> updateUserState (note range) >>% value
+
+// Helper: whitespace and comment handling
+let private lineComment () =
+    noting (fun range state -> { state with Comments = range :: state.Comments }) (pstring "--" >>. skipRestOfLine false)
+
+let comment () = lineComment () >>. optional skipNewline
+let inlineCommentNoNl () = lineComment ()
+let ws: Parser<unit, ParseState> = skipMany (skipMany1 spaces1 <|> comment ())
+let wsAll: Parser<unit, ParseState> = ws
+let wsInline = skipMany (skipAnyOf " \t")
+let wsNoNl() = skipMany (skipAnyOf " \t") // whitespace without newlines
+let wsWithComments () = ws
+
+/// The end of a line in an indentation-based block: an optional `-- comment`, then the newline.
+let blockLineEnd () : Parser<unit, ParseState> =
+    wsNoNl() >>. optional (inlineCommentNoNl ()) >>. skipNewline
+
+/// The end of a line in an indentation-based block, then any lines that are empty, whitespace only or a comment, so
+/// the next parser starts at the beginning of the next line with code. Used between a block's statements, inside an
+/// `attempt`: if what follows is not at the block's indent, the block ends at its last statement and the comments
+/// skipped here are forgotten, to be noted again by whatever parses them next.
+let blockLinesEnd () : Parser<unit, ParseState> =
+    blockLineEnd () >>. skipMany (attempt (blockLineEnd ()))
+
+// Indentation helpers
+let getIndentation () = 
+    getPosition |>> (fun pos -> int pos.Column - 1)
+
+let skipToColumn (col: int64) =
+    getPosition >>= fun pos ->
+        let currentCol = pos.Column
+        if currentCol < col then
+            skipManyTill (pchar ' ') (getPosition >>= fun p -> if p.Column >= col then preturn () else pzero)
+        else if currentCol = col then
+            preturn ()
+        else
+            pzero
+
+let atIndentation (refCol: int64) =
+    getPosition >>= fun pos ->
+        if pos.Column = refCol then preturn ()
+        else pzero
+
+let greaterIndentation (refCol: int64) =
+    getPosition >>= fun pos ->
+        if pos.Column > refCol then preturn ()
+        else pzero
+
+let newlineIndentedContinuation (refCol: int64) : Parser<unit, ParseState> =
+    attempt (
+        skipMany (skipAnyOf " \t") >>. newline >>.
+        many (pchar ' ' <|> pchar '\t') >>.
+        getPosition >>= fun pos ->
+            if pos.Column > refCol then preturn () else pzero
+    )
+
+let defEqualsContinuation (refCol: int64) : Parser<unit, ParseState> =
+    attempt (wsNoNl() >>. followedBy (pstring "=")) <|> newlineIndentedContinuation refCol
+
+// Parser for identifiers
+let identifierNoWs: Parser<Identifier, ParseState> =
+    let isIdentStart c = isLetter c || c = '_'
+    let isIdentContinue c = isLetter c || isDigit c || c = '_'
+    many1Satisfy2 isIdentStart isIdentContinue
+    <?> "identifier"
+
+let identifier: Parser<Identifier, ParseState> = identifierNoWs .>> wsInline
+
+let typeNameIdentifier: Parser<Identifier, ParseState> =
+    (pchar '$' >>. identifierNoWs |>> fun name -> "$" + name)
+    <|> identifierNoWs
+
+/// A name qualified with dots, any part of which may be a nominal type's: `m.$Email.parse`.
+let qualifiedIdentifier: Parser<Identifier, ParseState> =
+    pipe2
+        typeNameIdentifier
+        (many (pchar '.' >>. typeNameIdentifier))
+        (fun head tail -> String.concat "." (head :: tail))
+
+let internal spanOf (start: Position) (endIndex: int) : SourceSpan =
+    { File = start.StreamName
+      Start = int start.Index
+      End = max endIndex (int start.Index)
+      StartLine = int start.Line - 1
+      StartColumn = int start.Column - 1 }
+
+/// The index just past the last character consumed that is not whitespace. Many parsers consume the whitespace
+/// after what they parse; it is not part of a node's span.
+let private trimmedEnd: Parser<int, ParseState> =
+    fun stream ->
+        let mutable back = 0
+        let isTrailingSpace (offset: int) =
+            let c = stream.Peek(offset)
+            c <> CharStream.EndOfStreamChar && Char.IsWhiteSpace c
+        while isTrailingSpace (-(back + 1)) do
+            back <- back + 1
+        Reply(int stream.Index - back)
+
+/// Runs `p` and pairs its result with the span of the text it consumed.
+let withSpan (p: Parser<'a, ParseState>) : Parser<'a * SourceSpan, ParseState> =
+    pipe3 getPosition p trimmedEnd (fun start value endIndex -> value, spanOf start endIndex)
+
+/// The span of `name`, written from `start` on one line.
+let internal nameSpan (start: Position) (name: Identifier) = spanOf start (int start.Index + name.Length)
+
+/// Notes `name`, written at `start`, as declared by the construct being parsed: see `collectingNames`.
+let internal noteName (start: Position) (name: Identifier) : Parser<unit, ParseState> =
+    updateUserState (fun state -> { state with PendingNames = (name, nameSpan start name) :: state.PendingNames })
+
+/// Runs `p`, and returns with its result the names noted while it ran, in the order they are written. They are
+/// no longer pending afterwards.
+let internal collectingNames (p: Parser<'a, ParseState>) : Parser<'a * (Identifier * SourceSpan) list, ParseState> =
+    getUserState >>= fun before ->
+        p >>= fun value ->
+            getUserState >>= fun after ->
+                let noted =
+                    after.PendingNames
+                    |> List.take (after.PendingNames.Length - before.PendingNames.Length)
+                    |> List.rev
+                setUserState { after with PendingNames = before.PendingNames } >>% (value, noted)
+
+/// Records that `holder` declares `names` as `declarer`. A name declared twice, by the alternatives of an
+/// or-pattern, keeps the span of the first.
+let internal declare (declarer: Declarer) (holder: NodeId) (names: (Identifier * SourceSpan) list) : Parser<unit, ParseState> =
+    if List.isEmpty names then
+        preturn ()
+    else
+        updateUserState (fun state ->
+            let key = holder, declarer
+            let existing = state.Declared |> Map.tryFind key |> Option.defaultValue []
+            { state with Declared = state.Declared |> Map.add key (existing @ names |> List.distinctBy fst) })
+
+/// Runs `p` and makes what it built an expression spanning the text it consumed.
+let spanned (p: Parser<ExpressionKind, ParseState>) : Parser<Expression, ParseState> =
+    withSpan p |>> fun (kind, span) -> Expression.at span kind
+
+/// Runs `p` and makes what it built a pattern spanning the text it consumed.
+let internal spannedPattern (p: Parser<PatternKind, ParseState>) : Parser<Pattern, ParseState> =
+    withSpan p |>> fun (kind, span) -> Pattern.at span kind
+
+/// Runs `p` and makes what it built a type expression spanning the text it consumed.
+let internal spannedType (p: Parser<TypeExprKind, ParseState>) : Parser<TypeExpr, ParseState> =
+    withSpan p |>> fun (kind, span) -> TypeExpr.at span kind
+
+/// Runs `p`, which parses one type or several; one stays as it is, and several are made into the type `combine`
+/// builds from them, spanning the text `p` consumed.
+let internal singleOrCombined (combine: TypeExpr list -> TypeExprKind) (p: Parser<TypeExpr list, ParseState>) : Parser<TypeExpr, ParseState> =
+    withSpan p |>> fun (items, span) ->
+        match items with
+        | [ single ] -> single
+        | multiple -> TypeExpr.at span (combine multiple)
+
+let identifierWithSpan: Parser<Identifier * SourceSpan option, ParseState> =
+    withSpan identifierNoWs |>> fun (name, span) -> name, Some span
+
+let qualifiedIdentifierWithSpan: Parser<Identifier * SourceSpan option, ParseState> =
+    withSpan qualifiedIdentifier |>> fun (name, span) -> name, Some span
+
+/// One expression, or several separated by commas as a tuple of them.
+let internal singleOrTuple (items: Parser<Expression list, ParseState>) : Parser<Expression, ParseState> =
+    withSpan items |>> fun (exprs, span) ->
+        match exprs with
+        | [single] -> single
+        | multiple -> Expression.at span (TupleExpr multiple)
+
+/// `span`, ending no later than `last` does when `last` has a span of its own.
+let internal endingAt (last: SourceSpan) (span: SourceSpan) =
+    if not (SourceSpan.isNone last) && last.End < span.End then { span with End = last.End } else span
+
+/// Runs `p` and makes what it built a statement spanning the text it consumed. A statement that ends with an
+/// expression ends where that expression does: it may have consumed a trailing `-- comment`, which is not part of
+/// the statement.
+let internal spannedStatement (p: Parser<StatementKind, ParseState>) : Parser<Statement, ParseState> =
+    withSpan p |>> fun (kind, span) ->
+        let span =
+            match Statement.finalExpression kind with
+            | Some expr -> endingAt expr.Span span
+            | None -> span
+        Statement.at span kind
+
+/// A block of statements. It ends where its last statement does.
+let internal blockSpanned (statements: Parser<Statement list, ParseState>) : Parser<Expression, ParseState> =
+    withSpan statements |>> fun (stmts, span) ->
+        let span =
+            match List.tryLast stmts with
+            | Some last -> endingAt last.Span span
+            | None -> span
+        Expression.at span (Block stmts)
+
+
+/// Runs `p`, which parses text inside a string literal, and notes where that text is.
+let internal stringText (p: Parser<string, ParseState>) =
+    noting (fun range state -> { state with StringTexts = range :: state.StringTexts }) p
