@@ -37,6 +37,14 @@ export def Int.parse: string -> #some(int) | #invalidInt = { s ->
       else parseDigits(s, start, 0)
 }
 
+-- Booleans --------------------------------------------------------------------------------------
+
+-- The boolean `s` writes, `true` or `false` exactly as `Bool.toString` writes them, or
+-- `#invalidBool` for anything else (other capitalisation, spaces, an empty string).
+export def Bool.parse: string -> #some(bool) | #invalidBool = { s ->
+  if s == "true" then #some(true) else if s == "false" then #some(false) else #invalidBool
+}
+
 -- Text ------------------------------------------------------------------------------------------
 --
 -- Each built-in type has an attached `toString`, so a value can be turned into text by a function

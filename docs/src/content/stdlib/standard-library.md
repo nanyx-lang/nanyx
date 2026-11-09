@@ -76,6 +76,23 @@ label(42)    -- "<42>"
 label(true)  -- "<true>"
 ```
 
+# Reading from text
+
+`int` and `bool` each have an attached `parse`, also in the prelude. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read:
+
+```nanyx
+Int.parse: string -> #some(int) | #invalidInt
+Bool.parse: string -> #some(bool) | #invalidBool
+```
+
+`Int.parse` reads a decimal integer with an optional leading `-` or `+`. `Bool.parse` reads `true` or `false`, exactly as `Bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
+
+```nanyx
+def n = Int.parse("42")          -- #some(42)
+def b = "false" \Bool.parse      -- #some(false)
+def bad = Bool.parse("yes")      -- #invalidBool
+```
+
 # Map literals
 
 Maps are written with the square-bracket literal syntax and the `=>` operator:

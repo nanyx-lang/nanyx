@@ -45,6 +45,13 @@ let ``Int.parse is in the prelude`` () =
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
+let ``Bool.parse is in the prelude`` () =
+    let result = Compiler.compile "def b = Bool.parse(\"true\")\ndef piped = \"false\" \\ Bool.parse"
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["b"])
+    Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["piped"])
+
+[<Fact>]
 let ``Each built-in type has an attached toString in the prelude`` () =
     let source =
         "def i = Int.toString(1)\n" +
