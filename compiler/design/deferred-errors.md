@@ -2,7 +2,8 @@
 
 > **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
 > the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
-> The type checker reports every error in a module, item by item; see the [plan](#plan) for the rest. It is part of the [compilation](compilation.md) workstream, and
+> The type checker reports every error in a module, recovering at the expression that failed; see the
+> [plan](#plan) for the rest. It is part of the [compilation](compilation.md) workstream, and
 > its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 ## Summary
@@ -54,19 +55,29 @@ The type checker recovers from errors instead of stopping:
 - **The result.** Checking a module always produces a typed module, alongside its diagnostics. The expressions an
   error was reported at are marked in the typed AST, with the diagnostic.
 
-The first step of this works at the level of items and constraints, without `TyError`:
+How it is built:
 
-- **A def that fails to check** is reported, and the module is checked on without it. An unannotated one stays
-  bound at the fresh variable it was pre-bound at, generalised, so each use of it can be anything and none is an
-  error; an annotated one stays bound at its annotation.
+- **The error type** is `Unifier.errorType`, a primitive no source can name (printed `?`), so the passes that
+  handle types need no case of their own for it. Unifying it with a type variable binds the variable to it, as with
+  any type; unifying it with anything else succeeds without binding anything. A variable bound to it therefore
+  agrees with everything from then on, which is what stops one error cascading through the uses of a name.
+- **An expression that fails to check** is recovered where it failed: `inferExpr` records its diagnostics in the
+  state's `FailedExprs`, by its node, gives it the error type, and carries on. What inferring it did before it
+  failed is dropped. The smallest failing expression is the one recorded: a call whose arguments check but whose
+  callee is unknown is recorded whole, while an unknown name among its arguments is recorded alone. `FailedExprs`
+  is also the list of nodes the deferral pass will rewrite.
+- **What is done with an error-typed value** is not another error: reading a member of it, or piping it to a name
+  attached to no type, gives the error type again (the pipe's arguments are still checked).
+- **A def that fails to check** before its body is inferred (its annotation names an unknown type, say) is
+  reported, and the module is checked on without it. An unannotated one is bound at the error type from then on;
+  an annotated one stays bound at its annotation.
 - **A conflict among the constraints** is reported, and the constraints from where it was found are set aside
-  before the rest are solved again (`Unifier.solve`). The expressions there are typed by their other constraints,
-  or not at all, which is what `TyError` would make them. The constraints solved part-way through inference, to
-  read a record's fields say, are solved the same way, so a conflict in one def does not leave the types in the
-  next unresolved.
-
-An error inside a def's body still fails the whole def. Recovering within it needs the error nodes and `TyError`
-above.
+  before the rest are solved again (`Unifier.solve`). The constraints solved part-way through inference, to read a
+  record's fields say, are solved the same way, so a conflict in one def does not leave the types in the next
+  unresolved. Conflicts do not yet bind anything to the error type: the expressions there are typed by their other
+  constraints.
+- **Not yet:** checking a module still produces only diagnostics when there are errors, not a typed module beside
+  them.
 
 This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
 editor, which sees every error in a module, and hover types and completions past the first one. It is also where
@@ -137,7 +148,7 @@ for red-green iteration.
    a module with several independent errors reports all of them, and one mistake reports one error, not a cascade.
    The backend still refuses programs with errors.
    - [x] Carry on past a def that fails to check, and past a conflict among the constraints.
-   - [ ] Recover within an expression: `TyError` and error nodes.
+   - [x] Recover within an expression: the error type, and `FailedExprs` for the nodes that failed.
    - [ ] Return the typed module alongside its diagnostics.
 2. **Deferral pass and `Panic`.** Mark erroneous expressions and definitions in the typed AST, rewrite them to
    `Panic`, add the runtime helper (write to stderr, then `unreachable`), and cut sequences off after a panic.

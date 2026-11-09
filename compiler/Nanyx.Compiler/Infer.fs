@@ -120,7 +120,10 @@ type InferState =
             ContextInstances: Map<NodeId, ContextInstance option list>;
             /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
             /// as written there, by the name they are bound under in the environment (see `instanceBinding`).
-            InstanceContexts: Map<string, TypeExpr> }
+            InstanceContexts: Map<string, TypeExpr>;
+            /// The expressions that failed to check, each by its node with its diagnostics, the latest first. Each is
+            /// typed as anything, and checking carries on around it.
+            FailedExprs: (NodeId * Diagnostic list) list }
 
 let emptyState =
         { NextId = 0;
@@ -160,7 +163,8 @@ let emptyState =
             BlockAliases = Map.empty;
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
-            InstanceContexts = Map.empty }
+            InstanceContexts = Map.empty;
+            FailedExprs = [] }
 
 let private freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
@@ -1508,16 +1512,28 @@ let private recordExprType (result: Result<TypedExpr * InferState, Diagnostic li
 
 /// The constraints inferring `expr` adds are reported at `expr` (or, for a node the compiler made up, wherever the
 /// enclosing ones are); those its parent adds afterwards are reported at the parent again.
+///
+/// An expression that fails to check is recorded in `FailedExprs` and typed as `Unifier.errorType`, which agrees
+/// with whatever its surroundings make of it, so checking carries on around it and this never gives `Error`. What
+/// inferring it did before it failed is dropped. The smallest expression that fails is the one recorded: one whose
+/// parts check but that does not itself (a call with the wrong number of arguments) is recorded whole.
 let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     let outer = state.Origin
     let origin = if SourceSpan.isNone expr.Span then outer else expr.Span
-    inferExprKind env { state with Origin = origin } expr
-    |> Result.bind (fun (typedExpr, next) ->
-        match expr.Kind with
-        // A call to a function that requires a parameterised context finds its instance once its arguments are typed.
-        | FunctionCall(name, spanOpt, _) ->
-            resolveCallInstances env next expr name (nameSpan spanOpt expr) |> Result.map (fun next -> typedExpr, next)
-        | _ -> Ok (typedExpr, next))
+    let inferred =
+        inferExprKind env { state with Origin = origin } expr
+        |> Result.bind (fun (typedExpr, next) ->
+            match expr.Kind with
+            // A call to a function that requires a parameterised context finds its instance once its arguments are typed.
+            | FunctionCall(name, spanOpt, _) ->
+                resolveCallInstances env next expr name (nameSpan spanOpt expr) |> Result.map (fun next -> typedExpr, next)
+            | _ -> Ok (typedExpr, next))
+    let recovered =
+        match inferred with
+        | Ok _ -> inferred
+        | Error diagnostics ->
+            Ok (mkTypedExpr expr Unifier.errorType None None None, { state with FailedExprs = (expr.Id, diagnostics) :: state.FailedExprs })
+    recovered
     |> recordExprType
     |> Result.map (fun (typedExpr, next) -> typedExpr, { next with Origin = outer })
 
@@ -1851,13 +1867,24 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Ok (typedValue, nextState) ->
             // A pipe resolves left to right: the value's type as the code before the pipe settles it picks the
             // attached function, even where that type is still a variable waiting on the module's constraints.
+            let valueTy = resolveSoFar nextState typedValue.Type
             let resolvedName =
-                tryResolveAttachedFunction env (resolveSoFar nextState typedValue.Type) name
+                tryResolveAttachedFunction env valueTy name
                 |> Option.defaultValue name
             let nextState =
                 if resolvedName = name then nextState
                 else { nextState with PipeTargets = nextState.PipeTargets |> Map.add expr.Id resolvedName }
             let callArgs = pipeCallArguments value args
+            // Piping what failed to check to a name attached to nothing is not another error: the name may be
+            // attached to the type it was meant to have. Its arguments are still checked.
+            if resolvedName = name && Unifier.isError valueTy && (TypeEnv.tryFind name env).IsNone then
+                let mutable current = nextState
+                for arg in args do
+                    match inferExpr env current arg with
+                    | Ok (_, next) -> current <- next
+                    | Error _ -> ()
+                Ok (mkTypedExpr expr Unifier.errorType None None None, current)
+            else
             match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
             | Ok (typedCall, finalState) ->
                 Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
@@ -2480,6 +2507,8 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             match builtInProperty baseTy memberName with
             | Some (property, propertyTy) ->
                 Ok (mkTypedExpr expr propertyTy None None None, { next with BuiltInProperties = next.BuiltInProperties |> Map.add expr.Id property })
+            // What failed to check was reported where it failed; reading from it is not another error.
+            | None when Unifier.isError baseTy -> Ok (mkTypedExpr expr Unifier.errorType None None None, next)
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
 and inferUseBinding (env: TypeEnv) (state: InferState) (binding: UseBinding) : Result<TypedExpr * InferState, Diagnostic list> =
@@ -2838,13 +2867,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some info -> acc |> Map.add alias info
                     | None -> acc) state.TypeDefs }
 
-    // A def that fails to check is reported, and the module is checked on without it. An unannotated one stays bound
-    // at a type that each use is free to make anything, so the uses of a broken def are not errors too.
+    // A def that fails to check is reported, and the module is checked on without it. An unannotated one is bound at
+    // the error type from then on, so the uses of a broken def are not errors too.
     let abandon (name: string) (diagnostics: Diagnostic list) =
         errors <- errors @ diagnostics
         match preboundFreshVars |> Map.tryFind name, TypeEnv.tryFind name env with
-        | Some preboundTy, Some scheme ->
-            env <- declareTopLevel name scheme.Symbol (TypeEnv.generalize (withoutTopLevel name env) preboundTy) env
+        | Some _, Some scheme -> env <- declareTopLevel name scheme.Symbol (TypeEnv.mono Unifier.errorType) env
         | _ -> ()
 
     for item in module' do
@@ -3010,7 +3038,14 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     |> Map.fold (fun acc name contexts ->
                         acc |> Map.add name (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic))) state.ContextRequirements }
 
-    types, items, state, errors
+    // The defs that failed and the expressions that failed inside the others, in the order they are in the source. An
+    // expression inferred more than once (a lambda checked again against its expected type) is reported once.
+    let failedExprErrors = state.FailedExprs |> List.rev |> List.collect snd
+    let allErrors =
+        errors @ failedExprErrors
+        |> List.distinct
+        |> List.sortBy (fun diag -> diag.Span |> Option.map (fun span -> span.Start) |> Option.defaultValue System.Int32.MaxValue)
+    types, items, state, allErrors
 
 /// Infers a module, carrying on past an item that fails to check: the types and items of those that do, and the
 /// diagnostics of those that do not. The constraints are not solved here, so a type mismatch is not among them.

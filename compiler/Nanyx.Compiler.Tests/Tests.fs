@@ -2079,6 +2079,39 @@ let ``A def that fails to check does not hide errors in the defs after it`` () =
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, result.Diagnostics.[1].Code)
 
 [<Fact>]
+let ``The error type agrees with every type`` () =
+    let a = TyVar { Id = 1; Name = None }
+    let constraints: ConstraintSet =
+        [ (Unifier.errorType, TyPrimitive "int", Equal, SourceSpan.none)
+          (TyFunc(Unifier.errorType, TyPrimitive "int"), TyFunc(TyPrimitive "string", TyPrimitive "int"), Assignable, SourceSpan.none)
+          // A variable that takes it agrees with everything from then on.
+          (a, Unifier.errorType, Equal, SourceSpan.none)
+          (a, TyPrimitive "int", Equal, SourceSpan.none)
+          (a, TyPrimitive "string", Equal, SourceSpan.none) ]
+    let _, failures = Unifier.solve constraints
+    Assert.Empty(failures)
+
+[<Fact>]
+let ``Every error inside a def is reported`` () =
+    let result = Compiler.compile "def f = { x ->\n  def a = missing1(x)\n  def b = missing2(x)\n  def s: string = 1\n  a + b\n}"
+    Assert.Equal<string list>(
+        [ "Unknown function 'missing1'"; "Unknown function 'missing2'"; "Type mismatch: int vs string." ],
+        result.Diagnostics |> List.map (fun diag -> diag.Message))
+
+[<Fact>]
+let ``The uses of an expression that fails to check are not errors too`` () =
+    let result = Compiler.compile "def f = { x ->\n  def y = nope\n  def a = y + 1\n  def b: string = y\n  def c = y \\contains(\"s\")\n  def d = y.length\n  a\n}"
+    let diag = Assert.Single(result.Diagnostics)
+    Assert.Equal("Unknown identifier 'nope'", diag.Message)
+
+[<Fact>]
+let ``The arguments of a pipe from an expression that fails to check are still checked`` () =
+    let result = Compiler.compile "def f = { x ->\n  def y = nope\n  y \\contains(other)\n}"
+    Assert.Equal<string list>(
+        [ "Unknown identifier 'nope'"; "Unknown identifier 'other'" ],
+        result.Diagnostics |> List.map (fun diag -> diag.Message))
+
+[<Fact>]
 let ``The uses of a def that fails to check are not errors too`` () =
     let result = Compiler.compile "def broken = { x -> missing(x) }\ndef a = broken(1)\ndef b = broken(\"s\")"
     let diag = Assert.Single(result.Diagnostics)

@@ -21,6 +21,15 @@ module Unifier =
         | TyAlias(_, _, underlying) -> unalias underlying
         | _ -> ty
 
+    /// The type of an expression that failed to check. It agrees with every type, so nothing that uses the
+    /// expression is an error too: a variable unified with it becomes it, and from then on agrees with everything as
+    /// well. It is a primitive no source can name, so every pass that handles types handles it without a case of its
+    /// own; only a module with errors has it.
+    let errorType = TyPrimitive "?error"
+
+    /// Whether `ty` is `errorType`.
+    let isError (ty: Ty) = unalias ty = errorType
+
     let private tryTupleLikeRecord (fields: Map<string, Ty>) : Ty list option * (string * Ty) list =
         let tupleFields, namedFields =
             fields
@@ -65,6 +74,8 @@ module Unifier =
         match ty with
         // The unit type is written `()`; `unit` is only its internal name.
         | TyPrimitive "unit" -> "()"
+        // What failed to check could be anything.
+        | TyPrimitive "?error" -> "?"
         | TyPrimitive name -> name
         // A type variable is written bare, as in an annotation: `(t, a) -> t`.
         | TyVar v ->
@@ -582,6 +593,9 @@ module Unifier =
                 let l = apply subst left
                 let r = apply subst right
                 if l = r then
+                    loop subst rest
+                // A variable takes the error type, as it would any other; anything else agrees with it.
+                elif (isError l || isError r) && not (match l, r with TyVar _, _ | _, TyVar _ -> true | _ -> false) then
                     loop subst rest
                 else
                     match kind with
