@@ -522,10 +522,10 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLower.startFunctionName |> Option.map fst
 
     // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
-    // the functions it calls.
+    // the functions it calls; then drop specialisation and reuse.
     let definitionFunctions, startFunction =
         let all = definitionFunctions @ Option.toList startFunction
-        let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all
+        let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all |> CoreIrReuse.insert
         List.take definitionFunctions.Length counted, startFunction |> Option.map (fun _ -> List.last counted)
 
     // The tags, strings and dbg forms of exactly the functions emitted below.

@@ -131,7 +131,9 @@ let collect (functions: Function list) : ModuleFacts =
                 expr arm.Body
         | Dup(_, body)
         | Drop(_, body)
-        | DropAfter(body, _) -> expr body
+        | DropAfter(body, _)
+        | Release(_, body)
+        | Reuse(_, body) -> expr body
 
     for func in functions do
         expr func.Body

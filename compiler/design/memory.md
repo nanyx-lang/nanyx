@@ -19,8 +19,8 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
 `compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), every object on the heap has a reference count
 and a drop function for its type (see Object header below), and the compiler inserts `dup` and `drop` (see
-Inserting counts below), so a program frees each object once nothing refers to it. Nothing reuses a cell in place
-yet.
+Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
+apart and holds the only reference to for a new one of the same size.
 
 Every value is an `i32`. On the heap, after each object's header:
 
@@ -306,8 +306,32 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   through the environment it is called with, never through what it captures, so it cannot capture itself. Lifting
   lambdas in the IR ([#425](https://github.com/nanyx-lang/nanyx/issues/425)) is not needed first.
 
-The tests in `Features/Memory` check that a loop over lists, records, closures and tags runs in constant memory, and
-that the examples that compile give back every byte they allocate.
+Steps 3 and 4 are `CoreIrReuse.fs`, run on the counted IR, which adds two more nodes: `release x; e` and an
+allocation `reusing` a token.
+
+- **Drop specialisation.** An arm that takes apart one object (a list's first cell, a tag's cell, a record) whose
+  fields its patterns bind or ignore, and that does not use the object itself, releases it instead of taking a
+  reference to each name and dropping it. The release checks the count: when it is one, the names keep the fields'
+  references, the fields no name the arm uses are dropped, and the block is freed; otherwise the names take
+  references of their own and the count goes down.
+- **Reuse.** When the arm then always allocates a block of the same size (not in a branch, a loop or a guard), the
+  release keeps the block in a token instead of freeing it, or sets the token to 0 when the object was shared, and
+  the allocation writes into the block when the token holds one (`__nanyx_list_cons_at`, `__nanyx_tag_box_at`,
+  `__nanyx_reuse_object`). Mapping over a list held once rewrites its cells in place.
+- **`[a, ...rest]`** is `[a] ++ rest` to the parser. It is lowered to a cell for `a` in front of `rest`, rather than
+  a one-element list whose cell `++` copies, so that it allocates one cell, and can reuse one.
+
+The tests in `Features/Memory` check that a loop over lists, records, closures and tags runs in constant memory,
+that the examples that compile give back every byte they allocate, and, counting what the allocator hands out, that
+mapping over a list, a tuple or a tag's cell held once allocates nothing.
+
+On the examples that compile (blocks allocated, and the heap's peak in bytes):
+
+| Example | No counting | Counting (#294) | Reuse (#295) |
+|---------|-------------|-----------------|--------------|
+| `directives` | 13, 256 | 13, 136 | 13, 136 |
+| `money` | 6, 120 | 6, 104 | 6, 104 |
+| `shop` | 2,605, 54,868 | 2,605, 1,832 | 2,562, 1,832 |
 
 ### Things that need care
 
@@ -333,8 +357,8 @@ that the examples that compile give back every byte they allocate.
    ([#291](https://github.com/nanyx-lang/nanyx/issues/291), done).
 4. ~~**Reference counting.** Insert `dup` and `drop` with inferred ownership. Programs now free memory~~
    ([#294](https://github.com/nanyx-lang/nanyx/issues/294), done).
-5. **Reuse.** Drop specialisation and reuse tokens; measure on the examples
-   ([#295](https://github.com/nanyx-lang/nanyx/issues/295)).
+5. ~~**Reuse.** Drop specialisation and reuse tokens; measure on the examples~~
+   ([#295](https://github.com/nanyx-lang/nanyx/issues/295), done).
 
 ## Open questions
 

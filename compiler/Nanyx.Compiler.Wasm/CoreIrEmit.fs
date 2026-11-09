@@ -55,7 +55,9 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | ForEach { Source = OverRange(first, last) } -> ofAtoms [ first; last ]
     | Dup(_, body)
     | Drop(_, body)
-    | DropAfter(body, _) -> tempsUsedBy body
+    | DropAfter(body, _)
+    | Release(_, body)
+    | Reuse(_, body) -> tempsUsedBy body
     | Let _
     | Do _
     | Match _
@@ -105,6 +107,29 @@ type private FunctionEmitter(context: EmitContext) =
         |> List.filter (fun var -> CoreIrDrop.isHeapType var.Type)
         |> List.map (fun var -> $"local.get ${var.Name}\n    call ${CoreIrDrop.dupName var.Type}\n    drop")
         |> String.concat "\n    "
+
+    /// The code that gives up an object an arm took apart (see `CoreIrReuse`). When the arm holds the only reference,
+    /// the names it binds keep the fields' references, the fields it does not bind are dropped, and the block is freed
+    /// or kept in the token; otherwise the names take references of their own and the object's count goes down.
+    member this.Release (released: Released) =
+        let object = released.Object.Name
+        let block = $"local.get ${object}\n      i32.const {released.CountOffset}\n      i32.sub"
+        let unique =
+            [ for offset, bound, fieldTy in released.Fields do
+                  if bound.IsNone && CoreIrDrop.isHeapType fieldTy then
+                      $"local.get ${object}\n      i32.load offset={offset}\n      call ${CoreIrDrop.dropName fieldTy}"
+              match released.Token with
+              | Some token -> $"{block}\n      local.set ${token.Name}"
+              | None -> $"{block}\n      call ${helper Helpers.free}" ]
+        let shared =
+            [ this.DupVars (released.Fields |> List.choose (fun (_, bound, _) -> bound))
+              $"{block}\n      call ${helper Helpers.release}\n      drop"
+              match released.Token with
+              | Some token -> $"i32.const 0\n      local.set ${token.Name}"
+              | None -> "" ]
+        let lines (code: string list) = code |> List.filter ((<>) "") |> String.concat "\n      "
+        let count = $"local.get ${object}\n    i32.const {released.CountOffset}\n    i32.sub\n    i32.load"
+        $"{count}\n    i32.const 1\n    i32.eq\n    if\n      {lines unique}\n    else\n      {lines shared}\n    end"
 
     /// How a hole of type `holeType` is measured and written (see `Interpolation`).
     member _.HoleKind (holeType: HoleType) : Interpolation.HoleKind =
@@ -185,6 +210,9 @@ type private FunctionEmitter(context: EmitContext) =
                 walk body
             | Drop(vars, body) ->
                 parts.Add(dropVars localOf vars)
+                walk body
+            | Release(released, body) ->
+                parts.Add(this.Release released)
                 walk body
             | _ ->
                 claim expr
@@ -350,6 +378,21 @@ type private FunctionEmitter(context: EmitContext) =
         | Match(scrutinees, arms) -> this.Arms tail scrutinees arms
         | Dup(vars, body) -> join "\n    " [ this.DupVars vars; this.Value tail deferred onStack body ]
         | Drop(vars, body) -> join "\n    " [ dropVars localOf vars; this.Value tail deferred onStack body ]
+        | Release(released, body) -> join "\n    " [ this.Release released; this.Value tail deferred onStack body ]
+        // An allocation into the block a reuse token holds, if it holds one (see `CoreIrReuse`).
+        | Reuse(token, { Kind = CallRuntime(_, args, _) }) ->
+            join "\n    " [ $"local.get ${token.Name}"; atomsAfter true args; $"call ${helper Helpers.listConsAt}" ]
+        | Reuse(token, { Kind = MakeTag(name, payload) }) ->
+            join "\n    " [
+                $"local.get ${token.Name}\n    i32.const {tagCode (context.TagId name)}"
+                atomsAfter true [ payload ]
+                $"call ${helper Helpers.tagBoxAt}" ]
+        | Reuse(token, { Kind = MakeRecord fields }) ->
+            let layoutId = context.RecordLayoutId (List.map fst fields)
+            join "\n    " [
+                $"local.get ${token.Name}\n    i32.const {fields.Length * 4}\n    i32.const {layoutId}\n    call ${helper Helpers.reuseObject}"
+                yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value)) ]
+        | Reuse _ -> failwith "Internal error: a reuse of a block by something other than an allocation"
         | DropAfter(body, vars) ->
             // A temporary among `vars` is kept in a local as its value is pushed, to be dropped once `body` is done.
             // Nothing can follow a tail call, so `body` is not one.
@@ -526,7 +569,11 @@ let private declaredLocals (body: Expr) : string list =
                 walk arm.Body
         | Dup(_, body)
         | Drop(_, body)
-        | DropAfter(body, _) -> walk body
+        | DropAfter(body, _)
+        | Reuse(_, body) -> walk body
+        | Release(released, body) ->
+            released.Token |> Option.iter found.Add
+            walk body
         | Atom _
         | Prim _
         | Call _

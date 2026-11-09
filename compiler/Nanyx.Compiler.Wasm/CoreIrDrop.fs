@@ -125,7 +125,9 @@ let collect (functions: Function list) : Drops =
             | _ -> ()
         | Dup(_, body)
         | Drop(_, body)
-        | DropAfter(body, _) -> expr body
+        | DropAfter(body, _)
+        | Release(_, body)
+        | Reuse(_, body) -> expr body
         | Atom _
         | Prim _
         | Call _

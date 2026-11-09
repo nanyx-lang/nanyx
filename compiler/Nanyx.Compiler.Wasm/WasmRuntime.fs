@@ -36,6 +36,9 @@ module Helpers =
     let newObject = "__nanyx_new_object"
     let release = "__nanyx_release"
     let retain = "__nanyx_retain"
+    let reuseObject = "__nanyx_reuse_object"
+    let listConsAt = "__nanyx_list_cons_at"
+    let tagBoxAt = "__nanyx_tag_box_at"
     /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
     let procExit = "proc_exit"
 
@@ -245,6 +248,74 @@ let runtimeHelpers : Map<string, string> =
             "  i32.sub"
             "  i32.store"
             "  i32.const 0"
+            ")" ]
+      // `newObject`, in the block `$block` of an object given up with a count of one when it is not 0 (a reuse
+      // token): its count is still one, so only the info word is written. `block size info -> p`.
+      Helpers.reuseObject,
+      lines
+          [ $"(func ${Helpers.reuseObject} (param $block i32) (param $size i32) (param $info i32) (result i32)"
+            "  local.get $block"
+            "  i32.eqz"
+            "  if"
+            "    local.get $size"
+            "    local.get $info"
+            $"    call ${Helpers.newObject}"
+            "    return"
+            "  end"
+            "  local.get $block"
+            "  local.get $info"
+            "  i32.store offset=4"
+            "  local.get $block"
+            "  i32.const 8"
+            "  i32.add"
+            ")" ]
+      // `listCons` into the block of a reuse token, when it is not 0: `block head tail -> cell`.
+      Helpers.listConsAt,
+      lines
+          [ $"(func ${Helpers.listConsAt} (param $block i32) (param $head i32) (param $tail i32) (result i32)"
+            "  (local $cell i32)"
+            "  local.get $block"
+            "  i32.eqz"
+            "  if"
+            "    local.get $head"
+            "    local.get $tail"
+            $"    call ${Helpers.listCons}"
+            "    return"
+            "  end"
+            "  local.get $block"
+            "  i32.const 4"
+            "  i32.add"
+            "  local.tee $cell"
+            "  local.get $head"
+            "  i32.store"
+            "  local.get $cell"
+            "  local.get $tail"
+            "  i32.store offset=4"
+            "  local.get $cell"
+            ")" ]
+      // `tagBox` into the block of a reuse token, when it is not 0: `block code payload -> cell`.
+      Helpers.tagBoxAt,
+      lines
+          [ $"(func ${Helpers.tagBoxAt} (param $block i32) (param $code i32) (param $payload i32) (result i32)"
+            "  (local $cell i32)"
+            "  local.get $block"
+            "  i32.eqz"
+            "  if"
+            "    local.get $code"
+            "    local.get $payload"
+            $"    call ${Helpers.tagBox}"
+            "    return"
+            "  end"
+            "  local.get $block"
+            "  i32.const 4"
+            "  i32.add"
+            "  local.tee $cell"
+            "  local.get $code"
+            "  i32.store"
+            "  local.get $cell"
+            "  local.get $payload"
+            "  i32.store offset=4"
+            "  local.get $cell"
             ")" ]
       // Takes one more reference to the object whose count is at `$count`, unless it is never freed (a count of 0).
       Helpers.retain,
@@ -954,6 +1025,9 @@ let helperDependencies =
       Helpers.floatToString, [ Helpers.newObject ]
       Helpers.listLength, []
       Helpers.listConcat, [ Helpers.listCons ]
+      Helpers.reuseObject, [ Helpers.newObject ]
+      Helpers.listConsAt, [ Helpers.listCons ]
+      Helpers.tagBoxAt, [ Helpers.tagBox ]
       Helpers.floatSqrt, [ Helpers.floatBox ]
       Helpers.floatFloor, [ Helpers.floatBox ]
       Helpers.floatCeil, [ Helpers.floatBox ]

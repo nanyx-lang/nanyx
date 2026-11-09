@@ -110,14 +110,15 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal("", outcome.StandardError)
 
 /// A program compiled and instantiated on Wasmtime, without WASI, with the drop functions of some types and
-/// `$heap_ptr` exported as well, so that a test can call its functions, give up what they return, and see how far the
-/// heap has grown.
+/// `$heap_ptr` exported as well, and its allocator counting the blocks it hands out, so that a test can call its
+/// functions, give up what they return, and see how far the heap has grown and how often it allocated.
 type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmtime.Instance) =
     let memory = instance.GetMemory("memory")
     member _.Call(name: string, argument: int) = instance.GetFunction<int, int>(name).Invoke argument
     member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
         instance.GetAction<int>(Transpiler.Wasm.CoreIrDrop.dropName ty).Invoke value
     member _.HeapPointer = instance.GetGlobal("heap_ptr").GetValue() :?> int
+    member _.Allocations = instance.GetGlobal("allocations").GetValue() :?> int
     member _.Word(address: int) = memory.ReadInt32(int64 address)
     member _.Text(pointer: int) = memory.ReadString(int64 pointer, memory.ReadInt32(int64 (pointer - 4)))
     interface IDisposable with
@@ -127,11 +128,21 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
 
 /// `source` compiled and instantiated (see `WasmProgram`), with the drop functions of `dropped` exported.
 let instantiateWasm (source: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
-    let wat = transpileWat source
     let dropName = Transpiler.Wasm.CoreIrDrop.dropName
+    // The allocator's first instruction, after its locals, counts the call.
+    let allocator = "(func $__nanyx_alloc (param $size i32) (result i32)"
+    let wat =
+        let wat = transpileWat source
+        match wat.IndexOf allocator with
+        | -1 -> wat
+        | start ->
+            let afterLocals = wat.IndexOf("(local $ptr i32)", start) + "(local $ptr i32)".Length
+            wat.Insert(afterLocals, "\n    global.get $allocations\n    i32.const 1\n    i32.add\n    global.set $allocations")
     let exports =
         [ yield! dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))")
-          if wat.Contains "(global $heap_ptr" then "  (export \"heap_ptr\" (global $heap_ptr))" ]
+          if wat.Contains "(global $heap_ptr" then "  (export \"heap_ptr\" (global $heap_ptr))"
+          "  (global $allocations (mut i32) (i32.const 0))"
+          "  (export \"allocations\" (global $allocations))" ]
         |> String.concat "\n"
     let engine = new Wasmtime.Engine()
     let store = new Wasmtime.Store(engine)

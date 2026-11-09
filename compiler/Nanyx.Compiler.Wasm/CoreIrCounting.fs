@@ -62,7 +62,9 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Do _
     | Dup _
     | Drop _
-    | DropAfter _ -> []
+    | DropAfter _
+    | Release _
+    | Reuse _ -> []
 
 let rec private patternBinds (pattern: Pattern) : Var list =
     match pattern with
@@ -127,7 +129,9 @@ let rec private nodes (e: Expr) : Expr seq =
         | ForEach loop -> yield! nodes loop.Body
         | Dup(_, body)
         | Drop(_, body)
-        | DropAfter(body, _) -> yield! nodes body
+        | DropAfter(body, _)
+        | Release(_, body)
+        | Reuse(_, body) -> yield! nodes body
         | _ -> ()
     }
 
@@ -236,6 +240,8 @@ type private Counter(ownership: Ownership, func: Function) =
                 | Dup(dupped, body)
                 | Drop(dupped, body) -> Set.union (dupped |> List.map _.Id |> Set.ofList) (this.Free body)
                 | DropAfter(body, dropped) -> Set.union (dropped |> List.map _.Id |> Set.ofList) (this.Free body)
+                | Release(released, body) -> this.Free body |> Set.add released.Object.Id
+                | Reuse(_, body) -> this.Free body
                 | _ -> operands ownership e |> List.map (fst >> this.FreeIn) |> Set.unionMany
             free.[e] <- found
             found
@@ -305,7 +311,9 @@ type private Counter(ownership: Ownership, func: Function) =
             this.Wrap dups drops (mk (ForEach { loop with Body = body }) e.Type)
         | Dup _
         | Drop _
-        | DropAfter _ -> failwith "Internal error: the core IR is counted twice"
+        | DropAfter _
+        | Release _
+        | Reuse _ -> failwith "Internal error: the core IR is counted twice"
         | _ ->
             let dups, drops = this.Operands owned after (operands ownership e)
             this.Wrap dups drops e

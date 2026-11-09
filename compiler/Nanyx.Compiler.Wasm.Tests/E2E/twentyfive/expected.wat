@@ -400,11 +400,27 @@
       i32.add
       i32.load
         local.set $__payload_rest
-    local.get $__payload_rest
+    local.get $__match_tmp_0
+    i32.const 4
+    i32.sub
+    i32.load
+    i32.const 1
+    i32.eq
+    if
+      local.get $__match_tmp_0
+      i32.const 4
+      i32.sub
+      call $__nanyx_free
+    else
+      local.get $__payload_rest
     call $__nanyx_dup_list_int
     drop
-    local.get $__match_tmp_0
-    call $__nanyx_drop_list_int
+      local.get $__match_tmp_0
+      i32.const 4
+      i32.sub
+      call $__nanyx_release
+      drop
+    end
     local.get $__payload_x
     local.get $__payload_rest
     call $sum
