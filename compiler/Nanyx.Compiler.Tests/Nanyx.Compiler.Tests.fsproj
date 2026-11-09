@@ -7,7 +7,29 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Tests.fs" />
+    <Compile Include="TestSupport.fs" />
+    <Compile Include="Features\Attached\AttachedTests.fs" />
+    <Compile Include="Features\Attributes\AttributeTests.fs" />
+    <Compile Include="Features\Contexts\ContextTests.fs" />
+    <Compile Include="Features\Imports\ImportTests.fs" />
+    <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
+    <Compile Include="Features\Inference\InferenceTests.fs" />
+    <Compile Include="Features\Inference\TypedAstTests.fs" />
+    <Compile Include="Features\Inference\UnifierTests.fs" />
+    <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
+    <Compile Include="Features\StdLib\PreludeTests.fs" />
+    <Compile Include="Features\StdLib\StdLibTests.fs" />
+    <Compile Include="Features\Tooling\CompletionTests.fs" />
+    <Compile Include="Features\Tooling\HoverTests.fs" />
+    <Compile Include="Features\Tooling\OutlineTests.fs" />
+    <Compile Include="Features\Tooling\SymbolsTests.fs" />
+    <Compile Include="Features\Tooling\TypeHintsTests.fs" />
+    <Compile Include="Features\Types\AnnotationsTests.fs" />
+    <Compile Include="Features\Types\NominalsTests.fs" />
+    <Compile Include="Features\Types\RecordsTests.fs" />
+    <Compile Include="Features\Types\TypeOfTests.fs" />
+    <Compile Include="Features\Types\UnionsTests.fs" />
+    <Compile Include="Features\Workflows\WorkflowTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
     <Compile Include="AnalyzerTests.fs" />
     <Compile Include="PackageTests.fs" />

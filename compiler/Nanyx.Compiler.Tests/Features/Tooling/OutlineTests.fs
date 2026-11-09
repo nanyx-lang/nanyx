@@ -1,0 +1,54 @@
+module Nanyx.Compiler.Tests.Features.Tooling.Outline
+
+open System
+open System.IO
+open Xunit
+open NyxCompiler
+open Parser.Program
+open Nanyx.Compiler.Tests.TestSupport
+
+// The outline: what a module declares, as a tree.
+
+/// An outline item as its name, kind, the text its name span covers, and its children likewise.
+type private Shape = Shape of string * Outline.OutlineKind * string * Shape list
+
+let rec private shapes (source: string) (items: Outline.OutlineItem list) : Shape list =
+    items
+    |> List.map (fun item ->
+        Shape(item.Name, item.Kind, source.Substring(item.NameSpan.Start, item.NameSpan.End - item.NameSpan.Start), shapes source item.Children))
+
+[<Fact>]
+let ``The outline lists top-level declarations with what is declared inside them`` () =
+    let source =
+        "type Point = (x: int, y: int)\n" +
+        "type Shape = #circle(int) | #square(int)\n" +
+        "type Count = int\n" +
+        "context Logger = (log: string -> (), level: int)\n" +
+        "def origin: Point = (x = 0, y = 0)\n" +
+        "def area = { s ->\n" +
+        "  def side = 2\n" +
+        "  side * side\n" +
+        "}\n" +
+        "module geometry =\n" +
+        "  def unit = 1\n"
+    let outline = (Outline.ofSource "" source).Value
+    Assert.Equal<Shape list>(
+        [ Shape("Point", Outline.OutlineKind.RecordType, "Point",
+                [ Shape("x", Outline.OutlineKind.RecordField, "x", []); Shape("y", Outline.OutlineKind.RecordField, "y", []) ])
+          Shape("Shape", Outline.OutlineKind.UnionType, "Shape", [])
+          Shape("Count", Outline.OutlineKind.OtherType, "Count", [])
+          Shape("Logger", Outline.OutlineKind.ContextType, "Logger",
+                [ Shape("log", Outline.OutlineKind.ContextFunction, "log", []); Shape("level", Outline.OutlineKind.ContextValue, "level", []) ])
+          Shape("origin", Outline.OutlineKind.Value, "origin", [])
+          Shape("area", Outline.OutlineKind.Function, "area", [ Shape("side", Outline.OutlineKind.Value, "side", []) ])
+          // The parser lifts a block's defs to the top level; the outline puts them back in the block.
+          Shape("geometry", Outline.OutlineKind.ModuleBlock, "geometry", [ Shape("unit", Outline.OutlineKind.Value, "unit", []) ]) ],
+        shapes source outline)
+    // An item spans all of its declaration.
+    let area = outline |> List.find (fun item -> item.Name = "area")
+    Assert.Equal("def area = { s ->\n  def side = 2\n  side * side\n}", source.Substring(area.Span.Start, area.Span.End - area.Span.Start))
+
+[<Fact>]
+let ``A module with a type error has an outline, and one that does not parse has none`` () =
+    Assert.Equal(1, (Outline.ofSource "" "def broken: int = \"text\"\n").Value.Length)
+    Assert.Equal(None, Outline.ofSource "" "def broken = (\n")
