@@ -158,16 +158,26 @@ let rec private bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) 
         | Some p, Some p' -> bindScheme bindings p p'
         | None, None -> bindings
         | _ -> cannot "a tag's payload differs between a definition and its use"
-    | TyUnion items, TyUnion items' when items.Length = items'.Length ->
-        // The tags of a union may come in another order: pair them by name.
-        items
-        |> List.fold (fun acc item ->
-            match item with
-            | TyTag(name, _) ->
-                match items' |> List.tryFind (function TyTag(name', _) -> name' = name | _ -> false) with
-                | Some item' -> bindScheme acc item item'
-                | None -> cannot $"the tag #{name} is not in the type it is used at"
-            | _ -> cannot "an open union in a generic definition") bindings
+    | TyUnion items, TyUnion items' ->
+        // The tags of a union may come in another order: pair them by name. An open union's rest (a type variable among
+        // its tags) is the tags of the instance that the union does not name.
+        let tagName = function TyTag(name, _) -> Some name | _ -> None
+        let named = items |> List.choose tagName |> Set.ofList
+        let bound =
+            items
+            |> List.fold (fun acc item ->
+                match item with
+                | TyTag(name, _) ->
+                    match items' |> List.tryFind (fun item' -> tagName item' = Some name) with
+                    | Some item' -> bindScheme acc item item'
+                    | None -> cannot $"the tag #{name} is not in the type it is used at"
+                | _ -> acc) bindings
+        let rest = items' |> List.filter (fun item' -> match tagName item' with Some name -> not (named.Contains name) | None -> true)
+        match items |> List.filter (fun item -> (tagName item).IsNone) with
+        | [] when rest.IsEmpty -> bound
+        | [] -> cannot "a union used at a type with more tags than it has"
+        | [ restVar ] -> bindScheme bound restVar (TyUnion rest)
+        | _ -> cannot "a union with more than one rest"
     | TyApply(name, args), TyApply(name', args') when name = name' && args.Length = args'.Length ->
         List.fold2 bindScheme bindings args args'
     | TyNominal(name, underlying, _), TyNominal(name', underlying', _) when name = name' ->
@@ -572,7 +582,22 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let instanceTy =
                 match input.CalleeTypes |> Map.tryFind expr.Id with
                 | Some ty -> ty
-                | None -> cannot $"a call to '{name}' whose type is not known"
+                | None ->
+                    // A call the type checker did not record as one (a built-in property, such as `xs.length`, is
+                    // written as a call to the function that reads it): its type is its arguments' and its own.
+                    let argumentTys =
+                        flattenCallArgs args
+                        |> List.map (fun arg ->
+                            match input.ExprTypes |> Map.tryFind arg.Id with
+                            | Some ty -> ty
+                            | None -> cannot $"a call to '{name}' whose type is not known")
+                    let input' =
+                        match argumentTys with
+                        | [ single ] -> single
+                        | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
+                    match input.ExprTypes |> Map.tryFind expr.Id with
+                    | Some output -> TyFunc(input', output)
+                    | None -> cannot $"a call to '{name}' whose type is not known"
             let target = callee name instanceTy
             let ty = tyOf expr
             // The context members the callee requires follow its arguments, each found where the type checker found it.
