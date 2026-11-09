@@ -158,6 +158,54 @@ interpolation, `if ... is`, record updates, workflows and context calls are lowe
 works from the IR. This is worth doing for its own sake: later optimisations, a second
 backend and a simpler `CodeGen.fs` all benefit.
 
+**Shape.** The IR is in `compiler/Nanyx.Compiler.Wasm/CoreIr.fs`. A function has typed parameters, a result type and
+a body. Types are concrete (`int`, `bool`, `unit`, `string`, a union of tags), with no type variables. A body is an
+expression with a type on every node:
+
+| Node | Meaning |
+|------|---------|
+| atom | a variable or a constant (an int, a bool, unit, a string literal, a tag without a payload) |
+| `prim(op, atoms)` | an operator on ints or booleans |
+| `call(f, atoms)` | a call to a top-level function, by its name in WebAssembly text |
+| `makeTag(tag, atom)` | allocates the cell of a tag with a payload |
+| `let x = value in body` | names a value; the value is never a `let` itself |
+| `do value; rest` | evaluates a value for its effects and drops it |
+| `if atom then e1 else e2` | |
+| `match x1, ..., xn \| arms` | tests variables against each arm's patterns (`_`, a literal, a tag with a payload pattern, a binding) |
+
+Every operand is an atom, so every intermediate value has a name. Each variable says what kind it is: a parameter, a
+local the program declares, a scrutinee, a name a pattern binds, or a temporary (a value the source does not name).
+
+**Lowering.** `CoreIrLower.fs` lowers each definition from the typed module: its expressions as the backend sees
+them, with each node's type from `ExprTypes` and the type of the function at each call from `CalleeTypes`. A
+definition whose type is concrete is lowered as it is. A call to a generic definition binds the definition's type
+variables to the types at the call, and asks for the specialisation at those type arguments (`id__int`,
+`id__string`), which is lowered in turn with the variables replaced. Each specialisation is lowered once, however
+many calls ask for it, and a definition can have at most 32 (polymorphic recursion would otherwise never end).
+
+**Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
+as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
+it, so its value is computed where it is used. When a local is stored in between (a `match` among a call's arguments,
+say), the temporaries waiting are computed first and left on the stack.
+
+**Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
+the old way (`CodeGen.fs` straight from the syntax tree) when not:
+
+- A definition falls back if anything in it is beyond the IR (records, lists, closures, strings beyond literals,
+  `dbg`, pipes, contexts and so on), if it requires contexts, or if it calls a specialisation that could not be
+  lowered. A function and the functions it calls through the IR are kept or dropped together.
+- A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
+  compiled from the IR call its specialisations instead.
+- Both ways give the same calling convention, so a function from either can call one from the other. A function from
+  the IR compiles to the same text the old way would give it, apart from calling specialisations, and a test holds
+  them to that.
+- Only a type-checked module is lowered: `transpileModuleToWat`, which compiles an untyped module, uses the old path
+  throughout. `transpileTypedModuleWithReport` says which way each function was compiled, and why a definition fell
+  back.
+
+The fallback goes once the IR lowers every construct; the remaining constructs and its removal are tracked from
+[#293](https://github.com/nanyx-lang/nanyx/issues/293).
+
 ### Inserting counts
 
 On the IR, following the paper:

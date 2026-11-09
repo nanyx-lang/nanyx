@@ -1,0 +1,250 @@
+/// WebAssembly text from the core IR (`CoreIr.fs`).
+///
+/// Every value is still an `i32`, as in `CodeGen.fs`, and the code is laid out as `CodeGen.fs` lays it out, so that a
+/// function compiles to the same text whichever path it takes. A temporary is not stored: its value is computed
+/// where it is used, as a nested expression would be. When a local is stored between a temporary's definition and its
+/// use (a `def` or a `match` among a call's arguments, say), the temporaries waiting to be used are computed first and
+/// left on the stack beneath the store; the lowering binds the operands before such an operand to temporaries so
+/// that this keeps them in order (see `storesBeforeValue` in `CoreIrLower.fs`).
+module Transpiler.Wasm.CoreIrEmit
+
+open System.Collections.Generic
+open Transpiler.Wasm.Wat
+open Transpiler.Wasm.CoreIr
+
+/// The runtime helpers code from the IR calls (see `runtimeHelpers` in `CodeGen.fs`).
+type RuntimeHelper =
+    | TagBox
+    | TagCodeOf
+
+/// What the emitter needs from the module being compiled.
+type EmitContext =
+    { /// A tag's number, from which its code is made (see `Wat.tagCode`).
+      TagId: string -> int
+      /// Where a string literal's bytes are in the data segment.
+      StringOffset: string -> int
+      /// The name of a runtime helper.
+      HelperName: RuntimeHelper -> string }
+
+/// A function as WebAssembly text, and the runtime helpers it calls.
+type Emitted =
+    { Text: string
+      Helpers: Set<RuntimeHelper> }
+
+let private join (separator: string) (parts: string seq) =
+    parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
+
+/// The temporaries an expression uses directly, which it computes as part of its own code.
+let private tempsUsedBy (expr: Expr) : Var list =
+    let ofAtoms atoms = atoms |> List.choose (function AVar v when v.Kind = Temp -> Some v | _ -> None)
+    match expr.Kind with
+    | Atom atom -> ofAtoms [ atom ]
+    | Prim(_, atoms)
+    | Call(_, atoms) -> ofAtoms atoms
+    | MakeTag(_, atom)
+    | If(atom, _, _) -> ofAtoms [ atom ]
+    | Let _
+    | Do _
+    | Match _ -> []
+
+type private FunctionEmitter(context: EmitContext) =
+    let helpers = HashSet<RuntimeHelper>()
+
+    let helper (h: RuntimeHelper) =
+        helpers.Add h |> ignore
+        context.HelperName h
+
+    member _.Helpers = Set.ofSeq helpers
+
+    /// The code of a sequence: lets and `do`s ending in a value. `tail` says whether that value is what the
+    /// function returns, so that a call there is a tail call.
+    member this.Sequence (tail: bool) (expr: Expr) : string =
+        // The temporaries defined but not yet used, by variable, and those not used by another temporary's value, in
+        // the order they were defined: the ones a store has to compute first.
+        let deferred = Dictionary<int, Expr>()
+        let waiting = ResizeArray<Var>()
+        let onStack = HashSet<int>()
+        let parts = ResizeArray<string>()
+
+        let claim (value: Expr) =
+            for temp in tempsUsedBy value do
+                waiting.RemoveAll(fun v -> v.Id = temp.Id) |> ignore
+
+        // Computes the waiting temporaries, leaving their values on the stack for what uses them later.
+        let flush () =
+            for temp in List.ofSeq waiting do
+                parts.Add(this.Value false deferred onStack (deferred.[temp.Id]))
+                deferred.Remove temp.Id |> ignore
+                onStack.Add temp.Id |> ignore
+            waiting.Clear()
+
+        let rec walk (expr: Expr) =
+            match expr.Kind with
+            | Let(var, value, body) when var.Kind = Temp ->
+                claim value
+                deferred.[var.Id] <- value
+                waiting.Add var
+                walk body
+            | Let(var, value, body) ->
+                claim value
+                flush ()
+                parts.Add(join "\n    " [ this.Value false deferred onStack value; $"local.set ${var.Name}" ])
+                walk body
+            | Do(value, rest) ->
+                claim value
+                flush ()
+                parts.Add(join "\n    " [ this.Value false deferred onStack value; "drop" ])
+                walk rest
+            | _ ->
+                claim expr
+                if waiting.Count > 0 then failwith "Internal error: a temporary in the core IR is never used"
+                parts.Add(this.Value tail deferred onStack expr)
+        walk expr
+        if deferred.Count > 0 || onStack.Count > 0 then failwith "Internal error: a temporary in the core IR is used out of order"
+        join "\n    " parts
+
+    /// The code of a value that is not a `Let` or `Do`.
+    member this.Value (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
+        // The code of each atom in order. A temporary already on the stack has none, so it has to come before anything
+        // that pushes a value (`pushedBefore`, or an earlier atom), or the values would be in the wrong order.
+        let atomsAfter (pushedBefore: bool) (items: Atom list) =
+            let mutable pushed = pushedBefore
+            items
+            |> List.map (fun atom ->
+                match atom with
+                | AVar v when v.Kind = Temp && onStack.Contains v.Id ->
+                    if pushed then failwith "Internal error: a temporary in the core IR is used out of order"
+                    onStack.Remove v.Id |> ignore
+                    ""
+                | _ ->
+                    pushed <- true
+                    this.Atom deferred onStack atom)
+            |> join "\n    "
+        let atoms = atomsAfter false
+        match expr.Kind with
+        | Atom atom -> atoms [ atom ]
+        | Prim(Binary op, operands) ->
+            match wasmBinaryInstruction op with
+            | Some instruction -> join "\n    " [ atoms operands; instruction ]
+            | None -> failwith $"Internal error: no instruction for the operator {op}"
+        | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
+        | Call(name, args) ->
+            let call = if tail then "return_call" else "call"
+            join "\n    " [ atoms args; $"{call} ${name}" ]
+        | MakeTag(name, payload) ->
+            join "\n    " [ $"i32.const {tagCode (context.TagId name)}"; atomsAfter true [ payload ]; $"call ${helper TagBox}" ]
+        | If(cond, ifTrue, ifFalse) ->
+            let condCode = atoms [ cond ]
+            $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
+        | Match(scrutinees, arms) -> this.Arms tail scrutinees arms
+        | Let _
+        | Do _ -> this.Sequence tail expr
+
+    member this.Atom (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (atom: Atom) : string =
+        match atom with
+        | AVar v when v.Kind = Temp ->
+            match deferred.TryGetValue v.Id with
+            | true, value ->
+                deferred.Remove v.Id |> ignore
+                this.Value false deferred onStack value
+            | _ -> failwith "Internal error: a temporary in the core IR is used twice"
+        | AVar v -> $"local.get ${v.Name}"
+        | AInt value -> $"i32.const {value}"
+        | ABool value -> if value then "i32.const 1" else "i32.const 0"
+        | AUnit -> "i32.const 0"
+        | AString value -> $"i32.const {context.StringOffset value}"
+        | ATag name -> $"i32.const {tagCode (context.TagId name)}"
+
+    /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
+    member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
+        let tagPayloadCode valueCode = $"{valueCode}\n      i32.load offset=4"
+        let guarded first second =
+            $"{first}\n      (if (result i32)\n        (then\n          {second})\n        (else i32.const 0))"
+        let rec condition (pattern: Pattern) (valueCode: string) =
+            match pattern with
+            | PWildcard
+            | PBind _ -> "i32.const 1"
+            | PInt value -> $"{valueCode}\n      i32.const {value}\n      i32.eq"
+            | PBool value -> $"""{valueCode}\n      i32.const {if value then 1 else 0}\n      i32.eq"""
+            | PTag(name, payload) ->
+                let discriminant =
+                    $"{valueCode}\n      call ${helper TagCodeOf}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
+                match payload with
+                | None -> discriminant
+                | Some inner ->
+                    // Only look at the payload once the code matches: only then is the value a cell.
+                    match condition inner (tagPayloadCode valueCode) with
+                    | "i32.const 1" -> discriminant
+                    | payloadCheck -> guarded discriminant payloadCheck
+        let rec binds (pattern: Pattern) (valueCode: string) =
+            match pattern with
+            | PBind var -> [ $"{valueCode}\n        local.set ${var.Name}" ]
+            | PTag(_, Some inner) -> binds inner (tagPayloadCode valueCode)
+            | _ -> []
+        let rec emit (remaining: Arm list) =
+            match remaining with
+            | [] -> "unreachable"
+            | arm :: rest ->
+                let conditions =
+                    List.map2 (fun pattern (scrutinee: Var) -> condition pattern $"local.get ${scrutinee.Name}") arm.Patterns scrutinees
+                let allConditions =
+                    match conditions with
+                    | [] -> "i32.const 1"
+                    | [ single ] -> single
+                    | many -> (many |> String.concat "\n      ") + String.replicate (many.Length - 1) "\n      i32.and"
+                let bindCode =
+                    List.map2 (fun pattern (scrutinee: Var) -> binds pattern $"local.get ${scrutinee.Name}") arm.Patterns scrutinees
+                    |> List.concat
+                    |> String.concat "\n    "
+                let armCode = join "\n    " [ bindCode; this.Sequence tail arm.Body ]
+                $"{allConditions}\n    (if (result i32)\n      (then\n        {armCode}\n      )\n      (else\n        {emit rest}\n      )\n    )"
+        emit arms
+
+/// The locals a function declares beyond its parameters, in the order `CodeGen.fs` declares them: its own locals, then
+/// the scrutinees' and then what patterns bind.
+let private declaredLocals (body: Expr) : string list =
+    let found = ResizeArray<Var>()
+    let rec pattern (p: Pattern) =
+        match p with
+        | PBind var -> found.Add var
+        | PTag(_, Some inner) -> pattern inner
+        | _ -> ()
+    let rec walk (expr: Expr) =
+        match expr.Kind with
+        | Let(var, value, body) ->
+            if var.Kind <> Temp then found.Add var
+            walk value
+            walk body
+        | Do(value, rest) ->
+            walk value
+            walk rest
+        | If(_, ifTrue, ifFalse) ->
+            walk ifTrue
+            walk ifFalse
+        | Match(_, arms) ->
+            for arm in arms do
+                arm.Patterns |> List.iter pattern
+                walk arm.Body
+        | Atom _
+        | Prim _
+        | Call _
+        | MakeTag _ -> ()
+    walk body
+    [ Local; MatchTemp; PatternBound ]
+    |> List.collect (fun kind -> found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq)
+    |> List.distinct
+
+/// `func` as a WebAssembly function, exported under `exportName` if given.
+let emitFunction (context: EmitContext) (func: Function) (exportName: string option) : Emitted =
+    let emitter = FunctionEmitter(context)
+    let bodyCode = emitter.Sequence true func.Body
+    let header =
+        [ func.Params |> List.map (fun p -> $"(param ${p.Name} i32)") |> String.concat " "
+          "(result i32)"
+          declaredLocals func.Body |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " ]
+        |> join " "
+    let text =
+        match exportName with
+        | Some exported -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )\n  (export \"{exported}\" (func ${func.Name}))"
+        | None -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )"
+    { Text = text; Helpers = emitter.Helpers }
