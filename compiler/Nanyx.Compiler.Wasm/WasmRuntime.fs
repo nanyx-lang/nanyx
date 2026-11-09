@@ -27,6 +27,9 @@ module Helpers =
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
     let listCons = NyxCompiler.Intrinsics.listCons
     let free = "__nanyx_free"
+    let newCell = "__nanyx_new_cell"
+    let newObject = "__nanyx_new_object"
+    let release = "__nanyx_release"
     /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
     let procExit = "proc_exit"
 
@@ -48,6 +51,11 @@ let heapStartOffset = heapBaseOffset + largestSizeClass + 4
 /// tuple) is a pointer to a 4-byte slot per field in field-name order, with its layout's number (see
 /// `RecordTable`) in the 4 bytes before the pointer. A tag without a payload is its code (see `tagCode`), which
 /// is odd; a tag with one is a pointer to an 8-byte cell of (code, payload).
+///
+/// Every object on the heap has a header: its reference count, then its info word if it has one (a string's length,
+/// a record's layout, a closure's drop function). So the count is at `p - 8` for strings, records and closures, made
+/// by `newObject`, and at `p - 4` for list cells, tag cells and float boxes, made by `newCell`. A count of 0 marks
+/// an object that is never freed: a string literal in the data segment. `release` gives up a reference.
 ///
 /// The allocator hands out 4-byte-aligned blocks, so a pointer is never odd. Every block has its size (the
 /// requested size rounded up to 4 bytes, and at least 4) in the word before it, and `free` puts a block back on the
@@ -167,6 +175,69 @@ let runtimeHelpers : Map<string, string> =
             yield "  local.get $ptr"
             yield "  i32.store"
             yield ")" ]
+      // An object of `$size` bytes with a count of one and no info word: `size -> p`.
+      Helpers.newCell,
+      lines
+          [ $"(func ${Helpers.newCell} (param $size i32) (result i32)"
+            "  (local $block i32)"
+            "  local.get $size"
+            "  i32.const 4"
+            "  i32.add"
+            $"  call ${Helpers.alloc}"
+            "  local.tee $block"
+            "  i32.const 1"
+            "  i32.store"
+            "  local.get $block"
+            "  i32.const 4"
+            "  i32.add"
+            ")" ]
+      // An object of `$size` bytes with a count of one and the info word `$info`: `size info -> p`.
+      Helpers.newObject,
+      lines
+          [ $"(func ${Helpers.newObject} (param $size i32) (param $info i32) (result i32)"
+            "  (local $block i32)"
+            "  local.get $size"
+            "  i32.const 8"
+            "  i32.add"
+            $"  call ${Helpers.alloc}"
+            "  local.tee $block"
+            "  i32.const 1"
+            "  i32.store"
+            "  local.get $block"
+            "  local.get $info"
+            "  i32.store offset=4"
+            "  local.get $block"
+            "  i32.const 8"
+            "  i32.add"
+            ")" ]
+      // Gives up one reference to the object whose count is at `$count`: 1 when it was the last, and the caller then
+      // drops the object's fields and frees it; 0 otherwise. An object whose count is 0 is never freed.
+      Helpers.release,
+      lines
+          [ $"(func ${Helpers.release} (param $count i32) (result i32)"
+            "  (local $n i32)"
+            "  local.get $count"
+            "  i32.load"
+            "  local.tee $n"
+            "  i32.eqz"
+            "  if"
+            "    i32.const 0"
+            "    return"
+            "  end"
+            "  local.get $n"
+            "  i32.const 1"
+            "  i32.eq"
+            "  if"
+            "    i32.const 1"
+            "    return"
+            "  end"
+            "  local.get $count"
+            "  local.get $n"
+            "  i32.const 1"
+            "  i32.sub"
+            "  i32.store"
+            "  i32.const 0"
+            ")" ]
       Helpers.copyBytes,
       lines
           [ $"(func ${Helpers.copyBytes} (param $dst i32) (param $src i32) (param $len i32)"
@@ -204,25 +275,18 @@ let runtimeHelpers : Map<string, string> =
       Helpers.stringAlloc,
       lines
           [ $"(func ${Helpers.stringAlloc} (param $len i32) (result i32)"
-            "  (local $base i32)"
+            "  (local $s i32)"
             "  local.get $len"
-            "  i32.const 5"
+            "  i32.const 1"
             "  i32.add"
-            $"  call ${Helpers.alloc}"
-            "  local.set $base"
-            "  local.get $base"
             "  local.get $len"
-            "  i32.store"
-            "  local.get $base"
-            "  i32.const 4"
-            "  i32.add"
+            $"  call ${Helpers.newObject}"
+            "  local.tee $s"
             "  local.get $len"
             "  i32.add"
             "  i32.const 0"
             "  i32.store8"
-            "  local.get $base"
-            "  i32.const 4"
-            "  i32.add"
+            "  local.get $s"
             ")" ]
       Helpers.stringByteAt,
       lines
@@ -459,14 +523,18 @@ let runtimeHelpers : Map<string, string> =
             "  i32.store"
             "  local.get $base"
             ")" ]
+      // A new record with the layout and the `$size` bytes of fields of the record `$src`: `src size -> record`.
       Helpers.recordCopy,
       lines
           [ $"(func ${Helpers.recordCopy} (param $src i32) (param $size i32) (result i32)"
             "  (local $dst i32)"
             "  local.get $size"
-            $"  call ${Helpers.alloc}"
-            "  local.set $dst"
-            "  local.get $dst"
+            "  local.get $src"
+            "  i32.const 4"
+            "  i32.sub"
+            "  i32.load"
+            $"  call ${Helpers.newObject}"
+            "  local.tee $dst"
             "  local.get $src"
             "  local.get $size"
             $"  call ${Helpers.copyBytes}"
@@ -478,7 +546,7 @@ let runtimeHelpers : Map<string, string> =
           [ $"(func ${Helpers.tagBox} (param $code i32) (param $payload i32) (result i32)"
             "  (local $cell i32)"
             "  i32.const 8"
-            $"  call ${Helpers.alloc}"
+            $"  call ${Helpers.newCell}"
             "  local.tee $cell"
             "  local.get $code"
             "  i32.store"
@@ -540,7 +608,7 @@ let runtimeHelpers : Map<string, string> =
           [ $"(func ${Helpers.floatBox} (param $value f64) (result i32)"
             "  (local $box i32)"
             "  i32.const 8"
-            $"  call ${Helpers.alloc}"
+            $"  call ${Helpers.newCell}"
             "  local.set $box"
             "  local.get $box"
             "  local.get $value"
@@ -564,9 +632,12 @@ let runtimeHelpers : Map<string, string> =
             "  local.get $box"
             "  f64.load"
             "  local.set $x"
-            "  ;; 4 length bytes, a sign, up to 20 integer digits, the point, 6 digits and a terminator"
-            "  i32.const 36"
-            $"  call ${Helpers.alloc}"
+            "  ;; a string of a sign, up to 20 integer digits, the point, 6 digits and a terminator; $base is its length"
+            "  i32.const 32"
+            "  i32.const 0"
+            $"  call ${Helpers.newObject}"
+            "  i32.const 4"
+            "  i32.sub"
             "  local.set $base"
             "  local.get $base"
             "  i32.const 4"
@@ -741,7 +812,7 @@ let runtimeHelpers : Map<string, string> =
           [ $"(func ${Helpers.listCons} (param $head i32) (param $tail i32) (result i32)"
             "  (local $cell i32)"
             "  i32.const 8"
-            $"  call ${Helpers.alloc}"
+            $"  call ${Helpers.newCell}"
             "  local.set $cell"
             "  local.get $cell"
             "  local.get $head"
@@ -811,9 +882,12 @@ let dbgStrNewlineOffset = dbgDataBaseOffset + 96  // newline byte at 224 (clear 
 let helperDependencies =
     [ Helpers.alloc, []
       Helpers.free, []
+      Helpers.newCell, [ Helpers.alloc ]
+      Helpers.newObject, [ Helpers.alloc ]
+      Helpers.release, []
       Helpers.copyBytes, []
       Helpers.stringLength, []
-      Helpers.stringAlloc, [ Helpers.alloc ]
+      Helpers.stringAlloc, [ Helpers.newObject ]
       Helpers.stringByteAt, [ Helpers.stringLength ]
       Helpers.stringSlice, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringFromByte, [ Helpers.stringAlloc ]
@@ -822,14 +896,14 @@ let helperDependencies =
       Helpers.writeStdout, [ Helpers.stringLength ]
       Helpers.writeStderr, [ Helpers.stringLength ]
       Helpers.readStdinByte, []
-      Helpers.listCons, [ Helpers.alloc ]
+      Helpers.listCons, [ Helpers.newCell ]
       Helpers.recordSet, []
-      Helpers.recordCopy, [ Helpers.alloc; Helpers.copyBytes ]
-      Helpers.tagBox, [ Helpers.alloc ]
+      Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
+      Helpers.tagBox, [ Helpers.newCell ]
       Helpers.tagCode, []
       Helpers.tagEquals, []
-      Helpers.floatBox, [ Helpers.alloc ]
-      Helpers.floatToString, [ Helpers.alloc ]
+      Helpers.floatBox, [ Helpers.newCell ]
+      Helpers.floatToString, [ Helpers.newObject ]
       Helpers.listLength, []
       Helpers.listConcat, [ Helpers.listCons ] ]
 let rec closeHelpers (acc: Set<string>) (pending: string list) =

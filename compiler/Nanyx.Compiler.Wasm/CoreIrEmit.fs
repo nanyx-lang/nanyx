@@ -172,7 +172,7 @@ type private FunctionEmitter(context: EmitContext) =
         let stores (slotsAndValues: (int * Atom) list) =
             slotsAndValues
             |> List.map (fun (slot, value) ->
-                join "\n    " [ atomsAfter true [ value ]; $"i32.const {(slot + 1) * 4}\n    call ${helper Helpers.recordSet}" ])
+                join "\n    " [ atomsAfter true [ value ]; $"i32.const {slot * 4}\n    call ${helper Helpers.recordSet}" ])
         match expr.Kind with
         | Atom atom -> atoms [ atom ]
         | Prim(Binary op, operands) ->
@@ -202,22 +202,19 @@ type private FunctionEmitter(context: EmitContext) =
         | MakeTag(name, payload) ->
             join "\n    " [ $"i32.const {tagCode (context.TagId name)}"; atomsAfter true [ payload ]; $"call ${helper Helpers.tagBox}" ]
         | MakeRecord fields ->
-            // A slot for the layout's number, then one per field, with the pointer left at the first field. The
-            // record is allocated before its fields are evaluated, and its pointer stays on the stack meanwhile.
+            // A slot per field, with the layout's number as the info word. The record is allocated before its fields
+            // are evaluated, and its pointer stays on the stack meanwhile.
             let layoutId = context.RecordLayoutId (List.map fst fields)
             join "\n    " [
-                $"i32.const {(fields.Length + 1) * 4}\n    call ${helper Helpers.alloc}"
-                $"i32.const {layoutId}\n    i32.const 0\n    call ${helper Helpers.recordSet}"
-                yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value))
-                "i32.const 4\n    i32.add" ]
+                $"i32.const {fields.Length * 4}\n    i32.const {layoutId}\n    call ${helper Helpers.newObject}"
+                yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value)) ]
         | Field(record, slot) -> join "\n    " [ atoms [ record ]; $"i32.const {slot * 4}\n    i32.add\n    i32.load" ]
         | UpdateRecord(record, fieldCount, updates) ->
-            // A copy of the whole block, layout slot and all, with the updated fields overwritten in place.
+            // A copy of the record, layout and all, with the updated fields overwritten in place.
             join "\n    " [
                 atoms [ record ]
-                $"i32.const 4\n    i32.sub\n    i32.const {(fieldCount + 1) * 4}\n    call ${helper Helpers.recordCopy}"
-                yield! stores updates
-                "i32.const 4\n    i32.add" ]
+                $"i32.const {fieldCount * 4}\n    call ${helper Helpers.recordCopy}"
+                yield! stores updates ]
         | MakeList items ->
             // The elements left to right, then the empty list, then a cons for each from the back.
             join "\n    " [
@@ -228,14 +225,16 @@ type private FunctionEmitter(context: EmitContext) =
             // Every value is an i32, so a helper that returns nothing leaves unit, 0.
             join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]
         | MakeClosure(name, arity, captured) ->
-            // A block of 4-byte slots: the function's table slot, then what it captures. The block is allocated before
+            // A block of 4-byte slots: the function's table slot, then what it captures, with the table slot of the
+            // function that drops what it captures as the info word (see `CoreIrDrop`). The block is allocated before
             // anything is stored, and its pointer stays on the stack meanwhile.
             let values =
                 $"i32.const {context.FunctionSlot name arity}"
                 :: (captured |> List.map (fun value -> atomsAfter true [ value ]))
             let stores =
                 values |> List.mapi (fun index code -> $"{code}\n    i32.const {index * 4}\n    call ${helper Helpers.recordSet}")
-            join "\n    " [ $"i32.const {values.Length * 4}\n    call ${helper Helpers.alloc}"; yield! stores ]
+            let dropSlot = context.FunctionSlot (CoreIrDrop.environmentDropName (captured |> List.map atomType)) 1
+            join "\n    " [ $"i32.const {values.Length * 4}\n    i32.const {dropSlot}\n    call ${helper Helpers.newObject}"; yield! stores ]
         | CallClosure(closure, args) ->
             // The closure is passed first, as the environment, and read again for the table slot it holds.
             let closureCode =

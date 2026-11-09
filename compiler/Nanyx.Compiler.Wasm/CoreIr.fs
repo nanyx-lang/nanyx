@@ -231,6 +231,36 @@ module IrType =
         | IrList element -> $"list({show element})"
         | IrFunction(input, output) -> $"({show input} -> {show output})"
 
+    /// The type as part of a WebAssembly name, such as `list_string` in `id__list_string`.
+    let rec mangle (ty: IrType) =
+        match ty with
+        | IrTags tags ->
+            tags
+            |> List.map (fun (tag, payload) ->
+                match payload with
+                | Some payloadTy -> $"{tag}_{mangle payloadTy}"
+                | None -> tag)
+            |> String.concat "_"
+            |> sprintf "tags_%s"
+        | IrRecord fields ->
+            fields
+            |> List.map (fun (field, fieldTy) -> $"{field}_{mangle fieldTy}")
+            |> String.concat "_"
+            |> sprintf "rec_%s"
+        | IrList element -> $"list_{mangle element}"
+        | IrFunction(input, output) -> $"fn_{mangle input}_to_{mangle output}"
+        | _ -> show ty
+
+/// The type of an atom's value.
+let atomType (atom: Atom) =
+    match atom with
+    | AVar var -> var.Type
+    | AInt _ -> IrInt
+    | ABool _ -> IrBool
+    | AUnit -> IrUnit
+    | AString _ -> IrString
+    | ATag name -> IrTags [ name, None ]
+
 /// The IR as text, for reading and for tests.
 module Print =
     let private atom (a: Atom) =

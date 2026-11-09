@@ -17,21 +17,22 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 ## Where we are today
 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), but nothing calls `free` yet, so a long-running
+`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), and every object on the heap has a reference
+count and a drop function for its type (see Object header below), but nothing calls them yet, so a long-running
 program's memory only grows.
 
-Every value is an `i32`. On the heap:
+Every value is an `i32`. On the heap, after each object's header:
 
 | Value | Layout |
 |-------|--------|
 | String | UTF-8 bytes, the byte length in the 4 bytes before the pointer, a 0 byte after |
 | List | 0 for the empty list, else a pointer to an 8-byte cell of (head, tail) |
 | Record, tuple | a 4-byte slot per field in field-name order, the layout's number in the 4 bytes before |
-| Closure | the function's table slot, then the captured values |
+| Closure | the function's table slot, then the captured values; the table slot of its environment's drop function in the 4 bytes before |
 | Float | an 8-byte box holding the `f64` |
 | Tag with a payload | a pointer to an 8-byte cell of (code, payload) |
 
-String literals live in the data segment. A tag without a payload is not on the heap: it is its code,
+String literals live in the data segment, with a header of their own. A tag without a payload is not on the heap: it is its code,
 `(id << 1) | 1`. Codes are odd and allocations are 4-byte aligned, so a tag value is a code exactly when its low
 bit is set ([#181](https://github.com/nanyx-lang/nanyx/issues/181)).
 
@@ -108,12 +109,31 @@ Pointers stay 32-bit: linear memory stays `memory32`. A 64-bit address space (Wa
 
 ### Object header
 
-Every heap object gets a reference count in the word before its existing info word, so a pointer `p` has its count
-at `p - 8`. Objects that have an info word keep it at `p - 4` (a string's length, a record's layout). The drop
-function for the object's type knows the rest, so no other run-time layout information is needed.
+Every heap object has a reference count in the word before its info word, so a pointer `p` to an object with one has
+its count at `p - 8` and the info word at `p - 4`: a string's length, a record's layout, and a closure's environment
+drop function (below). An object with no info word (a list cell, a tag's cell, a float's box) has its count just
+before its fields, at `p - 4`. Every `dup` and `drop` knows the type of what it counts, so it knows which; giving
+the commonest objects, list cells, an empty info word would make each 20 bytes rather than 16 (with the
+allocator's size word). The drop function for the object's type knows the rest, so no other run-time layout
+information is needed. `__nanyx_new_object` and `__nanyx_new_cell` allocate an object of each kind with a count of
+one, and `__nanyx_release` gives up a reference, telling the caller whether it was the last.
 
-Static data (string literals) gets a header too, with a count that marks it as immortal: `dup` and `drop` leave it
-alone and it is never freed.
+Static data (string literals) gets a header too, with a count of 0, which marks it as immortal: `release` leaves it
+alone, so it is never freed. A literal in the data segment is laid out as a string on the heap is (the count, the
+length, the bytes and a 0 byte), padded to 4 bytes so that the next one is aligned.
+
+**Drop functions.** `CoreIrDrop.fs` generates one for each type on the heap that the module's functions use
+(`__nanyx_drop_list_string`, named by the type), together with the types of their fields. Each gives up a reference
+and, when it was the last, drops the fields that are on the heap and frees the object:
+
+- a list's walks along the list cell by cell, as long as each cell was held only by the one before it, so dropping
+  a long list takes no stack;
+- a tag union's returns at once for a code (an odd value); for a cell, it reads the code to tell the payload's type,
+  unless every tag with a payload has a payload of the same type;
+- a function value's calls the function whose table slot is in the closure's info word, which drops what the
+  closure captures. There is one such function per list of captured types (`__nanyx_drop_env__string`), and one,
+  `__nanyx_drop_env`, for closures that capture nothing on the heap. It is called through the function table, so it
+  has the type of a closure of one parameter, and returns 0.
 
 ### Allocator
 
@@ -126,8 +146,8 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
 - **Size word.** A block's rounded size is stored in the word just before the block `alloc` returns, so
   `free(b)` needs only the pointer. The object header is part of the block: once objects have one, a block holds
   the count, then the info word (if any), then the fields, so the size word sits just before the count. For a
-  string, say, that puts the count at `p - 8`, the length at `p - 4`, and the size at `p - 12`. Until headers
-  land, the size word is at `p - 8` for strings and records and `p - 4` for the rest.
+  string, say, that puts the count at `p - 8`, the length at `p - 4`, and the size at `p - 12`; for a list cell,
+  the count at `p - 4` and the size at `p - 8`.
   The drop functions will know each object's size from its type, so the size word could later go; it costs 4
   bytes per object but keeps `free` independent of types, and lets the large list hand out a bigger block than
   asked for and still take all of it back.
@@ -275,8 +295,8 @@ On the IR, following the paper:
      ([#292](https://github.com/nanyx-lang/nanyx/issues/292), done).
 2. ~~**Core IR and monomorphisation.** Introduce the IR, specialising generic functions as it is built, and move code
    generation onto it~~ ([#293](https://github.com/nanyx-lang/nanyx/issues/293), done).
-3. **Headers and drop functions.** Give every heap object a count, and generate a drop function per type
-   ([#291](https://github.com/nanyx-lang/nanyx/issues/291)). Needs step 2.
+3. ~~**Headers and drop functions.** Give every heap object a count, and generate a drop function per type~~
+   ([#291](https://github.com/nanyx-lang/nanyx/issues/291), done).
 4. **Reference counting.** Insert `dup` and `drop` with inferred ownership. Programs now free memory
    ([#294](https://github.com/nanyx-lang/nanyx/issues/294)).
 5. **Reuse.** Drop specialisation and reuse tokens; measure on the examples
