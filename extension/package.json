@@ -63,6 +63,11 @@
           "default": "",
           "markdownDescription": "Path to the `nanyx` executable (the compiler, which is also the language server). Leave empty to use the `nanyx` on PATH, or to download a release into the extension's storage."
         },
+        "nanyx.developmentMode": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "For working on the compiler: runs the language server from a copy of the `#nanyx.path#` build, so the build is never locked and `dotnet build` can overwrite it, and restarts the server with a fresh copy whenever the build changes. Needs `#nanyx.path#` to be set."
+        },
         "nanyx.compilerVersion": {
           "type": "string",
           "default": "",
