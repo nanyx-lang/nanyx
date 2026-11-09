@@ -8,7 +8,7 @@ open Transpiler.Wasm.CoreIr
 type ModuleFacts =
     { /// Every tag the emitter asks the number of, sorted by name.
       Tags: string list
-      /// Every string the emitter asks the data-segment offset of, in the order the functions first use them.
+      /// Every string the emitter asks the data-segment offset of, in the order the functions' IR first names them.
       Strings: string list
       /// Whether some `dbg` prints through `$dbg` or `$dbg_str`.
       UsesDbgHelpers: bool
@@ -25,14 +25,9 @@ let collect (functions: Function list) : ModuleFacts =
     let dbgTagPayloads = HashSet<string>()
     let usesDbgHelpers = ref false
 
-    let atom (a: Atom) =
-        match a with
-        | AString value -> strings.Add value
-        | ATag name -> tags.Add name |> ignore
-        | AVar _
-        | AInt _
-        | ABool _
-        | AUnit -> ()
+    // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
+    // the strings are then in the order the code uses them.
+    let deferred = Dictionary<int, Expr>()
 
     let holeType (ty: HoleType) =
         match ty with
@@ -42,7 +37,22 @@ let collect (functions: Function list) : ModuleFacts =
         | HoleBool
         | HoleFloat -> ()
 
-    let rec pattern (p: Pattern) =
+    let rec atom (a: Atom) =
+        match a with
+        | AString value -> strings.Add value
+        | ATag name -> tags.Add name |> ignore
+        | AVar v when v.Kind = Temp ->
+            match deferred.TryGetValue v.Id with
+            | true, value ->
+                deferred.Remove v.Id |> ignore
+                expr value
+            | _ -> ()
+        | AVar _
+        | AInt _
+        | ABool _
+        | AUnit -> ()
+
+    and pattern (p: Pattern) =
         match p with
         | PTag(name, payload) ->
             tags.Add name |> ignore
@@ -102,6 +112,9 @@ let collect (functions: Function list) : ModuleFacts =
                 atom first
                 atom last
             expr loop.Body
+        | Let(var, value, body) when var.Kind = Temp ->
+            deferred.[var.Id] <- value
+            expr body
         | Let(_, value, body) ->
             expr value
             expr body

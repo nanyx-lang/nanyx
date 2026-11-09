@@ -67,6 +67,16 @@ let ``Run - interpolating tags`` () =
     runSource source |> assertRan "#some(10) #some(\"hi\") #none #done\n"
 
 [<Fact>]
+let ``Run - interpolating a tag whose type names a tag no expression writes`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def show: (#red | #green) -> string = { c -> \"colour {c}\" }\n" +
+        "\n" +
+        "println(show(#red))\n"
+    runSource source |> assertRan "colour #red\n"
+
+[<Fact>]
 let ``Run - a tag keeps a payload that does not fit in 16 bits`` () =
     let source =
         "import nanyx/console\n" +
