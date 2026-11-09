@@ -78,10 +78,16 @@
           "default": "",
           "markdownDescription": "Where to download the compiler from. `${version}`, `${rid}` (e.g. `win-x64`) and `${ext}` (`zip` or `tar.gz`) are substituted. Leave empty for the GitHub releases of nanyx-lang/nanyx. With a custom URL the newest release cannot be looked up, so `nanyx.compilerVersion` (or the extension's minimum version) is downloaded."
         },
+        "nanyx.asciiTypes": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Write the types that hovers, lenses, inlay hints and completions show in ASCII only: inferred type variables are `a`, `b`, `c`, ... rather than `α`, `β`, `γ`, …, and the rest of an open record is `...` rather than `…`."
+        },
         "nanyx.greekTypeVariables": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Name inferred type variables `α`, `β`, `γ`, ... in hovers. Turn off for `a`, `b`, `c`, ... (passes `--latin-type-vars` to `nanyx lsp`, which needs a compiler that has it)."
+          "markdownDeprecationMessage": "Use `#nanyx.asciiTypes#` instead. Turning this off still turns ASCII types on.",
+          "markdownDescription": "Name inferred type variables `α`, `β`, `γ`, … in hovers."
         },
         "nanyx.topLevelTypeHints": {
           "type": "string",

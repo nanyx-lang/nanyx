@@ -91,7 +91,7 @@ let private calleeSpan (expr: Expression) =
 /// The narrowest span wins rather than the deepest node, because a made-up node can sit inside the syntax it
 /// stands for: a `for` loop's element is an identifier spanning all of the loop's arms. Of equal spans the
 /// outermost wins, for the same reason: the parameters a shorthand match lambda makes up span the whole lambda.
-let typeAt (names: TypeVarNames) (result: CompileResult) (offset: int) : HoverInfo option =
+let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         // Only the module's own declarations have types recorded, so no imported one is found here.

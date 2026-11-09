@@ -42,7 +42,7 @@ let private isFunction (ty: Ty) =
     | _ -> false
 
 /// The names of `namesInScope`, with their types.
-let typedNamesInScope (names: TypeVarNames) (result: CompileResult) (offset: int) : NameInScope list =
+let typedNamesInScope (names: TypeNotation) (result: CompileResult) (offset: int) : NameInScope list =
     match result.Typed with
     | Some typed ->
         namesInScope result offset
@@ -95,7 +95,7 @@ let private valueType (typed: TypedModule) (result: CompileResult) (offset: int)
 /// What can follow a dot on a value of type `valueType`, ordered by name: the fields of its record type, or the
 /// built-in properties of its type. A tuple's numbered items are left out, and a value whose type is not yet known
 /// has none.
-let private valueMembers (names: TypeVarNames) (valueType: Ty option) : Member list =
+let private valueMembers (names: TypeNotation) (valueType: Ty option) : Member list =
     let typeOf ty = Some (Unifier.tyToDisplayString names ty)
     let fields =
         valueType
@@ -116,7 +116,7 @@ let private valueMembers (names: TypeVarNames) (valueType: Ty option) : Member l
         | None -> []
     fields @ properties |> List.sortBy (fun item -> item.Name)
 
-let membersAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path: string list) : Member list =
+let membersAt (names: TypeNotation) (result: CompileResult) (offset: int) (path: string list) : Member list =
     let typeOf ty = Some (Unifier.tyToDisplayString names ty)
     match result.Typed with
     | Some typed ->
@@ -142,7 +142,7 @@ let membersAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path:
 /// What can follow a dot that starts a shorthand lambda's body (`{ .name }`) at `offset` in the compiled root module:
 /// the members of the innermost such lambda's argument there, as `membersAt` gives them for a value. Empty when there
 /// is no such lambda at `offset`, or the module did not type-check.
-let implicitArgumentMembersAt (names: TypeVarNames) (result: CompileResult) (offset: int) : Member list =
+let implicitArgumentMembersAt (names: TypeNotation) (result: CompileResult) (offset: int) : Member list =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         Hover.expressionsAt offset syntax
@@ -167,7 +167,7 @@ type PipeTarget = { Name: string; Type: string option; IsFunction: bool; IsAttac
 /// type, under each name a pipe resolves it by (see `Infer.attachedTypeNames`: `String` for a string, `List` for a
 /// list), nearest name first, as a pipe resolves them; then the functions in scope, which a pipe calls when no
 /// attached definition has the name. Only the functions in scope when the value's type is not known.
-let pipeTargetsAt (names: TypeVarNames) (result: CompileResult) (offset: int) (path: string list) : PipeTarget list =
+let pipeTargetsAt (names: TypeNotation) (result: CompileResult) (offset: int) (path: string list) : PipeTarget list =
     match result.Typed with
     | Some typed ->
         let describe (ty: Ty option) = ty |> Option.map (Unifier.tyToDisplayString names), ty |> Option.exists isFunction

@@ -216,11 +216,12 @@ What it does today:
 - A file that fails to parse gets one diagnostic for the parse error, and a compiler exception is
   reported as a diagnostic rather than taking the server down.
 - `textDocument/hover` shows the inferred type of the narrowest expression under the pointer, with
-  made-up type variables named `α`, `β`, ... through the Greek alphabet, a union's rest variable from
-  the other end (`#some(α) | ω`), a record's rest that appears nowhere else as a bare spread
-  (`list(name: α, ...) -> list(α)`, with a lone record argument in the application's own brackets), and
+  made-up type variables named `α`, `β`, … through the Greek alphabet, a union's rest variable from
+  the other end (`#some(α) | ω`), a record's rest spread with an ellipsis, and bare where it appears nowhere else
+  (`list(name: α, …) -> list(α)`, with a lone record argument in the application's own brackets), and
   annotation variables keeping their names, written bare as in an
-  annotation (`nanyx lsp --latin-type-vars` uses `a`, `b`, ... and `z` instead), and a type alias by its
+  annotation (`nanyx lsp --ascii`, or its older name `--latin-type-vars`, writes types in ASCII only: `a`, `b`,
+  ... and `z`, and `...` for a spread), and a type alias by its
   name (`Customer`, not `(name: string)`: inference carries aliases as `TyAlias` and looks through them); on a call's function name it shows the function's type at that call (so `id` in `id(5)` is
   `int -> int`), and on a declaration's own name (a def, a parameter, a pattern variable) the type of
   what it declares. The types come from the typed module's `ExprTypes` and `CalleeTypes`, recorded by

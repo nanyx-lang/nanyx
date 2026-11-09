@@ -127,7 +127,7 @@ let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol optio
 /// `context Name = ...`), with made-up type variables named by `names`, over the span of the name. The name can be
 /// in an annotation, a type definition (its own or another's) or a signature's contexts, and the type can be the
 /// module's own or an imported one. `None` when no type's name is at `offset`.
-let typeDefinitionAt (names: TypeVarNames) (file: string) (result: CompileResult) (offset: int) : Hover.HoverInfo option =
+let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Hover.HoverInfo option =
     match result.Typed, symbolAndNameAt file result offset with
     | Some typed, Some (symbol, span) when symbol.Kind = TypeDefinition ->
         typed.TypeDefs

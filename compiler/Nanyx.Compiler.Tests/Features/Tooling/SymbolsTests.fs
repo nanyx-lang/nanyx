@@ -274,7 +274,7 @@ let ``References to an import are the alias its names are written with`` () =
 /// What hovering the type name at `offset` shows, and the text of the name it covers.
 let private typeDefinitionHover (file: string) (result: CompileResult) (source: string) (offset: int) =
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Definition.typeDefinitionAt Greek file result offset
+    Definition.typeDefinitionAt Unicode file result offset
     |> Option.map (fun info -> info.Type, source.Substring(info.Span.Start, info.Span.End - info.Span.Start))
 
 [<Fact>]

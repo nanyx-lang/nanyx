@@ -88,5 +88,5 @@ let ``a name an except arm binds hovers as the payload it takes`` () =
         "def v = f() except #error(#io(message)) -> #some(message)\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    let hovered = Hover.typeAt Greek result (offsetOf source "#some(message)" 0 6)
+    let hovered = Hover.typeAt Unicode result (offsetOf source "#some(message)" 0 6)
     Assert.Equal(Some "string", hovered |> Option.map _.Type)

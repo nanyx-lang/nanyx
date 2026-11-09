@@ -9,26 +9,26 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // Hover: the type of the expression at a position.
 
-let private hoverWith (names: TypeVarNames) (source: string) (offset: int) =
+let private hoverWith (names: TypeNotation) (source: string) (offset: int) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Hover.typeAt names result offset
 
-let private hoverAt source offset = hoverWith Greek source offset
+let private hoverAt source offset = hoverWith Unicode source offset
 
 let private hoverType source offset =
     hoverAt source offset |> Option.map (fun info -> info.Type)
 
 let private latinHoverType source offset =
-    hoverWith Latin source offset |> Option.map (fun info -> info.Type)
+    hoverWith Ascii source offset |> Option.map (fun info -> info.Type)
 
 [<Fact>]
 let ``Reading fields of a parameter makes it a record with at least those fields`` () =
     let source =
         "def name = { p -> p.name }\n" +
         "def label = { p -> p.name ++ \" \" ++ p.city }\n"
-    Assert.Equal(Some "(name: α, ...) -> α", hoverType source (offsetOf source "{ p -> p.name }" 0 0))
-    Assert.Equal(Some "(city: string, name: string, ...) -> string", hoverType source (offsetOf source "{ p -> p.name ++" 0 0))
+    Assert.Equal(Some "(name: α, …) -> α", hoverType source (offsetOf source "{ p -> p.name }" 0 0))
+    Assert.Equal(Some "(city: string, name: string, …) -> string", hoverType source (offsetOf source "{ p -> p.name ++" 0 0))
 
 [<Fact>]
 let ``A record's rest is named only where it appears more than once`` () =
@@ -37,9 +37,9 @@ let ``A record's rest is named only where it appears more than once`` () =
         "  | [] -> []\n" +
         "  | [p, ...rest] -> [p.name, ...names(rest)] }\n" +
         "def keep = { p -> (p.name, p) }\n"
-    Assert.Equal(Some "list(name: α, ...) -> list(α)", hoverType source (offsetOf source "names" 0 0))
+    Assert.Equal(Some "list(name: α, …) -> list(α)", hoverType source (offsetOf source "names" 0 0))
     // What it is given it gives back, other fields and all, so the rest is named to say it is the same in both.
-    Assert.Equal(Some "(name: α, ...ω) -> (α, (name: α, ...ω))", hoverType source (offsetOf source "keep" 0 0))
+    Assert.Equal(Some "(name: α, …ω) -> (α, (name: α, …ω))", hoverType source (offsetOf source "keep" 0 0))
 
 [<Fact>]
 let ``A function reading fields takes any record that has them`` () =
@@ -179,14 +179,18 @@ let ``Type variables are shown as α, β in order of appearance`` () =
     Assert.Equal(Some "α, β -> (β, α)", hoverType source (offsetOf source "{" 0 0))
 
 [<Fact>]
-let ``Type variables are shown as a, b when Latin names are asked for`` () =
-    let source = "def pair = { a, b -> (b, a) }"
+let ``Types are shown in ASCII only when it is asked for`` () =
+    let source = "def pair = { a, b -> (b, a) }\ndef keep = { p -> (p.name, p) }\ndef name = { p -> p.name }\n"
     Assert.Equal(Some "a, b -> (b, a)", latinHoverType source (offsetOf source "{" 0 0))
+    // A record's rest is spread with three dots rather than an ellipsis.
+    Assert.Equal(Some "(name: a, ...z) -> (a, (name: a, ...z))", latinHoverType source (offsetOf source "keep" 0 0))
+    Assert.Equal(Some "(name: a, ...) -> a", latinHoverType source (offsetOf source "def name" 0 4))
+    Assert.Equal(Some "(name: α, …) -> α", hoverType source (offsetOf source "def name" 0 4))
 
 [<Fact>]
 let ``Greek type variable names go through the alphabet, then start again with a subscript`` () =
     let vars = [ for id in 1..26 -> TyVar { Id = id; Name = None } ]
-    let shown = Unifier.tyToDisplayString Greek (TyApply("f", vars))
+    let shown = Unifier.tyToDisplayString Unicode (TyApply("f", vars))
     Assert.Equal("f(α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ, ο, π, ρ, σ, τ, υ, φ, χ, ψ, ω, α₁, β₁)", shown)
 
 [<Fact>]
@@ -231,7 +235,7 @@ let ``A shorthand lambda shows its own type, and its operator the argument writt
     // The argument is left out where the operator is, so the operator shows the argument's type.
     Assert.Equal(Some "int", hoverType source (offsetOf source "%" 0 0))
     Assert.Equal(Some "bool", hoverType source (offsetOf source "==" 0 0))
-    Assert.Equal(Some "(name: α, ...) -> α", hoverType source (offsetOf source "{ .name" 0 0))
+    Assert.Equal(Some "(name: α, …) -> α", hoverType source (offsetOf source "{ .name" 0 0))
     Assert.Equal(Some "α", hoverType source (offsetOf source "name }" 0 0))
 
 [<Fact>]
@@ -295,7 +299,7 @@ let ``Where the two ends of the alphabet meet, each goes round its own part agai
     Assert.Equal(
         "f(α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ, ο, π, ρ, σ, τ, υ, "
         + "#x | ω, #x | ψ, #x | χ, #x | φ, #x | ω₁, #x | ψ₁, α₁, β₁)",
-        Unifier.tyToDisplayString Greek ty)
+        Unifier.tyToDisplayString Unicode ty)
 
 [<Fact>]
 let ``Hover inside a for loop's arm shows the arm's expression, not the loop element`` () =

@@ -39,7 +39,7 @@ public sealed class InlayHintHandler : InlayHintsHandlerBase
         }
 
         return new InlayHintContainer(
-            TypeHints.inlayHintsWithTopLevel(_settings.TypeVarNames, document.FileName, compiled)
+            TypeHints.inlayHintsWithTopLevel(_settings.TypeNotation, document.FileName, compiled)
                 .Where(hint => _settings.ShowsInlayHintFor(hint.Kind))
                 .Select(hint => ToInlayHint(document, hint))
                 .OfType<InlayHint>()
