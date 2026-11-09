@@ -224,6 +224,19 @@
     i32.store
     i32.const 0
   )
+  (func $__nanyx_retain (param $count i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    if
+      local.get $count
+      local.get $n
+      i32.const 1
+      i32.add
+      i32.store
+    end
+  )
 
   (data (i32.const 256) "\00\00\00\00\0b\00\00\00Hello world\00")
 
@@ -249,9 +262,19 @@
     end
   )
 
+  (func $__nanyx_dup_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_start
     call $main
-    drop
+    call $__nanyx_drop_string
   )
 
   (start $__nanyx_start)

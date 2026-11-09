@@ -34,8 +34,7 @@ type private RecordTable =
     { /// Field names in storage order -> the layout's number.
       LayoutIds: System.Collections.Generic.Dictionary<string list, int> }
 
-/// A module of just the allocator, exporting `alloc`, `free` and the memory, so that tests can drive it directly:
-/// nothing in generated code frees yet.
+/// A module of just the allocator, exporting `alloc`, `free` and the memory, so that tests can drive it directly.
 let allocatorModuleWat =
     [ "(module"
       "  (memory 1)"
@@ -47,6 +46,12 @@ let allocatorModuleWat =
       $"  (export \"free\" (func ${Helpers.free}))"
       ")" ]
     |> String.concat "\n"
+
+/// Where the heads of the allocator's free lists are, one per small size and then the one for large blocks, and where
+/// `$heap_ptr` starts: what a test needs to work out how much of the heap is still in use.
+let allocatorLayout =
+    [ for size in 4 .. 4 .. largestSizeClass -> heapBaseOffset - 4 + size ] @ [ heapBaseOffset + largestSizeClass ],
+    heapStartOffset
 
 let private ctxFnName (name: string, _, _) = name
 let private ctxFnSlot (_, slot: int, _) = slot
@@ -516,6 +521,13 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
 
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLower.startFunctionName |> Option.map fst
 
+    // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
+    // the functions it calls.
+    let definitionFunctions, startFunction =
+        let all = definitionFunctions @ Option.toList startFunction
+        let counted = CoreIrCounting.insert (CoreIrCounting.inferOwnership all) all
+        List.take definitionFunctions.Length counted, startFunction |> Option.map (fun _ -> List.last counted)
+
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
     let tagIdMap = facts.Tags |> List.mapi (fun index name -> name, index + 1) |> Map.ofList
@@ -554,13 +566,12 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             emitted.Text, "  (start $__nanyx_start)"
         | None -> "", ""
 
-    // A drop function for each type on the heap the functions above use, and for what each of their closures captures.
-    // A tag no function names has no cells to drop.
+    // A drop and a dup function for each type on the heap the functions above use, a function for what each of their
+    // closures captures, and `++` for each list of elements on the heap. A tag no function names has no cells to drop.
     let drops = CoreIrDrop.collect (definitionFunctions @ Option.toList startFunction)
     let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops |> String.concat "\n\n"
-    if not drops.Types.IsEmpty || not drops.Environments.IsEmpty then
-        usedHelpers.Add Helpers.release |> ignore
-        usedHelpers.Add Helpers.free |> ignore
+    for helper in CoreIrDrop.helpersUsed drops do
+        usedHelpers.Add helper |> ignore
     if drops.Types |> List.exists (function CoreIr.IrFunction _ -> true | _ -> false) then
         functionTable.IndirectArities.Add 1 |> ignore
 

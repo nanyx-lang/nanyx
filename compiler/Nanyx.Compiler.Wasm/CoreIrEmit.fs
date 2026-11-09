@@ -35,7 +35,7 @@ let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
 
 /// The temporaries an expression uses directly, which it computes as part of its own code.
-let private tempsUsedBy (expr: Expr) : Var list =
+let rec private tempsUsedBy (expr: Expr) : Var list =
     let ofAtoms atoms = atoms |> List.choose (function AVar v when v.Kind = Temp -> Some v | _ -> None)
     match expr.Kind with
     | Atom atom -> ofAtoms [ atom ]
@@ -53,6 +53,9 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | If(atom, _, _) -> ofAtoms [ atom ]
     | ForEach { Source = OverList list } -> ofAtoms [ list ]
     | ForEach { Source = OverRange(first, last) } -> ofAtoms [ first; last ]
+    | Dup(_, body)
+    | Drop(_, body)
+    | DropAfter(body, _) -> tempsUsedBy body
     | Let _
     | Do _
     | Match _
@@ -60,14 +63,48 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | BoxFloat _
     | Panic _ -> []
 
+/// The code that gives up the value on top of the stack, of type `ty`: its drop function if it is on the heap.
+let private dropValue (ty: IrType) =
+    if CoreIrDrop.isHeapType ty then $"call ${CoreIrDrop.dropName ty}" else "drop"
+
+/// The code that drops each of `vars`, kept in the locals `localOf` gives.
+let private dropVars (localOf: Var -> string) (vars: Var list) =
+    vars
+    |> List.filter (fun var -> CoreIrDrop.isHeapType var.Type)
+    |> List.map (fun var -> $"local.get ${localOf var}\n    {dropValue var.Type}")
+    |> String.concat "\n    "
+
 type private FunctionEmitter(context: EmitContext) =
     let helpers = HashSet<string>()
+    // The locals the counting needs beyond the IR's own: one for each temporary dropped after the instruction that
+    // borrowed it, and one for each value a construct has to read twice.
+    let extraLocals = ResizeArray<string>()
+    let droppedTemps = Dictionary<int, string>()
 
     let helper (name: string) =
         helpers.Add name |> ignore
         name
 
+    let freshLocal (prefix: string) =
+        let name = $"{prefix}_{extraLocals.Count}"
+        extraLocals.Add name
+        name
+
+    let localOf (var: Var) =
+        match droppedTemps.TryGetValue var.Id with
+        | true, local -> local
+        | _ -> var.Name
+
     member _.Helpers = Set.ofSeq helpers
+
+    member _.ExtraLocals = List.ofSeq extraLocals
+
+    /// The code that takes one more reference to each of `vars`.
+    member _.DupVars (vars: Var list) =
+        vars
+        |> List.filter (fun var -> CoreIrDrop.isHeapType var.Type)
+        |> List.map (fun var -> $"local.get ${var.Name}\n    call ${CoreIrDrop.dupName var.Type}\n    drop")
+        |> String.concat "\n    "
 
     /// How a hole of type `holeType` is measured and written (see `Interpolation`).
     member _.HoleKind (holeType: HoleType) : Interpolation.HoleKind =
@@ -140,8 +177,15 @@ type private FunctionEmitter(context: EmitContext) =
             | Do(value, rest) ->
                 claim value
                 flush ()
-                parts.Add(join "\n    " [ this.Value false deferred onStack value; "drop" ])
+                parts.Add(join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ])
                 walk rest
+            // Counting leaves the stack as it is, so it can happen while temporaries wait to be used.
+            | Dup(vars, body) ->
+                parts.Add(this.DupVars vars)
+                walk body
+            | Drop(vars, body) ->
+                parts.Add(dropVars localOf vars)
+                walk body
             | _ ->
                 claim expr
                 if waiting.Count > 0 then failwith "Internal error: a temporary in the core IR is never used"
@@ -208,12 +252,34 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [
                 $"i32.const {fields.Length * 4}\n    i32.const {layoutId}\n    call ${helper Helpers.newObject}"
                 yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value)) ]
-        | Field(record, slot) -> join "\n    " [ atoms [ record ]; $"i32.const {slot * 4}\n    i32.add\n    i32.load" ]
+        | Field(record, slot) ->
+            // The field's value, with a reference of its own.
+            let dup = if CoreIrDrop.isHeapType expr.Type then $"call ${CoreIrDrop.dupName expr.Type}" else ""
+            join "\n    " [ atoms [ record ]; $"i32.const {slot * 4}\n    i32.add\n    i32.load"; dup ]
         | UpdateRecord(record, fieldCount, updates) ->
-            // A copy of the record, layout and all, with the updated fields overwritten in place.
+            // A copy of the record, layout and all, with the updated fields overwritten in place. The copy takes a
+            // reference to each field on the heap it keeps.
+            let kept =
+                match atomType record with
+                | IrRecord fields ->
+                    fields
+                    |> List.indexed
+                    |> List.filter (fun (slot, (_, fieldTy)) -> CoreIrDrop.isHeapType fieldTy && not (updates |> List.exists (fst >> (=) slot)))
+                | _ -> []
+            let keepCode =
+                match kept with
+                | [] -> ""
+                | _ ->
+                    let copy = freshLocal "__update"
+                    let dups =
+                        kept
+                        |> List.map (fun (slot, (_, fieldTy)) ->
+                            $"local.get ${copy}\n    i32.load offset={slot * 4}\n    call ${CoreIrDrop.dupName fieldTy}\n    drop")
+                    String.concat "\n    " (($"local.tee ${copy}") :: dups)
             join "\n    " [
                 atoms [ record ]
                 $"i32.const {fieldCount * 4}\n    call ${helper Helpers.recordCopy}"
+                keepCode
                 yield! stores updates ]
         | MakeList items ->
             // The elements left to right, then the empty list, then a cons for each from the back.
@@ -221,6 +287,12 @@ type private FunctionEmitter(context: EmitContext) =
                 atoms items
                 "i32.const 0"
                 yield! items |> List.map (fun _ -> $"call ${helper Helpers.listCons}") ]
+        | CallRuntime(name, ([ first; _ ] as args), _) when
+            name = Helpers.listConcat && (match atomType first with IrList element -> CoreIrDrop.isHeapType element | _ -> false) ->
+            // Copying cells of elements on the heap takes a reference to each element (see `CoreIrDrop`).
+            let element = match atomType first with IrList element -> element | _ -> IrUnit
+            helper Helpers.listCons |> ignore
+            join "\n    " [ atoms args; $"call ${CoreIrDrop.listConcatName element}" ]
         | CallRuntime(name, args, returnsValue) ->
             // Every value is an i32, so a helper that returns nothing leaves unit, 0.
             join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]
@@ -236,22 +308,30 @@ type private FunctionEmitter(context: EmitContext) =
             let dropSlot = context.FunctionSlot (CoreIrDrop.environmentDropName (captured |> List.map atomType)) 1
             join "\n    " [ $"i32.const {values.Length * 4}\n    i32.const {dropSlot}\n    call ${helper Helpers.newObject}"; yield! stores ]
         | CallClosure(closure, args) ->
-            // The closure is passed first, as the environment, and read again for the table slot it holds.
-            let closureCode =
+            // The closure is passed first, as the environment, and read again for the table slot it holds. A top-level
+            // value is evaluated once, and kept in a local of its own for the second read.
+            let closureCode, slotCode =
                 match closure with
-                | ClosureVar var -> $"local.get ${var.Name}"
-                | ClosureValue name -> $"call ${name}"
+                | ClosureVar var -> $"local.get ${var.Name}", $"local.get ${var.Name}"
+                | ClosureValue name ->
+                    let local = freshLocal "__closure"
+                    $"call ${name}\n    local.tee ${local}", $"local.get ${local}"
             let arity = args.Length + 1
             context.IndirectCall arity
             let call = if tail then "return_call" else "call"
-            join "\n    " [ closureCode; atomsAfter true args; closureCode; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
+            join "\n    " [ closureCode; atomsAfter true args; slotCode; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
         | Interpolate parts -> this.Interpolation parts
         | Dbg(value, form) ->
             match form with
             | DbgNumber(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg\n    local.get ${scratch.Name}" ]
             | DbgString(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg_str\n    local.get ${scratch.Name}" ]
             | DbgFloat(scratch, _) ->
-                join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call ${helper Helpers.floatToString}\n    call $dbg_str\n    local.get ${scratch.Name}" ]
+                // The float is printed through a string of its own, dropped once printed.
+                let text = freshLocal "__dbg_text"
+                join "\n    " [
+                    atoms [ value ]
+                    $"local.tee ${scratch.Name}\n    call ${helper Helpers.floatToString}\n    local.tee ${text}\n    call $dbg_str"
+                    $"local.get ${text}\n    {dropValue IrString}\n    local.get ${scratch.Name}" ]
             | DbgTag(name, scratch) ->
                 // The host has a function per tag that `dbg` prints.
                 $"i32.const {tagCode (context.TagId name)}\n    local.set ${scratch.Name}\n    call $dbg_tag_{sanitizeIdentifier name}\n    local.get ${scratch.Name}"
@@ -262,11 +342,20 @@ type private FunctionEmitter(context: EmitContext) =
             | DbgTagValue(hole, holeType, _) ->
                 // Printed through the string `"{value}"` would build; the hole still holds the value to leave.
                 helper Helpers.alloc |> ignore
-                $"{this.Interpolation [ Hole(hole, holeType) ]}\n    call $dbg_str\n    local.get ${hole.Name}"
+                let text = freshLocal "__dbg_text"
+                $"{this.Interpolation [ Hole(hole, holeType) ]}\n    local.tee ${text}\n    call $dbg_str\n    local.get ${text}\n    {dropValue IrString}\n    local.get ${hole.Name}"
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
         | Match(scrutinees, arms) -> this.Arms tail scrutinees arms
+        | Dup(vars, body) -> join "\n    " [ this.DupVars vars; this.Value tail deferred onStack body ]
+        | Drop(vars, body) -> join "\n    " [ dropVars localOf vars; this.Value tail deferred onStack body ]
+        | DropAfter(body, vars) ->
+            // A temporary among `vars` is kept in a local as its value is pushed, to be dropped once `body` is done.
+            // Nothing can follow a tail call, so `body` is not one.
+            for var in vars do
+                if var.Kind = Temp then droppedTemps.[var.Id] <- freshLocal "__owned"
+            join "\n    " [ this.Value false deferred onStack body; dropVars localOf vars ]
         | Let _
         | Do _ -> this.Sequence tail expr
 
@@ -276,7 +365,9 @@ type private FunctionEmitter(context: EmitContext) =
             match deferred.TryGetValue v.Id with
             | true, value ->
                 deferred.Remove v.Id |> ignore
-                this.Value false deferred onStack value
+                match droppedTemps.TryGetValue v.Id with
+                | true, local -> $"{this.Value false deferred onStack value}\n    local.tee ${local}"
+                | _ -> this.Value false deferred onStack value
             | _ -> failwith "Internal error: a temporary in the core IR is used twice"
         | AVar v -> $"local.get ${v.Name}"
         | AInt value -> $"i32.const {value}"
@@ -285,19 +376,20 @@ type private FunctionEmitter(context: EmitContext) =
         | AString value -> $"i32.const {context.StringOffset value}"
         | ATag name -> $"i32.const {tagCode (context.TagId name)}"
 
-    /// A `for` loop, as `CodeGen.fs` lays it out: the body's value is dropped each time round, and the loop is unit.
+    /// A `for` loop: the body's value is dropped each time round, and the loop is unit.
     member this.ForLoop (loop: ForLoop) (atomCode: Atom -> string) : string =
         let depth = loop.Depth
         let cursor, finish, element = loop.Cursor.Name, loop.End.Name, loop.Element.Name
         let bodyCode = this.Sequence false loop.Body
+        let bodyDrop = dropValue loop.Body.Type
         match loop.Source with
         | OverRange(first, last) ->
             let firstCode = atomCode first
             let lastCode = atomCode last
-            $"{firstCode}\n    local.set ${element}\n    {lastCode}\n    local.set ${finish}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${element}\n        local.get ${finish}\n        i32.gt_s\n        br_if $__for_done_{depth}\n        {bodyCode}\n        drop\n        local.get ${element}\n        i32.const 1\n        i32.add\n        local.set ${element}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
+            $"{firstCode}\n    local.set ${element}\n    {lastCode}\n    local.set ${finish}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${element}\n        local.get ${finish}\n        i32.gt_s\n        br_if $__for_done_{depth}\n        {bodyCode}\n        {bodyDrop}\n        local.get ${element}\n        i32.const 1\n        i32.add\n        local.set ${element}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
         | OverList list ->
             let listCode = atomCode list
-            $"{listCode}\n    local.set ${cursor}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${cursor}\n        i32.eqz\n        br_if $__for_done_{depth}\n        local.get ${cursor}\n        i32.load\n        local.set ${element}\n        {bodyCode}\n        drop\n        local.get ${cursor}\n        i32.const 4\n        i32.add\n        i32.load\n        local.set ${cursor}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
+            $"{listCode}\n    local.set ${cursor}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${cursor}\n        i32.eqz\n        br_if $__for_done_{depth}\n        local.get ${cursor}\n        i32.load\n        local.set ${element}\n        {bodyCode}\n        {bodyDrop}\n        local.get ${cursor}\n        i32.const 4\n        i32.add\n        i32.load\n        local.set ${cursor}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
 
     /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
@@ -432,6 +524,9 @@ let private declaredLocals (body: Expr) : string list =
             for arm in arms do
                 arm.Patterns |> List.iter pattern
                 walk arm.Body
+        | Dup(_, body)
+        | Drop(_, body)
+        | DropAfter(body, _) -> walk body
         | Atom _
         | Prim _
         | Call _
@@ -485,7 +580,7 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
     let header =
         [ func.Params |> List.map (fun p -> $"(param ${p.Name} i32)") |> String.concat " "
           "(result i32)"
-          declaredLocals func.Body |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " ]
+          declaredLocals func.Body @ emitter.ExtraLocals |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " ]
         |> join " "
     let text =
         match exportName with
@@ -494,7 +589,7 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
     { Text = text; Helpers = emitter.Helpers }
 
 /// The start function, `func` (see `CoreIrLower.StartFunction`): each top-level expression in turn, its value
-/// dropped, as `CodeGen.fs` lays it out. It takes nothing and returns nothing.
+/// dropped. It takes nothing and returns nothing.
 let emitStart (context: EmitContext) (func: Function) : Emitted =
     let emitter = FunctionEmitter(context)
     let rec expressions (expr: Expr) =
@@ -504,10 +599,10 @@ let emitStart (context: EmitContext) (func: Function) : Emitted =
         | _ -> failwith "Internal error: the start function is not a sequence of top-level expressions"
     let bodyCode =
         expressions func.Body
-        |> List.map (fun value -> $"{emitter.Sequence false value}\n    drop")
+        |> List.map (fun value -> $"{emitter.Sequence false value}\n    {dropValue value.Type}")
         |> String.concat "\n    "
     let header =
-        match declaredLocals func.Body |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " with
+        match declaredLocals func.Body @ emitter.ExtraLocals |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " with
         | "" -> ""
         | locals -> " " + locals
     { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers }

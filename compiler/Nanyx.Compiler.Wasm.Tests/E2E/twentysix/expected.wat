@@ -338,6 +338,19 @@
     i32.store
     i32.const 0
   )
+  (func $__nanyx_retain (param $count i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    if
+      local.get $count
+      local.get $n
+      i32.const 1
+      i32.add
+      i32.store
+    end
+  )
   (func $__nanyx_list_cons (param $head i32) (param $tail i32) (result i32)
     (local $cell i32)
     i32.const 8
@@ -405,7 +418,7 @@
   (table $ctx_table 2 funcref)
   (elem (i32.const 0) $__lambda_0 $__nanyx_drop_env)
 
-  (func $List_filter__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32)
+  (func $List_filter__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32) (local $__owned_0 i32)
     local.get $arg1
     local.set $__match_tmp_0
     local.get $arg2
@@ -418,7 +431,11 @@
       i32.and
     (if (result i32)
       (then
-        i32.const 0
+        local.get $__match_tmp_0
+    call $__nanyx_drop_list_int
+    local.get $__match_tmp_1
+    call $__nanyx_drop_fn_int_to_bool
+    i32.const 0
       )
       (else
         local.get $__match_tmp_0
@@ -437,6 +454,14 @@
       i32.add
       i32.load
         local.set $__payload_rest
+    local.get $__payload_rest
+    call $__nanyx_dup_list_int
+    drop
+    local.get $__match_tmp_0
+    call $__nanyx_drop_list_int
+    local.get $__match_tmp_1
+    call $__nanyx_dup_fn_int_to_bool
+    drop
     local.get $__match_tmp_1
     local.get $__payload_x
     local.get $__match_tmp_1
@@ -447,10 +472,13 @@
         local.get $__payload_x
     i32.const 0
     call $__nanyx_list_cons
+    local.tee $__owned_0
     local.get $__payload_rest
     local.get $__match_tmp_1
     call $List_filter__int
     call $__nanyx_list_concat
+    local.get $__owned_0
+    call $__nanyx_drop_list_int
       )
       (else
         local.get $__payload_rest
@@ -492,7 +520,7 @@
   )
   (export "items" (func $items))
 
-  (func $main (result i32) (local $__match_tmp_0 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__for_cursor_0 i32) (local $__for_end_0 i32) (local $__for___for_element_0 i32) (local $__dbg_tmp i32)
+  (func $main (result i32) (local $__match_tmp_0 i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__for_cursor_0 i32) (local $__for_end_0 i32) (local $__for___for_element_0 i32) (local $__dbg_tmp i32) (local $__owned_0 i32)
     call $items
     i32.const 4
     i32.const 1
@@ -501,6 +529,7 @@
     i32.const 0
     call $__nanyx_record_set
     call $List_filter__int
+    local.tee $__owned_0
     local.set $__for_cursor_0
     block $__for_done_0
       loop $__for_next_0
@@ -534,10 +563,14 @@
       end
     end
     i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_list_int
   )
   (export "main" (func $main))
 
   (func $__lambda_0 (param $__env i32) (param $_arg_ i32) (result i32)
+    local.get $__env
+    call $__nanyx_drop_rec_0_int
     local.get $_arg_
     i32.const 2
     i32.rem_s
@@ -574,6 +607,19 @@
     end
   )
 
+  (func $__nanyx_dup_list_int (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.eqz
+      br_if $shared
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_fn_int_to_bool (param $p i32)
     ;; (int -> bool)
     local.get $p
@@ -595,6 +641,16 @@
     end
   )
 
+  (func $__nanyx_dup_fn_int_to_bool (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_rec_0_int (param $p i32)
     ;; (0: int)
     local.get $p
@@ -607,6 +663,16 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_rec_0_int (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 
   (func $__nanyx_drop_env (param $p i32) (result i32)

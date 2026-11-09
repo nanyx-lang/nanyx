@@ -150,7 +150,9 @@ until it exists, they can build in reverse and reverse the result.
    million deep: top-level, local `rec`, mutual recursion, through a closure and passing contexts on. **Done.**
 3. **Linter rule.** Report recursion that is not in tail position (`default/nonTailRecursion`). **Done.**
 4. **Reference counting.** Keep drops before tail calls and arguments to tail calls owned, when
-   [#294](https://github.com/nanyx-lang/nanyx/issues/294) inserts them.
+   [#294](https://github.com/nanyx-lang/nanyx/issues/294) inserts them. **Done:** ownership inference makes a
+   parameter owned when a tail call passes it something the caller owns, and the tests above still recurse a
+   million deep with counting in.
 5. **Stack overflow error.** Report running out of stack as a Nanyx error.
 6. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
 7. **Stack-safe `List.map` and `List.filter`.**

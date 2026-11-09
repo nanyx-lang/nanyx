@@ -156,6 +156,14 @@ and ExprKind =
     | If of Atom * Expr * Expr
     /// Tests the scrutinees against each arm's patterns in turn and evaluates the first arm that matches.
     | Match of Var list * Arm list
+    /// Gives each of these variables' values one more reference, then evaluates the expression (see
+    /// `CoreIrCounting`).
+    | Dup of Var list * Expr
+    /// Drops each of these variables' values, then evaluates the expression.
+    | Drop of Var list * Expr
+    /// Evaluates the expression, then drops each of these variables' values: operands it only borrowed (temporaries
+    /// among them), and variables whose last use it was.
+    | DropAfter of Expr * Var list
 
 /// A `for` loop over a list or a range, at a depth (how many loops enclose it) that names its locals.
 and ForLoop =
@@ -346,6 +354,9 @@ module Print =
                     $"\n{indent}| {patterns} ->\n{inner}{expr inner arm.Body}")
                 |> String.concat ""
             $"match {scrutineeNames}{renderedArms}"
+        | Dup(vars, body) -> $"""dup {vars |> List.map _.Name |> String.concat ", "}\n{indent}{expr indent body}"""
+        | Drop(vars, body) -> $"""drop {vars |> List.map _.Name |> String.concat ", "}\n{indent}{expr indent body}"""
+        | DropAfter(value, vars) -> $"""{expr indent value} then drop {vars |> List.map _.Name |> String.concat ", "}"""
 
     let func (f: Function) =
         let parameters = f.Params |> List.map (fun p -> $"{p.Name}: {IrType.show p.Type}") |> String.concat ", "

@@ -35,6 +35,7 @@ module Helpers =
     let newCell = "__nanyx_new_cell"
     let newObject = "__nanyx_new_object"
     let release = "__nanyx_release"
+    let retain = "__nanyx_retain"
     /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
     let procExit = "proc_exit"
 
@@ -60,7 +61,9 @@ let heapStartOffset = heapBaseOffset + largestSizeClass + 4
 /// Every object on the heap has a header: its reference count, then its info word if it has one (a string's length,
 /// a record's layout, a closure's drop function). So the count is at `p - 8` for strings, records and closures, made
 /// by `newObject`, and at `p - 4` for list cells, tag cells and float boxes, made by `newCell`. A count of 0 marks
-/// an object that is never freed: a string literal in the data segment. `release` gives up a reference.
+/// an object that is never freed: a string literal in the data segment. `retain` takes a reference and `release`
+/// gives one up. A helper borrows its operands and gives back a value of its own, which reference counting relies on
+/// (see `CoreIrCounting.operands`): only `listCons` takes its operands over, and `listConcat` its second.
 ///
 /// The allocator hands out 4-byte-aligned blocks, so a pointer is never odd. Every block has its size (the
 /// requested size rounded up to 4 bytes, and at least 4) in the word before it, and `free` puts a block back on the
@@ -242,6 +245,22 @@ let runtimeHelpers : Map<string, string> =
             "  i32.sub"
             "  i32.store"
             "  i32.const 0"
+            ")" ]
+      // Takes one more reference to the object whose count is at `$count`, unless it is never freed (a count of 0).
+      Helpers.retain,
+      lines
+          [ $"(func ${Helpers.retain} (param $count i32)"
+            "  (local $n i32)"
+            "  local.get $count"
+            "  i32.load"
+            "  local.tee $n"
+            "  if"
+            "    local.get $count"
+            "    local.get $n"
+            "    i32.const 1"
+            "    i32.add"
+            "    i32.store"
+            "  end"
             ")" ]
       Helpers.copyBytes,
       lines
@@ -913,6 +932,7 @@ let helperDependencies =
       Helpers.newCell, [ Helpers.alloc ]
       Helpers.newObject, [ Helpers.alloc ]
       Helpers.release, []
+      Helpers.retain, []
       Helpers.copyBytes, []
       Helpers.stringLength, []
       Helpers.stringAlloc, [ Helpers.newObject ]
