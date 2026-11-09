@@ -36,7 +36,7 @@ public sealed record OpenDocument(
         (_outline ??= new Lazy<Outline.OutlineItem[]?>(() => NyxCompiler.Outline.ofSource(FileName, Text)?.Value.ToArray())).Value;
 
     /// <summary>Whether <see cref="Compiled"/> type-checked, and so has the types and symbols editor features read.</summary>
-    public bool TypeChecked => Compiled is { Syntax: not null, Typed: not null };
+    public bool TypeChecked => Compiled is { Syntax: not null, Typed: not null, TypeChecked: true };
 
     /// <summary>
     /// The text of this document that hover and type hints read: this one if it type-checked, or else the last one

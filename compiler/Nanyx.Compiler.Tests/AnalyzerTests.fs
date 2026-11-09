@@ -65,6 +65,13 @@ let ``A rule can be given another severity, turned off, or promoted to an error`
     Assert.True(promoted.Diagnostics |> List.forall Diagnostics.isError)
     // The module still type-checked, so the editor keeps its types; the errors are what fail the compile.
     Assert.True(promoted.Typed.IsSome)
+    Assert.True(promoted.TypeChecked)
+
+[<Fact>]
+let ``The analyzers do not look at a module that does not type-check`` () =
+    let result = Compiler.compileWith (options [ everyDef ] []) "def one = missing\ndef two = 2"
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal("Unknown identifier 'missing'", diagnostic.Message)
 
 [<Fact>]
 let ``Configuring another code leaves a rule at its default`` () =
