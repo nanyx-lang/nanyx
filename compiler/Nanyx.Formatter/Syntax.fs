@@ -10,8 +10,8 @@ open Parser.Program
 let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
 
 /// The items with what formatting may change taken out: each destructuring temporary is renamed by the order it first
-/// appears in, imports lose their spans (the only spans syntax equality looks at), and a lambda whose body is a block
-/// of one expression has that expression as its body.
+/// appears in, imports lose their spans (the only spans syntax equality looks at), imports in a row become one, and a
+/// lambda whose body is a block of one expression has that expression as its body.
 let normalize (items: TopLevelItem list) : TopLevelItem list =
     let temps = Dictionary<string, string>()
 
@@ -135,14 +135,29 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             match i.Kind with
             | ModuleDecl _
             | Attribute _ -> i.Kind
-            | ModuleBlock(n, items) -> ModuleBlock(n, List.map item items)
+            | ModuleBlock(n, items) -> ModuleBlock(n, items' items)
             | Def(ValueDef(isExport, n, t, value)) -> Def(ValueDef(isExport, name n, Option.map typeExpr t, expr value))
             | Def(TypeDef(n, modifiers, parameters, body)) -> Def(TypeDef(typeDef (n, modifiers, parameters, body)))
             | Import items -> Import(List.map importItem items)
             | Expr value -> Expr(expr value)
         { i with Kind = kind }
 
-    List.map item items
+    // Imports in a row are one import of all their items, as the formatter writes them.
+    and items' (items: TopLevelItem list) =
+        items
+        |> List.map item
+        |> List.fold
+            (fun (merged: TopLevelItem list) (i: TopLevelItem) ->
+                match i.Kind, merged with
+                | Import imports, previous :: rest ->
+                    match previous.Kind with
+                    | Import run -> { previous with Kind = Import(run @ imports) } :: rest
+                    | _ -> i :: merged
+                | _ -> i :: merged)
+            []
+        |> List.rev
+
+    items' items
 
 /// Whether two parses say the same thing, ignoring what formatting may change (see `normalize`).
 let same (a: TopLevelItem list) (b: TopLevelItem list) = normalize a = normalize b

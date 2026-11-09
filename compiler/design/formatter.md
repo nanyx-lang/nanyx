@@ -200,6 +200,16 @@ Blank lines inside an expression (between a lambda's match cases, between record
 Two exceptions. Imports in a row stay together, however many lines a bracketed `import (...)` takes, and an
 attribute such as `@entry` stays on the line before its item.
 
+Imports in a row, with no blank line between them, become one bracketed import, any comments among them going inside
+the brackets; a blank line keeps groups of imports apart (decided 2026-11-09):
+
+```nanyx
+import (
+  nanyx/math
+  nanyx/text
+)
+```
+
 Whether a construct spans more than one line depends on its layout, which depends on where it starts, so the renderer
 decides it (`Doc.Stack`): a construct is multi-line if it always breaks, or if it does not fit flat in the width left at
 its indent.
