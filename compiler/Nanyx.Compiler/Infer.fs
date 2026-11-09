@@ -2322,6 +2322,9 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
 let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module': Module) : Map<string, Ty> * TypedTopLevelItem list * InferState * Diagnostic list =
     let mutable env = initialEnv
     let mutable state = initialState
+    // Each def's annotation has type variables of its own: `b` in one def's type is not `b` in another's, so a def
+    // whose body fails to fit its annotation cannot solve another def's variables (#453).
+    let beginDef () = state <- { state with TypeVars = initialState.TypeVars }
     let mutable currentModule: string option = None
     let mutable types = Map.empty
     let mutable items: TypedTopLevelItem list = []
@@ -2378,6 +2381,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Kind (Def (TypeDef(name, modifiers, parameters, body))) ->
             state <- registerTypeDef state name modifiers parameters body
         | Kind (Def (ValueDef(isExport, name, typeOpt, value))) ->
+            beginDef ()
             let symbol, declared = declareSymbol DefValue value.Id name TopLevelValue isExport None state
             // The module's own def wins over an imported one of the same name, and requires only its own contexts.
             state <- { declared with ContextRequirements = declared.ContextRequirements |> Map.remove name }
@@ -2429,6 +2433,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     for item in module' do
         match item.Kind with
         | Def (ValueDef(isExport, name, typeOpt, expr)) ->
+            beginDef ()
             let contextsExist =
                 match fst (extractContextFromTypeExpr typeOpt) with
                 | Some contexts -> ensureContextsExist state name (declarationSpan state DefValue expr) contexts

@@ -250,6 +250,35 @@ let ``Run - each kind of deferred error traps where it was found`` () =
         Assert.Contains("(deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
+let ``Run - a def whose annotation is too general does not change another def's type variables of the same name`` () =
+    // `broken`'s body makes its `b` a `#some(α)`. `mapError`'s `b` is its own, so its calls still compile (#453).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def broken: #some(α) | ω, (ω -> b) -> #some(α) | b = {\n" +
+        "  | #some(x), _ -> #some(x)\n" +
+        "  | other, f -> f(other)\n" +
+        "}\n" +
+        "\n" +
+        "def mapError: #some(α) | ω, (ω -> #some(α) | b) -> #some(α) | b = {\n" +
+        "  | #some(x), _ -> #some(x)\n" +
+        "  | other, f -> f(other)\n" +
+        "}\n" +
+        "\n" +
+        "def show: #some(int) | #bad(string) -> string = {\n" +
+        "  | #some(n) -> \"some {n}\"\n" +
+        "  | #bad(s) -> s\n" +
+        "}\n" +
+        "\n" +
+        "println(show(mapError(Int.parse(\"12\"), { #invalidInt -> #bad(\"bad\") })))\n" +
+        "println(show(mapError(Int.parse(\"zz\"), { #invalidInt -> #bad(\"bad\") })))\n"
+    let outcome = runSource source
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("some 12\nbad\n", outcome.StandardOutput)
+    Assert.Contains(":3:5: error NYX0202: Annotation of 'broken' is more general than the inferred type", outcome.StandardError)
+    Assert.Contains("Running with 1 deferred error", outcome.StandardError)
+
+[<Fact>]
 let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
     // A match on an int with no catch-all is a non-exhaustive match, so the trap is the deferred error.
     let source =
