@@ -150,6 +150,38 @@ let ``Run - a function requiring Console gets the runtime's instance`` () =
     runSource source |> assertRan "Hello, Nanyx\n"
 
 [<Fact>]
+let ``Run - local defs in a pattern lambda's arms`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def f: [Console] list(int) -> () = {\n" +
+        "  | [] ->\n" +
+        "    def done = \"end\"\n" +
+        "    println(done)\n" +
+        "  | [n, ...rest] ->\n" +
+        "    def label = \"x\"\n" +
+        "    def doubled = n * 2\n" +
+        "    println(label ++ \"{doubled}\")\n" +
+        "    f(rest)\n" +
+        "}\n" +
+        "\n" +
+        "def g: [Console] (int, string) -> () = {\n" +
+        "  | 0, s ->\n" +
+        "    def last = s ++ \"!\"\n" +
+        "    println(last)\n" +
+        "  | n, s ->\n" +
+        "    def next = s ++ \".\"\n" +
+        "    g(n - 1, next)\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  f([1, 2])\n" +
+        "  g(3, \"go\")\n" +
+        "}\n"
+    runSource source |> assertRan "x2\nx4\nend\ngo...!\n"
+
+[<Fact>]
 let ``Run - a use binding overrides the runtime's Console`` () =
     let source =
         "import nanyx/console\n" +
