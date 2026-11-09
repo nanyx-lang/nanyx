@@ -184,13 +184,13 @@ let private flattenCallArgs (args: Expression list) =
     | _ -> args
 
 /// The function-table slot of a top-level function used as a value, assigning one on first use.
-let private functionValueSlot (env: TranspileEnv) (name: string) (arity: int) : int =
-    match env.FunctionTable.Values.TryGetValue name with
+let private functionValueSlot (table: FunctionTable) (name: string) (arity: int) : int =
+    match table.Values.TryGetValue name with
     | true, ctxFn -> ctxFnSlot ctxFn
     | _ ->
-        let slot = env.FunctionTable.NextSlot
-        env.FunctionTable.NextSlot <- slot + 1
-        env.FunctionTable.Values.[name] <- (sanitizeIdentifier name, slot, arity)
+        let slot = table.NextSlot
+        table.NextSlot <- slot + 1
+        table.Values.[name] <- (sanitizeIdentifier name, slot, arity)
         slot
 
 let rec private collectExprLocalNames (expr: Expression) : string list =
@@ -1523,7 +1523,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
                 // A function with parameters, referenced rather than called: the value is its table slot.
                 if env.FunctionContextRequirements.ContainsKey name then
                     failwith $"Unsupported for WASM MVP backend: '{name}' requires contexts and cannot be used as a value"
-                $"i32.const {functionValueSlot env name arity}"
+                $"i32.const {functionValueSlot env.FunctionTable name arity}"
             | _ ->
                 // A top-level value (or a parameterless function): evaluate it.
                 $"call ${sanitizeIdentifier name}"
@@ -1928,7 +1928,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
     | FunctionCall("__slot", _, [ Kind (IdentifierExpr name) ]) ->
         // The table slot of a lifted function, for the first field of its closure block.
         match env.FunctionArities |> Map.tryFind name with
-        | Some arity -> $"i32.const {functionValueSlot env name arity}"
+        | Some arity -> $"i32.const {functionValueSlot env.FunctionTable name arity}"
         | None -> failwith $"Internal error: no lifted function named {name}"
     | FunctionCall("__for", _, [ iterable; Kind (Lambda([ (parameter, _) ], body)) ]) ->
         // `for iterable | arms`: a loop with the body inlined. The element goes into a local the body reads
@@ -2588,7 +2588,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
 
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
 
-    let coreIrContext (layoutIds: string list -> int) : CoreIrEmit.EmitContext =
+    let coreIrContext (layoutIds: string list -> int) (functionSlots: string -> int -> int) (indirectCalls: int -> unit) : CoreIrEmit.EmitContext =
         { TagId =
             fun name ->
                 match tagIdMap |> Map.tryFind name with
@@ -2599,7 +2599,9 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                 match stringLiteralMap |> Map.tryFind value with
                 | Some offset -> offset
                 | None -> failwith $"Internal error: missing string literal offset for {value}"
-          RecordLayoutId = layoutIds }
+          RecordLayoutId = layoutIds
+          FunctionSlot = functionSlots
+          IndirectCall = indirectCalls }
 
     // A specialisation is only called by the functions compiled with it; the definition itself is exported.
     let emitFromCoreIr (context: CoreIrEmit.EmitContext) (func: CoreIr.Function) =
@@ -2620,12 +2622,19 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   DefinitionTypes = types.DefinitionTypes
                   RequiresContexts = functionContextRequirements.Keys |> Set.ofSeq
                   RecordConstructors = typeLayouts.Keys |> Set.ofSeq
-                  NominalWrappers = nominalWrappers }
-            CoreIrLower.lowerModule input (emitFromCoreIr (coreIrContext (fun _ -> 0)) >> ignore))
+                  NominalWrappers = nominalWrappers
+                  Lifted =
+                    [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLower.LiftedLambda(origin.Lambda, origin.Captured))
+                      yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLower.FunctionWrapper wrapped) ]
+                    |> Map.ofList }
+            CoreIrLower.lowerModule input (emitFromCoreIr (coreIrContext (fun _ -> 0) (fun _ _ -> 0) ignore) >> ignore))
 
     /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
     let fromCoreIr (func: CoreIr.Function) =
-        let emitted = emitFromCoreIr (coreIrContext (recordLayoutId recordTable)) func
+        let emitted =
+            emitFromCoreIr
+                (coreIrContext (recordLayoutId recordTable) (functionValueSlot functionTable) (functionTable.IndirectArities.Add >> ignore))
+                func
         for helper in emitted.Helpers do
             usedHelpers.Add helper |> ignore
         emitted.Text

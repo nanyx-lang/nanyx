@@ -285,3 +285,35 @@ let ``Run - a generic function specialised at two types gives each its own resul
         "\n" +
         "main()\n"
     runSource source |> assertRan "5\n0\npositive\nnone\n"
+
+[<Fact>]
+let ``Run - closures through the core IR`` () =
+    // `compose`'s lambda is specialised along with `compose` (see CoreIrTests.fs).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def apply = { f, x -> f(x) }\n" +
+        "\n" +
+        "def double: int -> int = { n -> n * 2 }\n" +
+        "\n" +
+        "def compose = { f, g -> { x -> g(f(x)) } }\n" +
+        "\n" +
+        "def countdown: int -> int = { n ->\n" +
+        "  rec loop = { i, acc -> if i == 0 then acc else loop(i - 1, acc + i) }\n" +
+        "  loop(n, 0)\n" +
+        "}\n" +
+        "\n" +
+        "def show = { n -> \"{n * 1}\" }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  def offset = 10\n" +
+        "  def both = compose(double, { x -> x + offset })\n" +
+        "  println(show(apply({ x -> x + offset }, 1)))\n" +
+        "  println(show(apply(double, 4)))\n" +
+        "  println(show(both(1)))\n" +
+        "  println(apply({ s -> s ++ \"!\" }, \"hi\"))\n" +
+        "  println(show(countdown(4)))\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "11\n8\n12\nhi!\n10\n"

@@ -21,7 +21,11 @@ type EmitContext =
       /// Where a string literal's bytes are in the data segment.
       StringOffset: string -> int
       /// The number of the record layout with these fields, in the order they are stored, numbering it if it is new.
-      RecordLayoutId: string list -> int }
+      RecordLayoutId: string list -> int
+      /// The function table slot of the function of this name and arity, giving it one if it has none.
+      FunctionSlot: string -> int -> int
+      /// Notes an indirect call of this arity, so the module declares a type for it.
+      IndirectCall: int -> unit }
 
 /// A function as WebAssembly text, and the runtime helpers (see `WasmRuntime.Helpers`) it calls.
 type Emitted =
@@ -39,7 +43,9 @@ let private tempsUsedBy (expr: Expr) : Var list =
     | Prim(_, atoms)
     | Call(_, atoms)
     | MakeList atoms
-    | CallRuntime(_, atoms, _) -> ofAtoms atoms
+    | CallRuntime(_, atoms, _)
+    | MakeClosure(_, _, atoms)
+    | CallClosure(_, atoms) -> ofAtoms atoms
     | MakeRecord fields -> ofAtoms (List.map snd fields)
     | UpdateRecord(record, _, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
@@ -204,6 +210,25 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, args, returnsValue) ->
             // Every value is an i32, so a helper that returns nothing leaves unit, 0.
             join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]
+        | MakeClosure(name, arity, captured) ->
+            // A block of 4-byte slots: the function's table slot, then what it captures. The block is allocated before
+            // anything is stored, and its pointer stays on the stack meanwhile.
+            let values =
+                $"i32.const {context.FunctionSlot name arity}"
+                :: (captured |> List.map (fun value -> atomsAfter true [ value ]))
+            let stores =
+                values |> List.mapi (fun index code -> $"{code}\n    i32.const {index * 4}\n    call ${helper Helpers.recordSet}")
+            join "\n    " [ $"i32.const {values.Length * 4}\n    call ${helper Helpers.alloc}"; yield! stores ]
+        | CallClosure(closure, args) ->
+            // The closure is passed first, as the environment, and read again for the table slot it holds.
+            let closureCode =
+                match closure with
+                | ClosureVar var -> $"local.get ${var.Name}"
+                | ClosureValue name -> $"call ${name}"
+            let arity = args.Length + 1
+            context.IndirectCall arity
+            let call = if tail then "return_call" else "call"
+            join "\n    " [ closureCode; atomsAfter true args; closureCode; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
         | Interpolate parts -> this.Interpolation parts
         | Dbg(value, form) ->
             match form with
@@ -368,7 +393,9 @@ let private declaredLocals (body: Expr) : string list =
         | Field _
         | UpdateRecord _
         | MakeList _
-        | CallRuntime _ -> ()
+        | CallRuntime _
+        | MakeClosure _
+        | CallClosure _ -> ()
         | Interpolate _ -> interpolates.Value <- true
         | Dbg(_, form) ->
             match form with

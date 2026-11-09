@@ -159,9 +159,9 @@ works from the IR. This is worth doing for its own sake: later optimisations, a 
 backend and a simpler `CodeGen.fs` all benefit.
 
 **Shape.** The IR is in `compiler/Nanyx.Compiler.Wasm/CoreIr.fs`. A function has typed parameters, a result type and
-a body. Types are concrete (`int`, `bool`, `unit`, `string`, a union of tags, a record, a list), with no type
-variables. A tuple is a record whose fields are its positions, and a nominal type is the type of its shape. A body is
-an expression with a type on every node:
+a body. Types are concrete (`int`, `bool`, `unit`, `string`, a union of tags, a record, a list, a function), with no
+type variables. A tuple is a record whose fields are its positions, and a nominal type is the type of its shape. A
+body is an expression with a type on every node:
 
 | Node | Meaning |
 |------|---------|
@@ -174,6 +174,8 @@ an expression with a type on every node:
 | `updateRecord(atom, slot = atom, ...)` | copies a record with some fields replaced (`record with f = v`) |
 | `makeList(atoms)` | builds a list |
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
+| `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures |
+| `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
 | `dbg(atom, form)` | prints a value as `dbg` does for its type, and leaves it |
 | `let x = value in body` | names a value; the value is never a `let` itself |
@@ -193,6 +195,12 @@ many calls ask for it, and a definition can have at most 32 (polymorphic recursi
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
 reads its fields from where they are stored rather than looking them up at run time (`__nanyx_open_field`).
 
+Lambda lifting still runs on the syntax tree first (`LambdaLifting.fs`): a lambda becomes a top-level function that
+takes a closure block as its environment, and the lambda is replaced by a closure over it. The IR lowers a lifted
+function where a closure over it is made, since only there are the types of what it captures known. A lambda written
+in a generic definition is specialised along with it (`__lambda_0__int`), and the wrapper that lets a top-level
+function be passed as a value is lowered for each type it is passed at.
+
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
 as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. When a local is stored in between (a `match` among a call's arguments,
@@ -202,7 +210,7 @@ emitted, so functions from the IR are emitted in definition order with the rest,
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if anything in it is beyond the IR (closures, pipes, floats, contexts and so on), if it
+- A definition falls back if anything in it is beyond the IR (pipes, floats, contexts, workflows and so on), if it
   requires contexts, or if it calls a specialisation that could not be lowered. A function and the functions it calls
   through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers

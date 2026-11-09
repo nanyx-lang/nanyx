@@ -176,8 +176,9 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
 
 /// Where a lifted function came from: the top-level def it was written in, its local name there if it
 /// was a `rec` def, and the names of the variables it captures, in the order they sit in its environment.
-/// A lambda lifted from a call's argument also keeps the lambda as written, to find its type in the owner's.
-type LiftedOrigin = { Owner: string; LocalName: string option; Captured: string list; Source: Expression option }
+/// A lambda lifted from a call's argument also keeps the lambda as written, to find its type in the owner's. `Lambda`
+/// is the lambda as written for any lifted function, whose node the type checker typed.
+type LiftedOrigin = { Owner: string; LocalName: string option; Captured: string list; Source: Expression option; Lambda: Expression }
 
 /// `ty` with the type parameters of a context replaced by the arguments of one of its instances.
 let rec private substituteTypeParameters (arguments: Map<string, TypeExpr>) (ty: TypeExpr) : TypeExpr =
@@ -355,7 +356,7 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
                         |> Set.intersect scope
                         |> Set.toList
                     lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
-                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None }
+                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda }
                     [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
                 | DefStatement(isExport, name, typeOpt, Kind (FunctionCall("__rec", _, [ rhs ]))) ->
                     [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
@@ -438,7 +439,7 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
         let name = $"__lambda_{counter}"
         counter <- counter + 1
         lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda lambda args captured liftedBody))))
-        origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda }
+        origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda; Lambda = lambda }
         closureOf lambda name captured
 
     let liftItem (item: TopLevelItem) : TopLevelItem =

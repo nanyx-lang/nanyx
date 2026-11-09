@@ -18,6 +18,9 @@ type IrType =
     | IrRecord of (string * IrType) list
     /// A list of values of this type: 0 when empty, else a pointer to a cell of (head, tail).
     | IrList of IrType
+    /// A function value: a closure block holding the function's table slot and what it captures. The input is a
+    /// record of the parameters when there are several, as a function's type has it.
+    | IrFunction of IrType * IrType
 
 /// What a variable is, which decides how it is stored. The lowering names every variable as it is to be written in
 /// WebAssembly text; variables of the same kind and name share a local.
@@ -105,6 +108,12 @@ type DbgForm =
     /// A value of a union of tags, printed as `"{value}"` would print it: the hole is already evaluated.
     | DbgTagValue of Var * HoleType * Var
 
+/// Where a function value that is called comes from. The old path evaluates it twice (once to pass it, once to read
+/// its slot), so it is something that can be: a variable, or a top-level value.
+type ClosureRef =
+    | ClosureVar of Var
+    | ClosureValue of string
+
 type Expr =
     { Kind: ExprKind
       Type: IrType }
@@ -127,6 +136,12 @@ and ExprKind =
     /// A call to a runtime helper (see `WasmRuntime.Helpers`): an intrinsic, or the helper an operator on strings, lists
     /// or tags needs. One that returns nothing (an intrinsic whose result is unit) leaves unit, as every value must.
     | CallRuntime of string * Atom list * returnsValue: bool
+    /// Allocates the closure block of a lifted function (by its name in WebAssembly text, and how many parameters it
+    /// takes, the environment included) over the values it captures.
+    | MakeClosure of string * arity: int * Atom list
+    /// A call through a function value: the closure block is passed first, as the environment, and its first slot is
+    /// the function's table slot.
+    | CallClosure of ClosureRef * Atom list
     /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
     | Interpolate of InterpolationPart list
     /// `dbg(value)`: prints the value (the atom, unless the form says otherwise) and leaves it.
@@ -174,6 +189,7 @@ module IrType =
             let shown = fields |> List.map (fun (name, fieldTy) -> $"{name}: {show fieldTy}") |> String.concat ", "
             $"({shown})"
         | IrList element -> $"list({show element})"
+        | IrFunction(input, output) -> $"({show input} -> {show output})"
 
 /// The IR as text, for reading and for tests.
 module Print =
@@ -222,6 +238,9 @@ module Print =
             $"{atom record} with {shown}"
         | MakeList items -> $"[{atoms items}]"
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
+        | MakeClosure(name, _, captured) -> $"closure {name}({atoms captured})"
+        | CallClosure(ClosureVar v, args) -> $"{v.Name}({atoms args})"
+        | CallClosure(ClosureValue name, args) -> $"{name}()({atoms args})"
         | Interpolate parts ->
             parts
             |> List.map (function
