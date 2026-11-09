@@ -60,7 +60,7 @@ The type checker recovers from errors instead of stopping:
 
 How it is built:
 
-- **The error type** is `Unifier.errorType`, a primitive no source can name (printed `?`), so the passes that
+- **The error type** is `Unifier.errorType`, a primitive no source can name (printed `???`, as the [placeholder for unwritten code](../../docs/src/content/getting-started/basics.md#unimplemented-code) is written), so the passes that
   handle types need no case of their own for it. Unifying it with a type variable binds the variable to it, as with
   any type; unifying it with anything else succeeds without binding anything. A variable bound to it therefore
   agrees with everything from then on, which is what stops one error cascading through the uses of a name.
@@ -86,7 +86,7 @@ How it is built:
   linters only look at a module that type-checked. A module whose imports have errors is still not typed, and
   an import with errors fails its importer with them.
 - **The editor** still reads the last text that type-checked for hover, completion and type hints while the current
-  one does not (`OpenDocument.LastGood`). Reading the current text's partly typed module instead, with `?` where it
+  one does not (`OpenDocument.LastGood`). Reading the current text's partly typed module instead, with `???` where it
   failed, is a choice for the language server to make.
 
 This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
