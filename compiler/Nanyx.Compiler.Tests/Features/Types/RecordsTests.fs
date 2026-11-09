@@ -22,6 +22,16 @@ let ``Typecheck supports record constructor syntax`` () =
     | other -> Assert.True(false, $"Unexpected constructor type: %A{other}")
 
 [<Fact>]
+let ``A lone record type argument in the application's own brackets is the same type`` () =
+    let source =
+        "def count: list(name: string) -> int = { xs -> List.length(xs) }\n" +
+        "def bracketed: list((name: string)) -> int = count\n" +
+        "def n: int = count([(name = \"Ada\")])\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal(TyFunc(TyApply("list", [ TyRecord(Map.ofList [ "name", TyPrimitive "string" ]) ]), TyPrimitive "int"), result.Typed.Value.Types.["count"])
+
+[<Fact>]
 let ``Typecheck supports mixed positional and named records`` () =
     let source = "def value = (1, 2, z = 3)"
     let result = Compiler.compile source

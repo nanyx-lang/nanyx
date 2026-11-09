@@ -73,6 +73,19 @@ let ``comma binds tighter than the arrow inside brackets too`` () =
     |> should equal (ty (TypeRecord [ TypeField ("combine", false, false, Some (func (tuple [ var "a"; var "a" ]) (var "a")), None) ]))
 
 [<Fact>]
+let ``a lone record type argument may be written in the application's own brackets`` () =
+    let annotationOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
+        | other -> failwith $"Unexpected parse: %A{other}"
+    let field name typeName = TypeField (name, false, false, Some (named typeName), None)
+    let people = ty (TypeApply ("list", [ ty (TypeRecord [ field "name" "string"; field "age" "int" ]) ]))
+    annotationOf "def p: list(name: string, age: int) = p" |> should equal people
+    annotationOf "def p: list((name: string, age: int)) = p" |> should equal people
+    // Other arguments are not affected.
+    annotationOf "def m: map(string, int) = m" |> should equal (ty (TypeApply ("map", [ named "string"; named "int" ])))
+
+[<Fact>]
 let ``a record type may start with positional fields, named by position`` () =
     let annotationOf source =
         match parseModule source with

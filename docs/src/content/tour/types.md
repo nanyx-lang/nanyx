@@ -192,6 +192,7 @@ Both describe a function whose single argument is a two-field record of ints. Th
 - A function that is an item of a tuple, a type argument or a tag payload has brackets of its own: `(list(a), (a -> b)) -> list(b)`, `map(string, (a -> b))`.
 - A union never needs them: `#some(int) | #none -> int` is a function from the union.
 - In a record and in a lambda's parameter list the comma already separates fields and parameters, so a function with several parameters has them bracketed there: `(combine: (a, a) -> a)`.
+- A record of named fields that is a type's only argument can share its brackets, as a tag's payload does: `list(name: string)` is `list((name: string))`. A tuple can't, because `list(int, string)` would be two arguments.
 
 The compiler prints a type with the fewest brackets the rule allows, with a signature's parameters bare: `#some(int) | r, (int -> string) -> #some(string) | r`.
 
