@@ -24,7 +24,7 @@ of progress is simple: a program the documentation describes should parse, type-
 Out of scope here, with their own workstreams:
 
 - What diagnostics say and how they are shown: [Error messages](error-messages.md).
-- Spans, symbols and the semantic model, when they are built for analyzers: [Analyzers](analyzers.md). The
+- Spans, symbols and the semantic model, when they are built for linters: [Linters](linters.md). The
   refactors land in this codebase, but the design and tracking live there.
 - Editor features: [Language server](language-server.md).
 

@@ -1,7 +1,7 @@
 # Tail calls
 
 > **Status: in progress.** This page decides what Nanyx promises about tail calls and how the compiler keeps that
-> promise. The WebAssembly backend keeps it, and the official analyzer reports recursion that is not in tail
+> promise. The WebAssembly backend keeps it, and the official linter reports recursion that is not in tail
 > position; see the [plan](#plan) for the rest. It is part of the [compilation](compilation.md) workstream, and its issues carry the `compilation` and
 > `wasm backend` labels.
 
@@ -88,7 +88,7 @@ keyword that runs code after its continuation returns (`defer`) is not.
 When the backend lowers a call in tail position, it emits `return_call $f` instead of `call $f`, and
 `return_call_indirect` instead of `call_indirect` for closures and context members. Before lowering a function,
 it finds the calls in tail position in its body by the rules above (`TailPosition.callsIn`, in the compiler, which
-the analyzer below shares), and lowering a call looks itself up there. A call to a function that needs contexts
+the linter below shares), and lowering a call looks itself up there. A call to a function that needs contexts
 passes them as extra arguments, which changes nothing. The backend runs a lambda with no parameters where it is
 written, so its body is in tail position when the lambda is.
 
@@ -115,7 +115,7 @@ error that names the function that recursed, not a WebAssembly backtrace.
 
 ### Checking tail position
 
-The official analyzer's `nonTailRecursion` rule (`default/nonTailRecursion`) reports a function that calls itself
+The official linter's `nonTailRecursion` rule (`default/nonTailRecursion`) reports a function that calls itself
 other than in tail position: a top-level def whose value is a lambda, or a local `rec`. It reports at the call,
 and says why the call is not in tail position by naming what is done with its result: the operator it is an
 operand of, the function it is passed to, the list it goes into, the name it is bound to, and so on.
@@ -147,7 +147,7 @@ until it exists, they can build in reverse and reverse the result.
    one of them. **Done.**
 2. **Code generation.** Emit `return_call` and `return_call_indirect` in tail position, with tests that recurse a
    million deep: top-level, local `rec`, mutual recursion, through a closure and passing contexts on. **Done.**
-3. **Analyzer rule.** Report recursion that is not in tail position (`default/nonTailRecursion`). **Done.**
+3. **Linter rule.** Report recursion that is not in tail position (`default/nonTailRecursion`). **Done.**
 4. **Reference counting.** Keep drops before tail calls and arguments to tail calls owned, when
    [#294](https://github.com/nanyx-lang/nanyx/issues/294) inserts them.
 5. **Stack overflow error.** Report running out of stack as a Nanyx error.

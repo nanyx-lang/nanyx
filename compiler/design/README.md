@@ -8,7 +8,7 @@ with a Stream field. An issue that serves several workstreams is placed under th
 | Workstream | Design | Label |
 |------------|--------|-------|
 | Compilation | [compilation.md](compilation.md) | [`compilation`](https://github.com/nanyx-lang/nanyx/labels/compilation) |
-| Analyzers | [analyzers.md](analyzers.md) | [`analyzers`](https://github.com/nanyx-lang/nanyx/labels/analyzers) |
+| Linters | [linters.md](linters.md) | [`linters`](https://github.com/nanyx-lang/nanyx/labels/linters) |
 | Error messages | [error-messages.md](error-messages.md) | [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) |
 | Language server and editor | [language-server.md](language-server.md) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [packaging.md](packaging.md) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |

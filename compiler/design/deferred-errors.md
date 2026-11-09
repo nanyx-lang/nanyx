@@ -83,7 +83,7 @@ How it is built:
   constraints.
 - **The result.** A module with type or name errors is typed all the same, with what did check:
   `CompileResult.Typed` holds it beside the errors, and `CompileResult.TypeChecked` says whether there were any. The
-  analyzers only look at a module that type-checked. A module whose imports have errors is still not typed, and
+  linters only look at a module that type-checked. A module whose imports have errors is still not typed, and
   an import with errors fails its importer with them.
 - **The editor** still reads the last text that type-checked for hover, completion and type hints while the current
   one does not (`OpenDocument.LastGood`). Reading the current text's partly typed module instead, with `?` where it
@@ -134,7 +134,7 @@ How it is built:
 - **What cannot be deferred.** An error the pass places nowhere (one in a type definition, or a conflict found at a
   pattern) leaves `CompileResult.ErrorsDeferred` false, and the program is not run.
 - **The CLI** is described in [Debug and release](#debug-and-release). A package's errors are deferred
-  (`PackageBuild.ErrorsDeferred`) when each file's are: a file with an analyzer rule configured as an error, or an
+  (`PackageBuild.ErrorsDeferred`) when each file's are: a file with a linter rule configured as an error, or an
   error in a directive, is not.
 
 ### Broken definitions

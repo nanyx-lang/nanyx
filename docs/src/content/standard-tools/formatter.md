@@ -10,13 +10,13 @@ The formatter focuses on whitespace, indentation, line wrapping, and other prese
 
 The formatter is available as a command line tool and can be integrated into editor workflows.
 
-The formatter is minimally configurable by design, with the goal of keeping style consistent across contributors and reducing formatting-only diffs in reviews. It also works well with analyzer guidance and editor tooling to help you write clean, idiomatic Nanyx code.
+The formatter is minimally configurable by design, with the goal of keeping style consistent across contributors and reducing formatting-only diffs in reviews. It also works well with linter guidance and editor tooling to help you write clean, idiomatic Nanyx code.
 
 # Why use it
 
 - Keeps style consistent across contributors
 - Reduces formatting-only diffs in reviews
-- Works well with analyzer guidance and editor tooling
+- Works well with linter guidance and editor tooling
 
 # Usage modes
 
@@ -107,4 +107,4 @@ Each file is formatted with the settings of the nearest `.nyxpack` in its direct
 
 # Related
 
-See [Official style analyzer](./official-analyzer) for style diagnostics that complement formatting.
+See [Official style linter](./official-linter) for style diagnostics that complement formatting.

@@ -9,8 +9,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Xunit;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
-using Analyzer = NyxCompiler.Analyzer;
-using AnalyzerOptions = NyxCompiler.AnalyzerOptions;
+using Linter = NyxCompiler.Linter;
+using LinterOptions = NyxCompiler.LinterOptions;
 using Fix = NyxCompiler.Fix;
 using Report = NyxCompiler.Report;
 using Rule = NyxCompiler.Rule;
@@ -105,11 +105,11 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Analyzer_diagnostics_are_published_at_their_configured_severity()
+    public async Task Linter_diagnostics_are_published_at_their_configured_severity()
     {
-        // A test analyzer that reports every top-level def, at a warning by default.
+        // A test linter that reports every top-level def, at a warning by default.
         var everyDef = new Rule("everyDef", "Every def", Severity.Warning, "");
-        var analyzer = new Analyzer(
+        var linter = new Linter(
             "test",
             ListModule.OfSeq([everyDef]),
             FuncConvert.FromFunc<SemanticModel, FSharpList<Report>>(model => ListModule.OfSeq(
@@ -124,7 +124,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
         {
             await RestartWithAsync(ServerSettings.Default with
             {
-                Analyzers = new AnalyzerOptions(ListModule.OfSeq([analyzer]), severities)
+                Linters = new LinterOptions(ListModule.OfSeq([linter]), severities)
             });
             Open(uri, "def one = 1\n");
             return Assert.Single((await NextPublished(uri)).Diagnostics!);
@@ -433,9 +433,9 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task Code_actions_are_the_fixes_of_the_diagnostics_in_the_range()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-8");
-        const string text = "#:analyzer default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
+        const string text = "::linter default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { x -> 1 }\n";
 
-        // The official analyzer runs only where something turns it on: here, a directive.
+        // The official linter runs only where something turns it on: here, a directive.
         Open(uri, text);
         var published = (await NextPublished(uri)).Diagnostics!;
         Assert.Equal(2, published.Count());
@@ -444,12 +444,12 @@ public sealed class LanguageServerTests : IAsyncLifetime
         var remove = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)));
         Assert.Equal(("Remove `unused`", CodeActionKind.QuickFix, true), (remove.Title, remove.Kind, remove.IsPreferred));
         Assert.Equal("default/unusedBindings", Assert.Single(remove.Diagnostics!).Code?.String);
-        Assert.Equal("#:analyzer default\ndef f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
+        Assert.Equal("::linter default\ndef f = {\n  2\n}\ndef g = { x -> 1 }\n", Applied(text, Assert.Single(remove.Edit!.Changes![uri])));
 
         // An unused parameter is renamed to `_`.
         var rename = Assert.Single(await CodeActionsIn(uri, new Range(5, 10, 5, 11)));
         Assert.Equal("Rename `x` to `_`", rename.Title);
-        Assert.Equal("#:analyzer default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
+        Assert.Equal("::linter default\ndef f = {\n  def unused = 1\n  2\n}\ndef g = { _ -> 1 }\n", Applied(text, Assert.Single(rename.Edit!.Changes![uri])));
 
         // Nothing where no diagnostic is.
         Assert.Empty(await CodeActionsIn(uri, new Range(3, 2, 3, 3)));
@@ -942,23 +942,23 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task Formatting_a_script_keeps_its_directives_and_uses_its_formatter_directives()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-format-directives");
-        Open(uri, "#:formatter indentSize 4\ndef x =\n  def a = 1\n  a\n");
+        Open(uri, "::formatter indentSize 4\ndef x =\n  def a = 1\n  a\n");
         await NextPublished(uri);
 
         var edit = Assert.Single(await FormattingEdits(uri));
-        Assert.Equal("#:formatter indentSize 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
+        Assert.Equal("::formatter indentSize 4\ndef x =\n    def a = 1\n    a\n", edit.NewText);
     }
 
     [Fact]
-    public async Task A_script_is_analyzed_as_its_directives_say()
+    public async Task A_script_is_linted_as_its_directives_say()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "directives.nyx"));
 
-        Open(uri, "#:analyzer default.unusedBindings error\n#:analyzer nope\ndef f = {\n  def unused = 1\n  2\n}\n");
+        Open(uri, "::linter default.unusedBindings error\n::linter nope\ndef f = {\n  def unused = 1\n  2\n}\n");
 
         var diagnostics = (await NextPublished(uri)).Diagnostics!.ToList();
         Assert.Equal(["NYX0009", "default/unusedBindings"], diagnostics.Select(d => d.Code?.String));
-        Assert.Equal(new Range(1, 0, 1, 15), diagnostics[0].Range);
+        Assert.Equal(new Range(1, 0, 1, 13), diagnostics[0].Range);
         Assert.Equal(DiagnosticSeverity.Error, diagnostics[1].Severity);
     }
 

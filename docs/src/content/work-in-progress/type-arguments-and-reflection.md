@@ -38,7 +38,7 @@ Printing and equality are compiler intrinsics: `dbg` and string interpolation pr
 - **Context synthesis.** The compiler [builds a context](../advanced/contexts#context-synthesis) such as `Sum(Point)` from a type's attached definitions, and an explicit `use` overrides it. This is the closest thing Nanyx has to deriving, but it works by name, not by structure: nothing builds `Eq` of a record from the `Eq` of its fields.
 - **`typeof`.** [`typeof x`](../tour/types#typeof) is a type expression that names the type of a value. It only appears in annotations and gives no access to the type's structure.
 - **Attributes.** [Attributes](../tour/attributes) are compile-time metadata whose meaning the compiler defines. `@workflow` is documented as generating a helper, which is a small built-in form of code generation.
-- **Analyzers.** [Analyzers](../advanced/analyzers) are planned as Nanyx packages compiled to WebAssembly and run at compile time on the engine the compiler already embeds. That infrastructure could later run code generators too.
+- **Linters.** [Linters](../advanced/linters) are planned as Nanyx packages compiled to WebAssembly and run at compile time on the engine the compiler already embeds. That infrastructure could later run code generators too.
 - **Monomorphisation.** Generic code is compiled once for each set of concrete types it is used at, so every type is known at every use site when code is generated.
 
 ## Constraints
@@ -156,7 +156,7 @@ Context synthesis could be extended so that the compiler builds `Eq`, `Hash` or 
 
 ## Source generators
 
-C#'s source generators run user code at compile time that emits more source. The analyzer infrastructure could host them, since analyzers will already run Nanyx code at compile time. Generated code would have to exist before type checking, while analyzers run after it, so generators would need their own phase and a narrower view of the program. They remain an option for cases that type arguments cannot reach.
+C#'s source generators run user code at compile time that emits more source. The linter infrastructure could host them, since linters will already run Nanyx code at compile time. Generated code would have to exist before type checking, while linters run after it, so generators would need their own phase and a narrower view of the program. They remain an option for cases that type arguments cannot reach.
 
 # Open questions
 

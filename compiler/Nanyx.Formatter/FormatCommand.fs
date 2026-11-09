@@ -83,7 +83,7 @@ let findFiles (currentDirectory: string) (paths: string list) : Result<string li
 
 let private utf8Bom = [| 0xEFuy; 0xBBuy; 0xBFuy |]
 
-/// Formats each file with the options `settings` gives for it (see `Settings.cached`) and its `#:formatter` directives
+/// Formats each file with the options `settings` gives for it (see `Settings.cached`) and its `::formatter` directives
 /// give (see `Settings.withDirectives`), rewriting the ones that change
 /// in write mode (keeping a byte order mark if there was one), and leaving alone any whose settings are not valid, that
 /// do not parse, or that the formatter cannot format safely.

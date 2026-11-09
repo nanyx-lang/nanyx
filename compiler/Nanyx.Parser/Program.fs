@@ -1834,18 +1834,18 @@ type SourceModule =
       /// The source the spans index into: line endings normalised to `\n`, trailing whitespace removed.
       Source: string }
 
-/// A `#:` directive at the top of a script, which says what a package manifest would: `#:analyzer default`.
+/// A `::` directive at the top of a script, which says what a package manifest would: `::linter default`.
 type Directive =
-    { /// The word after `#:`: `analyzer`, say. Empty when there is none.
+    { /// The word after `::`: `linter`, say. Empty when there is none.
       Name: string
       /// The words after the name.
       Arguments: string list
-      /// The line, from `#:` to its end.
+      /// The line, from `::` to its end.
       Span: SourceSpan }
 
-/// The lines at the top of a file that are not code: an optional `#!` line, then `#:` directives, among blank lines
+/// The lines at the top of a file that are not code: an optional `#!` line, then `::` directives, among blank lines
 /// and `--` comments. They end at the first line of code, so they are read without parsing the file, and the parser
-/// skips them. `#:` cannot start a tag, so a directive is never code.
+/// skips them. `::` only ever follows a name inside brackets, so no line of code starts with it.
 module Directives =
     /// Each line of `source` (line breaks `\n`), as the offsets it starts and ends at, without its line break.
     let private lines (source: string) =
@@ -1862,8 +1862,9 @@ module Directives =
         |> List.takeWhile (fun (line, (start, finish)) ->
             let text = source.Substring(start, finish - start)
             let trimmed = text.Trim()
-            text.StartsWith "#:" || (line = 0 && text.StartsWith "#!") || trimmed = "" || trimmed.StartsWith "--")
-        |> List.filter (fun (_, (start, _)) -> source.Length > start + 1 && source[start] = '#')
+            text.StartsWith "::" || (line = 0 && text.StartsWith "#!") || trimmed = "" || trimmed.StartsWith "--")
+        |> List.filter (fun (line, (start, _)) ->
+            String.CompareOrdinal(source, start, "::", 0, 2) = 0 || (line = 0 && String.CompareOrdinal(source, start, "#!", 0, 2) = 0))
 
     let private normalize (source: string) = source.Replace("\r\n", "\n").Replace("\r", "\n")
 
@@ -1871,7 +1872,7 @@ module Directives =
     let read (filePath: string) (source: string) : Directive list =
         let source = normalize source
         headerLines source
-        |> List.filter (fun (_, (start, _)) -> source[start + 1] = ':')
+        |> List.filter (fun (_, (start, _)) -> String.CompareOrdinal(source, start, "::", 0, 2) = 0)
         |> List.map (fun (line, (start, finish)) ->
             let text = source.Substring(start, finish - start).TrimEnd()
             let name, arguments =
@@ -1913,8 +1914,8 @@ let private runModuleParser (filePath: string) (normalized: string) : Result<Top
     match runParserOnString moduleParser initialState filePath (Directives.blank normalized) with
     | ParserResult.Success(result, state, _) -> Result.Ok (result, state)
     // A directive after the code has started is not skipped, and fails where it starts.
-    | ParserResult.Failure(_, error, _) when error.Position.Column = 1L && String.CompareOrdinal(normalized, int error.Position.Index, "#:", 0, 2) = 0 ->
-        Result.Error (errorAt error.Position "A directive (a `#:` line) must come before the first line of code")
+    | ParserResult.Failure(_, error, _) when error.Position.Column = 1L && String.CompareOrdinal(normalized, int error.Position.Index, "::", 0, 2) = 0 ->
+        Result.Error (errorAt error.Position "A directive (a `::` line) must come before the first line of code")
     | ParserResult.Failure(errorMsg, error, _) ->
         // The failure of a workflow keyword is backtracked over, and FParsec reports some enclosing construct
         // instead (often the whole def), so it is reported where it happened.

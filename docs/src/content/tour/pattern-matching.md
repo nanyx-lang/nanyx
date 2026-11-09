@@ -30,7 +30,7 @@ match value
   | _ -> "something else"
 ```
 
-A match that does not cover every possible value is a compiler error. An arm that can never be reached, because an earlier arm already matches everything it would, is not an error (the program is still correct), so it is reported by the [analyzer](../advanced/analyzers) as a warning instead.
+A match that does not cover every possible value is a compiler error. An arm that can never be reached, because an earlier arm already matches everything it would, is not an error (the program is still correct), so it is reported by the [linter](../advanced/linters) as a warning instead.
 
 # Introducing values
 

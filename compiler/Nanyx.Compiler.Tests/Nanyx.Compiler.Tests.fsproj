@@ -31,7 +31,7 @@
     <Compile Include="Features\Types\UnionsTests.fs" />
     <Compile Include="Features\Workflows\WorkflowTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
-    <Compile Include="AnalyzerTests.fs" />
+    <Compile Include="LinterTests.fs" />
     <Compile Include="PackageTests.fs" />
     <Compile Include="ScriptTests.fs" />
   </ItemGroup>

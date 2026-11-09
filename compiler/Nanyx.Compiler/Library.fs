@@ -18,7 +18,7 @@ type CompileResult =
       /// The module typed with what did check: present when it parsed and its imports checked, even if it has type
       /// or name errors of its own (see `TypeChecked`).
       Typed: TypedModule option
-      /// Whether the module type-checked: it has no type or name errors. An analyzer rule configured as an error does
+      /// Whether the module type-checked: it has no type or name errors. A linter rule configured as an error does
       /// not stop it type-checking.
       TypeChecked: bool
       /// Whether each type or name error in the module is compiled to a trap in `Typed` where it was found, so that a
@@ -1433,11 +1433,11 @@ module Compiler =
         | Result.Ok (ast, _, _) -> Ok ast
         | Result.Error err -> Error [ syntaxError err ]
 
-    /// Checks the module from `origin`, then runs the analyzers `options` names over it if it type-checked. A module
+    /// Checks the module from `origin`, then runs the linters `options` names over it if it type-checked. A module
     /// with type or name errors is typed all the same, with what did check, beside its errors. Only
     /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
     /// diagnostics are not repeated in every module that imports it, and the standard library never is.
-    let private compileFrom (options: AnalyzerOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+    let private compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
         match typecheckModule (CheckedModules()) origin source Set.empty with
         | Result.Error (phase, diagnostics) ->
             { Phase = phase
@@ -1456,19 +1456,19 @@ module Compiler =
                     CalleeTypes = resolve checkedModule.RawCalleeTypes
                     SymbolTypes = resolve checkedModule.RawSymbolTypes }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
-            // there for the editor's features. The analyzers only look at a module that type-checked; a rule
+            // there for the editor's features. The linters only look at a module that type-checked; a rule
             // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Analyzers.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
+                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
                 else checkedModule.Errors
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax }
 
-    /// `compileFile` with the analyzers and severities `options` gives.
-    let compileFileWith (options: AnalyzerOptions) (filePath: string) : CompileResult =
+    /// `compileFile` with the linters and severities `options` gives.
+    let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
         if not (File.Exists filePath) then
             { Phase = Parsed
               Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"File not found: {filePath}" ]
@@ -1480,24 +1480,24 @@ module Compiler =
             compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)
 
     /// Compiles the file at `filePath` up to the typed module, resolving its imports (standard-library modules
-    /// from the embedded library, everything else relative to the file). It runs no analyzers: `compileFileWith` runs those it is given.
+    /// from the embedded library, everything else relative to the file). It runs no linters: `compileFileWith` runs those it is given.
     let compileFile (filePath: string) : CompileResult =
-        compileFileWith Analyzers.none filePath
+        compileFileWith Linters.none filePath
 
-    /// `compileSource` with the analyzers and severities `options` gives.
-    let compileSourceWith (options: AnalyzerOptions) (filePath: string) (source: string) : CompileResult =
+    /// `compileSource` with the linters and severities `options` gives.
+    let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         compileFrom options (SourceFile (Path.GetFullPath filePath)) source
 
     /// Compiles `source` as if it were the contents of the file at `filePath` (which need not exist, or may hold
     /// older text: an editor's unsaved buffer, say). Imports are resolved exactly as `compileFile` resolves them.
     let compileSource (filePath: string) (source: string) : CompileResult =
-        compileSourceWith Analyzers.none filePath source
+        compileSourceWith Linters.none filePath source
 
-    /// `compile` with the analyzers and severities `options` gives.
-    let compileWith (options: AnalyzerOptions) (source: string) : CompileResult =
+    /// `compile` with the linters and severities `options` gives.
+    let compileWith (options: LinterOptions) (source: string) : CompileResult =
         compileFrom options InMemory source
 
-    /// Compiles source given directly, up to the typed module, without analyzers. Standard-library
+    /// Compiles source given directly, up to the typed module, without linters. Standard-library
     /// imports are resolved; imports by path cannot be, since there is no file for them to be relative to.
     let compile (source: string) : CompileResult =
-        compileWith Analyzers.none source
+        compileWith Linters.none source

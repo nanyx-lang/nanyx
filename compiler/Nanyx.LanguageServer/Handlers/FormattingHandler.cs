@@ -11,7 +11,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// Formats a document ("Format Document", and format-on-save) with the same formatter and safety check as
 /// <c>nanyx format</c>: one edit replacing the whole document, or none when it is already formatted, does not parse,
 /// or could not be formatted safely. The line width and indent come from the package's <c>.nyxpack</c>, or a script's
-/// <c>#:formatter</c> directives, as for <c>nanyx format</c>; the request's <c>tabSize</c> and <c>insertSpaces</c> are
+/// <c>::formatter</c> directives, as for <c>nanyx format</c>; the request's <c>tabSize</c> and <c>insertSpaces</c> are
 /// ignored.
 /// </summary>
 public sealed class FormattingHandler : DocumentFormattingHandlerBase
@@ -36,7 +36,7 @@ public sealed class FormattingHandler : DocumentFormattingHandlerBase
         }
 
         // Read every time, rather than cached, so an edit to the manifest applies to the next format. A document not on
-        // disk has no manifest. A script's #:formatter directives apply on top.
+        // disk has no manifest. A script's ::formatter directives apply on top.
         var settings = document.FileName == ""
             ? FSharpResult<Formatter.Formatter.Options, string>.NewOk(Formatter.Formatter.OptionsModule.defaults)
             : Settings.forFile(document.FileName);

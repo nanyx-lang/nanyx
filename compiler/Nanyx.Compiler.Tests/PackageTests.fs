@@ -41,33 +41,33 @@ let ``A manifest's package table is read, with the default sources`` () =
     Assert.Equal("demo", read.Name)
     Assert.Equal("0.1.0", read.Version)
     Assert.Equal<string list>([ "**/*.nyx" ], read.Sources)
-    Assert.Empty(read.Analyzers.Analyzers)
+    Assert.Empty(read.Linters.Linters)
 
 [<Fact>]
-let ``An analyzers table turns on the analyzers it names, with the severities it sets`` () =
+let ``A linters table turns on the linters it names, with the severities it sets`` () =
     use package =
-        new TempPackage([ "demo.nyxpack", manifest "[analyzers.default]\nunusedBindings = \"error\"\nanalyzerFailed = \"none\"" ])
+        new TempPackage([ "demo.nyxpack", manifest "[linters.default]\nunusedBindings = \"error\"\nlinterFailed = \"none\"" ])
     let read = okOf (Manifest.read (package.Path "demo.nyxpack"))
-    Assert.Equal<string list>([ "default" ], read.Analyzers.Analyzers |> List.map _.Name)
-    Assert.Equal(Some(Some Severity.Error), read.Analyzers.Severities |> Map.tryFind "default/unusedBindings")
-    Assert.Equal(Some None, read.Analyzers.Severities |> Map.tryFind "default/analyzerFailed")
+    Assert.Equal<string list>([ "default" ], read.Linters.Linters |> List.map _.Name)
+    Assert.Equal(Some(Some Severity.Error), read.Linters.Severities |> Map.tryFind "default/unusedBindings")
+    Assert.Equal(Some None, read.Linters.Severities |> Map.tryFind "default/linterFailed")
 
 [<Fact>]
 let ``Every problem with a manifest is reported, naming the key`` () =
     let text =
         "[package]\nname = \"Demo\"\nversion = 1\ncolour = \"red\"\n"
-        + "[analyzers.default]\nunusedBindings = \"loud\"\nnoSuchRule = \"error\"\n"
-        + "[analyzers.other]\n[dependencies]\nacme.json = \"1.0\"\n[extras]\n"
+        + "[linters.default]\nunusedBindings = \"loud\"\nnoSuchRule = \"error\"\n"
+        + "[linters.other]\n[dependencies]\nacme.json = \"1.0\"\n[extras]\n"
     use package = new TempPackage([ "demo.nyxpack", text ])
     let errors = errorsOf (Manifest.read (package.Path "demo.nyxpack")) |> List.map (fun e -> e.Substring(e.IndexOf(": ") + 2))
     Assert.Contains("[package] name \"Demo\" must be lower case, with words separated by dots: acme.web", errors)
     Assert.Contains("[package] version must be a string, not 1", errors)
     Assert.Contains("unknown key [package] colour; the keys are 'name', 'version', 'sources', 'public-modules'", errors)
-    Assert.Contains("[analyzers.default] unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"", errors)
-    Assert.Contains("unknown rule [analyzers.default] noSuchRule; the rules are 'unusedBindings', 'nonTailRecursion', 'analyzerFailed'", errors)
-    Assert.Contains("unknown analyzer [analyzers.other]; the analyzers are 'default'", errors)
+    Assert.Contains("[linters.default] unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"", errors)
+    Assert.Contains("unknown rule [linters.default] noSuchRule; the rules are 'unusedBindings', 'nonTailRecursion', 'linterFailed'", errors)
+    Assert.Contains("unknown linter [linters.other]; the linters are 'default'", errors)
     Assert.Contains("[dependencies] is not supported yet: a package can only use the standard library and its own files", errors)
-    Assert.Contains("unknown table [extras]; the tables are 'package', 'dependencies', 'project-references', 'analyzers', 'formatter'", errors)
+    Assert.Contains("unknown table [extras]; the tables are 'package', 'dependencies', 'project-references', 'linters', 'formatter'", errors)
 
 [<Fact>]
 let ``A manifest that is not TOML says so`` () =
@@ -94,23 +94,23 @@ let ``A package with two entries is an error naming both`` () =
     Assert.Contains("a.nyx, b.nyx", error)
 
 [<Fact>]
-let ``Without an analyzers table no analyzer runs`` () =
+let ``Without a linters table no linter runs`` () =
     use package = new TempPackage([ "demo.nyxpack", manifest ""; "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).IsSome)
 
 [<Fact>]
-let ``The manifest's analyzers check every source file at the severities it sets`` () =
+let ``The manifest's linters check every source file at the severities it sets`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxpack", manifest "[analyzers.default]\nunusedBindings = \"error\""
+            [ "demo.nyxpack", manifest "[linters.default]\nunusedBindings = \"error\""
               "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal("default/unusedBindings", diagnostic.Code)
     Assert.Equal(Severity.Error, diagnostic.Severity)
-    Assert.Equal(Some(Some Severity.Error), (Package.analyzersFor (package.Path "main.nyx")) |> Option.map (fun o -> o.Severities |> Map.tryFind "default/unusedBindings" |> Option.flatten))
+    Assert.Equal(Some(Some Severity.Error), (Package.lintersFor (package.Path "main.nyx")) |> Option.map (fun o -> o.Severities |> Map.tryFind "default/unusedBindings" |> Option.flatten))
 
 [<Fact>]
 let ``The example package builds cleanly`` () =
