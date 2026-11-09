@@ -728,6 +728,42 @@ public sealed class LanguageServerTests : IAsyncLifetime
             (await InlayHintsIn(uri, new Range(0, 0, 1, 0))).Select(hint => (hint.Position, hint.Label.String)));
     }
 
+    [Theory]
+    [InlineData(false, true, true, new[] { "scale", "factor", "rest", "items", "tail" })]
+    [InlineData(true, false, true, new[] { "scale", "offset", "rest", "tail" })]
+    [InlineData(true, true, false, new[] { "scale", "factor", "offset", "rest", "items" })]
+    // The top-level defs' hints are there whatever the other settings say.
+    [InlineData(false, false, false, new[] { "scale", "rest" })]
+    public async Task Inlay_hints_for_each_kind_of_declaration_can_be_turned_off(
+        bool locals, bool parameters, bool patternVariables, string[] shown)
+    {
+        await RestartWithAsync(ServerSettings.Default with
+        {
+            TopLevelTypeHints = TopLevelTypeHints.Inlay,
+            LocalTypeHints = locals,
+            ParameterTypeHints = parameters,
+            PatternVariableTypeHints = patternVariables
+        });
+        var uri = DocumentUri.Parse("untitled:Untitled-11");
+        var source =
+            "def scale = { factor ->\n  def offset = 1\n  factor * 2 + offset\n}\n" +
+            "def rest = { items -> match items\n  | [_, ...tail] -> tail\n  | _ -> items }\n";
+        var lines = source.Split('\n');
+
+        Open(uri, source);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(
+            shown.Select(PositionAfter),
+            (await InlayHintsIn(uri, new Range(0, 0, lines.Length, 0))).Select(hint => hint.Position));
+
+        Position PositionAfter(string name)
+        {
+            var line = Array.FindIndex(lines, text => text.Contains(name));
+            return new Position(line, lines[line].IndexOf(name, StringComparison.Ordinal) + name.Length);
+        }
+    }
+
     [Fact]
     public async Task Lenses_and_inlay_hints_in_a_document_with_type_errors_read_its_own_types()
     {

@@ -52,7 +52,8 @@ export async function activate(context: vscode.ExtensionContext) {
         event.affectsConfiguration("nanyx.compilerVersion") ||
         event.affectsConfiguration("nanyx.downloadUrl") ||
         event.affectsConfiguration("nanyx.greekTypeVariables") ||
-        event.affectsConfiguration("nanyx.topLevelTypeHints")
+        event.affectsConfiguration("nanyx.topLevelTypeHints") ||
+        event.affectsConfiguration("nanyx.inlayHints")
       ) {
         void startOrRestart(context);
       }
@@ -237,6 +238,15 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
     args.push("--top-level-type-hints", "inlay");
   } else if (topLevel === "off") {
     args.push("--top-level-type-hints", "off");
+  }
+  if (!config.get<boolean>("inlayHints.localDefinitions", true)) {
+    args.push("--no-local-type-hints");
+  }
+  if (!config.get<boolean>("inlayHints.parameters", true)) {
+    args.push("--no-parameter-type-hints");
+  }
+  if (!config.get<boolean>("inlayHints.patternVariables", true)) {
+    args.push("--no-pattern-variable-type-hints");
   }
 
   // No `transport`: stdio is the default, and naming it makes the client append `--stdio` to the args.

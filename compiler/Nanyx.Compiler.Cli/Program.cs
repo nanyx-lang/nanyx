@@ -275,11 +275,17 @@ internal static class CliCommands
     /// <param name="stdio">Accepted and ignored: stdio is the only transport, but LSP clients conventionally pass it.</param>
     /// <param name="latinTypeVars">Name inferred type variables a, b, ... in hovers, rather than α, β, ...</param>
     /// <param name="topLevelTypeHints">Where to show top-level defs' inferred types: lens (above them, the default), inlay (after their names) or off.</param>
+    /// <param name="noLocalTypeHints">Show no inlay hints for local defs' inferred types.</param>
+    /// <param name="noParameterTypeHints">Show no inlay hints for lambda parameters' inferred types.</param>
+    /// <param name="noPatternVariableTypeHints">Show no inlay hints for pattern variables' inferred types.</param>
     [Consolo("lsp")]
     public static int Lsp(
         [Consolo("stdio")] bool stdio = false,
         [Consolo("latin-type-vars")] bool latinTypeVars = false,
-        [Consolo("top-level-type-hints")] string topLevelTypeHints = "lens")
+        [Consolo("top-level-type-hints")] string topLevelTypeHints = "lens",
+        [Consolo("no-local-type-hints")] bool noLocalTypeHints = false,
+        [Consolo("no-parameter-type-hints")] bool noParameterTypeHints = false,
+        [Consolo("no-pattern-variable-type-hints")] bool noPatternVariableTypeHints = false)
     {
         Nanyx.LanguageServer.TopLevelTypeHints? topLevel = topLevelTypeHints switch
         {
@@ -296,7 +302,10 @@ internal static class CliCommands
 
         var settings = new Nanyx.LanguageServer.ServerSettings(
             latinTypeVars ? TypeVarNames.Latin : TypeVarNames.Greek,
-            topLevel.Value);
+            topLevel.Value,
+            LocalTypeHints: !noLocalTypeHints,
+            ParameterTypeHints: !noParameterTypeHints,
+            PatternVariableTypeHints: !noPatternVariableTypeHints);
         Nanyx.LanguageServer.NanyxLanguageServer.RunStdioAsync(settings).GetAwaiter().GetResult();
         return 0;
     }

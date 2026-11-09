@@ -9,8 +9,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Shows the inferred type after the name of each local def, lambda parameter and pattern variable that does not
 /// write its own, read from the document's last compile that was typed, as <c>: int</c>; with
-/// <see cref="TopLevelTypeHints.Inlay"/>, after each such top-level def too. Nothing is shown in a top-level item edited
-/// since that compile.
+/// <see cref="TopLevelTypeHints.Inlay"/>, after each such top-level def too. Each kind of declaration can be turned off
+/// (<see cref="ServerSettings.ShowsInlayHintFor"/>). Nothing is shown in a top-level item edited since that compile.
 /// </summary>
 public sealed class InlayHintHandler : InlayHintsHandlerBase
 {
@@ -38,11 +38,9 @@ public sealed class InlayHintHandler : InlayHintsHandlerBase
             return null;
         }
 
-        var hints = _settings.TopLevelTypeHints == TopLevelTypeHints.Inlay
-            ? TypeHints.inlayHintsWithTopLevel(_settings.TypeVarNames, document.FileName, compiled)
-            : TypeHints.inlayHints(_settings.TypeVarNames, document.FileName, compiled);
         return new InlayHintContainer(
-            hints
+            TypeHints.inlayHintsWithTopLevel(_settings.TypeVarNames, document.FileName, compiled)
+                .Where(hint => _settings.ShowsInlayHintFor(hint.Kind))
                 .Select(hint => ToInlayHint(document, hint))
                 .OfType<InlayHint>()
                 .Where(hint => Contains(request.Range, hint.Position)));

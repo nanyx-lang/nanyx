@@ -9,7 +9,8 @@ from the Nanyx language server.
 - Diagnostics as you type, from the Nanyx compiler running as a language server (`nanyx lsp`).
 - Inferred types on hover, in a lens above each top-level definition that does not write its type,
   and as inlay hints after unannotated locals and parameters. Set `nanyx.topLevelTypeHints` to
-  `inlayHint` to show top-level definitions' types as inlay hints too, instead of lenses, or to `off`. VS Code's
+  `inlayHint` to show top-level definitions' types as inlay hints too, instead of lenses, or to `off`, and the
+  `nanyx.inlayHints.*` settings to turn off the hints for locals, parameters or pattern variables. VS Code's
   `editor.codeLens` and `editor.inlayHints.enabled` settings turn the lenses and hints off; under
   `"[nanyx]": { ... }` they do so for Nanyx files only.
 - Go to definition.
@@ -66,6 +67,12 @@ the extension says so and you can run **Nanyx: Download the compiler** later or 
   default: a lens above it), `inlayHint` (after its name, like `def id: α -> α = { x -> x }`) or
   `off`. The last two start the server with `nanyx lsp --top-level-type-hints inlay` or `off`, which
   compilers before this setting do not understand.
+- `nanyx.inlayHints.localDefinitions`, `nanyx.inlayHints.parameters` and `nanyx.inlayHints.patternVariables`:
+  whether to show inlay hints for the inferred types of local definitions, lambda parameters and the variables
+  patterns bind (all on by default). With `nanyx.topLevelTypeHints` set to `inlayHint` and these three off, only
+  top-level definitions get hints. Turning one off starts the server with `--no-local-type-hints`,
+  `--no-parameter-type-hints` or `--no-pattern-variable-type-hints`, which compilers before these settings do not
+  understand.
 
 Changing any of these restarts the language server.
 

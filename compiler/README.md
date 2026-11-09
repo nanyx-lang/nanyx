@@ -245,7 +245,9 @@ What it does today:
   `AnnotatedSymbols`, and are named together a top-level def at a time, so a hint's `α` is the one in its def's
   lens (see `NyxCompiler.TypeHints`). `nanyx lsp --top-level-type-hints inlay` shows the top-level defs'
   types as inlay hints after their names instead of lenses, and `--top-level-type-hints off` shows
-  neither for them (the default is `lens`). A file that does not type-check shows neither.
+  neither for them (the default is `lens`). `--no-local-type-hints`, `--no-parameter-type-hints` and
+  `--no-pattern-variable-type-hints` turn off the inlay hints for each of the other kinds of declaration. A file
+  that does not type-check shows neither.
 
 Each feature is one handler class in `Nanyx.LanguageServer/Handlers/`, registered in
 `NanyxLanguageServer.Configure`; what is still to come is tracked in

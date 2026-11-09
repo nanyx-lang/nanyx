@@ -14,13 +14,30 @@ namespace Nanyx.LanguageServer;
 /// Where the standard library's source is written for the editor to open; under the user's local application data
 /// when <c>null</c>.
 /// </param>
+/// <param name="LocalTypeHints">Whether to show inlay hints for the inferred types of local defs.</param>
+/// <param name="ParameterTypeHints">Whether to show inlay hints for the inferred types of lambda parameters.</param>
+/// <param name="PatternVariableTypeHints">Whether to show inlay hints for the inferred types of pattern variables.</param>
 public sealed record ServerSettings(
     TypeVarNames TypeVarNames,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
     LinterOptions? Linters = null,
-    StandardLibrarySource? StandardLibrarySource = null)
+    StandardLibrarySource? StandardLibrarySource = null,
+    bool LocalTypeHints = true,
+    bool ParameterTypeHints = true,
+    bool PatternVariableTypeHints = true)
 {
     public static ServerSettings Default { get; } = new(TypeVarNames.Greek);
+
+    /// <summary>Whether an inlay hint is shown for a declaration of <paramref name="kind"/>.</summary>
+    public bool ShowsInlayHintFor(SymbolKind kind) =>
+        kind.Tag switch
+        {
+            SymbolKind.Tags.TopLevelValue => TopLevelTypeHints == TopLevelTypeHints.Inlay,
+            SymbolKind.Tags.LocalValue => LocalTypeHints,
+            SymbolKind.Tags.Parameter => ParameterTypeHints,
+            SymbolKind.Tags.PatternVariable => PatternVariableTypeHints,
+            _ => true
+        };
 
     /// <summary>
     /// The linter options the document at <paramref name="path"/> (<c>null</c> if not on disk) is compiled with, given
