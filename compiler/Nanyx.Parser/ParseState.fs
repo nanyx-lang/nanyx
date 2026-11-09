@@ -15,6 +15,9 @@ type ParseState =
       PendingNames: (Identifier * SourceSpan) list
       /// How many lambdas the parser is inside.
       LambdaDepth: int
+      /// When the next operand parsed is the argument a shorthand lambda's body leaves out (`{ % 2 == 0 }`), the
+      /// span it is given: that of the operator, or the `.`, written in its place.
+      ImplicitArgumentNext: SourceSpan option
       /// The text of each `module name =` block parsed so far, with the block's name.
       ModuleBlocks: (ModuleName * SourceSpan) list
       /// The furthest workflow keyword applied to a value, where it is and what to say about it. It is a cell
@@ -32,6 +35,7 @@ module ParseState =
         { Declared = Map.empty
           PendingNames = []
           LambdaDepth = 0
+          ImplicitArgumentNext = None
           ModuleBlocks = []
           WorkflowKeyword = ref None
           Comments = []

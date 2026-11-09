@@ -57,6 +57,11 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         var wordStart = CompletionContext.WordStart(text, cursor);
+        if (CompletionContext.StartsShorthandMember(text, wordStart))
+        {
+            return ShorthandMembers(document, wordStart);
+        }
+
         if (CompletionContext.MemberPath(text, wordStart) is { } path)
         {
             return Members(document, path, wordStart - 1 - string.Join('.', path).Length);
@@ -167,18 +172,34 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         return new CompletionList(
-            Completion.membersAt(_settings.TypeVarNames, compiled, offset, ListModule.OfSeq(path))
-                .Select(member => new CompletionItem
-                {
-                    Label = member.Name,
-                    Kind = member.Kind.IsField ? CompletionItemKind.Field
-                        : member.Kind.IsProperty ? CompletionItemKind.Property
-                        : member.Kind.IsPrefix ? CompletionItemKind.Module
-                        : member.IsFunction ? CompletionItemKind.Function
-                        : CompletionItemKind.Variable,
-                    Detail = member.Type?.Value
-                }));
+            Completion.membersAt(_settings.TypeVarNames, compiled, offset, ListModule.OfSeq(path)).Select(MemberItem));
     }
+
+    /// <summary>
+    /// What can follow the dot that starts a shorthand lambda's body at <paramref name="wordStart"/> (see
+    /// <see cref="Completion.implicitArgumentMembersAt"/>): the members of the lambda's argument.
+    /// </summary>
+    private CompletionList ShorthandMembers(OpenDocument document, int wordStart)
+    {
+        if (document.LastGood?.Compiled is not { } compiled || document.NearestInLastGood(wordStart) is not { } offset)
+        {
+            return new CompletionList();
+        }
+
+        return new CompletionList(
+            Completion.implicitArgumentMembersAt(_settings.TypeVarNames, compiled, offset).Select(MemberItem));
+    }
+
+    private static CompletionItem MemberItem(Completion.Member member) => new()
+    {
+        Label = member.Name,
+        Kind = member.Kind.IsField ? CompletionItemKind.Field
+            : member.Kind.IsProperty ? CompletionItemKind.Property
+            : member.Kind.IsPrefix ? CompletionItemKind.Module
+            : member.IsFunction ? CompletionItemKind.Function
+            : CompletionItemKind.Variable,
+        Detail = member.Type?.Value
+    };
 
     /// <summary>
     /// What a pipe can call (see <see cref="Completion.pipeTargetsAt"/>): the definitions attached to the type of

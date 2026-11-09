@@ -51,6 +51,23 @@ let ``Run - a pipe passes its value in front of several arguments`` () =
     runSource source |> assertRan "123\n1123\n"
 
 [<Fact>]
+let ``Run - shorthand lambdas filter, map and fold a list`` () =
+    // `{ % 2 == 0 }` is `{ x -> x % 2 == 0 }`: the body goes on after the operation on the left-out argument.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n" +
+        "def x = 100\n" +
+        "\n" +
+        "def items2 = items \\filter { % 2 == 0 }\n" +
+        "\n" +
+        "for items2 | i -> println(\"{i}\")\n" +
+        "for items \\filter { > 8 } \\map { * x + 1 } | i -> println(\"{i}\")\n" +
+        "println(\"{items \\fold(0) { + }}\")\n" +
+        "println(\"{[\"a\", \"\", \"bc\"] \\filter { != \"\" } \\map { .length } \\fold(0) { + }}\")\n"
+    runSource source |> assertRan "2\n4\n6\n8\n10\n901\n1001\n55\n3\n"
+
+[<Fact>]
 let ``Run - a function takes positional and named arguments together, called or piped into`` () =
     let source =
         "import nanyx/console\n" +

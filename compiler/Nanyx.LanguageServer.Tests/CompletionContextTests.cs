@@ -74,6 +74,29 @@ public sealed class CompletionContextTests
     public void There_is_no_path_where_the_word_follows_no_dot_or_no_name(string marked) =>
         Assert.Null(MemberPathAt(marked));
 
+    /// <summary>Whether the word at <c>|</c> in <paramref name="marked"/> follows the dot that starts a shorthand lambda.</summary>
+    private static bool StartsShorthandMemberAt(string marked)
+    {
+        var cursor = marked.IndexOf('|');
+        var text = marked.Remove(cursor, 1);
+        return CompletionContext.StartsShorthandMember(text, CompletionContext.WordStart(text, cursor));
+    }
+
+    [Theory]
+    [InlineData("def a = xs \\map { .|")]
+    [InlineData("def a = xs \\map {.na|")]
+    [InlineData("def a = xs \\filter {  .na| > 18 }")]
+    public void A_dot_that_starts_a_lambda_is_a_member_of_its_argument(string marked) =>
+        Assert.True(StartsShorthandMemberAt(marked));
+
+    [Theory]
+    [InlineData("def a = p.|")]
+    [InlineData("def a = { p.|")]
+    [InlineData("def a = 1 -- { .|")]
+    [InlineData("def a = '{ .|'")]
+    public void Any_other_dot_does_not_start_a_shorthand_lambda(string marked) =>
+        Assert.False(StartsShorthandMemberAt(marked));
+
     /// <summary>The names piped into the word at <c>|</c> in <paramref name="marked"/>, dot-separated.</summary>
     private static string? PipedPathAt(string marked)
     {

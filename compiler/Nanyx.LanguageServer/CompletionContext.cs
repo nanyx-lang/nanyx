@@ -122,6 +122,21 @@ public static class CompletionContext
     }
 
     /// <summary>
+    /// Whether the word at <paramref name="wordStart"/> follows a dot that starts a shorthand lambda's body, as
+    /// <c>name</c> does in <c>{ .name }</c>: a member of the lambda's argument.
+    /// </summary>
+    public static bool StartsShorthandMember(string text, int wordStart)
+    {
+        if (wordStart == 0 || text[wordStart - 1] != '.')
+        {
+            return false;
+        }
+
+        var before = text[..(wordStart - 1)].TrimEnd(' ', '\t');
+        return before.EndsWith('{') && IsCode(text, wordStart);
+    }
+
+    /// <summary>
     /// The names written before the dot that the word at <paramref name="wordStart"/> follows: <c>p</c> for
     /// <c>p.x</c>, <c>p</c> and <c>inner</c> for <c>p.inner.x</c>. <c>null</c> if the word does not follow a dot,
     /// the dot is not in code, or what is before it is not a name or a dotted name (a number, a call's result, a

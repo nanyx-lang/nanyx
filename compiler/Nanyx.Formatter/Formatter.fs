@@ -307,6 +307,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         match e.Kind with
         | LiteralExpr literal -> literalDoc e.Span literal
         | UnitExpr -> text "()"
+        | IdentifierExpr n when n = implicitArgument -> Doc.empty
         | IdentifierExpr n -> text n
         | BinaryOp(op, l, r) ->
             match spreadSegments e with
@@ -422,14 +423,18 @@ let format (options: Options) (parsed: SourceModule) : string =
                 else (if index = 0 then p else p + 1)
             expr { position with Tail = isLast && position.Tail; Prec = prec } operand
         let docs = List.mapi operandDoc operands
+        // A shorthand lambda's implicit argument, the first operand, is printed as nothing, and so is the space after it.
+        let leftOut index = index = 0 && (List.head operands).Kind = IdentifierExpr implicitArgument
         if position.Inline then
             List.zip (List.take (count - 1) docs) operators
-            |> List.collect (fun (doc, operator) -> [ doc; text $" {operator} " ])
+            |> List.mapi (fun index (doc, operator) -> if leftOut index then [ text $"{operator} " ] else [ doc; text $" {operator} " ])
+            |> List.concat
             |> fun parts -> cat (parts @ [ List.last docs ])
         else
             let items =
                 List.zip (List.take (count - 1) docs) operators
-                |> List.collect (fun (doc, operator) -> [ cat [ doc; text $" {operator}" ]; Doc.line ])
+                |> List.mapi (fun index (doc, operator) -> [ (if leftOut index then text operator else cat [ doc; text $" {operator}" ]); Doc.line ])
+                |> List.concat
             nest (Fill(items @ [ List.last docs ]))
 
     /// `[a, ...xs, b]` is parsed as `[a] ++ xs ++ [b]`, the list runs spanning the whole literal. The segments, each a
@@ -567,18 +572,17 @@ let format (options: Options) (parsed: SourceModule) : string =
                 // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
                 Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
 
-    /// The shorthand lambdas the parser expands, made up at the span of the whole lambda: `{ }`, `{ * }`, `{ * 2 }`,
-    /// `{ .name }` and `{ | pattern -> ... }`.
+    /// The shorthand lambdas the parser expands: `{ }`, `{ * }`, a body that leaves out its first operand (`{ * 2 }`,
+    /// `{ .name }`, which the implicit argument is printed as nothing in), and `{ | pattern -> ... }`.
     and shorthand (e: Expression) parameters (body: Expression) : Doc option =
         let made (x: Expression) = valid e.Span && x.Span = e.Span
         match parameters, body.Kind with
         | [], UnitExpr when made body -> Some(text "{ }")
-        | [ ("x", None); ("y", None) ], BinaryOp(op, l, r) when made body && made l && made r && l.Kind = IdentifierExpr "x" && r.Kind = IdentifierExpr "y" ->
+        | [ (first, None); (second, None) ], BinaryOp(op, l, r) when
+            first = implicitArgument && second = implicitSecondArgument && l.Kind = IdentifierExpr first && r.Kind = IdentifierExpr second ->
             Some(text $"{{ {op} }}")
-        | [ ("x", None) ], BinaryOp(op, l, right) when made body && made l && l.Kind = IdentifierExpr "x" ->
-            Some(cat [ text $"{{ {op} "; expr operandPosition right; text " }" ])
-        | [ ("x", None) ], MemberAccess(target, field, None) when made body && made target && target.Kind = IdentifierExpr "x" ->
-            Some(text $"{{ .{field} }}")
+        | [ (only, None) ], _ when only = implicitArgument ->
+            Some(Doc.group (cat [ text "{ "; nest (expr full body); Doc.line; text "}" ]))
         | _, Match(scrutinees, arms) when
             made body
             && not parameters.IsEmpty

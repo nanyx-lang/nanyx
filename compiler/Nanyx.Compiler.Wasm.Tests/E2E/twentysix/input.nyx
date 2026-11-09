@@ -1,0 +1,8 @@
+-- A shorthand lambda: the body goes on after the operation on the left-out argument
+def items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+def main = {
+  for items \filter { % 2 == 0 } | i -> dbg(i)
+}
+
+main()

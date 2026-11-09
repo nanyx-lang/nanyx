@@ -125,6 +125,24 @@ let ``After a value's name come the fields of its record, followed through the p
     Assert.Empty(members "v }" [ "v" ])
 
 [<Fact>]
+let ``After the dot that starts a shorthand lambda come the members of its argument`` () =
+    let source =
+        "def name: (name: string, age: int) -> string = { .name }\n" +
+        "def size: string -> int = { .length }\n" +
+        "def person = (name = \"a\", age = 3)\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let members at =
+        Completion.implicitArgumentMembersAt Greek result (offsetOf source at 0 0)
+        |> List.map (fun item -> item.Name, item.Kind, item.Type)
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "age", Completion.Field, Some "int"; "name", Completion.Field, Some "string" ], members "name }")
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "length", Completion.Property, Some "int" ], members "length }")
+    // Outside a shorthand lambda there is no argument to complete.
+    Assert.Empty(members "person")
+
+[<Fact>]
 let ``After an import's alias come its exports, and after a prefix the names under it`` () =
     withTempDir (fun dir ->
         let modulePath = Path.Combine(dir, "mod.nyx")

@@ -61,6 +61,24 @@ let ``Typecheck supports match shorthand lambda`` () =
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
 
 [<Fact>]
+let ``Typecheck infers a shorthand lambda's argument from the operators applied to it`` () =
+    let source =
+        "def suffix = \"!\"\n" +
+        "def isEven = { % 2 == 0 }\n" +
+        "def shout = { ++ suffix }\n" +
+        "def add = { + }\n" +
+        "def even = isEven(4)\n" +
+        "def loud = shout(\"hi\")\n" +
+        "def sum = add(1, 2)\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let typed = result.Typed.Value
+    Assert.Equal(TyPrimitive "bool", typed.Types.["even"])
+    // `suffix` is the def around the lambda: the lambda's argument cannot be named, so it never shadows one.
+    Assert.Equal(TyPrimitive "string", typed.Types.["loud"])
+    Assert.Equal(TyPrimitive "int", typed.Types.["sum"])
+
+[<Fact>]
 let ``Typecheck records typed match patterns`` () =
     let source =
         "def result = match 1\n" +
