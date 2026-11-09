@@ -185,9 +185,9 @@ and Pattern =
     | PFields of (int * Pattern) list
     /// A string equal to this literal.
     | PString of string
-    /// A value that compares by the operator to what this expression computes, each time the arm is tested:
-    /// `| { >= limit * 2 } ->`.
-    | PGuard of string * Expr
+    /// A value for which this expression, a guard's predicate inlined, computes true each time the arm is tested, with
+    /// the value in the variable: `| { >= limit * 2 } ->`.
+    | PGuard of Var * Expr
     /// A list whose first elements match these patterns, and the rest of which matches the last pattern if there is
     /// one, or is empty if not.
     | PList of Pattern list * Pattern option
@@ -251,7 +251,7 @@ module Print =
             let shown = fields |> List.map (fun (slot, inner) -> $"{slot}: {pattern indent inner}") |> String.concat ", "
             $"({shown})"
         | PString value -> $"\"{value}\""
-        | PGuard(op, guard) -> $"{op} {expr indent guard}"
+        | PGuard(v, guard) -> $"{{ {v.Name} -> {expr indent guard} }}"
         | PList(elements, rest) ->
             let shown = elements |> List.map (pattern indent)
             let shownRest = rest |> Option.map (fun r -> [ $"...{pattern indent r}" ]) |> Option.defaultValue []

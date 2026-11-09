@@ -360,12 +360,6 @@ let private parenArguments =
 /// handles names handles it; the type checker reports it as not implemented.
 let notImplemented = "???"
 
-/// The parameters of a shorthand lambda: the operand its body leaves out (`{ * 2 }`, `{ .name }`), or the two
-/// operands of an operator written alone (`{ + }`). Like `???`, they are names no code can write, so a shorthand
-/// lambda never captures a name the code around it declares.
-let implicitArgument = "<arg>"
-let implicitSecondArgument = "<arg2>"
-
 let private notImplementedExpr =
     spanned (pstring notImplemented >>% IdentifierExpr notImplemented)
 
@@ -1168,7 +1162,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         | BinaryOp(op, left, right) -> BinaryOp(op, rewrite left, rewrite right)
         | Pipe(value, funcName, range, args) -> Pipe(rewrite value, rewriteName funcName, range, args |> List.map rewrite)
         | Block statements -> Block (statements |> List.map (fun statement -> { statement with Kind = rewriteStatement statement.Kind }))
-        | Match(values, arms) -> Match(values |> List.map rewrite, arms |> List.map (fun (patterns, body) -> patterns, rewrite body))
+        | Match(values, arms) -> Match(values |> List.map rewrite, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions rewrite), rewrite body))
         | TupleExpr items -> TupleExpr (items |> List.map rewrite)
         | RecordExpr fields ->
             RecordExpr (

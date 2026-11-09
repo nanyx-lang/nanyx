@@ -214,6 +214,16 @@ let ``Names the compiler makes up are not reported`` () =
     Assert.Empty(unusedIn source)
 
 [<Fact>]
+let ``A name used only in a guard pattern's predicate is used`` () =
+    let source =
+        "def size: int, int -> string = { n, limit ->\n" +
+        "  match n\n" +
+        "    | { x -> x > limit } -> \"big\"\n" +
+        "    | _ -> \"small\"\n" +
+        "}\n"
+    Assert.Empty(unusedIn source)
+
+[<Fact>]
 let ``The fix for an unused local def removes its line, with a comment after it`` () =
     let source = "def total = { x ->\n  def y = 1\n  def taxRate = 0.2 -- the rate\n  x + y\n}\n"
     let text, title = fixed' source

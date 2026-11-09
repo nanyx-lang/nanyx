@@ -1656,12 +1656,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | LiteralPattern literal ->
                     let constrained = addConstraint scrutineeTy (literalType literal) state'
                     Ok (env', constrained, mkTypedPattern pattern scrutineeTy)
-                | GuardPattern(_, guardExpr) ->
-                    match inferExpr env' state' guardExpr with
-                    | Ok (guardTyped, nextState) ->
-                        let constrained = addConstraint scrutineeTy guardTyped.Type nextState
-                        Ok (env', constrained, mkTypedPattern pattern scrutineeTy)
-                    | Error err -> Error err
+                // A predicate on the value matched. It sees what is in scope at the match, not what its own arm binds:
+                // an arm's names are bound only once all its patterns have matched.
+                | GuardPattern predicate ->
+                    match predicate.Kind with
+                    | Lambda([ argument ], body) ->
+                        inferLambdaWithExpected env state' predicate [ argument ] body (Some scrutineeTy) (Some (primitiveType "bool"))
+                        |> recordExprType
+                        |> Result.map (fun (_, nextState) -> env', nextState, mkTypedPattern pattern scrutineeTy)
+                    | _ ->
+                        Error [
+                            Diagnostics.at
+                                DiagnosticCodes.GuardNotAPredicate
+                                predicate.Span
+                                "A guard pattern is a predicate on the value matched, a lambda of one parameter such as `{ < 0 }` or `{ x -> x % 2 == 0 }`" ]
                 | RangePattern(startExpr, endExpr) ->
                     match inferExpr env' state' startExpr with
                     | Error err -> Error err

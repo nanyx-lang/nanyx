@@ -72,6 +72,14 @@ let ``Shorthand lambdas are printed as written`` () =
     unchanged "def k = { -> -1 }\n"
 
 [<Fact>]
+let ``Guard patterns are printed as written`` () =
+    unchanged (lines [ "def f = { n ->"; "  match n"; "    | { < 0 } -> 0"; "    | { % 2 == 0 } -> 1"; "    | { x -> x > limit * 2 } -> 2"; "    | > 5 -> 3"; "    | _ -> 4"; "}" ])
+    unchanged (lines [ "def g = {"; "  | (0, { .length > 5 }) -> 1"; "  | #some({ >= 2 }) -> 2"; "  | [{ % 2 == 0 }, ...] -> 3"; "  | _ -> 4"; "}" ])
+    Assert.Equal(
+        lines [ "def h = {"; "  | { .length > 5 } -> 1"; "  | >= 2 -> 2"; "  | _ -> 3"; "}" ],
+        format (lines [ "def h = {"; "  | {.length>5} -> 1"; "  | >=   2 -> 2"; "  | _ -> 3"; "}" ]))
+
+[<Fact>]
 let ``A shorthand lambda's spacing is tidied`` () =
     Assert.Equal("def a = xs \\map { * 2 }\n", format "def a = xs \\map {   *   2   }")
     Assert.Equal("def b = { .name }\n", format "def b = {.name}")

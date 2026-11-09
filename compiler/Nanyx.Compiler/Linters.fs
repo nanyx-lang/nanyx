@@ -76,8 +76,8 @@ module private SyntaxTree =
         | UseValue value
         | UseContextInstance(_, value) -> value
 
-    /// The expressions directly within `expr`, and the statements of it if it is a block. What patterns and types
-    /// hold is left out: they hold no blocks.
+    /// The expressions directly within `expr`, and the statements of it if it is a block: a guard's predicate among
+    /// them. What types hold is left out: they hold no blocks.
     let childrenOf (expr: Expression) : Expression list * Statement list =
         match expr.Kind with
         | LiteralExpr _
@@ -92,7 +92,7 @@ module private SyntaxTree =
         | BinaryOp(_, left, right) -> [ left; right ], []
         | Pipe(value, _, _, args) -> value :: args, []
         | Block statements -> [], statements
-        | Match(values, arms) -> values @ (arms |> List.map snd), []
+        | Match(values, arms) -> values @ Pattern.armExpressions arms @ (arms |> List.map snd), []
         | RecordExpr fields -> fields |> List.map (function NamedField(_, value) | PositionalField value -> value), []
         | TagExpr(_, payload) -> Option.toList payload, []
         | IfExpr(condition, ifTrue, ifFalse) -> [ condition; ifTrue; ifFalse ], []

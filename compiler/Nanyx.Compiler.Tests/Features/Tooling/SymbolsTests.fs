@@ -51,6 +51,15 @@ let ``Names refer to the variables patterns bind`` () =
     Assert.Equal(Some (PatternVariable, offsetOf source "v)" 0 0), resolvesTo source (offsetOf source "then v" 0 5))
 
 [<Fact>]
+let ``Names in a guard pattern's predicate refer to its parameter and to what is in scope at the match`` () =
+    let source =
+        "def size = { n, limit -> match n\n" +
+        "  | { x -> x > limit * 2 } -> 2\n" +
+        "  | _ -> 0 }\n"
+    Assert.Equal(Some (Parameter, offsetOf source "{ x" 0 2), resolvesTo source (offsetOf source "x >" 0 0))
+    Assert.Equal(Some (Parameter, offsetOf source "limit" 0 0), resolvesTo source (offsetOf source "limit *" 0 0))
+
+[<Fact>]
 let ``The nearest declaration of a name wins`` () =
     let source =
         "def x = 1\n" +

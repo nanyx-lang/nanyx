@@ -85,7 +85,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | ListPattern(ps, rest) -> ListPattern(List.map pattern ps, Option.map pattern rest)
             | ListSplatMiddle(before, after) -> ListSplatMiddle(List.map pattern before, List.map pattern after)
             | RangePattern(a, b) -> RangePattern(expr a, expr b)
-            | GuardPattern(op, value) -> GuardPattern(op, expr value)
+            | GuardPattern predicate -> GuardPattern(expr predicate)
             | TagPattern(n, payload) -> TagPattern(n, Option.map pattern payload)
         { p with Kind = kind }
 

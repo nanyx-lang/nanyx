@@ -226,7 +226,7 @@ and private expressionsOfPattern (pattern: Pattern) =
     | ListPattern (patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressionsOfPattern
     | ListSplatMiddle (before, after) -> (before @ after) |> List.collect expressionsOfPattern
     | RangePattern (low, high) -> expressions low @ expressions high
-    | GuardPattern (_, value) -> expressions value
+    | GuardPattern predicate -> expressions predicate
     | TagPattern (_, payload) -> payload |> Option.toList |> List.collect expressionsOfPattern
 
 and private expressionsOfType (typeExpr: TypeExpr) =

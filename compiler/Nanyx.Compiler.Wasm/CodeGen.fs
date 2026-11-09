@@ -194,7 +194,7 @@ let private exprChildren (expr: Expression) : Expression list =
         |> List.map (function
             | NamedField(_, value) -> value
             | PositionalField value -> value)
-    | Match(values, arms) -> values @ (arms |> List.map snd)
+    | Match(values, arms) -> values @ Pattern.armExpressions arms @ (arms |> List.map snd)
     | UseIn(_, body) -> [ body ]
     | MemberAccess(inner, _, _) -> [ inner ]
     | TagExpr(_, payload) -> Option.toList payload
@@ -248,7 +248,7 @@ let rec private existsExpr (predicate: Expression -> bool) (expr: Expression) : 
                | NamedField(_, value) -> recurse value
                | PositionalField value -> recurse value)
        | Match(values, arms) ->
-           (values |> List.exists recurse) || (arms |> List.exists (fun (_, armExpr) -> recurse armExpr))
+           (values @ Pattern.armExpressions arms |> List.exists recurse) || (arms |> List.exists (fun (_, armExpr) -> recurse armExpr))
        | UseIn(_, body) -> recurse body
        | MemberAccess(inner, _, _) -> recurse inner
        | TagExpr(_, payload) -> payload |> Option.exists recurse
@@ -293,7 +293,7 @@ let rec private containsDbgCallExpr (expr: Expression) : bool =
             | NamedField(_, value) -> containsDbgCallExpr value
             | PositionalField value -> containsDbgCallExpr value)
     | Match(values, arms) ->
-        (values |> List.exists containsDbgCallExpr)
+        (values @ Pattern.armExpressions arms |> List.exists containsDbgCallExpr)
         || (arms |> List.exists (fun (_, armExpr) -> containsDbgCallExpr armExpr))
     | UseIn(_, body) -> containsDbgCallExpr body
     | MemberAccess(inner, _, _) -> containsDbgCallExpr inner
@@ -334,7 +334,7 @@ let rec private usesHeapAllocationExpr (expr: Expression) : bool =
     | Lambda(_, body) -> usesHeapAllocationExpr body
     | Pipe(value, _, _, args) -> usesHeapAllocationExpr value || (flattenCallArgs args |> List.exists usesHeapAllocationExpr)
     | Match(values, arms) ->
-        (values |> List.exists usesHeapAllocationExpr)
+        (values @ Pattern.armExpressions arms |> List.exists usesHeapAllocationExpr)
         || (arms |> List.exists (fun (_, armExpr) -> usesHeapAllocationExpr armExpr))
     | UseIn(_, body) -> usesHeapAllocationExpr body
     | MemberAccess(inner, _, _) -> usesHeapAllocationExpr inner
@@ -383,7 +383,7 @@ let rec private collectDbgTagNamesExpr (expr: Expression) : string list =
             | NamedField(_, value) -> collectDbgTagNamesExpr value
             | PositionalField value -> collectDbgTagNamesExpr value)
     | Match(values, arms) ->
-        let valueTags = values |> List.collect collectDbgTagNamesExpr
+        let valueTags = values @ Pattern.armExpressions arms |> List.collect collectDbgTagNamesExpr
         let armTags = arms |> List.collect (fun (_, armExpr) -> collectDbgTagNamesExpr armExpr)
         valueTags @ armTags
     | UseIn(_, body) -> collectDbgTagNamesExpr body
@@ -456,7 +456,7 @@ and private collectStringLiteralsPattern (pattern: Pattern) : string list =
         @ (afterPatterns |> List.collect collectStringLiteralsPattern)
     | RecordPattern(_, patterns) -> patterns |> List.collect collectStringLiteralsPattern
     | RecordMemberPattern members -> members |> List.collect (fun (_, p) -> collectStringLiteralsPattern p)
-    | GuardPattern(_, value)
+    | GuardPattern value
     | RangePattern(value, _) -> collectStringLiteralsExpr value
     | TagPattern(_, None)
     | LiteralPattern _
@@ -509,7 +509,7 @@ let rec private collectDbgTagPayloadNamesExpr (expr: Expression) : string list =
             | NamedField(_, value) -> collectDbgTagPayloadNamesExpr value
             | PositionalField value -> collectDbgTagPayloadNamesExpr value)
     | Match(values, arms) ->
-        let valueTags = values |> List.collect collectDbgTagPayloadNamesExpr
+        let valueTags = values @ Pattern.armExpressions arms |> List.collect collectDbgTagPayloadNamesExpr
         let armTags = arms |> List.collect (fun (_, armExpr) -> collectDbgTagPayloadNamesExpr armExpr)
         valueTags @ armTags
     | UseIn(_, body) -> collectDbgTagPayloadNamesExpr body
@@ -563,7 +563,7 @@ let rec private containsRegularDbgExpr (expr: Expression) : bool =
             | NamedField(_, value) -> containsRegularDbgExpr value
             | PositionalField value -> containsRegularDbgExpr value)
     | Match(values, arms) ->
-        (values |> List.exists containsRegularDbgExpr)
+        (values @ Pattern.armExpressions arms |> List.exists containsRegularDbgExpr)
         || (arms |> List.exists (fun (_, armExpr) -> containsRegularDbgExpr armExpr))
     | UseIn(_, body) -> containsRegularDbgExpr body
     | MemberAccess(value, _, _) -> containsRegularDbgExpr value
@@ -612,7 +612,7 @@ and private containsDbgStringLiteralExpr (expr: Expression) : bool =
             | NamedField(_, value) -> containsDbgStringLiteralExpr value
             | PositionalField value -> containsDbgStringLiteralExpr value)
     | Match(values, arms) ->
-        (values |> List.exists containsDbgStringLiteralExpr)
+        (values @ Pattern.armExpressions arms |> List.exists containsDbgStringLiteralExpr)
         || (arms |> List.exists (fun (_, armExpr) -> containsDbgStringLiteralExpr armExpr))
     | UseIn(_, body) -> containsDbgStringLiteralExpr body
     | MemberAccess(value, _, _) -> containsDbgStringLiteralExpr value
@@ -703,7 +703,7 @@ and private collectTagNamesPattern (pattern: Pattern) : string list =
         @ (afterPatterns |> List.collect collectTagNamesPattern)
     | RecordPattern(_, patterns) -> patterns |> List.collect collectTagNamesPattern
     | RecordMemberPattern members -> members |> List.collect (fun (_, p) -> collectTagNamesPattern p)
-    | GuardPattern(_, value)
+    | GuardPattern value
     | RangePattern(value, _) -> collectTagNamesExpr value
     | LiteralPattern _
     | IdentifierPattern _

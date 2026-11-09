@@ -92,6 +92,19 @@ let ``Hover shows the type of literals, locals, parameters, calls and lambdas`` 
     Assert.Equal(Some "int -> int", hoverType source (offsetOf source "double(" 0 1))
 
 [<Fact>]
+let ``Hover inside a guard pattern shows the predicate's types`` () =
+    let source =
+        "def size: string -> int = { s ->\n" +
+        "  match s\n" +
+        "    | { .length > 5 } -> 2\n" +
+        "    | { x -> x == \"\" } -> 1\n" +
+        "    | _ -> 0\n" +
+        "}\n"
+    Assert.Equal(Some "string -> bool", hoverType source (offsetOf source "{ ." 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "length" 0 0))
+    Assert.Equal(Some "string", hoverType source (offsetOf source "x ==" 0 0))
+
+[<Fact>]
 let ``Hover on a declaration's name shows the type of what it declares`` () =
     let source =
         "def id = { x -> x }\n" +

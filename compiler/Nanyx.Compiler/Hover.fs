@@ -24,7 +24,7 @@ let rec private children (expr: Expression) : Expression list =
     | Pipe(value, _, _, args) -> value :: args
     | Block statements -> statements |> List.collect statementExpressions
     | Match(values, arms) ->
-        values @ (arms |> List.collect (fun (patterns, armExpr) -> (patterns |> List.collect patternExpressions) @ [ armExpr ]))
+        values @ (arms |> List.collect (fun (patterns, armExpr) -> (patterns |> List.collect Pattern.expressions) @ [ armExpr ]))
     | TupleExpr items
     | ListExpr items -> items
     | RecordExpr fields ->
@@ -49,22 +49,6 @@ and private bindingExpression (binding: UseBinding) =
     match binding with
     | UseValue value
     | UseContextInstance(_, value) -> value
-
-and private patternExpressions (pattern: Pattern) : Expression list =
-    match pattern.Kind with
-    | RangePattern(low, high) -> [ low; high ]
-    | GuardPattern(_, value) -> [ value ]
-    | TuplePattern items
-    | RecordPattern(_, items) -> items |> List.collect patternExpressions
-    | RecordMemberPattern members -> members |> List.collect (snd >> patternExpressions)
-    | ListPattern(items, rest) -> (items @ Option.toList rest) |> List.collect patternExpressions
-    | ListSplatMiddle(before, after) -> (before @ after) |> List.collect patternExpressions
-    | TagPattern(_, payload) -> payload |> Option.toList |> List.collect patternExpressions
-    | LiteralPattern _
-    | IdentifierPattern _
-    | WildcardPattern
-    | UnitPattern
-    | ElsePattern -> []
 
 let rec private topLevelExpressions (item: TopLevelItem) : Expression list =
     match item.Kind with
