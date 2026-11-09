@@ -174,6 +174,12 @@ Before running a program with deferred errors, `run` says so in one line after t
 
 Every one of these still refuses an error that is not deferred.
 
+**Exit status.** Deferred errors do not change it. A debug run exits with the program's own status: 0 if it never
+reaches a deferred error and ends normally, 1 if it reaches one. A debug `build` or `wasm` that writes a program
+exits with 0. The exit status says how the run or the build went, and the diagnostics say whether the program
+type-checks. A script or CI job that must not pass on a program with errors uses `--release`, or `nanyx check`,
+which exits with 1 on any error.
+
 When there is a test runner, it should run every test in a debug build: a test that reaches a deferred error fails
 with that error's message, and the others pass or fail on their own merits. This is what makes the feature useful
 for red-green iteration.
@@ -201,10 +207,6 @@ for red-green iteration.
 
 ## Open questions
 
-- **Exit status.** A debug run that never reaches a deferred error exits with the program's own status, for now, and
-  a debug build that writes a program exits with 0. That is honest about the run, but makes it easy for a script or
-  CI job to pass on a program that does not type-check: CI should use `--release`, or `nanyx check`. Should a debug
-  build or run with errors exit non-zero instead?
 - **Blame.** With constraints solved together, the error is reported at whichever constraint fails, which is not
   always the expression the programmer got wrong. The trap is at the same place as the diagnostic, so it is
   consistent, but it may trap later (or earlier) than the real mistake. Is that acceptable, or does deferral want
