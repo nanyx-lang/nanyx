@@ -209,6 +209,13 @@ def divide: (int, int) -> Result(int, #divideByZero) = {
   | x, y -> #some(x / y)
 }
 
+-- Each arm has a pattern for each argument, except a lone `else`, which matches whatever they all are
+def quadrant: (int, int) -> string = {
+  | 0, 0 -> "origin"
+  | 0, _ -> "on the y axis"
+  | else -> "elsewhere"
+}
+
 -- Pattern matching with guards
 def classify: int -> string = {
   | 0 -> "zero"

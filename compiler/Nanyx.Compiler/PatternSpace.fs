@@ -7,6 +7,15 @@ open Parser.Program
 /// with a splat in the middle) is taken to match no value for sure, so neither ever reports something on its account
 /// that might not be so.
 module PatternSpace =
+    /// The patterns of an arm of a match on `valueCount` values. A lone `else` is the arm for anything else, whatever
+    /// every value is, so in a match on several values it stands for a catch-all at each position: one `else` per
+    /// value, each written where the `else` is. Any other arm is as written.
+    let ofArm (valueCount: int) (patterns: Pattern list) : Pattern list =
+        match patterns with
+        | [ Kind ElsePattern as orElse ] when valueCount > 1 ->
+            orElse :: List.init (valueCount - 1) (fun _ -> Pattern.at orElse.Span ElsePattern)
+        | _ -> patterns
+
     /// Whether `pattern` matches every value of its type. `(a, _)` matches every tuple: a tuple pattern is irrefutable
     /// when each element is. So is a record pattern (`$Money(pence)`, `(x = a)`) whose parts all are: the type says the
     /// value has that shape.

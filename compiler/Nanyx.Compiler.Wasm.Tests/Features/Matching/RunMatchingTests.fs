@@ -183,3 +183,18 @@ let ``Run - or-patterns in match arms`` () =
         "println(size(1) ++ \" \" ++ size(2) ++ \" \" ++ size(9))\n" +
         "println(axis(0, 5) ++ \" \" ++ axis(5, 0) ++ \" \" ++ axis(3, 3))\n"
     runSource source |> assertRan "weekend weekend weekday\nsmall small big\naxis axis plane\n"
+
+[<Fact>]
+let ``Run - a lone else in a match on several values`` () =
+    // A lone `else` used to crash type checking in a match on several values.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def describe: int, int -> string = { x, y ->\n" +
+        "  match x, y\n" +
+        "    | 0, 0 -> \"origin\"\n" +
+        "    | 0, _ -> \"on the y axis\"\n" +
+        "    | else -> \"elsewhere\"\n" +
+        "}\n" +
+        "println(describe(0, 0) ++ \", \" ++ describe(0, 5) ++ \", \" ++ describe(3, 4))\n"
+    runSource source |> assertRan "origin, on the y axis, elsewhere\n"

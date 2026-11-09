@@ -209,3 +209,46 @@ let ``A match on an alias of a tag union is checked for exhaustiveness`` () =
         "  | #found(n) -> n }\n"
     let result = Compiler.compile source
     Assert.Contains(result.Diagnostics, fun diag -> diag.Message.Contains "missing tags: missing")
+
+/// The text `span` covers in `source`.
+let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
+
+[<Fact>]
+let ``A lone else in a match on several values matches whatever they all are`` () =
+    let source =
+        "def describe: int, int -> string = { x, y ->\n" +
+        "  match x, y\n" +
+        "    | 0, 0 -> \"origin\"\n" +
+        "    | 0, _ -> \"on the y axis\"\n" +
+        "    | else -> \"elsewhere\"\n" +
+        "}\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``An arm with a pattern count other than the values' is an error at the arm`` () =
+    // It used to throw from inside type checking instead.
+    let tooFew = "def f: int, int -> int = { x, y ->\n  match x, y\n    | 0, 0 -> 1\n    | _ -> 2\n}\n"
+    let diagnostic = Assert.Single((Compiler.compile tooFew).Diagnostics)
+    Assert.Equal(DiagnosticCodes.WrongPatternCount.Code, diagnostic.Code)
+    Assert.Equal(
+        "This arm has 1 pattern, but the match is on 2 values: an arm needs a pattern for each value, or a lone `else` for anything else",
+        diagnostic.Message)
+    Assert.Equal("_", textOf tooFew diagnostic.Span.Value)
+    let tooMany = "def f: int, int -> int = { x, y ->\n  match x, y\n    | 1, 2, 3 -> 1\n    | else -> 2\n}\n"
+    let diagnostic = Assert.Single((Compiler.compile tooMany).Diagnostics)
+    Assert.Equal(DiagnosticCodes.WrongPatternCount.Code, diagnostic.Code)
+    Assert.StartsWith("This arm has 3 patterns, but the match is on 2 values", diagnostic.Message)
+    Assert.Equal("1, 2, 3", textOf tooMany diagnostic.Span.Value)
+
+[<Fact>]
+let ``The parser's multi-value match examples compile without throwing`` () =
+    // They are snippets of syntax that use names they never define, so unknown names are all there is to report.
+    let examples = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "Nanyx.Parser.Tests", "Features", "Matches")
+    let files =
+        Array.append (Directory.GetFiles(examples, "test_match_multi_*.nyx")) [| Path.Combine(examples, "test_match_phase6_all.nyx") |]
+    Assert.True(files.Length > 10)
+    for path in files do
+        let result = Compiler.compileFile path
+        for diagnostic in result.Diagnostics do
+            Assert.True(diagnostic.Code = DiagnosticCodes.UnknownIdentifier.Code, $"{Path.GetFileName path}: %A{diagnostic}")
