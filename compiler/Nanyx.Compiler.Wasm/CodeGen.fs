@@ -462,6 +462,7 @@ and private collectStringLiteralsPattern (pattern: Pattern) : string list =
     | LiteralPattern _
     | IdentifierPattern _
     | WildcardPattern
+    | UnitPattern
     | ElsePattern -> []
 
 and private collectStringLiteralsStatements (statements: Statement list) : string list =
@@ -707,6 +708,7 @@ and private collectTagNamesPattern (pattern: Pattern) : string list =
     | LiteralPattern _
     | IdentifierPattern _
     | WildcardPattern
+    | UnitPattern
     | ElsePattern -> []
 
 /// Where a call to `name`, the call at node `callId`, finds each member of the contexts the callee requires, in the

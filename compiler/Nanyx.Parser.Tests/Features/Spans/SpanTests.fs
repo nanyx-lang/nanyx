@@ -218,6 +218,7 @@ and private expressionsOfPattern (pattern: Pattern) =
     | LiteralPattern _
     | IdentifierPattern _
     | WildcardPattern
+    | UnitPattern
     | ElsePattern -> []
     | TuplePattern patterns
     | RecordPattern (_, patterns) -> patterns |> List.collect expressionsOfPattern
@@ -276,6 +277,7 @@ let rec private patternsWithin (pattern: Pattern) : Pattern list =
         | LiteralPattern _
         | IdentifierPattern _
         | WildcardPattern
+        | UnitPattern
         | ElsePattern
         | RangePattern _
         | GuardPattern _ -> []

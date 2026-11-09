@@ -63,6 +63,7 @@ and private referencedNamesPattern (pattern: Pattern) : string list =
     | LiteralPattern _
     | IdentifierPattern _
     | WildcardPattern
+    | UnitPattern
     | ElsePattern -> []
 
 /// Every name a pattern binds.
@@ -81,6 +82,7 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
     | GuardPattern _
     | RangePattern _
     | WildcardPattern
+    | UnitPattern
     | ElsePattern -> []
 
 /// Every name bound anywhere inside an expression: local defs, lambda parameters and pattern variables.

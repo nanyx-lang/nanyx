@@ -147,6 +147,9 @@ let guardPattern =
             |>> fun (op, value) -> GuardPattern(op, value))
     spannedPattern (braced <|> bare)
 
+/// `()`, the unit value.
+let unitPattern = spannedPattern (pstring "(" >>. ws >>. pstring ")" >>% UnitPattern)
+
 // Tag pattern: #nil or #some(x) or #error data
 // Tag pattern: #tagName or #tagName(pattern) or #tagName(p1, p2, ...)
 let tagPattern =
@@ -160,7 +163,9 @@ let tagPattern =
                     (sepBy1 (ws >>. pattern) (pstring "," .>> ws)))
         let inlinePayload =
             skipMany1 (skipAnyOf " \t") >>. pattern |>> fun p -> [p], p.Span
-        opt (attempt parenPayload <|> attempt inlinePayload) >>= fun patternsOpt ->
+        // Empty brackets, `#some()`, carry the unit value, as they do in a value.
+        let unitPayload = unitPattern |>> fun p -> [p], p.Span
+        opt (attempt unitPayload <|> attempt parenPayload <|> attempt inlinePayload) >>= fun patternsOpt ->
         match patternsOpt with
         | None -> preturn (TagPattern(tagName, None))
         | Some ([single], _) -> preturn (TagPattern(tagName, Some single))
@@ -179,6 +184,7 @@ let internal fillPatternRef () =
             attempt recordPatternByPosition  // Must come before identifierPattern
             attempt recordMemberPattern
             attempt listPattern
+            attempt unitPattern         // "()" must come before tuples
             attempt tuplePattern
             attempt wildcardPattern
             identifierPattern           // Last resort - any identifier

@@ -943,6 +943,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let rec lowerPattern (isTop: bool) (scrutinee: Var) (valueTy: IrType) (pattern: Parser.Program.Pattern) =
                 match pattern.Kind with
                 | WildcardPattern
+                | UnitPattern
                 | ElsePattern -> PWildcard
                 // A name for the whole scrutinee is the scrutinee's local.
                 | IdentifierPattern name when isTop ->

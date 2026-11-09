@@ -334,6 +334,7 @@ module Compiler =
         | LiteralPattern _
         | IdentifierPattern _
         | WildcardPattern
+        | UnitPattern
         | ElsePattern -> []
 
     /// The inlined items `own` uses: the value definitions it reaches, directly or through other inlined

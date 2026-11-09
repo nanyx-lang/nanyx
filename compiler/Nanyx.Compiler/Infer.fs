@@ -1648,6 +1648,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match pattern.Kind with
                 | WildcardPattern
                 | ElsePattern -> Ok (env', state', mkTypedPattern pattern scrutineeTy)
+                // `()` matches the unit value, so what it is matched against is unit.
+                | UnitPattern -> Ok (env', addConstraint scrutineeTy (TyPrimitive "unit") state', mkTypedPattern pattern scrutineeTy)
                 | IdentifierPattern name ->
                     let symbol, declared = declareSymbol ArmBody armBody.Id name PatternVariable false (Some armBody.Span.End) state'
                     Ok (TypeEnv.declare name symbol (TypeEnv.mono scrutineeTy) env', recordSymbolType symbol scrutineeTy declared, mkTypedPattern pattern scrutineeTy)
