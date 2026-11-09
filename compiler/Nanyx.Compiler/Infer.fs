@@ -17,7 +17,6 @@ type InferState = NyxCompiler.InferState.InferState
 
 let emptyState = NyxCompiler.InferState.emptyState
 
-
 let private primitiveType name =
     TyPrimitive name
 
