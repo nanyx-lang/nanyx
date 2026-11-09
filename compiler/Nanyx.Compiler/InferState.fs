@@ -124,7 +124,10 @@ type InferState =
             /// piping it to a name attached to no type, or reading a member of it. Each is typed as the error type
             /// without another error, since the error that left the value's type unknown has been reported; a debug
             /// build cannot run it, and traps there.
-            UnknownTypeUses: NodeId list }
+            UnknownTypeUses: NodeId list;
+            /// Where each builder block falls off its end without `return`, by the node of the made-up read of the
+            /// builder's `zero` desugaring put there: where to say so if the builder has no `zero`.
+            WorkflowZeros: Map<NodeId, SourceSpan> }
 
 let emptyState =
         { NextId = 0;
@@ -167,7 +170,8 @@ let emptyState =
             InstanceContexts = Map.empty;
             FailedExprs = [];
             UnhandledMatches = [];
-            UnknownTypeUses = [] }
+            UnknownTypeUses = [];
+            WorkflowZeros = Map.empty }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

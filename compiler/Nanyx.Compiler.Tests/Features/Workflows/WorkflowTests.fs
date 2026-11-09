@@ -223,3 +223,71 @@ let ``A try nested in an expression of a proc block is bound before its statemen
             | [ IdentifierExpr "x"; IdentifierExpr "x"; IdentifierExpr inner ] when inner <> "x" -> ()
             | other -> Assert.True(false, $"Unexpected binds: %A{other}")
         | None -> Assert.True(false, "run not found")
+
+[<Fact>]
+let ``A proc block that ends without return is #some(())`` () =
+    let source =
+        "def f: int -> #some(int) | #error(#tooBig) = { n -> if n > 5 then #error(#tooBig) else #some(n) }\n" +
+        "def run = { x -> proc {\n" +
+        "  def a = try f(x)\n" +
+        "  a + 1\n" +
+        "} }\n" +
+        "def check = { x -> proc {\n" +
+        "  if x < 0 then try #error(#tooBig)\n" +
+        "} }"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("int -> #some(()) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
+    Assert.Equal("int -> #some(()) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["check"])
+
+[<Fact>]
+let ``A builder block that can end without return needs the builder's zero`` () =
+    let builder =
+        "def opt = (\n" +
+        "  try = {\n" +
+        "    | #some(value), continue -> continue(value)\n" +
+        "    | failure, _ -> failure\n" +
+        "  }\n" +
+        "  return = { value -> #some(value) }\n" +
+        ")\n" +
+        "def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let fallsOff = builder + "def show = { n -> opt {\n  def h = try half(n)\n  h + 1\n} }\n"
+    let result = Compiler.compile fallsOff
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal(DiagnosticCodes.InvalidWorkflow.Code, diagnostic.Code)
+    Assert.Equal("h + 1", fallsOff.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))
+    Assert.Contains("`opt` has no `zero`", diagnostic.Message)
+    // A block that always ends with `return` never needs it.
+    Assert.Empty((Compiler.compile (builder + "def show = { n -> opt {\n  def h = try half(n)\n  return h + 1\n} }\n")).Diagnostics)
+
+[<Fact>]
+let ``A builder's zero is the value of a block that ends without return`` () =
+    let source =
+        "def opt\n" +
+        "  : (\n" +
+        "    try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r\n" +
+        "    return: a -> #some(a) | r\n" +
+        "    zero: #nothing | r\n" +
+        "  )\n" +
+        "  = (\n" +
+        "  try = {\n" +
+        "    | #some(value), continue -> continue(value)\n" +
+        "    | failure, _ -> failure\n" +
+        "  }\n" +
+        "  return = { value -> #some(value) }\n" +
+        "  zero = #nothing\n" +
+        ")\n" +
+        "def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+        "def show = { n -> opt {\n  def h = try half(n)\n  h + 1\n} }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let shown = Unifier.tyToString result.Typed.Value.Types.["show"]
+    for tag in [ "#nothing"; "#odd" ] do
+        Assert.Contains(tag, shown)
+[<Fact>]
+let ``A proc block that returns a value on one path and ends without return on another is a mismatch`` () =
+    // `return n` makes the block a `#some(int)`, and ending without `return` makes it `#some(())`.
+    let result = Compiler.compile "def c = { n -> proc {\n  if n > 2 then return n\n} }"
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Contains("() vs int", diagnostic.Message)

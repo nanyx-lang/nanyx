@@ -40,6 +40,17 @@ def result = proc {
 
 If any step returns an error, the function immediately returns that error.
 
+A `proc` block that is only run for what it does doesn't need a `return`. A block that ends without one is `#some(())`, the `proc` workflow's `zero`:
+
+```nanyx
+def greet: [Console] string -> #some(()) | #invalidName = { name -> proc {
+  def person = try Person.new(name)
+  println("Hello, {person.name}!")
+} }
+```
+
+Every way out of a block must agree, so a block that returns a value on one path can't also end without `return` on another: `if n > 2 then return n` on its own is a type error, since the block would be `#some(int)` one way and `#some(())` the other.
+
 # Option types
 
 For values that might not exist, use the `#some` / `#none` pattern:

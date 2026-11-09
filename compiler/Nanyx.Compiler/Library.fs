@@ -480,9 +480,13 @@ module Compiler =
 
     /// Desugars `module'`, with the errors in what it desugars: a workflow keyword the rest of its builder's block
     /// cannot follow (see `Unreachable`).
-    let desugarWithDiagnostics (module': Module) : Module * Diagnostic list =
+    /// `module'` desugared, with the errors desugaring found, and where each builder block falls off its end without
+    /// `return`: by the node of the made-up read of the builder's `zero` that is the block's value there, the place
+    /// in the block to report a missing `zero` at.
+    let desugarWithDiagnostics (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan> =
         let isReturnKeyword keyword = keyword = "return"
         let diagnostics = ResizeArray<Diagnostic>()
+        let mutable zeros: Map<NodeId, SourceSpan> = Map.empty
 
         // The builder whose block is being desugared (`proc` in `proc { ... }`), and whether that block used a
         // workflow keyword. A keyword `k` in the block calls the builder's member `k`, `return` its member `return`.
@@ -795,12 +799,22 @@ module Compiler =
             | ImportStatement _
             | TypeDefStatement _ -> stmt
         // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
-        // block as its continuation, and so on. The block then ends in `()`, its last value only run.
+        // block as its continuation, and so on. A block that falls off its end without `return` has the builder's
+        // `zero` as its value there (`#some(())` for `proc`), its last value only run; outside a builder's block, `()`.
         and desugarWorkflowChain (statements: Statement list) =
+            let ending =
+                match builder with
+                | Some builderName ->
+                    let zero = Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr builderName), "zero", None))
+                    let place = statements |> List.tryLast |> Option.map _.Span |> Option.defaultValue SourceSpan.none
+                    zeros <- zeros |> Map.add zero.Id place
+                    builderUsed <- true
+                    zero
+                | None -> Expression.synthetic UnitExpr
             desugarChain statements (fun last ->
                 match last with
-                | Some value -> Expression.from value (Block [ Statement.from value (ExprStatement value); Statement.synthetic (ExprStatement (Expression.synthetic UnitExpr)) ])
-                | None -> Expression.synthetic UnitExpr)
+                | Some value -> Expression.from value (Block [ Statement.from value (ExprStatement value); Statement.synthetic (ExprStatement ending) ])
+                | None -> ending)
         // `statements` as a workflow chain that goes on to `next` at its end, given the value of its last statement
         // if that is an expression. A keyword takes the rest of the chain as its continuation; `return` ends the
         // whole block, so what follows it, `next` included, never runs.
@@ -915,9 +929,11 @@ module Compiler =
                     { item with Kind = Def (ValueDef(isExport, name, typeOpt, desugarExpr expr)) }
                 | Kind (Expr expr) as item -> { item with Kind = Expr (desugarExpr expr) }
                 | other -> other)
-        desugared, List.ofSeq diagnostics
+        desugared, List.ofSeq diagnostics, zeros
 
-    let desugar (module': Module) : Module = desugarWithDiagnostics module' |> fst
+    let desugar (module': Module) : Module =
+        let desugared, _, _ = desugarWithDiagnostics module'
+        desugared
 
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
@@ -1102,14 +1118,14 @@ module Compiler =
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             |> Result.bind (fun (ast, declared, moduleBlocks) ->
                 match desugarWithDiagnostics ast with
-                | _, (_ :: _ as errors) -> Error (Desugared, errors)
-                | desugaredAst, [] ->
+                | _, (_ :: _ as errors), _ -> Error (Desugared, errors)
+                | desugaredAst, [], zeros ->
                     applyAttributes desugaredAst
-                    |> Result.map (fun desugared -> ast, declared, moduleBlocks, desugared)
+                    |> Result.map (fun desugared -> ast, declared, moduleBlocks, desugared, zeros)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok (ast, declared, moduleBlocks, desugared) ->
+        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -1126,7 +1142,7 @@ module Compiler =
                 | StandardLibraryModule _ -> Intrinsics.typeEnv
                 | SourceFile _
                 | InMemory -> TypeEnv.empty
-            let mutable state = { NyxCompiler.Infer.emptyState with Declared = declared; ModuleBlocks = moduleBlocks }
+            let mutable state = { NyxCompiler.Infer.emptyState with Declared = declared; ModuleBlocks = moduleBlocks; WorkflowZeros = zeros }
             let mutable errors: Diagnostic list = []
             let mutable inlined: TopLevelItem list = []
             // Kept apart and inlined last, so that where an explicit import defines the same name, its definition is kept.
