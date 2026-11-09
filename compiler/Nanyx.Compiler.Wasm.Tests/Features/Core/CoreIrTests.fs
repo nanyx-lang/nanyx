@@ -46,22 +46,19 @@ let ``A function the core IR can lower goes through it, and one it cannot falls 
         "    | #small -> 0\n" +
         "}\n" +
         "\n" +
-        "def shout: int -> int = { n ->\n" +
-        "  def twice = { x -> x * 2 }\n" +
-        "  twice(n)\n" +
-        "}\n"
+        "def shout: int -> float = { n -> 1.5 }\n"
     let _, report = compileWithReport source
     Assert.Equal<string list>([ "add"; "classify"; "size" ], report.FromCoreIr)
     let reason = report.Fallbacks |> List.find (fst >> (=) "shout") |> snd
-    Assert.Equal("a function value", reason)
+    Assert.Equal("a value of type float", reason)
 
 [<Fact>]
 let ``A function that calls one the core IR cannot specialise falls back too`` () =
     // `show` is generic and its body is out of the core IR's reach, so `main` cannot call a specialisation of it.
     let source =
         "def show = { x ->\n" +
-        "  def same = { y -> y }\n" +
-        "  same(x)\n" +
+        "  def scale = 1.5\n" +
+        "  x\n" +
         "}\n" +
         "\n" +
         "def main = show(1)\n"
@@ -204,6 +201,33 @@ let ``Interpolated strings and dbg go through the core IR`` () =
     Assert.Contains("call $dbg_tag_payload_some", wat)
 
 [<Fact>]
+let ``Lambdas, closures and function values go through the core IR`` () =
+    let source =
+        "def apply = { f, x -> f(x) }\n" +
+        "\n" +
+        "def double: int -> int = { n -> n * 2 }\n" +
+        "\n" +
+        "def compose = { f, g -> { x -> g(f(x)) } }\n" +
+        "\n" +
+        "def countdown: int -> int = { n ->\n" +
+        "  rec loop = { i, acc -> if i == 0 then acc else loop(i - 1, acc + i) }\n" +
+        "  loop(n, 0)\n" +
+        "}\n" +
+        "\n" +
+        "def main = {\n" +
+        "  def offset = 10\n" +
+        "  def both = compose(double, { x -> x + offset })\n" +
+        "  apply({ x -> x + offset }, 1) + apply(double, 4) + both(1) + countdown(4)\n" +
+        "}\n"
+    let wat, report = compileWithReport source
+    // A lambda written in a generic function is specialised with it; one written in `main` keeps its own name.
+    for name in [ "compose__int__int__int"; "__lambda_0__int__int__int"; "__rec_loop_1"; "__lambda_2"; "__fn_double"; "main" ] do
+        Assert.Contains(name, report.FromCoreIr)
+    // Calls through function values, and closure blocks holding a table slot and what they capture.
+    Assert.Contains("call_indirect (type $ctx_fn_2)", wat)
+    Assert.Contains("call $__nanyx_alloc", wat)
+
+[<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
     let source =
         "def nOf = { r -> r.n }\n" +
@@ -232,7 +256,8 @@ let ``Every intermediate value in the core IR is named`` () =
           DefinitionTypes = typed.Types
           RequiresContexts = Set.empty
           RecordConstructors = Set.empty
-          NominalWrappers = Set.empty }
+          NominalWrappers = Set.empty
+          Lifted = Map.empty }
     let lowered = CoreIrLower.lowerModule input id
     let func, _ = lowered.Roots.["f"]
     let printed = CoreIr.Print.func func

@@ -13,6 +13,14 @@ open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
 
+/// A function lambda lifting made (see `LambdaLifting.fs`), which the IR lowers where a closure over it is made.
+type LiftedFunction =
+    /// A lambda, or a `rec` local function, lifted out of a definition: the lambda as written (which the type checker
+    /// typed), and the names it captures, in the order its environment holds them.
+    | LiftedLambda of Expression * string list
+    /// What lets the top-level function of this name be passed as a value: it takes an environment and ignores it.
+    | FunctionWrapper of string
+
 /// What the lowering reads from the typed module.
 type LowerInput =
     { /// The module's top-level definitions as the backend compiles them, in order: a function is a lambda.
@@ -29,7 +37,9 @@ type LowerInput =
       RecordConstructors: Set<string>
       /// The nominal types whose shape is not a record (`type $Money = private int`). A value of one is its shape's
       /// value, so its constructor and the pattern that takes it apart are no-ops.
-      NominalWrappers: Set<string> }
+      NominalWrappers: Set<string>
+      /// The functions lambda lifting made, by name.
+      Lifted: Map<string, LiftedFunction> }
 
 /// A function the IR lowered, and what it was finished into (see `lowerModule`).
 type Lowered<'T> =
@@ -47,6 +57,15 @@ let private cannot message = raise (CannotLower message)
 
 /// A generic definition at some type arguments: what a specialisation is.
 type private SpecKey = string * IrType list
+
+/// How a function is lowered.
+type private Lowering =
+    /// As its definition says.
+    | AsDefined
+    /// As a lifted lambda whose closure captures values of these types.
+    | LiftedCapturing of IrType list
+    /// As the wrapper of a top-level function, which it calls at this type.
+    | WrapperCalling of string * Ty
 
 /// The most specialisations one definition may have: a definition that calls itself at ever bigger types
 /// (polymorphic recursion) would otherwise have no end of them.
@@ -154,7 +173,7 @@ let rec private toIrType (ty: Ty) : IrType =
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     | TyVar _ -> cannot "a type that is not known here"
     | TyPrimitive other -> cannot $"a value of type {other}"
-    | TyFunc _ -> cannot "a function value"
+    | TyFunc(input, output) -> IrFunction(toIrType input, toIrType output)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
@@ -177,6 +196,7 @@ let private specialisationName (name: string) (typeArguments: IrType list) =
             |> String.concat "_"
             |> sprintf "rec_%s"
         | IrList element -> $"list_{mangle element}"
+        | IrFunction(input, output) -> $"fn_{mangle input}_to_{mangle output}"
         | _ -> IrType.show ty
     sanitizeIdentifier name + (typeArguments |> List.map (mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
 
@@ -233,7 +253,7 @@ type private Scope =
       InterpolationDepth: int }
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
-type private FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, request: SpecKey -> Map<int, Ty> -> string) =
+type private FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
     let mutable nextId = 0
     let usedNames = System.Collections.Generic.HashSet<string>()
 
@@ -298,9 +318,21 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     match bindings |> Map.tryFind id with
                     | Some ty -> toIrType ty
                     | None -> cannot $"a call to '{name}' that does not fix all of its type arguments")
-            request (name, typeArguments) bindings
+            request (name, typeArguments) bindings AsDefined
 
     let mk kind ty : Expr = { Kind = kind; Type = ty }
+
+    /// The name of the function being lowered, in WebAssembly text.
+    let mutable selfName = ""
+
+    let atomType (atom: Atom) =
+        match atom with
+        | AVar var -> var.Type
+        | AInt _ -> IrInt
+        | ABool _ -> IrBool
+        | AUnit -> IrUnit
+        | AString _ -> IrString
+        | ATag name -> IrTags [ name, None ]
 
     let bindTemp (value: Expr) (k: Atom -> Expr) : Expr =
         let temp = newTemp value.Type
@@ -425,8 +457,47 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let ty = tyOf expr
             this.Atoms scope (flattenCallArgs args) (fun atoms ->
                 k (mk (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
+        | FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured) ->
+            // A function value: the closure block of a lifted function over what it captures. The closure keeps the
+            // node of the lambda or function it stands for, so its type is that function's.
+            let ty = tyOf expr
+            let arity = parameterNames target |> List.length
+            match input.Lifted |> Map.tryFind target with
+            | Some (LiftedLambda _) ->
+                this.Atoms scope captured (fun atoms ->
+                    let capturedTys = atoms |> List.map atomType
+                    // A lambda in a specialisation is specialised with it.
+                    let name = request (target, snd self) subst (LiftedCapturing capturedTys)
+                    k (mk (MakeClosure(name, arity, atoms)) ty))
+            | Some (FunctionWrapper wrapped) ->
+                // A top-level function passed as a value, through a wrapper for each type it is passed at.
+                let instanceTy = substitute subst input.ExprTypes.[expr.Id]
+                let generic = input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty >> not)
+                let key = target, (if generic then [ toIrType instanceTy ] else [])
+                let name = request key subst (WrapperCalling(wrapped, instanceTy))
+                k (mk (MakeClosure(name, arity, [])) ty)
+            | None -> cannot $"a closure over '{target}', which lambda lifting did not make"
+        | FunctionCall(name, _, args) when scope.Vars.ContainsKey name ->
+            // A call through a function value in a parameter or local.
+            let ty = tyOf expr
+            match scope.Vars.[name] with
+            | { Type = IrFunction _ } as var -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar var, atoms)) ty))
+            | var -> cannot $"a call to '{name}', a value of type {IrType.show var.Type}"
+        | FunctionCall(name, _, args) when definitions.ContainsKey name && not (isFunction name) && not (flattenCallArgs args).IsEmpty ->
+            // A call through a function value a top-level value holds.
+            let ty = tyOf expr
+            let instanceTy =
+                match input.CalleeTypes |> Map.tryFind expr.Id with
+                | Some ty -> ty
+                | None -> cannot $"a call to '{name}' whose type is not known"
+            let target = callee name instanceTy
+            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureValue target, atoms)) ty))
+        | FunctionCall(name, _, args) when input.Lifted.ContainsKey name ->
+            // A `rec` local function calling itself, directly, with its environment passed on.
+            if name <> fst self then cannot $"a call to the lifted function '{name}' from another function"
+            let ty = tyOf expr
+            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (Call(selfName, atoms)) ty))
         | FunctionCall(name, _, args) ->
-            if scope.Vars.ContainsKey name then cannot $"a call through the function value '{name}'"
             if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
             if not (isFunction name) then cannot $"a call to the value '{name}'"
             let instanceTy =
@@ -482,12 +553,17 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             // A value of another module, named through it.
             this.Complex scope { expr with Kind = IdentifierExpr $"{qualifier}.{fieldName}" } k
         | MemberAccess(record, fieldName, _) ->
-            let ty = tyOf expr
-            let slot =
-                match tyOf record with
+            // The field's type is the record's for it: a lifted function reads what it captures from its environment
+            // with reads the type checker never saw.
+            let recordTy =
+                match record.Kind with
+                | IdentifierExpr name when scope.Vars.ContainsKey name -> scope.Vars.[name].Type
+                | _ -> tyOf record
+            let slot, ty =
+                match recordTy with
                 | IrRecord fields ->
                     match fields |> List.tryFindIndex (fst >> (=) fieldName) with
-                    | Some slot -> slot
+                    | Some slot -> slot, snd fields.[slot]
                     | None -> cannot $"the field '{fieldName}', which the record does not have"
                 | other -> cannot $"the field '{fieldName}' of a value of type {IrType.show other}"
             this.Atoms scope [ record ] (fun atoms -> k (mk (Field(atoms.Head, slot)) ty))
@@ -579,9 +655,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | DefStatement(_, _, _, Kind (Lambda _)) :: _ -> cannot "a local function"
         | DefStatement(_, name, _, rhs) :: rest ->
             // The local is named before its value is lowered, so that locals are declared in the order they are
-            // written.
-            let local = newVar (uniqueName name) Local (tyOf rhs)
+            // written. Its type is its value's, which a local lambda lifting made has as well.
+            let localName = uniqueName name
             this.Complex scope rhs (fun value ->
+                let local = newVar localName Local value.Type
                 let body = this.Block { scope with Vars = scope.Vars |> Map.add name local } rest k
                 mk (Let(local, value, body)) body.Type)
         | ExprStatement first :: rest ->
@@ -667,45 +744,80 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     mk (Let(scrutinee, lowered, body)) body.Type)
         bindScrutinees (List.zip scrutinees values)
 
-    /// Lowers the definition `name` to a function called `functionName`.
-    member this.Function (name: string) (functionName: string) (typeArguments: IrType list) : Function =
+    /// The types of the parameters `names` of a function of type `fnTy`, and of its result. Several parameters are the
+    /// fields of the input, each named by its position or by its own name when the type names it
+    /// (`(int, step: int) -> int`).
+    member private this.ParameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * Ty =
+        match names, Unifier.unalias fnTy with
+        | [], TyFunc(_, result) when isLambda -> [], result
+        | [], _ -> [], fnTy
+        | [ _ ], TyFunc(input, result) -> [ input ], result
+        | several, TyFunc(input, result) ->
+            match Unifier.unalias input with
+            | TyRecord fields when fields.Count = several.Length ->
+                several
+                |> List.mapi (fun index parameterName ->
+                    match fields |> Map.tryFind (string index), fields |> Map.tryFind parameterName with
+                    | Some ty, _
+                    | None, Some ty -> ty
+                    | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
+            | _ -> cannot "a function whose parameters are not a tuple"
+        | _ -> cannot "a definition whose type is not a function"
+
+    /// Lowers the definition `name` to a function called `functionName`, as `lowering` says.
+    member this.Function (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) : Function =
+        selfName <- functionName
         let expr = definitions.[name]
         let parameterNames, body = parametersAndBody expr
-        let defTy =
-            match input.ExprTypes |> Map.tryFind expr.Id with
-            | Some ty -> substitute subst ty
-            | None -> cannot "a definition without a type"
-        let parameterTys, resultTy =
-            match parameterNames, Unifier.unalias defTy with
-            | [], TyFunc(_, result) when (match expr.Kind with Lambda _ -> true | _ -> false) -> [], result
-            | [], _ -> [], defTy
-            | [ _ ], TyFunc(input, result) -> [ input ], result
-            | several, TyFunc(input, result) ->
-                match Unifier.unalias input with
-                | TyRecord fields when fields.Count = several.Length ->
-                    // A parameter is a field of the input named by its position, or by its own name when the type
-                    // names it (`(int, step: int) -> int`).
-                    several
-                    |> List.mapi (fun index parameterName ->
-                        match fields |> Map.tryFind (string index), fields |> Map.tryFind parameterName with
-                        | Some ty, _
-                        | None, Some ty -> ty
-                        | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
-                | _ -> cannot "a function whose parameters are not a tuple"
-            | _ -> cannot "a definition whose type is not a function"
-        let parameters = List.map2 (fun parameterName ty -> newVar (uniqueName parameterName) Param (toIrType ty)) parameterNames parameterTys
-        let scope =
+        let isLambda = match expr.Kind with Lambda _ -> true | _ -> false
+        let parameterOf (parameterName: string) (ty: IrType) = newVar (uniqueName parameterName) Param ty
+        let scopeOf (parameters: Var list) =
             { Vars = List.zip parameterNames parameters |> Map.ofList
               MatchDepth = 0
               LivePayloads = Set.empty
               InterpolationDepth = 0 }
-        { Name = functionName
-          Source = name
-          TypeArguments = typeArguments
-          Params = parameters
-          Result = toIrType resultTy
-          Body = this.Tail scope body }
-
+        let make (parameters: Var list) (result: IrType) (body: Expr) =
+            { Name = functionName
+              Source = name
+              TypeArguments = typeArguments
+              Params = parameters
+              Result = result
+              Body = body }
+        match lowering with
+        | AsDefined ->
+            let defTy =
+                match input.ExprTypes |> Map.tryFind expr.Id with
+                | Some ty -> substitute subst ty
+                | None -> cannot "a definition without a type"
+            let parameterTys, resultTy = this.ParameterTypes parameterNames defTy isLambda
+            let parameters = List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames parameterTys
+            make parameters (toIrType resultTy) (this.Tail (scopeOf parameters) body)
+        | LiftedCapturing capturedTys ->
+            // The environment first: the function's table slot, then what it captures. The rest are the lambda's
+            // parameters, typed as the lambda was where it was written.
+            let lambda =
+                match input.Lifted |> Map.tryFind name with
+                | Some (LiftedLambda(lambda, _)) -> lambda
+                | _ -> cannot $"'{name}' is not a lifted lambda"
+            let lambdaTy =
+                match input.ExprTypes |> Map.tryFind lambda.Id with
+                | Some ty -> substitute subst ty
+                | None -> cannot "a lambda without a type"
+            let environment = IrRecord(("0", IrInt) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
+            let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail lambdaTy true
+            let parameters =
+                parameterOf parameterNames.Head environment
+                :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
+            make parameters (toIrType resultTy) (this.Tail (scopeOf parameters) body)
+        | WrapperCalling(wrapped, instanceTy) ->
+            // Takes an environment, ignores it, and calls the function with the rest.
+            let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail instanceTy true
+            let environment = IrRecord [ "0", IrInt ]
+            let parameters =
+                parameterOf parameterNames.Head environment
+                :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
+            let call = mk (Call(callee wrapped instanceTy, parameters.Tail |> List.map AVar)) (toIrType resultTy)
+            make parameters (toIrType resultTy) call
 /// Lowers every definition the IR can, with the specialisations they need, and runs `finish` over each function
 /// (the emitter, which can still fail). A function is kept only when it and every specialisation it calls,
 /// directly or not, lowered and finished: one that calls a specialisation that did not is left to the old path, as is
@@ -714,38 +826,43 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     let definitions = input.Definitions |> Map.ofList
     let names = System.Collections.Generic.Dictionary<SpecKey, string>()
     let usedNames = System.Collections.Generic.HashSet<string>(input.Definitions |> Seq.map (fst >> sanitizeIdentifier))
-    let pending = System.Collections.Generic.Queue<SpecKey * Map<int, Ty>>()
+    let pending = System.Collections.Generic.Queue<SpecKey * Map<int, Ty> * Lowering>()
     let counts = System.Collections.Generic.Dictionary<string, int>()
     // Every function lowered, by its key, with the specialisations it calls; or why it could not be.
     let results = System.Collections.Generic.Dictionary<SpecKey, Result<Function * 'T * Set<SpecKey>, string>>()
     let order = ResizeArray<SpecKey>()
 
-    let lowerOne (key: SpecKey) (subst: Map<int, Ty>) (functionName: string) =
+    let lowerOne (key: SpecKey) (subst: Map<int, Ty>) (how: Lowering) (functionName: string) =
         let calls = System.Collections.Generic.HashSet<SpecKey>()
-        let request (specKey: SpecKey) (bindings: Map<int, Ty>) =
+        let request (specKey: SpecKey) (bindings: Map<int, Ty>) (lowering: Lowering) =
             calls.Add specKey |> ignore
             match names.TryGetValue specKey with
             | true, existing -> existing
             | _ ->
-                let defName = fst specKey
+                let defName, typeArguments = specKey
                 let count = match counts.TryGetValue defName with | true, n -> n | _ -> 0
                 if count >= maxSpecialisations then cannot $"more than {maxSpecialisations} specialisations of '{defName}'"
                 counts.[defName] <- count + 1
-                let baseName = specialisationName defName (snd specKey)
-                let mutable candidate = baseName
-                let mutable index = 1
-                while usedNames.Contains candidate do
-                    candidate <- $"{baseName}_{index}"
-                    index <- index + 1
-                usedNames.Add candidate |> ignore
+                // A lifted function of a definition that is not generic keeps its own name.
+                let candidate =
+                    if typeArguments.IsEmpty then sanitizeIdentifier defName
+                    else
+                        let baseName = specialisationName defName typeArguments
+                        let mutable candidate = baseName
+                        let mutable index = 1
+                        while usedNames.Contains candidate do
+                            candidate <- $"{baseName}_{index}"
+                            index <- index + 1
+                        usedNames.Add candidate |> ignore
+                        candidate
                 names.[specKey] <- candidate
-                pending.Enqueue((specKey, bindings))
+                pending.Enqueue((specKey, bindings, lowering))
                 candidate
         order.Add key
         results.[key] <-
             try
-                let lowering = FunctionLowering(input, definitions, subst, request)
-                let func = lowering.Function (fst key) functionName (snd key)
+                let lowering = FunctionLowering(input, definitions, subst, key, request)
+                let func = lowering.Function how (fst key) functionName (snd key)
                 Ok (func, finish func, Set.ofSeq calls)
             with
             | CannotLower reason -> Error reason
@@ -759,17 +876,20 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
         | None -> false
 
     for (name, _) in input.Definitions do
-        if input.RequiresContexts.Contains name then
+        if input.Lifted.ContainsKey name then
+            // Lowered where a closure over it is made, if that is lowered: what it captures is known there.
+            ()
+        elif input.RequiresContexts.Contains name then
             results.[(name, [])] <- Error "it requires contexts"
             order.Add((name, []))
         elif isGeneric name then
             results.[(name, [])] <- Error "it is generic: each instantiation is lowered where it is called"
             order.Add((name, []))
         else
-            lowerOne (name, []) Map.empty (sanitizeIdentifier name)
+            lowerOne (name, []) Map.empty AsDefined (sanitizeIdentifier name)
         while pending.Count > 0 do
-            let key, bindings = pending.Dequeue()
-            lowerOne key bindings names.[key]
+            let key, bindings, how = pending.Dequeue()
+            lowerOne key bindings how names.[key]
 
     // Keep what lowered and finished and calls only specialisations that are kept, until nothing changes.
     let mutable kept =
