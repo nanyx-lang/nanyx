@@ -1,0 +1,165 @@
+module Nanyx.Compiler.Tests.Features.StdLib.StdLib
+
+open System
+open System.IO
+open Xunit
+open NyxCompiler
+open Parser.Program
+open Nanyx.Compiler.Tests.TestSupport
+
+[<Fact>]
+let ``Typecheck accepts the Console context from nanyx/console`` () =
+    let source =
+        "import nanyx/console\n\n" +
+        "def greet: [Console] string -> () = { name -> println(name) }"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``println comes from nanyx/console with type string -> unit`` () =
+    let result = Compiler.compile "import nanyx/console\n\ndef result = println(\"hi\")"
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal(TyPrimitive "unit", result.Typed.Value.Types.["result"])
+
+[<Fact>]
+let ``println rejects a non-string argument`` () =
+    let result = Compiler.compile "import nanyx/console\n\nprintln(42)"
+    Assert.False(result.Diagnostics.IsEmpty)
+
+[<Fact>]
+let ``println is not in scope without importing nanyx/console`` () =
+    let result = Compiler.compile "def main = { println(\"hi\") }"
+    let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
+    Assert.Contains("Unknown function 'println'", message)
+
+[<Fact>]
+let ``Standard library import is resolved without a file`` () =
+    withTempDir (fun dir ->
+        let mainPath = Path.Combine(dir, "main.nyx")
+        File.WriteAllText(mainPath, "import nanyx/console\n\nprintln(\"Hello, Nanyx!\")\n")
+        let result = Compiler.compileFile mainPath
+        Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+        // The module is compiled together with the program: the backend sees its definitions, not the import.
+        let hasImport = result.Typed.Value.Module |> List.exists (function Kind (Import _) -> true | _ -> false)
+        Assert.False(hasImport)
+        let hasPrintln = result.Typed.Value.Module |> List.exists (function Kind (Def (ValueDef(_, "println", _, _))) -> true | _ -> false)
+        Assert.True(hasPrintln))
+
+[<Fact>]
+let ``nanyx/console declares the Console context`` () =
+    let source =
+        "import nanyx/console\n" +
+        "def greet: [Console] string -> () = { name -> println(name) }\n" +
+        "def main = { greet(\"hi\") }"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.True(result.Typed.Value.TypeDefs.ContainsKey "Console")
+
+[<Fact>]
+let ``nanyx/text exports string functions with their types`` () =
+    let source =
+        "import nanyx/text\n" +
+        "def shout = String.uppercase(\"hi\")\n" +
+        "def n = String.length(\"hi\")\n" +
+        "def parts = String.split(\"a,b\", \",\")\n" +
+        "def joined = String.join(parts, \"-\")\n" +
+        "def yes = String.startsWith(\"nanyx\", \"nan\")\n" +
+        "def found = String.indexOf(\"nanyx\", \"yx\")\n" +
+        "def lastFound = String.lastIndexOf(\"nanyx\", \"n\")\n" +
+        "def times = String.count(\"nanyx\", \"n\")\n" +
+        "def replaced = String.replace(\"nanyx\", \"n\", \"N\")\n" +
+        "def padded = String.padStart(\"7\", 3, \"0\")\n" +
+        "def blank = String.isBlank(\" \")\n" +
+        "def allLines = String.lines(\"a\")\n" +
+        "def allWords = String.words(\"a b\")"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let types = result.Typed.Value.Types
+    let indexResult = TyUnion [ TyTag("some", Some (TyPrimitive "int")); TyTag("notFound", None) ]
+    Assert.Equal(TyPrimitive "string", types.["shout"])
+    Assert.Equal(TyPrimitive "int", types.["n"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), types.["parts"])
+    Assert.Equal(TyPrimitive "string", types.["joined"])
+    Assert.Equal(TyPrimitive "bool", types.["yes"])
+    Assert.Equal(indexResult, types.["found"])
+    Assert.Equal(indexResult, types.["lastFound"])
+    Assert.Equal(TyPrimitive "int", types.["times"])
+    Assert.Equal(TyPrimitive "string", types.["replaced"])
+    Assert.Equal(TyPrimitive "string", types.["padded"])
+    Assert.Equal(TyPrimitive "bool", types.["blank"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), types.["allLines"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), types.["allWords"])
+
+[<Fact>]
+let ``nanyx/text rejects a wrongly typed argument`` () =
+    let result = Compiler.compile "import nanyx/text\n\ndef bad = String.repeat(\"ab\", \"twice\")"
+    Assert.False(result.Diagnostics.IsEmpty)
+
+[<Fact>]
+let ``Standard library private helpers are not imported`` () =
+    let result = Compiler.compile "import nanyx/text\n\ndef bad = indexFrom(\"abc\", \"b\", 0)"
+    let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
+    Assert.Contains("Unknown function 'indexFrom'", message)
+
+[<Fact>]
+let ``Compiler intrinsics are not in scope in user code`` () =
+    let result = Compiler.compile "import nanyx/text\n\ndef bad = __nanyx_string_length(\"abc\")"
+    let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
+    Assert.Contains("Unknown function '__nanyx_string_length'", message)
+
+[<Fact>]
+let ``Standard library import with alias is qualified`` () =
+    let source =
+        "import nanyx/text as t\n" +
+        "def shout = t.String.uppercase(\"hi\")"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["shout"])
+    let unqualified = Compiler.compile "import nanyx/text as t\n\ndef shout = String.uppercase(\"hi\")"
+    Assert.False(unqualified.Diagnostics.IsEmpty)
+
+[<Fact>]
+let ``nanyx/text functions are attached to String`` () =
+    let result = Compiler.compile "import nanyx/text\ndef s = \" a \"\ndef piped = s \\ trim\ndef called = String.trim(s)"
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["piped"])
+    Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["called"])
+    let bare = Compiler.compile "import nanyx/text\ndef x = trim(\" a \")"
+    Assert.Contains("Unknown function 'trim'", (List.head bare.Diagnostics).Message)
+
+[<Fact>]
+let ``Unknown standard library module is an error`` () =
+    withTempDir (fun dir ->
+        let mainPath = Path.Combine(dir, "main.nyx")
+        File.WriteAllText(mainPath, "import nanyx/sockets\n")
+        let result = Compiler.compileFile mainPath
+        let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
+        Assert.Contains("Unknown standard library module 'nanyx/sockets'", message)
+        Assert.Contains("nanyx/console", message))
+
+[<Fact>]
+let ``Entry point module sees nanyx/console without importing it`` () =
+    let source =
+        "module main\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(\"Hello, World!\")\n" +
+        "}\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let withoutEntry = Compiler.compile "module main\n\ndef main = {\n  println(\"Hello, World!\")\n}\n"
+    Assert.False(withoutEntry.Diagnostics.IsEmpty)
+
+[<Fact>]
+let ``nanyx/math exports int functions with their types`` () =
+    let result =
+        Compiler.compile (
+            "import nanyx/math as math\n" +
+            "def a = math.abs(-3)\n" +
+            "def b = math.min(1, 2)\n" +
+            "def c = math.max(1, 2)\n" +
+            "def d = math.clamp(5, 0, 3)\n" +
+            "def e = math.pow(2, 3)")
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    for name in [ "a"; "b"; "c"; "d"; "e" ] do
+        Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])
