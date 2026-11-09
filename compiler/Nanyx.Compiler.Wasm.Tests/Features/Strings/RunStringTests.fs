@@ -130,3 +130,38 @@ let ``Run - interpolation holes that allocate or have effects run once`` () =
         "println(\"a {s ++ \"!\"} c {String.uppercase(s)} d\")\n" +
         "println(\"[{shout(\"x\")}]\")\n"
     runSource source |> assertRan "a b! c B d\nshouting x\n[X]\n"
+
+[<Fact>]
+let ``Run - strings and lists through the core IR`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def greet: string -> string = { name -> \"Hello, \" ++ name }\n" +
+        "\n" +
+        "def heads: list(int) -> int = { xs ->\n" +
+        "  match xs\n" +
+        "    | [] -> 0\n" +
+        "    | [a] -> a\n" +
+        "    | [a, b, ...rest] -> a + b\n" +
+        "}\n" +
+        "\n" +
+        "def answer = { s ->\n" +
+        "  match s\n" +
+        "    | \"yes\" -> \"agreed\"\n" +
+        "    | _ -> \"declined\"\n" +
+        "}\n" +
+        "\n" +
+        "def show = { n -> \"{n * 1}\" }\n" +
+        "\n" +
+        "def main = {\n" +
+        "  println(greet(\"Ada\"))\n" +
+        "  println(show(heads([10, 20] ++ [30])))\n" +
+        "  println(show(heads([7])))\n" +
+        "  println(answer(\"yes\"))\n" +
+        "  println(answer(\"no\"))\n" +
+        "  println(show(\"four\".length))\n" +
+        "  if \"a\" != \"b\" then println(\"different\") else println(\"same\")\n" +
+        "}\n" +
+        "\n" +
+        "main()\n"
+    runSource source |> assertRan "Hello, Ada\n30\n7\nagreed\ndeclined\n4\ndifferent\n"

@@ -9,6 +9,7 @@ module Transpiler.Wasm.CoreIrLower
 open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.Identifiers
+open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
 
@@ -150,6 +151,7 @@ let rec private toIrType (ty: Ty) : IrType =
     // A `Map`'s keys are in the order a record's fields are stored in.
     | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal(_, underlying, _) -> toIrType underlying
+    | TyApply("list", [ element ]) -> IrList(toIrType element)
     | TyVar _ -> cannot "a type that is not known here"
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc _ -> cannot "a function value"
@@ -174,6 +176,7 @@ let private specialisationName (name: string) (typeArguments: IrType list) =
             |> List.map (fun (field, fieldTy) -> $"{field}_{mangle fieldTy}")
             |> String.concat "_"
             |> sprintf "rec_%s"
+        | IrList element -> $"list_{mangle element}"
         | _ -> IrType.show ty
     sanitizeIdentifier name + (typeArguments |> List.map (mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
 
@@ -188,7 +191,8 @@ let rec private storesBeforeValue (expr: Expression) =
     | IfExpr(cond, _, _) -> storesBeforeValue cond
     | BinaryOp(_, left, right) -> storesBeforeValue left || storesBeforeValue right
     | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue
-    | TupleExpr items -> items |> List.exists storesBeforeValue
+    | TupleExpr items
+    | ListExpr items -> items |> List.exists storesBeforeValue
     | RecordExpr fields ->
         fields |> List.exists (function NamedField(_, value) | PositionalField value -> storesBeforeValue value)
     | MemberAccess(inner, _, _) -> storesBeforeValue inner
@@ -308,6 +312,28 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | TagExpr(name, Some payload) ->
             let ty = tyOf expr
             this.Atoms scope [ payload ] (fun atoms -> k (mk (MakeTag(name, atoms.Head)) ty))
+        | BinaryOp("++", left, right) ->
+            // Joining strings or lists: a runtime helper for each.
+            let helper =
+                match tyOf left with
+                | IrString -> Helpers.stringConcat
+                | IrList _ -> Helpers.listConcat
+                | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
+            let ty = tyOf expr
+            this.Atoms scope [ left; right ] (fun atoms -> k (mk (CallRuntime(helper, atoms, true)) ty))
+        | BinaryOp(("==" | "!=") as op, left, right) when (match tyOf left, tyOf right with
+                                                           | (IrString | IrTags _), _ | _, (IrString | IrTags _) -> true
+                                                           | _ -> false) ->
+            // A string is a pointer to its bytes, and a tag with a payload to its cell: equality compares what they
+            // point to.
+            let helper =
+                match tyOf left, tyOf right with
+                | IrString, _ | _, IrString -> Helpers.stringEquals
+                | _ -> Helpers.tagEquals
+            this.Atoms scope [ left; right ] (fun atoms ->
+                let equal = mk (CallRuntime(helper, atoms, true)) IrBool
+                if op = "==" then k equal
+                else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
         | BinaryOp(op, left, right) ->
             if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
             for operand in [ left; right ] do
@@ -345,6 +371,12 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             match flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
             | _ -> cannot $"the type constructor {name} without a record of its fields"
+        | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
+            // A compiler intrinsic (only the standard library can call these, and a built-in property such as
+            // `s.length` is one): the runtime helper of the same name.
+            let ty = tyOf expr
+            this.Atoms scope (flattenCallArgs args) (fun atoms ->
+                k (mk (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
         | FunctionCall(name, _, args) ->
             if scope.Vars.ContainsKey name then cannot $"a call through the function value '{name}'"
             if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
@@ -393,6 +425,9 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             | flatArgs when flatArgs.Length = parameters.Length -> this.Atoms scope flatArgs call
             | _ -> cannot $"a call to '{name}' with its arguments in another shape"
         | TupleExpr items -> this.Record scope (items |> List.mapi (fun index item -> string index, item)) (tyOf expr) k
+        | ListExpr items ->
+            let ty = tyOf expr
+            this.Atoms scope items (fun atoms -> k (mk (MakeList atoms) ty))
         | RecordExpr fields -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
         | MemberAccess(Kind (IdentifierExpr qualifier), fieldName, _) when
             not (scope.Vars.ContainsKey qualifier) && definitions.ContainsKey $"{qualifier}.{fieldName}" ->
@@ -487,6 +522,13 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     armVars <- armVars |> Map.add name var
                     PBind var
                 | LiteralPattern(IntLit value) -> PInt(int64 value)
+                | LiteralPattern(StringLit value) -> PString value
+                | ListPattern(elements, rest) ->
+                    let elementTy =
+                        match valueTy with
+                        | IrList elementTy -> elementTy
+                        | other -> cannot $"a list pattern on a value of type {IrType.show other}"
+                    PList(elements |> List.map (lowerPattern false scrutinee elementTy), rest |> Option.map (lowerPattern false scrutinee valueTy))
                 | LiteralPattern(BoolLit value) -> PBool value
                 | TagPattern(name, payload) ->
                     let payloadTy =

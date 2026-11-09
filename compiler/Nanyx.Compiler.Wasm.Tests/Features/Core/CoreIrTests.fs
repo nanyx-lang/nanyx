@@ -144,6 +144,37 @@ let ``Records, tuples and nominal values go through the core IR`` () =
     Assert.Equal<string list>([ "make"; "older"; "swapped"; "pence"; "add"; "stepped"; "main" ], report.FromCoreIr)
 
 [<Fact>]
+let ``Strings, lists and intrinsics go through the core IR`` () =
+    let source =
+        "def greet: string -> string = { name -> \"Hello, \" ++ name }\n" +
+        "\n" +
+        "def differ: (string, string) -> bool = { a, b -> a != b }\n" +
+        "\n" +
+        "def isNone = { o -> o == #none }\n" +
+        "\n" +
+        "def heads: list(int) -> int = { xs ->\n" +
+        "  match xs\n" +
+        "    | [] -> 0\n" +
+        "    | [a] -> a\n" +
+        "    | [a, b, ...rest] -> a + b\n" +
+        "}\n" +
+        "\n" +
+        "def word = { s ->\n" +
+        "  match s\n" +
+        "    | \"yes\" -> 1\n" +
+        "    | _ -> 0\n" +
+        "}\n" +
+        "\n" +
+        "def size: string -> int = { s -> s.length }\n" +
+        "\n" +
+        "def main = heads([1, 2] ++ [3]) + word(\"yes\") + size(greet(\"Ada\"))\n"
+    let wat, report = compileWithReport source
+    Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.FromCoreIr)
+    Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)
+    Assert.Contains("call $__nanyx_list_concat", wat)
+    Assert.Contains("call $__nanyx_tag_equals", wat)
+
+[<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
     let source =
         "def nOf = { r -> r.n }\n" +

@@ -16,6 +16,8 @@ type IrType =
     /// A record, its fields in the order they are stored: sorted by name. A tuple is a record whose fields are its
     /// positions, and a nominal type is the type of its shape.
     | IrRecord of (string * IrType) list
+    /// A list of values of this type: 0 when empty, else a pointer to a cell of (head, tail).
+    | IrList of IrType
 
 /// What a variable is, which decides how it is stored. The lowering names every variable as it is to be written in
 /// WebAssembly text; variables of the same kind and name share a local.
@@ -62,6 +64,11 @@ type Pattern =
     | PTag of string * Pattern option
     /// A record's fields, by the slot each is stored in, and the pattern each must match.
     | PFields of (int * Pattern) list
+    /// A string equal to this literal.
+    | PString of string
+    /// A list whose first elements match these patterns, and the rest of which matches the last pattern if there is
+    /// one, or is empty if not.
+    | PList of Pattern list * Pattern option
     /// Binds the value matched here to a variable.
     | PBind of Var
 
@@ -82,6 +89,11 @@ and ExprKind =
     | Field of Atom * int
     /// Copies a record of this many fields, and replaces the fields in these slots: `record with f = v`.
     | UpdateRecord of Atom * int * (int * Atom) list
+    /// Builds a list of these elements, in order.
+    | MakeList of Atom list
+    /// A call to a runtime helper (see `WasmRuntime.Helpers`): an intrinsic, or the helper an operator on strings, lists
+    /// or tags needs. One that returns nothing (an intrinsic whose result is unit) leaves unit, as every value must.
+    | CallRuntime of string * Atom list * returnsValue: bool
     /// `let x = value in body`. The value is never a `Let` itself: blocks are flattened.
     | Let of Var * Expr * Expr
     /// Evaluates the first expression for its effects, drops its value, then evaluates the second.
@@ -124,6 +136,7 @@ module IrType =
         | IrRecord fields ->
             let shown = fields |> List.map (fun (name, fieldTy) -> $"{name}: {show fieldTy}") |> String.concat ", "
             $"({shown})"
+        | IrList element -> $"list({show element})"
 
 /// The IR as text, for reading and for tests.
 module Print =
@@ -146,6 +159,12 @@ module Print =
         | PFields fields ->
             let shown = fields |> List.map (fun (slot, inner) -> $"{slot}: {pattern inner}") |> String.concat ", "
             $"({shown})"
+        | PString value -> $"\"{value}\""
+        | PList(elements, rest) ->
+            let shown = elements |> List.map pattern
+            let shownRest = rest |> Option.map (fun r -> [ $"...{pattern r}" ]) |> Option.defaultValue []
+            let all = shown @ shownRest |> String.concat ", "
+            $"[{all}]"
         | PBind v -> v.Name
 
     let rec private expr (indent: string) (e: Expr) : string =
@@ -164,6 +183,8 @@ module Print =
         | UpdateRecord(record, _, updates) ->
             let shown = updates |> List.map (fun (slot, value) -> $"[{slot}] = {atom value}") |> String.concat ", "
             $"{atom record} with {shown}"
+        | MakeList items -> $"[{atoms items}]"
+        | CallRuntime(name, args, _) -> $"{name}({atoms args})"
         | Let(v, value, body) -> $"let {v.Name}: {IrType.show v.Type} = {expr indent value}\n{indent}{expr indent body}"
         | Do(first, rest) -> $"do {expr indent first}\n{indent}{expr indent rest}"
         | If(cond, ifTrue, ifFalse) ->
