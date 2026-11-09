@@ -326,6 +326,7 @@ module Compiler =
         | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
         | TagPattern(_, Some payload) -> referencedNamesInPattern payload
         | TuplePattern patterns
+        | AndPattern patterns
         | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesInPattern
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesInPattern
         | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesInPattern

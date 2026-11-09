@@ -1602,6 +1602,29 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 DiagnosticCodes.GuardNotAPredicate
                                 predicate.Span
                                 "A guard pattern is a predicate on the value matched, a lambda of one parameter such as `{ < 0 }` or `{ x -> x % 2 == 0 }`" ]
+                // Every part matches the same value, and the names each binds are in scope after it.
+                | AndPattern parts ->
+                    let repeated =
+                        parts
+                        |> List.collect (Pattern.boundNames >> List.distinct)
+                        |> List.countBy id
+                        |> List.filter (fun (_, count) -> count > 1)
+                        |> List.map fst
+                    match repeated with
+                    | name :: _ ->
+                        Error [
+                            Diagnostics.at
+                                DiagnosticCodes.NameBoundTwiceInPattern
+                                pattern.Span
+                                $"The name '{name}' is bound by more than one part of this pattern; each part of an and-pattern must bind different names" ]
+                    | [] ->
+                        let step result part =
+                            result
+                            |> Result.bind (fun (partEnv, partState) ->
+                                inferPattern armBody partEnv partState scrutineeTy part
+                                |> Result.map (fun (nextEnv, nextState, _) -> nextEnv, nextState))
+                        List.fold step (Ok (env', state')) parts
+                        |> Result.map (fun (nextEnv, nextState) -> nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
                 | RangePattern(startExpr, endExpr) ->
                     match inferExpr env' state' startExpr with
                     | Error err -> Error err

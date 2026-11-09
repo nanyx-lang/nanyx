@@ -378,6 +378,22 @@ let ``An arm is not unreachable after guards, partial patterns or other values``
     Assert.Empty(unreachableIn listsLeft)
 
 [<Fact>]
+let ``An and-pattern matches what all its parts do`` () =
+    // `n & 5` matches only 5, so the arm for 5 after it can never match, but the catch-all can (#427).
+    let literal = "def f: int -> int = { n ->\n  match n\n    | m & 5 -> m\n    | 5 -> 2\n    | _ -> 3\n}"
+    Assert.Equal<(string * string list) list>([ "5", [ "m & 5" ] ], unreachableIn literal)
+    let ranges = "def f: int -> int = { n ->\n  match n\n    | 1..10 & 5..20 -> 1\n    | 6 -> 2\n    | 11 -> 3\n    | _ -> 0\n}"
+    Assert.Equal<(string * string list) list>([ "6", [ "1..10 & 5..20" ] ], unreachableIn ranges)
+    // A guard part covers nothing for certain.
+    let guarded = "def f: int -> int = { n ->\n  match n\n    | m & { > 0 } -> m\n    | 5 -> 2\n    | _ -> 3\n}"
+    Assert.Empty(unreachableIn guarded)
+    // An and-pattern asked about that cannot be told apart from nothing is not reported.
+    let disjoint = "def f: int -> int = { n ->\n  match n\n    | 1 & 2 -> 1\n    | _ -> 0\n}"
+    Assert.Empty(unreachableIn disjoint)
+    let afterCatchAll = "def f: int -> int = { n ->\n  match n\n    | _ -> 1\n    | m & { > 0 } -> m\n}"
+    Assert.Equal<(string * string list) list>([ "m & { > 0 }", [ "_" ] ], unreachableIn afterCatchAll)
+
+[<Fact>]
 let ``The else of an if-is after a pattern that always matches is unreachable, but the unit an if-is makes up is not reported`` () =
     let withElse = "def f: (int, int) -> int = { p -> if p is (_a, _b) then 1 else 2 }"
     Assert.Equal<(string * string list) list>([ "2", [ "(_a, _b)" ] ], unreachableIn withElse)

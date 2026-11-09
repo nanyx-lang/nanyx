@@ -193,6 +193,8 @@ and Pattern =
     | PList of Pattern list * Pattern option
     /// Binds the value matched here to a variable.
     | PBind of Var
+    /// A value every one of these patterns matches, binding what each of them binds: `| n & { > 100 } ->`.
+    | PAll of Pattern list
 
 /// A top-level function, as it is emitted: a generic definition yields one per instantiation.
 type Function =
@@ -252,6 +254,7 @@ module Print =
             $"({shown})"
         | PString value -> $"\"{value}\""
         | PGuard(v, guard) -> $"{{ {v.Name} -> {expr indent guard} }}"
+        | PAll parts -> parts |> List.map (pattern indent) |> String.concat " & "
         | PList(elements, rest) ->
             let shown = elements |> List.map (pattern indent)
             let shownRest = rest |> Option.map (fun r -> [ $"...{pattern indent r}" ]) |> Option.defaultValue []

@@ -47,3 +47,5 @@ let internal typeListToType ((items: TypeExpr list, resultOpt: TypeExpr option),
 
 // Pattern parsers
 let pattern, patternRef = createParserForwardedToRef<Pattern, ParseState>()
+/// One pattern, not an and-pattern (`p1 & p2`), which `pattern` also parses.
+let singlePattern, singlePatternRef = createParserForwardedToRef<Pattern, ParseState>()

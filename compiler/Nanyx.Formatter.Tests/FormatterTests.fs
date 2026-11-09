@@ -96,6 +96,14 @@ let ``Guard patterns are printed as written`` () =
         format (lines [ "def h = {"; "  | {.length>5} -> 1"; "  | >=   2 -> 2"; "  | _ -> 3"; "}" ]))
 
 [<Fact>]
+let ``And-patterns are printed as written`` () =
+    unchanged (lines [ "def f = { n ->"; "  match n"; "    | { < 0 } & m -> m"; "    | m & { > 100 } & _ -> m"; "    | _ -> 0"; "}" ])
+    unchanged (lines [ "def g = {"; "  | #some(n & { > 1 }) -> n"; "  | (a & 1, b) -> b"; "  | #error e & whole -> 0"; "  | _ -> 4"; "}" ])
+    Assert.Equal("def h = { | a & b -> 1 }\n", format "def h = { | a&b -> 1 }")
+    // A tag's payload written after a space keeps its brackets: without them the tag would be a part.
+    unchanged (lines [ "def i = {"; "  | #some (a & b) -> 1"; "  | _ -> 2"; "}" ])
+
+[<Fact>]
 let ``A shorthand lambda's spacing is tidied`` () =
     Assert.Equal("def a = xs \\map { * 2 }\n", format "def a = xs \\map {   *   2   }")
     Assert.Equal("def b = { .name }\n", format "def b = {.name}")
