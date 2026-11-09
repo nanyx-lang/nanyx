@@ -269,7 +269,7 @@ Current WASM backend support is intentionally minimal and focused on bootstrappi
 - simple expression blocks with local `def` assignments (`local.set`/`local.get`)
 - top-level expressions (and the `@entry` definition) run from a WebAssembly start function
 - strings are pointers to length-prefixed UTF-8 bytes; `++` and `==` on strings call emitted helpers
-- list literals, `++` on lists, and list patterns (`[]`, `[x, ...rest]`, `[1, y]`) over cons cells on a bump-allocated heap
+- list literals, `++` on lists, and list patterns (`[]`, `[x, ...rest]`, `[1, y]`) over heap-allocated cons cells
 - `dbg(...)` of integers and strings, and `nanyx/console`, write to stdout through WASI `fd_write`
 - `dbg(#tag)` calls a host import `(import "env" "dbg_tag_<tag>" (func))`, which the runtime provides
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a

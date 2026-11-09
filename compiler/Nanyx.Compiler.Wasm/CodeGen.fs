@@ -128,6 +128,16 @@ module private Helpers =
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
     let listCons = NyxCompiler.Intrinsics.listCons
+    let free = "__nanyx_free"
+
+let private heapBaseOffset = 4096  // Start heap after string data region
+
+/// The largest block size, in bytes, with a free list of its own; larger blocks share one list.
+let private largestSizeClass = 32
+
+/// Where `$heap_ptr` starts: after the table of free-list heads, one word per small size and one for the large
+/// blocks.
+let private heapStartOffset = heapBaseOffset + largestSizeClass + 4
 
 /// The WebAssembly helper functions, keyed by name. The ones named after a compiler intrinsic implement
 /// that intrinsic; the rest back language operators (`+` and `==` on strings, list literals and patterns)
@@ -137,45 +147,126 @@ module private Helpers =
 /// pointer and a 0 byte after; a list is 0 (empty) or a pointer to an 8-byte cell of (head, tail); a record (or
 /// tuple) is a pointer to a 4-byte slot per field in field-name order, with its layout's number (see
 /// `RecordTable`) in the 4 bytes before the pointer. A tag without a payload is its code (see `tagCode`), which
-/// is odd; a tag with one is a pointer to an 8-byte cell of (code, payload). The heap is a bump allocator from
-/// `$heap_ptr` that hands out 4-byte-aligned blocks, so a pointer is never odd, and grows the memory when it runs
-/// out; nothing is ever freed.
+/// is odd; a tag with one is a pointer to an 8-byte cell of (code, payload).
+///
+/// The allocator hands out 4-byte-aligned blocks, so a pointer is never odd. Every block has its size (the
+/// requested size rounded up to 4 bytes, and at least 4) in the word before it, and `free` puts a block back on the
+/// free list for its size: blocks of up to 32 bytes have a list per size, larger ones share one list searched
+/// first-fit. The list heads are a table at `heapBaseOffset` (see `freeListHead`), and a free block keeps the next
+/// block of its list in its first word. `alloc` takes from a list when it can, and otherwise bumps `$heap_ptr`,
+/// growing the memory when it runs out.
 let private runtimeHelpers : Map<string, string> =
     let lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
+    // Leaves on the stack the address of the head of the free list for a block of `$size` bytes.
+    let freeListHead =
+        [ "  local.get $size"
+          $"  i32.const {largestSizeClass}"
+          "  i32.le_u"
+          "  if (result i32)"
+          $"    i32.const {heapBaseOffset - 4}"
+          "    local.get $size"
+          "    i32.add"
+          "  else"
+          $"    i32.const {heapBaseOffset + largestSizeClass}"
+          "  end" ]
     [ Helpers.alloc,
       lines
-          [ $"(func ${Helpers.alloc} (param $size i32) (result i32)"
-            "  (local $ptr i32)"
-            "  global.get $heap_ptr"
-            "  local.set $ptr"
-            "  local.get $ptr"
-            "  local.get $size"
-            "  i32.const 3"
-            "  i32.add"
-            "  i32.const -4"
-            "  i32.and"
-            "  i32.add"
-            "  global.set $heap_ptr"
-            "  block $fits"
-            "    loop $grow"
-            "      global.get $heap_ptr"
-            "      memory.size"
-            "      i32.const 65536"
-            "      i32.mul"
-            "      i32.le_u"
-            "      br_if $fits"
-            "      i32.const 1"
-            "      memory.grow"
-            "      i32.const -1"
-            "      i32.eq"
-            "      if"
-            "        unreachable"
-            "      end"
-            "      br $grow"
-            "    end"
-            "  end"
-            "  local.get $ptr"
-            ")" ]
+          [ yield $"(func ${Helpers.alloc} (param $size i32) (result i32)"
+            yield "  (local $link i32)"
+            yield "  (local $ptr i32)"
+            yield "  local.get $size"
+            yield "  i32.const 3"
+            yield "  i32.add"
+            yield "  i32.const -4"
+            yield "  i32.and"
+            yield "  local.tee $size"
+            yield "  i32.eqz"
+            yield "  if"
+            yield "    i32.const 4"
+            yield "    local.set $size"
+            yield "  end"
+            // Walk the free list from its head, taking the first block that is big enough: on a small size's
+            // list that is the first block.
+            yield! freeListHead
+            yield "  local.set $link"
+            yield "  block $empty"
+            yield "    loop $search"
+            yield "      local.get $link"
+            yield "      i32.load"
+            yield "      local.tee $ptr"
+            yield "      i32.eqz"
+            yield "      br_if $empty"
+            yield "      local.get $ptr"
+            yield "      i32.const 4"
+            yield "      i32.sub"
+            yield "      i32.load"
+            yield "      local.get $size"
+            yield "      i32.ge_u"
+            yield "      if"
+            yield "        local.get $link"
+            yield "        local.get $ptr"
+            yield "        i32.load"
+            yield "        i32.store"
+            yield "        local.get $ptr"
+            yield "        return"
+            yield "      end"
+            yield "      local.get $ptr"
+            yield "      local.set $link"
+            yield "      br $search"
+            yield "    end"
+            yield "  end"
+            yield "  global.get $heap_ptr"
+            yield "  i32.const 4"
+            yield "  i32.add"
+            yield "  local.tee $ptr"
+            yield "  local.get $size"
+            yield "  i32.add"
+            yield "  global.set $heap_ptr"
+            yield "  block $fits"
+            yield "    loop $grow"
+            yield "      global.get $heap_ptr"
+            yield "      memory.size"
+            yield "      i32.const 65536"
+            yield "      i32.mul"
+            yield "      i32.le_u"
+            yield "      br_if $fits"
+            yield "      i32.const 1"
+            yield "      memory.grow"
+            yield "      i32.const -1"
+            yield "      i32.eq"
+            yield "      if"
+            yield "        unreachable"
+            yield "      end"
+            yield "      br $grow"
+            yield "    end"
+            yield "  end"
+            yield "  local.get $ptr"
+            yield "  i32.const 4"
+            yield "  i32.sub"
+            yield "  local.get $size"
+            yield "  i32.store"
+            yield "  local.get $ptr"
+            yield ")" ]
+      Helpers.free,
+      lines
+          [ yield $"(func ${Helpers.free} (param $ptr i32)"
+            yield "  (local $size i32)"
+            yield "  (local $head i32)"
+            yield "  local.get $ptr"
+            yield "  i32.const 4"
+            yield "  i32.sub"
+            yield "  i32.load"
+            yield "  local.set $size"
+            yield! freeListHead
+            yield "  local.set $head"
+            yield "  local.get $ptr"
+            yield "  local.get $head"
+            yield "  i32.load"
+            yield "  i32.store"
+            yield "  local.get $head"
+            yield "  local.get $ptr"
+            yield "  i32.store"
+            yield ")" ]
       Helpers.copyBytes,
       lines
           [ $"(func ${Helpers.copyBytes} (param $dst i32) (param $src i32) (param $len i32)"
@@ -807,6 +898,20 @@ let private runtimeHelpers : Map<string, string> =
             ")" ] ]
     |> Map.ofList
 
+/// A module of just the allocator, exporting `alloc`, `free` and the memory, so that tests can drive it directly:
+/// nothing in generated code frees yet.
+let allocatorModuleWat =
+    [ "(module"
+      "  (memory 1)"
+      "  (export \"memory\" (memory 0))"
+      $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset}))"
+      runtimeHelpers |> Map.find Helpers.alloc
+      runtimeHelpers |> Map.find Helpers.free
+      $"  (export \"alloc\" (func ${Helpers.alloc}))"
+      $"  (export \"free\" (func ${Helpers.free}))"
+      ")" ]
+    |> String.concat "\n"
+
 let private ctxFnName (name: string, _, _) = name
 let private ctxFnSlot (_, slot: int, _) = slot
 let private ctxFnArity (_, _, arity: int) = arity
@@ -1050,8 +1155,6 @@ let private sanitizeImportSuffix (name: string) = sanitizeIdentifier name
 let private tagCode (id: int) = (id <<< 1) ||| 1
 
 let private stringDataBaseOffset = 256
-
-let private heapBaseOffset = 4096  // Start heap after string data region
 
 let private dbgDataBaseOffset = 128
 
@@ -2334,7 +2437,9 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
             |> String.concat "\n    "
         let lengthCode = indexedParts |> List.map renderInterpolationPartLength |> String.concat "\n    "
         let writeCode = indexedParts |> List.map renderInterpolationPartWrite |> String.concat "\n    "
-        $"{evalCode}\n    i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    global.get $heap_ptr\n    local.tee $__interp_base\n    local.get $__interp_len\n    i32.store\n    local.get $__interp_base\n    i32.const 4\n    i32.add\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_cursor\n    i32.const 0\n    i32.store8\n    local.get $__interp_base\n    local.get $__interp_len\n    i32.const 8\n    i32.add\n    i32.const -4\n    i32.and\n    i32.add\n    global.set $heap_ptr\n    local.get $__interp_base\n    i32.const 4\n    i32.add"
+        // The string is allocated once its length is known, before the parts are written into it.
+        env.UsedHelpers.Add Helpers.stringAlloc |> ignore
+        $"{evalCode}\n    i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    local.get $__interp_len\n    call ${Helpers.stringAlloc}\n    local.tee $__interp_base\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_base"
     | IdentifierExpr name ->
         match env.Locals |> Map.tryFind name with
         | Some localName -> $"local.get ${localName}"
@@ -4277,6 +4382,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
     // The runtime helpers the lowered code asked for, closed over what they call themselves.
     let helperDependencies =
         [ Helpers.alloc, []
+          Helpers.free, []
           Helpers.copyBytes, []
           Helpers.stringLength, []
           Helpers.stringAlloc, [ Helpers.alloc ]
@@ -4583,7 +4689,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
     // Add heap global if we use heap allocation
     let heapSection =
         if moduleUsesHeap then
-            $"  (global $heap_ptr (mut i32) (i32.const {heapBaseOffset}))"
+            $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset}))"
         else
             ""
 
