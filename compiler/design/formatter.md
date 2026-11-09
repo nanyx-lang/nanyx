@@ -10,7 +10,7 @@
 Nanyx should ship with one official formatter, `nanyx format`, so that there is one layout for Nanyx code and nobody
 argues about it. The [Formatter](../../docs/src/content/standard-tools/formatter.md) page already describes what
 users see: a write mode (the default) and a `--check` mode, files or directories as arguments, a line width of 100
-and an indent of 2, and a `[formatter]` table in `.nyxpack` with those two settings and nothing else.
+and an indent of 2, and a `[formatter]` table in `.nyxp` with those two settings and nothing else.
 
 This page is about what that page leaves out: how the formatter keeps comments the parser throws away, how it
 decides where lines break, and how it guarantees it never changes what a program means.
@@ -32,7 +32,7 @@ Out of scope here:
   [official linter](../../docs/src/content/standard-tools/official-linter.md), in the linters workstream. The
   formatter only moves whitespace and comments, adds or removes parentheses and blank lines, and sorts imports. It
   never renames anything or reorders anything else.
-- Reading the rest of `.nyxpack`: the packaging workstream. The formatter reads only its `[formatter]` table.
+- Reading the rest of `.nyxp`: the packaging workstream. The formatter reads only its `[formatter]` table.
 
 ## Where the compiler is today
 
@@ -228,7 +228,7 @@ error whatever their order (#155). If imports ever gain effects, this rule chang
 
 ### Configuration
 
-The `[formatter]` table of the package's `.nyxpack` (TOML), as the docs describe, with two settings:
+The `[formatter]` table of the package's `.nyxp` (TOML), as the docs describe, with two settings:
 
 ```toml
 [formatter]
@@ -236,8 +236,8 @@ lineWidth = 100   # default 100
 indentSize = 2    # default 2
 ```
 
-`nanyx format` finds the nearest `.nyxpack` in the file's directory or above it, and reads only that table, so it
-does not wait for the packaging workstream to read whole manifests. With no `.nyxpack`, or no table, the defaults
+`nanyx format` finds the nearest `.nyxp` in the file's directory or above it, and reads only that table, so it
+does not wait for the packaging workstream to read whole manifests. With no `.nyxp`, or no table, the defaults
 apply. An unknown key or a value that is not a positive integer is an error naming the file and key. The language
 server uses the same settings for the document it formats.
 
@@ -279,7 +279,7 @@ its own:
    constructs, at every level.
 8. **Sorting imports** ([#226](https://github.com/nanyx-lang/nanyx/issues/226)).
 9. **Configuration** ([#227](https://github.com/nanyx-lang/nanyx/issues/227)). The `[formatter]` table of
-   `.nyxpack`.
+   `.nyxp`.
 10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and
     the docs' code blocks, and run `nanyx format --check` in CI.
 
@@ -289,7 +289,7 @@ Later: range formatting, formatting standard input for other editors (`nanyx for
 
 On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
 
-- **Configuration.** `lineWidth` and `indentSize`, for now, in the `[formatter]` table of `.nyxpack`.
+- **Configuration.** `lineWidth` and `indentSize`, for now, in the `[formatter]` table of `.nyxp`.
 - **Blank lines.** A construct that spans several lines gets a blank line before and after it, at every level;
   between single-line constructs, the author's single blank lines are kept.
 - **Trailing commas.** A non-issue: Nanyx separates the elements of a multi-line record or list with newlines, not

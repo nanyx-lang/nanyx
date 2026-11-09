@@ -8,12 +8,12 @@ Packages group related modules into units that can be built, distributed, and re
 
 # Packages
 
-A package contains one or more named modules and is described by a `.nyxpack` manifest.
+A package contains one or more named modules and is described by a `.nyxp` manifest.
 
 For example, a package named `acme.web` might have the following structure:
 
 ```text
-acme.web.nyxpack
+acme.web.nyxp
 http.nyx
 json.nyx
 json/
@@ -47,7 +47,7 @@ The `/` separates the package name from the module name. Dots within a module na
 
 # Package manifests
 
-Every package has a `.nyxpack` manifest written in TOML.
+Every package has a `.nyxp` manifest written in TOML.
 
 The manifest describes the package and the source files and dependencies that make it up.
 
@@ -193,7 +193,7 @@ In a package's directory (or any directory under it), `nanyx build` checks every
 
 ```text
 nanyx run examples/greeter
-nanyx build examples/greeter/greeter.nyxpack
+nanyx build examples/greeter/greeter.nyxp
 ```
 
 Both are debug builds: a type or name error is reported, but does not stop the program being built or run. The code where it was found reports the error again, and stops the program, if the program reaches it. `nanyx build --release` refuses any error.
@@ -210,13 +210,13 @@ For example:
 myProject.nyxproj
 src/
   app/
-    app.nyxpack
+    app.nyxp
     ...
   shared/
-    shared.nyxpack
+    shared.nyxp
     ...
   domain/
-    domain.nyxpack
+    domain.nyxp
     ...
 ```
 
@@ -269,7 +269,7 @@ The script can import other anonymous modules by file path:
 import "./utils" as utils
 ```
 
-For script mode, Nanyx synthesizes a package description in memory rather than requiring a `.nyxpack` file. A script can add to that description with `::` directives at the top of the file, each saying what one manifest entry would:
+For script mode, Nanyx synthesizes a package description in memory rather than requiring a `.nyxp` file. A script can add to that description with `::` directives at the top of the file, each saying what one manifest entry would:
 
 ```nanyx
 ::linters.default.unusedBindings = "error"

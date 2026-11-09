@@ -12,7 +12,7 @@ later (Python, early Go, C and C++) never fully recover from the years without i
 the first release, and built alongside the compiler.
 
 The [Packages and projects](../../docs/src/content/tour/packages.md) page already describes the user's side:
-`.nyxpack` and `.nyxproj` TOML manifests, imports of the form `acme.web/http`, `public-modules`, project
+`.nyxp` and `.nyxproj` TOML manifests, imports of the form `acme.web/http`, `public-modules`, project
 references and script mode. This page is about what that page leaves out: who owns a package name, how versions
 are chosen, what a published package is, and where it lives.
 
@@ -20,7 +20,7 @@ are chosen, what a published package is, and where it lives.
 
 | Area | Where |
 |------|-------|
-| Manifests | Reading `.nyxpack` and `.nyxproj`, checked against the docs |
+| Manifests | Reading `.nyxp` and `.nyxproj`, checked against the docs |
 | Module resolution | Imports by package and module name, `public-modules`, direct-dependency-only imports |
 | Version resolution | Choosing one version of each package, the lockfile, error messages when no choice works |
 | Package cache | Downloading, verifying and storing packages on the user's machine |
@@ -39,7 +39,7 @@ Out of scope here:
 
 ## Where the compiler is today
 
-A first slice of `.nyxpack` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
+A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
 
 - **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
   `sources`; `public-modules` is accepted but not used) and `[linters]` table are read, with an error naming the
@@ -120,7 +120,7 @@ linter rule that asks for annotations on exported definitions
 
 ### What a package is
 
-A published package is a `.nyxpkg` file: a gzipped tar holding the `.nyxpack` manifest, the source files the
+A published package is a `.nyxpkg` file: a gzipped tar holding the `.nyxp` manifest, the source files the
 manifest selects, the readme and licence, and a generated `api.json` describing the public API.
 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
@@ -197,7 +197,7 @@ cached source read-only.
 
 _To do._ Candidate items, not yet filed, roughly in order. Each produces something usable on its own:
 
-1. **Imports by module name within a package.** Read `.nyxpack` (`name`, `version`, `sources`,
+1. **Imports by module name within a package.** Read `.nyxp` (`name`, `version`, `sources`,
    `public-modules`), require named modules, check a module's declared name against its import, and resolve
    `package/module` names through the manifest instead of the file system. `nanyx run` and `check` without a file
    use the manifest in the current directory. `nanyx new` creates one.

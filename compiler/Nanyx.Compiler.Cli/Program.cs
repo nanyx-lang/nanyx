@@ -58,7 +58,7 @@ internal static class CliCommands
     /// <summary>
     /// Run a Nanyx program: a .nyx file, or the @entry of a package.
     /// </summary>
-    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
+    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Optional output path for generated artifacts.</param>
     [Consolo("run")]
     public static int Run(
@@ -107,7 +107,7 @@ internal static class CliCommands
     /// <summary>
     /// Build a Nanyx package: check every source file the manifest selects, and write its @entry program as WebAssembly text.
     /// </summary>
-    /// <param name="path">The package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
+    /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     [Consolo("build")]
