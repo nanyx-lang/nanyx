@@ -192,7 +192,10 @@ type Package =
 type PackageBuild =
     { Package: Package
       Results: (string * CompileResult) list
-      Diagnostics: Diagnostic list }
+      Diagnostics: Diagnostic list
+      /// Whether every error in the package is a type or name error deferred to run time (see
+      /// `CompileResult.ErrorsDeferred`), so a debug build can run its `@entry`. True when there are none.
+      ErrorsDeferred: bool }
 
 module Package =
     /// The files the manifest's `sources` select, as full paths in order.
@@ -261,10 +264,19 @@ module Package =
             |> List.map (fun file ->
                 let source = File.ReadAllText file
                 let result = Compiler.compileSourceWith package.Manifest.Analyzers file source
-                file, { result with Diagnostics = directiveErrors package.Manifest.Path file source @ result.Diagnostics })
+                let directives = directiveErrors package.Manifest.Path file source
+                file,
+                { result with
+                    Diagnostics = directives @ result.Diagnostics
+                    ErrorsDeferred = result.ErrorsDeferred && directives.IsEmpty })
+        // A file's errors are deferred when it did not type-check and each of its errors was placed; an analyzer rule
+        // configured as an error, in a file that did type-check, is not deferred.
+        let deferred (result: CompileResult) =
+            not (result.Diagnostics |> List.exists Diagnostics.isError) || (not result.TypeChecked && result.ErrorsDeferred)
         { Package = package
           Results = results
-          Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics) |> List.distinct }
+          Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics) |> List.distinct
+          ErrorsDeferred = results |> List.forall (snd >> deferred) }
 
     /// The compile of the package's `@entry` file, if it has one.
     let entryResult (build: PackageBuild) : CompileResult option =
