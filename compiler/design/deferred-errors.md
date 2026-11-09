@@ -2,8 +2,8 @@
 
 > **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
 > the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
-> The type checker reports every error in a module, recovering at the expression that failed; see the
-> [plan](#plan) for the rest. It is part of the [compilation](compilation.md) workstream, and
+> The type checker recovers from errors (stage 1 of the [plan](#plan)): it reports every error in a module and
+> types the module all the same. Turning the errors into traps is next. It is part of the [compilation](compilation.md) workstream, and
 > its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 ## Summary
@@ -76,8 +76,13 @@ How it is built:
   record's fields say, are solved the same way, so a conflict in one def does not leave the types in the next
   unresolved. Conflicts do not yet bind anything to the error type: the expressions there are typed by their other
   constraints.
-- **Not yet:** checking a module still produces only diagnostics when there are errors, not a typed module beside
-  them.
+- **The result.** A module with type or name errors is typed all the same, with what did check:
+  `CompileResult.Typed` holds it beside the errors, and `CompileResult.TypeChecked` says whether there were any. The
+  analyzers only look at a module that type-checked. A module whose imports have errors is still not typed, and
+  an import with errors fails its importer with them.
+- **The editor** still reads the last text that type-checked for hover, completion and type hints while the current
+  one does not (`OpenDocument.LastGood`). Reading the current text's partly typed module instead, with `?` where it
+  failed, is a choice for the language server to make.
 
 This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
 editor, which sees every error in a module, and hover types and completions past the first one. It is also where
@@ -149,7 +154,7 @@ for red-green iteration.
    The backend still refuses programs with errors.
    - [x] Carry on past a def that fails to check, and past a conflict among the constraints.
    - [x] Recover within an expression: the error type, and `FailedExprs` for the nodes that failed.
-   - [ ] Return the typed module alongside its diagnostics.
+   - [x] Return the typed module alongside its diagnostics.
 2. **Deferral pass and `Panic`.** Mark erroneous expressions and definitions in the typed AST, rewrite them to
    `Panic`, add the runtime helper (write to stderr, then `unreachable`), and cut sequences off after a panic.
    Make non-exhaustive matches deferred too.

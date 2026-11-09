@@ -2079,6 +2079,24 @@ let ``A def that fails to check does not hide errors in the defs after it`` () =
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, result.Diagnostics.[1].Code)
 
 [<Fact>]
+let ``A module with errors is typed with what did check`` () =
+    let result = Compiler.compile "def a = missing\ndef b = 1\ndef c: string = 2"
+    Assert.False(result.TypeChecked)
+    Assert.Equal(2, result.Diagnostics.Length)
+    let typed = result.Typed.Value
+    Assert.Equal(Unifier.errorType, typed.Types.["a"])
+    Assert.Equal(TyPrimitive "int", typed.Types.["b"])
+    Assert.Equal(TyPrimitive "string", typed.Types.["c"])
+    Assert.True(result.Syntax.IsSome)
+
+[<Fact>]
+let ``A module that imports one with errors is not typed`` () =
+    let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport \"mod.nyx\"\ndef value = foo"
+    Assert.True(result.Typed.IsNone)
+    Assert.False(result.TypeChecked)
+    Assert.Equal("Unknown identifier 'missing'", (Assert.Single result.Diagnostics).Message)
+
+[<Fact>]
 let ``The error type agrees with every type`` () =
     let a = TyVar { Id = 1; Name = None }
     let constraints: ConstraintSet =

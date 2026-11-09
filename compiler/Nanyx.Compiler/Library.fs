@@ -15,9 +15,14 @@ type CompilationPhase =
 type CompileResult =
     { Phase: CompilationPhase
       Diagnostics: Diagnostic list
+      /// The module typed with what did check: present when it parsed and its imports checked, even if it has type
+      /// or name errors of its own (see `TypeChecked`).
       Typed: TypedModule option
+      /// Whether the module type-checked: it has no type or name errors. An analyzer rule configured as an error does
+      /// not stop it type-checking.
+      TypeChecked: bool
       /// The root module as parsed, before desugaring: the syntax the user wrote, whose nodes the typed module's
-      /// `ExprTypes` and `CalleeTypes` are keyed by. Only present when the module type-checked.
+      /// `ExprTypes` and `CalleeTypes` are keyed by. Present when `Typed` is.
       Syntax: Module option }
 
 /// Where a module's source came from, which decides how its imports are resolved and what is in scope.
@@ -32,6 +37,9 @@ type private ModuleOrigin =
 /// A type-checkedModule module together with what an importer needs from it.
 type private CheckedModule =
     { Typed: TypedModule
+      /// The errors found checking the module itself. A module with errors is still typed, with what did check,
+      /// for the editor's features; it cannot be run or imported.
+      Errors: Diagnostic list
       /// The module's own items (imports removed), as the backend will see them.
       Own: Module
       /// Items inlined from the modules it imports, already renamed and ready for the backend.
@@ -1211,7 +1219,10 @@ module Compiler =
                     if importKey = key || visited.Contains importKey then
                         Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"Import cycle detected for {importKey}" ])
                     else
-                        typecheckImport checkedModules importOrigin readSource (visited.Add key)
+                        match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
+                        // A module with errors fails each importer with them.
+                        | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, imported.Errors)
+                        | checkedImport -> checkedImport
                 match StandardLibrary.tryModuleName item with
                 | Some moduleName ->
                     match StandardLibrary.tryLoadSource moduleName with
@@ -1257,106 +1268,105 @@ module Compiler =
                 Error (Typed, List.distinct errors)
             else
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.Infer.inferModuleWithEnv env state desugared
+                let subst, mismatches = Unifier.solve state.Constraints
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
-                // constraints of those that did.
-                match Unifier.solve state.Constraints with
-                | _, mismatches when not (inferErrors.IsEmpty && mismatches.IsEmpty) ->
-                    // In the order they are in the source, not the order solving found them.
-                    let mismatchErrors =
-                        mismatches
-                        |> List.sortBy (fun (_, span) -> span.Start)
-                        |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message)
-                    Error (Typed, inferErrors @ mismatchErrors)
-                | subst, _ ->
-                        let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
-                        let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
-                        // The module's own definitions win over imported ones of the same name.
-                        let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
-                        let inlined =
-                            inlined @ preludeInlined
-                            |> List.filter (function
-                                | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
-                                | _ -> true)
-                            |> distinctDefinitions
-                            |> reachedItems own
-                        // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
-                        // alias), each meaning the definition the environment settled on (an explicit import's over
-                        // the prelude's), less the names the module declares at the top level itself.
-                        let ownTopLevel =
-                            state.Scopes
-                            |> Map.keys
-                            |> Seq.map (fun id -> state.Symbols.[id])
-                            |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
-                            |> List.ofSeq
-                        let declaredHere = ownTopLevel |> List.map (fun symbol -> symbol.Name) |> Set.ofList
-                        let imported =
-                            env
-                            |> Map.toList
-                            |> List.choose (fun (name, scheme) ->
-                                match scheme.Symbol with
-                                | Some id when state.Symbols.ContainsKey id && not (declaredHere.Contains name) -> Some (name, id, scheme.Type)
-                                | _ -> None)
-                        // Only the undotted ones are in scope as names: a dotted one is reached through its prefix.
-                        let scopes =
-                            imported
-                            |> List.filter (fun (name, _, _) -> not (name.Contains '.'))
-                            |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (sourceFileName origin))) state.Scopes
-                        // A def a `module name =` block does not export can only be named inside the block.
-                        let keptToItsBlock (symbol: Symbol) =
-                            not symbol.IsExported
-                            && state.ModuleBlocks |> List.exists (fun (_, block) -> SourceSpan.contains block symbol.Declaration)
-                        let moduleNames =
-                            ownTopLevel
-                            |> List.filter (keptToItsBlock >> not)
-                            |> List.fold (fun acc symbol -> acc |> Map.add symbol.Name symbol.Id) (imported |> List.map (fun (name, id, _) -> name, id) |> Map.ofList)
-                        Ok { Typed =
-                                { Module = inlined @ own
-                                  // The types of the imported definitions inlined for the backend, then the module's own.
-                                  Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
-                                  TypeDefs = resolvedTypeDefs
-                                  Items = resolvedItems
-                                  // Filled in for the root module only, by `compileWith`.
-                                  ExprTypes = Map.empty
-                                  CalleeTypes = Map.empty
-                                  SymbolTypes = Map.empty
-                                  Symbols = state.Symbols
-                                  AnnotatedSymbols = state.AnnotatedSymbols
-                                  References = state.References
-                                  ImportReferences = state.ImportReferences
-                                  Scopes = scopes
-                                  ModuleNames = moduleNames
-                                  ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
-                                  ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances }
-                             Own = own
-                             Inlined = inlined
-                             Name = declaredModuleName desugared
-                             Syntax = ast
-                             Subst = subst
-                             RawExprTypes = state.ExprTypes
-                             RawCalleeTypes = state.CalleeTypes
-                             RawSymbolTypes = state.SymbolTypes
-                             // Only declarations the module made itself are in `DeclarationSymbols`.
-                             Exports =
-                                state.DeclarationSymbols
-                                |> Map.values
-                                |> Seq.map (fun id -> state.Symbols.[id])
-                                |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue && symbol.IsExported)
-                                |> Seq.map (fun symbol -> symbol.Name, symbol)
-                                |> Map.ofSeq
-                             ContextRequirements =
-                                let exported = exportedValueNames own
-                                state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name)
-                             ContextSignatures =
-                                let exported = exportedValueNames own
-                                state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
-                             AmbientContexts =
-                                state.AmbientMembers
-                                |> Map.values
-                                |> Seq.map snd
-                                |> Set.ofSeq
-                                |> Set.union state.CarriedAmbientContexts
-                                |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
-                                |> Map.ofSeq }
+                // constraints of those that did, in the order they are in the source rather than the order solving
+                // found them. The module is typed all the same, with what did check.
+                let moduleErrors =
+                    inferErrors
+                    @ (mismatches
+                       |> List.sortBy (fun (_, span) -> span.Start)
+                       |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message))
+                let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
+                let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                // The module's own definitions win over imported ones of the same name.
+                let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
+                let inlined =
+                    inlined @ preludeInlined
+                    |> List.filter (function
+                        | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
+                        | _ -> true)
+                    |> distinctDefinitions
+                    |> reachedItems own
+                // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
+                // alias), each meaning the definition the environment settled on (an explicit import's over
+                // the prelude's), less the names the module declares at the top level itself.
+                let ownTopLevel =
+                    state.Scopes
+                    |> Map.keys
+                    |> Seq.map (fun id -> state.Symbols.[id])
+                    |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
+                    |> List.ofSeq
+                let declaredHere = ownTopLevel |> List.map (fun symbol -> symbol.Name) |> Set.ofList
+                let imported =
+                    env
+                    |> Map.toList
+                    |> List.choose (fun (name, scheme) ->
+                        match scheme.Symbol with
+                        | Some id when state.Symbols.ContainsKey id && not (declaredHere.Contains name) -> Some (name, id, scheme.Type)
+                        | _ -> None)
+                // Only the undotted ones are in scope as names: a dotted one is reached through its prefix.
+                let scopes =
+                    imported
+                    |> List.filter (fun (name, _, _) -> not (name.Contains '.'))
+                    |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (sourceFileName origin))) state.Scopes
+                // A def a `module name =` block does not export can only be named inside the block.
+                let keptToItsBlock (symbol: Symbol) =
+                    not symbol.IsExported
+                    && state.ModuleBlocks |> List.exists (fun (_, block) -> SourceSpan.contains block symbol.Declaration)
+                let moduleNames =
+                    ownTopLevel
+                    |> List.filter (keptToItsBlock >> not)
+                    |> List.fold (fun acc symbol -> acc |> Map.add symbol.Name symbol.Id) (imported |> List.map (fun (name, id, _) -> name, id) |> Map.ofList)
+                Ok { Typed =
+                        { Module = inlined @ own
+                          // The types of the imported definitions inlined for the backend, then the module's own.
+                          Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
+                          TypeDefs = resolvedTypeDefs
+                          Items = resolvedItems
+                          // Filled in for the root module only, by `compileWith`.
+                          ExprTypes = Map.empty
+                          CalleeTypes = Map.empty
+                          SymbolTypes = Map.empty
+                          Symbols = state.Symbols
+                          AnnotatedSymbols = state.AnnotatedSymbols
+                          References = state.References
+                          ImportReferences = state.ImportReferences
+                          Scopes = scopes
+                          ModuleNames = moduleNames
+                          ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
+                          ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances }
+                     Errors = moduleErrors
+                     Own = own
+                     Inlined = inlined
+                     Name = declaredModuleName desugared
+                     Syntax = ast
+                     Subst = subst
+                     RawExprTypes = state.ExprTypes
+                     RawCalleeTypes = state.CalleeTypes
+                     RawSymbolTypes = state.SymbolTypes
+                     // Only declarations the module made itself are in `DeclarationSymbols`.
+                     Exports =
+                        state.DeclarationSymbols
+                        |> Map.values
+                        |> Seq.map (fun id -> state.Symbols.[id])
+                        |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue && symbol.IsExported)
+                        |> Seq.map (fun symbol -> symbol.Name, symbol)
+                        |> Map.ofSeq
+                     ContextRequirements =
+                        let exported = exportedValueNames own
+                        state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name)
+                     ContextSignatures =
+                        let exported = exportedValueNames own
+                        state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
+                     AmbientContexts =
+                        state.AmbientMembers
+                        |> Map.values
+                        |> Seq.map snd
+                        |> Set.ofSeq
+                        |> Set.union state.CarriedAmbientContexts
+                        |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
+                        |> Map.ofSeq }
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
@@ -1373,7 +1383,8 @@ module Compiler =
         | Result.Ok (ast, _, _) -> Ok ast
         | Result.Error err -> Error [ syntaxError err ]
 
-    /// Checks the module from `origin`, then runs the analyzers `options` names over it if it type-checked. Only
+    /// Checks the module from `origin`, then runs the analyzers `options` names over it if it type-checked. A module
+    /// with type or name errors is typed all the same, with what did check, beside its errors. Only
     /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
     /// diagnostics are not repeated in every module that imports it, and the standard library never is.
     let private compileFrom (options: AnalyzerOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
@@ -1382,6 +1393,7 @@ module Compiler =
             { Phase = phase
               Diagnostics = diagnostics
               Typed = None
+              TypeChecked = false
               Syntax = None }
         | Result.Ok checkedModule ->
             // Types by node are only read for the root module, so only its are resolved: not those of every
@@ -1392,12 +1404,15 @@ module Compiler =
                     ExprTypes = resolve checkedModule.RawExprTypes
                     CalleeTypes = resolve checkedModule.RawCalleeTypes
                     SymbolTypes = resolve checkedModule.RawSymbolTypes }
-            // A rule configured as an error fails the compile as a compiler error does: callers that stop at
-            // errors (`nanyx run`, say) look at the diagnostics, and the typed module is still there for the
-            // editor's features.
+            // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
+            // there for the editor's features. The analyzers only look at a module that type-checked; a rule
+            // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
-              Diagnostics = Analyzers.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
+              Diagnostics =
+                if checkedModule.Errors.IsEmpty then Analyzers.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
+                else checkedModule.Errors
               Typed = Some typed
+              TypeChecked = checkedModule.Errors.IsEmpty
               Syntax = Some checkedModule.Syntax }
 
     /// `compileFile` with the analyzers and severities `options` gives.
@@ -1406,6 +1421,7 @@ module Compiler =
             { Phase = Parsed
               Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"File not found: {filePath}" ]
               Typed = None
+              TypeChecked = false
               Syntax = None }
         else
             compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)

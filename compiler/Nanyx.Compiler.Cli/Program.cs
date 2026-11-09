@@ -417,7 +417,7 @@ internal static class CliCommands
 
     private static int RunCheck(CompileResult result)
     {
-        if (result.Typed is null)
+        if (result.Typed is null || !result.TypeChecked)
         {
             return 1;
         }
