@@ -133,7 +133,7 @@ what the compiler keeps: exact spans, resolved names and types.
   standard-library module exports offers the import that brings it in, one fix per module that exports it.
   `String.trim(s)` offers `import nanyx/text`; a name qualified by a module's name, as `math.abs(x)`, offers
   `import nanyx/math as math`. The import goes on the line after the file's last import, else after its `module`
-  line, else at the top. `NyxCompiler.ImportFixes` attaches these fixes in the compiler, from an index of the
+  line, else after the `::` directives (which must come before any code), else at the top. `NyxCompiler.ImportFixes` attaches these fixes in the compiler, from an index of the
   library's exports built once; the prelude is left out, since its names are always in scope. A fix that edits
   another file is not offered.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.

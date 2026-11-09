@@ -55,8 +55,9 @@ module ImportFixes =
         | None -> $"import {source}"
 
     /// Where a new import goes in `source`, and the text to insert there for the line `line`: on the line after the
-    /// module's last top-level import; else after its `module` line, with a blank line between; else at the top,
-    /// with a blank line after it.
+    /// module's last top-level import; else after its `module` line, with a blank line between; else after the `#!`
+    /// line and `::` directives at the top, which must come before any code, with a blank line between; else at the
+    /// top, with a blank line after it.
     let private insertion (source: string) (syntax: Module) (line: string) : int * string =
         let lineAfter (offset: int) =
             match source.IndexOf('\n', offset) with
@@ -73,7 +74,10 @@ module ImportFixes =
             match lineAfter item.Span.End with
             | Some offset -> offset, "\n" + line + "\n"
             | None -> source.Length, "\n\n" + line
-        | None, None -> 0, line + "\n\n"
+        | None, None ->
+            match Directives.headerEnd source with
+            | 0 -> 0, line + "\n\n"
+            | headerEnd -> headerEnd, "\n\n" + line
 
     let private fixesFor (exports: Map<string, string list>) (source: string) (syntax: Module) (span: SourceSpan) : Fix list =
         let written = source.Substring(span.Start, span.End - span.Start)
