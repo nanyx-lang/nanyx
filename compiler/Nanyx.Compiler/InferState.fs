@@ -127,7 +127,10 @@ type InferState =
             UnknownTypeUses: NodeId list;
             /// Where each builder block falls off its end without `return`, by the node of the made-up read of the
             /// builder's `zero` desugaring put there: where to say so if the builder has no `zero`.
-            WorkflowZeros: Map<NodeId, SourceSpan> }
+            WorkflowZeros: Map<NodeId, SourceSpan>;
+            /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
+            /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
+            JoinRests: Set<int> }
 
 let emptyState =
         { NextId = 0;
@@ -171,7 +174,8 @@ let emptyState =
             FailedExprs = [];
             UnhandledMatches = [];
             UnknownTypeUses = [];
-            WorkflowZeros = Map.empty }
+            WorkflowZeros = Map.empty;
+            JoinRests = Set.empty }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

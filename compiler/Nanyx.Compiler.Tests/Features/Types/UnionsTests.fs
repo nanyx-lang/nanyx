@@ -97,6 +97,67 @@ let ``A piped lambda can match only the tags left of a union's rest`` () =
     Assert.Equal(expected, typed.Types.["piped"])
 
 [<Fact>]
+let ``A match arm of a type not known yet joins the other arms' tags as the union's rest`` () =
+    // `f(other)` is of no known type when the arms are joined, so it adds a rest to `#some(x)` rather than being
+    // made a `#some`: `f` can give back other tags, as the annotated `mapError` above says it can.
+    let source =
+        "def mapOther = {\n" +
+        "  | #some(x), _ -> #some(x)\n" +
+        "  | other, f -> f(other)\n" +
+        "}\n" +
+        "def parsed: #some(int) | #invalidInt = #invalidInt\n" +
+        "def mapped = mapOther(parsed, { _ -> #bad(\"y\") })"
+    let result = Compiler.compile source
+    Assert.Empty(result.Diagnostics)
+    let typed = result.Typed.Value
+    match typed.Types.["mapOther"] with
+    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar a)); TyVar resultRest ]) ->
+        match fields.["0"], fields.["1"] with
+        | TyUnion [ TyTag("some", Some (TyVar a')); TyVar inputRest ],
+          TyFunc(TyVar fInput, TyUnion [ TyTag("some", Some (TyVar a'')); TyVar fRest ]) ->
+            Assert.Equal(a.Id, a'.Id)
+            Assert.Equal(a.Id, a''.Id)
+            Assert.Equal(inputRest.Id, fInput.Id)
+            Assert.Equal(resultRest.Id, fRest.Id)
+            Assert.NotEqual(inputRest.Id, resultRest.Id)
+        | other -> Assert.Fail($"Unexpected parameters: %A{other}")
+    | other -> Assert.Fail($"Unexpected mapOther type: %A{other}")
+    Assert.Equal(TyUnion [ TyTag("some", Some (TyPrimitive "int")); TyTag("bad", Some (TyPrimitive "string")) ], typed.Types.["mapped"])
+
+[<Fact>]
+let ``A recursive call's arm joins the tags of the arms around it`` () =
+    // `loop(rest)` is of no known type inside `loop`: the `if` makes it `#found(string) | s`, and the match around
+    // it adds `#missing` to that `s` rather than asking `s` to hold itself.
+    let source =
+        "def find = { xs, name ->\n" +
+        "  rec loop = {\n" +
+        "    | [] -> #missing\n" +
+        "    | [x, ...rest] -> if x == name then #found(x) else loop(rest)\n" +
+        "  }\n" +
+        "  loop(xs)\n" +
+        "}\n" +
+        "def found = find([\"a\", \"b\"], \"b\")\n" +
+        "def described = match found\n" +
+        "  | #missing -> \"missing\"\n" +
+        "  | #found(x) -> x\n"
+    let result = Compiler.compile source
+    Assert.Empty(result.Diagnostics)
+    let typed = result.Typed.Value
+    Assert.Equal(TyPrimitive "string", typed.Types.["described"])
+
+[<Fact>]
+let ``A match arm whose type is an annotation's variable is not made a union`` () =
+    // `b` stands for any type, so the arm cannot join `#some(x)` as a rest: the annotation is too general.
+    let source =
+        "def broken: #some(α) | ω, (ω -> b) -> #some(α) | b = {\n" +
+        "  | #some(x), _ -> #some(x)\n" +
+        "  | other, f -> f(other)\n" +
+        "}\n"
+    let result = Compiler.compile source
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal("NYX0202", diagnostic.Code)
+
+[<Fact>]
 let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
     // `other` cannot be a `#some`, so it is the rest `r`: returning it does not force `a` and `b` together.
     let source =
