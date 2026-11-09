@@ -814,11 +814,25 @@ module Compiler =
                 | TypedModuleDecl _ -> item)
         resolvedTypes, resolvedTypeDefs, resolvedItems
 
+    /// `expr` with each builder block that uses no workflow keyword (`blocks`, by the node of the call it is written
+    /// as) replaced by its block, which runs where it is written.
+    let private inlineWorkflowBlocks (blocks: Set<NodeId>) (expr: Expression) : Expression =
+        if blocks.IsEmpty then
+            expr
+        else
+            expr
+            |> mapExpressionKinds (fun current kind ->
+                match kind with
+                | FunctionCall(_, _, [ Kind (Lambda([], body)) ]) when blocks.Contains current.Id -> body.Kind
+                | other -> other)
+
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
     /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
-    /// call (`properties`), and without import statements.
-    let private moduleFromTypedItems (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (items: TypedTopLevelItem list) : Module =
-        let lower (expr: Expression) = expr |> retargetPipes pipeTargets |> callBuiltInProperties properties
+    /// call (`properties`), each builder block that uses no keyword as its block (`workflowBlocks`), and without
+    /// import statements.
+    let private moduleFromTypedItems (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+        let lower (expr: Expression) =
+            expr |> retargetPipes pipeTargets |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1071,7 +1085,7 @@ module Compiler =
                     | Error (message, span) -> Error (Typed, [ Diagnostics.at DiagnosticCodes.TypeMismatch span message ])
                     | Ok subst ->
                         let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
-                        let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties resolvedItems |> writeBlockAliases state
+                        let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                         // The module's own definitions win over imported ones of the same name.
                         let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                         let inlined =

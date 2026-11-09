@@ -98,6 +98,9 @@ type InferState =
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
+            /// The builder blocks that use no workflow keyword, `proc { ... }` with no `try` or `return`, by the node
+            /// of the call they are written as: each runs as its block, where it is written.
+            WorkflowBlocks: Set<NodeId>;
             /// Where a constraint added now is reported if it cannot be satisfied: the expression being inferred.
             Origin: SourceSpan;
             /// The imports of `module name =` blocks in this file (see `BlockImport`).
@@ -147,6 +150,7 @@ let emptyState =
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
             BuiltInProperties = Map.empty;
+            WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;
             BlockImports = [];
             BlockAliases = Map.empty;
@@ -1661,26 +1665,22 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | _ -> None
 
                 match isWorkflowCall with
-                | Some fields ->
-                    let missingMembers =
-                        ["await"; "pure"]
-                        |> List.filter (fun memberName -> not (fields |> Map.containsKey memberName))
-                    if not missingMembers.IsEmpty then
-                        let missingText = String.concat ", " missingMembers
-                        Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' is missing context members: {missingText}" ]
-                    else
-                        let envWithCtx = extendEnvWithRecordFields env funcTy
-                        match args with
-                        | [Kind (Lambda(lambdaArgs, lambdaBody)) as lambdaExpr] ->
-                            match inferLambdaWithExpected envWithCtx current lambdaExpr lambdaArgs lambdaBody (Some (TyPrimitive "unit")) None with
-                            | Ok (typedLambda, next) ->
-                                let returnTy =
-                                    match Unifier.unalias typedLambda.Type with
-                                    | TyFunc(_, ret) -> ret
-                                    | other -> other
-                                Ok (mkTypedExpr expr returnTy None None None, next)
-                            | Error err -> Error err
-                        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
+                | Some _ ->
+                    // A builder's block with no workflow keyword, `proc { ... }` with no `try` or `return`: the
+                    // workflow rewrite leaves it as a call, since it cannot tell a builder from a function given a
+                    // trailing lambda, but a builder is a record. The block runs where it is written, as a block
+                    // with keywords does, and its value is the block's.
+                    match args with
+                    | [Kind (Lambda(lambdaArgs, lambdaBody)) as lambdaExpr] ->
+                        match inferLambdaWithExpected env current lambdaExpr lambdaArgs lambdaBody (Some (TyPrimitive "unit")) None with
+                        | Ok (typedLambda, next) ->
+                            let returnTy =
+                                match Unifier.unalias typedLambda.Type with
+                                | TyFunc(_, ret) -> ret
+                                | other -> other
+                            Ok (mkTypedExpr expr returnTy None None None, { next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
+                        | Error err -> Error err
+                    | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
                 | None ->
                     // With a known signature, each argument is checked against its parameter as it is inferred,
                     // so a lambda argument's parameters can take their types from the signature and from the
