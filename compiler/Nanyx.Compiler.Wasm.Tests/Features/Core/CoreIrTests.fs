@@ -333,6 +333,21 @@ let ``A type variable that nothing constrains is unit in the core IR`` () =
     Assert.Contains("List_length__unit", report.FromCoreIr)
 
 [<Fact>]
+let ``A guard compares to what any expression computes, in the core IR`` () =
+    let source =
+        "def limit = 10\n" +
+        "\n" +
+        "def size: int -> int = { n ->\n" +
+        "  match n\n" +
+        "    | { >= limit * 2 } -> 2\n" +
+        "    | { >= limit } -> 1\n" +
+        "    | else -> 0\n" +
+        "}\n"
+    let wat, report = compileWithReport source
+    Assert.Contains("size", report.FromCoreIr)
+    Assert.Contains("call $limit\n    i32.const 2\n    i32.mul\n      i32.ge_s", wat)
+
+[<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
     let source =
         "def nOf = { r -> r.n }\n" +
@@ -364,7 +379,8 @@ let ``Every intermediate value in the core IR is named`` () =
           RecordConstructors = Set.empty
           NominalWrappers = Set.empty
           Lifted = Map.empty
-          TopLevel = [] }
+          TopLevel = []
+          NamedTypes = Map.empty }
     let lowered = CoreIrLower.lowerModule input id
     let func, _ = lowered.Roots.["f"]
     let printed = CoreIr.Print.func func

@@ -73,24 +73,6 @@ type PrimOp =
     | FloatBinary of string
     | Not
 
-type Pattern =
-    | PWildcard
-    | PInt of int64
-    | PBool of bool
-    /// A tag, and the pattern its payload must match if it has one.
-    | PTag of string * Pattern option
-    /// A record's fields, by the slot each is stored in, and the pattern each must match.
-    | PFields of (int * Pattern) list
-    /// A string equal to this literal.
-    | PString of string
-    /// A value that compares to this one by the operator: `| > 5 ->`.
-    | PGuard of string * Atom
-    /// A list whose first elements match these patterns, and the rest of which matches the last pattern if there is
-    /// one, or is empty if not.
-    | PList of Pattern list * Pattern option
-    /// Binds the value matched here to a variable.
-    | PBind of Var
-
 /// How a hole of an interpolated string is printed.
 type HoleType =
     | HoleString
@@ -193,6 +175,25 @@ and Arm =
     { Patterns: Pattern list
       Body: Expr }
 
+and Pattern =
+    | PWildcard
+    | PInt of int64
+    | PBool of bool
+    /// A tag, and the pattern its payload must match if it has one.
+    | PTag of string * Pattern option
+    /// A record's fields, by the slot each is stored in, and the pattern each must match.
+    | PFields of (int * Pattern) list
+    /// A string equal to this literal.
+    | PString of string
+    /// A value that compares by the operator to what this expression computes, each time the arm is tested:
+    /// `| { >= limit * 2 } ->`.
+    | PGuard of string * Expr
+    /// A list whose first elements match these patterns, and the rest of which matches the last pattern if there is
+    /// one, or is empty if not.
+    | PList of Pattern list * Pattern option
+    /// Binds the value matched here to a variable.
+    | PBind of Var
+
 /// A top-level function, as it is emitted: a generic definition yields one per instantiation.
 type Function =
     { /// The function's name in WebAssembly text.
@@ -239,26 +240,26 @@ module Print =
         | AString value -> $"\"{value}\""
         | ATag name -> $"#{name}"
 
-    let rec private pattern (p: Pattern) =
+    let rec private pattern (indent: string) (p: Pattern) =
         match p with
         | PWildcard -> "_"
         | PInt value -> string value
         | PBool value -> if value then "true" else "false"
-        | PTag(name, Some payload) -> $"#{name}({pattern payload})"
+        | PTag(name, Some payload) -> $"#{name}({pattern indent payload})"
         | PTag(name, None) -> $"#{name}"
         | PFields fields ->
-            let shown = fields |> List.map (fun (slot, inner) -> $"{slot}: {pattern inner}") |> String.concat ", "
+            let shown = fields |> List.map (fun (slot, inner) -> $"{slot}: {pattern indent inner}") |> String.concat ", "
             $"({shown})"
         | PString value -> $"\"{value}\""
-        | PGuard(op, value) -> $"{op} {atom value}"
+        | PGuard(op, guard) -> $"{op} {expr indent guard}"
         | PList(elements, rest) ->
-            let shown = elements |> List.map pattern
-            let shownRest = rest |> Option.map (fun r -> [ $"...{pattern r}" ]) |> Option.defaultValue []
+            let shown = elements |> List.map (pattern indent)
+            let shownRest = rest |> Option.map (fun r -> [ $"...{pattern indent r}" ]) |> Option.defaultValue []
             let all = shown @ shownRest |> String.concat ", "
             $"[{all}]"
         | PBind v -> v.Name
 
-    let rec private expr (indent: string) (e: Expr) : string =
+    and private expr (indent: string) (e: Expr) : string =
         let atoms (items: Atom list) = items |> List.map atom |> String.concat ", "
         match e.Kind with
         | Atom a -> atom a
@@ -308,7 +309,7 @@ module Print =
             let renderedArms =
                 arms
                 |> List.map (fun arm ->
-                    let patterns = arm.Patterns |> List.map pattern |> String.concat ", "
+                    let patterns = arm.Patterns |> List.map (pattern indent) |> String.concat ", "
                     $"\n{indent}| {patterns} ->\n{inner}{expr inner arm.Body}")
                 |> String.concat ""
             $"match {scrutineeNames}{renderedArms}"

@@ -67,7 +67,10 @@ type LowerInput =
       /// The functions lambda lifting made, by name.
       Lifted: Map<string, LiftedFunction>
       /// The module's top-level expressions, which its start function evaluates in order when the module is loaded.
-      TopLevel: Expression list }
+      TopLevel: Expression list
+      /// The types the module defines (records and nominal types, not contexts), by name: what an annotation that
+      /// names one means.
+      NamedTypes: Map<string, Ty> }
 
 /// The name of the start function, which evaluates the module's top-level expressions.
 let startFunctionName = "__nanyx_start"
@@ -158,6 +161,9 @@ let rec private bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) 
         | Some p, Some p' -> bindScheme bindings p p'
         | None, None -> bindings
         | _ -> cannot "a tag's payload differs between a definition and its use"
+    // A tag alone is a union of one.
+    | TyUnion _, (TyTag _ as tag) -> bindScheme bindings scheme (TyUnion [ tag ])
+    | (TyTag _ as tag), TyUnion [ _ ] -> bindScheme bindings (TyUnion [ tag ]) instance
     | TyUnion items, TyUnion items' ->
         // The tags of a union may come in another order: pair them by name. An open union's rest (a type variable among
         // its tags) is the tags of the instance that the union does not name.
@@ -315,12 +321,13 @@ let rec private deferredMessages (expr: Expression) : string list =
     | LiteralExpr _
     | IdentifierExpr _ -> []
 
-/// The primitive type a type annotation names, if it names one: `string`, `(int)`.
-let rec private primitiveOfTypeExpr (typeExpr: TypeExpr) : Ty option =
+/// The type a type annotation names, if it is a primitive or a type the module defines: `string`, `(int)`, `Point`.
+let rec private typeOfAnnotation (namedTypes: Map<string, Ty>) (typeExpr: TypeExpr) : Ty option =
     match typeExpr.Kind with
     | TypeName ("int" | "string" | "bool" | "float" | "unit" as name) -> Some (TyPrimitive name)
+    | TypeName name -> namedTypes |> Map.tryFind name
     | TypeUnit -> Some (TyPrimitive "unit")
-    | TypeTuple [ single ] -> primitiveOfTypeExpr single
+    | TypeTuple [ single ] -> typeOfAnnotation namedTypes single
     | _ -> None
 
 let private flattenCallArgs (args: Expression list) =
@@ -535,13 +542,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     | LiteralExpr _
                     | InterpolatedString _ -> None
                     | _ -> Some scope.InterpolationDepth
-                // A name in scope has its variable's type, which may be more than the type checker recorded at the name
-                // (a parameter annotated by lambda lifting, say).
-                let valueTy =
-                    match value.Kind with
-                    | IdentifierExpr name when scope.Vars.ContainsKey name -> scope.Vars.[name].Type
-                    | _ -> tyOf value
-                match valueTy with
+                match this.TypeIn scope value with
                 | IrString -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgString(scratch, holeDepth))) ty))
                 | IrFloat -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgFloat(scratch, holeDepth))) ty))
                 | IrInt
@@ -549,7 +550,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | IrUnit -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgNumber(scratch, holeDepth))) ty))
                 | IrTags _ ->
                     // A tag value prints as `"{value}"` would: evaluated into a hole, a level deeper.
-                    let holeType = this.HoleType value
+                    let holeType = this.HoleType scope value
                     let hole = newVar (Interpolation.holeLocalName scope.InterpolationDepth 0) InterpolationHole (tyOf value)
                     this.Complex { scope with InterpolationDepth = scope.InterpolationDepth + 1 } value (fun lowered ->
                         let body = k (mk (Dbg(AVar hole, DbgTagValue(hole, holeType, scratch))) ty)
@@ -594,8 +595,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 k (mk (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
         | FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured) ->
             // A function value: the closure block of a lifted function over what it captures. The closure keeps the
-            // node of the lambda or function it stands for, so its type is that function's.
-            let ty = tyOf expr
+            // node of the lambda or function it stands for, so its type is that function's, with the parameters lambda
+            // lifting annotated where the type checker left them open.
+            let ty =
+                match input.Lifted |> Map.tryFind target, input.ExprTypes |> Map.tryFind expr.Id with
+                | Some (LiftedLambda _), Some lambdaTy ->
+                    let parameterTys, resultTy = this.LiftedParameterTypes target (substitute subst lambdaTy)
+                    let inputTy =
+                        match parameterTys with
+                        | [] -> TyPrimitive "unit"
+                        | [ single ] -> single
+                        | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
+                    toIrType (substitute subst (TyFunc(inputTy, resultTy)))
+                | _ -> tyOf expr
             let arity = parameterNames target |> List.length
             match input.Lifted |> Map.tryFind target with
             | Some (LiftedLambda _) ->
@@ -783,7 +795,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                                 Hole(var, holeType))
                     k (mk (Interpolate irParts) IrString)
                 | hole :: rest ->
-                    let holeType = this.HoleType hole
+                    let holeType = this.HoleType scope hole
                     // A float is formatted to a string as its hole is evaluated, since that allocates.
                     let local = newVar (Interpolation.holeLocalName depth index) InterpolationHole (if holeType = HoleFloat then IrString else tyOf hole)
                     let store (value: Expr) =
@@ -809,25 +821,40 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         let name = request (wrapper, []) subst (WrapperCalling(wrapped, wrappedTy))
         mk (MakeClosure(name, parameterNames wrapper |> List.length, [])) (toIrType wrappedTy)
 
+    /// The type of `expr` where it is: a name in scope has its variable's type, and a field of one the field's, which
+    /// may be more than the type checker recorded at the node (for a parameter lambda lifting annotated, say).
+    member this.TypeIn (scope: Scope) (expr: Expression) : IrType =
+        match expr.Kind with
+        | IdentifierExpr name when scope.Vars.ContainsKey name -> scope.Vars.[name].Type
+        | MemberAccess(record, fieldName, _) when (match record.Kind with IdentifierExpr name -> scope.Vars.ContainsKey name | _ -> true) ->
+            match this.TypeIn scope record with
+            | IrRecord fields when fields |> List.exists (fst >> (=) fieldName) -> fields |> List.find (fst >> (=) fieldName) |> snd
+            | _ -> tyOf expr
+        | _ -> tyOf expr
+
     /// How the hole `hole` of an interpolated string is printed, from its type. A tag's cases are in the order its type
     /// names them, which is the order they are tested in.
-    member this.HoleType (hole: Expression) : HoleType =
-        match tyOf hole with
+    member this.HoleType (scope: Scope) (hole: Expression) : HoleType =
+        match this.TypeIn scope hole with
         | IrString -> HoleString
         | IrInt -> HoleInt
         | IrBool -> HoleBool
         | IrFloat -> HoleFloat
-        | IrTags _ ->
+        | IrTags tags ->
+            // In the order the hole's type names them, where the type checker gave the hole one.
             let rec cases (ty: Ty) =
                 match Unifier.unalias ty with
-                | TyTag(name, payload) -> [ name, payload ]
+                | TyTag(name, payload) -> [ name, payload |> Option.map toIrType ]
                 | TyUnion items -> items |> List.collect cases
+                | TyVar _ -> []
                 | _ -> cannot "interpolating a union with tags not known here"
-            let ty = substitute subst input.ExprTypes.[hole.Id]
-            cases ty
+            let ordered =
+                match input.ExprTypes |> Map.tryFind hole.Id |> Option.map (substitute subst) with
+                | Some ty when (match Unifier.unalias ty with TyTag _ | TyUnion _ -> true | _ -> false) -> cases ty
+                | _ -> tags
+            ordered
             |> List.distinctBy fst
-            |> List.map (fun (name, payload) ->
-                let payloadTy = payload |> Option.map toIrType
+            |> List.map (fun (name, payloadTy) ->
                 match payloadTy with
                 | None
                 | Some (IrString | IrInt | IrBool) -> name, payloadTy
@@ -919,14 +946,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | LiteralPattern(IntLit value) -> PInt(int64 value)
                 | LiteralPattern(StringLit value) -> PString value
                 | GuardPattern(op, guard) ->
-                    // `| > 5 ->`: compared, as the old path compares it, as ints. Only a literal or a name is
-                    // compared to, since a pattern's condition has no room for what computing anything else needs.
+                    // `| > 5 ->`, `| { >= limit * 2 } ->`: compared, as the old path compares it, as ints, to what the
+                    // expression computes each time the arm is tested.
                     if (wasmBinaryInstruction op).IsNone then cannot $"the guard operator {op}"
-                    match guard.Kind with
-                    | LiteralExpr(IntLit value) -> PGuard(op, AInt(int64 value))
-                    | LiteralExpr(BoolLit value) -> PGuard(op, ABool value)
-                    | IdentifierExpr name when armScope.Vars.ContainsKey name -> PGuard(op, AVar armScope.Vars.[name])
-                    | _ -> cannot "a guard compared to something other than a literal or a name"
+                    PGuard(op, this.Tail armScope guard)
                 | ListPattern(elements, rest) ->
                     let elementTy =
                         match valueTy with
@@ -1013,6 +1036,22 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
           Result = IrError
           Body = mk (Panic messages) IrError }
 
+    /// The types of the parameters of the lifted lambda `name` (its environment aside), whose type where it was written
+    /// is `lambdaTy`, and of its result. A lambda bound to a context member in a `use` may have parameters the type
+    /// checker left open; lambda lifting annotates them with the types the member declares.
+    member this.LiftedParameterTypes (name: string) (lambdaTy: Ty) : Ty list * Ty =
+        let parameters =
+            match definitions.[name].Kind with
+            | Lambda(parameters, _) -> parameters.Tail
+            | _ -> []
+        let parameterTys, resultTy = this.ParameterTypes (List.map fst parameters) lambdaTy true
+        let annotated =
+            List.map2 (fun (ty: Ty) (_, annotation) ->
+                match annotation |> Option.bind (typeOfAnnotation input.NamedTypes) with
+                | Some annotatedTy when not (freeVars (substitute subst ty)).IsEmpty -> annotatedTy
+                | _ -> ty) parameterTys parameters
+        annotated, resultTy
+
     /// The types of the parameters `names` of a function of type `fnTy`, and of its result. Several parameters are the
     /// fields of the input, each named by its position or by its own name when the type names it
     /// (`(int, step: int) -> int`).
@@ -1091,18 +1130,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | Some ty -> substitute subst ty
                 | None -> cannot "a lambda without a type"
             let environment = IrRecord(("0", IrInt) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
-            let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail lambdaTy true
-            // A lambda bound to a context member in a `use` may have parameters the type checker left open; lambda
-            // lifting annotates them with the types the member declares.
-            let annotations =
-                match expr.Kind with
-                | Lambda(parameters, _) -> parameters.Tail |> List.map snd
-                | _ -> parameterNames.Tail |> List.map (fun _ -> None)
-            let parameterTys =
-                List.map2 (fun (ty: Ty) annotation ->
-                    match Unifier.unalias ty, annotation |> Option.bind primitiveOfTypeExpr with
-                    | TyVar _, Some annotated -> annotated
-                    | _ -> ty) parameterTys annotations
+            let parameterTys, resultTy = this.LiftedParameterTypes name lambdaTy
             let parameters =
                 parameterOf parameterNames.Head environment
                 :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys

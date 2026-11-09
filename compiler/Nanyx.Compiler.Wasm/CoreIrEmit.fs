@@ -333,9 +333,9 @@ type private FunctionEmitter(context: EmitContext) =
             | PFields fields -> fields |> List.map (fun (slot, inner) -> condition inner (fieldCode valueCode slot)) |> allOf
             | PString value ->
                 $"{valueCode}\n      i32.const {context.StringOffset value}\n      call ${helper Helpers.stringEquals}"
-            | PGuard(op, value) ->
+            | PGuard(op, guard) ->
                 match wasmBinaryInstruction op with
-                | Some instruction -> $"{valueCode}\n      {this.Atom (Dictionary()) (HashSet()) value}\n      {instruction}"
+                | Some instruction -> $"{valueCode}\n      {this.Sequence false guard}\n      {instruction}"
                 | None -> failwith $"Internal error: no instruction for the guard operator {op}"
             | PList(elements, rest) ->
                 let lengthInstruction = if rest.IsSome then "i32.ge_s" else "i32.eq"
@@ -400,13 +400,14 @@ let private declaredLocals (body: Expr) : string list =
     let rec pattern (p: Pattern) =
         match p with
         | PBind var -> found.Add var
+        | PGuard(_, guard) -> walk guard
         | PTag(_, Some inner) -> pattern inner
         | PFields fields -> fields |> List.iter (snd >> pattern)
         | PList(elements, rest) ->
             elements |> List.iter pattern
             rest |> Option.iter pattern
         | _ -> ()
-    let rec walk (expr: Expr) =
+    and walk (expr: Expr) =
         match expr.Kind with
         | Let(var, value, body) ->
             match var.Kind with
