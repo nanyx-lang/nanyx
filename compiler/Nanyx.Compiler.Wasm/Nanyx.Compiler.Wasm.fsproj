@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Identifiers.fs" />
+    <Compile Include="LambdaLifting.fs" />
     <Compile Include="CodeGen.fs" />
   </ItemGroup>
 

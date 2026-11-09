@@ -1,0 +1,484 @@
+/// Lambda lifting. A lambda with parameters that appears as a value (a call or pipe argument, the right-hand
+/// side of a local `def`, ...) becomes a top-level function `__lambda_N`, and the expression becomes a reference
+/// to that name, so the rest of the backend only ever meets lambdas as definitions. A lambda that captures
+/// variables of its enclosing function is lifted too: what it captures travels in its closure block (see `lift`).
+module internal Transpiler.Wasm.LambdaLifting
+
+open Parser.Program
+open Transpiler.Wasm.Identifiers
+
+/// Every name an expression refers to: identifiers, callees and pipe targets.
+let rec private referencedNames (expr: Expression) : string list =
+    match expr.Kind with
+    | IdentifierExpr name -> [ name ]
+    | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
+    | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
+    | Lambda(_, body) -> referencedNames body
+    | BinaryOp(_, left, right) -> referencedNames left @ referencedNames right
+    | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
+    | Block statements -> statements |> List.collect referencedNamesStatement
+    | Match(values, arms) ->
+        (values |> List.collect referencedNames)
+        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencedNamesPattern) @ referencedNames body))
+    | TupleExpr items
+    | ListExpr items -> items |> List.collect referencedNames
+    | RecordExpr fields ->
+        fields |> List.collect (function NamedField(_, value) | PositionalField value -> referencedNames value)
+    | TagExpr(_, payload) -> payload |> Option.map referencedNames |> Option.defaultValue []
+    | MemberAccess(inner, _, _) -> referencedNames inner
+    | UseIn(binding, body) -> referencedNamesBinding binding @ referencedNames body
+    | WorkflowBindExpr(_, value)
+    | WorkflowReturnExpr value -> referencedNames value
+    | InterpolatedString parts ->
+        parts |> List.collect (function StringExpr value -> referencedNames value | StringText _ -> [])
+    | ContextMemberCall(_, _, args) -> args |> List.collect referencedNames
+    | ContextMemberAccess _
+    | UnitExpr
+    | LiteralExpr _ -> []
+
+and private referencedNamesStatement (statement: Statement) : string list =
+    match statement.Kind with
+    | DefStatement(_, _, _, rhs) -> referencedNames rhs
+    | ExprStatement value -> referencedNames value
+    | UseStatement binding -> referencedNamesBinding binding
+    | ImportStatement _
+    | TypeDefStatement _ -> []
+
+and private referencedNamesBinding (binding: UseBinding) : string list =
+    match binding with
+    | UseValue value
+    | UseContextInstance(_, value) -> referencedNames value
+
+and private referencedNamesPattern (pattern: Pattern) : string list =
+    match pattern.Kind with
+    | GuardPattern(_, value) -> referencedNames value
+    | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
+    | TagPattern(_, Some payload) -> referencedNamesPattern payload
+    | TuplePattern patterns
+    | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesPattern
+    | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesPattern
+    | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesPattern
+    | RecordMemberPattern members -> members |> List.collect (snd >> referencedNamesPattern)
+    | TagPattern(_, None)
+    | LiteralPattern _
+    | IdentifierPattern _
+    | WildcardPattern
+    | ElsePattern -> []
+
+/// Every name a pattern binds.
+let rec private boundNamesPattern (pattern: Pattern) : string list =
+    match pattern.Kind with
+    | IdentifierPattern name -> [ name ]
+    | TagPattern(_, Some payload) -> boundNamesPattern payload
+    | TuplePattern patterns -> patterns |> List.collect boundNamesPattern
+    | ListPattern(patterns, rest) ->
+        (patterns |> List.collect boundNamesPattern) @ (rest |> Option.map boundNamesPattern |> Option.defaultValue [])
+    | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNamesPattern
+    | RecordPattern(_, patterns) -> patterns |> List.collect boundNamesPattern
+    | RecordMemberPattern members -> members |> List.collect (fun (name, p) -> name :: boundNamesPattern p)
+    | TagPattern(_, None)
+    | LiteralPattern _
+    | GuardPattern _
+    | RangePattern _
+    | WildcardPattern
+    | ElsePattern -> []
+
+/// Every name bound anywhere inside an expression: local defs, lambda parameters and pattern variables.
+/// (An over-approximation of what a nested lambda could capture, which errs on the side of not lifting.)
+let rec private boundNames (expr: Expression) : string list =
+    match expr.Kind with
+    | Lambda(args, body) -> (args |> List.map fst) @ boundNames body
+    | Block statements ->
+        statements |> List.map _.Kind
+        |> List.collect (function
+            | DefStatement(_, name, _, rhs) -> name :: boundNames rhs
+            | ExprStatement value -> boundNames value
+            | UseStatement _
+            | ImportStatement _
+            | TypeDefStatement _ -> [])
+    | Match(values, arms) ->
+        (values |> List.collect boundNames)
+        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect boundNamesPattern) @ boundNames body))
+    | FunctionCall(_, _, args)
+    | ContextMemberCall(_, _, args) -> args |> List.collect boundNames
+    | Pipe(value, _, _, args) -> boundNames value @ (args |> List.collect boundNames)
+    | BinaryOp(_, left, right) -> boundNames left @ boundNames right
+    | IfExpr(cond, thenExpr, elseExpr) -> boundNames cond @ boundNames thenExpr @ boundNames elseExpr
+    | TupleExpr items
+    | ListExpr items -> items |> List.collect boundNames
+    | RecordExpr fields -> fields |> List.collect (function NamedField(_, value) | PositionalField value -> boundNames value)
+    | TagExpr(_, payload) -> payload |> Option.map boundNames |> Option.defaultValue []
+    | MemberAccess(inner, _, _) -> boundNames inner
+    | UseIn(_, body) -> boundNames body
+    | WorkflowBindExpr(name, value) -> name :: boundNames value
+    | WorkflowReturnExpr value -> boundNames value
+    | InterpolatedString parts -> parts |> List.collect (function StringExpr value -> boundNames value | StringText _ -> [])
+    | ContextMemberAccess _
+    | UnitExpr
+    | LiteralExpr _
+    | IdentifierExpr _ -> []
+
+/// The name of the environment parameter every lifted function takes first: the closure block itself.
+let envParameter = "__env"
+
+/// `expr` with every reference to the local function `from` redirected to its lifted form `to'`: a call
+/// becomes a direct call that passes the environment on, and a use as a value is the environment itself
+/// (the closure block).
+let rec private redirectSelfReferences (from: string) (to': string) (expr: Expression) : Expression =
+    let recur = redirectSelfReferences from to'
+    let rebuild kind = { expr with Kind = kind }
+    let flatten (args: Expression list) =
+        match args with
+        | [ Kind (TupleExpr items) ] -> items
+        | _ -> args
+    match expr.Kind with
+    | IdentifierExpr name when name = from -> rebuild (IdentifierExpr envParameter)
+    | IdentifierExpr _ -> expr
+    | FunctionCall(name, range, args) when name = from ->
+        rebuild (FunctionCall(to', range, [ Expression.from expr (TupleExpr (Expression.from expr (IdentifierExpr envParameter) :: (flatten args |> List.map recur))) ]))
+    | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
+    | Pipe(value, name, range, args) when name = from ->
+        recur (rebuild (FunctionCall(name, range, pipeCallArguments value args)))
+    | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
+    | Lambda(args, body) -> rebuild (Lambda(args, recur body))
+    | BinaryOp(op, left, right) -> rebuild (BinaryOp(op, recur left, recur right))
+    | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
+    | Block statements ->
+        statements
+        |> List.map (fun statement ->
+            match statement.Kind with
+            | DefStatement(isExport, name, typeOpt, rhs) -> { statement with Kind = DefStatement(isExport, name, typeOpt, recur rhs) }
+            | ExprStatement value -> { statement with Kind = ExprStatement(recur value) }
+            | _ -> statement)
+        |> Block
+        |> rebuild
+    | Match(values, arms) -> rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns, recur body)))
+    | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
+    | ListExpr items -> rebuild (ListExpr(items |> List.map recur))
+    | RecordExpr fields ->
+        fields
+        |> List.map (function
+            | NamedField(name, value) -> NamedField(name, recur value)
+            | PositionalField value -> PositionalField(recur value))
+        |> RecordExpr
+        |> rebuild
+    | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
+    | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
+    | UseIn(binding, body) -> rebuild (UseIn(binding, recur body))
+    | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
+    | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(recur value))
+    | InterpolatedString parts ->
+        parts |> List.map (function StringExpr value -> StringExpr(recur value) | text -> text) |> InterpolatedString |> rebuild
+    | ContextMemberCall(ctx, name, args) -> rebuild (ContextMemberCall(ctx, name, args |> List.map recur))
+    | ContextMemberAccess _
+    | UnitExpr
+    | LiteralExpr _ -> expr
+
+/// Where a lifted function came from: the top-level def it was written in, its local name there if it
+/// was a `rec` def, and the names of the variables it captures, in the order they sit in its environment.
+/// A lambda lifted from a call's argument also keeps the lambda as written, to find its type in the owner's.
+type LiftedOrigin = { Owner: string; LocalName: string option; Captured: string list; Source: Expression option }
+
+/// `ty` with the type parameters of a context replaced by the arguments of one of its instances.
+let rec private substituteTypeParameters (arguments: Map<string, TypeExpr>) (ty: TypeExpr) : TypeExpr =
+    let recur = substituteTypeParameters arguments
+    match ty.Kind with
+    | TypeName name
+    | TypeVar name when arguments.ContainsKey name -> arguments.[name]
+    | TypeFunc(input, output) -> { ty with Kind = TypeFunc(recur input, recur output) }
+    | TypeTuple items -> { ty with Kind = TypeTuple(items |> List.map recur) }
+    | TypeApply(name, items) -> { ty with Kind = TypeApply(name, items |> List.map recur) }
+    | _ -> ty
+
+/// A lambda bound to a context member, with each parameter it leaves unannotated given the type the member
+/// declares for it, so the lifted function knows its parameters' types (a string to interpolate, say).
+let private annotateFromMemberType (memberType: TypeExpr option) (args: (string * TypeExpr option) list) =
+    let declared =
+        match memberType with
+        | Some (Kind (TypeFunc(Kind (TypeTuple items), _))) when items.Length = args.Length -> items
+        | Some (Kind (TypeFunc(input, _))) when args.Length = 1 -> [ input ]
+        | _ -> []
+    if declared.IsEmpty then args
+    else List.map2 (fun (name, annotation) ty -> name, Some (annotation |> Option.defaultValue ty)) args declared
+
+/// Closure conversion. Every function value is a closure block: a tuple of the function's table slot
+/// followed by the values it captures. A lifted function takes that block as its first parameter,
+/// `__env`, and starts by binding each captured name to the matching field; a call through a value
+/// passes the block as the environment and calls the slot it holds. A top-level function used as a
+/// value gets a wrapper that takes and ignores an environment. Lifts the lambdas of a module into
+/// top-level definitions appended at the end, and returns where each came from (lifting runs after
+/// type checking, so the backend uses that to find the types of parameters and captures) and the
+/// wrapper made for each top-level function used as a value.
+///
+/// A context member is a function value too. Each binding of a `use` is evaluated into a local of its
+/// own, `__use_<key>_N`, and the statement is left as `use (<key> = __use_<key>_N, ...)`, so a binding
+/// can be any function-valued expression: a lambda (which may capture), a top-level function, a
+/// parameter or local. The top-level functions that can stand in for a context member when nothing in
+/// scope supplies one (the ambient instance, like the runtime's `Console`) get wrappers up front, as do
+/// `synthesized`, the top-level functions an instance the compiler builds from attached definitions is made of.
+let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
+    let lifted = System.Collections.Generic.List<TopLevelItem>()
+    let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
+    let wrappers = System.Collections.Generic.Dictionary<string, string>()
+    let mutable owner = ""
+    let mutable counter = 0
+
+    let topLevelFunctions =
+        module'
+        |> List.choose (function
+            | Kind (Def (ValueDef(_, name, _, Kind (Lambda(args, _))))) when not args.IsEmpty -> Some (name, args.Length)
+            | _ -> None)
+        |> Map.ofList
+
+    /// The type parameters and member types of every record type, by name: contexts are declared as
+    /// records, with or without the `context` modifier.
+    let recordTypes =
+        module'
+        |> List.choose (function
+            | Kind (Def (TypeDef(name, _, parameters, Kind (TypeRecord fields)))) ->
+                let members =
+                    fields
+                    |> List.choose (function
+                        | TypeField(fieldName, _, _, typeOpt, _)
+                        | TypeMember(fieldName, typeOpt) -> typeOpt |> Option.map (fun ty -> fieldName, ty))
+                    |> Map.ofList
+                Some (name, (parameters |> List.map fst, members))
+            | _ -> None)
+        |> Map.ofList
+
+    /// The type a context declares for a member: of the named context (with its type parameters bound
+    /// to the instance's arguments), or of any record type with such a member when the context is not named.
+    let memberType (contextType: TypeExpr option) (memberName: string) : TypeExpr option =
+        match contextType with
+        | Some (Kind (TypeName name)) ->
+            recordTypes |> Map.tryFind name |> Option.bind (fun (_, members) -> members |> Map.tryFind memberName)
+        | Some (Kind (TypeApply(name, arguments))) ->
+            recordTypes
+            |> Map.tryFind name
+            |> Option.bind (fun (parameters, members) ->
+                members
+                |> Map.tryFind memberName
+                |> Option.map (fun ty ->
+                    if parameters.Length = arguments.Length then
+                        substituteTypeParameters (List.zip parameters arguments |> Map.ofList) ty
+                    else ty))
+        | _ -> recordTypes |> Map.toSeq |> Seq.tryPick (fun (_, (_, members)) -> members |> Map.tryFind memberName)
+
+    /// The wrapper that lets the top-level function `name` be called as a function value.
+    let wrapperOf (name: string) =
+        match wrappers.TryGetValue name with
+        | true, existing -> existing
+        | _ ->
+            let wrapperName = $"__fn_{sanitizeIdentifier name}"
+            let parameters = [ for index in 1 .. topLevelFunctions.[name] -> $"__arg{index}" ]
+            let call = Expression.synthetic (FunctionCall(name, None, [ Expression.synthetic (TupleExpr (parameters |> List.map (fun p -> Expression.synthetic (IdentifierExpr p)))) ]))
+            lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, wrapperName, None, Expression.synthetic (Lambda((envParameter, None) :: (parameters |> List.map (fun p -> p, None)), call))))))
+            wrappers.[name] <- wrapperName
+            wrapperName
+
+    /// The closure block for the lifted function `liftedName` over the given captured names, standing in for
+    /// `origin` (the lambda or function reference it replaces), whose id and span it keeps. (A marker call
+    /// rather than a tuple, so that `f(closure)` is not flattened into one argument per field.)
+    let closureOf (origin: Expression) (liftedName: string) (captured: string list) =
+        { origin with
+            Kind =
+                FunctionCall("__closure", None,
+                    Expression.synthetic (FunctionCall("__slot", None, [ Expression.synthetic (IdentifierExpr liftedName) ]))
+                    :: (captured |> List.map (fun name -> Expression.synthetic (IdentifierExpr name)))) }
+
+    /// The lifted function's lambda: the environment parameter first, then the captured names bound
+    /// from the environment's fields ahead of the original body. It is reported where `lambda` was written.
+    let liftedLambda (lambda: Expression) (args: (string * TypeExpr option) list) (captured: string list) (body: Expression) =
+        let captureBindings =
+            captured
+            |> List.mapi (fun index name ->
+                Statement.synthetic (DefStatement(false, name, None, Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr envParameter), string (index + 1), None)))))
+        let bodyWithCaptures =
+            match captureBindings, body.Kind with
+            | [], _ -> body
+            | _, Block statements -> { body with Kind = Block (captureBindings @ statements) }
+            | _, _ -> Expression.from body (Block (captureBindings @ [ Statement.from body (ExprStatement body) ]))
+        Expression.from lambda (Lambda((envParameter, None) :: args, bodyWithCaptures))
+
+    // `scope` is every name the enclosing function binds; a lambda referring to one of them captures it.
+    let rec liftExpr (scope: Set<string>) (expr: Expression) : Expression =
+        let recur = liftExpr scope
+        let rebuild kind = { expr with Kind = kind }
+        match expr.Kind with
+        // A `for` loop's lambda is inlined as the loop body by the backend, never lifted; lift inside it.
+        | FunctionCall("__for", range, [ iterable; Kind (Lambda(args, body)) as lambda ]) ->
+            let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
+            rebuild (FunctionCall("__for", range, [ recur iterable; { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) } ]))
+        | Lambda(args, body) when not args.IsEmpty -> liftLambda scope expr args body
+        | Lambda(args, body) -> rebuild (Lambda(args, recur body))
+        // A top-level function used as a value: a closure over a wrapper that takes an environment.
+        | IdentifierExpr name when topLevelFunctions.ContainsKey name && not (scope.Contains name) ->
+            closureOf expr (wrapperOf name) []
+        | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
+        | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
+        | BinaryOp(op, left, right) -> rebuild (BinaryOp(op, recur left, recur right))
+        | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
+        | Block statements ->
+            // The records defined in this block, for `use ctx` where `ctx` is one of them.
+            let localRecords =
+                statements
+                |> List.choose (function
+                    | Kind (DefStatement(_, name, _, Kind (RecordExpr fields))) -> Some (name, fields)
+                    | _ -> None)
+                |> Map.ofList
+            let usedRecords =
+                statements
+                |> List.choose (function
+                    | Kind (UseStatement(UseValue(Kind (IdentifierExpr name)))) when localRecords.ContainsKey name -> Some name
+                    | _ -> None)
+                |> Set.ofList
+            // A lambda bound to a context member is a function even with no parameters.
+            let liftMember contextType memberName (value: Expression) =
+                match value.Kind with
+                | Lambda(args, body) -> liftLambda scope value (annotateFromMemberType (memberType contextType memberName) args) body
+                | _ -> recur value
+            statements
+            |> List.collect (fun statement ->
+                let keep kind = { statement with Kind = kind }
+                match statement.Kind with
+                // `rec name = { ... }`: a local function that calls itself. It is lifted under a fresh
+                // name with its self-references redirected there (a self-call passes the environment on),
+                // and the local is bound to its closure.
+                | DefStatement(isExport, name, _, Kind (FunctionCall("__rec", _, [ Kind (Lambda(args, body)) as lambda ]))) when not args.IsEmpty ->
+                    let liftedName = $"__rec_{sanitizeIdentifier name}_{counter}"
+                    counter <- counter + 1
+                    let parameterNames = args |> List.map fst |> Set.ofList
+                    let innerScope = Set.union parameterNames (boundNames body |> Set.ofList) |> Set.add name
+                    let liftedBody = liftExpr (Set.union scope innerScope) body |> redirectSelfReferences name liftedName
+                    let captured =
+                        Set.difference (referencedNames liftedBody |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add envParameter)
+                        |> Set.intersect scope
+                        |> Set.toList
+                    lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
+                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None }
+                    [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
+                | DefStatement(isExport, name, typeOpt, Kind (FunctionCall("__rec", _, [ rhs ]))) ->
+                    [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
+                // A record a `use` binds below: its fields are context members.
+                | DefStatement(isExport, name, typeOpt, (Kind (RecordExpr fields) as record)) when usedRecords.Contains name ->
+                    let fields =
+                        fields
+                        |> List.map (function
+                            | NamedField(memberName, value) -> NamedField(memberName, liftMember None memberName value)
+                            | PositionalField value -> PositionalField(recur value))
+                    [ keep (DefStatement(isExport, name, typeOpt, { record with Kind = RecordExpr fields })) ]
+                | DefStatement(isExport, name, typeOpt, rhs) -> [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
+                | ExprStatement value -> [ keep (ExprStatement(recur value)) ]
+                | UseStatement binding ->
+                    let namedFields (fields: RecordField list) =
+                        fields |> List.choose (function NamedField(name, value) -> Some (name, value) | PositionalField _ -> None)
+                    let contextType, bindings =
+                        match binding with
+                        | UseValue(Kind (RecordExpr fields)) -> None, namedFields fields
+                        | UseValue(Kind (FunctionCall(contextName, _, [ Kind (RecordExpr fields) ]))) -> Some (TypeExpr.synthetic (TypeName contextName)), namedFields fields
+                        | UseContextInstance(contextType, Kind (RecordExpr fields)) -> Some contextType, namedFields fields
+                        | UseValue(Kind (IdentifierExpr recordName) as recordRef) when localRecords.ContainsKey recordName ->
+                            None,
+                            namedFields localRecords.[recordName]
+                            |> List.map (fun (name, _) -> name, Expression.from recordRef (MemberAccess(Expression.from recordRef (IdentifierExpr recordName), name, None)))
+                        | _ -> None, []
+                    if bindings.IsEmpty then [ statement ]
+                    else
+                        let locals =
+                            bindings
+                            |> List.map (fun (memberName, value) ->
+                                let key = contextMemberKey contextType memberName
+                                let local = $"__use_{sanitizeIdentifier key}_{counter}"
+                                counter <- counter + 1
+                                key, local, liftMember contextType memberName value)
+                        [ yield! locals |> List.map (fun (_, local, value) -> Statement.from value (DefStatement(false, local, None, value)))
+                          keep (UseStatement(UseValue(Expression.synthetic (RecordExpr(locals |> List.map (fun (key, local, _) -> NamedField(key, Expression.synthetic (IdentifierExpr local)))))))) ]
+                | ImportStatement _ | TypeDefStatement _ -> [ statement ])
+            |> Block
+            |> rebuild
+        | Match(values, arms) -> rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns, recur body)))
+        | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
+        | ListExpr items -> rebuild (ListExpr(items |> List.map recur))
+        | RecordExpr fields ->
+            fields
+            |> List.map (function
+                | NamedField(name, value) -> NamedField(name, recur value)
+                | PositionalField value -> PositionalField(recur value))
+            |> RecordExpr
+            |> rebuild
+        | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
+        | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
+        | UseIn(binding, body) -> rebuild (UseIn(binding, recur body))
+        | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
+        | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(recur value))
+        | InterpolatedString parts ->
+            parts
+            |> List.map (function
+                | StringExpr value -> StringExpr(recur value)
+                | text -> text)
+            |> InterpolatedString
+            |> rebuild
+        | ContextMemberCall(ctx, name, args) -> rebuild (ContextMemberCall(ctx, name, args |> List.map recur))
+        | ContextMemberAccess _
+        | UnitExpr
+        | LiteralExpr _
+        | IdentifierExpr _ -> expr
+
+    /// Lifts `{ args -> body }` to a fresh top-level function and returns its closure.
+    and liftLambda (scope: Set<string>) (lambda: Expression) (args: (string * TypeExpr option) list) (body: Expression) : Expression =
+        let parameterNames = args |> List.map fst |> Set.ofList
+        let innerScope = Set.union parameterNames (boundNames body |> Set.ofList)
+        // A lambda nested inside may capture what this one binds and what encloses this one alike;
+        // what it captures from outside is then referenced here, so this lambda captures it in turn.
+        let liftedBody = liftExpr (Set.union scope innerScope) body
+        let captured =
+            Set.difference (referencedNames liftedBody |> Set.ofList) innerScope
+            |> Set.intersect scope
+            |> Set.toList
+        let name = $"__lambda_{counter}"
+        counter <- counter + 1
+        lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda lambda args captured liftedBody))))
+        origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda }
+        closureOf lambda name captured
+
+    let liftItem (item: TopLevelItem) : TopLevelItem =
+        match item.Kind with
+        // A definition's own lambda is the function being defined; lift inside its body only.
+        | Def (ValueDef(isExport, name, typeOpt, (Kind (Lambda(args, body)) as lambda))) ->
+            owner <- name
+            let scope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
+            { item with Kind = Def (ValueDef(isExport, name, typeOpt, { lambda with Kind = Lambda(args, liftExpr scope body) })) }
+        | Def (ValueDef(isExport, name, typeOpt, rhs)) ->
+            owner <- name
+            { item with Kind = Def (ValueDef(isExport, name, typeOpt, liftExpr (boundNames rhs |> Set.ofList) rhs)) }
+        | Expr expr ->
+            owner <- ""
+            { item with Kind = Expr (liftExpr (boundNames expr |> Set.ofList) expr) }
+        | _ -> item
+
+    let items = module' |> List.map liftItem
+
+    // The ambient instance: a top-level function named like a member of a declared context, which takes
+    // no contexts itself, stands in for that member wherever nothing else supplies it. Only worth a
+    // wrapper when some function takes contexts.
+    let takesContexts (typeOpt: TypeExpr option) =
+        match typeOpt with
+        | Some (Kind (TypeWithContext _))
+        | Some (Kind (TypeContext _)) -> true
+        | _ -> false
+    let defTypes =
+        module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, _))) -> Some (name, typeOpt) | _ -> None) |> Map.ofList
+    if defTypes |> Map.exists (fun _ typeOpt -> takesContexts typeOpt) then
+        module'
+        |> List.collect (function
+            | Kind (Def (TypeDef(_, modifiers, _, Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
+                fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
+            | _ -> [])
+        |> List.distinct
+        |> List.filter (fun name -> topLevelFunctions.ContainsKey name && not (takesContexts defTypes.[name]))
+        |> List.iter (wrapperOf >> ignore)
+    synthesized |> Set.filter topLevelFunctions.ContainsKey |> Set.iter (wrapperOf >> ignore)
+
+    items @ List.ofSeq lifted,
+    origins |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
+    wrappers |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
