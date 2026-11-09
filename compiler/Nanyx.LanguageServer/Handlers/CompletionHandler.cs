@@ -11,9 +11,9 @@ namespace Nanyx.LanguageServer.Handlers;
 /// Offers the names in scope at the cursor, with their types, and the language's keywords; after a dot, the fields
 /// of a record or the names under a prefix (an import's alias, a type's attached definitions); and in an import, the
 /// standard library's modules and the files beside the document (see <see cref="ImportPaths"/>). Completion is asked
-/// for while the user types, when the text rarely type-checks, so these come from the document's last compile that
-/// did, at the place there nearest the cursor (see <see cref="OpenDocument.NearestInLastGood"/>): a name declared
-/// since is not offered until the text type-checks again. Nothing is offered in a comment or a string, or where a
+/// for while the user types, when the text often does not parse, so these come from the document's last compile that
+/// was typed, at the place there nearest the cursor (see <see cref="OpenDocument.NearestInLastGood"/>): a name
+/// declared since is not offered until the text parses again. Nothing is offered in a comment or a string, or where a
 /// <c>def</c> names something new.
 /// </summary>
 public sealed class CompletionHandler : CompletionHandlerBase

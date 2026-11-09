@@ -313,14 +313,27 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Hover_in_a_document_that_does_not_type_check_returns_nothing()
+    public async Task Hover_in_a_document_with_type_errors_reads_its_own_types()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-error.nyx"));
 
         Open(uri, "def answer = missing + 1\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
 
-        Assert.Null(await HoverAt(uri, 0, 23));
+        // What did check has its type; what did not has the type `???`.
+        Assert.Equal("```nanyx\nint\n```", (await HoverAt(uri, 0, 23))?.Contents.MarkupContent?.Value);
+        Assert.Equal("```nanyx\n???\n```", (await HoverAt(uri, 0, 15))?.Contents.MarkupContent?.Value);
+    }
+
+    [Fact]
+    public async Task Hover_in_a_document_that_has_never_parsed_returns_nothing()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-unparsed.nyx"));
+
+        Open(uri, "def answer = (1 +\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Null(await HoverAt(uri, 0, 14));
     }
 
     [Fact]
@@ -716,11 +729,28 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Lenses_and_inlay_hints_in_a_document_that_does_not_type_check_are_empty()
+    public async Task Lenses_and_inlay_hints_in_a_document_with_type_errors_read_its_own_types()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hints-error.nyx"));
 
-        Open(uri, "def scale = { factor -> factor + missing }\n");
+        Open(uri, "def scale = { factor -> factor + missing }\ndef broken = { x -> nope }\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        // `scale` checks around the unknown name; `broken`'s result is what failed, `???`.
+        Assert.Equal(
+            [(new Range(0, 4, 0, 9), "int -> int"), (new Range(1, 4, 1, 10), "α -> ???")],
+            (await CodeLenses(uri)).Select(lens => (lens.Range, lens.Command?.Title)));
+        Assert.Equal(
+            [(new Position(0, 20), ": int"), (new Position(1, 16), ": α")],
+            (await InlayHintsIn(uri, new Range(0, 0, 2, 0))).Select(hint => (hint.Position, hint.Label.String)));
+    }
+
+    [Fact]
+    public async Task Lenses_and_inlay_hints_in_a_document_that_has_never_parsed_are_empty()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hints-unparsed.nyx"));
+
+        Open(uri, "def scale = { factor -> factor + }\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
 
         var lenses = await _client.TextDocument.RequestCodeLens(
@@ -759,7 +789,8 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Open(uri, "def id = { x -> x }\ndef total = id(40) + 2\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        Change(uri, version: 2, "def id = { x -> x }\ndef total = id(40) + missing\n");
+        // A text that does not parse has no types of its own.
+        Change(uri, version: 2, "def id = { x -> x }\ndef total = id(40) +\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
 
         // The untouched def still has its types; the edited one has none, rather than ones that may be stale.
@@ -802,22 +833,22 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Completion_reads_the_last_good_compile_while_the_text_does_not_type_check()
+    public async Task Completion_reads_the_text_with_type_errors_and_the_last_typed_one_while_it_does_not_parse()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-last-good.nyx"));
 
         Open(uri, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + offset\n}\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        // Typing a name that does not exist yet, inside the lambda: a type error.
+        // Typing a name that does not exist yet, inside the lambda: a type error, so the text is typed all the same.
         Change(uri, version: 2, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + off\n}\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
         var inLambda = await CompletionsAt(uri, 2, 18);
         Assert.Contains(inLambda, item => item.Label == "offset" && item.Detail == "int");
         Assert.Contains(inLambda, item => item.Label == "factor");
 
-        // An unclosed bracket at the end of the file: a parse error.
-        Change(uri, version: 3, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + offset\n}\ndef later = (sc");
+        // An unclosed bracket at the end of the file: a parse error, so the last typed text is read.
+        Change(uri, version: 3, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + off\n}\ndef later = (sc");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
         var atEnd = await CompletionsAt(uri, 4, 15);
         Assert.Contains(atEnd, item => item.Label == "scale" && item.Detail == "int -> int");

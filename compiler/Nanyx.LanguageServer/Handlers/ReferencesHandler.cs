@@ -9,7 +9,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// Finds the names that refer to what the name under the cursor declares or refers to, as go-to-definition finds
 /// it: a value, parameter, pattern variable, import, type or context member. Only the document's own compile is
 /// searched, not the files that import it. With <c>includeDeclaration</c>, the declaration comes first, wherever
-/// it is (see <see cref="SourceLocations"/>). Nothing is found in a document that did not type-check.
+/// it is (see <see cref="SourceLocations"/>). Nothing is found in a document that does not parse.
 /// </summary>
 public sealed class ReferencesHandler : ReferencesHandlerBase
 {

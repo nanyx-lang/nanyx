@@ -7,11 +7,11 @@ using Definition = NyxCompiler.Definition;
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
-/// Shows the inferred type of the expression under the pointer, read from the document's last compile that
-/// type-checked. On a call's function name it shows the function's type instantiated at that call, and on a
+/// Shows the inferred type of the expression under the pointer, read from the document's last compile that was
+/// typed: this one even with type or name errors, where what failed has the type <c>???</c>. On a call's function name it shows the function's type instantiated at that call, and on a
 /// declaration's own name (a def, a parameter, a pattern variable) the type of what it declares. On a type's name it
 /// shows the type's definition instead, even inside an expression. Nothing is shown in a top-level item edited since
-/// that compile, nor in a document that has never type-checked.
+/// that compile, nor in a document that has never been typed (see <see cref="OpenDocument.LastGood"/>).
 /// </summary>
 public sealed class HoverHandler : HoverHandlerBase
 {

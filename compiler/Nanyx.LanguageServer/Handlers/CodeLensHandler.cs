@@ -7,7 +7,7 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Shows the inferred type above each top-level def that does not write its own, read from the document's last
-/// compile that type-checked, so the lenses stay while the user is typing and the code does not move. Where one def
+/// compile that was typed (see <see cref="OpenDocument.LastGood"/>), so the lenses stay while the text does not parse. Where one def
 /// declares several names (a destructuring def), each lens says which name it is for. Nothing is shown for a def
 /// edited since that compile, nor unless <see cref="ServerSettings.TopLevelTypeHints"/> is
 /// <see cref="TopLevelTypeHints.Lens"/>.

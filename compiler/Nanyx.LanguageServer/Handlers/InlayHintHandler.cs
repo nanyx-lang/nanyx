@@ -8,7 +8,7 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Shows the inferred type after the name of each local def, lambda parameter and pattern variable that does not
-/// write its own, read from the document's last compile that type-checked, as <c>: int</c>; with
+/// write its own, read from the document's last compile that was typed, as <c>: int</c>; with
 /// <see cref="TopLevelTypeHints.Inlay"/>, after each such top-level def too. Nothing is shown in a top-level item edited
 /// since that compile.
 /// </summary>
