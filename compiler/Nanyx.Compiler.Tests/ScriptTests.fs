@@ -57,7 +57,7 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
 
 [<Theory>]
 [<InlineData("::linter nope", "NYX0009", "unknown linter 'nope'; the linters are 'default'")>]
-[<InlineData("::linter default.nope error", "NYX0009", "unknown rule 'nope' of the linter 'default'; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'linterFailed'")>]
+[<InlineData("::linter default.nope error", "NYX0009", "unknown rule 'nope' of the linter 'default'; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'linterFailed'")>]
 [<InlineData("::linter default.unusedBindings loud", "NYX0009", "::linter default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not 'loud'")>]
 [<InlineData("::linter default error", "NYX0009", "::linter takes a linter, or one of its rules and a severity")>]
 [<InlineData("::linter", "NYX0009", "::linter takes a linter")>]
