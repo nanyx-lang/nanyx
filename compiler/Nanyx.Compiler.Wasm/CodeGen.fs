@@ -2651,7 +2651,26 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
             | TyApply(_, args) -> args |> List.collect namedVars
             | TyUnion items -> items |> List.collect namedVars
             | TyAlias(_, args, underlying) -> (args |> List.collect namedVars) @ namedVars underlying
-        let vars = definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue [] |> Map.ofList
+        // The type variables the annotation writes, each matched to the one in the same place in the definition's
+        // type: inference may have merged a written variable with another and dropped its name.
+        let rec matchAnnotation (annotation: TypeExpr) (ty: Ty) : (string * Ty) list =
+            match annotation.Kind, Unifier.unalias ty with
+            | (TypeName varName | TypeVar varName), TyVar _ -> [ varName, ty ]
+            | TypeFunc(input, output), TyFunc(input', output') -> matchAnnotation input input' @ matchAnnotation output output'
+            | TypeTuple items, TyRecord fields ->
+                items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
+            | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
+                List.map2 matchAnnotation items items' |> List.concat
+            | _ -> []
+        let annotated =
+            match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
+            | Some (_, typeOpt, _), Some ty ->
+                match unwrapContextType typeOpt with
+                | Some annotation -> matchAnnotation annotation ty
+                | None -> []
+            | _ -> []
+        let vars =
+            (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) @ annotated |> Map.ofList
         let argumentTy (argument: TypeExpr) =
             match argument.Kind with
             | TypeName ("int" | "string" | "bool" | "unit" | "float" as primitive) -> Some (TyPrimitive primitive)
@@ -2748,7 +2767,11 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                     [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLower.LiftedLambda(origin.Lambda, origin.Captured))
                       yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLower.FunctionWrapper wrapped) ]
                     |> Map.ofList
-                  TopLevel = topLevelExprs }
+                  TopLevel = topLevelExprs
+                  NamedTypes =
+                    types.TypeDefs
+                    |> Map.filter (fun _ info -> not info.IsContext)
+                    |> Map.map (fun name info -> TyNominal(name, info.Underlying, info.IsPrivate)) }
             CoreIrLower.lowerModule input (emitFromCoreIr (coreIrContext (fun _ -> 0) (fun _ _ -> 0) ignore) >> ignore))
 
     /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
