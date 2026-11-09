@@ -119,7 +119,12 @@ type InferState =
             FailedExprs: (NodeId * Diagnostic list) list;
             /// The matches that do not handle every case, each by its node with its diagnostics, the latest first.
             /// Each is typed as if it did.
-            UnhandledMatches: (NodeId * Diagnostic list) list }
+            UnhandledMatches: (NodeId * Diagnostic list) list;
+            /// The expressions that do something with a value of the error type that needs its type, the latest first:
+            /// piping it to a name attached to no type, or reading a member of it. Each is typed as the error type
+            /// without another error, since the error that left the value's type unknown has been reported; a debug
+            /// build cannot run it, and traps there.
+            UnknownTypeUses: NodeId list }
 
 let emptyState =
         { NextId = 0;
@@ -161,7 +166,8 @@ let emptyState =
             ContextInstances = Map.empty;
             InstanceContexts = Map.empty;
             FailedExprs = [];
-            UnhandledMatches = [] }
+            UnhandledMatches = [];
+            UnknownTypeUses = [] }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

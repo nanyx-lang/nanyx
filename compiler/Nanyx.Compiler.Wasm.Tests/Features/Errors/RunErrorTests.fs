@@ -123,6 +123,47 @@ let ``Wasm - a release build of a file refuses a deferred error`` () =
         File.Delete outputPath
 
 [<Fact>]
+let ``Run - a function whose body uses a value of no known type runs up to the error`` () =
+    // The pipe and the member read need `y`'s type, which the error left unknown. They trap rather than keep the
+    // whole of `main` from compiling, so `start` is printed before the program stops at `nope`.
+    let source =
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(\"start\")\n" +
+        "\n" +
+        "  def y = nope\n" +
+        "  def a = y + 1\n" +
+        "  def b: string = y\n" +
+        "  def c = y \\contains(\"s\")\n" +
+        "  def d = y.length\n" +
+        "\n" +
+        "  println(\"end\")\n" +
+        "}\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Contains(":5:11: error NYX0101: Unknown identifier 'nope' (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - piping a value of no known type that did not stop the program stops it there`` () =
+    let source =
+        "import nanyx/text\n" +
+        "\n" +
+        "def g = { x -> if x == 0 then nope else x }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def y = g(5)\n" +
+        "  println(\"before\")\n" +
+        "  def c = y \\contains(\"s\")\n" +
+        "  println(\"never\")\n" +
+        "}\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains(":9:11: error: the value used here has no known type, because of an error deferred from compile time", outcome.StandardError)
+
+[<Fact>]
 let ``Run - ??? runs until it is reached, and stops the program there`` () =
     let source =
         "import nanyx/console\n" +

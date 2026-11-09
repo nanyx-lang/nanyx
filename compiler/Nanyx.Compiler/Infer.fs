@@ -1456,7 +1456,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     match inferExpr env current arg with
                     | Ok (_, next) -> current <- next
                     | Error _ -> ()
-                Ok (mkTypedExpr expr Unifier.errorType None None None, current)
+                Ok (mkTypedExpr expr Unifier.errorType None None None, { current with UnknownTypeUses = expr.Id :: current.UnknownTypeUses })
             else
             match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
             | Ok (typedCall, finalState) ->
@@ -2019,7 +2019,8 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             | Some (property, propertyTy) ->
                 Ok (mkTypedExpr expr propertyTy None None None, { next with BuiltInProperties = next.BuiltInProperties |> Map.add expr.Id property })
             // What failed to check was reported where it failed; reading from it is not another error.
-            | None when Unifier.isError baseTy -> Ok (mkTypedExpr expr Unifier.errorType None None None, next)
+            | None when Unifier.isError baseTy ->
+                Ok (mkTypedExpr expr Unifier.errorType None None None, { next with UnknownTypeUses = expr.Id :: next.UnknownTypeUses })
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
 and inferUseBinding (env: TypeEnv) (state: InferState) (binding: UseBinding) : Result<TypedExpr * InferState, Diagnostic list> =
