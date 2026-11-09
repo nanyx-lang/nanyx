@@ -103,3 +103,79 @@ let ``Parse dotted def name`` () =
         match module' with
         | [Kind (Def (ValueDef(_, name, _, _)))] -> name |> should equal "Person.fullName"
         | _ -> failwith "Expected dotted def name"
+
+// Literal Tests
+[<Fact>]
+let ``Parse string literal`` () =
+    let result = parseModule "def message = \"Hello world\""
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should haveLength 1
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (StringLit value))))) ->
+            name |> should equal "message"
+            value |> should equal "Hello world"
+        | _ -> failwith "Expected Def with StringLit"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse integer literal`` () =
+    let result = parseModule "def count = 42"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should haveLength 1
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (IntLit value))))) ->
+            name |> should equal "count"
+            value |> should equal 42
+        | _ -> failwith "Expected Def with IntLit"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse float literal`` () =
+    let result = parseModule "def pi = 3.14159"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should haveLength 1
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (FloatLit value))))) ->
+            name |> should equal "pi"
+            value |> should equal 3.14159
+        | _ -> failwith "Expected Def with FloatLit"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse boolean true`` () =
+    let result = parseModule "def flag = true"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should haveLength 1
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (BoolLit value))))) ->
+            name |> should equal "flag"
+            value |> should equal true
+        | _ -> failwith "Expected Def with BoolLit"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse boolean false`` () =
+    let result = parseModule "def flag = false"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should haveLength 1
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (BoolLit value))))) ->
+            name |> should equal "flag"
+            value |> should equal false
+        | _ -> failwith "Expected Def with BoolLit"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"

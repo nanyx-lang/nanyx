@@ -80,3 +80,89 @@ let ``++ shorthand lambda is the two-argument concatenation`` () =
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ ("x", None); ("y", None) ], Kind (BinaryOp ("++", _, _))))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+// Binary Operator Tests
+[<Fact>]
+let ``Parse addition`` () =
+    let result = parseModule "def sum = 1 + 2"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        module' |> should haveLength 1
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, name, _, Kind (BinaryOp (op, left, right))))) ->
+            name |> should equal "sum"
+            op |> should equal "+"
+            match left.Kind, right.Kind with
+            | LiteralExpr (IntLit v1), LiteralExpr (IntLit v2) ->
+                v1 |> should equal 1
+                v2 |> should equal 2
+            | _ -> failwith "Expected int literals"
+        | _ -> failwith "Expected Def with BinaryOp"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse multiplication`` () =
+    let result = parseModule "def product = 3 * 4"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp (op, _, _))))) ->
+            op |> should equal "*"
+        | _ -> failwith "Expected Def with BinaryOp"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse operator precedence - multiplication before addition`` () =
+    let result = parseModule "def x = 1 + 2 * 3"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("+", Kind (LiteralExpr (IntLit 1)), Kind (BinaryOp ("*", Kind (LiteralExpr (IntLit 2)), Kind (LiteralExpr (IntLit 3))))))))) ->
+            () // Correct precedence: 1 + (2 * 3)
+        | _ -> failwith "Expected correct precedence: 1 + (2 * 3)"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse parenthesized expression`` () =
+    let result = parseModule "def x = (1 + 2) * 3"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("*", Kind (BinaryOp ("+", Kind (LiteralExpr (IntLit 1)), Kind (LiteralExpr (IntLit 2)))), Kind (LiteralExpr (IntLit 3))))))) ->
+            () // Correct: (1 + 2) * 3
+        | _ -> failwith "Expected correct precedence: (1 + 2) * 3"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse comparison operators`` () =
+    let result = parseModule "def x = 5 > 3"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp (">", Kind (LiteralExpr (IntLit 5)), Kind (LiteralExpr (IntLit 3))))))) ->
+            ()
+        | _ -> failwith "Expected comparison operator"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Parse equality operators`` () =
+    let result = parseModule "def x = a == b"
+    
+    result |> isOk |> should equal true
+    match result with
+    | Result.Ok module' ->
+        match module'.[0] with
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("==", Kind (IdentifierExpr "a"), Kind (IdentifierExpr "b")))))) ->
+            ()
+        | _ -> failwith "Expected equality operator"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
