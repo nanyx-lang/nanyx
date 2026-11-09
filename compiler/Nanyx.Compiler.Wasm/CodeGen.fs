@@ -75,7 +75,7 @@ type private TranspileEnv =
       /// The nominal types of the module whose shape is not a record (`type $Money = private int`). A value of one
       /// is its shape's value as it is, so its constructor and the pattern that takes it apart compile to nothing.
       NominalWrappers: Set<string>
-      /// How many interpolation holes the expression being compiled is inside (see `interpolationHoleLocalName`).
+      /// How many interpolation holes the expression being compiled is inside (see `Interpolation.holeLocalName`).
       InterpolationDepth: int
       /// Where each call to a function that requires a parameterised context finds its instances, by the call's
       /// node, as the type checker decided (see `TypedModule.ContextInstances`).
@@ -716,7 +716,7 @@ let rec private deferredErrorMessages (expr: Expression) : string list =
     | FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]) -> [ message ]
     | _ -> exprChildren expr |> List.collect deferredErrorMessages
 
-/// Whether lowering `expr` needs the interpolation scratch locals (see `interpolationLocalNames`).
+/// Whether lowering `expr` needs the interpolation scratch locals (see `Interpolation.scratchLocals`).
 /// Used for function bodies and for the script start function alike, so both declare the same locals.
 /// `dbg` of a value that may be a tag prints it as `"{value}"` does (see the `dbg` case of
 /// `transpileExpression`). Its type is not known here, so any `dbg` of a non-literal counts.
@@ -735,23 +735,18 @@ let rec private containsInterpolation (expr: Expression) : bool =
     | _ when isDbgOfValue expr -> true
     | _ -> exprChildren expr |> List.exists containsInterpolation
 
-/// The local the hole `index` of an interpolated string at nesting depth `depth` is evaluated into. A string inside a
-/// hole of another is one deeper: its holes are evaluated while the outer string's earlier holes are already held,
-/// so they must not share locals (#326). Sibling strings at one depth share them, as they are evaluated in turn.
-let private interpolationHoleLocalName (depth: int) (index: int) = $"__interp_hole_{depth}_{index}"
-
 /// The hole locals the interpolations in `expr`, at nesting depth `depth`, are evaluated into (see
-/// `interpolationHoleLocalName`).
+/// `Interpolation.holeLocalName`).
 let rec private interpolationHoleLocals (depth: int) (expr: Expression) : string list =
     match expr.Kind with
     | InterpolatedString parts ->
         let holes = parts |> List.choose (function StringExpr inner -> Some inner | StringText _ -> None)
-        (holes |> List.mapi (fun index _ -> interpolationHoleLocalName depth index))
+        (holes |> List.mapi (fun index _ -> Interpolation.holeLocalName depth index))
         @ (holes |> List.collect (interpolationHoleLocals (depth + 1)))
     | _ when isDbgOfValue expr ->
         // `dbg` of a value that may be a tag prints it through a string whose one hole holds the value. The value is
         // compiled inside that hole, a level deeper, or else as it is, at this depth.
-        interpolationHoleLocalName depth 0
+        Interpolation.holeLocalName depth 0
         :: (exprChildren expr |> List.collect (fun child -> interpolationHoleLocals depth child @ interpolationHoleLocals (depth + 1) child))
     | _ -> exprChildren expr |> List.collect (interpolationHoleLocals depth)
 
@@ -771,23 +766,10 @@ let rec private collectForLoopLocals (depth: int) (expr: Expression) : string li
         @ collectForLoopLocals (depth + 1) body
     | _ -> exprChildren expr |> List.collect (collectForLoopLocals depth)
 
-let private interpolationLocalNames =
-    [ "__interp_len"
-      "__interp_base"
-      "__interp_cursor"
-      "__interp_ptr"
-      "__interp_copy_len"
-      "__interp_src"
-      "__interp_tmp"
-      "__interp_start"
-      "__interp_lo"
-      "__interp_hi"
-      "__interp_swap" ]
-
 /// Every local that lowering the interpolations in `expr` needs, or none when it has no interpolation.
 let private interpolationLocalsFor (expr: Expression) : string list =
     if containsInterpolation expr then
-        interpolationLocalNames @ (interpolationHoleLocals 0 expr |> List.distinct)
+        Interpolation.scratchLocals @ (interpolationHoleLocals 0 expr |> List.distinct)
     else
         []
 
@@ -1416,34 +1398,6 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
         ([ closureCode ] @ argsCode @ [ closureCode; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ])
         |> String.concat "\n    "
 
-    let renderStaticBytes bytes =
-        bytes
-        |> Array.toList
-        |> List.map (fun b ->
-            $"local.get $__interp_cursor\n    i32.const {int b}\n    i32.store8\n    local.get $__interp_cursor\n    i32.const 1\n    i32.add\n    local.set $__interp_cursor")
-        |> String.concat "\n    "
-
-    let renderIntLength exprCode =
-        $"{exprCode}\n    local.set $__interp_tmp\n    local.get $__interp_tmp\n    i32.const 0\n    i32.lt_s\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n      local.get $__interp_tmp\n      i32.const -1\n      i32.mul\n      local.set $__interp_tmp\n    end\n    local.get $__interp_tmp\n    i32.const 0\n    i32.eq\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n    else\n      loop $interp_int_len\n        local.get $__interp_len\n        i32.const 1\n        i32.add\n        local.set $__interp_len\n        local.get $__interp_tmp\n        i32.const 10\n        i32.div_u\n        local.set $__interp_tmp\n        local.get $__interp_tmp\n        i32.const 0\n        i32.ne\n        br_if $interp_int_len\n      end\n    end"
-
-    let renderIntWrite exprCode =
-        $"{exprCode}\n    local.set $__interp_tmp\n    local.get $__interp_tmp\n    i32.const 0\n    i32.lt_s\n    if\n      local.get $__interp_cursor\n      i32.const 45\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n      local.get $__interp_tmp\n      i32.const -1\n      i32.mul\n      local.set $__interp_tmp\n    end\n    local.get $__interp_tmp\n    i32.const 0\n    i32.eq\n    if\n      local.get $__interp_cursor\n      i32.const 48\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n    else\n      local.get $__interp_cursor\n      local.set $__interp_start\n      loop $interp_digits\n        local.get $__interp_cursor\n        local.get $__interp_tmp\n        i32.const 10\n        i32.rem_u\n        i32.const 48\n        i32.add\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get $__interp_tmp\n        i32.const 10\n        i32.div_u\n        local.set $__interp_tmp\n        local.get $__interp_tmp\n        i32.const 0\n        i32.ne\n        br_if $interp_digits\n      end\n      local.get $__interp_start\n      local.set $__interp_lo\n      local.get $__interp_cursor\n      i32.const 1\n      i32.sub\n      local.set $__interp_hi\n      block $interp_rev_done\n        loop $interp_rev\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.ge_u\n          br_if $interp_rev_done\n          local.get $__interp_lo\n          i32.load8_u\n          local.set $__interp_swap\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.load8_u\n          i32.store8\n          local.get $__interp_hi\n          local.get $__interp_swap\n          i32.store8\n          local.get $__interp_lo\n          i32.const 1\n          i32.add\n          local.set $__interp_lo\n          local.get $__interp_hi\n          i32.const 1\n          i32.sub\n          local.set $__interp_hi\n          br $interp_rev\n        end\n      end\n    end"
-
-    let renderStringCopy exprCode =
-        $"{exprCode}\n    local.set $__interp_ptr\n    local.get $__interp_ptr\n    i32.const 4\n    i32.sub\n    i32.load\n    local.set $__interp_copy_len\n    local.get $__interp_ptr\n    local.set $__interp_src\n    block $interp_copy_done\n      loop $interp_copy\n        local.get $__interp_copy_len\n        i32.const 0\n        i32.eq\n        br_if $interp_copy_done\n        local.get $__interp_cursor\n        local.get $__interp_src\n        i32.load8_u\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get $__interp_src\n        i32.const 1\n        i32.add\n        local.set $__interp_src\n        local.get $__interp_copy_len\n        i32.const 1\n        i32.sub\n        local.set $__interp_copy_len\n        br $interp_copy\n      end\n    end"
-
-    let renderBoolLength exprCode =
-        $"{exprCode}\n    if\n      local.get $__interp_len\n      i32.const 4\n      i32.add\n      local.set $__interp_len\n    else\n      local.get $__interp_len\n      i32.const 5\n      i32.add\n      local.set $__interp_len\n    end"
-
-    let renderBoolWrite exprCode =
-        let trueBytes = renderStaticBytes (Encoding.UTF8.GetBytes "true")
-        let falseBytes = renderStaticBytes (Encoding.UTF8.GetBytes "false")
-        $"{exprCode}\n    if\n      {trueBytes}\n    else\n      {falseBytes}\n    end"
-
-    // Each `{...}` hole is evaluated exactly once, up front, into `__interp_hole_N`. The length and
-    // write passes then only read that local. Evaluating a hole in the write pass would be wrong twice
-    // over: its side effects would run again, and anything it allocated would land on top of the
-    // output buffer, which is only reserved once the whole string has been written.
     // The type of a hole that may be a tag: a tag literal's is plain from the literal.
     let holeTy (inner: Expression) =
         match inner.Kind with
@@ -1487,51 +1441,26 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
                 name, tagCode id, payloadTypeName
             | None -> failwith $"Internal error: missing tag discriminant for #{name}")
 
-    let renderTagHole (valueCode: string) (inner: Expression) (renderText: string -> string) (renderPayload: string -> string -> string) =
-        env.UsedHelpers.Add Helpers.tagCode |> ignore
-        tagHoleCases inner
-        |> List.map (fun (name, code, payloadTypeName) ->
-            let body =
-                match payloadTypeName with
-                | None -> renderText $"#{name}"
-                | Some typeName ->
-                    let payloadCode = $"{valueCode}\n    i32.load offset=4"
-                    let opening = renderText ("#" + name + "(")
-                    let closing = renderText ")"
-                    $"{opening}\n    {renderPayload typeName payloadCode}\n    {closing}"
-            $"{valueCode}\n    call ${Helpers.tagCode}\n    i32.const {code}\n    i32.eq\n    if\n      {body}\n    end")
-        |> String.concat "\n    "
-
     let isTagOperand (operand: Expression) =
         match operand.Kind with
         | TagExpr _ -> true
         | _ -> holeTy operand |> Option.bind tryTagMembers |> Option.isSome
 
-    let renderTextLength (text: string) =
-        $"local.get $__interp_len\n    i32.const {Encoding.UTF8.GetByteCount text}\n    i32.add\n    local.set $__interp_len"
-
-    let renderTextWrite (text: string) = renderStaticBytes (Encoding.UTF8.GetBytes text)
-
-    let renderTagPayloadLength typeName payloadCode =
-        match typeName with
-        | "string" ->
-            let quotes = renderTextLength "\"\""
-            $"{quotes}\n    {payloadCode}\n    i32.const 4\n    i32.sub\n    i32.load\n    local.get $__interp_len\n    i32.add\n    local.set $__interp_len"
-        | "int" -> renderIntLength payloadCode
-        | _ -> renderBoolLength payloadCode
-
-    let renderTagPayloadWrite typeName payloadCode =
-        match typeName with
-        | "string" ->
-            let quote = renderTextWrite "\""
-            $"{quote}\n    {renderStringCopy payloadCode}\n    {quote}"
-        | "int" -> renderIntWrite payloadCode
-        | _ -> renderBoolWrite payloadCode
+    /// How the hole `inner` is measured and written (see `Interpolation`).
+    let holeKind (inner: Expression) =
+        match interpolationHoleType inner with
+        | "string" -> Interpolation.StringHole
+        | "float" -> Interpolation.FloatHole
+        | "int" -> Interpolation.IntHole
+        | "tag" ->
+            env.UsedHelpers.Add Helpers.tagCode |> ignore
+            Interpolation.TagHole (tagHoleCases inner)
+        | _ -> Interpolation.BoolHole
 
     // A float hole is formatted to a string here, in the evaluation pass, since formatting allocates and
     // the length and write passes must not.
     // A hole is compiled a level deeper, so a string inside it keeps to its own hole locals.
-    let holeLocal index = interpolationHoleLocalName env.InterpolationDepth index
+    let holeLocal index = Interpolation.holeLocalName env.InterpolationDepth index
     let insideHole = { env with InterpolationDepth = env.InterpolationDepth + 1 }
 
     let renderInterpolationHoleEval (index: int) (inner: Expression) =
@@ -1545,28 +1474,13 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
 
     let renderInterpolationPartLength (part, holeIndex) =
         match part with
-        | StringText text ->
-            let len = Encoding.UTF8.GetByteCount text
-            $"local.get $__interp_len\n    i32.const {len}\n    i32.add\n    local.set $__interp_len"
-        | StringExpr inner ->
-            let valueCode = $"local.get ${holeLocal holeIndex}"
-            match interpolationHoleType inner with
-            | "string" | "float" ->
-                $"{valueCode}\n    i32.const 4\n    i32.sub\n    i32.load\n    local.get $__interp_len\n    i32.add\n    local.set $__interp_len"
-            | "int" -> renderIntLength valueCode
-            | "tag" -> renderTagHole valueCode inner renderTextLength renderTagPayloadLength
-            | _ -> renderBoolLength valueCode
+        | StringText text -> Interpolation.textLength text
+        | StringExpr inner -> Interpolation.holeLength (holeKind inner) $"local.get ${holeLocal holeIndex}"
 
     let renderInterpolationPartWrite (part, holeIndex) =
         match part with
-        | StringText text -> renderStaticBytes (Encoding.UTF8.GetBytes text)
-        | StringExpr inner ->
-            let valueCode = $"local.get ${holeLocal holeIndex}"
-            match interpolationHoleType inner with
-            | "string" | "float" -> renderStringCopy valueCode
-            | "int" -> renderIntWrite valueCode
-            | "tag" -> renderTagHole valueCode inner renderTextWrite renderTagPayloadWrite
-            | _ -> renderBoolWrite valueCode
+        | StringText text -> Interpolation.textWrite text
+        | StringExpr inner -> Interpolation.holeWrite (holeKind inner) $"local.get ${holeLocal holeIndex}"
 
     match expr.Kind with
     | UnitExpr ->
@@ -1599,7 +1513,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
         let writeCode = indexedParts |> List.map renderInterpolationPartWrite |> String.concat "\n    "
         // The string is allocated once its length is known, before the parts are written into it.
         env.UsedHelpers.Add Helpers.stringAlloc |> ignore
-        $"{evalCode}\n    i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    local.get $__interp_len\n    call ${Helpers.stringAlloc}\n    local.tee $__interp_base\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_base"
+        Interpolation.build evalCode lengthCode writeCode
     | IdentifierExpr name ->
         match env.Locals |> Map.tryFind name with
         | Some localName -> $"local.get ${localName}"
