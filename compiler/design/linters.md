@@ -100,8 +100,9 @@ Once every node has a span, the diagnostics that are now reported at the nearest
 
 ### 2. Structured diagnostics
 
-> **Done** in [#97](https://github.com/nanyx-lang/nanyx/issues/97), except that no compiler error offers
-> suggestions or fixes yet. The language server offers fixes as quick fixes
+> **Done** in [#97](https://github.com/nanyx-lang/nanyx/issues/97), except that few compiler errors offer
+> suggestions or fixes yet: the first fix is the import an unknown name from the standard library needs
+> ([#497](https://github.com/nanyx-lang/nanyx/issues/497)). The language server offers fixes as quick fixes
 > ([#284](https://github.com/nanyx-lang/nanyx/issues/284)).
 
 The diagnostic follows the error anatomy in [Principles](../../docs/src/content/foundations/principles.md#human-readable-errors):

@@ -16,6 +16,13 @@ type Severity =
 /// A change to source text: `Span` is replaced by `NewText`.
 type TextEdit = { Span: SourceSpan; NewText: string }
 
+module TextEdit =
+    /// The span from `start` to `end'` of `source`, in the file of `like`.
+    let spanBetween (source: string) (like: SourceSpan) (start: int) (end': int) : SourceSpan =
+        let lineStart = source.LastIndexOf('\n', max 0 (start - 1)) + 1
+        let line = source.Substring(0, start) |> Seq.filter ((=) '\n') |> Seq.length
+        { like with Start = start; End = end'; StartLine = line; StartColumn = start - (if start = 0 then 0 else lineStart) }
+
 /// A change that resolves a diagnostic, shown to the user as `Title`.
 type Fix = { Title: string; Edits: TextEdit list }
 
