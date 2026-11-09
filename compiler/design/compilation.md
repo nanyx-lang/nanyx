@@ -64,6 +64,8 @@ _To do._ Candidate items, not yet filed:
    [tail-calls.md](tail-calls.md).
 7. **Deferred errors.** Keep a debug build running in the face of name and type errors, by compiling each error
    to a trap where it was found. Designed in [deferred-errors.md](deferred-errors.md).
+8. **Closed and open records.** A record type has exactly the fields it names, unless it says `...` for more.
+   Designed in [records.md](records.md).
 
 ## Open questions
 

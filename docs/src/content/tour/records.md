@@ -97,6 +97,50 @@ You can also compose record requirements with intersections:
 type Person = Named & (age: int)
 ```
 
+# Closed and open records
+
+A record type is _closed_: it has exactly the fields it lists, no more and no fewer. A record with an extra field is a different type, so it can't be passed where the smaller record is expected:
+
+```nanyx
+def f: (x: int, y: int) -> int = { x, y -> x + y }
+
+def data = (x = 1, y = 2, z = 3)
+
+f(data) -- ✗ `f` takes no field `z`
+```
+
+This is what makes named arguments safe. A function's parameters are a record, so a misspelled argument such as `f(x = 1, y = 2, verbos = true)` is an error rather than silently ignored.
+
+To accept any record that has _at least_ some fields, end the type with `...`. This makes it _open_:
+
+```nanyx
+def g: (x: int, y: int, ...) -> int = { x, y -> x + y }
+
+g(data) -- `z` is one of the other fields
+```
+
+Give the other fields a name, as in `...r`, when a type needs to say that two records have the same ones. Here, whatever else the input has, the output has too:
+
+```nanyx
+def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
+
+def moved = moveRight((x = 1, y = 2, label = "a"))
+-- moved: (x: int, y: int, label: string)
+```
+
+`...` only covers named fields. A record's positional fields are always exactly the ones its type lists, so a function of two positional parameters can't be called with three.
+
+You rarely need to write `...` yourself. When the compiler infers a function's type from the fields it reads, the type it infers is already open:
+
+```nanyx
+def area = { r -> r.width * r.height }
+-- inferred as `(width: int, height: int, ...a) -> int`
+
+area((width = 2, height = 3, colour = "red")) -- fine
+```
+
+An annotation is taken exactly as written, so annotate with `...` when you mean "at least these fields".
+
 # Records vs tuples
 
 In Nanyx, tuples and records are one unified structure. A tuple is just a record whose fields are all positional.
