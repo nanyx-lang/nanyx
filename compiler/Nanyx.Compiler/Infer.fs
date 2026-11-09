@@ -1183,10 +1183,7 @@ let private recordFieldsOf (ty: Ty) : Map<string, Ty> option =
 let private recordFieldsSoFar (state: InferState) (ty: Ty) : Map<string, Ty> option =
     let resolved =
         match ty with
-        | TyVar _ ->
-            match Unifier.unify state.Constraints with
-            | Ok subst -> Unifier.apply subst ty
-            | Error _ -> ty
+        | TyVar _ -> Unifier.apply (fst (Unifier.solve state.Constraints)) ty
         | _ -> ty
     recordFieldsOf resolved
 /// `ty` as far as the constraints gathered so far determine it; a type variable stays one when nothing does.
@@ -1194,10 +1191,8 @@ let private recordFieldsSoFar (state: InferState) (ty: Ty) : Map<string, Ty> opt
 let private resolveSoFar (state: InferState) (ty: Ty) : Ty =
     match ty with
     | TyPrimitive _ -> ty
-    | _ ->
-        match Unifier.unify state.Constraints with
-        | Ok subst -> Unifier.apply subst ty
-        | Error _ -> ty
+    // A conflict elsewhere in the module does not stop the rest of the constraints saying what `ty` is.
+    | _ -> Unifier.apply (fst (Unifier.solve state.Constraints)) ty
 
 // Instances of parameterised contexts.
 //
@@ -2750,7 +2745,10 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                 let details = String.concat "; " problems
                 Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"Annotation of '{name}' is more general than the inferred type: {details}" ]
 
-let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module': Module) : Result<Map<string, Ty> * TypedTopLevelItem list * InferState, Diagnostic list> =
+/// Infers a module in `initialEnv`, carrying on past an item that fails to check: the types and items of those
+/// that do, and the diagnostics of those that do not. The constraints are not solved here, so a type mismatch is
+/// not among them.
+let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module': Module) : Map<string, Ty> * TypedTopLevelItem list * InferState * Diagnostic list =
     let mutable env = initialEnv
     let mutable state = initialState
     let mutable currentModule: string option = None
@@ -2840,9 +2838,18 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some info -> acc |> Map.add alias info
                     | None -> acc) state.TypeDefs }
 
+    // A def that fails to check is reported, and the module is checked on without it. An unannotated one stays bound
+    // at a type that each use is free to make anything, so the uses of a broken def are not errors too.
+    let abandon (name: string) (diagnostics: Diagnostic list) =
+        errors <- errors @ diagnostics
+        match preboundFreshVars |> Map.tryFind name, TypeEnv.tryFind name env with
+        | Some preboundTy, Some scheme ->
+            env <- declareTopLevel name scheme.Symbol (TypeEnv.generalize (withoutTopLevel name env) preboundTy) env
+        | _ -> ()
+
     for item in module' do
         match item.Kind with
-        | Def (ValueDef(isExport, name, typeOpt, expr)) when errors.IsEmpty ->
+        | Def (ValueDef(isExport, name, typeOpt, expr)) ->
             let contextsExist =
                 match fst (extractContextFromTypeExpr typeOpt) with
                 | Some contexts -> ensureContextsExist state name (declarationSpan state DefValue expr) contexts
@@ -2853,7 +2860,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 | Some typeExpr -> inferTypeOfValues (withoutTopLevel name env) state typeExpr
                 | None -> Ok state
             match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
-            | Error err -> errors <- err
+            | Error err -> abandon name err
             | Ok inferredState ->
                 state <- inferredState
                 let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
@@ -2935,7 +2942,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr
                         | None -> Ok ()
                     match rigidResult with
-                    | Error err -> errors <- err
+                    | Error err -> abandon name err
                     | Ok () ->
                         // Generalize against an env without this def's own pre-binding, so the fresh
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
@@ -2946,18 +2953,17 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         env <- declareTopLevel name symbol scheme env
                         types <- types |> Map.add name declaredTy
                         items <- items @ [ TypedDef (TypedValueDef(isExport, name, typeOpt, typedExpr)) ]
-                | Error err -> errors <- err
+                | Error err -> abandon name err
         // A block is a module, not a program, so it has no top-level code.
-        | Expr expr when errors.IsEmpty && (blockAround state.ModuleBlocks expr.Span).IsSome ->
+        | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
-            errors <- [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"Module '{blockName}' is a block, which can only hold definitions, types and imports, not code to run" ]
-        | Expr expr when errors.IsEmpty ->
+            errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"Module '{blockName}' is a block, which can only hold definitions, types and imports, not code to run" ]
+        | Expr expr ->
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->
                 state <- next
                 items <- items @ [ TypedExprItem typedExpr ]
-            | Error err -> errors <- err
-        | Expr _ -> ()
+            | Error err -> errors <- errors @ err
         | Import itemsList -> items <- items @ [ TypedImport itemsList ]
         | ModuleDecl name ->
             currentModule <- Some name
@@ -2967,12 +2973,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Attribute _ -> ()
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
-            if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters
-            if errors.IsEmpty then errors <- unknownTypesInTypeDef state body parameters
+            match typeOfInTypeDef name body parameters with
+            | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters
+            | typeOfErrors -> errors <- errors @ typeOfErrors
             items <- items @ [ TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ]
-        | Def (ValueDef _) -> ()
 
-    if errors.IsEmpty then
+    do
         // The ambient contexts each unannotated function needs: those its body uses, and those the unannotated
         // functions it uses need that nothing nearer supplies, until no more are found.
         let uses = List.rev state.DeferredContextUses
@@ -3004,7 +3010,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     |> Map.fold (fun acc name contexts ->
                         acc |> Map.add name (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic))) state.ContextRequirements }
 
-    if errors.IsEmpty then Ok (types, items, state) else Error errors
+    types, items, state, errors
 
-let inferModule (module': Module) : Result<Map<string, Ty> * TypedTopLevelItem list * InferState, Diagnostic list> =
+/// Infers a module, carrying on past an item that fails to check: the types and items of those that do, and the
+/// diagnostics of those that do not. The constraints are not solved here, so a type mismatch is not among them.
+let inferModule (module': Module) : Map<string, Ty> * TypedTopLevelItem list * InferState * Diagnostic list =
     inferModuleWithEnv TypeEnv.empty emptyState module'

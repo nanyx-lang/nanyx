@@ -639,3 +639,17 @@ module Unifier =
                     | Equal ->
                         unifyEqual origin l r rest
         loop empty constraints
+
+    /// Solves `constraints` as `unify` does, carrying on past a failure: the constraints from where it failed are
+    /// set aside and the rest solved again, until they agree. Gives the substitution the rest agree on, and each
+    /// failure in the order it was found. With no failure, the substitution is the one `unify` gives.
+    let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =
+        let rec attempt (remaining: ConstraintSet) (failures: (string * SourceSpan) list) =
+            match unify remaining with
+            | Ok subst -> subst, List.rev failures
+            | Error (message, span) ->
+                let kept = remaining |> List.filter (fun (_, _, _, origin) -> origin <> span)
+                // A failure from no constraint given (which `unify` does not make) cannot be set aside.
+                if kept.Length = remaining.Length then empty, List.rev ((message, span) :: failures)
+                else attempt kept ((message, span) :: failures)
+        attempt constraints []

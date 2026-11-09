@@ -1256,12 +1256,18 @@ module Compiler =
                 // A module imported along several paths fails each importer with the same diagnostics.
                 Error (Typed, List.distinct errors)
             else
-                match NyxCompiler.Infer.inferModuleWithEnv env state desugared with
-                | Error diagnostics -> Error (Typed, diagnostics)
-                | Ok (types, items, (state: NyxCompiler.Infer.InferState)) ->
-                    match Unifier.unify state.Constraints with
-                    | Error (message, span) -> Error (Typed, [ Diagnostics.at DiagnosticCodes.TypeMismatch span message ])
-                    | Ok subst ->
+                let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.Infer.inferModuleWithEnv env state desugared
+                // Every error in the module is reported: the items that failed to check, and each conflict among the
+                // constraints of those that did.
+                match Unifier.solve state.Constraints with
+                | _, mismatches when not (inferErrors.IsEmpty && mismatches.IsEmpty) ->
+                    // In the order they are in the source, not the order solving found them.
+                    let mismatchErrors =
+                        mismatches
+                        |> List.sortBy (fun (_, span) -> span.Start)
+                        |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message)
+                    Error (Typed, inferErrors @ mismatchErrors)
+                | subst, _ ->
                         let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
                         let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                         // The module's own definitions win over imported ones of the same name.
