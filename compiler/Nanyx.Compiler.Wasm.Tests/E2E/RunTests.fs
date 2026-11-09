@@ -129,6 +129,27 @@ let ``Run - a nominal value over a primitive is made and taken apart with its ty
     runSource source |> assertRan "2.89\n289p\nfree\n294\n"
 
 [<Fact>]
+let ``Run - a builder block that uses no workflow keyword runs as its block`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def total = proc {\n" +
+        "  def a = 20\n" +
+        "  a + 22\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  proc {\n" +
+        "    def names = [\"Ada\", \"Grace\"]\n" +
+        "    for names | name -> println(\"Hello, \" ++ name)\n" +
+        "  }\n" +
+        "  def three = proc { 1 + 2 }\n" +
+        "  println(\"{total} {three}\")\n" +
+        "}\n"
+    runSource source |> assertRan "Hello, Ada\nHello, Grace\n42 3\n"
+
+[<Fact>]
 let ``Run - an interpolated value of a type only the type checker knows`` () =
     // The backend works a hole's type out from what it sees, and asks the type checker when that is not enough
     // (#193): a generic call's result, a for loop's element, a value bound by a match at the top of a script.

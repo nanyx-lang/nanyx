@@ -1500,6 +1500,19 @@ let ``A proc block is a result of its return value or of the first error`` () =
     Assert.Equal("int -> #some(string) | #error(#tooBig)", Unifier.tyToString result.Typed.Value.Types.["run"])
 
 [<Fact>]
+let ``A proc block that uses no workflow keyword is its block`` () =
+    // It used to be checked for the members `await` and `pure`, which no builder has (#346).
+    let source =
+        "def total = proc {\n" +
+        "  def a = 20\n" +
+        "  a + 22\n" +
+        "}\n" +
+        "def nothing = { proc { () } }"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("int", Unifier.tyToString result.Typed.Value.Types.["total"])
+
+[<Fact>]
 let ``A proc block collects the failures of each try`` () =
     let source =
         "import nanyx/result\n" +
