@@ -2090,6 +2090,29 @@ let ``A module with errors is typed with what did check`` () =
     Assert.True(result.Syntax.IsSome)
 
 [<Fact>]
+let ``A failed expression is compiled to a trap with its error`` () =
+    let result = Compiler.compile "def f = { x -> missing(x) }\ndef g = 1"
+    Assert.True(result.ErrorsDeferred)
+    let panics =
+        result.Typed.Value.Module
+        |> List.choose (function
+            | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]))))))) -> Some message
+            | _ -> None)
+    Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function 'missing' (deferred from compile time)\n" ], panics)
+
+[<Fact>]
+let ``A module with no errors has nothing deferred`` () =
+    let result = Compiler.compile "def g = 1"
+    Assert.True(result.TypeChecked)
+    Assert.True(result.ErrorsDeferred)
+
+[<Fact>]
+let ``An error in a type definition is not deferred`` () =
+    let result = Compiler.compile "type T = (a: Missing)\ndef g = 1"
+    Assert.False(result.TypeChecked)
+    Assert.False(result.ErrorsDeferred)
+
+[<Fact>]
 let ``A module that imports one with errors is not typed`` () =
     let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport \"mod.nyx\"\ndef value = foo"
     Assert.True(result.Typed.IsNone)

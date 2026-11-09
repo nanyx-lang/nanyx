@@ -21,6 +21,10 @@ type CompileResult =
       /// Whether the module type-checked: it has no type or name errors. An analyzer rule configured as an error does
       /// not stop it type-checking.
       TypeChecked: bool
+      /// Whether each type or name error in the module is compiled to a trap in `Typed` where it was found, so that a
+      /// debug build can run it: the trap writes the error and stops the program if it is reached. True when there
+      /// are none.
+      ErrorsDeferred: bool
       /// The root module as parsed, before desugaring: the syntax the user wrote, whose nodes the typed module's
       /// `ExprTypes` and `CalleeTypes` are keyed by. Present when `Typed` is.
       Syntax: Module option }
@@ -40,6 +44,8 @@ type private CheckedModule =
       /// The errors found checking the module itself. A module with errors is still typed, with what did check,
       /// for the editor's features; it cannot be run or imported.
       Errors: Diagnostic list
+      /// Those of `Errors` that are not compiled to a trap in `Own`, so a debug build cannot run the module.
+      Undeferred: Diagnostic list
       /// The module's own items (imports removed), as the backend will see them.
       Own: Module
       /// Items inlined from the modules it imports, already renamed and ready for the backend.
@@ -1013,9 +1019,42 @@ module Compiler =
     /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
     /// call (`properties`), each builder block that uses no keyword as its block (`workflowBlocks`), and without
     /// import statements.
-    let private moduleFromTypedItems (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    /// What a deferred error writes when it is reached: the diagnostic as `nanyx` prints it, marked as deferred.
+    let private deferredMessage (diagnostic: Diagnostic) =
+        let location =
+            match diagnostic.Span with
+            | Some span when span.File = "" -> $"{span.StartLine + 1}:{span.StartColumn + 1}: "
+            | Some span -> $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
+            | None -> ""
+        $"{location}error {diagnostic.Code}: {diagnostic.Message} (deferred from compile time)\n"
+
+    /// `expr` with each expression that failed to check replaced by a call to `__panic`, which writes the errors
+    /// and traps when it is reached, so a debug build runs the code around it. An expression in `failed` is found
+    /// by its node. A conflict among the constraints is only known by where it was found, the expression whose
+    /// constraints conflicted, so one in `mismatches` replaces the outermost expression written there. Each
+    /// diagnostic placed is added to `placed`, by `deferredMessage`. A match in `unhandled`, which does not handle
+    /// every case, is given a last arm that catches the rest and traps.
+    let private deferErrors (failed: Map<NodeId, Diagnostic list>) (mismatches: Map<SourceSpan, Diagnostic>) (unhandled: Map<NodeId, Diagnostic list>) (placed: System.Collections.Generic.HashSet<string>) (expr: Expression) =
+        let panic (node: Expression) (diagnostics: Diagnostic list) =
+            let messages = diagnostics |> List.map deferredMessage
+            messages |> List.iter (placed.Add >> ignore)
+            FunctionCall("__panic", None, [ Expression.from node (LiteralExpr (StringLit (String.concat "" messages))) ])
+        expr
+        |> mapExpressionKinds (fun node kind ->
+            let diagnostics =
+                match failed |> Map.tryFind node.Id with
+                | Some diagnostics -> diagnostics
+                | None -> mismatches |> Map.tryFind node.Span |> Option.toList
+            match diagnostics, kind, unhandled |> Map.tryFind node.Id with
+            | _ :: _, _, _ -> panic node diagnostics
+            | [], Match(values, arms), Some missing ->
+                let catchAll = values |> List.map (fun _ -> Pattern.at node.Span WildcardPattern)
+                Match(values, arms @ [ catchAll, Expression.from node (panic node missing) ])
+            | _ -> kind)
+
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> retargetPipes pipeTargets |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1272,13 +1311,23 @@ module Compiler =
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.
-                let moduleErrors =
-                    inferErrors
-                    @ (mismatches
-                       |> List.sortBy (fun (_, span) -> span.Start)
-                       |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message))
+                let mismatchErrors =
+                    mismatches
+                    |> List.sortBy (fun (_, span) -> span.Start)
+                    |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message)
+                let moduleErrors = inferErrors @ mismatchErrors
+                // Each error that can be is compiled to a trap where it was found, for a debug build to run.
+                let placed = System.Collections.Generic.HashSet<string>()
+                let defer =
+                    if moduleErrors.IsEmpty then id
+                    else
+                        let failed = state.FailedExprs |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
+                        let bySpan = mismatchErrors |> List.choose (fun diagnostic -> diagnostic.Span |> Option.map (fun span -> span, diagnostic)) |> Map.ofList
+                        let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
+                        deferErrors failed bySpan unhandled placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
-                let own = moduleFromTypedItems state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                 let inlined =
@@ -1337,6 +1386,7 @@ module Compiler =
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances }
                      Errors = moduleErrors
+                     Undeferred = undeferred
                      Own = own
                      Inlined = inlined
                      Name = declaredModuleName desugared
@@ -1394,6 +1444,7 @@ module Compiler =
               Diagnostics = diagnostics
               Typed = None
               TypeChecked = false
+              ErrorsDeferred = false
               Syntax = None }
         | Result.Ok checkedModule ->
             // Types by node are only read for the root module, so only its are resolved: not those of every
@@ -1413,6 +1464,7 @@ module Compiler =
                 else checkedModule.Errors
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
+              ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax }
 
     /// `compileFile` with the analyzers and severities `options` gives.
@@ -1422,6 +1474,7 @@ module Compiler =
               Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"File not found: {filePath}" ]
               Typed = None
               TypeChecked = false
+              ErrorsDeferred = false
               Syntax = None }
         else
             compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)

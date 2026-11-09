@@ -314,7 +314,16 @@ internal static class CliCommands
         if (target == Target.Run)
         {
             PrintDiagnostics(WorthStoppingFor(result.Diagnostics), Console.Error);
-            return RunProgram(result);
+            // A debug run: type and name errors the compiler deferred to traps do not stop it. Each is reported again
+            // if the program reaches it.
+            var deferred = !result.TypeChecked && result.ErrorsDeferred && result.Typed is not null;
+            if (deferred)
+            {
+                var count = result.Diagnostics.Count(diagnostic => diagnostic.Severity.IsError);
+                Console.Error.WriteLine($"Running with {count} deferred error{(count == 1 ? "" : "s")}");
+            }
+
+            return RunProgram(result, deferred);
         }
 
         Console.WriteLine($"Phase: {result.Phase}");
@@ -442,9 +451,9 @@ internal static class CliCommands
         return 0;
     }
 
-    private static int RunProgram(CompileResult result)
+    private static int RunProgram(CompileResult result, bool errorsDeferred = false)
     {
-        if (!TryEmitWat(result, Console.Error, out var wat))
+        if (!TryEmitWat(result, Console.Error, out var wat, errorsDeferred))
         {
             return 1;
         }
@@ -469,12 +478,15 @@ internal static class CliCommands
         }
     }
 
-    /// <summary>Lowers a successfully type-checked program to WebAssembly text, reporting failures to <paramref name="errors"/>.</summary>
-    private static bool TryEmitWat(CompileResult result, TextWriter errors, out string wat)
+    /// <summary>
+    /// Lowers a successfully type-checked program to WebAssembly text, reporting failures to <paramref name="errors"/>.
+    /// With <paramref name="errorsDeferred"/>, a program whose errors were all deferred to traps is lowered too.
+    /// </summary>
+    private static bool TryEmitWat(CompileResult result, TextWriter errors, out string wat, bool errorsDeferred = false)
     {
         wat = string.Empty;
 
-        if (result.Typed is null || HasErrors(result.Diagnostics))
+        if (result.Typed is null || (HasErrors(result.Diagnostics) && !errorsDeferred))
         {
             return false;
         }
