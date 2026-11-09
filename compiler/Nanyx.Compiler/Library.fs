@@ -1227,7 +1227,8 @@ module Compiler =
                         if item.Alias.IsSome then
                             state <- { state with Scopes = state.Scopes |> Map.add import.Id (Scope.wholeModule item.Span.File) }
                         Map.ofList [ import.Id, import ],
-                        exportedSymbols |> Map.fold (fun acc id _ -> acc |> Map.add id import.Id) state.ImportedThrough
+                        Seq.append exportedSymbols exportedTypeSymbols
+                        |> Seq.fold (fun acc (KeyValue(id, _)) -> acc |> Map.add id import.Id) state.ImportedThrough
                 // A type an explicit import exports replaces the prelude's type of the same name.
                 let typeDefs =
                     if importedKey = preludeKey then

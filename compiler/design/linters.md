@@ -49,7 +49,7 @@ only then design the public contract that Nanyx-authored linters will be written
 - **Name resolution is recorded** ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). Each binding in
   `TypeEnv` carries the symbol it declares, so inference records which symbol every identifier, call, pipe target
   and qualified name resolved to (`TypedModule.Symbols`, `References`, and `ImportReferences` for the import a
-  name came through). Values, parameters, pattern variables and imports are symbols; type names and context
+  name came through, a type's name in a type expression among them). Values, parameters, pattern variables and imports are symbols; type names and context
   members are not yet, though type expressions now have nodes to record them against. A declaration is a node (a def, a
   parameter list, a pattern), but the names it declares are not, so the parser keeps their spans beside the tree
   (`DeclaredNames`), keyed by the node that declares them.
@@ -202,7 +202,11 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > the first any diagnostic offers; the language server shows them as quick fixes. Its second is `nonTailRecursion`
 > ([tail-calls.md](tail-calls.md#checking-tail-position)), and its third `unreachableArms`
 > ([#103](https://github.com/nanyx-lang/nanyx/issues/103)), which asks `PatternSpace` which earlier arms cover an arm:
-> the module the exhaustiveness check in `Infer.fs` uses too. The semantic model
+> the module the exhaustiveness check in `Infer.fs` uses too. Its fourth is `unusedImports`
+> ([#102](https://github.com/nanyx-lang/nanyx/issues/102)): an `ImportedModule` symbol that no entry of
+> `ImportReferences` names. A type name in a type expression records its import there as a value's name does, so a
+> type used only in an annotation keeps its import. The rules for unused and unreachable code are tracked in
+> [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
 >
 > - Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its

@@ -137,7 +137,7 @@ type ContextInstance =
 ///
 /// `Symbols` holds what the module declares and the imported definitions it refers to. `References` says which
 /// symbol each name resolved to, by the node of the identifier, call, pipe or qualified name; `ImportReferences`
-/// says which import a name brought in by an import came through. `AnnotatedSymbols` are the declarations that
+/// says which import a name brought in by an import came through, a type's name in a type expression among them. `AnnotatedSymbols` are the declarations that
 /// write their own type: an annotated def or lambda parameter. `Scopes` says where each name can be written
 /// unqualified (see `Scope`): the module's own declarations, the aliases of its imports, and the names its imports
 /// and the prelude bring in unqualified, less those the module declares itself.

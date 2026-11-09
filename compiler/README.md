@@ -240,7 +240,7 @@ What it does today:
   blocks, with their local defs, fields and members nested (`NyxCompiler.Outline`). It needs only a parse,
   so a type error does not empty it; while the text does not parse, the last good text's outline is shown.
 - `textDocument/codeAction` offers each fix of a diagnostic in the range as a quick fix: a linter's, such
-  as removing an unused local, or the import of the standard-library module an unknown name comes from
+  as removing an unused local or an unused import, or the import of the standard-library module an unknown name comes from
   (`import nanyx/text` for `String.trim(s)`, `import nanyx/math as math` for `math.abs(x)`; see
   `NyxCompiler.ImportFixes`). Other compiler errors have no fixes yet.
 - `textDocument/codeLens` shows the inferred type above each top-level def that does not write its own

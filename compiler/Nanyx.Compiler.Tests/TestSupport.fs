@@ -34,6 +34,12 @@ let compileImportingAll (modules: (string * string) list) (mainSource: string) =
         result <- Compiler.compileFile mainPath)
     result
 
+/// `source` with the edits of `fix` applied.
+let applyFix (source: string) (fix: Fix) =
+    fix.Edits
+    |> List.sortByDescending (fun edit -> edit.Span.Start)
+    |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source
+
 /// The offset of the `occurrence`th (zero-based) appearance of `text` in `source`, plus `within` characters.
 let offsetOf (source: string) (text: string) (occurrence: int) (within: int) =
     let rec find from remaining =
