@@ -324,69 +324,6 @@
   (table $ctx_table 1 funcref)
   (elem (i32.const 0) $__lambda_0)
 
-  (func $List_filter (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32)
-    local.get $arg1
-    local.set $__match_tmp_0
-    local.get $arg2
-    local.set $__match_tmp_1
-    local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 0
-      i32.eq
-      i32.const 1
-      i32.and
-    (if (result i32)
-      (then
-        i32.const 0
-      )
-      (else
-        local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 1
-      i32.ge_s
-      i32.const 1
-      i32.and
-    (if (result i32)
-      (then
-        local.get $__match_tmp_0
-      i32.load
-        local.set $__payload_x
-    local.get $__match_tmp_0
-      i32.const 4
-      i32.add
-      i32.load
-        local.set $__payload_rest
-    local.get $__match_tmp_1
-    local.get $__payload_x
-    local.get $__match_tmp_1
-    i32.load
-    call_indirect (type $ctx_fn_2)
-    (if (result i32)
-      (then
-        local.get $__payload_x
-    i32.const 0
-    call $__nanyx_list_cons
-    local.get $__payload_rest
-    local.get $__match_tmp_1
-    call $List_filter
-    call $__nanyx_list_concat
-      )
-      (else
-        local.get $__payload_rest
-    local.get $__match_tmp_1
-    return_call $List_filter
-      )
-    )
-      )
-      (else
-        unreachable
-      )
-    )
-      )
-    )
-  )
-  (export "List.filter" (func $List_filter))
-
   (func $List_filter__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32)
     local.get $arg1
     local.set $__match_tmp_0

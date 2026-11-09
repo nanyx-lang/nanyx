@@ -111,7 +111,7 @@
     end
   )
 
-  (func $getOrDefault (param $opt i32) (param $default i32) (result i32) (local $__match_tmp_0 i32) (local $__payload_value i32)
+  (func $getOrDefault__int (param $opt i32) (param $default i32) (result i32) (local $__match_tmp_0 i32) (local $__payload_value i32)
     local.get $opt
     local.set $__match_tmp_0
     local.get $__match_tmp_0
@@ -141,7 +141,6 @@
       )
     )
   )
-  (export "getOrDefault" (func $getOrDefault))
 
   (func $main (result i32) (local $x i32) (local $y i32) (local $a i32) (local $b i32)
     i32.const 5
@@ -152,11 +151,11 @@
     local.set $y
     local.get $x
     i32.const 0
-    call $getOrDefault
+    call $getOrDefault__int
     local.set $a
     local.get $y
     i32.const 99
-    call $getOrDefault
+    call $getOrDefault__int
     local.set $b
     local.get $a
     local.get $b

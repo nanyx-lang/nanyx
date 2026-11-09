@@ -20,10 +20,14 @@ let loadFeatureFile featureName fileName =
         failwith $"Test data file not found: {filePath}"
     File.ReadAllText(filePath)
 
+/// `source`, type-checked and compiled. Errors the type checker defers to run time are compiled to traps, as
+/// `nanyx run` does.
 let transpileWat (source: string) =
-    match parseModule source with
-    | Result.Ok ast -> transpileModuleToWat ast
-    | Result.Error err -> failwith $"Parse error: {err}"
+    match Compiler.compile source with
+    | { Typed = Some typed } -> transpileTypedModuleToWat typed
+    | result ->
+        let messages = result.Diagnostics |> List.map (fun d -> d.Message) |> String.concat "\n"
+        failwith $"Compile error: {messages}"
 
 let transpileWatFile (filePath: string) =
     match Compiler.compileFile filePath with

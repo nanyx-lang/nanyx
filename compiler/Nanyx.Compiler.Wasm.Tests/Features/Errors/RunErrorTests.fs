@@ -11,19 +11,19 @@ let ``Run - what the backend cannot compile is reported with its place, like any
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def explain = {\n" +
-        "  | #badLine(text) -> \"could not read '{text}'\"\n" +
-        "  | _ -> \"something went wrong\"\n" +
+        "def shout: (int, int) -> int = { t ->\n" +
+        "  def u = dbg(t)\n" +
+        "  u.0\n" +
         "}\n" +
         "\n" +
         "@entry\n" +
-        "def main = { println(explain(#badLine(\"x\"))) }\n"
+        "def main = { println(\"{shout((1, 2))}\") }\n"
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    // `path/to/file.nyx:4:41: error NYX0301: ...`, the column being that of `text` in the hole.
+    // `path/to/file.nyx:4:11: error NYX0301: ...`, at the `dbg`.
     Assert.Matches(
-        ":4:41: error NYX0301: The WebAssembly backend cannot tell the type of this interpolated value: annotate the function or value it comes from\\r?\\n$",
+        ":4:11: error NYX0301: The WebAssembly backend cannot compile `dbg` of a value of type \\(0: int, 1: int\\) yet\\r?\\n$",
         outcome.StandardError)
 
 [<Fact>]
@@ -262,3 +262,20 @@ let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("Non-exhaustive match, missing int values, such as 0 (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - matching on a value of no known type that did not stop the program stops it there`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def g = { x -> if x == 0 then nope else x }\n" +
+        "\n" +
+        "println(\"start\")\n" +
+        "println(match g(5)\n" +
+        "  | #a -> \"a\"\n" +
+        "  | else -> \"other\")\n" +
+        "println(\"never\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Contains(":6:15: error: the value matched here has no known type, because of an error deferred from compile time", outcome.StandardError)

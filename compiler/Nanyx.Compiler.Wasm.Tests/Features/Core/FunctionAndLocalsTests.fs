@@ -66,17 +66,15 @@ let private placeOf (text: string) (source: string) =
 
 [<Fact>]
 let ``What the backend cannot compile is reported where it is written`` () =
-    // An interpolated value whose type the backend cannot work out (#193) is reported at the value, not the string.
-    let interpolated =
-        "def explain = {\n" +
-        "  | #badLine(text) -> \"could not read '{text}'\"\n" +
-        "  | _ -> \"something went wrong\"\n" +
+    // An expression it cannot compile is reported at that expression, not the ones inside it, and named.
+    let printed =
+        "def shout: (int, int) -> int = { t ->\n" +
+        "  def u = dbg(t)\n" +
+        "  u.0\n" +
         "}\n"
-    let message, line, column = backendFailure interpolated
-    Assert.Equal("The WebAssembly backend cannot tell the type of this interpolated value: annotate the function or value it comes from", message)
-    let expectedLine, expectedColumn = placeOf "text}" interpolated
-    Assert.Equal((expectedLine, expectedColumn), (line, column))
-    // Any other expression it cannot compile is reported at that expression, and named.
+    let message, line, column = backendFailure printed
+    Assert.Equal("The WebAssembly backend cannot compile `dbg` of a value of type (0: int, 1: int) yet", message)
+    Assert.Equal(placeOf "dbg(t)" printed, (line, column))
     let useIn =
         "context Ask = (ask: () -> int)\n" +
         "def twice: [Ask] () -> int = { ask() + ask() }\n" +

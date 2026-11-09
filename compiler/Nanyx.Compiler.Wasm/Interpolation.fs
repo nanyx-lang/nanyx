@@ -134,8 +134,13 @@ let build (evalCode: string) (lengthCode: string) (writeCode: string) =
 
 /// What a debug build writes when it reaches the hole at `span` that has no known type, because of an error deferred to
 /// run time, and the hole did not stop the program itself: the location as a deferred error's, then why.
-let unknownHoleMessage (span: SourceSpan) =
+let private unknownValueMessage (verb: string) (span: SourceSpan) =
     let location =
         if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
         else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-    $"{location}error: the value interpolated here has no known type, because of an error deferred from compile time\n"
+    $"{location}error: the value {verb} here has no known type, because of an error deferred from compile time\n"
+
+let unknownHoleMessage (span: SourceSpan) = unknownValueMessage "interpolated" span
+
+/// What a debug build writes when it matches on the value at `span`, which has no known type for the same reason.
+let unknownScrutineeMessage (span: SourceSpan) = unknownValueMessage "matched" span

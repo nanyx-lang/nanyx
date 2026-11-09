@@ -1,4 +1,33 @@
 (module
+  (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
+  (memory 1)
+  (export "memory" (memory 0))
+
+  (func $__nanyx_string_length (param $s i32) (result i32)
+    local.get $s
+    i32.const 4
+    i32.sub
+    i32.load
+  )
+  (func $__nanyx_write_stderr (param $s i32)
+    i32.const 0
+    local.get $s
+    i32.store
+    i32.const 4
+    local.get $s
+    call $__nanyx_string_length
+    i32.store
+    i32.const 2
+    i32.const 0
+    i32.const 1
+    i32.const 8
+    call $fd_write
+    drop
+  )
+
+  (data (i32.const 256) "O\00\00\0012:27: error NYX0201: Type mismatch: bool vs int. (deferred from compile time)\0a\00")
+
   (func $inRange (param $x i32) (param $lo i32) (param $hi i32) (result i32)
     local.get $x
     local.get $lo
@@ -49,9 +78,11 @@
     i32.const 1
     i32.eq
     i32.and
-    local.get $r2
-    i32.const 0
-    i32.eq
+    i32.const 260
+    call $__nanyx_write_stderr
+    i32.const 1
+    call $proc_exit
+    unreachable
     i32.and
     local.get $c2
     i32.const 0
