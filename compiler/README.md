@@ -166,7 +166,7 @@ and its explicit imports take precedence over the prelude's, so a module can def
 | --------------- | ------------------------------------------------------------------------------------------------- |
 | `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type (`#some(a) \| #error(e)`) with `Result.map`, `mapError`, `bind`, `defaultValue`, `isOk`, `isError`. The helpers for option-like unions, attached to the name `Option`: `Option.map`, `bind`, `defaultValue`, `isSome`, `isNone`, `toResult`, `mapOr`. `Int.parse`, which reads a decimal integer (`#some(int) \| #invalidInt`). The `List` functions: `List.length`, `head`, `map`, `filter`, `find`, `all`, `any`, `fold`, `foldBack`, `reverse`, `append`, `flatten`, `take`, `skip`, `zip` |
 | `nanyx/console` | The `Console` context (`print`, `println`, `eprint`, `eprintln`, `readLine`, `readToEnd`, `flush`), the `IoError` type, and the instance the runtime supplies to the entry point |
-| `nanyx/math`    | `abs`, `min`, `max`, `clamp` and `pow` on `int` (the docs make them generic over `Num(a)`; the `float` functions are #186) |
+| `nanyx/math`    | `abs`, `min`, `max`, `clamp` and `pow` on `int` (the docs make them generic over `Num(a)`, #186); `sqrt`, `floor`, `ceil` and `round` on `float` |
 | `nanyx/result`  | Nothing: kept so that `import nanyx/result` still compiles now that `proc` is in the prelude      |
 | `nanyx/text`    | Attached to `String`: `String.length`, `substring`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, `contains`, `count`, `removePrefix`, `removeSuffix`, `uppercase`, `lowercase`, `trim`, `trimStart`, `trimEnd`, `isEmpty`, `isBlank`, `repeat`, `padStart`, `padEnd`, `split`, `join`, `concat`, `replace`, `lines`, `words`; called as `String.trim(s)` or `s \trim` |
 
@@ -174,7 +174,7 @@ The library is written over a handful of **compiler intrinsics**: operations tha
 Nanyx itself, such as writing to standard output or reading a byte of a string. They are listed with
 their types in one place, `Intrinsics` in `Nanyx.Compiler/Builtins.fs`, are only in scope while a
 standard-library module is being checked (user code cannot call them), and are lowered by the backend
-onto helper functions it emits with the module (`runtimeHelpers` in `Nanyx.Compiler.Wasm/CodeGen.fs`).
+onto helper functions it emits with the module (`runtimeHelpers` in `Nanyx.Compiler.Wasm/WasmRuntime.fs`).
 Their names all start with `__nanyx_`.
 
 Strings are UTF-8 and this first slice of `nanyx/text` works byte by byte: `length` counts bytes,
@@ -189,7 +189,8 @@ To add a module: create `stdlib/nanyx/<name>.nyx` declaring `module <name>`, mar
 `export`, and rebuild; the glob picks it up and `import nanyx/<name>` resolves. Definitions inside a
 module must be written before the definitions that use them (self-recursion is fine). Add an intrinsic
 only when a function genuinely cannot be written in Nanyx: give it a name and type in `Intrinsics`, and
-a WebAssembly body of the same name in `runtimeHelpers`.
+a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in
+`helperDependencies` (the order of that list is the order helpers are emitted in, so add new ones at the end).
 
 ## The language server
 

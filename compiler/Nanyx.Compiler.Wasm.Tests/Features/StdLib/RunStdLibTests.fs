@@ -197,3 +197,42 @@ let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
         "def g = math.pow(5, 0)\n" +
         "println(\"{a} {b} {c} {d} {e} {f} {g}\")\n"
     runSource source |> assertRan "42 3 7 100 0 256 1\n"
+
+[<Fact>]
+let ``Run - nanyx/math sqrt, floor, ceil and round`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "def s = math.sqrt(81.0)\n" +
+        "def t = math.sqrt(2.0)\n" +
+        "println(\"{s} {t}\")\n" +
+        "println(\"{math.floor(3.9)} {math.floor(-3.1)} {math.floor(4.0)}\")\n" +
+        "println(\"{math.ceil(3.1)} {math.ceil(-3.9)} {math.ceil(4.0)}\")\n" +
+        "println(\"{math.round(3.5)} {math.round(2.5)} {math.round(-2.5)} {math.round(2.4999)} {math.round(-0.4)}\")\n"
+    runSource source |> assertRan "9.0 1.414214\n3 -4 4\n4 -3 4\n4 3 -3 2 0\n"
+
+[<Fact>]
+let ``Run - nanyx/math floor of a float out of the range of int stops the program`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "println(\"before\")\n" +
+        "def n = math.floor(1.0e12)\n" +
+        "println(\"after {n}\")\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains("wasm trap: integer overflow", outcome.StandardError)
+
+[<Fact>]
+let ``Run - nanyx/math round of NaN stops the program`` () =
+    let source =
+        "import nanyx/math as math\n" +
+        "\n" +
+        "dbg(math.round(0.0 / 0.0))\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Contains("wasm trap: invalid conversion to integer", outcome.StandardError)

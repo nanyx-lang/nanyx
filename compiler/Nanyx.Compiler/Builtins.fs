@@ -9,13 +9,14 @@ open Parser.Program
 ///
 /// They are in scope only while a standard-library module is being checked, never in user code. The
 /// WebAssembly backend lowers a call to one of them onto a helper function it emits with the module
-/// (see `runtimeHelpers` in Transpiler.Wasm.CodeGen).
+/// (see `runtimeHelpers` in Transpiler.Wasm.WasmRuntime).
 module Intrinsics =
     /// Every intrinsic name starts with this, which keeps them out of the way of ordinary identifiers.
     let prefix = "__nanyx_"
 
     let private stringTy = TyPrimitive "string"
     let private intTy = TyPrimitive "int"
+    let private floatTy = TyPrimitive "float"
     let private unitTy = TyPrimitive "unit"
 
     /// The input type of a function taking several arguments: a positional record, as inference builds it.
@@ -42,6 +43,16 @@ module Intrinsics =
     let stringFromByte = prefix + "string_from_byte"
     /// A list with an element added at the front.
     let listCons = prefix + "list_cons"
+    /// The square root of a float (NaN for a negative one).
+    let floatSqrt = prefix + "float_sqrt"
+    /// The largest whole float not above a float.
+    let floatFloor = prefix + "float_floor"
+    /// The smallest whole float not below a float.
+    let floatCeil = prefix + "float_ceil"
+    /// A float with its fraction dropped, towards zero.
+    let floatTrunc = prefix + "float_trunc"
+    /// A whole float as an int. A float that is NaN, infinite or out of the range of `int` stops the program.
+    let floatToInt = prefix + "float_to_int"
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
@@ -52,6 +63,11 @@ module Intrinsics =
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy))
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy))
           stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy))
+          floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy))
+          floatFloor, TypeEnv.mono (TyFunc(floatTy, floatTy))
+          floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy))
+          floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy))
+          floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy))
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None } ]
 
     let names : Set<string> = all |> List.map fst |> Set.ofList
