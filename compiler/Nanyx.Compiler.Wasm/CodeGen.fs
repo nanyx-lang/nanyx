@@ -81,6 +81,9 @@ type private TranspileEnv =
       FunctionContextTypes: Map<string, TypeExpr list>
       /// The wrapper that lets each top-level function that has one be passed as a function value.
       FunctionWrappers: Map<string, string>
+      /// The type the type checker resolved for each expression of the module being compiled, by node (see
+      /// `TypedModule.ExprTypes`): empty when compiling an untyped module.
+      CheckedTypes: Map<NodeId, Ty>
       TypeFieldTypes: Map<string, Map<string, string>>
       RecordFieldTypes: Map<string, Map<string, string>>
       ParamTypes: Map<string, string>
@@ -1289,6 +1292,13 @@ let rec private tryExprTy (env: TranspileEnv) (expr: Expression) : Ty option =
             | _ -> None)
     | _ -> None
 
+/// The type the type checker resolved for `expr`, unless it is still a type variable: generic code is compiled once,
+/// so a value of a type it is generic in has no single type.
+let private checkedTy (env: TranspileEnv) (expr: Expression) : Ty option =
+    match env.CheckedTypes |> Map.tryFind expr.Id with
+    | Some (TyVar _) | None -> None
+    | Some ty -> Some ty
+
 /// The layout (field names in storage order) of a record-typed expression, from its inferred type. Records are
 /// stored with their fields sorted by name, which is also the order of a `Map`'s keys.
 let private tryRecordLayoutOfExpr (env: TranspileEnv) (expr: Expression) : string list option =
@@ -2171,10 +2181,11 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
         | TagExpr(name, payload) ->
             let payloadTy = payload |> Option.map (fun p -> tryGetExprTypeName env p |> Option.map TyPrimitive |> Option.defaultValue (TyPrimitive "unknown"))
             Some (TyTag(name, payloadTy))
-        | _ -> tryExprTy env inner
+        | _ -> tryExprTy env inner |> Option.orElseWith (fun () -> checkedTy env inner)
 
+    // What the backend can tell of a hole's type from what it sees, or else the type checker's type for it (#193).
     let interpolationHoleType inner =
-        match tryGetExprTypeName env inner with
+        match tryGetExprTypeName env inner |> Option.orElseWith (fun () -> checkedTy env inner |> Option.bind trySimpleTypeName) with
         | Some ("string" | "int" | "bool" | "float" as typeName) -> typeName
         | Some other -> unsupportedAt inner.Span $"The WebAssembly backend cannot interpolate a value of type '{other}' yet"
         | None when holeTy inner |> Option.bind tryTagMembers |> Option.isSome -> "tag"
@@ -3666,7 +3677,7 @@ let private getLayoutFromTypeExpr (typeLayouts: Map<string, string list>) (typeF
         Some (fieldNames, fieldTypes)
     | _ -> None
 
-let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) : string =
+let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map<string, TypedExpr>) (typedValueTypes: Map<string, string>) (typedReturnTypes: Map<string, string>) (typedTopLevelTys: Map<string, Ty>) (contextInstances: Map<NodeId, ContextInstance option list>) (checkedTypes: Map<NodeId, Ty>) : string =
     // The definitions synthesized instances are made of are passed as function values.
     let synthesizedMembers =
         contextInstances
@@ -4035,6 +4046,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   ContextInstances = contextInstances
                   FunctionContextTypes = functionContextTypes
                   FunctionWrappers = functionWrappers
+                  CheckedTypes = checkedTypes
                   TypeFieldTypes = typeFieldTypes
                   RecordFieldTypes = initialRecordFieldTypes
                   ParamTypes = initialParamTypes
@@ -4211,6 +4223,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   ContextInstances = contextInstances
                   FunctionContextTypes = functionContextTypes
                   FunctionWrappers = functionWrappers
+                  CheckedTypes = checkedTypes
                   TypeFieldTypes = typeFieldTypes
                   RecordFieldTypes = Map.empty
                   ParamTypes = Map.empty
@@ -4572,7 +4585,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
         $"(module\n{body}\n)"
 
 let transpileModuleToWat (module': Module) : string =
-    transpileModuleToWatCore module' Map.empty Map.empty Map.empty Map.empty Map.empty
+    transpileModuleToWatCore module' Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
 let transpileTypedModuleToWat (typed: TypedModule) : string =
     let typedBodies =
@@ -4594,7 +4607,7 @@ let transpileTypedModuleToWat (typed: TypedModule) : string =
             | TyFunc(_, returnTy) -> trySimpleTypeName returnTy |> Option.map (fun tyName -> name, tyName)
             | _ -> None)
         |> Map.ofList
-    transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances
+    transpileModuleToWatCore typed.Module typedBodies typedValueTypes typedReturnTypes typed.Types typed.ContextInstances typed.ExprTypes
 
 /// `transpileTypedModuleToWat`, with what the backend cannot compile reported as a diagnostic at the place in the source
 /// it is written: the innermost expression it is in that has one, or else the definition.
