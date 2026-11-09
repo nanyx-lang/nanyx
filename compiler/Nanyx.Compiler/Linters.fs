@@ -349,7 +349,7 @@ module UnreachableArms =
           Title = "Unreachable match arm"
           DefaultSeverity = Severity.Warning
           Description =
-            "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them handle every tag, boolean or length of list." }
+            "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them match every tag, boolean, int, length of list or combination of them it does." }
 
     /// The span from `start` to `end'` of `source`, in the file of `like`.
     let private spanBetween (source: string) (like: SourceSpan) (start: int) (end': int) : SourceSpan =

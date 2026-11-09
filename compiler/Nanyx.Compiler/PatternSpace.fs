@@ -1,11 +1,14 @@
 namespace NyxCompiler
 
+open System
 open Parser.Program
 
 /// Which values patterns match, as far as the compiler reasons about it: what the exhaustiveness check
-/// (`Infer`) and the `unreachableArms` rule (`Linters`) both ask. A pattern it cannot reason about (a guard, a list
-/// with a splat in the middle) is taken to match no value for sure, so neither ever reports something on its account
-/// that might not be so.
+/// (`Infer`) and the `unreachableArms` rule (`Linters`) both ask. Both are questions of usefulness, as in Maranget's
+/// "Warnings for pattern matching": whether a row of patterns matches a value that no row before it does. A pattern
+/// it cannot reason about (a guard, a list with a splat in the middle) is taken to match no value for sure when it is
+/// in one of the rows before, and any value when it is the row asked about, so neither ever reports something on its
+/// account that might not be so.
 module PatternSpace =
     /// The patterns of an arm of a match on `valueCount` values. A lone `else` is the arm for anything else, whatever
     /// every value is, so in a match on several values it stands for a catch-all at each position: one `else` per
@@ -34,42 +37,6 @@ module PatternSpace =
         | GuardPattern _
         | TagPattern _ -> false
 
-    /// The tag `pattern` matches, if it is a tag pattern.
-    let tagName (pattern: Pattern) =
-        match pattern.Kind with
-        | TagPattern(tagName, _) -> Some tagName
-        | _ -> None
-
-    let rec private unwrap (ty: Ty) =
-        match ty with
-        | TyNominal(_, underlying, _)
-        | TyAlias(_, _, underlying) -> unwrap underlying
-        | _ -> ty
-
-    /// The tags of `ty`, if it is a union of tags and nothing else (no rest left open).
-    let tagUnion (ty: Ty) : Set<string> option =
-        match unwrap ty with
-        | TyUnion items when items |> List.forall (function TyTag _ -> true | _ -> false) ->
-            items |> List.choose (function TyTag(name, _) -> Some name | _ -> None) |> Set.ofList |> Some
-        | _ -> None
-
-    let isList (ty: Ty) =
-        match unwrap ty with
-        | TyApply("list", _) -> true
-        | _ -> false
-
-    let isRecord (ty: Ty) =
-        match unwrap ty with
-        | TyRecord _ -> true
-        | _ -> false
-
-    /// Whether list patterns at one position of a match cover every list, as the exhaustiveness check counts it: an
-    /// empty list and one with a splat.
-    let listsCoverAll (patterns: Pattern list) =
-        let hasEmpty = patterns |> List.exists (function Kind (ListPattern([], None)) -> true | _ -> false)
-        let hasSplat = patterns |> List.exists (function Kind (ListPattern(_, Some _)) -> true | _ -> false)
-        hasEmpty && hasSplat
-
     /// The tag an arm whose patterns are `patterns` handles in full at `index`: its pattern there is that tag with a
     /// catch-all payload, or none, and its pattern at every other position is a catch-all. Every value with that tag
     /// there goes to the arm.
@@ -79,104 +46,368 @@ module PatternSpace =
         | Some (Kind (TagPattern(tagName, payload))) when othersCatchAll && payload |> Option.forall isCatchAll -> Some tagName
         | _ -> None
 
-    let private intOf (expr: Expression) =
-        match expr.Kind with
-        | LiteralExpr (IntLit value) -> Some value
+    let rec private unwrap (ty: Ty) =
+        match ty with
+        | TyNominal(_, underlying, _)
+        | TyAlias(_, _, underlying) -> unwrap underlying
+        | _ -> ty
+
+    let rec private unalias (ty: Ty) =
+        match ty with
+        | TyAlias(_, _, underlying) -> unalias underlying
+        | _ -> ty
+
+    /// The tags of `ty`, if it is a union of tags and nothing else (no rest left open), or a single tag.
+    let private tagsOf (ty: Ty) : Set<string> option =
+        match unwrap ty with
+        | TyUnion items when items |> List.forall (function TyTag _ -> true | _ -> false) ->
+            items |> List.choose (function TyTag(name, _) -> Some name | _ -> None) |> Set.ofList |> Some
+        | TyTag(name, _) -> Some (Set.singleton name)
         | _ -> None
 
-    /// Whether `general` matches every value `specific` matches.
-    let rec subsumes (general: Pattern) (specific: Pattern) : bool =
-        let all (generals: Pattern list) (specifics: Pattern list) =
-            generals.Length = specifics.Length && List.forall2 subsumes generals specifics
-        if isCatchAll general then
-            true
-        else
-            match general.Kind, specific.Kind with
-            | LiteralPattern literal, LiteralPattern other -> literal = other
-            | RangePattern(low, high), LiteralPattern (IntLit value) ->
-                match intOf low, intOf high with
-                | Some low, Some high -> low <= value && value <= high
-                | _ -> false
-            | RangePattern(low, high), RangePattern(otherLow, otherHigh) ->
-                match intOf low, intOf high, intOf otherLow, intOf otherHigh with
-                | Some low, Some high, Some otherLow, Some otherHigh -> low <= otherLow && otherHigh <= high
-                | _ -> false
-            | TagPattern(name, payload), TagPattern(otherName, otherPayload) when name = otherName ->
-                match payload, otherPayload with
-                | None, None -> true
-                | Some payload, Some otherPayload -> subsumes payload otherPayload
-                | Some payload, None -> isCatchAll payload
-                | None, Some _ -> false
-            | TuplePattern elements, TuplePattern others -> all elements others
-            | RecordPattern(name, elements), RecordPattern(otherName, others) -> name = otherName && all elements others
-            | RecordMemberPattern members, RecordMemberPattern others ->
-                members
-                |> List.forall (fun (name, pattern) ->
-                    match others |> List.tryFind (fst >> (=) name) with
-                    | Some (_, other) -> subsumes pattern other
-                    | None -> isCatchAll pattern)
-            // `[a, b]` matches lists of exactly two; `[a, ...rest]` lists of at least one.
-            | ListPattern(elements, None), ListPattern(others, None) -> all elements others
-            | ListPattern(elements, Some _), ListPattern(others, _) ->
-                others.Length >= elements.Length && all elements (others |> List.take elements.Length)
-            | _ -> false
+    /// A value of a type, as an example of one no arm matches. `Anything` is any value at all; `OneOfTags` any value
+    /// with one of those tags, which are every tag of the type that no arm names.
+    type Witness =
+        | Anything
+        | OneOfTags of string list
+        | TagCase of string * Witness
+        | BoolCase of bool
+        | IntCase of int64
+        | LiteralCase of Literal
+        | RecordCase of (string * Witness) list
+        | NamedCase of string * Witness list
+        | EmptyList
+        | ListCons of Witness * Witness
 
-    /// Whether `pattern` matches every value of one kind its type has, whatever is inside it: a tag with a catch-all
-    /// payload or none, a boolean, or a list of some length (or more) with catch-alls for elements.
-    let private handlesInFull (pattern: Pattern) =
+    /// What a pattern matches, as the check reasons about it. A tuple is a record whose fields are `0`, `1` and so on,
+    /// as its type is, and a list is empty or an element before another list.
+    type private Space =
+        | Any
+        /// No value that can be counted on.
+        | Never
+        | Tag of string * Space
+        | Bool of bool
+        /// The ints from the first to the second, inclusive.
+        | Ints of int64 * int64
+        /// A string or a float.
+        | Lit of Literal
+        | Fields of Map<string, Space>
+        | Named of string * Space list
+        | Nil
+        | Cons of Space * Space
+
+    /// One kind of value of a type, which the check takes a column of patterns apart by: those of a tag, a boolean, a
+    /// run of ints that no pattern of the column splits, a string or float, a record with these fields, a value of a
+    /// named record type, an empty list, a list with an element.
+    type private Head =
+        | HTag of string
+        | HBool of bool
+        | HInts of int64 * int64
+        | HLit of Literal
+        | HFields of string list
+        | HNamed of string * int
+        | HNil
+        | HCons
+
+    let private intOf (expr: Expression) =
+        match expr.Kind with
+        | LiteralExpr (IntLit value) -> Some (int64 value)
+        | _ -> None
+
+    /// What `pattern` matches. `certain` says what a pattern the check cannot reason about stands for: nothing when
+    /// it is in an arm that might cover others (`true`), anything when it is in the arm asked about.
+    let rec private spaceOf (certain: bool) (pattern: Pattern) : Space =
+        let uncertain = if certain then Never else Any
         match pattern.Kind with
-        | TagPattern(_, payload) -> payload |> Option.forall isCatchAll
-        | LiteralPattern (BoolLit _) -> true
-        | ListPattern(elements, _) -> elements |> List.forall isCatchAll
-        | _ -> false
+        | WildcardPattern
+        | ElsePattern
+        | IdentifierPattern _ -> Any
+        | LiteralPattern (IntLit value) -> Ints(int64 value, int64 value)
+        | LiteralPattern (BoolLit value) -> Bool value
+        | LiteralPattern literal -> Lit literal
+        | RangePattern(low, high) ->
+            match intOf low, intOf high with
+            | Some low, Some high when low <= high -> Ints(low, high)
+            | _ -> uncertain
+        | TagPattern(name, payload) -> Tag(name, payload |> Option.map (spaceOf certain) |> Option.defaultValue Any)
+        | TuplePattern elements -> elements |> List.mapi (fun index element -> string index, spaceOf certain element) |> Map.ofList |> Fields
+        | RecordMemberPattern members -> members |> List.map (fun (name, member') -> name, spaceOf certain member') |> Map.ofList |> Fields
+        | RecordPattern(name, elements) -> Named(name, elements |> List.map (spaceOf certain))
+        | ListPattern(elements, rest) ->
+            let tail = rest |> Option.map (spaceOf certain) |> Option.defaultValue Nil
+            List.foldBack (fun element after -> Cons(spaceOf certain element, after)) elements tail
+        | ListSplatMiddle _
+        | GuardPattern _ -> uncertain
 
-    /// Whether arms that each handle in full one kind of value (`handlesInFull`) at one position, the patterns
-    /// `handled`, whatever is at the others, leave no value of `ty` there: every tag of its union, both booleans, or
-    /// every length of list.
-    let private coversType (ty: Ty option) (handled: Pattern list) =
-        let tags = handled |> List.choose tagName |> Set.ofList
-        let literals = handled |> List.choose (function Kind (LiteralPattern literal) -> Some literal | _ -> None) |> Set.ofList
-        // The lengths of list every one of the patterns matches: exactly n, or n and more.
-        let exact = handled |> List.choose (function Kind (ListPattern(elements, None)) when List.forall isCatchAll elements -> Some elements.Length | _ -> None) |> Set.ofList
-        let atLeast = handled |> List.choose (function Kind (ListPattern(elements, Some _)) when List.forall isCatchAll elements -> Some elements.Length | _ -> None)
-        let everyList = atLeast |> List.exists (fun least -> List.forall exact.Contains [ 0 .. least - 1 ])
-        match ty |> Option.map unwrap with
-        | Some (TyPrimitive "bool") -> literals.Contains (BoolLit true) && literals.Contains (BoolLit false)
-        | Some itemTy when isList itemTy -> everyList
-        | Some itemTy ->
-            match tagUnion itemTy with
-            | Some union -> not union.IsEmpty && Set.isSubset union tags
-            | None -> false
-        | None -> everyList
+    let private arity (head: Head) =
+        match head with
+        | HTag _ -> 1
+        | HFields names -> names.Length
+        | HNamed(_, count) -> count
+        | HCons -> 2
+        | HBool _
+        | HInts _
+        | HLit _
+        | HNil -> 0
+
+    /// The kind of value `space` matches, for one that is neither `Any`, `Never`, ints nor fields.
+    let private headOf (space: Space) =
+        match space with
+        | Tag(name, _) -> Some (HTag name)
+        | Bool value -> Some (HBool value)
+        | Lit literal -> Some (HLit literal)
+        | Named(name, parts) -> Some (HNamed(name, parts.Length))
+        | Nil -> Some HNil
+        | Cons _ -> Some HCons
+        | Any
+        | Never
+        | Ints _
+        | Fields _ -> None
+
+    /// What `space` matches inside a value of the kind `head`, part by part, if it matches every such value's shape.
+    let private partsOf (head: Head) (space: Space) : Space list option =
+        match head, space with
+        | _, Any -> Some (List.replicate (arity head) Any)
+        | HTag name, Tag(other, payload) when name = other -> Some [ payload ]
+        | HBool value, Bool other when value = other -> Some []
+        | HInts(low, high), Ints(otherLow, otherHigh) when otherLow <= low && high <= otherHigh -> Some []
+        | HLit literal, Lit other when literal = other -> Some []
+        | HFields names, Fields fields -> Some (names |> List.map (fun name -> fields |> Map.tryFind name |> Option.defaultValue Any))
+        | HNamed(name, count), Named(other, parts) when name = other && parts.Length = count -> Some parts
+        | HNil, Nil -> Some []
+        | HCons, Cons(head, tail) -> Some [ head; tail ]
+        | _ -> None
+
+    /// The types of the parts of a value of the kind `head` whose type is `ty`, where known.
+    let private partTypes (ty: Ty option) (head: Head) : Ty option list =
+        let shape = ty |> Option.map unwrap
+        match head with
+        | HTag name ->
+            let payload =
+                match shape with
+                | Some (TyUnion items) -> items |> List.tryPick (function TyTag(other, payload) when other = name -> Some payload | _ -> None) |> Option.flatten
+                | Some (TyTag(other, payload)) when other = name -> payload
+                | _ -> None
+            [ payload ]
+        | HFields names ->
+            let fields =
+                match shape with
+                | Some (TyRecord fields)
+                | Some (TyOpenRecord(fields, _)) -> fields
+                | _ -> Map.empty
+            names |> List.map fields.TryFind
+        | HNamed(_, count) ->
+            match ty |> Option.map unalias with
+            | Some (TyNominal(_, underlying, _)) when count = 1 -> [ Some underlying ]
+            | _ -> List.replicate count None
+        | HCons ->
+            let element =
+                match shape with
+                | Some (TyApply("list", [ element ])) -> Some element
+                | _ -> None
+            [ element; ty ]
+        | HBool _
+        | HInts _
+        | HLit _
+        | HNil -> []
+
+    /// The value of the kind `head` with these parts.
+    let private witnessOf (head: Head) (parts: Witness list) =
+        match head, parts with
+        | HTag name, [ payload ] -> TagCase(name, payload)
+        | HBool value, _ -> BoolCase value
+        | HInts(low, high), _ -> IntCase (if low > 0L then low elif high < 0L then high else 0L)
+        | HLit literal, _ -> LiteralCase literal
+        | HFields names, _ -> RecordCase (List.zip names parts)
+        | HNamed(name, _), _ -> NamedCase(name, parts)
+        | HNil, _ -> EmptyList
+        | HCons, [ head; tail ] -> ListCons(head, tail)
+        | _ -> Anything
+
+    /// The runs of ints from `low` to `high` that no range in `ranges` splits: each is in a range in full, or in none.
+    let private runs (low: int64) (high: int64) (ranges: (int64 * int64) list) =
+        let cuts =
+            ranges
+            |> List.collect (fun (start, finish) -> [ start; (if finish = Int64.MaxValue then finish else finish + 1L) ])
+            |> List.filter (fun cut -> low < cut && cut <= high)
+            |> List.distinct
+            |> List.sort
+        List.zip (low :: cuts) ((cuts |> List.map (fun cut -> cut - 1L)) @ [ high ])
+
+    /// Fields in the order a tuple's are written, then by name.
+    let private fieldOrder (name: string) =
+        match Int32.TryParse name with
+        | true, index -> 0, index, ""
+        | _ -> 1, 0, name
+
+    /// A string or float none of `present` is, of the kind `sample` is.
+    let private otherLiteral (present: Literal list) (sample: Literal) =
+        let candidates =
+            match sample with
+            | StringLit _ -> Seq.append [ "" ] (Seq.initInfinite (fun index -> string (char (int 'a' + index % 26)) + (if index < 26 then "" else string (index / 26)))) |> Seq.map StringLit
+            | _ -> Seq.initInfinite (float >> FloatLit)
+        candidates |> Seq.find (fun candidate -> not (List.contains candidate present))
+
+    /// A value matched by `vector` (one space per value, of the types `types`) that no row of `rows` matches, if there
+    /// is one: one witness per value. `trustTags` says whether the tags the rows name are taken to be every tag of a
+    /// type that is not known to be a closed union of tags.
+    let rec private useful (trustTags: bool) (rows: Space list list) (vector: Space list) (types: Ty option list) : Witness list option =
+        match vector with
+        | [] -> if rows.IsEmpty then Some [] else None
+        | first :: rest ->
+            let ty = List.tryHead types |> Option.flatten
+            let restTypes = List.tail (if types.IsEmpty then [ None ] else types)
+            let column = rows |> List.map List.head
+            // The rows that match a value of the kind `head`, its parts in front of their other patterns.
+            let through (head: Head) (parts: Space list) =
+                let specialised = rows |> List.choose (fun row -> partsOf head row.Head |> Option.map (fun inner -> inner @ row.Tail))
+                useful trustTags specialised (parts @ rest) (partTypes ty head @ restTypes)
+                |> Option.map (fun witnesses -> witnessOf head (List.take parts.Length witnesses) :: List.skip parts.Length witnesses)
+            let anyOf (heads: Head list) = heads |> List.tryPick (fun head -> through head (List.replicate (arity head) Any))
+            // A kind of value no row names: the rows that match it are those that match anything.
+            let otherwise (missing: Witness) =
+                let defaulted = rows |> List.choose (fun row -> match row.Head with Any -> Some row.Tail | _ -> None)
+                useful trustTags defaulted rest restTypes |> Option.map (fun witnesses -> missing :: witnesses)
+            let ranges = column |> List.choose (function Ints(low, high) -> Some (low, high) | _ -> None)
+            let fieldNames =
+                column
+                |> List.collect (function Fields fields -> fields |> Map.toList |> List.map fst | _ -> [])
+            let fieldsOf (own: string list) = own @ fieldNames |> List.distinct |> List.sortBy fieldOrder
+            match first with
+            | Never -> None
+            | Ints(low, high) -> runs low high ranges |> List.tryPick (fun run -> through (HInts run) [])
+            | Fields own ->
+                let names = fieldsOf (own |> Map.toList |> List.map fst)
+                through (HFields names) (names |> List.map (fun name -> own |> Map.tryFind name |> Option.defaultValue Any))
+            | Any ->
+                let heads = column |> List.choose headOf |> List.distinct
+                let hasFields = column |> List.exists (function Fields _ -> true | _ -> false)
+                let kinds =
+                    [ if not ranges.IsEmpty then "int"
+                      if hasFields then "fields"
+                      yield!
+                          heads
+                          |> List.map (function
+                              | HTag _ -> "tag"
+                              | HBool _ -> "bool"
+                              | HLit (StringLit _) -> "string"
+                              | HLit _ -> "float"
+                              | HNamed _ -> "named"
+                              | HNil
+                              | HCons -> "list"
+                              | HInts _
+                              | HFields _ -> "") ]
+                    |> List.distinct
+                match kinds with
+                | [] -> otherwise Anything
+                | [ "tag" ] ->
+                    let present = heads |> List.choose (function HTag name -> Some name | _ -> None) |> Set.ofList
+                    match ty |> Option.bind tagsOf with
+                    | Some union when Set.isSubset union present -> anyOf (present |> Set.toList |> List.map HTag)
+                    | Some union -> otherwise (OneOfTags (Set.difference union present |> Set.toList))
+                    | None when trustTags -> anyOf (present |> Set.toList |> List.map HTag)
+                    | None -> otherwise Anything
+                | [ "bool" ] ->
+                    match heads with
+                    | [ HBool value ] -> otherwise (BoolCase (not value))
+                    | _ -> anyOf [ HBool true; HBool false ]
+                | [ "int" ] ->
+                    let all = runs Int64.MinValue Int64.MaxValue ranges
+                    let covered (low, high) = ranges |> List.exists (fun (start, finish) -> start <= low && high <= finish)
+                    match all |> List.filter (covered >> not) with
+                    | [] -> anyOf (all |> List.map HInts)
+                    | gaps -> otherwise (gaps |> List.map (fun gap -> witnessOf (HInts gap) []) |> List.minBy (function IntCase value -> value < 0L, (if value = Int64.MinValue then Int64.MaxValue else abs value) | _ -> false, 0L))
+                | [ "string" ]
+                | [ "float" ] ->
+                    let present = heads |> List.choose (function HLit literal -> Some literal | _ -> None)
+                    otherwise (LiteralCase (otherLiteral present present.Head))
+                | [ "fields" ] ->
+                    let names = fieldsOf []
+                    through (HFields names) (names |> List.map (fun _ -> Any))
+                | [ "named" ] when heads.Length = 1 -> anyOf heads
+                | [ "list" ] ->
+                    match heads with
+                    | [ HNil ] -> otherwise (ListCons(Anything, Anything))
+                    | [ HCons ] -> otherwise EmptyList
+                    | _ -> anyOf [ HNil; HCons ]
+                // Patterns of different kinds of value at one position, which the type checker reports.
+                | _ -> otherwise Anything
+            | _ ->
+                match headOf first with
+                | Some head -> through head (partsOf head first |> Option.defaultValue [])
+                | None -> None
+
+    /// A value that no arm of a match on values of the types `types` matches, as one witness per value, or `None` if
+    /// every value is matched. An arm whose pattern count is not the values' is left out: it is an error of its own.
+    /// A tag union whose type is not known yet is taken to be the tags the arms name.
+    let missingCase (arms: Pattern list list) (types: Ty option list) : Witness list option =
+        let rows = arms |> List.filter (fun patterns -> patterns.Length = types.Length) |> List.map (List.map (spaceOf true))
+        useful true rows (List.replicate types.Length Any) types
 
     /// The earlier arms that between them match every value the arm with `patterns` does, so that it can never match,
     /// or `None` if they do not (or it cannot be told). `earlier` are the arms before it, with their indexes, and
-    /// `types` the types of the values matched, by position, where known. An earlier arm that matches everything the
-    /// arm does is enough; so are arms that each handle a value in full at one position (a tag, a boolean, a length
-    /// of list, with catch-alls elsewhere), when the arm's own pattern there matches only values they handle.
+    /// `types` the types of the values matched, by position, where known. A single arm that does is given when there
+    /// is one; otherwise as few arms as do between them.
     let coveringArms (earlier: (int * Pattern list) list) (types: Ty option list) (patterns: Pattern list) : int list option =
-        let single =
-            earlier
-            |> List.tryFind (fun (_, others) -> others.Length = patterns.Length && List.forall2 subsumes others patterns)
-            |> Option.map (fst >> List.singleton)
-        let byPosition () =
-            patterns
-            |> List.indexed
-            |> List.tryPick (fun (index, pattern) ->
-                // The earlier arms that handle one kind of value in full here, with catch-alls at every other position.
-                let handling =
-                    earlier
-                    |> List.choose (fun (armIndex, others) ->
-                        let othersCatchAll = others |> List.indexed |> List.forall (fun (i, other) -> i = index || isCatchAll other)
-                        match List.tryItem index others with
-                        | Some other when othersCatchAll && others.Length = patterns.Length && handlesInFull other -> Some (armIndex, other)
-                        | _ -> None)
-                let ty = types |> List.tryItem index |> Option.flatten
-                // A single earlier arm that covers a tag or a literal the arm matches is found above; here the arm's
-                // pattern matches any value of the position (or any list), which only the handled values together cover.
-                let matchesAny =
-                    match pattern.Kind with
-                    | ListPattern _ -> true
-                    | _ -> isCatchAll pattern
-                if matchesAny && coversType ty (handling |> List.map snd) then Some (handling |> List.map fst) else None)
-        single |> Option.orElseWith byPosition
+        let vector = patterns |> List.map (spaceOf false)
+        let types = patterns |> List.mapi (fun index _ -> types |> List.tryItem index |> Option.flatten)
+        let candidates = earlier |> List.filter (fun (_, others) -> others.Length = patterns.Length)
+        let cover (arms: (int * Pattern list) list) =
+            (useful false (arms |> List.map (snd >> List.map (spaceOf true))) vector types).IsNone
+        if not (cover candidates) then
+            None
+        else
+            match candidates |> List.tryFind (List.singleton >> cover) with
+            | Some (index, _) -> Some [ index ]
+            | None ->
+                candidates
+                |> List.fold (fun needed arm -> let without = needed |> List.filter ((<>) arm) in if cover without then without else needed) candidates
+                |> List.map fst
+                |> Some
+
+    /// `witness` as a pattern would be written.
+    let rec show (witness: Witness) : string =
+        let items (witnesses: Witness list) = witnesses |> List.map show |> String.concat ", "
+        match witness with
+        | Anything -> "_"
+        | OneOfTags tags -> tags |> List.tryHead |> Option.map (sprintf "#%s") |> Option.defaultValue "_"
+        | TagCase(name, Anything) -> $"#{name}"
+        | TagCase(name, payload) -> $"#{name}({show payload})"
+        | BoolCase value -> if value then "true" else "false"
+        | IntCase value -> string value
+        | LiteralCase (StringLit text) -> $"\"{text}\""
+        | LiteralCase (FloatLit value) when Math.Round value = value -> sprintf "%.1f" value
+        | LiteralCase (FloatLit value) -> string value
+        | LiteralCase (IntLit value) -> string value
+        | LiteralCase (BoolLit value) -> show (BoolCase value)
+        | RecordCase fields when fields |> List.mapi (fun index (name, _) -> name = string index) |> List.forall id ->
+            $"({items (List.map snd fields)})"
+        | RecordCase fields ->
+            match fields |> List.filter (fun (_, part) -> part <> Anything) with
+            | [] -> "_"
+            | named -> "(" + (named |> List.map (fun (name, part) -> $"{name} = {show part}") |> String.concat ", ") + ")"
+        | NamedCase(name, parts) -> $"{name}({items parts})"
+        | EmptyList -> "[]"
+        | ListCons _ ->
+            let rec elements (witness: Witness) =
+                match witness with
+                | ListCons(head, tail) -> let shown, rest = elements tail in show head :: shown, rest
+                | EmptyList -> [], ""
+                | _ -> [], "..."
+            let shown, rest = elements witness
+            "[" + String.concat ", " (shown @ (if rest = "" then [] else [ rest ])) + "]"
+
+    /// What a match is missing at one value, when `witness` is a value no arm matches there and every other value
+    /// may be anything: the tags no arm names, list or record cases, or a value of a type with too many to name.
+    let whatIsMissing (witness: Witness) : string =
+        match witness with
+        | OneOfTags tags -> $"""missing tags: {String.concat ", " tags}"""
+        | EmptyList
+        | ListCons _ -> "missing list cases"
+        | RecordCase fields when not (fields |> List.mapi (fun index (name, _) -> name = string index) |> List.forall id) -> "missing record cases"
+        | NamedCase _ -> "missing record cases"
+        | BoolCase _ -> $"missing value: {show witness}"
+        | IntCase _ -> $"missing int values, such as {show witness}"
+        | LiteralCase (StringLit _) -> $"missing string values, such as {show witness}"
+        | LiteralCase _ -> $"missing float values, such as {show witness}"
+        | _ -> $"missing case: {show witness}"

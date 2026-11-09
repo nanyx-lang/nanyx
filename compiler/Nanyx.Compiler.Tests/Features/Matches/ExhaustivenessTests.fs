@@ -252,3 +252,75 @@ let ``The parser's multi-value match examples compile without throwing`` () =
         let result = Compiler.compileFile path
         for diagnostic in result.Diagnostics do
             Assert.True(diagnostic.Code = DiagnosticCodes.UnknownIdentifier.Code, $"{Path.GetFileName path}: %A{diagnostic}")
+
+/// The message of the one diagnostic compiling `source` gives.
+let private onlyDiagnostic (source: string) =
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] -> diagnostic
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``A match on ints without a catch-all is non-exhaustive, and says which int is missing`` () =
+    let single = onlyDiagnostic "def f: int -> string = { n ->\n  match n\n    | 0 -> \"zero\"\n    | 1 -> \"one\"\n}\n"
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, single.Code)
+    Assert.Equal("Non-exhaustive match, missing int values, such as 2", single.Message)
+    // Ranges count for the ints they hold.
+    let ranges = onlyDiagnostic "def f: int -> string = { n ->\n  match n\n    | 0..9 -> \"digit\"\n    | 10..99 -> \"two digits\"\n}\n"
+    Assert.Equal("Non-exhaustive match, missing int values, such as 100", ranges.Message)
+    // `(1, 1)` reaches no arm, though each value on its own has a catch-all somewhere.
+    let source = "def f: int, int -> string = { x, y ->\n  match x, y\n    | 0, 0 -> \"origin\"\n    | 0, _ -> \"on the y axis\"\n}\n"
+    let pair = onlyDiagnostic source
+    Assert.Equal("Non-exhaustive match (scrutinee 1), missing int values, such as 1", pair.Message)
+    Assert.Equal("x", textOf source pair.Span.Value)
+    let strings = onlyDiagnostic "def f: string -> int = { s ->\n  match s\n    | \"a\" -> 1\n}\n"
+    Assert.Equal("Non-exhaustive match, missing string values, such as \"\"", strings.Message)
+    let booleans = onlyDiagnostic "def f: bool -> int = { b ->\n  match b\n    | true -> 1\n}\n"
+    Assert.Equal("Non-exhaustive match, missing value: false", booleans.Message)
+    // A guard covers nothing, whatever it says.
+    let guarded = onlyDiagnostic "def f: int -> int = { n ->\n  match n\n    | { > 0 } -> 1\n    | { <= 0 } -> 0\n}\n"
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, guarded.Code)
+
+[<Fact>]
+let ``A match on several values must cover every combination of them, not each value on its own`` () =
+    let source =
+        "def f: (#some(int) | #none), bool -> int = { o, b ->\n" +
+        "  match o, b\n" +
+        "    | #some(_), true -> 1\n" +
+        "    | #none, false -> 2\n" +
+        "}\n"
+    let diagnostic = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
+    // `(#none, true)` is missing too; the check names one case.
+    Assert.Equal("Non-exhaustive match, missing case: #none, true", diagnostic.Message)
+    Assert.StartsWith("match o, b", textOf source diagnostic.Span.Value)
+    let tags =
+        onlyDiagnostic (
+            "def f: (#left | #right), (#up | #down) -> int = { a, b ->\n" +
+            "  match a, b\n" +
+            "    | #left, #up -> 1\n" +
+            "    | #right, _ -> 2\n" +
+            "}\n")
+    Assert.Equal("Non-exhaustive match, missing case: #left, #down", tags.Message)
+    // Inside a tag's payload too.
+    let nested = onlyDiagnostic "def f: #some(bool) | #none -> int = { o ->\n  match o\n    | #some(true) -> 1\n    | #none -> 0\n}\n"
+    Assert.Equal("Non-exhaustive match, missing case: #some(false)", nested.Message)
+    let tuple = onlyDiagnostic "def f: (int, bool) -> int = { p ->\n  match p\n    | (_, true) -> 1\n    | (0, false) -> 0\n}\n"
+    Assert.Equal("Non-exhaustive match, missing case: (1, false)", tuple.Message)
+
+[<Fact>]
+let ``Matches that cover every value pass, however the arms split them`` () =
+    let sources =
+        [ // Every combination of two booleans, and of a tag and a boolean.
+          "def f: bool, bool -> int = { a, b ->\n  match a, b\n    | true, true -> 1\n    | true, false -> 2\n    | false, _ -> 3\n}\n"
+          "def f: (#some(int) | #none), bool -> int = { o, b ->\n  match o, b\n    | #some(_), true -> 1\n    | #some(_), false -> 2\n    | #none, _ -> 3\n}\n"
+          // Ints with a catch-all, at the end of the arms or in another arm's other position.
+          "def f: int, int -> int = { x, y ->\n  match x, y\n    | 0, 0 -> 0\n    | 0, _ -> 1\n    | _, _ -> 2\n}\n"
+          "def f: int -> int = { n ->\n  match n\n    | 0 -> 0\n    | 1..5 -> 1\n    | _ -> 2\n}\n"
+          // Payloads and list elements.
+          "def f: #some(bool) | #none -> int = { o ->\n  match o\n    | #some(true) -> 1\n    | #some(false) -> 2\n    | #none -> 0\n}\n"
+          "def f: list(bool) -> int = { xs ->\n  match xs\n    | [] -> 0\n    | [true, ..._rest] -> 1\n    | [false, ..._rest] -> 2\n}\n"
+          // A record that is covered field by field.
+          "def f: (x: bool, y: int) -> int = { p ->\n  match p\n    | (x = true) -> 1\n    | (x = false) -> 0\n}\n" ]
+    for source in sources do
+        let result = Compiler.compile source
+        Assert.True(result.Diagnostics.IsEmpty, $"{source}\n%A{result.Diagnostics}")

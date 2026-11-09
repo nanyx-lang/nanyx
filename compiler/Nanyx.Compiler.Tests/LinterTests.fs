@@ -345,6 +345,12 @@ let ``An arm that an earlier one matches everything of is unreachable, at any po
     let twoValues =
         "def f: (#some(int) | #none), bool -> int = { o, b ->\n  match o, b\n    | #some(_x), _ -> 1\n    | #none, _ -> 2\n    | _, true -> 3\n}"
     Assert.Equal<(string * string list) list>([ "_, true", [ "#some(_x), _"; "#none, _" ] ], unreachableIn twoValues)
+    // Arms that cover a combination of values between them, none of them with catch-alls elsewhere.
+    let combinations =
+        "def f: bool, bool -> int = { a, b ->\n  match a, b\n    | true, true -> 1\n    | false, true -> 2\n    | _, false -> 3\n    | _, true -> 4\n}"
+    Assert.Equal<(string * string list) list>([ "_, true", [ "true, true"; "false, true" ] ], unreachableIn combinations)
+    let ranges = "def f: int -> int = { n ->\n  match n\n    | 1..5 -> 1\n    | 6..10 -> 2\n    | 3..8 -> 3\n    | _ -> 0\n}"
+    Assert.Equal<(string * string list) list>([ "3..8", [ "1..5"; "6..10" ] ], unreachableIn ranges)
 
 [<Fact>]
 let ``An arm is not unreachable after guards, partial patterns or other values`` () =

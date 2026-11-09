@@ -158,6 +158,7 @@ let ``Run - each kind of deferred error traps where it was found`` () =
 
 [<Fact>]
 let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
+    // A match on an int with no catch-all is a non-exhaustive match, so the trap is the deferred error.
     let source =
         "def pick = { x ->\n" +
         "    match x\n" +
@@ -167,5 +168,4 @@ let ``Run - a match with no matching arm exits 1 with a runtime error`` () =
         "dbg(pick(2))\n"
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("Runtime error", outcome.StandardError)
-    Assert.Contains("unreachable", outcome.StandardError)
+    Assert.Contains("Non-exhaustive match, missing int values, such as 0 (deferred from compile time)", outcome.StandardError)

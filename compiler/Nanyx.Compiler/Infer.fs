@@ -1860,40 +1860,19 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match List.tryItem index scrutinees with
                 | Some scrutinee when not (SourceSpan.isNone scrutinee.Span) -> scrutinee.Span
                 | _ -> expr.Span
+            // A value no arm matches (`PatternSpace.missingCase`) is reported at the one value that makes it so, or at
+            // the match when it is a combination of values.
             let exhaustivenessDiagnostics () =
-                resolvedScrutineeTypes
-                |> List.mapi (fun index scrutineeTy ->
-                    let patternsAtPos = patternsForIndex index
-                    let hasCatchAll = patternsAtPos |> List.exists isCatchAllPattern
-                    if hasCatchAll then
-                        None
-                    else
-                        match PatternSpace.tagUnion scrutineeTy with
-                        | Some tagUnion ->
-                            let coveredTags =
-                                patternsAtPos
-                                |> List.choose PatternSpace.tagName
-                                |> Set.ofList
-                            let missing = Set.difference tagUnion coveredTags |> Set.toList
-                            if missing.IsEmpty then
-                                None
-                            else
-                                let missingText = missing |> String.concat ", "
-                                let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                                Some (Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, missing tags: {missingText}")
-                        | None ->
-                            if PatternSpace.isList scrutineeTy then
-                                if PatternSpace.listsCoverAll patternsAtPos then
-                                    None
-                                else
-                                    let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                                    Some (Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, missing list cases")
-                            elif PatternSpace.isRecord scrutineeTy then
-                                let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                                Some (Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, missing record cases")
-                            else
-                                None)
-                |> List.choose id
+                match PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some) with
+                | None -> []
+                | Some witnesses ->
+                    match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
+                    | [ index, witness ] ->
+                        let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
+                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (scrutineeSpan index) $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}" ]
+                    | _ ->
+                        let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
+                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch expr.Span $"Non-exhaustive match, missing case: {missing}" ]
             // A tag that an earlier arm handles in full (its payload and every other position are catch-alls)
             // cannot reach a later arm, so a name bound by a catch-all in a later arm has the scrutinee's union
             // without those tags; with only the rest left, it has the rest's type. That is what lets
