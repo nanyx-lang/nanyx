@@ -50,6 +50,8 @@ the extension says so and you can run **Nanyx: Download the compiler** later or 
 
 - `nanyx.path`: path to the `nanyx` executable. Empty (the default) means search `PATH`, then the
   downloaded copy.
+- `nanyx.developmentMode`: for working on the compiler; see
+  [Using a local build of the compiler](#using-a-local-build-of-the-compiler). Off by default.
 - `nanyx.compilerVersion`: pins the compiler release to download and use, e.g. `0.5.2`; the
   extension then never looks for a newer one. Empty means the newest release.
 - `nanyx.downloadUrl`: a URL template to download from, with `${version}`, `${rid}` and `${ext}`
@@ -77,6 +79,14 @@ dotnet publish compiler/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -c Release -
 
 then set `nanyx.path` to `/tmp/nanyx/nanyx` (or `...\nanyx.exe` on Windows). A plain
 `dotnet build` output works too: `compiler/Nanyx.Compiler.Cli/bin/Debug/net10.0/nanyx.exe`.
+
+While the language server runs from the build it holds its files open, and on Windows that stops
+`dotnet build` from overwriting them. Turn on `nanyx.developmentMode` to avoid this: the extension
+copies the folder `nanyx.path` is in to its storage and runs the server from the copy. It also
+watches that folder, and once a build has finished writing to it (the folder has been quiet for a
+moment) it makes a fresh copy and restarts the server with it, so a `dotnet build` is all it takes
+to try a compiler change in the editor. The **Nanyx** output channel logs each restart. Old copies
+are deleted once nothing runs from them.
 
 ## Developing the extension
 

@@ -38,12 +38,15 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const node_1 = require("vscode-languageclient/node");
 const compiler_1 = require("./compiler");
+const developmentMode_1 = require("./developmentMode");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
 /** When the extension last asked GitHub for a newer compiler release (milliseconds since the epoch). */
 const LAST_UPDATE_CHECK = "nanyx.lastUpdateCheck";
 const UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000;
 let client;
+/** In development mode, watches the `nanyx.path` build for changes. */
+let buildWatcher;
 let outputChannel;
 let declinedDownload = false;
 let declinedUpdate = false;
@@ -63,6 +66,7 @@ async function activate(context) {
         }
     }), vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)), vscode.workspace.onDidChangeConfiguration((event) => {
         if (event.affectsConfiguration("nanyx.path") ||
+            event.affectsConfiguration("nanyx.developmentMode") ||
             event.affectsConfiguration("nanyx.compilerVersion") ||
             event.affectsConfiguration("nanyx.downloadUrl") ||
             event.affectsConfiguration("nanyx.greekTypeVariables") ||
@@ -73,6 +77,7 @@ async function activate(context) {
     await startOrRestart(context);
 }
 async function deactivate() {
+    buildWatcher?.dispose();
     await stopClient();
 }
 /**
@@ -80,7 +85,16 @@ async function deactivate() {
  * When it is a downloaded copy, a newer compiler release is looked for afterwards, never before.
  */
 async function startOrRestart(context) {
+    buildWatcher?.dispose();
+    buildWatcher = undefined;
     const settings = (0, compiler_1.readSettings)();
+    if (vscode.workspace.getConfiguration("nanyx").get("developmentMode", false)) {
+        if (settings.path) {
+            await startDevelopmentBuild(context, settings.path);
+            return;
+        }
+        void vscode.window.showWarningMessage("Nanyx: development mode needs nanyx.path to point at your local build of the compiler.");
+    }
     let located;
     try {
         located = (0, compiler_1.locateCompiler)(context, settings);
@@ -92,10 +106,35 @@ async function startOrRestart(context) {
     const executable = located?.executable ?? (await promptAndDownload(context, settings));
     if (executable) {
         await restartClient(context, executable);
+        (0, developmentMode_1.removeOldCopies)(context);
     }
     if (located?.downloadedVersion && (0, compiler_1.tracksNewestRelease)(settings)) {
         void checkForUpdate(context, settings, located.downloadedVersion);
     }
+}
+/**
+ * Development mode: runs the language server from a copy of `build`, so `dotnet build` can overwrite
+ * it, and restarts the server with a fresh copy whenever the build changes.
+ */
+async function startDevelopmentBuild(context, build) {
+    let copy;
+    try {
+        copy = (0, developmentMode_1.copyBuild)(context, build);
+    }
+    catch (error) {
+        void vscode.window.showErrorMessage(`Nanyx: could not copy the build at ${build} (${messageOf(error)}).`);
+        return;
+    }
+    log(`Development mode: running a copy of ${build}, and restarting when it is rebuilt.`);
+    await restartClient(context, copy);
+    (0, developmentMode_1.removeOldCopies)(context, copy);
+    buildWatcher = (0, developmentMode_1.watchBuild)(build, async () => {
+        const fresh = (0, developmentMode_1.copyBuild)(context, build);
+        log(`${build} was rebuilt; restarting the language server.`);
+        await restartClient(context, fresh);
+        (0, developmentMode_1.removeOldCopies)(context, fresh);
+        vscode.window.setStatusBarMessage("$(sync) Nanyx: restarted with the new build", 5000);
+    }, log);
 }
 /** Offers to download the compiler once per session; returns the executable if the user agreed and it worked. */
 async function promptAndDownload(context, settings) {
