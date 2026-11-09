@@ -95,9 +95,11 @@ let internal fillTypeRefs () =
                     let isOptional = optFlag.IsSome
                     TypeField(name, false, isOptional, Some typeValue, None))
         // A payload is a record of named fields, or the types in the brackets: `#pair(int, string)` carries a
-        // tuple and `#apply(a, b -> c)` a function.
+        // tuple and `#apply(a, b -> c)` a function. Empty brackets, `#some()`, carry the unit type.
+        let unitPayload = attempt (spannedType (pstring "(" >>. ws >>. pstring ")" >>% TypeUnit))
         let payload =
-            between
+            unitPayload
+            <|> between
                 (pstring "(")
                 (ws >>. pstring ")")
                 (attempt (ws >>. spannedType (sepBy1 namedField (pstring "," .>> ws) |>> TypeRecord)) <|> (ws >>. typeList |>> typeListToType))

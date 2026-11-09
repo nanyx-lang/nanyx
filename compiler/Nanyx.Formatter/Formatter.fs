@@ -340,6 +340,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | RecordExpr fields -> fieldsDoc e.Span.Start e.Span.End fields
         | ListExpr items -> listDoc e.Span [ Choice1Of2 items ]
         | TagExpr(n, None) -> text ("#" + n)
+        | TagExpr(n, Some (Kind UnitExpr)) -> text $"#{n}()"
         | TagExpr(n, Some payload) -> cat [ text ("#" + n); parenFields payload (e.Span.Start + 1 + n.Length) e.Span.End ]
         | MemberAccess(target, field, _) -> cat [ expr operandPosition target; text "."; text field ]
         | ContextMemberAccess(context, field) -> cat [ contextHead context; text "."; text field ]
@@ -935,6 +936,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeRecord fields -> cat [ text "("; commaJoin (List.map recordTypeField fields); text ")" ]
         | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
         | TypeTag(n, None) -> text ("#" + n)
+        | TypeTag(n, Some (Kind TypeUnit)) -> text $"#{n}()"
         | TypeTag(n, Some payload) -> cat [ text $"#{n}("; tagPayload payload; text ")" ]
         | TypeContext items -> contextSet items
         | TypeConstraint(n, baseType, predicate) ->

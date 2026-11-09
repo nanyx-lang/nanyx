@@ -178,13 +178,13 @@ let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
     runSource source |> assertRan "some 2\nerror ERR: odd\nsome 20\n0\nabc!\n7 3\n"
 
 [<Fact>]
-let ``Run - a proc block that ends without return runs for what it does and is #some(())`` () =
+let ``Run - a proc block that ends without return runs for what it does and is #some()`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
         "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
         "\n" +
-        "def show: [Console] int -> #some(()) | #odd = { n -> proc {\n" +
+        "def show: [Console] int -> #some() | #odd = { n -> proc {\n" +
         "  def h = try halve(n)\n" +
         "  println(\"half of {n} is {h}\")\n" +
         "} }\n" +
