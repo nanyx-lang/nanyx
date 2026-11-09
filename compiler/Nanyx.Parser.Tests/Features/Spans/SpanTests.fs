@@ -221,6 +221,7 @@ and private expressionsOfPattern (pattern: Pattern) =
     | UnitPattern
     | ElsePattern -> []
     | TuplePattern patterns
+    | AndPattern patterns
     | RecordPattern (_, patterns) -> patterns |> List.collect expressionsOfPattern
     | RecordMemberPattern members -> members |> List.collect (snd >> expressionsOfPattern)
     | ListPattern (patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressionsOfPattern
@@ -269,6 +270,7 @@ let rec private patternsWithin (pattern: Pattern) : Pattern list =
     pattern ::
         match pattern.Kind with
         | TuplePattern patterns
+        | AndPattern patterns
         | RecordPattern (_, patterns) -> patterns |> List.collect patternsWithin
         | RecordMemberPattern members -> members |> List.collect (snd >> patternsWithin)
         | ListPattern (patterns, rest) -> (patterns @ Option.toList rest) |> List.collect patternsWithin

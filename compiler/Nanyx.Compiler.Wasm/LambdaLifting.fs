@@ -55,6 +55,7 @@ and private referencedNamesPattern (pattern: Pattern) : string list =
     | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
     | TagPattern(_, Some payload) -> referencedNamesPattern payload
     | TuplePattern patterns
+    | AndPattern patterns
     | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesPattern
     | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesPattern
     | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesPattern
@@ -71,7 +72,8 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
     match pattern.Kind with
     | IdentifierPattern name -> [ name ]
     | TagPattern(_, Some payload) -> boundNamesPattern payload
-    | TuplePattern patterns -> patterns |> List.collect boundNamesPattern
+    | TuplePattern patterns
+    | AndPattern patterns -> patterns |> List.collect boundNamesPattern
     | ListPattern(patterns, rest) ->
         (patterns |> List.collect boundNamesPattern) @ (rest |> Option.map boundNamesPattern |> Option.defaultValue [])
     | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNamesPattern

@@ -17,6 +17,7 @@
     <Compile Include="Features\Inference\TypedAstTests.fs" />
     <Compile Include="Features\Inference\UnifierTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
+    <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />

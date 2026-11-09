@@ -105,6 +105,18 @@ let ``Hover inside a guard pattern shows the predicate's types`` () =
     Assert.Equal(Some "string", hoverType source (offsetOf source "x ==" 0 0))
 
 [<Fact>]
+let ``Hover inside an and-pattern shows each part's types`` () =
+    let source =
+        "def size: string -> int = { s ->\n" +
+        "  match s\n" +
+        "    | t & { .length > 5 } -> t.length\n" +
+        "    | _ -> 0\n" +
+        "}\n"
+    Assert.Equal(Some "string", hoverType source (offsetOf source "t &" 0 0))
+    Assert.Equal(Some "string -> bool", hoverType source (offsetOf source "{ ." 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "length >" 0 0))
+
+[<Fact>]
 let ``Hover on a declaration's name shows the type of what it declares`` () =
     let source =
         "def id = { x -> x }\n" +

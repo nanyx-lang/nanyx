@@ -334,6 +334,12 @@ type private FunctionEmitter(context: EmitContext) =
             | PString value ->
                 $"{valueCode}\n      i32.const {context.StringOffset value}\n      call ${helper Helpers.stringEquals}"
             | PGuard(var, guard) -> $"{valueCode}\n      local.set ${var.Name}\n      {this.Sequence false guard}"
+            // Left to right, each part tested only once those before it match: `#some(_) & { ... }`'s predicate runs
+            // only on a `#some`.
+            | PAll parts ->
+                match parts |> List.map (fun part -> condition part valueCode) |> List.filter ((<>) "i32.const 1") with
+                | [] -> "i32.const 1"
+                | checks -> List.reduceBack guarded checks
             | PList(elements, rest) ->
                 let lengthInstruction = if rest.IsSome then "i32.ge_s" else "i32.eq"
                 let lengthCheck =
@@ -353,6 +359,7 @@ type private FunctionEmitter(context: EmitContext) =
             | PBind var -> [ $"{valueCode}\n        local.set ${var.Name}" ]
             | PTag(_, Some inner) -> binds inner (tagPayloadCode valueCode)
             | PFields fields -> fields |> List.collect (fun (slot, inner) -> binds inner (fieldCode valueCode slot))
+            | PAll parts -> parts |> List.collect (fun part -> binds part valueCode)
             | PList(elements, rest) ->
                 (elements |> List.mapi (fun index element -> binds element (listElementCode valueCode index)) |> List.concat)
                 @ (rest |> Option.map (fun restPattern -> binds restPattern (listTailCode valueCode elements.Length)) |> Option.defaultValue [])
@@ -402,6 +409,7 @@ let private declaredLocals (body: Expr) : string list =
             walk guard
         | PTag(_, Some inner) -> pattern inner
         | PFields fields -> fields |> List.iter (snd >> pattern)
+        | PAll parts -> parts |> List.iter pattern
         | PList(elements, rest) ->
             elements |> List.iter pattern
             rest |> Option.iter pattern

@@ -450,6 +450,7 @@ and private collectStringLiteralsPattern (pattern: Pattern) : string list =
     | LiteralPattern(StringLit value) -> [ value ]
     | TagPattern(_, Some payload) -> collectStringLiteralsPattern payload
     | TuplePattern patterns
+    | AndPattern patterns
     | ListPattern(patterns, _) -> patterns |> List.collect collectStringLiteralsPattern
     | ListSplatMiddle(beforePatterns, afterPatterns) ->
         (beforePatterns |> List.collect collectStringLiteralsPattern)
@@ -697,6 +698,7 @@ and private collectTagNamesPattern (pattern: Pattern) : string list =
         | Some payload -> tagName :: collectTagNamesPattern payload
         | None -> [ tagName ]
     | TuplePattern patterns
+    | AndPattern patterns
     | ListPattern(patterns, _) -> patterns |> List.collect collectTagNamesPattern
     | ListSplatMiddle(beforePatterns, afterPatterns) ->
         (beforePatterns |> List.collect collectTagNamesPattern)

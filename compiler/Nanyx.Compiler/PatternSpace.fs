@@ -31,6 +31,7 @@ module PatternSpace =
         | TuplePattern elements
         | RecordPattern(_, elements) -> elements |> List.forall isCatchAll
         | RecordMemberPattern members -> members |> List.forall (snd >> isCatchAll)
+        | AndPattern parts -> parts |> List.forall isCatchAll
         | LiteralPattern _
         | ListPattern _
         | ListSplatMiddle _
@@ -138,8 +139,32 @@ module PatternSpace =
         | ListPattern(elements, rest) ->
             let tail = rest |> Option.map (spaceOf certain) |> Option.defaultValue Nil
             List.foldBack (fun element after -> Cons(spaceOf certain element, after)) elements tail
+        | AndPattern parts -> parts |> List.map (spaceOf certain) |> List.reduce (intersect uncertain)
         | ListSplatMiddle _
         | GuardPattern _ -> uncertain
+
+    /// What both `left` and `right` match. `uncertain` stands for what the check cannot tell, as in `spaceOf`: two
+    /// spaces with no value in common are that, so an arm asked about is never said to match nothing on their account.
+    and private intersect (uncertain: Space) (left: Space) (right: Space) : Space =
+        let recur = intersect uncertain
+        match left, right with
+        | Any, other
+        | other, Any -> other
+        | Never, _
+        | _, Never -> Never
+        | Tag(name, payload), Tag(other, otherPayload) when name = other -> Tag(name, recur payload otherPayload)
+        | Bool value, Bool other when value = other -> left
+        | Ints(low, high), Ints(otherLow, otherHigh) when max low otherLow <= min high otherHigh ->
+            Ints(max low otherLow, min high otherHigh)
+        | Lit literal, Lit other when literal = other -> left
+        | Fields fields, Fields others ->
+            Map.fold (fun merged name space -> merged |> Map.add name (merged |> Map.tryFind name |> Option.map (recur space) |> Option.defaultValue space)) fields others
+            |> Fields
+        | Named(name, parts), Named(other, otherParts) when name = other && parts.Length = otherParts.Length ->
+            Named(name, List.map2 recur parts otherParts)
+        | Nil, Nil -> Nil
+        | Cons(head, tail), Cons(otherHead, otherTail) -> Cons(recur head otherHead, recur tail otherTail)
+        | _ -> uncertain
 
     let private arity (head: Head) =
         match head with

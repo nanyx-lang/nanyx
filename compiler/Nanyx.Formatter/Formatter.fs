@@ -863,12 +863,16 @@ let format (options: Options) (parsed: SourceModule) : string =
             only = implicitArgument && valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' ->
             expr full body
         | GuardPattern predicate -> expr full predicate
+        | AndPattern parts -> parts |> List.map pattern |> List.reduce (fun left right -> cat [ left; text " & "; right ])
         | TagPattern(n, None) -> text ("#" + n)
         | TagPattern(n, Some (Kind UnitPattern)) -> text $"#{n}()"
         | TagPattern(n, Some payload) ->
             let afterName = p.Span.Start + 1 + n.Length
             if valid p.Span && afterName < source.Length && source[afterName] <> '(' then
-                cat [ text $"#{n} "; pattern payload ]
+                match payload.Kind with
+                // `#n (a & b)`: without its brackets, the and-pattern would take in the tag.
+                | AndPattern _ -> cat [ text $"#{n} ("; pattern payload; text ")" ]
+                | _ -> cat [ text $"#{n} "; pattern payload ]
             else
                 match payload.Kind with
                 | TuplePattern ps -> cat [ text $"#{n}("; commaJoin (List.map pattern ps); text ")" ]

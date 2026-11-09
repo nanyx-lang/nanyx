@@ -141,6 +141,9 @@ and PatternKind =
     | RangePattern of Expression * Expression  // start..end (inclusive)
     | GuardPattern of Expression  // a predicate lambda, `{ < 0 }` or `{ x -> x % 2 == 0 }`: matches when it returns true
     | TagPattern of Identifier * Pattern option  // #tagName or #tagName(pattern)
+    /// `p1 & p2 & ...`: matches when every one of its patterns matches the same value, and binds the names of all
+    /// of them. It has two parts or more.
+    | AndPattern of Pattern list
 
 /// A statement in a block and where it came from. Like `Expression`, equality and comparison look only at `Kind`,
 /// and it is printed (`%A`) as its kind alone. Like `Pattern`, it is declared before `Expression`.
@@ -316,6 +319,7 @@ module Pattern =
         | GuardPattern predicate -> [ predicate ]
         | RangePattern(low, high) -> [ low; high ]
         | TuplePattern patterns
+        | AndPattern patterns
         | RecordPattern(_, patterns) -> patterns |> List.collect expressions
         | RecordMemberPattern members -> members |> List.collect (snd >> expressions)
         | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressions
@@ -323,6 +327,24 @@ module Pattern =
         | TagPattern(_, payload) -> payload |> Option.toList |> List.collect expressions
         | LiteralPattern _
         | IdentifierPattern _
+        | WildcardPattern
+        | UnitPattern
+        | ElsePattern -> []
+
+    /// The names `pattern` binds, in the order they are written: its identifier patterns and its named list rests.
+    let rec boundNames (pattern: Pattern) : Identifier list =
+        match pattern.Kind with
+        | IdentifierPattern name -> [ name ]
+        | TuplePattern patterns
+        | AndPattern patterns
+        | RecordPattern(_, patterns) -> patterns |> List.collect boundNames
+        | RecordMemberPattern members -> members |> List.collect (snd >> boundNames)
+        | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect boundNames
+        | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNames
+        | TagPattern(_, payload) -> payload |> Option.toList |> List.collect boundNames
+        | GuardPattern _
+        | RangePattern _
+        | LiteralPattern _
         | WildcardPattern
         | UnitPattern
         | ElsePattern -> []
@@ -339,6 +361,7 @@ module Pattern =
             | GuardPattern predicate -> GuardPattern(f predicate)
             | RangePattern(low, high) -> RangePattern(f low, f high)
             | TuplePattern patterns -> TuplePattern(List.map recur patterns)
+            | AndPattern patterns -> AndPattern(List.map recur patterns)
             | RecordPattern(name, patterns) -> RecordPattern(name, List.map recur patterns)
             | RecordMemberPattern members -> RecordMemberPattern(members |> List.map (fun (name, p) -> name, recur p))
             | ListPattern(patterns, rest) -> ListPattern(List.map recur patterns, Option.map recur rest)

@@ -999,6 +999,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 // local even at the top of an arm, as the old path gives it one.
                 | RecordPattern(typeName, [ inner ]) when (typeName.Split('.') |> Array.last).StartsWith "$" ->
                     lowerPattern false scrutinee valueTy inner
+                // Every part matches the value matched here, so a name at the top of the arm is still the scrutinee.
+                | AndPattern parts -> PAll(parts |> List.map (lowerPattern isTop scrutinee valueTy))
                 | _ -> cannot "this kind of pattern"
             // An arm for a tag the value cannot have never matches, so it is left out.
             match (try Some (List.map2 (fun scrutinee pattern -> lowerPattern true scrutinee scrutinee.Type pattern) scrutinees patterns) with NeverMatches -> None) with

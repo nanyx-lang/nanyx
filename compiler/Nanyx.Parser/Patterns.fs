@@ -159,8 +159,9 @@ let tagPattern =
                     (pstring "(")
                     (pstring ")")
                     (sepBy1 (ws >>. pattern) (pstring "," .>> ws)))
+        // One pattern, not an and-pattern: `#error data & d` is `(#error data) & d`.
         let inlinePayload =
-            skipMany1 (skipAnyOf " \t") >>. pattern |>> fun p -> [p], p.Span
+            skipMany1 (skipAnyOf " \t") >>. singlePattern |>> fun p -> [p], p.Span
         // Empty brackets, `#some()`, carry the unit value, as they do in a value.
         let unitPayload = unitPattern |>> fun p -> [p], p.Span
         opt (attempt unitPayload <|> attempt parenPayload <|> attempt inlinePayload) >>= fun patternsOpt ->
@@ -173,7 +174,7 @@ let tagPattern =
 
 /// Fills `pattern`. Called by `Api`: a file's top-level code runs only when one of its own values is first used.
 let internal fillPatternRef () =
-    patternRef :=
+    singlePatternRef :=
         choice [
             attempt elsePattern         // "else" must come before identifiers
             attempt tagPattern          // "#tag" must come before literals/identifiers
@@ -188,3 +189,10 @@ let internal fillPatternRef () =
             identifierPattern           // Last resort - any identifier
         ] .>> ws
         <?> "pattern"
+    // `p1 & p2`, an and-pattern; a lone `&`, as `&&` is an operator.
+    let andOperator = attempt (pstring "&" .>> notFollowedBy (pchar '&')) .>> ws
+    patternRef :=
+        sepBy1 singlePattern andOperator
+        |>> function
+            | [ single ] -> single
+            | parts -> Pattern.at (SourceSpan.between (List.head parts).Span (List.last parts).Span) (AndPattern parts)
