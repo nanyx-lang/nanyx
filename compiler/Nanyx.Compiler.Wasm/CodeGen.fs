@@ -72,6 +72,8 @@ type private TranspileEnv =
       /// The nominal types of the module whose shape is not a record (`type $Money = private int`). A value of one
       /// is its shape's value as it is, so its constructor and the pattern that takes it apart compile to nothing.
       NominalWrappers: Set<string>
+      /// How many interpolation holes the expression being compiled is inside (see `interpolationHoleLocalName`).
+      InterpolationDepth: int
       /// Where each call to a function that requires a parameterised context finds its instances, by the call's
       /// node, as the type checker decided (see `TypedModule.ContextInstances`).
       ContextInstances: Map<NodeId, ContextInstance option list>
@@ -1454,17 +1456,25 @@ let rec private containsInterpolation (expr: Expression) : bool =
     | _ when isDbgOfValue expr -> true
     | _ -> exprChildren expr |> List.exists containsInterpolation
 
-/// The most `{...}` holes any single interpolated string in `expr` has: each hole is evaluated once
-/// into its own `__interp_hole_N` local, so the function has to declare that many.
-let rec private maxInterpolationHoles (expr: Expression) : int =
-    let own =
-        match expr.Kind with
-        | InterpolatedString parts -> parts |> List.filter (function StringExpr _ -> true | _ -> false) |> List.length
-        | _ when isDbgOfValue expr -> 1
-        | _ -> 0
-    exprChildren expr |> List.fold (fun acc child -> max acc (maxInterpolationHoles child)) own
+/// The local the hole `index` of an interpolated string at nesting depth `depth` is evaluated into. A string inside a
+/// hole of another is one deeper: its holes are evaluated while the outer string's earlier holes are already held,
+/// so they must not share locals (#326). Sibling strings at one depth share them, as they are evaluated in turn.
+let private interpolationHoleLocalName (depth: int) (index: int) = $"__interp_hole_{depth}_{index}"
 
-let private interpolationHoleLocalName (index: int) = $"__interp_hole_{index}"
+/// The hole locals the interpolations in `expr`, at nesting depth `depth`, are evaluated into (see
+/// `interpolationHoleLocalName`).
+let rec private interpolationHoleLocals (depth: int) (expr: Expression) : string list =
+    match expr.Kind with
+    | InterpolatedString parts ->
+        let holes = parts |> List.choose (function StringExpr inner -> Some inner | StringText _ -> None)
+        (holes |> List.mapi (fun index _ -> interpolationHoleLocalName depth index))
+        @ (holes |> List.collect (interpolationHoleLocals (depth + 1)))
+    | _ when isDbgOfValue expr ->
+        // `dbg` of a value that may be a tag prints it through a string whose one hole holds the value. The value is
+        // compiled inside that hole, a level deeper, or else as it is, at this depth.
+        interpolationHoleLocalName depth 0
+        :: (exprChildren expr |> List.collect (fun child -> interpolationHoleLocals depth child @ interpolationHoleLocals (depth + 1) child))
+    | _ -> exprChildren expr |> List.collect (interpolationHoleLocals depth)
 
 /// The locals of the `for` loops in an expression. A loop at nesting depth `d` keeps its position in
 /// `__for_cursor_d` and `__for_end_d` and its element in `__for_<parameter>_d`; sibling loops share them,
@@ -1498,8 +1508,7 @@ let private interpolationLocalNames =
 /// Every local that lowering the interpolations in `expr` needs, or none when it has no interpolation.
 let private interpolationLocalsFor (expr: Expression) : string list =
     if containsInterpolation expr then
-        interpolationLocalNames
-        @ [ for index in 0 .. maxInterpolationHoles expr - 1 -> interpolationHoleLocalName index ]
+        interpolationLocalNames @ (interpolationHoleLocals 0 expr |> List.distinct)
     else
         []
 
@@ -2241,14 +2250,18 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
 
     // A float hole is formatted to a string here, in the evaluation pass, since formatting allocates and
     // the length and write passes must not.
+    // A hole is compiled a level deeper, so a string inside it keeps to its own hole locals.
+    let holeLocal index = interpolationHoleLocalName env.InterpolationDepth index
+    let insideHole = { env with InterpolationDepth = env.InterpolationDepth + 1 }
+
     let renderInterpolationHoleEval (index: int) (inner: Expression) =
         let valueCode =
             match interpolationHoleType inner with
             | "float" ->
                 env.UsedHelpers.Add Helpers.floatToString |> ignore
-                $"{transpileExpression env inner}\n    call ${Helpers.floatToString}"
-            | _ -> transpileExpression env inner
-        $"{valueCode}\n    local.set ${interpolationHoleLocalName index}"
+                $"{transpileExpression insideHole inner}\n    call ${Helpers.floatToString}"
+            | _ -> transpileExpression insideHole inner
+        $"{valueCode}\n    local.set ${holeLocal index}"
 
     let renderInterpolationPartLength (part, holeIndex) =
         match part with
@@ -2256,7 +2269,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
             let len = Encoding.UTF8.GetByteCount text
             $"local.get $__interp_len\n    i32.const {len}\n    i32.add\n    local.set $__interp_len"
         | StringExpr inner ->
-            let valueCode = $"local.get ${interpolationHoleLocalName holeIndex}"
+            let valueCode = $"local.get ${holeLocal holeIndex}"
             match interpolationHoleType inner with
             | "string" | "float" ->
                 $"{valueCode}\n    i32.const 4\n    i32.sub\n    i32.load\n    local.get $__interp_len\n    i32.add\n    local.set $__interp_len"
@@ -2268,7 +2281,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
         match part with
         | StringText text -> renderStaticBytes (Encoding.UTF8.GetBytes text)
         | StringExpr inner ->
-            let valueCode = $"local.get ${interpolationHoleLocalName holeIndex}"
+            let valueCode = $"local.get ${holeLocal holeIndex}"
             match interpolationHoleType inner with
             | "string" | "float" -> renderStringCopy valueCode
             | "int" -> renderIntWrite valueCode
@@ -2803,7 +2816,7 @@ let rec private transpileExpressionUnplaced (env: TranspileEnv) (expr: Expressio
             // A tag value prints as `"{value}"` would; the hole local keeps the value to return.
             env.UsedHelpers.Add Helpers.alloc |> ignore
             let rendered = transpileExpression env { argExpr with Kind = InterpolatedString [ StringExpr argExpr ] }
-            $"{rendered}\n    call $dbg_str\n    local.get ${interpolationHoleLocalName 0}"
+            $"{rendered}\n    call $dbg_str\n    local.get ${holeLocal 0}"
         | _ -> $"{argCode}\n    local.tee ${dbgLocal}\n    call $dbg\n    local.get ${dbgLocal}"
     | FunctionCall(name, _, args) when env.NominalWrappers.Contains name ->
         // `$Money(pence)`: a nominal value over a shape that is not a record is that shape's value.
@@ -4018,6 +4031,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   RecordLayouts = initialRecordLayouts
                   TypeLayouts = typeLayouts
                   NominalWrappers = nominalWrappers
+                  InterpolationDepth = 0
                   ContextInstances = contextInstances
                   FunctionContextTypes = functionContextTypes
                   FunctionWrappers = functionWrappers
@@ -4193,6 +4207,7 @@ let private transpileModuleToWatCore (module': Module) (typedFunctionBodies: Map
                   RecordLayouts = Map.empty
                   TypeLayouts = typeLayouts
                   NominalWrappers = nominalWrappers
+                  InterpolationDepth = 0
                   ContextInstances = contextInstances
                   FunctionContextTypes = functionContextTypes
                   FunctionWrappers = functionWrappers
