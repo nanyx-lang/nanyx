@@ -25,6 +25,7 @@ module PatternSpace =
     let rec isCatchAll (pattern: Pattern) =
         match pattern.Kind with
         | WildcardPattern
+        | UnitPattern
         | ElsePattern
         | IdentifierPattern _ -> true
         | TuplePattern elements
@@ -120,6 +121,7 @@ module PatternSpace =
         let uncertain = if certain then Never else Any
         match pattern.Kind with
         | WildcardPattern
+        | UnitPattern
         | ElsePattern
         | IdentifierPattern _ -> Any
         | LiteralPattern (IntLit value) -> Ints(int64 value, int64 value)

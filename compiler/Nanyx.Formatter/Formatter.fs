@@ -811,6 +811,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | LiteralPattern literal -> literalDoc p.Span literal
         | IdentifierPattern n -> text n
         | WildcardPattern -> text "_"
+        | UnitPattern -> text "()"
         | ElsePattern -> text "else"
         | TuplePattern ps -> cat [ text "("; commaJoin (List.map pattern ps); text ")" ]
         | RecordPattern(n, ps) -> cat [ text n; text "("; commaJoin (List.map pattern ps); text ")" ]
@@ -830,6 +831,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             if valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' then cat [ text op; text " "; expr full value ]
             else cat [ text "{ "; text op; text " "; expr full value; text " }" ]
         | TagPattern(n, None) -> text ("#" + n)
+        | TagPattern(n, Some (Kind UnitPattern)) -> text $"#{n}()"
         | TagPattern(n, Some payload) ->
             let afterName = p.Span.Start + 1 + n.Length
             if valid p.Span && afterName < source.Length && source[afterName] <> '(' then

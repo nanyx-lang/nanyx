@@ -63,6 +63,7 @@ and private patternExpressions (pattern: Pattern) : Expression list =
     | LiteralPattern _
     | IdentifierPattern _
     | WildcardPattern
+    | UnitPattern
     | ElsePattern -> []
 
 let rec private topLevelExpressions (item: TopLevelItem) : Expression list =

@@ -110,6 +110,15 @@ def area: Shape -> float = { shape ->
 }
 ```
 
+A tag that carries the unit value is matched as it is written, with empty brackets, and `()` on its own matches the unit value:
+
+```nanyx
+def describe: (#some() | #error(string)) -> string = {
+  | #some() -> "saved"
+  | #error(reason) -> "not saved: {reason}"
+}
+```
+
 # Nesting patterns
 
 Where pattern matching really shines is in its ability to nest patterns inside each other, allowing you to make complex data structure comparisons and extract values in a single expression. Below is an artificial complex example that demonstrates this:

@@ -192,10 +192,10 @@ let ``Run - a proc block that ends without return runs for what it does and is #
         "@entry\n" +
         "def main = {\n" +
         "  match show(10)\n" +
-        "    | #some(_) -> println(\"shown\")\n" +
+        "    | #some() -> println(\"shown\")\n" +
         "    | #odd -> println(\"odd\")\n" +
         "  match show(3)\n" +
-        "    | #some(_) -> println(\"shown\")\n" +
+        "    | #some() -> println(\"shown\")\n" +
         "    | #odd -> println(\"odd\")\n" +
         "}\n"
     runSource source |> assertRan "half of 10 is 5\nshown\nodd\n"

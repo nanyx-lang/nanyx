@@ -130,6 +130,8 @@ and PatternKind =
     | LiteralPattern of Literal
     | IdentifierPattern of Identifier
     | WildcardPattern
+    /// `()`: the unit value, the only value of its type, so it always matches what it is matched against.
+    | UnitPattern
     | ElsePattern
     | TuplePattern of Pattern list
     | RecordPattern of Identifier * Pattern list  // Type name and patterns by position

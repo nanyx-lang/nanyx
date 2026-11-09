@@ -77,6 +77,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | LiteralPattern _
             | IdentifierPattern _
             | WildcardPattern
+            | UnitPattern
             | ElsePattern -> p.Kind
             | TuplePattern ps -> TuplePattern(List.map pattern ps)
             | RecordPattern(n, ps) -> RecordPattern(n, List.map pattern ps)

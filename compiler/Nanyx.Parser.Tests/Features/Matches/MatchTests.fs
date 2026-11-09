@@ -149,3 +149,17 @@ let ``a name starting with an underscore is a name in a pattern, and a lone unde
                                                                     [ Kind (IdentifierPattern "_other") ], _ ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``() matches the unit value, and #tag() a tag carrying it`` () =
+    match parseModule "def f = { | () -> 0 | #some() -> 1 | #some(()) -> 2 | #some( ) -> 3 | (a, ()) -> 4 }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Match (_, arms))))))) ] ->
+        match arms |> List.map fst with
+        | [ [ Kind UnitPattern ]
+            [ Kind (TagPattern ("some", Some (Kind UnitPattern))) ]
+            [ Kind (TagPattern ("some", Some (Kind UnitPattern))) ]
+            [ Kind (TagPattern ("some", Some (Kind UnitPattern))) ]
+            [ Kind (TuplePattern [ Kind (IdentifierPattern "a"); Kind UnitPattern ]) ] ] -> ()
+        | other -> failwith $"Unexpected arms: %A{other}"
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
