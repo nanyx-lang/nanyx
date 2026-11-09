@@ -40,7 +40,7 @@ This creates a new project with the following structure:
 
 ```
 hello_world/
-├── hello_world.nyxpack
+├── hello_world.nyxp
 └── src/
     └── main.nyx
 ```

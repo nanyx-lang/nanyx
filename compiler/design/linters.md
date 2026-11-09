@@ -216,7 +216,7 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 >   not declare, both count as failing, and the linter's other reports for the module are left out.
 > - The `SemanticModel` has no `Lowered` table yet ([#99](https://github.com/nanyx-lang/nanyx/issues/99)).
 > - The configuration is `LinterOptions` (the linters to run, and severities by code), passed to
->   `Compiler.compileWith` and its file and source variants. A package's `.nyxpack` sets it with an
+>   `Compiler.compileWith` and its file and source variants. A package's `.nyxp` sets it with an
 >   `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
 >   `nanyx build`, `nanyx run` and the language server; without the table, the linter does not run. A file
 >   outside any package turns linters on with `::linters` directives in the same way, and without them runs

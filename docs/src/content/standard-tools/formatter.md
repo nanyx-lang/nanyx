@@ -93,7 +93,7 @@ def Option.map
 
 # Configuration
 
-The formatter has a small set of configuration options that can be set in a `[formatter]` table of the package's `.nyxpack` manifest. These options are intentionally limited to keep style consistent across contributors and projects.
+The formatter has a small set of configuration options that can be set in a `[formatter]` table of the package's `.nyxp` manifest. These options are intentionally limited to keep style consistent across contributors and projects.
 
 ```toml
 [formatter]
@@ -103,7 +103,7 @@ lineWidth = 100
 indentSize = 2
 ```
 
-Each file is formatted with the settings of the nearest `.nyxpack` in its directory or a directory above it, so one run can format several packages, each in its own style. With no manifest, or no `[formatter]` table in it, the defaults apply. The table may hold only these two settings, each a positive integer: anything else is an error naming the manifest and the setting, and no file under that manifest is formatted (`nanyx format` exits with 2). The language server reads the same settings for the document it formats, and leaves the document alone if they are not valid.
+Each file is formatted with the settings of the nearest `.nyxp` in its directory or a directory above it, so one run can format several packages, each in its own style. With no manifest, or no `[formatter]` table in it, the defaults apply. The table may hold only these two settings, each a positive integer: anything else is an error naming the manifest and the setting, and no file under that manifest is formatted (`nanyx format` exits with 2). The language server reads the same settings for the document it formats, and leaves the document alone if they are not valid.
 
 # Related
 

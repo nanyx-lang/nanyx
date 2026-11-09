@@ -96,7 +96,7 @@ let ``A directive after the first line of code is a syntax error saying where di
 [<Fact>]
 let ``A directive in a file of a package is an error saying to use the manifest`` () =
     let root = Path.GetDirectoryName(scriptPath ())
-    let manifest = Path.Combine(root, "demo.nyxpack")
+    let manifest = Path.Combine(root, "demo.nyxp")
     File.WriteAllText(manifest, "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n")
     let main = Path.Combine(root, "main.nyx")
     File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\n" + unusedBinding)

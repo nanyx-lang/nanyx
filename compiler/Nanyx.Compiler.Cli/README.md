@@ -6,7 +6,7 @@ The `nanyx` executable: a small C# CLI over the compiler pipeline, implemented w
 
 ```
 nanyx <run|wasm|check|parse> <file.nyx> [--out <path>]
-nanyx <run|build> [<directory or .nyxpack>] [--out <path>]
+nanyx <run|build> [<directory or .nyxp>] [--out <path>]
 ```
 
 - `run` compiles the file and executes it on the embedded Wasmtime engine. The program's output is the
@@ -21,7 +21,7 @@ quick check that the compiler and runtime work.
 
 ## Packages
 
-Given a directory or a `.nyxpack` manifest instead of a file, or nothing at all, `run` and `build` work on
+Given a directory or a `.nyxp` manifest instead of a file, or nothing at all, `run` and `build` work on
 a package: the manifest in that directory (the current one by default) or the nearest directory above it.
 
 - `build` checks every source file the manifest's `sources` select, with the linters its `[linters]`

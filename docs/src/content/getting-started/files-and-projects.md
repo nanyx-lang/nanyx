@@ -83,7 +83,7 @@ For larger projects, turn the code into a _package_ by adding a package manifest
 
 ## Package manifest format (TOML)
 
-A package is described by a `.nyxpack` file at the package root, written in TOML. It names the package, selects its source files, and lists its dependencies:
+A package is described by a `.nyxp` file at the package root, written in TOML. It names the package, selects its source files, and lists its dependencies:
 
 ```toml
 [package]

@@ -36,8 +36,8 @@ let private okOf result =
 
 [<Fact>]
 let ``A manifest's package table is read, with the default sources`` () =
-    use package = new TempPackage([ "demo.nyxpack", manifest ""; "main.nyx", entrySource ])
-    let read = okOf (Manifest.read (package.Path "demo.nyxpack"))
+    use package = new TempPackage([ "demo.nyxp", manifest ""; "main.nyx", entrySource ])
+    let read = okOf (Manifest.read (package.Path "demo.nyxp"))
     Assert.Equal("demo", read.Name)
     Assert.Equal("0.1.0", read.Version)
     Assert.Equal<string list>([ "**/*.nyx" ], read.Sources)
@@ -46,8 +46,8 @@ let ``A manifest's package table is read, with the default sources`` () =
 [<Fact>]
 let ``A linters table turns on the linters it names, with the severities it sets`` () =
     use package =
-        new TempPackage([ "demo.nyxpack", manifest "[linters.default]\nunusedBindings = \"error\"\nlinterFailed = \"none\"" ])
-    let read = okOf (Manifest.read (package.Path "demo.nyxpack"))
+        new TempPackage([ "demo.nyxp", manifest "[linters.default]\nunusedBindings = \"error\"\nlinterFailed = \"none\"" ])
+    let read = okOf (Manifest.read (package.Path "demo.nyxp"))
     Assert.Equal<string list>([ "default" ], read.Linters.Linters |> List.map _.Name)
     Assert.Equal(Some(Some Severity.Error), read.Linters.Severities |> Map.tryFind "default/unusedBindings")
     Assert.Equal(Some None, read.Linters.Severities |> Map.tryFind "default/linterFailed")
@@ -58,8 +58,8 @@ let ``Every problem with a manifest is reported, naming the key`` () =
         "[package]\nname = \"Demo\"\nversion = 1\ncolour = \"red\"\n"
         + "[linters.default]\nunusedBindings = \"loud\"\nnoSuchRule = \"error\"\n"
         + "[linters.other]\n[dependencies]\nacme.json = \"1.0\"\n[extras]\n"
-    use package = new TempPackage([ "demo.nyxpack", text ])
-    let errors = errorsOf (Manifest.read (package.Path "demo.nyxpack")) |> List.map (fun e -> e.Substring(e.IndexOf(": ") + 2))
+    use package = new TempPackage([ "demo.nyxp", text ])
+    let errors = errorsOf (Manifest.read (package.Path "demo.nyxp")) |> List.map (fun e -> e.Substring(e.IndexOf(": ") + 2))
     Assert.Contains("[package] name \"Demo\" must be lower case, with words separated by dots: acme.web", errors)
     Assert.Contains("[package] version must be a string, not 1", errors)
     Assert.Contains("unknown key [package] colour; the keys are 'name', 'version', 'sources', 'public-modules'", errors)
@@ -71,15 +71,15 @@ let ``Every problem with a manifest is reported, naming the key`` () =
 
 [<Fact>]
 let ``A manifest that is not TOML says so`` () =
-    use package = new TempPackage([ "demo.nyxpack", "[package" ])
-    let error = Assert.Single(errorsOf (Manifest.read (package.Path "demo.nyxpack")))
+    use package = new TempPackage([ "demo.nyxp", "[package" ])
+    let error = Assert.Single(errorsOf (Manifest.read (package.Path "demo.nyxp")))
     Assert.Contains("not valid TOML", error)
 
 [<Fact>]
 let ``A package is found from a directory under it, with its sources and entry`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxpack", manifest "sources = [\"src/**/*.nyx\"]"
+            [ "demo.nyxp", manifest "sources = [\"src/**/*.nyx\"]"
               "src/main.nyx", entrySource
               "src/lib/util.nyx", "module util\n\nexport def one = 1\n"
               "scripts/other.nyx", "println(\"not a source\")\n" ])
@@ -89,13 +89,19 @@ let ``A package is found from a directory under it, with its sources and entry``
 
 [<Fact>]
 let ``A package with two entries is an error naming both`` () =
-    use package = new TempPackage([ "demo.nyxpack", manifest ""; "a.nyx", entrySource; "b.nyx", entrySource ])
+    use package = new TempPackage([ "demo.nyxp", manifest ""; "a.nyx", entrySource; "b.nyx", entrySource ])
     let error = Assert.Single(errorsOf (Package.find package.Root))
     Assert.Contains("a.nyx, b.nyx", error)
 
 [<Fact>]
-let ``Without a linters table no linter runs`` () =
+let ``A manifest with the old .nyxpack extension is not a manifest`` () =
     use package = new TempPackage([ "demo.nyxpack", manifest ""; "main.nyx", entrySource ])
+    Assert.Contains("No .nyxp manifest in", Assert.Single(errorsOf (Package.find package.Root)))
+    Assert.Contains("Not a directory or a .nyxp manifest", Assert.Single(errorsOf (Package.find (package.Path "demo.nyxpack"))))
+
+[<Fact>]
+let ``Without a linters table no linter runs`` () =
+    use package = new TempPackage([ "demo.nyxp", manifest ""; "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).IsSome)
@@ -104,7 +110,7 @@ let ``Without a linters table no linter runs`` () =
 let ``The manifest's linters check every source file at the severities it sets`` () =
     use package =
         new TempPackage(
-            [ "demo.nyxpack", manifest "[linters.default]\nunusedBindings = \"error\""
+            [ "demo.nyxp", manifest "[linters.default]\nunusedBindings = \"error\""
               "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
@@ -121,7 +127,7 @@ let ``The example package builds cleanly`` () =
 /// The greeter example as it was first written with a nominal `$Person`: it named the type without the import's alias
 /// and built a `$Person` from its shape outside the module that defines it.
 let private greeterGotWrong (construct: string) =
-    [ "greeter.nyxpack", manifest ""
+    [ "greeter.nyxp", manifest ""
       "src/greetings.nyx",
       "module greetings\n\nexport def greet: $Person -> string = { p ->\n  \"Hello, \" ++ p.name ++ \"!\"\n}\n\n"
       + "export type $Person = (name: string)\n"

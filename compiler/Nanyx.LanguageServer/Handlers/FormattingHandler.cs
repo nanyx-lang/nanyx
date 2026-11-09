@@ -10,7 +10,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Formats a document ("Format Document", and format-on-save) with the same formatter and safety check as
 /// <c>nanyx format</c>: one edit replacing the whole document, or none when it is already formatted, does not parse,
-/// or could not be formatted safely. The line width and indent come from the package's <c>.nyxpack</c>, or a script's
+/// or could not be formatted safely. The line width and indent come from the package's <c>.nyxp</c>, or a script's
 /// <c>::formatter</c> directives, as for <c>nanyx format</c>; the request's <c>tabSize</c> and <c>insertSpaces</c> are
 /// ignored.
 /// </summary>
