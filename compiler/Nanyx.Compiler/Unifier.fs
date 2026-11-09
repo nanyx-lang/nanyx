@@ -6,12 +6,13 @@ open Parser.Program
 /// Substitution map for type variables.
 type Subst = Map<int, Ty>
 
-/// How a type shown to a reader names the type variables the compiler made up.
-type TypeVarNames =
-    /// `α`, `β`, `γ`, ... through the Greek alphabet.
-    | Greek
-    /// `a`, `b`, `c`, ...
-    | Latin
+/// The characters a type shown to a reader is written in.
+type TypeNotation =
+    /// Type variables the compiler made up are `α`, `β`, `γ`, … through the Greek alphabet, and the rest of an open
+    /// record is spread with an ellipsis: `(name: α, …)`.
+    | Unicode
+    /// Only ASCII: type variables are `a`, `b`, `c`, ... and a spread is three dots, `(name: a, ...)`.
+    | Ascii
 
 module Unifier =
     /// The type an alias stands for, looking through any number of aliases; any other type as it is. Only the
@@ -55,13 +56,13 @@ module Unifier =
     /// and `|` binds tighter than both, so a function needs brackets only where it is an item of a comma list
     /// (`(int, (a -> b))`), the input of another function (`(a -> b) -> c`) or a member of a union; a union never
     /// does. At the top, `signature` writes a function's parameters bare, as a def's annotation would:
-    /// `int, (a -> b) -> a`.
-    let rec private printTy (signature: bool) (ty: Ty) : string =
+    /// `int, (a -> b) -> a`. An open record's rest is spread with `spread`: `...` as in source, or `…` for a reader.
+    let rec private printTy (spread: string) (signature: bool) (ty: Ty) : string =
         // A function, bracketed; in brackets its parameters are not bare.
         let grouped ty =
             match ty with
-            | TyFunc _ -> $"({printTy false ty})"
-            | _ -> printTy false ty
+            | TyFunc _ -> $"({printTy spread false ty})"
+            | _ -> printTy spread false ty
         // The items of a tuple, each bracketed where a comma list needs it.
         let items tys = tys |> List.map grouped |> String.concat ", "
         let bareTuple ty =
@@ -78,9 +79,9 @@ module Unifier =
             match ty with
             | TyRecord fields
             | TyOpenRecord(fields, _) when not fields.IsEmpty && (fst (tryTupleLikeRecord fields)).IsNone ->
-                let written = printTy false ty
+                let written = printTy spread false ty
                 written.Substring(1, written.Length - 2)
-            | _ -> printTy false ty
+            | _ -> printTy spread false ty
         match ty with
         // The unit type is written `()`; `unit` is only its internal name.
         | TyPrimitive "unit" -> "()"
@@ -103,7 +104,7 @@ module Unifier =
                 match bareTuple arg with
                 | Some bare when signature -> bare
                 | _ -> grouped arg
-            $"{argText} -> {printTy false ret}"
+            $"{argText} -> {printTy spread false ret}"
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
@@ -128,8 +129,8 @@ module Unifier =
         // An open record's other fields are written as a spread of its row: `(name: string, ...ω)`. A row named
         // nothing (see `displayRenaming`) is written as a bare spread: `(name: string, ...)`.
         | TyOpenRecord(fields, row) ->
-            let rowText = $"...{printTy false (TyVar row)}"
-            match printTy false (TyRecord fields) with
+            let rowText = $"{spread}{printTy spread false (TyVar row)}"
+            match printTy spread false (TyRecord fields) with
             | "()" -> $"({rowText})"
             | closed -> $"{closed.Substring(0, closed.Length - 1)}, {rowText})"
         // Tags are written with their `#`, as in source: `#some(int) | #notFound`. A record payload's fields are
@@ -137,11 +138,11 @@ module Unifier =
         | TyTag(name, payloadOpt) ->
             match payloadOpt with
             | Some (TyRecord fields as payload) when not fields.IsEmpty ->
-                let written = printTy false payload
+                let written = printTy spread false payload
                 $"#{name}{written}"
             // The unit value is written as no payload in the brackets, as in source: `#some()`.
             | Some (TyPrimitive "unit") -> $"#{name}()"
-            | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy false payload)})"
+            | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy spread false payload)})"
             | None -> $"#{name}"
         | TyApply(name, [ arg ]) -> $"{name}({soleArgument arg})"
         | TyApply(name, args) -> $"{name}({items args})"
@@ -153,7 +154,7 @@ module Unifier =
             |> String.concat " | "
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
-    let tyToString (ty: Ty) : string = printTy true ty
+    let tyToString (ty: Ty) : string = printTy "..." true ty
 
     /// The type variables of `ty` in the order `tyToString` prints them, each as many times as it is printed. A
     /// nominal's or alias's underlying type is not printed, so its variables are not included (an alias's arguments'
@@ -322,7 +323,7 @@ module Unifier =
         collect ty
 
     /// The ids of the made-up variables in `ty` that stand for the rest of an open record and appear nowhere else in
-    /// it. Such a row only says the record may have more fields, so it needs no name: `(name: α, ...) -> α`.
+    /// it. Such a row only says the record may have more fields, so it needs no name: `(name: α, …) -> α`.
     let private loneRecordRows (ty: Ty) : Set<int> =
         let occurrences = varOccurrences ty
         let once =
@@ -341,12 +342,12 @@ module Unifier =
     /// When the two ends run into each other, the alphabet is split where they met while giving out its letters
     /// the first time, and each end goes round its own part again with a suffix: `α₁`, `ω₁` (`a1`, `z1`).
     ///
-    /// The record rows in `unnamedRows` are given no name and no letter, so they print as a bare `...`.
-    let private displayRenaming (names: TypeVarNames) (unnamedRows: Set<int>) (ty: Ty) : Subst =
+    /// The record rows in `unnamedRows` are given no name and no letter, so they print as a bare spread.
+    let private displayRenaming (notation: TypeNotation) (unnamedRows: Set<int>) (ty: Ty) : Subst =
         let alphabet, suffix =
-            match names with
-            | Greek -> greekLetters, subscript
-            | Latin -> latinLetters, string
+            match notation with
+            | Unicode -> greekLetters, subscript
+            | Ascii -> latinLetters, string
         let vars = varsInPrintOrder ty
         let taken = vars |> List.choose (fun v -> v.Name) |> Set.ofList
         // The letters an annotation took are left out before the alphabet is shared between its two ends.
@@ -381,24 +382,28 @@ module Unifier =
         |> Seq.append (unnamedRows |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
 
-    /// `ty` for a reader, with the variables the compiler made up named as `displayRenaming` describes, and a record
-    /// row that appears nowhere else written as a bare `...`.
-    let tyToDisplayString (names: TypeVarNames) (ty: Ty) : string =
-        tyToString (apply (displayRenaming names (loneRecordRows ty) ty) ty)
+    /// `ty` as `tyToString` writes it, with a spread written in `notation`.
+    let private printIn (notation: TypeNotation) (ty: Ty) : string =
+        printTy (match notation with Unicode -> "…" | Ascii -> "...") true ty
+
+    /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
+    /// describes, and a record row that appears nowhere else written as a bare spread: `(name: α, …)`.
+    let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string =
+        printIn notation (apply (displayRenaming notation (loneRecordRows ty) ty) ty)
 
     /// Each of `tys` for a reader, as `tyToDisplayString` writes it, with a variable they share given the same name
     /// in each. The first one's variables are named first, so it reads as it would alone unless the others use a
-    /// name from an annotation that it would have been given. A record row is a bare `...` only where it is in
+    /// name from an annotation that it would have been given. A record row is a bare spread only where it is in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
-    let tysToDisplayStrings (names: TypeVarNames) (tys: Ty list) : string list =
+    let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list =
         let lone =
             let loneIn = tys |> List.map (fun ty -> loneRecordRows ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
             loneIn
             |> List.map fst
             |> Set.unionMany
             |> Set.filter (fun id -> loneIn |> List.forall (fun (lone, all) -> lone.Contains id || not (all.Contains id)))
-        let renamed = displayRenaming names lone (TyApply("", tys))
-        tys |> List.map (apply renamed >> tyToString)
+        let renamed = displayRenaming notation lone (TyApply("", tys))
+        tys |> List.map (apply renamed >> printIn notation)
 
     /// The rest variables of `ty` that only stand for tags it gives out: ones that appear in no function's input.
     /// Nothing can add a tag to such a union, so it has no more tags than those written: its rest is empty. In

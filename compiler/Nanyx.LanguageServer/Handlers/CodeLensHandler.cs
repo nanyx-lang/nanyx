@@ -38,7 +38,7 @@ public sealed class CodeLensHandler : CodeLensHandlerBase
             return null;
         }
 
-        var lenses = TypeHints.typeLenses(_settings.TypeVarNames, document.FileName, compiled)
+        var lenses = TypeHints.typeLenses(_settings.TypeNotation, document.FileName, compiled)
             .Select(lens => (lens, span: document.FromLastGood(lens.Span.Start, lens.Span.End)))
             .Where(mapped => mapped.span is not null)
             .Select(mapped => (mapped.lens, span: mapped.span!.Value))

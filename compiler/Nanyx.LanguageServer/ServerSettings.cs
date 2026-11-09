@@ -3,7 +3,9 @@ using NyxCompiler;
 namespace Nanyx.LanguageServer;
 
 /// <summary>Choices fixed when the server starts, set by <c>nanyx lsp</c>'s options.</summary>
-/// <param name="TypeVarNames">How hover names the type variables the compiler made up.</param>
+/// <param name="TypeNotation">
+/// The characters hovers, hints and completions write types in: Unicode (<c>α</c>, <c>…</c>) or ASCII only.
+/// </param>
 /// <param name="TopLevelTypeHints">Where to show the inferred types of top-level defs that do not write theirs.</param>
 /// <param name="Linters">
 /// Which linters run on each document and how serious their diagnostics are. When <c>null</c>, a document in a package
@@ -18,7 +20,7 @@ namespace Nanyx.LanguageServer;
 /// <param name="ParameterTypeHints">Whether to show inlay hints for the inferred types of lambda parameters.</param>
 /// <param name="PatternVariableTypeHints">Whether to show inlay hints for the inferred types of pattern variables.</param>
 public sealed record ServerSettings(
-    TypeVarNames TypeVarNames,
+    TypeNotation TypeNotation,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
     LinterOptions? Linters = null,
     StandardLibrarySource? StandardLibrarySource = null,
@@ -26,7 +28,7 @@ public sealed record ServerSettings(
     bool ParameterTypeHints = true,
     bool PatternVariableTypeHints = true)
 {
-    public static ServerSettings Default { get; } = new(TypeVarNames.Greek);
+    public static ServerSettings Default { get; } = new(TypeNotation.Unicode);
 
     /// <summary>Whether an inlay hint is shown for a declaration of <paramref name="kind"/>.</summary>
     public bool ShowsInlayHintFor(SymbolKind kind) =>

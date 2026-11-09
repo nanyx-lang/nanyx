@@ -10,10 +10,10 @@ open Nanyx.Compiler.Tests.TestSupport
 // Type hints: the inferred types shown for declarations that do not write theirs.
 
 /// Each hint as its name, type and where its name starts.
-let private typeHints (hintsOf: TypeVarNames -> string -> CompileResult -> TypeHints.TypeHint list) (source: string) =
+let private typeHints (hintsOf: TypeNotation -> string -> CompileResult -> TypeHints.TypeHint list) (source: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    hintsOf Greek "" result |> List.map (fun hint -> hint.Name, hint.Type, hint.Span.Start)
+    hintsOf Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type, hint.Span.Start)
 
 [<Fact>]
 let ``Lenses show the types of top-level defs that do not write theirs`` () =
@@ -72,7 +72,7 @@ let ``Each hint says what kind of declaration it is for`` () =
           "rest", TopLevelValue
           "items", Parameter
           "tail", PatternVariable ],
-        TypeHints.inlayHintsWithTopLevel Greek "" result |> List.map (fun hint -> hint.Name, hint.Kind))
+        TypeHints.inlayHintsWithTopLevel Unicode "" result |> List.map (fun hint -> hint.Name, hint.Kind))
 
 [<Fact>]
 let ``A def that writes only its contexts has its type shown after them`` () =
@@ -87,7 +87,7 @@ let ``A def that writes only its contexts has its type shown after them`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let hints =
-        TypeHints.inlayHintsWithTopLevel Greek "" result
+        TypeHints.inlayHintsWithTopLevel Unicode "" result
         |> List.map (fun hint -> hint.Name, hint.Type, hint.Context |> Option.map (fun span -> span.Start))
     let contextAt occurrence = Some (offsetOf source "[Log]" occurrence 0)
     Assert.Equal<(string * string * int option) list>(
@@ -137,10 +137,10 @@ let ``A record's rest is left unnamed in every hint of a def when it is named no
         "  | [] -> []\n" +
         "  | [p, ...rest] -> [p.name, ...names(rest)] }\n"
     Assert.Equal<(string * string) list>(
-        [ "names", "list(name: α, ...) -> list(α)"
-          "people", "list(name: α, ...)"
-          "p", "(name: α, ...)"
-          "rest", "list(name: α, ...)" ],
+        [ "names", "list(name: α, …) -> list(α)"
+          "people", "list(name: α, …)"
+          "p", "(name: α, …)"
+          "rest", "list(name: α, …)" ],
         typeHints TypeHints.inlayHintsWithTopLevel source |> List.map (fun (name, ty, _) -> name, ty))
 
 [<Fact>]

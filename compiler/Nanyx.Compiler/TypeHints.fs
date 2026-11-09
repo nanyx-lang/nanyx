@@ -53,7 +53,7 @@ let private contextOf (annotations: (SourceSpan * SourceSpan) list) (declaration
 /// The declarations are taken a top-level def at a time, from its name to the next top-level def or expression, and
 /// the types in each are named together with the def's own type, so a parameter's `α` is the `α` of the def's
 /// signature. An annotated def is named with the rest but gets no lens.
-let private hints (names: TypeVarNames) (file: string) (result: CompileResult) : TypeHint list * TypeHint list =
+let private hints (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list * TypeHint list =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let own =
@@ -114,16 +114,16 @@ let private hints (names: TypeVarNames) (file: string) (result: CompileResult) :
 /// made-up type variables named by `names`. A destructuring def gets one for each name it declares. `file` is the
 /// file the root module was compiled as (empty for source compiled directly), which tells its own declarations from
 /// those of the modules it imports. Empty when the module did not type-check.
-let typeLenses (names: TypeVarNames) (file: string) (result: CompileResult) : TypeHint list =
+let typeLenses (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     fst (hints names file result)
 
 /// An inlay hint for each local def, lambda parameter and pattern variable in the compiled root module that does
 /// not write its type, in source order, as for `typeLenses`.
-let inlayHints (names: TypeVarNames) (file: string) (result: CompileResult) : TypeHint list =
+let inlayHints (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     snd (hints names file result)
 
 /// The hints of `typeLenses` and `inlayHints` together in source order, for an editor that shows a top-level def's
 /// type after its name, as an inlay hint, rather than in a lens above it.
-let inlayHintsWithTopLevel (names: TypeVarNames) (file: string) (result: CompileResult) : TypeHint list =
+let inlayHintsWithTopLevel (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     let lenses, others = hints names file result
     lenses @ others |> List.sortBy (fun hint -> hint.Span.Start)

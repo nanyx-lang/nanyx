@@ -60,9 +60,11 @@ the extension says so and you can run **Nanyx: Download the compiler** later or 
   `nanyx-lang/nanyx`. Point it somewhere else to install from a mirror, or at a release that has not
   been published on GitHub yet. The extension cannot list the releases at a custom URL, so it
   downloads `nanyx.compilerVersion`, or its minimum version if that is empty.
-- `nanyx.greekTypeVariables`: hovers, lenses and inlay hints name inferred type variables `α`, `β`, `γ`, ... (the default).
-  Turn it off for `a`, `b`, `c`, ...; this starts the server with `nanyx lsp --latin-type-vars`,
-  which compilers before this setting do not understand.
+- `nanyx.asciiTypes`: off by default, so hovers, lenses, inlay hints and completions write types with Unicode:
+  inferred type variables are `α`, `β`, `γ`, … and the rest of an open record is `…`, as in
+  `list(name: α, …) -> list(α)`. Turn it on for ASCII only: `a`, `b`, `c`, ... and `...`. This starts the server
+  with `nanyx lsp --latin-type-vars` (the older name for `--ascii`). It replaces `nanyx.greekTypeVariables`;
+  turning that off still turns ASCII types on.
 - `nanyx.topLevelTypeHints`: where a top-level definition's inferred type is shown: `codeLens` (the
   default: a lens above it), `inlayHint` (after its name, like `def id: α -> α = { x -> x }`) or
   `off`. The last two start the server with `nanyx lsp --top-level-type-hints inlay` or `off`, which

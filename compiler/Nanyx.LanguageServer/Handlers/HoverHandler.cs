@@ -37,8 +37,8 @@ public sealed class HoverHandler : HoverHandlerBase
         }
 
         // A type's name, in an annotation inside a block say, is about the type, not the block around it.
-        var info = Definition.typeDefinitionAt(_settings.TypeVarNames, lastGood.FileName, compiled, offset)
-            ?? CompilerHover.typeAt(_settings.TypeVarNames, compiled, offset);
+        var info = Definition.typeDefinitionAt(_settings.TypeNotation, lastGood.FileName, compiled, offset)
+            ?? CompilerHover.typeAt(_settings.TypeNotation, compiled, offset);
         if (info is null || document.FromLastGood(info.Value.Span.Start, info.Value.Span.End) is not { } span)
         {
             return null;

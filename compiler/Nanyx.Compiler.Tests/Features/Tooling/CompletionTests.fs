@@ -100,7 +100,7 @@ let ``The prelude's names are in scope until the module declares its own`` () =
 /// What can follow `path` and a dot at the start of `at` in `result`, as each member's name, kind and type.
 let private membersIn (result: CompileResult) (source: string) (at: string) (path: string list) =
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Completion.membersAt Greek result (offsetOf source at 0 0) path
+    Completion.membersAt Unicode result (offsetOf source at 0 0) path
     |> List.map (fun item -> item.Name, item.Kind, item.Type)
 
 [<Fact>]
@@ -133,7 +133,7 @@ let ``After the dot that starts a shorthand lambda come the members of its argum
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let members at =
-        Completion.implicitArgumentMembersAt Greek result (offsetOf source at 0 0)
+        Completion.implicitArgumentMembersAt Unicode result (offsetOf source at 0 0)
         |> List.map (fun item -> item.Name, item.Kind, item.Type)
     Assert.Equal<(string * Completion.MemberKind * string option) list>(
         [ "age", Completion.Field, Some "int"; "name", Completion.Field, Some "string" ], members "name }")
@@ -154,7 +154,7 @@ let ``After the dot that starts a guard pattern come the members of the value ma
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal<(string * Completion.MemberKind * string option) list>(
         [ "age", Completion.Field, Some "int"; "name", Completion.Field, Some "string" ],
-        Completion.implicitArgumentMembersAt Greek result (offsetOf source "age >" 0 0)
+        Completion.implicitArgumentMembersAt Unicode result (offsetOf source "age >" 0 0)
         |> List.map (fun item -> item.Name, item.Kind, item.Type))
 
 [<Fact>]
@@ -189,7 +189,7 @@ let ``A module block offers only what it exports`` () =
 let private pipeTargetsIn (source: string) (at: string) (path: string list) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Completion.pipeTargetsAt Greek result (offsetOf source at 0 0) path
+    Completion.pipeTargetsAt Unicode result (offsetOf source at 0 0) path
 
 [<Fact>]
 let ``After a pipe come the definitions attached to the piped value's type, then the functions in scope`` () =

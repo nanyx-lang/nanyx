@@ -79,7 +79,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
 
         var names = document.LastGood is { Compiled: { } compiled } lastGood
             && document.NearestInLastGood(wordStart) is { } offset
-                ? Completion.typedNamesInScope(_settings.TypeVarNames, compiled, offset)
+                ? Completion.typedNamesInScope(_settings.TypeNotation, compiled, offset)
                     .Select(name => NameItem(name, lastGood.FileName))
                 : [];
         var keywords = Keywords.Select(keyword => new CompletionItem
@@ -172,7 +172,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         return new CompletionList(
-            Completion.membersAt(_settings.TypeVarNames, compiled, offset, ListModule.OfSeq(path)).Select(MemberItem));
+            Completion.membersAt(_settings.TypeNotation, compiled, offset, ListModule.OfSeq(path)).Select(MemberItem));
     }
 
     /// <summary>
@@ -187,7 +187,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         return new CompletionList(
-            Completion.implicitArgumentMembersAt(_settings.TypeVarNames, compiled, offset).Select(MemberItem));
+            Completion.implicitArgumentMembersAt(_settings.TypeNotation, compiled, offset).Select(MemberItem));
     }
 
     private static CompletionItem MemberItem(Completion.Member member) => new()
@@ -213,7 +213,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         return new CompletionList(
-            Completion.pipeTargetsAt(_settings.TypeVarNames, compiled, offset, ListModule.OfSeq(piped))
+            Completion.pipeTargetsAt(_settings.TypeNotation, compiled, offset, ListModule.OfSeq(piped))
                 .Select(target => new CompletionItem
                 {
                     Label = target.Name,

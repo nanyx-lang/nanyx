@@ -273,7 +273,8 @@ internal static class CliCommands
     /// Run the Nanyx language server over standard input and output (for editors; see compiler/README.md).
     /// </summary>
     /// <param name="stdio">Accepted and ignored: stdio is the only transport, but LSP clients conventionally pass it.</param>
-    /// <param name="latinTypeVars">Name inferred type variables a, b, ... in hovers, rather than α, β, ...</param>
+    /// <param name="ascii">Write the types it shows in ASCII only: type variables a, b, ... rather than α, β, …, and a record's rest as ... rather than ….</param>
+    /// <param name="latinTypeVars">The older name for --ascii.</param>
     /// <param name="topLevelTypeHints">Where to show top-level defs' inferred types: lens (above them, the default), inlay (after their names) or off.</param>
     /// <param name="noLocalTypeHints">Show no inlay hints for local defs' inferred types.</param>
     /// <param name="noParameterTypeHints">Show no inlay hints for lambda parameters' inferred types.</param>
@@ -281,6 +282,7 @@ internal static class CliCommands
     [Consolo("lsp")]
     public static int Lsp(
         [Consolo("stdio")] bool stdio = false,
+        [Consolo("ascii")] bool ascii = false,
         [Consolo("latin-type-vars")] bool latinTypeVars = false,
         [Consolo("top-level-type-hints")] string topLevelTypeHints = "lens",
         [Consolo("no-local-type-hints")] bool noLocalTypeHints = false,
@@ -301,7 +303,7 @@ internal static class CliCommands
         }
 
         var settings = new Nanyx.LanguageServer.ServerSettings(
-            latinTypeVars ? TypeVarNames.Latin : TypeVarNames.Greek,
+            ascii || latinTypeVars ? TypeNotation.Ascii : TypeNotation.Unicode,
             topLevel.Value,
             LocalTypeHints: !noLocalTypeHints,
             ParameterTypeHints: !noParameterTypeHints,
