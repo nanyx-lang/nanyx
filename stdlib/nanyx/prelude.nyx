@@ -44,13 +44,19 @@ export def Int.parse: string -> #some(int) | #invalidInt = { s ->
 -- writes the value as interpolation does.
 
 -- `n` in decimal, with a leading `-` when it is negative.
-export def Int.toString: int -> string = { n -> "{n}" }
+export def Int.toString: int -> string = { n ->
+  "{n}"
+}
 
 -- `x` in decimal.
-export def Float.toString: float -> string = { x -> "{x}" }
+export def Float.toString: float -> string = { x ->
+  "{x}"
+}
 
 -- `true` or `false`.
-export def Bool.toString: bool -> string = { b -> "{b}" }
+export def Bool.toString: bool -> string = { b ->
+  "{b}"
+}
 
 -- `s` itself.
 export def String.toString: string -> string = { s -> s }
