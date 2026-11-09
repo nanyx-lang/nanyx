@@ -33,7 +33,10 @@ module Manifest =
     let private packageKeys = [ "name"; "version"; "sources"; "public-modules" ]
 
     /// Lower-case dotted names, as packaging.md proposes: `acme.web`, `word_counter`.
-    let private namePattern = Regex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+    let internal namePattern = Regex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+
+    /// What `namePattern` asks of a name, to finish "must be ...".
+    let internal nameRule = "lower case, with words separated by dots: acme.web"
 
     let private versionPattern = Regex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
@@ -150,7 +153,7 @@ module Manifest =
                 | false, _ ->
                     if document.ContainsKey "package" then errors.Add $"{path}: [package] has no {key}"
                     ""
-            let name = text "name" namePattern "lower case, with words separated by dots: acme.web"
+            let name = text "name" namePattern nameRule
             let version = text "version" versionPattern "a semantic version: 1.2.0"
             let strings (key: string) (defaults: string list) =
                 match package.TryGetValue key with
