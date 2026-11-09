@@ -1297,8 +1297,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Some (TyFunc(lambdaInput, _)) when unannotated && not (List.isEmpty lambdaArgs) ->
                             match Unifier.unify current.Constraints with
                             | Ok subst ->
-                                // A lambda of several parameters needs the input's fields to split between them.
                                 match Unifier.apply subst lambdaInput with
+                                // A rest that widening made up is only room for tags no argument has given yet,
+                                // not tags the lambda must handle: the lambda takes its input from its own
+                                // patterns, as it does when the arguments come as one tuple (#452).
+                                | resolved when
+                                    (match Unifier.unalias resolved with
+                                     | TyUnion items -> items |> List.exists (function TyVar v -> Unifier.isMadeUpRest v | _ -> false)
+                                     | _ -> false) -> None
+                                // A lambda of several parameters needs the input's fields to split between them.
                                 | resolved when (match Unifier.unalias resolved with TyRecord _ -> true | _ -> false) -> Some resolved
                                 | resolved when lambdaArgs.Length = 1 -> Some resolved
                                 | _ -> None
