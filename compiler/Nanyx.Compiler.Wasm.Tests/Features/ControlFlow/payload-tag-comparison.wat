@@ -151,6 +151,19 @@
     i32.store
     i32.const 0
   )
+  (func $__nanyx_retain (param $count i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    if
+      local.get $count
+      local.get $n
+      i32.const 1
+      i32.add
+      i32.store
+    end
+  )
   (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
     (local $cell i32)
     i32.const 8
@@ -193,12 +206,17 @@
     i32.and
   )
 
-  (func $classify (param $value i32) (result i32)
+  (func $classify (param $value i32) (result i32) (local $__owned_0 i32)
     local.get $value
     i32.const 3
     i32.const 3
     call $__nanyx_tag_box
+    local.tee $__owned_0
     call $__nanyx_tag_equals
+    local.get $value
+    call $__nanyx_drop_tags_some_int
+    local.get $__owned_0
+    call $__nanyx_drop_tags_some_int
     (if (result i32)
       (then
         i32.const 1
@@ -236,5 +254,19 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_tags_some_int (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 1
+      i32.and
+      br_if $shared
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 )

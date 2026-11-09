@@ -275,8 +275,8 @@ Current WASM backend support is intentionally minimal and focused on bootstrappi
 - top-level expressions (and the `@entry` definition) run from a WebAssembly start function
 - strings are pointers to length-prefixed UTF-8 bytes; `++` and `==` on strings call emitted helpers
 - list literals, `++` on lists, and list patterns (`[]`, `[x, ...rest]`, `[1, y]`) over heap-allocated cons cells
-- every object on the heap has a reference count in its header, and the module has a drop function for each type
-  it puts on the heap; nothing calls them yet, so nothing is freed (see `compiler/design/memory.md`)
+- every object on the heap has a reference count in its header, and the compiler inserts `dup` and `drop` (Perceus
+  reference counting), so an object is freed once nothing refers to it (see `compiler/design/memory.md`)
 - `dbg(...)` of integers and strings, and `nanyx/console`, write to stdout through WASI `fd_write`
 - `dbg(#tag)` calls a host import `(import "env" "dbg_tag_<tag>" (func))`, which the runtime provides
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a

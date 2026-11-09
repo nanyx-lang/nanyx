@@ -17,9 +17,10 @@ place. Generic code is monomorphised, so every object's layout is known when it 
 ## Where we are today
 
 The WebAssembly backend's allocator can free (`__nanyx_alloc` and `__nanyx_free` in
-`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), and every object on the heap has a reference
-count and a drop function for its type (see Object header below), but nothing calls them yet, so a long-running
-program's memory only grows.
+`compiler/Nanyx.Compiler.Wasm/WasmRuntime.fs`; see Allocator below), every object on the heap has a reference count
+and a drop function for its type (see Object header below), and the compiler inserts `dup` and `drop` (see
+Inserting counts below), so a program frees each object once nothing refers to it. Nothing reuses a cell in place
+yet.
 
 Every value is an `i32`. On the heap, after each object's header:
 
@@ -275,11 +276,44 @@ On the IR, following the paper:
 4. **Reuse.** When a dropped cell is the same size as one allocated later on the same path, the drop becomes a
    reuse token and the allocation writes into it when the count was one.
 
+Steps 1 and 2 are `CoreIrCounting.fs`, run on every function of the module after it is lowered, which adds three
+nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` (drop once `e` is done).
+`CoreIrDrop.fs` generates the dup and drop function of each type.
+
+- **Every variable owns its reference,** except a parameter its function borrows, a name a pattern binds that the
+  arm does not use, and, inside a `for` loop's body or a guard, every variable from outside it. Each instruction
+  either takes an operand over (a call that owns the parameter, a field of a new object, a value returned, `dbg`)
+  or borrows it (a field read, an operator, a runtime helper): a variable is duplicated where it is taken over and
+  still used after, and dropped after the instruction that used it last if that one only borrowed it.
+- **Temporaries are counted where they are used.** A temporary's value is computed where it is used (see Generating
+  code), so its value is analysed there, in the order the operands are evaluated. A temporary an instruction only
+  borrows is kept in a local as it is pushed (`local.tee`), and dropped after the instruction.
+- **Drops happen before a store.** What dies in a `let`'s value is dropped as the value is computed, before it is
+  stored, so a local the variable shares with another of the same name (see the IR's `VarKind`) still holds it.
+- **Matching.** An arm takes a reference to each name its patterns bind that it uses, then drops the scrutinee if
+  it does not use it either. Reading a field takes a reference to the value read.
+- **Ownership.** A function called through a closure (a lifted lambda, or the wrapper of a function passed as a
+  value) owns all its parameters, the environment among them: a call through a closure passes it on owned, or a
+  new reference to it if it is used again. Another function borrows a parameter on the heap it never takes over,
+  and owns it otherwise; this is worked out over the whole module at once, until nothing changes.
+- **Runtime helpers borrow.** Every helper, the ones that write to stdout and stderr among them, borrows its
+  operands and returns a value of its own, except `List.cons` (which takes both over) and `++` on lists (which
+  takes the second over, and copies the first's cells with a reference to each element). Strings handed to the
+  host are borrowed for the call.
+- **Tail calls.** An argument passed in a tail call that the caller owns makes the callee own that parameter, so
+  nothing is left to drop after a tail call (see [tail-calls.md](tail-calls.md)).
+- **Recursive local closures** need nothing more: lambda lifting already makes a `rec` local refer to itself
+  through the environment it is called with, never through what it captures, so it cannot capture itself. Lifting
+  lambdas in the IR ([#425](https://github.com/nanyx-lang/nanyx/issues/425)) is not needed first.
+
+The tests in `Features/Memory` check that a loop over lists, records, closures and tags runs in constant memory, and
+that the examples that compile give back every byte they allocate.
+
 ### Things that need care
 
-- **Recursive local closures.** A local def that calls itself is bound to a closure that captures itself, the one
-  cycle the language can make. It has to be lifted so that it refers to itself directly rather than through its
-  environment.
+- **Recursive local closures.** A local def that calls itself would be bound to a closure that captures itself, the
+  one cycle the language can make. Lambda lifting avoids it: the lifted function refers to itself through the
+  closure it is called with, which it does not capture.
 - **Closures and contexts.** Capturing a value duplicates it, and freeing a closure drops what it captured. Context
   members are passed as closures and follow the same rules.
 - **Host calls.** Strings handed to the runtime (stdout, `dbg`) are borrowed for the call.
@@ -297,8 +331,8 @@ On the IR, following the paper:
    generation onto it~~ ([#293](https://github.com/nanyx-lang/nanyx/issues/293), done).
 3. ~~**Headers and drop functions.** Give every heap object a count, and generate a drop function per type~~
    ([#291](https://github.com/nanyx-lang/nanyx/issues/291), done).
-4. **Reference counting.** Insert `dup` and `drop` with inferred ownership. Programs now free memory
-   ([#294](https://github.com/nanyx-lang/nanyx/issues/294)).
+4. ~~**Reference counting.** Insert `dup` and `drop` with inferred ownership. Programs now free memory~~
+   ([#294](https://github.com/nanyx-lang/nanyx/issues/294), done).
 5. **Reuse.** Drop specialisation and reuse tokens; measure on the examples
    ([#295](https://github.com/nanyx-lang/nanyx/issues/295)).
 

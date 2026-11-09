@@ -108,3 +108,33 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
+
+/// A program compiled and instantiated on Wasmtime, without WASI, with the drop functions of some types and
+/// `$heap_ptr` exported as well, so that a test can call its functions, give up what they return, and see how far the
+/// heap has grown.
+type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmtime.Instance) =
+    let memory = instance.GetMemory("memory")
+    member _.Call(name: string, argument: int) = instance.GetFunction<int, int>(name).Invoke argument
+    member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
+        instance.GetAction<int>(Transpiler.Wasm.CoreIrDrop.dropName ty).Invoke value
+    member _.HeapPointer = instance.GetGlobal("heap_ptr").GetValue() :?> int
+    member _.Word(address: int) = memory.ReadInt32(int64 address)
+    member _.Text(pointer: int) = memory.ReadString(int64 pointer, memory.ReadInt32(int64 (pointer - 4)))
+    interface IDisposable with
+        member _.Dispose() =
+            store.Dispose()
+            engine.Dispose()
+
+/// `source` compiled and instantiated (see `WasmProgram`), with the drop functions of `dropped` exported.
+let instantiateWasm (source: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
+    let wat = transpileWat source
+    let dropName = Transpiler.Wasm.CoreIrDrop.dropName
+    let exports =
+        [ yield! dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))")
+          if wat.Contains "(global $heap_ptr" then "  (export \"heap_ptr\" (global $heap_ptr))" ]
+        |> String.concat "\n"
+    let engine = new Wasmtime.Engine()
+    let store = new Wasmtime.Store(engine)
+    use module' = Wasmtime.Module.FromText(engine, "program", wat.Substring(0, wat.LastIndexOf ')') + exports + "\n)")
+    use linker = new Wasmtime.Linker(engine)
+    new WasmProgram(engine, store, linker.Instantiate(store, module'))

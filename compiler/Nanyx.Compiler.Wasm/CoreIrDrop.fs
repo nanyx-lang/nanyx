@@ -1,7 +1,7 @@
-/// The drop functions of a module: one for each type of object on the heap that its functions use, which gives up a
-/// reference to a value of that type and, when it was the last, drops the object's fields and frees it (see "Object
-/// header" in `compiler/design/memory.md`). Every type is concrete, so each drop function knows which of its object's
-/// fields are pointers.
+/// The drop and dup functions of a module: for each type of object on the heap that its functions use, one that gives
+/// up a reference to a value of that type and, when it was the last, drops the object's fields and frees it, and one
+/// that takes a reference (see "Object header" in `compiler/design/memory.md`). Every type is concrete, so each drop
+/// function knows which of its object's fields are pointers.
 module Transpiler.Wasm.CoreIrDrop
 
 open System.Collections.Generic
@@ -37,6 +37,13 @@ let countOffset (ty: IrType) =
 /// The name of the drop function of a type on the heap.
 let dropName (ty: IrType) = "__nanyx_drop_" + sanitizeIdentifier (IrType.mangle ty)
 
+/// The name of the dup function of a type on the heap, which takes one more reference to its value and leaves it.
+let dupName (ty: IrType) = "__nanyx_dup_" + sanitizeIdentifier (IrType.mangle ty)
+
+/// The name of the function `++` calls on lists of an element on the heap: it copies the first list's cells, so it
+/// takes a reference to each element it copies.
+let listConcatName (element: IrType) = "__nanyx_list_concat_" + sanitizeIdentifier (IrType.mangle element)
+
 /// The name of the function that drops what a closure captures, by the types of its captures in the order its block
 /// holds them. Closures that capture nothing on the heap share one that drops nothing.
 let environmentDropName (captured: IrType list) =
@@ -45,17 +52,19 @@ let environmentDropName (captured: IrType list) =
     else
         "__nanyx_drop_env"
 
-/// What a module drops: the types on the heap its functions use (with the types of their fields), and what its
-/// closures capture.
+/// What a module drops: the types on the heap its functions use (with the types of their fields), what its
+/// closures capture, and the elements of the lists on the heap it joins with `++`.
 type Drops =
     { Types: IrType list
-      Environments: IrType list list }
+      Environments: IrType list list
+      ListConcats: IrType list }
 
 /// The drops of a module made of `functions`, each in the order the functions first use it.
 let collect (functions: Function list) : Drops =
     let types = ResizeArray<IrType>()
     let seen = HashSet<IrType>()
     let environments = ResizeArray<IrType list>()
+    let listConcats = ResizeArray<IrType>()
 
     let rec add (ty: IrType) =
         if isHeapType ty && seen.Add ty then
@@ -110,6 +119,13 @@ let collect (functions: Function list) : Drops =
         | ForEach loop ->
             variable loop.Element
             expr loop.Body
+        | CallRuntime(name, [ first; _ ], _) when name = Helpers.listConcat ->
+            match atomType first with
+            | IrList element when isHeapType element && not (listConcats.Contains element) -> listConcats.Add element
+            | _ -> ()
+        | Dup(_, body)
+        | Drop(_, body)
+        | DropAfter(body, _) -> expr body
         | Atom _
         | Prim _
         | Call _
@@ -129,7 +145,17 @@ let collect (functions: Function list) : Drops =
         func.Params |> List.iter variable
         add func.Result
         expr func.Body
-    { Types = List.ofSeq types; Environments = List.ofSeq environments }
+    { Types = List.ofSeq types
+      Environments = List.ofSeq environments
+      ListConcats = List.ofSeq listConcats }
+
+/// The runtime helpers the functions of `drops` call.
+let helpersUsed (drops: Drops) : string list =
+    [ if not drops.Types.IsEmpty || not drops.Environments.IsEmpty then
+          Helpers.release
+          Helpers.retain
+          Helpers.free
+      if not drops.ListConcats.IsEmpty then Helpers.listCons ]
 
 /// The code that drops the value at `load` (which leaves it on the stack), if it is of a type on the heap.
 let private dropField (ty: IrType) (load: string list) =
@@ -214,20 +240,60 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrUnit
     | IrError -> failwith $"Internal error: a drop function for {IrType.show ty}, which is not on the heap"
 
+/// The body of the dup function of `ty`, which takes the value in `$p` and leaves it.
+let private dupBody (ty: IrType) : string list =
+    let notOnHeap =
+        match ty with
+        | IrList _ -> [ "local.get $p"; "i32.eqz"; "br_if $shared" ]
+        | IrTags _ -> [ "local.get $p"; "i32.const 1"; "i32.and"; "br_if $shared" ]
+        | _ -> []
+    [ "block $shared"
+      yield! notOnHeap |> List.map (fun line -> "  " + line)
+      "  local.get $p"
+      $"  i32.const {countOffset ty}"
+      "  i32.sub"
+      $"  call ${Helpers.retain}"
+      "end"
+      "local.get $p" ]
+
 let private lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
 
-/// The drop functions of `drops`, as WebAssembly text: one per type, then one per closure environment. The function
-/// that drops a closure's captures is called through the function table, so it has the type of a closure of one
-/// parameter (`$ctx_fn_1`), and returns 0. `tagId` gives the number of each tag the module numbers; a tag it does not
-/// is never made, so has no cells to drop.
+/// The functions of `drops`, as WebAssembly text: the drop and dup functions of each type, the function that drops
+/// each closure environment, and the `++` of each list. The function that drops a closure's captures is called through
+/// the function table, so it has the type of a closure of one parameter (`$ctx_fn_1`), and returns 0. `tagId` gives
+/// the number of each tag the module numbers; a tag it does not is never made, so has no cells to drop.
 let render (tagId: string -> int option) (drops: Drops) : string list =
     let typeDrops =
         drops.Types
-        |> List.map (fun ty ->
+        |> List.collect (fun ty ->
+            [ lines [
+                  $"(func ${dropName ty} (param $p i32)"
+                  $"  ;; {IrType.show ty}"
+                  yield! dropBody tagId ty |> List.map (fun line -> "  " + line)
+                  ")" ]
+              lines [
+                  $"(func ${dupName ty} (param $p i32) (result i32)"
+                  yield! dupBody ty |> List.map (fun line -> "  " + line)
+                  ")" ] ])
+    let listConcats =
+        drops.ListConcats
+        |> List.map (fun element ->
             lines [
-                $"(func ${dropName ty} (param $p i32)"
-                $"  ;; {IrType.show ty}"
-                yield! dropBody tagId ty |> List.map (fun line -> "  " + line)
+                $"(func ${listConcatName element} (param $a i32) (param $b i32) (result i32)"
+                "  local.get $a"
+                "  i32.eqz"
+                "  if (result i32)"
+                "    local.get $b"
+                "  else"
+                "    local.get $a"
+                "    i32.load"
+                $"    call ${dupName element}"
+                "    local.get $a"
+                "    i32.load offset=4"
+                "    local.get $b"
+                $"    call ${listConcatName element}"
+                $"    call ${Helpers.listCons}"
+                "  end"
                 ")" ])
     let environmentDrops =
         drops.Environments
@@ -242,4 +308,4 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                     |> List.map (fun line -> "  " + line)
                 "  i32.const 0"
                 ")" ])
-    typeDrops @ environmentDrops
+    typeDrops @ environmentDrops @ listConcats

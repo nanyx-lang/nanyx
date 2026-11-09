@@ -129,6 +129,9 @@ let collect (functions: Function list) : ModuleFacts =
             for arm in arms do
                 arm.Patterns |> List.iter pattern
                 expr arm.Body
+        | Dup(_, body)
+        | Drop(_, body)
+        | DropAfter(body, _) -> expr body
 
     for func in functions do
         expr func.Body

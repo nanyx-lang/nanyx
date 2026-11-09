@@ -169,6 +169,19 @@
     i32.store
     i32.const 0
   )
+  (func $__nanyx_retain (param $count i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    if
+      local.get $count
+      local.get $n
+      i32.const 1
+      i32.add
+      i32.store
+    end
+  )
   (func $__nanyx_copy_bytes (param $dst i32) (param $src i32) (param $len i32)
     (local $i i32)
     block $done
@@ -395,15 +408,18 @@
   )
   (export "print" (func $print))
 
-  (func $println (param $text i32) (result i32)
+  (func $println (param $text i32) (result i32) (local $__owned_0 i32)
     local.get $text
     call $__nanyx_write_stdout
     i32.const 0
     drop
     i32.const 10
     call $__nanyx_string_from_byte
+    local.tee $__owned_0
     call $__nanyx_write_stdout
     i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_string
   )
   (export "println" (func $println))
 
@@ -414,15 +430,18 @@
   )
   (export "eprint" (func $eprint))
 
-  (func $eprintln (param $text i32) (result i32)
+  (func $eprintln (param $text i32) (result i32) (local $__owned_0 i32)
     local.get $text
     call $__nanyx_write_stderr
     i32.const 0
     drop
     i32.const 10
     call $__nanyx_string_from_byte
+    local.tee $__owned_0
     call $__nanyx_write_stderr
     i32.const 0
+    local.get $__owned_0
+    call $__nanyx_drop_string
   )
   (export "eprintln" (func $eprintln))
 
@@ -449,6 +468,8 @@
     i32.const 1
     i32.sub
     call $__nanyx_string_slice
+    local.get $line
+    call $__nanyx_drop_string
       )
       (else
         local.get $line
@@ -457,7 +478,7 @@
   )
   (export "console.withoutCarriageReturn" (func $console_withoutCarriageReturn))
 
-  (func $console_readLineAfter (param $acc i32) (result i32) (local $byte i32)
+  (func $console_readLineAfter (param $acc i32) (result i32) (local $byte i32) (local $__owned_0 i32)
     call $__nanyx_read_stdin_byte
     local.set $byte
     local.get $byte
@@ -471,7 +492,9 @@
     i32.eq
     (if (result i32)
       (then
-        i32.const 5
+        local.get $acc
+    call $__nanyx_drop_string
+    i32.const 5
     i32.const 3
     call $__nanyx_tag_box
       )
@@ -497,7 +520,12 @@
         local.get $acc
     local.get $byte
     call $__nanyx_string_from_byte
+    local.tee $__owned_0
     call $__nanyx_string_concat
+    local.get $acc
+    call $__nanyx_drop_string
+    local.get $__owned_0
+    call $__nanyx_drop_string
     return_call $console_readLineAfter
       )
     )
@@ -512,7 +540,7 @@
   )
   (export "readLine" (func $readLine))
 
-  (func $console_readToEndAfter (param $acc i32) (result i32) (local $byte i32)
+  (func $console_readToEndAfter (param $acc i32) (result i32) (local $byte i32) (local $__owned_0 i32)
     call $__nanyx_read_stdin_byte
     local.set $byte
     local.get $byte
@@ -526,7 +554,12 @@
         local.get $acc
     local.get $byte
     call $__nanyx_string_from_byte
+    local.tee $__owned_0
     call $__nanyx_string_concat
+    local.get $acc
+    call $__nanyx_drop_string
+    local.get $__owned_0
+    call $__nanyx_drop_string
     return_call $console_readToEndAfter
       )
     )
@@ -566,6 +599,16 @@
     end
   )
 
+  (func $__nanyx_dup_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_tags_error_tags_endOfInput_some_string (param $p i32)
     ;; #error(#endOfInput) | #some(string)
     local.get $p
@@ -595,6 +638,20 @@
     end
   )
 
+  (func $__nanyx_dup_tags_error_tags_endOfInput_some_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 1
+      i32.and
+      br_if $shared
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_tags_error_tags_endOfInput (param $p i32)
     ;; #error(#endOfInput)
     local.get $p
@@ -613,6 +670,20 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_tags_error_tags_endOfInput (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 1
+      i32.and
+      br_if $shared
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 
   (func $__nanyx_drop_tags_some_string (param $p i32)
@@ -636,6 +707,20 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_tags_some_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 1
+      i32.and
+      br_if $shared
+      local.get $p
+      i32.const 4
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 
   (func $__nanyx_start

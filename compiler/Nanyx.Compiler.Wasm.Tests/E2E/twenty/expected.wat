@@ -325,6 +325,19 @@
     i32.store
     i32.const 0
   )
+  (func $__nanyx_retain (param $count i32)
+    (local $n i32)
+    local.get $count
+    i32.load
+    local.tee $n
+    if
+      local.get $count
+      local.get $n
+      i32.const 1
+      i32.add
+      i32.store
+    end
+  )
   (func $__nanyx_copy_bytes (param $dst i32) (param $src i32) (param $len i32)
     (local $i i32)
     block $done
@@ -414,7 +427,7 @@
   (data (i32.const 276) "\00\00\00\00\0b\00\00\00, yString: \00")
   (data (i32.const 296) "\00\00\00\00\04\00\00\00fake\00\00\00\00")
 
-  (func $compareStrings__int__string (param $x i32) (param $y i32) (param $__ctx_ToString_a_toString i32) (param $__ctx_ToString_b_toString i32) (result i32) (local $xString i32) (local $yString i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__dbg_tmp i32)
+  (func $compareStrings__int__string (param $x i32) (param $y i32) (param $__ctx_ToString_a_toString i32) (param $__ctx_ToString_b_toString i32) (result i32) (local $xString i32) (local $yString i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__dbg_tmp i32) (local $__owned_0 i32) (local $__owned_1 i32)
     local.get $__ctx_ToString_a_toString
     local.get $x
     local.get $__ctx_ToString_a_toString
@@ -432,12 +445,18 @@
     i32.const 284
     local.get $yString
     call $__nanyx_string_concat
+    local.tee $__owned_1
     call $__nanyx_string_concat
+    local.get $__owned_1
+    call $__nanyx_drop_string
+    local.tee $__owned_0
     call $__nanyx_string_concat
+    local.get $__owned_0
+    call $__nanyx_drop_string
     local.tee $__dbg_tmp
     call $dbg_str
     local.get $__dbg_tmp
-    drop
+    call $__nanyx_drop_string
     local.get $xString
     local.get $yString
     i32.eq
@@ -467,11 +486,15 @@
   (export "main" (func $main))
 
   (func $__lambda_1 (param $__env i32) (param $i i32) (result i32)
+    local.get $__env
+    call $__nanyx_drop_rec_0_int
     i32.const 304
   )
   (export "__lambda_1" (func $__lambda_1))
 
   (func $__lambda_3 (param $__env i32) (param $s i32) (result i32)
+    local.get $__env
+    call $__nanyx_drop_rec_0_int
     local.get $s
   )
   (export "__lambda_3" (func $__lambda_3))
@@ -488,6 +511,16 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 
   (func $__nanyx_drop_fn_int_to_string (param $p i32)
@@ -511,6 +544,16 @@
     end
   )
 
+  (func $__nanyx_dup_fn_int_to_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_fn_string_to_string (param $p i32)
     ;; (string -> string)
     local.get $p
@@ -530,6 +573,16 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_fn_string_to_string (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 
   (func $__nanyx_drop_fn_string_to_unit (param $p i32)
@@ -553,6 +606,16 @@
     end
   )
 
+  (func $__nanyx_dup_fn_string_to_unit (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_rec_0_int (param $p i32)
     ;; (0: int)
     local.get $p
@@ -565,6 +628,16 @@
       i32.sub
       call $__nanyx_free
     end
+  )
+
+  (func $__nanyx_dup_rec_0_int (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
   )
 
   (func $__nanyx_drop_env (param $p i32) (result i32)
