@@ -8,6 +8,7 @@
 module internal Transpiler.Wasm.Interpolation
 
 open System.Text
+open Parser.Program
 open Transpiler.Wasm.WasmRuntime
 
 /// What a hole holds, which decides how it is measured and written.
@@ -130,3 +131,11 @@ let measureAndWrite (lengthCode: string) (writeCode: string) =
 /// The whole string: `evalCode` evaluates its holes into their locals, then `measureAndWrite`.
 let build (evalCode: string) (lengthCode: string) (writeCode: string) =
     $"{evalCode}\n    {measureAndWrite lengthCode writeCode}"
+
+/// What a debug build writes when it reaches the hole at `span` that has no known type, because of an error deferred to
+/// run time, and the hole did not stop the program itself: the location as a deferred error's, then why.
+let unknownHoleMessage (span: SourceSpan) =
+    let location =
+        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
+        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
+    $"{location}error: the value interpolated here has no known type, because of an error deferred from compile time\n"

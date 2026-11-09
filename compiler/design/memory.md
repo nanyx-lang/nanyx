@@ -178,6 +178,7 @@ shape. A body is an expression with a type on every node:
 | `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
 | `boxFloat(value)` | boxes a float constant (floats are boxed, and `prim` on floats unboxes its operands) |
 | `forEach(loop)` | a `for` loop over a list or a range, its body run for each element |
+| `panic(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
 | `dbg(atom, form)` | prints a value as `dbg` does for its type, and leaves it |
 | `let x = value in body` | names a value; the value is never a `let` itself |
@@ -209,6 +210,11 @@ found its context (a `use`, the caller's own members, an instance built from att
 `Console`), by the same function the old path uses. A lambda of no parameters that is not a function's own runs where
 it is written, as the old path runs it, which is what workflow blocks lower to.
 
+The module's top-level expressions are lowered as one more function, the start function, which evaluates each in
+turn and drops its value. A module with type or name errors is compiled all the same in a debug build: what failed to
+check is a `panic` that reports the error when it is reached, and a value of no known type because of it has a type of
+its own (still an `i32`).
+
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
 as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
@@ -220,9 +226,10 @@ old path does.
 **Falling back.** Until the IR covers the whole language, a definition is compiled from the IR when it can be, and
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
-- A definition falls back if anything in it is beyond the IR (errors deferred to run time, for now), or if it calls a
-  specialisation that could not be lowered, such as one of a generic definition imported from another module. A
-  function and the functions it calls through the IR are kept or dropped together.
+- A definition falls back if it calls a specialisation that could not be lowered (one of a generic definition imported
+  from another module, say) or if anything else in it cannot be: a body that holds an error deferred to run time and
+  cannot be lowered because of it, which the old path compiles to a trap. A function and the functions it calls
+  through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
   compiled from the IR call its specialisations instead.
 - Both ways give the same calling convention, so a function from either can call one from the other. A function from

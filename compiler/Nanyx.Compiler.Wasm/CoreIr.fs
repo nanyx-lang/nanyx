@@ -12,6 +12,8 @@ type IrType =
     | IrString
     /// A float, in a box of its own: the value is a pointer to the `f64`.
     | IrFloat
+    /// A value of no known type, because of an error deferred to run time (a debug build of a module with errors).
+    | IrError
     /// A value that is one of these tags, each with the type of its payload if it has one, sorted by name. A single
     /// tag's type is a union of one.
     | IrTags of (string * IrType option) list
@@ -161,6 +163,8 @@ and ExprKind =
     | Dbg of Atom * DbgForm
     /// Boxes a float constant.
     | BoxFloat of float
+    /// An error deferred to run time: writes these messages to stderr and ends the program.
+    | Panic of string list
     /// A `for` loop: evaluates its body for each element, and is unit.
     | ForEach of ForLoop
     /// `let x = value in body`. The value is never a `Let` itself: blocks are flattened.
@@ -210,6 +214,7 @@ module IrType =
         | IrUnit -> "unit"
         | IrString -> "string"
         | IrFloat -> "float"
+        | IrError -> "?error"
         | IrTags tags ->
             tags
             |> List.map (fun (name, payload) ->
@@ -284,6 +289,7 @@ module Print =
             |> sprintf "\"%s\""
         | Dbg(value, _) -> $"dbg({atom value})"
         | BoxFloat value -> string value
+        | Panic messages -> $"""panic({messages |> String.concat ""})"""
         | ForEach loop ->
             let inner = indent + "  "
             let source =
