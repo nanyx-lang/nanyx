@@ -16,6 +16,11 @@ open NyxCompiler.InferState
 /// `rowVars` are the rest variables of the tag unions being matched on. A branch of one of those types
 /// (a catch-all arm returning what it caught) joins the union as its rest, so
 /// `| #some(a), f -> #some(f(a)) | other, _ -> other` is `#some(b) | r`.
+///
+/// A branch whose type nothing has settled yet, as a call to a function parameter's is, joins the other branches'
+/// tags as a fresh rest, and is that union. So `| #some(x), _ -> #some(x) | other, f -> f(other)` is
+/// `#some(a) | s`, and `f` gives back a `#some(a) | s`: tags other than `#some` too, which it could not if it
+/// were made equal to the first branch.
 let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branchTypes: Ty list) : Ty * InferState =
     let isUnionItem ty =
         match Unifier.unalias ty with
@@ -39,12 +44,23 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
     | [] -> TyPrimitive "unit", state
     | head :: tail ->
         let branchTags = branchTypes |> List.map tagsOf
-        if branchTags |> List.forall Option.isSome then
+        let untagged = List.zip branchTypes branchTags |> List.filter (snd >> Option.isNone) |> List.map fst
+        // An annotation's variable is not unknown: it stands for any type, so it cannot be made a union.
+        let isUnknown ty =
+            match resolveSoFar state ty with
+            | TyVar v -> v.Name.IsNone && not (rowVars.Contains v.Id)
+            | _ -> false
+        let unknownBranches =
+            if untagged.Length < branchTypes.Length && untagged |> List.forall isUnknown then untagged else []
+        if untagged.IsEmpty || not unknownBranches.IsEmpty then
             // Merge in order of first appearance; an existing tag of the same name unifies with the new one.
             // A union has one rest, so a second rest variable is unified with the first.
-            let items = branchTags |> List.choose id |> List.concat
+            let taggedBranches = branchTags |> List.choose id
+            let items = List.concat taggedBranches
             let tags = items |> List.filter (function TyTag _ -> true | _ -> false)
+            let isJoinRest = function TyVar v -> state.JoinRests.Contains v.Id | _ -> false
             let rests = items |> List.filter (function TyVar _ -> true | _ -> false) |> List.distinct
+            let joinRests, ownRests = rests |> List.partition isJoinRest
             let merged, nextState =
                 tags
                 |> List.fold (fun (acc: Ty list, st) tag ->
@@ -52,13 +68,34 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                     match acc |> List.tryFind (function TyTag(n, _) -> n = name | _ -> false) with
                     | Some existing -> acc, addConstraint existing tag st
                     | None -> acc @ [ tag ], st) ([], state)
-            let merged, nextState =
-                match rests with
-                | [] -> merged, nextState
-                | rest :: others -> merged @ [ rest ], others |> List.fold (fun st other -> addConstraint rest other st) nextState
-            match merged with
-            | [ single ] -> single, nextState
-            | items -> TyUnion items, nextState
+            let rest, nextState =
+                match ownRests with
+                | rest :: others -> Some rest, others |> List.fold (fun st other -> addConstraint rest other st) nextState
+                | [] when unknownBranches.IsEmpty && joinRests.IsEmpty -> None, nextState
+                | [] ->
+                    match freshVar nextState with
+                    | TyVar v as rest, next -> Some rest, { next with JoinRests = next.JoinRests.Add v.Id }
+                    | rest, next -> Some rest, next
+            // A rest an earlier join made up is the tags this join adds to its branch, and this join's rest, so the
+            // branch is the joined union: in a recursive function, the branch can be the joined union itself.
+            let nextState =
+                joinRests
+                |> List.fold (fun st joinRest ->
+                    let branchNames =
+                        taggedBranches
+                        |> List.find (List.contains joinRest)
+                        |> List.choose (function TyTag(name, _) -> Some name | _ -> None)
+                    let added = merged |> List.filter (function TyTag(name, _) -> not (List.contains name branchNames) | _ -> false)
+                    let extended =
+                        match added @ Option.toList rest with
+                        | [ single ] -> single
+                        | extendedItems -> TyUnion extendedItems
+                    addConstraint joinRest extended st) nextState
+            let joined =
+                match merged @ Option.toList rest with
+                | [ single ] -> single
+                | joinedItems -> TyUnion joinedItems
+            joined, unknownBranches |> List.fold (fun st ty -> addConstraint ty joined st) nextState
         else
             let recordFields ty =
                 match Unifier.unalias ty with
