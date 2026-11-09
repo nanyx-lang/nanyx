@@ -47,6 +47,13 @@ let ``The import goes after the module line when there are no imports`` () =
         fixesFor source)
 
 [<Fact>]
+let ``The import goes after the directives when there are no imports, since directives come before any code`` () =
+    let source = "#!/usr/bin/env nanyx\n::linter default\n\ndef a = sqrt(4.0)\n"
+    Assert.Equal<(string * string) list>(
+        [ "Add `import nanyx/math`", "#!/usr/bin/env nanyx\n::linter default\n\nimport nanyx/math\n\ndef a = sqrt(4.0)\n" ],
+        fixesFor source)
+
+[<Fact>]
 let ``The edit is an insertion where the import goes`` () =
     let source = "import nanyx/console\n\ndef n = abs(1)\n"
     let edit = (onlyDiagnostic (Compiler.compile source)).Fixes |> List.exactlyOne |> _.Edits |> List.exactlyOne
