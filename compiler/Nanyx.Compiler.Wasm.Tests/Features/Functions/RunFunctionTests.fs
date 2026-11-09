@@ -7,6 +7,33 @@ open Xunit
 open TranspilerWasmTestHelpers
 
 [<Fact>]
+let ``Run - a lambda's parameters may be patterns that take its argument apart`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "type $Email = string\n" +
+        "\n" +
+        "def address: $Email -> string = { $Email(s) -> s }\n" +
+        "def weigh = { (a, b), c -> a + b * c }\n" +
+        "def answer = { () -> 42 }\n" +
+        "def middle = { (), (_, (m, _)) -> m }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(address($Email(\"ada@example.com\")))\n" +
+        "  println(\"{weigh((1, 2), 3)} {answer()} {middle((), (0, (\"mid\", 1)))}\")\n" +
+        "  def sums = [(1, 2), (30, 40)] \\map { (x, y) -> x + y }\n" +
+        "  for sums | n -> println(\"{n}\")\n" +
+        "  def offset = 100\n" +
+        "  def shifted = [(1, 2)] \\map { (x, y) ->\n" +
+        "    def total = x + y\n" +
+        "    total + offset\n" +
+        "  }\n" +
+        "  for shifted | n -> println(\"{n}\")\n" +
+        "}\n"
+    runSource source |> assertRan "ada@example.com\n7 42 mid\n3\n70\n103\n"
+
+[<Fact>]
 let ``Run - local defs in a pattern lambda's arms`` () =
     let source =
         "import nanyx/console\n" +

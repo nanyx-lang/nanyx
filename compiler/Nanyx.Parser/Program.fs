@@ -794,7 +794,18 @@ do
     // A parameter may be bracketed, `{ (x: int) -> x + 1 }`, so the arrow after its annotation ends the parameters
     // rather than making the annotation a function type.
     let bracketedParameter = between (pstring "(" >>. wsInline) (wsInline >>. pstring ")") parameter
-    let paramList = sepBy (bracketedParameter <|> parameter) (pstring "," .>> ws)
+    // A parameter may be a pattern, `{ (a, b) -> a + b }`, `{ $Email(s) -> s }`, with the names it binds. A name or
+    // `_` alone is an ordinary parameter.
+    let patternParameter =
+        collectingNames pattern >>= fun (parameter, names) ->
+            match parameter.Kind with
+            | IdentifierPattern _
+            | WildcardPattern -> fail "a name, not a pattern"
+            | _ -> preturn (Choice2Of2(parameter, names))
+    let paramList =
+        sepBy
+            (attempt (bracketedParameter |>> Choice1Of2) <|> attempt patternParameter <|> (parameter |>> Choice1Of2))
+            (pstring "," .>> ws)
     let arrow = wsInline >>. pstring "->" .>> wsInline
     
     // Lambda body: allow multi-line statement blocks or a single expression
@@ -821,7 +832,36 @@ do
     
     // Each form builds the lambda's kind given the span of the whole `{ ... }`, which is also where the
     // parameters and expressions a shorthand stands for are made up.
-    let lambdaWithParams = pipe2 (paramList .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun parameters body _ -> Lambda(parameters, body))
+    // A pattern parameter is taken apart by a match with one arm at the top of the body, over the parameter that
+    // stands in its place (`patternArgument`), so the pattern must be total as a destructuring def's is. The arm's
+    // body, the lambda's, declares the names the patterns bind. `{ () -> ... }` is `{ ... }`: unit is what a lambda
+    // without parameters takes.
+    let lambdaWithParams =
+        pipe2 (paramList .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun parameters body -> parameters, body)
+        >>= fun (parameters, body) ->
+            let destructured =
+                parameters
+                |> List.indexed
+                |> List.choose (function
+                    | index, Choice2Of2(pattern, names) -> Some(index + 1, pattern, names)
+                    | _ -> None)
+            match parameters, destructured with
+            | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> preturn (fun _ -> Lambda([], body))
+            | _, [] -> preturn (fun _ -> Lambda(parameters |> List.choose (function Choice1Of2 named -> Some named | _ -> None), body))
+            | _ ->
+                let named =
+                    parameters
+                    |> List.mapi (fun index parameter ->
+                        match parameter with
+                        | Choice1Of2 named -> named
+                        | Choice2Of2 _ -> patternArgument (index + 1), None)
+                declare ArmBody body.Id (destructured |> List.collect (fun (_, _, names) -> names))
+                >>% fun span ->
+                    // Each scrutinee is made up where its pattern is written, so a pattern that is not total is
+                    // reported there.
+                    let scrutinees = destructured |> List.map (fun (position, pattern, _) -> Expression.at pattern.Span (IdentifierExpr (patternArgument position)))
+                    let patterns = destructured |> List.map (fun (_, pattern, _) -> pattern)
+                    Lambda(named, Expression.at span (Match(scrutinees, [ patterns, body ])))
     let lambdaNoParams = blockBody |>> (fun body _ -> Lambda([], body))
     // `{ }`, possibly spanning lines, is a lambda that does nothing
     let emptyLambda = skipMany (skipAnyOf " \t\r\n") >>. followedBy (pstring "}") >>% fun span -> Lambda([], Expression.at span UnitExpr)

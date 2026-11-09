@@ -280,6 +280,34 @@ let format (options: Options) (parsed: SourceModule) : string =
         | [] -> "()"
         | entries -> render entries
 
+    /// A lambda's parameters as written, each with the pattern it was written as, if any, and its body as written. A
+    /// pattern parameter (`{ (a, b) -> a + b }`) is taken apart by a one-arm match the parser puts at the top of the
+    /// body, over the parameter that stands in its place (`patternArgument`).
+    let writtenLambda (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) =
+        let plain () = parameters |> List.map (fun parameter -> parameter, None), body
+        match body.Kind with
+        | Match(scrutinees, [ patterns, inner ]) when valid e.Span && body.Span = e.Span && scrutinees.Length = patterns.Length ->
+            let taken =
+                List.zip scrutinees patterns
+                |> List.choose (fun (scrutinee, p) ->
+                    match scrutinee.Kind with
+                    | IdentifierExpr n -> Some(n, p)
+                    | _ -> None)
+                |> Map.ofList
+            let written =
+                parameters |> List.mapi (fun index (n, t) -> (n, t), (if n = patternArgument (index + 1) then Map.tryFind n taken else None))
+            if taken.Count = scrutinees.Length && (List.choose snd written).Length = taken.Count then written, inner else plain ()
+        | _ -> plain ()
+
+    /// Whether the lambda `e`, which has no parameters, was written with a unit pattern for them, `{ () -> ... }`.
+    let writtenWithUnit (e: Expression) =
+        if not (valid e.Span) || source[e.Span.Start] <> '{' then
+            false
+        else
+            let afterBrace = source.Substring(e.Span.Start + 1, e.Span.End - e.Span.Start - 1).TrimStart()
+            afterBrace.StartsWith "(" && afterBrace.Substring(1).TrimStart().StartsWith ")"
+            && afterBrace.Substring(1).TrimStart().Substring(1).TrimStart().StartsWith "->"
+
     let rec expr (position: Position) (e: Expression) : Doc =
         if needsParentheses position e then parens (exprBare full e) else exprBare position e
 
@@ -549,13 +577,16 @@ let format (options: Options) (parsed: SourceModule) : string =
         match shorthand e parameters body with
         | Some doc -> doc
         | None ->
+            let parameters, body = writtenLambda e parameters body
             // An annotated parameter is bracketed, so an arrow after its annotation is not read as part of it.
-            let parameterDoc (n, typeOpt) =
-                match typeOpt with
-                | Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
-                | None -> text n
+            let parameterDoc ((n, typeOpt), patternOpt) =
+                match patternOpt, typeOpt with
+                | Some p, _ -> pattern p
+                | None, Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
+                | None, None -> text n
             let head =
                 match parameters with
+                | [] when writtenWithUnit e -> text "{ () ->"
                 | [] -> text "{"
                 | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); text " ->" ]
             match body.Kind with
@@ -568,7 +599,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
                 let head =
                     let first = (Doc.render Int32.MaxValue bodyDoc).TrimStart()
-                    if List.isEmpty parameters && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
+                    if List.isEmpty parameters && not (writtenWithUnit e) && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
                 // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
                 // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
                 Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
@@ -790,7 +821,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | _ -> false
         match value.Kind with
         | Block _ -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
-        | Lambda(parameters, body) when typeOpt.IsSome && not (isTrivial body) ->
+        | Lambda(parameters, body) when typeOpt.IsSome && not (isTrivial (snd (writtenLambda value parameters body))) ->
             cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
         | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]
 

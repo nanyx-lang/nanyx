@@ -12,6 +12,11 @@ open Parser.Program
 let implicitArgument = "<arg>"
 let implicitSecondArgument = "<arg2>"
 
+/// The parameter a lambda takes in place of the pattern written as its `position`th (counted from 1) parameter,
+/// `{ $Email(s) -> s }`, which a match at the top of its body takes apart. Like `implicitArgument`, no code can
+/// write it.
+let patternArgument (position: int) = $"<pattern{position}>"
+
 // Forward references for recursive expression parsing
 let expression, expressionRef = createParserForwardedToRef<Expression, ParseState>()
 let exprWithoutCrossingNewlines, exprWithoutCrossingNewlinesRef = createParserForwardedToRef<Expression, ParseState>()

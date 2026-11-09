@@ -38,6 +38,22 @@ let ``An annotated lambda parameter is bracketed`` () =
     Assert.Equal("def f = { (x: int), y -> x + y }\n", format "def f = { x: int, y -> x + y }")
 
 [<Fact>]
+let ``Pattern parameters are printed as written`` () =
+    unchanged "def a = { (x, y) -> x + y }\n"
+    unchanged "def b: $Email -> string = { $Email(s) -> s }\n"
+    unchanged "def c = pairs \\map { (k, v), n -> k }\n"
+    unchanged (lines [ "def d = { [first, ...rest] ->"; "  -- the head"; "  first"; "}" ])
+    unchanged "def e = { (), n -> n }\n"
+    Assert.Equal("def f = { (a, b) -> a }\n", format "def f = {(a,b)->a}")
+
+[<Fact>]
+let ``A unit parameter is printed as written`` () =
+    unchanged "def a = { () -> 5 }\n"
+    unchanged "def b = { () -> -1 }\n"
+    unchanged (lines [ "def main = { () ->"; "  println(\"Hello, world!\")"; "}" ])
+    unchanged "def c = { 5 }\n"
+
+[<Fact>]
 let ``&& and || stay as written`` () =
     unchanged "def a = b && c || d\n"
     unchanged "def a = b and c or d\n"
