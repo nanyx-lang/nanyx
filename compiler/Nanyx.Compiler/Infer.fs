@@ -7,6 +7,10 @@ open NyxCompiler
 type TypedExpr = NyxCompiler.TypedExpr
 type TypedStatement = NyxCompiler.TypedStatement
 
+/// What the names of the locals the workflow rewrite binds the rest of a block to start with, after an `if` or `match`
+/// with workflow keywords in its branches: each branch goes on to it. No name written in the source can start with it.
+let workflowRestPrefix = "__rest_"
+
 /// Which contexts the code being inferred runs in.
 type ContextScope =
     /// The top level of a module, which runs in the ambient instances (the runtime's `Console`).
@@ -2641,7 +2645,13 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 finalState
                                 |> recordSymbolType symbol declaredTy
                                 |> recordAnnotated symbol expectedDeclaredOpt.IsSome
-                            let scheme, generalizedState = generalizeDef env' current declaredTy
+                            // The rest of a workflow block after an `if` or `match` with keywords in its branches
+                            // is bound to a local the branches all go on to. It is one continuation, not a function
+                            // to use at different types: generalised, its failures would be closed to those of the
+                            // rest alone, and a `try` in a branch could not add its own.
+                            let scheme, generalizedState =
+                                if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
+                                else generalizeDef env' current declaredTy
                             current <- generalizedState
                             env' <- TypeEnv.declare name symbol scheme env'
                             typedStatements <- typedStatements @ [ TypedDefStatement(isExport, name, typeOpt, typedExpr) ]
