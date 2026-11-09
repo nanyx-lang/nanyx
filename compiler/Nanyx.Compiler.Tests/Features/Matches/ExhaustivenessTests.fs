@@ -309,6 +309,24 @@ let ``An arm with a pattern count other than the values' is an error at the arm`
     Assert.Equal("1, 2, 3", textOf tooMany diagnostic.Span.Value)
 
 [<Fact>]
+let ``Brackets around a tuple are optional in an arm, either way round`` () =
+    // A match on a tuple takes `| x, y`, and a match on two values takes `| (x, y)`, and each is checked as the other.
+    let onTuple = "def f: (int, int) -> int = { pair ->\n  match pair\n    | 0, y -> y\n    | x, _ -> x\n}\n"
+    let result = Compiler.compile onTuple
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let onValues = "def f: int, int -> int = { a, b ->\n  match a, b\n    | (0, y) -> y\n    | (x, _) -> x\n}\n"
+    let result = Compiler.compile onValues
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    // Exhaustiveness sees through the brackets too.
+    let missing = "def f: int, int -> int = { a, b ->\n  match a, b\n    | (0, y) -> y\n}\n"
+    let diagnostic = Assert.Single((Compiler.compile missing).Diagnostics)
+    Assert.Contains(diagnostic.Code, [ DiagnosticCodes.NonExhaustiveMatch.Code; DiagnosticCodes.MissingCatchAllArm.Code ])
+    // A tuple of the wrong size is still the wrong number of patterns.
+    let wrongSize = "def f: int, int -> int = { a, b ->\n  match a, b\n    | (x, y, z) -> x\n    | else -> 0\n}\n"
+    let diagnostic = Assert.Single((Compiler.compile wrongSize).Diagnostics)
+    Assert.Equal(DiagnosticCodes.WrongPatternCount.Code, diagnostic.Code)
+
+[<Fact>]
 let ``The parser's multi-value match examples compile without throwing`` () =
     // They are snippets of syntax that use names they never define, so unknown names are all there is to report.
     let examples = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "Nanyx.Parser.Tests", "Features", "Matches")
