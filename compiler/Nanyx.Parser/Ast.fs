@@ -377,6 +377,33 @@ module Pattern =
             | ElsePattern -> pattern.Kind
         { pattern with Kind = kind }
 
+module MatchHead =
+    /// The head of the match `matchExpr` on `scrutinees`: what is reported for the match as a whole, rather than
+    /// for one arm. That depends on how the match was written:
+    /// - `match a | ...` is from `match` to the end of the last value matched on, so `match a`, or
+    ///   `match getData() \mapOption { ... }`.
+    /// - `{ | pattern -> ... }`, and a `for` loop's arms, match on values made up over the whole match, arms and
+    ///   all. Their head is the first character, the `{` or the first `|`.
+    /// - A lambda's pattern parameters (`{ #some(n) -> n }`) match on values made up where the patterns are
+    ///   written, so they are the head, from the first to the last.
+    /// - A match made up over its value (`def #some(x) = value`, `value except | ...`) has the value as its head.
+    let span (matchExpr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : SourceSpan =
+        let firstPatterns = arms |> List.tryHead |> Option.map fst |> Option.defaultValue []
+        match scrutinees with
+        | [] -> matchExpr.Span
+        | first :: _ ->
+            let last = List.last scrutinees
+            let madeUpOverArms =
+                first.Span = matchExpr.Span && firstPatterns |> List.exists (fun pattern -> SourceSpan.contains first.Span pattern.Span)
+            let madeUpAtPatterns =
+                not (SourceSpan.isNone first.Span)
+                && firstPatterns.Length = scrutinees.Length
+                && List.forall2 (fun (scrutinee: Expression) (pattern: Pattern) -> scrutinee.Span = pattern.Span) scrutinees firstPatterns
+            if madeUpOverArms then { matchExpr.Span with End = matchExpr.Span.Start + 1 }
+            elif madeUpAtPatterns then SourceSpan.between first.Span last.Span
+            elif SourceSpan.contains matchExpr.Span last.Span then SourceSpan.between matchExpr.Span last.Span
+            else matchExpr.Span
+
 module Statement =
     /// A statement written at `span`.
     let at (span: SourceSpan) (kind: StatementKind) : Statement =

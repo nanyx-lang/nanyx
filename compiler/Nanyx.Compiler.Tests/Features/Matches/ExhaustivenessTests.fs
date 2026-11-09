@@ -356,7 +356,7 @@ let ``A match on ints without a catch-all is non-exhaustive, and says which int 
     let source = "def f: int, int -> string = { x, y ->\n  match x, y\n    | 0, 0 -> \"origin\"\n    | 0, _ -> \"on the y axis\"\n}\n"
     let pair = onlyDiagnostic source
     Assert.Equal("Non-exhaustive match (scrutinee 1), missing int values, such as 1", pair.Message)
-    Assert.Equal("x", textOf source pair.Span.Value)
+    Assert.Equal("match x, y", textOf source pair.Span.Value)
     let strings = onlyDiagnostic "def f: string -> int = { s ->\n  match s\n    | \"a\" -> 1\n}\n"
     Assert.Equal("Non-exhaustive match, missing string values, such as \"\"", strings.Message)
     let booleans = onlyDiagnostic "def f: bool -> int = { b ->\n  match b\n    | true -> 1\n}\n"
@@ -377,7 +377,7 @@ let ``A match on several values must cover every combination of them, not each v
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
     // `(#none, true)` is missing too; the check names one case.
     Assert.Equal("Non-exhaustive match, missing case: #none, true", diagnostic.Message)
-    Assert.StartsWith("match o, b", textOf source diagnostic.Span.Value)
+    Assert.Equal("match o, b", textOf source diagnostic.Span.Value)
     let tags =
         onlyDiagnostic (
             "def f: (#left | #right), (#up | #down) -> int = { a, b ->\n" +
@@ -391,6 +391,47 @@ let ``A match on several values must cover every combination of them, not each v
     Assert.Equal("Non-exhaustive match, missing case: #some(false)", nested.Message)
     let tuple = onlyDiagnostic "def f: (int, bool) -> int = { p ->\n  match p\n    | (_, true) -> 1\n    | (0, false) -> 0\n}\n"
     Assert.Equal("Non-exhaustive match, missing case: (1, false)", tuple.Message)
+
+/// The start and end of the one diagnostic compiling `source` gives, and the text between them.
+let private onlySpan (source: string) =
+    let diagnostic = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
+    let span = diagnostic.Span.Value
+    span.Start, span.End, textOf source span
+
+[<Fact>]
+let ``A non-exhaustive match is reported from the match keyword to the end of its scrutinee, not at its arms`` () =
+    let prefix = "def a: #some(string) | #notFound = #notFound\n"
+    let source = prefix + "def b = match a\n  | #some(s) -> s\n"
+    let start = prefix.Length + "def b = ".Length
+    Assert.Equal((start, start + "match a".Length, "match a"), onlySpan source)
+
+[<Fact>]
+let ``A non-exhaustive match on a pipeline is reported over the whole pipeline`` () =
+    let prefix =
+        "def mapOption\n" +
+        "  : (#some(int) | #notFound), (int -> string) -> (#some(string) | #notFound)\n" +
+        "  = { | #some(a), f -> #some(f(a))\n" +
+        "      | #notFound, _ -> #notFound }\n" +
+        "def getData: () -> #some(int) | #notFound = { #notFound }\n" +
+        "def b = "
+    let head = "match getData() \\mapOption { n: int -> \"{n}\" }"
+    let source = prefix + head + "\n  | #some(s) -> s\n"
+    Assert.Equal((prefix.Length, prefix.Length + head.Length, head), onlySpan source)
+
+[<Fact>]
+let ``A non-exhaustive lambda that matches its arguments is reported at its opening brace`` () =
+    let prefix = "def f: (#some(int) | #none) -> int = "
+    let source = prefix + "{ | #some(n) -> n }\n"
+    Assert.Equal((prefix.Length, prefix.Length + 1, "{"), onlySpan source)
+    // A lambda that takes its parameters apart with patterns is reported at the patterns.
+    let prefix = "def g: int, (#some(int) | #none), (#some(int) | #none) -> int = { a, "
+    let source = prefix + "#some(n), #some(m) -> a + n + m }\n"
+    Assert.Equal((prefix.Length, prefix.Length + "#some(n), #some(m)".Length, "#some(n), #some(m)"), onlySpan source)
+    // A `for` loop's arms are reported at the first `|`.
+    let prefix = "def h: list(#some(int) | #none) -> () = { xs -> for xs "
+    let source = prefix + "| #some(_) -> () }\n"
+    Assert.Equal((prefix.Length, prefix.Length + 1, "|"), onlySpan source)
 
 [<Fact>]
 let ``Matches that cover every value pass, however the arms split them`` () =
