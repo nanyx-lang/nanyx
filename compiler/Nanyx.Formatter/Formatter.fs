@@ -237,29 +237,31 @@ let format (options: Options) (parsed: SourceModule) : string =
                 i <- i + 1
         List.ofSeq runs
 
-    /// The pattern of a destructuring def as written, with its spacing made regular.
+    /// The pattern of a destructuring def as written, from after `def` to the `=` outside any brackets, with its
+    /// spacing made regular. It keeps the form it was written in: `def (x, y) =` or `def x, y =`.
     let writtenPattern (span: SourceSpan) =
         if not (valid span) then
             None
         else
             let defAt = source.IndexOf("def", span.Start, StringComparison.Ordinal)
-            let openAt = if defAt >= 0 && defAt < span.End then source.IndexOf('(', defAt) else -1
-            if openAt < 0 || openAt >= span.End then
+            if defAt < 0 || defAt >= span.End then
                 None
             else
+                let startAt = defAt + 3
                 let mutable depth = 0
-                let mutable closeAt = -1
-                let mutable i = openAt
-                while closeAt < 0 && i < span.End do
-                    if source[i] = '(' then depth <- depth + 1
-                    elif source[i] = ')' then
-                        depth <- depth - 1
-                        if depth = 0 then closeAt <- i
+                let mutable equalsAt = -1
+                let mutable i = startAt
+                while equalsAt < 0 && i < span.End do
+                    match source[i] with
+                    | '(' -> depth <- depth + 1
+                    | ')' -> depth <- depth - 1
+                    | '=' when depth = 0 -> equalsAt <- i
+                    | _ -> ()
                     i <- i + 1
-                if closeAt < 0 then
+                if equalsAt < 0 then
                     None
                 else
-                    Some(Regex.Replace(source.Substring(openAt, closeAt - openAt + 1), @"\s+", "").Replace(",", ", "))
+                    Some(Regex.Replace(source.Substring(startAt, equalsAt - startAt), @"\s+", "").Replace(",", ", "))
 
     /// The pattern of a destructuring def, rebuilt from the defs it stands for when the source cannot be read.
     let rebuiltPattern (bindings: Def list) =

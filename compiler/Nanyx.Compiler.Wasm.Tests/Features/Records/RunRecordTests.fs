@@ -55,6 +55,20 @@ let ``Run - tuple destructuring with def`` () =
     runSource source |> assertRan "10,20\n1+2=3\nAda 36\n"
 
 [<Fact>]
+let ``Run - tuple destructuring with def and no brackets`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def a, b = (1, 2)\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def x, (name, age) = (10, (\"Ada\", 36))\n" +
+        "  println(\"{a}+{b}={a + b}\")\n" +
+        "  println(name ++ \" {age} {x}\")\n" +
+        "}\n"
+    runSource source |> assertRan "1+2=3\nAda 36 10\n"
+
+[<Fact>]
 let ``Run - with record update`` () =
     // Regression: `alice with age = 31` was a parse error (#40).
     let source =
