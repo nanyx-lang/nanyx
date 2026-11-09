@@ -8,7 +8,7 @@ namespace Nanyx.LanguageServer;
 /// <param name="Linters">
 /// Which linters run on each document and how serious their diagnostics are. When <c>null</c>, a document in a package
 /// gets the linters its <c>.nyxpack</c> manifest configures, as <c>nanyx build</c> does, and any other document those
-/// its <c>::linter</c> directives configure, or none if it has none, as <c>nanyx run</c> does for a script.
+/// its <c>::linters</c> directives configure, or none if it has none, as <c>nanyx run</c> does for a script.
 /// </param>
 /// <param name="StandardLibrarySource">
 /// Where the standard library's source is written for the editor to open; under the user's local application data

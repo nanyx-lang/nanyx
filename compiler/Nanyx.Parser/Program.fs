@@ -1381,14 +1381,20 @@ type SourceModule =
       /// The source the spans index into: line endings normalised to `\n`, trailing whitespace removed.
       Source: string }
 
-/// A `::` directive at the top of a script, which says what a package manifest would: `::linter default`.
+/// A `::` directive at the top of a script, which says what a package manifest would, as the manifest's own dotted key
+/// would: `::linters.default` is the table `[linters.default]`, and `::formatter.lineWidth = 80` sets `lineWidth = 80`
+/// in `[formatter]`.
 type Directive =
-    { /// The word after `::`: `linter`, say. Empty when there is none.
-      Name: string
-      /// The words after the name.
-      Arguments: string list
+    { /// The parts of the dotted key after `::`: `[ "linters"; "default" ]`. Empty when the key is missing or is not
+      /// a dotted key of names.
+      Key: string list
+      /// What comes after `=`, as written: a TOML value such as `80` or `"error"`. None for a table, which has no `=`.
+      Value: string option
       /// The line, from `::` to its end.
       Span: SourceSpan }
+
+    /// The key as written, `linters.default`.
+    member this.Name = String.Join(".", this.Key)
 
 /// The lines at the top of a file that are not code: an optional `#!` line, then `::` directives, among blank lines
 /// and `--` comments. They end at the first line of code, so they are read without parsing the file, and the parser
@@ -1415,6 +1421,9 @@ module Directives =
 
     let private normalize (source: string) = source.Replace("\r\n", "\n").Replace("\r", "\n")
 
+    /// One part of a directive's dotted key: a bare TOML key.
+    let private keyPart = System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9_-]+$")
+
     /// The directives at the top of the file at `filePath`, whose text is `source`.
     let read (filePath: string) (source: string) : Directive list =
         let source = normalize source
@@ -1422,12 +1431,14 @@ module Directives =
         |> List.filter (fun (_, (start, _)) -> String.CompareOrdinal(source, start, "::", 0, 2) = 0)
         |> List.map (fun (line, (start, finish)) ->
             let text = source.Substring(start, finish - start).TrimEnd()
-            let name, arguments =
-                match text.Substring(2).Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries) |> List.ofArray with
-                | name :: arguments -> name, arguments
-                | [] -> "", []
-            { Name = name
-              Arguments = arguments
+            let body = text.Substring 2
+            let keyText, value =
+                match body.IndexOf '=' with
+                | -1 -> body, None
+                | equals -> body.Substring(0, equals), Some(body.Substring(equals + 1).Trim())
+            let key = keyText.Trim().Split '.' |> Array.map _.Trim() |> List.ofArray
+            { Key = if key |> List.forall keyPart.IsMatch then key else []
+              Value = value
               Span = { File = filePath; Start = start; End = start + text.Length; StartLine = line; StartColumn = 0 } })
 
     /// Where the `#!` line and directives at the top of `source` (line breaks `\n`) end: the end of the last of them,

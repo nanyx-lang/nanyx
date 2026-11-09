@@ -56,7 +56,8 @@ module Manifest =
             | parent -> tryFind parent
         | several -> Result.Error $"""{directory} has more than one {extension} manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
 
-    let private describe (value: obj) =
+    /// A TOML value as an error message names it.
+    let describe (value: obj) =
         match value with
         | :? int64 as n -> string n
         | :? string as s -> $"the string \"{s}\""
@@ -252,10 +253,11 @@ module Package =
     let directiveErrors (manifestPath: string) (filePath: string) (source: string) : Diagnostic list =
         Directives.read (Path.GetFullPath filePath) source
         |> List.map (fun directive ->
+            let name = if directive.Key.IsEmpty then "a :: line" else $"::{directive.Name}"
             Diagnostics.at
                 DiagnosticCodes.DirectiveInPackage
                 directive.Span
-                $"::{directive.Name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
+                $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
 
     /// Checks every source file of `package`, running the linters its manifest turns on over each.
     let build (package: Package) : PackageBuild =

@@ -20,18 +20,20 @@ let rec manifestIn (directory: string) : Result<string option, string> =
         | parent -> manifestIn parent
     | several -> Result.Error $"""{directory} has more than one .nyxpack manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
 
+/// A TOML value as an error message names it.
+let private describe (value: obj) =
+    match value with
+    | :? int64 as n -> string n
+    | :? string as s -> $"the string \"{s}\""
+    | :? float -> "a float"
+    | :? bool -> "a boolean"
+    | :? TomlTable -> "a table"
+    | :? TomlArray -> "an array"
+    | _ -> "a date or time"
+
 /// The options the `[formatter]` table of the manifest at `manifest` sets, the defaults for those it leaves out, or
 /// an error naming the manifest and what is wrong.
 let read (manifest: string) : Result<Formatter.Options, string> =
-    let describe (value: obj) =
-        match value with
-        | :? int64 as n -> string n
-        | :? string as s -> $"the string \"{s}\""
-        | :? float -> "a float"
-        | :? bool -> "a boolean"
-        | :? TomlTable -> "a table"
-        | :? TomlArray -> "an array"
-        | _ -> "a date or time"
     let positive (key: string) (value: obj) =
         match value with
         | :? int64 as n when n > 0L && n <= int64 Int32.MaxValue -> Result.Ok(int n)
@@ -63,27 +65,35 @@ let forFile (path: string) : Result<Formatter.Options, string> =
         | None -> Result.Ok Formatter.Options.defaults)
 
 /// `options` with the `::formatter` directives at the top of `text`, the source of the file at `path`, applied:
-/// `::formatter lineWidth 100`. They are a script's `[formatter]` table, so a file in a package may not have any; the
+/// `::formatter.lineWidth = 100`. They are a script's `[formatter]` table, so a file in a package may not have any; the
 /// other directives are the compiler's. An error names the file, the line and the directive.
 let withDirectives (path: string) (text: string) (options: Formatter.Options) : Result<Formatter.Options, string> =
     let manifest =
         if path = "" then Result.Ok None else manifestIn (Path.GetDirectoryName(Path.GetFullPath path))
-    let directives = Parser.Program.Api.Directives.read path text |> List.filter (fun directive -> directive.Name = "formatter")
+    let directives =
+        Parser.Program.Api.Directives.read path text |> List.filter (fun directive -> List.tryHead directive.Key = Some "formatter")
     (Result.Ok options, directives)
     ||> List.fold (fun options directive ->
         options
         |> Result.bind (fun options ->
             let error message = Result.Error $"{path}:{directive.Span.StartLine + 1}:1: {message}"
-            let positive (key: string) (value: string) =
-                match Int32.TryParse value with
-                | true, n when n > 0 -> Result.Ok n
-                | _ -> error $"::formatter {key} must be a positive integer, not '{value}'"
-            match manifest, directive.Arguments with
-            | Result.Ok (Some manifest), _ -> error $"::formatter is for a script; in a package, set it in the [formatter] table of {manifest}"
-            | _, [ "lineWidth" as key; value ] -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
-            | _, [ "indentSize" as key; value ] -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
-            | _, [ key; _ ] -> error $"unknown setting ::formatter {key}; the settings are lineWidth and indentSize"
-            | _ -> error "::formatter takes a setting and its value: ::formatter lineWidth 100"))
+            let positive (key: string) (text: string) =
+                let value =
+                    try
+                        match TomlSerializer.Deserialize<TomlTable>("value = " + text, TomlSerializerOptions()).TryGetValue "value" with
+                        | true, value -> Some value
+                        | false, _ -> None
+                    with :? TomlException -> None
+                match value with
+                | Some (:? int64 as n) when n > 0L && n <= int64 Int32.MaxValue -> Result.Ok(int n)
+                | Some value -> error $"::formatter.{key} must be a positive integer, not {describe value}"
+                | None -> error $"::formatter.{key} must be a positive integer, not '{text}'"
+            match manifest, directive.Key, directive.Value with
+            | Result.Ok (Some manifest), _, _ -> error $"::formatter is for a script; in a package, set it in the [formatter] table of {manifest}"
+            | _, [ _; "lineWidth" as key ], Some value -> positive key value |> Result.map (fun n -> { options with LineWidth = n })
+            | _, [ _; "indentSize" as key ], Some value -> positive key value |> Result.map (fun n -> { options with IndentSize = n })
+            | _, [ _; key ], Some _ -> error $"unknown setting ::formatter.{key}; the settings are lineWidth and indentSize"
+            | _ -> error "::formatter takes a setting and its value: ::formatter.lineWidth = 100"))
 
 /// `forFile`, reading each manifest once, for formatting many files.
 let cached () : string -> Result<Formatter.Options, string> =
