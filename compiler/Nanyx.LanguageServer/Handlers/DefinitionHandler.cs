@@ -9,7 +9,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Goes to where the name under the cursor is declared: a value, parameter, pattern variable or import, in this
 /// document, in a source file it imports, or in the standard library (see <see cref="StandardLibrarySource"/>). On
-/// a declaration's own name it goes to that declaration. Nothing is found in a document that did not type-check.
+/// a declaration's own name it goes to that declaration. Nothing is found in a document that does not parse.
 /// </summary>
 public sealed class DefinitionHandler : DefinitionHandlerBase
 {

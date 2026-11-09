@@ -85,9 +85,9 @@ How it is built:
   `CompileResult.Typed` holds it beside the errors, and `CompileResult.TypeChecked` says whether there were any. The
   linters only look at a module that type-checked. A module whose imports have errors is still not typed, and
   an import with errors fails its importer with them.
-- **The editor** still reads the last text that type-checked for hover, completion and type hints while the current
-  one does not (`OpenDocument.LastGood`). Reading the current text's partly typed module instead, with `???` where it
-  failed, is a choice for the language server to make.
+- **The editor** reads the current text's partly typed module for hover, completion and type hints, with `???` where
+  an error left a type unknown; only while the text does not parse does it read the last text that was typed
+  (`OpenDocument.LastGood`). See [the language server](language-server.md).
 
 This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
 editor, which sees every error in a module, and hover types and completions past the first one. It is also where

@@ -9,7 +9,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// The outline of a document: its top-level defs, types, contexts and module blocks, each with the local defs,
 /// fields or members declared inside it (see <c>NyxCompiler.Outline</c>). A text that does not parse shows the
-/// outline of the last text that type-checked, less the top-level items edited since.
+/// outline of the last text that was typed, less the top-level items edited since.
 /// </summary>
 public sealed class DocumentSymbolHandler : DocumentSymbolHandlerBase
 {

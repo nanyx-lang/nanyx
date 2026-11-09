@@ -37,16 +37,20 @@ what the compiler keeps: exact spans, resolved names and types.
   written has no type rather than that of the rest of the workflow. Each document
   is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A
   declared signature or doc comment needs name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)),
-  and a file that has never type-checked shows no hover.
+  and a file that has never parsed shows no hover.
 - **Hover on a type's name shows its definition** ([#297](https://github.com/nanyx-lang/nanyx/issues/297)):
   `type Point = (x: int, y: int)`, or `context Logger = (...)` for a context. The type is the one go-to-definition
   finds (`Definition.typeDefinitionAt`), in an annotation, a type definition or a signature's contexts, whether the
   module's own, an imported one or the prelude's, printed from its `TypeDefInfo` with the type printer hover uses.
   A type's parameters keep the names they are written with (`type Box(a) = (item: a)`). On a type's name this
   takes precedence over the type of an expression around it, such as the block a local def's annotation is in.
+- **A text with type or name errors is typed all the same.** The type checker recovers from them (see
+  [deferred errors](deferred-errors.md)): what checks has its type, and what does not has the error type, shown as
+  `???`. So hover, lenses, inlay hints and completion read the current text whenever it parses
+  (`OpenDocument.Typed`), errors or not.
 - **The last good compile is kept** ([#210](https://github.com/nanyx-lang/nanyx/issues/210)). While the text does
-  not type-check, hover, lenses and inlay hints read the last text of the document that did (`OpenDocument.LastGood`).
-  The client sends whole documents, so what changed since is taken as one region, between the texts' common start
+  not parse (or its imports do not check), hover, lenses, inlay hints and completion read the last text of the
+  document that was typed (`OpenDocument.LastGood`). The client sends whole documents, so what changed since is taken as one region, between the texts' common start
   and common end (`EditedRegion`); positions are mapped across it, and a top-level item that overlaps it gets
   nothing, since what that compile says about it may no longer be true. Diagnostics always come from the current
   text.
@@ -65,8 +69,9 @@ what the compiler keeps: exact spans, resolved names and types.
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). A def that writes only its contexts
   (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,
-  without a colon (`[Log] string -> ()`), rather than after the name. Like hover, they come from the last good
-  compile, so while the file is broken only the def being edited loses its lens.
+  without a colon (`[Log] string -> ()`), rather than after the name. Like hover, they come from the current text
+  when it parses, with `???` where an error left a type unknown (`α -> ???`), and from the last good compile while
+  it does not, so then only the def being edited loses its lens.
 - **Completion of the names in scope** ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), with their
   types, and the keywords. Inference records where each name can be written (`TypedModule.Scopes`,
   [#211](https://github.com/nanyx-lang/nanyx/issues/211)): a local from its def to the end of its block, a
@@ -75,7 +80,7 @@ what the compiler keeps: exact spans, resolved names and types.
   `NyxCompiler.Completion.namesInScope` gives the one symbol each name means at an offset, the nearest declaration
   winning. The handler reads the last good compile at the place nearest the cursor
   (`OpenDocument.NearestInLastGood`): a cursor in text edited since moves to where the edit starts, so a name
-  declared since that compile is not offered until the text type-checks again. Whether the cursor is in a comment
+  declared since that compile is not offered until the text parses again. Whether the cursor is in a comment
   or a string, after a dot, or naming a new def is read from the characters alone (`CompletionContext`), since the
   text being typed rarely parses.
 - **Completion after a dot** ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), triggered by typing it.
@@ -152,7 +157,7 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278)). Workspace symbols (Go to
    Symbol in Workspace) would need an index of the workspace's files, as find-references across it does.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
-   compile, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
+   parse, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
    ([#212](https://github.com/nanyx-lang/nanyx/issues/212)); record fields and module exports after a dot are
    offered ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), and import paths

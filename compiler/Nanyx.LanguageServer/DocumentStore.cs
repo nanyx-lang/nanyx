@@ -13,7 +13,7 @@ namespace Nanyx.LanguageServer;
 /// <param name="Compiled">What the compiler made of <paramref name="Text"/>; <c>null</c> if the compiler threw.</param>
 /// <param name="CompilerFailure">The exception the compiler threw, if it did.</param>
 /// <param name="PreviousGood">
-/// The last earlier text of this document that type-checked, if this one did not: see <see cref="LastGood"/>.
+/// The last earlier text of this document that was typed, if this one was not: see <see cref="LastGood"/>.
 /// </param>
 public sealed record OpenDocument(
     string Text,
@@ -35,15 +35,19 @@ public sealed record OpenDocument(
     public Outline.OutlineItem[]? Outline =>
         (_outline ??= new Lazy<Outline.OutlineItem[]?>(() => NyxCompiler.Outline.ofSource(FileName, Text)?.Value.ToArray())).Value;
 
-    /// <summary>Whether <see cref="Compiled"/> type-checked, and so has the types and symbols editor features read.</summary>
-    public bool TypeChecked => Compiled is { Syntax: not null, Typed: not null, TypeChecked: true };
+    /// <summary>
+    /// Whether <see cref="Compiled"/> has the types and symbols editor features read. A text with type or name errors
+    /// has them: the type checker types what did check, and gives what did not the type <c>???</c>. A text that does
+    /// not parse, or whose imports do not check, has none.
+    /// </summary>
+    public bool Typed => Compiled is { Syntax: not null, Typed: not null };
 
     /// <summary>
-    /// The text of this document that hover and type hints read: this one if it type-checked, or else the last one
-    /// that did, since while the user is typing the text mostly does not. <c>null</c> if no text of it has.
-    /// Diagnostics always come from this text's own compile.
+    /// The text of this document that hover, type hints and completion read: this one if it was typed, or else the
+    /// last one that was, since while the user is typing the text often does not parse. <c>null</c> if no text of it
+    /// has been. Diagnostics always come from this text's own compile.
     /// </summary>
-    public OpenDocument? LastGood => TypeChecked ? this : PreviousGood;
+    public OpenDocument? LastGood => Typed ? this : PreviousGood;
 
     /// <summary>
     /// The offset in <see cref="LastGood"/>'s text of the character at <paramref name="offset"/> in this one, or
@@ -90,7 +94,7 @@ public sealed record OpenDocument(
     /// The offset in <see cref="LastGood"/>'s text nearest to <paramref name="offset"/> in this one, for asking
     /// which names are in scope there rather than what anything's type is: an offset in text edited since maps to
     /// where the edit starts, which is in the same scope unless the edit opened or closed one. <c>null</c> if no
-    /// text of the document has type-checked.
+    /// text of the document has been typed.
     /// </summary>
     public int? NearestInLastGood(int offset)
     {
@@ -121,8 +125,8 @@ public sealed record OpenDocument(
 }
 
 /// <summary>
-/// Every document the client has open, keyed by URI, with the last compile of its text and the last one that
-/// type-checked. A document is compiled once per change, and diagnostics, hover and type hints all read that result.
+/// Every document the client has open, keyed by URI, with the last compile of its text and the last one that was
+/// typed. A document is compiled once per change, and diagnostics, hover and type hints all read that result.
 /// </summary>
 public sealed class DocumentStore
 {
@@ -140,7 +144,7 @@ public sealed class DocumentStore
     public OpenDocument Update(DocumentUri uri, string text)
     {
         var document = Compile(uri, text);
-        if (!document.TypeChecked && TryGet(uri)?.LastGood is { } lastGood)
+        if (!document.Typed && TryGet(uri)?.LastGood is { } lastGood)
         {
             document = document with { PreviousGood = lastGood };
         }
