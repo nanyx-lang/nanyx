@@ -230,7 +230,10 @@ as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once,
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
 or an interpolated string among a call's arguments, say) is one temporary whose value is the whole sequence, stores
 and all, so nothing waits on the stack across a store. Record layouts and function table slots are numbered as
-functions are emitted, in definition order, each definition followed by its specialisations.
+functions are emitted, in definition order, each definition followed by its specialisations. What the module needs
+besides its functions comes from the IR of exactly the functions it emits (`CoreIrFacts.fs`): the tags it numbers
+(sorted by name, so every case of a tag type a hole prints has one), the string literals in its data segment, and the
+host imports and helpers `dbg` calls. The heap is set up when some function calls `$alloc`.
 
 **What cannot be compiled.** Every function is compiled from the IR; there is no other way. What the IR cannot lower
 (`use ... in`, a local function, `==` on records and lists, `dbg` of a record, and the like) is an error,

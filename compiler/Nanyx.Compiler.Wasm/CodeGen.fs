@@ -72,11 +72,6 @@ let private isNominalTypeName (name: string) =
     let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
     own.StartsWith "$"
 
-let private flattenCallArgs (args: Expression list) =
-    match args with
-    | [Kind (TupleExpr items)] -> items
-    | _ -> args
-
 /// The function-table slot of a top-level function used as a value, assigning one on first use.
 let private functionValueSlot (table: FunctionTable) (name: string) (arity: int) : int =
     match table.Values.TryGetValue name with
@@ -86,54 +81,6 @@ let private functionValueSlot (table: FunctionTable) (name: string) (arity: int)
         table.NextSlot <- slot + 1
         table.Values.[name] <- (sanitizeIdentifier name, slot, arity)
         slot
-
-let rec private collectExprLocalNames (expr: Expression) : string list =
-    match expr.Kind with
-    | Block statements -> collectStatementLocalNames statements
-    | BinaryOp(_, left, right) -> (collectExprLocalNames left) @ (collectExprLocalNames right)
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        (collectExprLocalNames cond) @ (collectExprLocalNames thenExpr) @ (collectExprLocalNames elseExpr)
-    | FunctionCall(_, _, args) -> args |> List.collect collectExprLocalNames
-    | Lambda(_, body) -> collectExprLocalNames body
-    | Pipe(value, _, _, args) -> (collectExprLocalNames value) @ (args |> List.collect collectExprLocalNames)
-    | TupleExpr items
-    | ListExpr items -> items |> List.collect collectExprLocalNames
-    | RecordExpr fields ->
-        fields
-        |> List.collect (function
-            | NamedField(_, value) -> collectExprLocalNames value
-            | PositionalField value -> collectExprLocalNames value)
-    | Except(value, arms) -> collectExprLocalNames { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        let valueLocals = values |> List.collect collectExprLocalNames
-        let armLocals =
-            arms
-            |> List.collect (fun (_, armExpr) -> collectExprLocalNames armExpr)
-        valueLocals @ armLocals
-    | UseIn(_, body) -> collectExprLocalNames body
-    | MemberAccess(inner, _, _) -> collectExprLocalNames inner
-    | ContextMemberAccess(_, _) -> []
-    | ContextMemberCall(_, _, args) -> args |> List.collect collectExprLocalNames
-    | TagExpr(_, payload) -> payload |> Option.map collectExprLocalNames |> Option.defaultValue []
-    | InterpolatedString parts ->
-        parts
-        |> List.collect (function
-            | StringText _ -> []
-            | StringExpr inner -> collectExprLocalNames inner)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> collectExprLocalNames value
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
-
-and private collectStatementLocalNames (statements: Statement list) : string list =
-    statements |> List.map _.Kind
-    |> List.collect (function
-        | DefStatement(_, name, _, rhs) -> name :: collectExprLocalNames rhs
-        | ExprStatement expr -> collectExprLocalNames expr
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> [])
 
 let private sanitizeImportSuffix (name: string) = sanitizeIdentifier name
 
@@ -171,558 +118,6 @@ let private recordLayoutId (table: RecordTable) (fieldNames: string list) =
         let id = layouts.Count + 1
         layouts.[fieldNames] <- id
         id
-
-/// The immediate sub-expressions of `expr`, for traversals that only need to look inside.
-let private exprChildren (expr: Expression) : Expression list =
-    match expr.Kind with
-    | InterpolatedString parts ->
-        parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None)
-    | Block statements ->
-        statements |> List.map _.Kind
-        |> List.choose (function
-            | DefStatement(_, _, _, rhs) -> Some rhs
-            | ExprStatement value -> Some value
-            | _ -> None)
-    | BinaryOp(_, left, right) -> [ left; right ]
-    | IfExpr(cond, thenExpr, elseExpr) -> [ cond; thenExpr; elseExpr ]
-    | FunctionCall(_, _, args) -> args
-    | Lambda(_, body) -> [ body ]
-    | Pipe(value, _, _, args) -> value :: args
-    | TupleExpr items
-    | ListExpr items -> items
-    | RecordExpr fields ->
-        fields
-        |> List.map (function
-            | NamedField(_, value) -> value
-            | PositionalField value -> value)
-    | Except(value, arms) -> value :: Pattern.armExpressions arms @ (arms |> List.map snd)
-    | Match(values, arms) -> values @ Pattern.armExpressions arms @ (arms |> List.map snd)
-    | UseIn(_, body) -> [ body ]
-    | MemberAccess(inner, _, _) -> [ inner ]
-    | TagExpr(_, payload) -> Option.toList payload
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> [ value ]
-    | ContextMemberCall(_, _, args) -> args
-    | ContextMemberAccess(_, _)
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
-
-/// Whether `inner`, an interpolated string's hole, has the error type: the type checker could not tell what it is,
-/// because of an error deferred to run time (in a function it calls, say), so there is no way to print it.
-let private isErrorTypedHole (checkedTypes: Map<NodeId, Ty>) (inner: Expression) =
-    checkedTypes |> Map.tryFind inner.Id |> Option.exists Unifier.isError
-
-
-/// The holes in the interpolated strings of `expr` that have the error type (see `isErrorTypedHole`).
-let rec private errorTypedHoles (checkedTypes: Map<NodeId, Ty>) (expr: Expression) : Expression list =
-    let own =
-        match expr.Kind with
-        | InterpolatedString parts ->
-            parts |> List.choose (function StringExpr inner when isErrorTypedHole checkedTypes inner -> Some inner | _ -> None)
-        | _ -> []
-    own @ (exprChildren expr |> List.collect (errorTypedHoles checkedTypes))
-
-/// The values `expr` matches on that have the error type.
-let rec private errorTypedScrutinees (checkedTypes: Map<NodeId, Ty>) (expr: Expression) : Expression list =
-    let own =
-        match expr.Kind with
-        | ExpressionKind.Match(values, _) -> values |> List.filter (isErrorTypedHole checkedTypes)
-        | _ -> []
-    own @ (exprChildren expr |> List.collect (errorTypedScrutinees checkedTypes))
-
-/// True when `predicate` holds for `expr` or any expression nested inside it.
-let rec private existsExpr (predicate: Expression -> bool) (expr: Expression) : bool =
-    let recurse = existsExpr predicate
-    predicate expr
-    || match expr.Kind with
-       | FunctionCall(_, _, args) -> args |> List.exists recurse
-       | BinaryOp(_, left, right) -> recurse left || recurse right
-       | IfExpr(cond, thenExpr, elseExpr) -> recurse cond || recurse thenExpr || recurse elseExpr
-       | Block statements -> existsStatements predicate statements
-       | Lambda(_, body) -> recurse body
-       | Pipe(value, _, _, args) -> recurse value || (args |> List.exists recurse)
-       | TupleExpr items
-       | ListExpr items -> items |> List.exists recurse
-       | RecordExpr fields ->
-           fields
-           |> List.exists (function
-               | NamedField(_, value) -> recurse value
-               | PositionalField value -> recurse value)
-       | Except(value, arms) -> recurse { expr with Kind = Match([ value ], arms) }
-       | Match(values, arms) ->
-           (values @ Pattern.armExpressions arms |> List.exists recurse) || (arms |> List.exists (fun (_, armExpr) -> recurse armExpr))
-       | UseIn(_, body) -> recurse body
-       | MemberAccess(inner, _, _) -> recurse inner
-       | TagExpr(_, payload) -> payload |> Option.exists recurse
-       | InterpolatedString parts ->
-           parts
-           |> List.exists (function
-               | StringText _ -> false
-               | StringExpr inner -> recurse inner)
-       | WorkflowBindExpr(_, value)
-       | WorkflowReturnExpr value -> recurse value
-       | ContextMemberCall(_, _, args) -> args |> List.exists recurse
-       | ContextMemberAccess(_, _)
-       | UnitExpr
-       | LiteralExpr _
-       | IdentifierExpr _ -> false
-
-and private existsStatements (predicate: Expression -> bool) (statements: Statement list) : bool =
-    statements |> List.map _.Kind
-    |> List.exists (function
-        | DefStatement(_, _, _, rhs) -> existsExpr predicate rhs
-        | ExprStatement expr -> existsExpr predicate expr
-        | UseStatement (UseValue value)
-        | UseStatement (UseContextInstance(_, value)) -> existsExpr predicate value
-        | ImportStatement _
-        | TypeDefStatement _ -> false)
-
-let rec private containsDbgCallExpr (expr: Expression) : bool =
-    match expr.Kind with
-    | FunctionCall(name, _, _) when name = "dbg" -> true
-    | FunctionCall(_, _, args) -> args |> List.exists containsDbgCallExpr
-    | BinaryOp(_, left, right) -> containsDbgCallExpr left || containsDbgCallExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        containsDbgCallExpr cond || containsDbgCallExpr thenExpr || containsDbgCallExpr elseExpr
-    | Block statements -> containsDbgCallStatements statements
-    | Lambda(_, body) -> containsDbgCallExpr body
-    | Pipe(value, _, _, args) -> containsDbgCallExpr value || (args |> List.exists containsDbgCallExpr)
-    | TupleExpr items
-    | ListExpr items -> items |> List.exists containsDbgCallExpr
-    | RecordExpr fields ->
-        fields
-        |> List.exists (function
-            | NamedField(_, value) -> containsDbgCallExpr value
-            | PositionalField value -> containsDbgCallExpr value)
-    | Except(value, arms) -> containsDbgCallExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        (values @ Pattern.armExpressions arms |> List.exists containsDbgCallExpr)
-        || (arms |> List.exists (fun (_, armExpr) -> containsDbgCallExpr armExpr))
-    | UseIn(_, body) -> containsDbgCallExpr body
-    | MemberAccess(inner, _, _) -> containsDbgCallExpr inner
-    | TagExpr(_, payload) -> payload |> Option.exists containsDbgCallExpr
-    | InterpolatedString parts ->
-        parts
-        |> List.exists (function
-            | StringText _ -> false
-            | StringExpr inner -> containsDbgCallExpr inner)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> containsDbgCallExpr value
-    | ContextMemberAccess(_, _) -> false
-    | ContextMemberCall(_, _, args) -> args |> List.exists containsDbgCallExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> false
-
-and private containsDbgCallStatements (statements: Statement list) : bool =
-    statements |> List.map _.Kind
-    |> List.exists (function
-        | DefStatement(_, _, _, rhs) -> containsDbgCallExpr rhs
-        | ExprStatement expr -> containsDbgCallExpr expr
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> false)
-
-let rec private usesHeapAllocationExpr (expr: Expression) : bool =
-    match expr.Kind with
-    | TupleExpr _
-    | ListExpr _
-    | RecordExpr _
-    | FunctionCall("__closure", _, _) -> true
-    | FunctionCall(_, _, args) -> flattenCallArgs args |> List.exists usesHeapAllocationExpr
-    | BinaryOp(_, left, right) -> usesHeapAllocationExpr left || usesHeapAllocationExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        usesHeapAllocationExpr cond || usesHeapAllocationExpr thenExpr || usesHeapAllocationExpr elseExpr
-    | Block statements -> usesHeapAllocationStatements statements
-    | Lambda(_, body) -> usesHeapAllocationExpr body
-    | Pipe(value, _, _, args) -> usesHeapAllocationExpr value || (flattenCallArgs args |> List.exists usesHeapAllocationExpr)
-    | Except(value, arms) -> usesHeapAllocationExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        (values @ Pattern.armExpressions arms |> List.exists usesHeapAllocationExpr)
-        || (arms |> List.exists (fun (_, armExpr) -> usesHeapAllocationExpr armExpr))
-    | UseIn(_, body) -> usesHeapAllocationExpr body
-    | MemberAccess(inner, _, _) -> usesHeapAllocationExpr inner
-    | TagExpr(_, payload) -> payload.IsSome
-    | InterpolatedString _ -> true
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> usesHeapAllocationExpr value
-    | ContextMemberAccess(_, _) -> false
-    | ContextMemberCall(_, _, args) -> args |> List.exists usesHeapAllocationExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> false
-
-and private usesHeapAllocationStatements (statements: Statement list) : bool =
-    statements |> List.map _.Kind
-    |> List.exists (function
-        | DefStatement(_, _, _, rhs) -> usesHeapAllocationExpr rhs
-        | ExprStatement expr -> usesHeapAllocationExpr expr
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> false)
-
-let rec private collectDbgTagNamesExpr (expr: Expression) : string list =
-    let flattenDbgArgs args =
-        match args with
-        | [Kind (TupleExpr items)] -> items
-        | _ -> args
-
-    match expr.Kind with
-    | FunctionCall(name, _, args) when name = "dbg" ->
-        match flattenDbgArgs args with
-        | [Kind (TagExpr(tagName, None))] -> [ tagName ]
-        | _ -> []
-    | FunctionCall(_, _, args) -> args |> List.collect collectDbgTagNamesExpr
-    | BinaryOp(_, left, right) -> collectDbgTagNamesExpr left @ collectDbgTagNamesExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        collectDbgTagNamesExpr cond @ collectDbgTagNamesExpr thenExpr @ collectDbgTagNamesExpr elseExpr
-    | Lambda(_, body) -> collectDbgTagNamesExpr body
-    | Pipe(value, _, _, args) -> collectDbgTagNamesExpr value @ (args |> List.collect collectDbgTagNamesExpr)
-    | Block statements -> collectDbgTagNamesStatements statements
-    | TupleExpr values
-    | ListExpr values -> values |> List.collect collectDbgTagNamesExpr
-    | RecordExpr fields ->
-        fields
-        |> List.collect (function
-            | NamedField(_, value) -> collectDbgTagNamesExpr value
-            | PositionalField value -> collectDbgTagNamesExpr value)
-    | Except(value, arms) -> collectDbgTagNamesExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        let valueTags = values @ Pattern.armExpressions arms |> List.collect collectDbgTagNamesExpr
-        let armTags = arms |> List.collect (fun (_, armExpr) -> collectDbgTagNamesExpr armExpr)
-        valueTags @ armTags
-    | UseIn(_, body) -> collectDbgTagNamesExpr body
-    | MemberAccess(value, _, _) -> collectDbgTagNamesExpr value
-    | TagExpr(_, payload) -> payload |> Option.map collectDbgTagNamesExpr |> Option.defaultValue []
-    | InterpolatedString parts ->
-        parts
-        |> List.collect (function
-            | StringText _ -> []
-            | StringExpr value -> collectDbgTagNamesExpr value)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> collectDbgTagNamesExpr value
-    | ContextMemberAccess(_, _) -> []
-    | ContextMemberCall(_, _, args) -> args |> List.collect collectDbgTagNamesExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
-
-and private collectStringLiteralsExpr (expr: Expression) : string list =
-    match expr.Kind with
-    | LiteralExpr(StringLit value) -> [ value ]
-    | Block statements -> collectStringLiteralsStatements statements
-    | BinaryOp(_, left, right) -> collectStringLiteralsExpr left @ collectStringLiteralsExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        collectStringLiteralsExpr cond @ collectStringLiteralsExpr thenExpr @ collectStringLiteralsExpr elseExpr
-    | FunctionCall(_, _, args) -> args |> List.collect collectStringLiteralsExpr
-    | Lambda(_, body) -> collectStringLiteralsExpr body
-    | Pipe(value, _, _, args) -> collectStringLiteralsExpr value @ (args |> List.collect collectStringLiteralsExpr)
-    | TupleExpr items
-    | ListExpr items -> items |> List.collect collectStringLiteralsExpr
-    | RecordExpr fields ->
-        fields
-        |> List.collect (function
-            | NamedField(_, value) -> collectStringLiteralsExpr value
-            | PositionalField value -> collectStringLiteralsExpr value)
-    | Except(value, arms) -> collectStringLiteralsExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        let valueStrings = values |> List.collect collectStringLiteralsExpr
-        let armStrings =
-            arms
-            |> List.collect (fun (patterns, armExpr) ->
-                (patterns |> List.collect collectStringLiteralsPattern) @ collectStringLiteralsExpr armExpr)
-        valueStrings @ armStrings
-    | UseIn(_, body) -> collectStringLiteralsExpr body
-    | MemberAccess(inner, _, _) -> collectStringLiteralsExpr inner
-    | TagExpr(_, payload) -> payload |> Option.map collectStringLiteralsExpr |> Option.defaultValue []
-    | InterpolatedString parts ->
-        // Literals inside `{...}` holes need data-segment offsets like any other literal.
-        parts
-        |> List.collect (function
-            | StringText _ -> []
-            | StringExpr value -> collectStringLiteralsExpr value)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> collectStringLiteralsExpr value
-    | ContextMemberAccess(_, _) -> []
-    | ContextMemberCall(_, _, args) -> args |> List.collect collectStringLiteralsExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
-
-/// String literals that appear inside patterns (`| "Sat" -> ...`, `| #name("x") -> ...`) need data-segment
-/// offsets just like literals in expressions.
-and private collectStringLiteralsPattern (pattern: Pattern) : string list =
-    match pattern.Kind with
-    | LiteralPattern(StringLit value) -> [ value ]
-    | TagPattern(_, Some payload) -> collectStringLiteralsPattern payload
-    | TuplePattern patterns
-    | AndPattern patterns
-    | ListPattern(patterns, _) -> patterns |> List.collect collectStringLiteralsPattern
-    | ListSplatMiddle(beforePatterns, afterPatterns) ->
-        (beforePatterns |> List.collect collectStringLiteralsPattern)
-        @ (afterPatterns |> List.collect collectStringLiteralsPattern)
-    | RecordPattern(_, patterns) -> patterns |> List.collect collectStringLiteralsPattern
-    | RecordMemberPattern members -> members |> List.collect (fun (_, p) -> collectStringLiteralsPattern p)
-    | GuardPattern value
-    | RangePattern(value, _) -> collectStringLiteralsExpr value
-    | TagPattern(_, None)
-    | LiteralPattern _
-    | IdentifierPattern _
-    | WildcardPattern
-    | UnitPattern
-    | ElsePattern -> []
-
-and private collectStringLiteralsStatements (statements: Statement list) : string list =
-    statements |> List.map _.Kind
-    |> List.collect (function
-        | DefStatement(_, _, _, rhs) -> collectStringLiteralsExpr rhs
-        | ExprStatement expr -> collectStringLiteralsExpr expr
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> [])
-
-and private collectDbgTagNamesStatements (statements: Statement list) : string list =
-    statements |> List.map _.Kind
-    |> List.collect (function
-        | DefStatement(_, _, _, value) -> collectDbgTagNamesExpr value
-        | ExprStatement value -> collectDbgTagNamesExpr value
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> [])
-
-let rec private collectDbgTagPayloadNamesExpr (expr: Expression) : string list =
-    let flattenDbgArgs args =
-        match args with
-        | [Kind (TupleExpr items)] -> items
-        | _ -> args
-
-    match expr.Kind with
-    | FunctionCall(name, _, args) when name = "dbg" ->
-        match flattenDbgArgs args with
-        | [Kind (TagExpr(tagName, Some _))] -> [ tagName ]
-        | _ -> []
-    | FunctionCall(_, _, args) -> args |> List.collect collectDbgTagPayloadNamesExpr
-    | BinaryOp(_, left, right) -> collectDbgTagPayloadNamesExpr left @ collectDbgTagPayloadNamesExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        collectDbgTagPayloadNamesExpr cond @ collectDbgTagPayloadNamesExpr thenExpr @ collectDbgTagPayloadNamesExpr elseExpr
-    | Lambda(_, body) -> collectDbgTagPayloadNamesExpr body
-    | Pipe(value, _, _, args) -> collectDbgTagPayloadNamesExpr value @ (args |> List.collect collectDbgTagPayloadNamesExpr)
-    | Block statements -> collectDbgTagPayloadNamesStatements statements
-    | TupleExpr values
-    | ListExpr values -> values |> List.collect collectDbgTagPayloadNamesExpr
-    | RecordExpr fields ->
-        fields
-        |> List.collect (function
-            | NamedField(_, value) -> collectDbgTagPayloadNamesExpr value
-            | PositionalField value -> collectDbgTagPayloadNamesExpr value)
-    | Except(value, arms) -> collectDbgTagPayloadNamesExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        let valueTags = values @ Pattern.armExpressions arms |> List.collect collectDbgTagPayloadNamesExpr
-        let armTags = arms |> List.collect (fun (_, armExpr) -> collectDbgTagPayloadNamesExpr armExpr)
-        valueTags @ armTags
-    | UseIn(_, body) -> collectDbgTagPayloadNamesExpr body
-    | MemberAccess(value, _, _) -> collectDbgTagPayloadNamesExpr value
-    | TagExpr(_, payload) -> payload |> Option.map collectDbgTagPayloadNamesExpr |> Option.defaultValue []
-    | InterpolatedString parts ->
-        parts
-        |> List.collect (function
-            | StringText _ -> []
-            | StringExpr value -> collectDbgTagPayloadNamesExpr value)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> collectDbgTagPayloadNamesExpr value
-    | ContextMemberAccess(_, _) -> []
-    | ContextMemberCall(_, _, args) -> args |> List.collect collectDbgTagPayloadNamesExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
-
-and private collectDbgTagPayloadNamesStatements (statements: Statement list) : string list =
-    statements |> List.map _.Kind
-    |> List.collect (function
-        | DefStatement(_, _, _, value) -> collectDbgTagPayloadNamesExpr value
-        | ExprStatement value -> collectDbgTagPayloadNamesExpr value
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> [])
-
-let rec private containsRegularDbgExpr (expr: Expression) : bool =
-    let flattenDbgArgs args =
-        match args with
-        | [Kind (TupleExpr items)] -> items
-        | _ -> args
-
-    match expr.Kind with
-    | FunctionCall(name, _, args) when name = "dbg" ->
-        match flattenDbgArgs args with
-        | [Kind (TagExpr(_, None))] -> false
-        | _ -> true
-    | FunctionCall(_, _, args) -> args |> List.exists containsRegularDbgExpr
-    | BinaryOp(_, left, right) -> containsRegularDbgExpr left || containsRegularDbgExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        containsRegularDbgExpr cond || containsRegularDbgExpr thenExpr || containsRegularDbgExpr elseExpr
-    | Lambda(_, body) -> containsRegularDbgExpr body
-    | Pipe(value, _, _, args) -> containsRegularDbgExpr value || (args |> List.exists containsRegularDbgExpr)
-    | Block statements -> containsRegularDbgStatements statements
-    | TupleExpr values
-    | ListExpr values -> values |> List.exists containsRegularDbgExpr
-    | RecordExpr fields ->
-        fields
-        |> List.exists (function
-            | NamedField(_, value) -> containsRegularDbgExpr value
-            | PositionalField value -> containsRegularDbgExpr value)
-    | Except(value, arms) -> containsRegularDbgExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        (values @ Pattern.armExpressions arms |> List.exists containsRegularDbgExpr)
-        || (arms |> List.exists (fun (_, armExpr) -> containsRegularDbgExpr armExpr))
-    | UseIn(_, body) -> containsRegularDbgExpr body
-    | MemberAccess(value, _, _) -> containsRegularDbgExpr value
-    | TagExpr(_, payload) -> payload |> Option.exists containsRegularDbgExpr
-    | InterpolatedString parts ->
-        parts
-        |> List.exists (function
-            | StringText _ -> false
-            | StringExpr value -> containsRegularDbgExpr value)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> containsRegularDbgExpr value
-    | ContextMemberAccess(_, _) -> false
-    | ContextMemberCall(_, _, args) -> args |> List.exists containsRegularDbgExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> false
-
-and private containsDbgStringLiteralExpr (expr: Expression) : bool =
-    let flattenDbgArgs args =
-        match args with
-        | [Kind (TupleExpr items)] -> items
-        | _ -> args
-
-    match expr.Kind with
-    | FunctionCall(name, _, args) when name = "dbg" ->
-        match flattenDbgArgs args with
-        | [Kind (LiteralExpr(StringLit _))] -> true
-        | _ -> false
-    | FunctionCall(_, _, args) -> args |> List.exists containsDbgStringLiteralExpr
-    | BinaryOp(_, left, right) -> containsDbgStringLiteralExpr left || containsDbgStringLiteralExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        containsDbgStringLiteralExpr cond || containsDbgStringLiteralExpr thenExpr || containsDbgStringLiteralExpr elseExpr
-    | Lambda(_, body) -> containsDbgStringLiteralExpr body
-    | Pipe(value, _, _, args) -> containsDbgStringLiteralExpr value || (args |> List.exists containsDbgStringLiteralExpr)
-    | Block statements -> statements |> List.map _.Kind |> List.exists (function
-        | DefStatement(_, _, _, rhs) -> containsDbgStringLiteralExpr rhs
-        | ExprStatement expr -> containsDbgStringLiteralExpr expr
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> false)
-    | TupleExpr values
-    | ListExpr values -> values |> List.exists containsDbgStringLiteralExpr
-    | RecordExpr fields ->
-        fields
-        |> List.exists (function
-            | NamedField(_, value) -> containsDbgStringLiteralExpr value
-            | PositionalField value -> containsDbgStringLiteralExpr value)
-    | Except(value, arms) -> containsDbgStringLiteralExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        (values @ Pattern.armExpressions arms |> List.exists containsDbgStringLiteralExpr)
-        || (arms |> List.exists (fun (_, armExpr) -> containsDbgStringLiteralExpr armExpr))
-    | UseIn(_, body) -> containsDbgStringLiteralExpr body
-    | MemberAccess(value, _, _) -> containsDbgStringLiteralExpr value
-    | TagExpr(_, payload) -> payload |> Option.exists containsDbgStringLiteralExpr
-    | InterpolatedString parts ->
-        parts
-        |> List.exists (function
-            | StringText _ -> false
-            | StringExpr inner -> containsDbgStringLiteralExpr inner)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> containsDbgStringLiteralExpr value
-    | ContextMemberAccess(_, _) -> false
-    | ContextMemberCall(_, _, args) -> args |> List.exists containsDbgStringLiteralExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> false
-
-and private containsRegularDbgStatements (statements: Statement list) : bool =
-    statements |> List.map _.Kind
-    |> List.exists (function
-        | DefStatement(_, _, _, value) -> containsRegularDbgExpr value
-        | ExprStatement value -> containsRegularDbgExpr value
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> false)
-
-let rec private collectTagNamesExpr (expr: Expression) : string list =
-    match expr.Kind with
-    | TagExpr(name, payload) ->
-        match payload with
-        | Some value -> name :: collectTagNamesExpr value
-        | None -> [ name ]
-    | BinaryOp(_, left, right) -> collectTagNamesExpr left @ collectTagNamesExpr right
-    | IfExpr(cond, thenExpr, elseExpr) ->
-        collectTagNamesExpr cond @ collectTagNamesExpr thenExpr @ collectTagNamesExpr elseExpr
-    | FunctionCall(_, _, args) -> args |> List.collect collectTagNamesExpr
-    | Lambda(_, body) -> collectTagNamesExpr body
-    | Pipe(value, _, _, args) -> collectTagNamesExpr value @ (args |> List.collect collectTagNamesExpr)
-    | Block statements -> collectTagNamesStatements statements
-    | TupleExpr values
-    | ListExpr values -> values |> List.collect collectTagNamesExpr
-    | RecordExpr fields ->
-        fields
-        |> List.collect (function
-            | NamedField(_, value) -> collectTagNamesExpr value
-            | PositionalField value -> collectTagNamesExpr value)
-    | Except(value, arms) -> collectTagNamesExpr { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        let valueTags = values |> List.collect collectTagNamesExpr
-        let armTags =
-            arms
-            |> List.collect (fun (patterns, armExpr) ->
-                (patterns |> List.collect collectTagNamesPattern) @ (collectTagNamesExpr armExpr))
-        valueTags @ armTags
-    | UseIn(_, body) -> collectTagNamesExpr body
-    | MemberAccess(value, _, _) -> collectTagNamesExpr value
-    | InterpolatedString parts ->
-        parts
-        |> List.collect (function
-            | StringText _ -> []
-            | StringExpr value -> collectTagNamesExpr value)
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> collectTagNamesExpr value
-    | ContextMemberAccess(_, _) -> []
-    | ContextMemberCall(_, _, args) -> args |> List.collect collectTagNamesExpr
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
-
-and private collectTagNamesStatements (statements: Statement list) : string list =
-    statements |> List.map _.Kind
-    |> List.collect (function
-        | DefStatement(_, _, _, value) -> collectTagNamesExpr value
-        | ExprStatement value -> collectTagNamesExpr value
-        | ImportStatement _
-        | TypeDefStatement _
-        | UseStatement _ -> [])
-
-and private collectTagNamesPattern (pattern: Pattern) : string list =
-    match pattern.Kind with
-    | TagPattern(tagName, payloadOpt) ->
-        match payloadOpt with
-        | Some payload -> tagName :: collectTagNamesPattern payload
-        | None -> [ tagName ]
-    | TuplePattern patterns
-    | AndPattern patterns
-    | ListPattern(patterns, _) -> patterns |> List.collect collectTagNamesPattern
-    | ListSplatMiddle(beforePatterns, afterPatterns) ->
-        (beforePatterns |> List.collect collectTagNamesPattern)
-        @ (afterPatterns |> List.collect collectTagNamesPattern)
-    | RecordPattern(_, patterns) -> patterns |> List.collect collectTagNamesPattern
-    | RecordMemberPattern members -> members |> List.collect (fun (_, p) -> collectTagNamesPattern p)
-    | GuardPattern value
-    | RangePattern(value, _) -> collectTagNamesExpr value
-    | LiteralPattern _
-    | IdentifierPattern _
-    | WildcardPattern
-    | UnitPattern
-    | ElsePattern -> []
 
 /// Where a call to `name`, the call at node `callId`, finds each member of the contexts the callee requires, in the
 /// order it requires them, given the keys of the members in scope there (`scopeKeys`). Each is found where the type
@@ -948,48 +343,6 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
 
     let usedHelpers = System.Collections.Generic.HashSet<string>()
 
-    let moduleUsesDbg =
-        (defs |> List.exists (fun (_, _, expr) -> containsDbgCallExpr expr)) ||
-        (topLevelExprs |> List.exists containsDbgCallExpr)
-    let moduleUsesRegularDbg =
-        (defs |> List.exists (fun (_, _, expr) -> containsRegularDbgExpr expr)) ||
-        (topLevelExprs |> List.exists containsRegularDbgExpr)
-    let moduleUsesDbgString = 
-        (defs |> List.exists (fun (_, _, expr) -> containsDbgStringLiteralExpr expr)) ||
-        (topLevelExprs |> List.exists containsDbgStringLiteralExpr)
-    let moduleUsesHeap = 
-        (defs |> List.exists (fun (_, _, expr) -> usesHeapAllocationExpr expr)) ||
-        (topLevelExprs |> List.exists usesHeapAllocationExpr)
-    let dbgTagNames =
-        (defs |> List.collect (fun (_, _, expr) -> collectDbgTagNamesExpr expr)) @
-         (topLevelExprs |> List.collect collectDbgTagNamesExpr)
-        |> List.distinct
-        |> List.sort
-    let dbgTagPayloadNames =
-        (defs |> List.collect (fun (_, _, expr) -> collectDbgTagPayloadNamesExpr expr)) @
-         (topLevelExprs |> List.collect collectDbgTagPayloadNamesExpr)
-        |> List.distinct
-        |> List.sort
-    let tagIdMap =
-        (defs |> List.collect (fun (_, _, expr) -> collectTagNamesExpr expr)) @
-         (topLevelExprs |> List.collect collectTagNamesExpr)
-        |> List.distinct
-        |> List.sort
-        |> List.mapi (fun index name -> name, index + 1)
-        |> Map.ofList
-
-    let stringLiterals =
-        (defs |> List.collect (fun (_, _, expr) -> collectStringLiteralsExpr expr)) @
-         (topLevelExprs |> List.collect collectStringLiteralsExpr) @
-         // What each hole or matched value of no known type writes, if a debug build reaches it.
-         ((defs |> List.map (fun (_, _, expr) -> expr)) @ topLevelExprs
-          |> List.collect (fun expr ->
-              (errorTypedHoles checkedTypes expr |> List.map (fun hole -> Interpolation.unknownHoleMessage hole.Span))
-              @ (errorTypedScrutinees checkedTypes expr |> List.map (fun value -> Interpolation.unknownScrutineeMessage value.Span))))
-        |> List.distinct
-
-    let stringLiteralMap, stringLiteralData = buildStringLiteralMap stringLiterals
-
     /// The other names a function can call the members of the contexts it requires by, each with the key it stands
     /// for: a member of a parameterised context (`Show_a_show`) by its own name (`show`), as the type checker allows,
     /// when no other context the function declares has a member of that name.
@@ -1094,29 +447,20 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
                   CoreIrLower.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
         parameters, contextMemberAliases name |> Map.ofList
 
-    let coreIrContext (layoutIds: string list -> int) (functionSlots: string -> int -> int) (indirectCalls: int -> unit) : CoreIrEmit.EmitContext =
-        { TagId =
-            fun name ->
-                match tagIdMap |> Map.tryFind name with
-                | Some id -> id
-                | None -> failwith $"Internal error: missing tag discriminant for #{name}"
-          StringOffset =
-            fun value ->
-                match stringLiteralMap |> Map.tryFind value with
-                | Some offset -> offset
-                | None -> failwith $"Internal error: missing string literal offset for {value}"
-          RecordLayoutId = layoutIds
-          FunctionSlot = functionSlots
-          IndirectCall = indirectCalls }
-
     // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported.
     let emitFromCoreIr (context: CoreIrEmit.EmitContext) (func: CoreIr.Function) =
         let exportName = if func.TypeArguments.IsEmpty then Some func.Source else None
         CoreIrEmit.emitFunction context func exportName
 
     // Every definition that is not generic, the start function, and the specialisations and lifted functions they
-    // need. Each function is emitted once here only to find out whether it can be (layouts get numbers of no
-    // consequence), and again below, in order, for real.
+    // need. Each function is emitted once here only to find out whether it can be (tags, strings and layouts get
+    // numbers of no consequence), and again below, in order, for real.
+    let probeContext: CoreIrEmit.EmitContext =
+        { TagId = (fun _ -> 0)
+          StringOffset = (fun _ -> 0)
+          RecordLayoutId = (fun _ -> 0)
+          FunctionSlot = (fun _ _ -> 0)
+          IndirectCall = ignore }
     let lowered =
         let input: CoreIrLower.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -1144,7 +488,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun name info -> TyNominal(name, info.Underlying, info.IsPrivate)) }
-        CoreIrLower.lowerModule input (emitFromCoreIr (coreIrContext (fun _ -> 0) (fun _ _ -> 0) ignore) >> ignore)
+        CoreIrLower.lowerModule input (emitFromCoreIr probeContext >> ignore)
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
@@ -1157,16 +501,6 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
         | None -> failwith message
     | [] -> ()
 
-    /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
-    let fromCoreIr (func: CoreIr.Function) =
-        let emitted =
-            emitFromCoreIr
-                (coreIrContext (recordLayoutId recordTable) (functionValueSlot functionTable) (functionTable.IndirectArities.Add >> ignore))
-                func
-        for helper in emitted.Helpers do
-            usedHelpers.Add helper |> ignore
-        emitted.Text
-
     // Each definition that is not generic, followed by the specialisations of it: a generic definition has only those.
     let definitionFunctions =
         defs
@@ -1174,17 +508,41 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             [ yield! lowered.Roots |> Map.tryFind name |> Option.map fst |> Option.toList
               yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map fst ])
 
-    let renderedFunctions = definitionFunctions |> List.map fromCoreIr |> String.concat "\n\n"
-
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLower.startFunctionName |> Option.map fst
+
+    // The tags, strings and dbg forms of exactly the functions emitted below.
+    let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
+    let tagIdMap = facts.Tags |> List.mapi (fun index name -> name, index + 1) |> Map.ofList
+    let stringLiteralMap, stringLiteralData = buildStringLiteralMap facts.Strings
+
+    let context: CoreIrEmit.EmitContext =
+        { TagId =
+            fun name ->
+                match tagIdMap |> Map.tryFind name with
+                | Some id -> id
+                | None -> failwith $"Internal error: missing tag discriminant for #{name}"
+          StringOffset =
+            fun value ->
+                match stringLiteralMap |> Map.tryFind value with
+                | Some offset -> offset
+                | None -> failwith $"Internal error: missing string literal offset for {value}"
+          RecordLayoutId = recordLayoutId recordTable
+          FunctionSlot = functionValueSlot functionTable
+          IndirectCall = functionTable.IndirectArities.Add >> ignore }
+
+    /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
+    let fromCoreIr (func: CoreIr.Function) =
+        let emitted = emitFromCoreIr context func
+        for helper in emitted.Helpers do
+            usedHelpers.Add helper |> ignore
+        emitted.Text
+
+    let renderedFunctions = definitionFunctions |> List.map fromCoreIr |> String.concat "\n\n"
 
     let renderedStartFunction, startDirective =
         match startFunction with
         | Some func ->
-            let emitted =
-                CoreIrEmit.emitStart
-                    (coreIrContext (recordLayoutId recordTable) (functionValueSlot functionTable) (functionTable.IndirectArities.Add >> ignore))
-                    func
+            let emitted = CoreIrEmit.emitStart context func
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
             emitted.Text, "  (start $__nanyx_start)"
@@ -1197,16 +555,15 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             |> List.collect (fun (name, _, _) ->
                 lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name, sanitizeIdentifier name)) }
 
-    let moduleUsesDbgHelpers = moduleUsesRegularDbg || moduleUsesDbgString
-
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     let moduleUsesStandardStreams =
         [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte ] |> List.exists usedHelperSet.Contains
     let moduleReadsStdin = usedHelperSet.Contains Helpers.readStdinByte
     // Anything that writes to stdout or stderr, or reads stdin, shares the WASI import, the memory and the
     // newline byte.
-    let moduleUsesIoHelpers = moduleUsesDbgHelpers || moduleUsesStandardStreams
-    let moduleUsesHeap = moduleUsesHeap || usedHelperSet.Contains Helpers.alloc
+    let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams
+    // Everything that allocates does it through `$alloc`.
+    let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc
     let renderedHelpers =
         helperDependencies
         |> List.map fst
@@ -1223,7 +580,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
                   "  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func $proc_exit (param i32)))"
               "  (memory 1)"
               "  (export \"memory\" (memory 0))"
-              if moduleUsesDbgHelpers then
+              if facts.UsesDbgHelpers then
                   $"  (data (i32.const {dbgDataBaseOffset}) \"dbg: \")"
                   $"  (data (i32.const {dbgStrNewlineOffset}) \"\\0a\")"
                   yield! dbgFunctions ]
@@ -1271,13 +628,13 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
         |> String.concat "\n"
 
     let dbgTagImports =
-        dbgTagNames
+        facts.DbgTags
         |> List.map (fun tagName ->
             let importName = $"dbg_tag_{sanitizeImportSuffix tagName}"
             $"  (import \"env\" \"{importName}\" (func ${importName}))")
 
     let dbgTagPayloadImports =
-        dbgTagPayloadNames
+        facts.DbgTagPayloads
         |> List.map (fun tagName ->
             let importName = $"dbg_tag_payload_{sanitizeImportSuffix tagName}"
             $"  (import \"env\" \"{importName}\" (func ${importName} (param i32)))")
