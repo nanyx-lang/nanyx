@@ -325,6 +325,14 @@ let ``A generic function over an open union, and a list's length, go through the
     Assert.Contains("List_length", report.Specialisations |> List.map snd)
 
 [<Fact>]
+let ``A type variable that nothing constrains is unit in the core IR`` () =
+    // The element of `[]` is fixed by nothing: no value of it can be made or inspected.
+    let source = "def none: () -> int = { List.length([]) }\n"
+    let _, report = compileWithReport source
+    Assert.Contains("none", report.FromCoreIr)
+    Assert.Contains("List_length__unit", report.FromCoreIr)
+
+[<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
     let source =
         "def nOf = { r -> r.n }\n" +

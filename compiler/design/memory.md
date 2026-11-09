@@ -195,6 +195,8 @@ definition whose type is concrete is lowered as it is. A call to a generic defin
 variables to the types at the call, and asks for the specialisation at those type arguments (`id__int`,
 `id__string`), which is lowered in turn with the variables replaced. Each specialisation is lowered once, however
 many calls ask for it, and a definition can have at most 32 (polymorphic recursion would otherwise never end).
+A type variable that nothing constrains (the element of `[]`, the rest of an open union no use closes) is `unit`:
+nothing can make or inspect a value of such a type.
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
 reads its fields from where they are stored rather than looking them up at run time (`__nanyx_open_field`).
 
@@ -217,7 +219,8 @@ it is written, as the old path runs it, which is what workflow blocks lower to.
 The module's top-level expressions are lowered as one more function, the start function, which evaluates each in
 turn and drops its value. A module with type or name errors is compiled all the same in a debug build: what failed to
 check is a `panic` that reports the error when it is reached, and a value of no known type because of it has a type of
-its own (still an `i32`).
+its own (still an `i32`). A definition (or top-level expression) that holds such errors and cannot be lowered because
+of them is lowered to a trap that reports them as soon as it is called, as the old path does.
 
 **Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
 as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
@@ -231,9 +234,8 @@ old path does.
 the old way (`CodeGen.fs` straight from the syntax tree) when not:
 
 - A definition falls back if it calls a specialisation that could not be lowered, or if anything else in it cannot be:
-  a body that holds an error deferred to run time and cannot be lowered because of it, which the old path compiles to a
-  trap, and the few things the IR declines to copy from the old path (`dbg` of a record, say, which prints a pointer).
-  A function and the functions it calls through the IR are kept or dropped together.
+  the few things the IR declines to copy from the old path (`==` on records, `dbg` of a record, which compare and print
+  pointers). A function and the functions it calls through the IR are kept or dropped together.
 - A generic definition is always compiled the old way too, unspecialised, for the callers that fell back. Callers
   compiled from the IR call its specialisations instead.
 - Both ways give the same calling convention, so a function from either can call one from the other. A function from
