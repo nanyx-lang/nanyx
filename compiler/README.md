@@ -140,6 +140,11 @@ the exit code is 0 on success, 1 when the program fails to compile or traps, and
 The project form (`module main` with `@entry def main = { ... }`) runs the same way: `@entry` marks the
 definition the program starts at.
 
+`run --check-memory` checks the program's reference counting as it runs (`WasmOptions.CheckMemory`). It stops
+with exit code 70 at a block freed twice or an object counted after it was freed. When the program finishes
+with blocks it never freed, it fails with 1. The Wasm tests run every program this way, so a leak anywhere fails
+a test.
+
 `println` comes from the standard library's `nanyx/console` module (see below). A script imports it
 explicitly; the module that declares `@entry` gets it implicitly, because the runtime calls the entry
 point inside its `Console` context.

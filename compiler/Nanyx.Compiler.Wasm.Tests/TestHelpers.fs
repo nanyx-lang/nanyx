@@ -20,27 +20,32 @@ let loadFeatureFile featureName fileName =
         failwith $"Test data file not found: {filePath}"
     File.ReadAllText(filePath)
 
-/// `source`, type-checked and compiled. Errors the type checker defers to run time are compiled to traps, as
-/// `nanyx run` does.
-let transpileWat (source: string) =
+/// `source`, type-checked and compiled with `options`. Errors the type checker defers to run time are compiled to
+/// traps, as `nanyx run` does.
+let transpileWatWith (options: WasmOptions) (source: string) =
     match Compiler.compile source with
-    | { Typed = Some typed } -> transpileTypedModuleToWat typed
+    | { Typed = Some typed } -> transpileTypedModuleWithOptions options typed |> fst
     | result ->
         let messages = result.Diagnostics |> List.map (fun d -> d.Message) |> String.concat "\n"
         failwith $"Compile error: {messages}"
 
+let transpileWat (source: string) = transpileWatWith WasmOptions.Default source
+
 /// How many times `text` occurs in `wat`.
 let countOccurrences (text: string) (wat: string) = Text.RegularExpressions.Regex.Matches(wat, Text.RegularExpressions.Regex.Escape text).Count
 
-let transpileWatFile (filePath: string) =
+/// The program in `filePath`, compiled with `options`; any diagnostic fails.
+let transpileWatFileWith (options: WasmOptions) (filePath: string) =
     match Compiler.compileFile filePath with
     | result when not result.Diagnostics.IsEmpty ->
         let messages = result.Diagnostics |> List.map (fun d -> d.Message) |> String.concat "\n"
         failwith $"Compile error: {messages}"
     | result ->
         match result.Typed with
-        | Some typed -> transpileTypedModuleToWat typed
+        | Some typed -> transpileTypedModuleWithOptions options typed |> fst
         | None -> failwith "Compile error: no typed module produced"
+
+let transpileWatFile (filePath: string) = transpileWatFileWith WasmOptions.Default filePath
 
 let assertFixture featureName baseName =
     let source = loadFeatureFile featureName (baseName + ".nyx")
@@ -85,8 +90,10 @@ let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome
 let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
     nanyxProcess (Some directory) "" arguments
 
+/// Runs the program in `inputPath` with its memory checked, so that every program a test runs also fails it when it
+/// frees a block twice, uses an object after freeing it, or leaves anything on the heap.
 let nanyxRunWithInput (standardInput: string) (inputPath: string) : RunOutcome =
-    nanyxWithInput standardInput [ "run"; inputPath ]
+    nanyxWithInput standardInput [ "run"; "--check-memory"; inputPath ]
 
 let nanyxRun (inputPath: string) : RunOutcome = nanyxRunWithInput "" inputPath
 
@@ -127,16 +134,22 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
 
-/// A program compiled and instantiated on Wasmtime, without WASI, with the drop functions of some types and
-/// `$heap_ptr` exported as well, and its allocator counting the blocks it hands out, so that a test can call its
-/// functions, give up what they return, and see how far the heap has grown and how often it allocated.
+/// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
+let checkedOptions = { CheckMemory = true }
+
+/// A program compiled with memory checks (see `WasmOptions.CheckMemory`), instantiated on Wasmtime with a WASI that
+/// reads nothing and writes nowhere, and its top-level code run. The drop functions of some types are exported as
+/// well, so that a test can call its functions, give up what they return, and see how far the heap has grown, how
+/// often it allocated, and how many blocks are still in use.
 type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmtime.Instance) =
     let memory = instance.GetMemory("memory")
+    let counter (name: string) = instance.GetGlobal(name).GetValue() :?> int
     member _.Call(name: string, argument: int) = instance.GetFunction<int, int>(name).Invoke argument
     member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
         instance.GetAction<int>(Transpiler.Wasm.CoreIrDrop.dropName ty).Invoke value
-    member _.HeapPointer = instance.GetGlobal("heap_ptr").GetValue() :?> int
-    member _.Allocations = instance.GetGlobal("allocations").GetValue() :?> int
+    member _.HeapPointer = counter CheckedExports.heapPointer
+    member _.Allocations = counter CheckedExports.allocations
+    member _.LiveBlocks = counter CheckedExports.liveBlocks
     member _.Word(address: int) = memory.ReadInt32(int64 address)
     member _.Text(pointer: int) = memory.ReadString(int64 pointer, memory.ReadInt32(int64 (pointer - 4)))
     interface IDisposable with
@@ -144,26 +157,24 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
             store.Dispose()
             engine.Dispose()
 
-/// `source` compiled and instantiated (see `WasmProgram`), with the drop functions of `dropped` exported.
-let instantiateWasm (source: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
+/// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
+/// exported.
+let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     let dropName = Transpiler.Wasm.CoreIrDrop.dropName
-    // The allocator's first instruction, after its locals, counts the call.
-    let allocator = "(func $__nanyx_alloc (param $size i32) (result i32)"
-    let wat =
-        let wat = transpileWat source
-        match wat.IndexOf allocator with
-        | -1 -> wat
-        | start ->
-            let afterLocals = wat.IndexOf("(local $ptr i32)", start) + "(local $ptr i32)".Length
-            wat.Insert(afterLocals, "\n    global.get $allocations\n    i32.const 1\n    i32.add\n    global.set $allocations")
     let exports =
-        [ yield! dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))")
-          if wat.Contains "(global $heap_ptr" then "  (export \"heap_ptr\" (global $heap_ptr))"
-          "  (global $allocations (mut i32) (i32.const 0))"
-          "  (export \"allocations\" (global $allocations))" ]
-        |> String.concat "\n"
+        dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))") |> String.concat "\n"
     let engine = new Wasmtime.Engine()
     let store = new Wasmtime.Store(engine)
+    store.SetWasiConfiguration(Wasmtime.WasiConfiguration())
     use module' = Wasmtime.Module.FromText(engine, "program", wat.Substring(0, wat.LastIndexOf ')') + exports + "\n)")
     use linker = new Wasmtime.Linker(engine)
-    new WasmProgram(engine, store, linker.Instantiate(store, module'))
+    linker.DefineWasi()
+    let instance = linker.Instantiate(store, module')
+    match instance.GetAction CheckedExports.start with
+    | null -> ()
+    | start -> start.Invoke()
+    new WasmProgram(engine, store, instance)
+
+/// `source` compiled with memory checks, instantiated and run (see `instantiateWat`).
+let instantiateWasm (source: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
+    instantiateWat (transpileWatWith checkedOptions source) dropped

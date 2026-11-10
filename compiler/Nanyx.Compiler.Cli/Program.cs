@@ -99,9 +99,11 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Optional output path for generated artifacts.</param>
+    /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("out", Alias = "o")] string? outputPath = null,
+        [Consolo("check-memory")] bool checkMemory = false,
         params string[] path)
     {
         if (!TrySinglePath(path, out var single))
@@ -111,7 +113,7 @@ internal static class CliCommands
 
         if (single is not null && !IsPackagePath(single))
         {
-            return Execute(single, Target.Run, outputPath);
+            return Execute(single, Target.Run, outputPath, checkMemory: checkMemory);
         }
 
         if (!TryFindPackage(single, out var package))
@@ -140,7 +142,7 @@ internal static class CliCommands
             Console.Error.WriteLine($"Running with {DeferredErrors(build.Diagnostics)}");
         }
 
-        return RunProgram(entry.Value, deferred);
+        return RunProgram(entry.Value, deferred, checkMemory);
     }
 
     /// <summary>
@@ -177,7 +179,7 @@ internal static class CliCommands
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(entry.Value, Console.Out, out var wat, deferred))
+        if (!TryEmitWat(entry.Value, Console.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
         {
             return 1;
         }
@@ -367,7 +369,7 @@ internal static class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(string inputFile, Target target, string? outputPath, bool release = false)
+    private static int Execute(string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -401,7 +403,7 @@ internal static class CliCommands
                 Console.Error.WriteLine($"Running with {DeferredErrors(result.Diagnostics)}");
             }
 
-            return RunProgram(result, deferred);
+            return RunProgram(result, deferred, checkMemory);
         }
 
         Console.WriteLine($"Phase: {result.Phase}");
@@ -519,7 +521,7 @@ internal static class CliCommands
     private static int RunWasm(CompileResult result, string inputFile, string? outputPath, bool release)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(result, Console.Out, out var wat, deferred))
+        if (!TryEmitWat(result, Console.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
         {
             return 1;
         }
@@ -531,20 +533,43 @@ internal static class CliCommands
         return 0;
     }
 
-    private static int RunProgram(CompileResult result, bool errorsDeferred = false)
+    private static int RunProgram(CompileResult result, bool errorsDeferred = false, bool checkMemory = false)
     {
-        if (!TryEmitWat(result, Console.Error, out var wat, errorsDeferred))
+        var options = new CodeGen.WasmOptions(checkMemory);
+        if (!TryEmitWat(result, Console.Error, out var wat, options, errorsDeferred))
         {
             return 1;
         }
 
-        var outcome = WasmRunner.run(wat);
-        if (outcome.IsOk)
+        if (!checkMemory)
+        {
+            var outcome = WasmRunner.run(wat);
+            return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue);
+        }
+
+        var counted = WasmRunner.runReading(
+            CodeGen.CheckedExports.start,
+            new[] { CodeGen.CheckedExports.liveBlocks, CodeGen.CheckedExports.allocations },
+            wat);
+        if (counted.IsError)
+        {
+            return ReportRunError(counted.ErrorValue);
+        }
+
+        var (live, allocated) = (counted.ResultValue[0], counted.ResultValue[1]);
+        if (live == 0)
         {
             return 0;
         }
 
-        switch (outcome.ErrorValue)
+        Console.Error.WriteLine(
+            $"Memory check failed: {live} of the {allocated} blocks the program allocated were never freed.");
+        return 1;
+    }
+
+    private static int ReportRunError(RunError error)
+    {
+        switch (error)
         {
             case RunError.InvalidModule invalid:
                 Console.Error.WriteLine($"Internal compiler error: the generated WebAssembly is invalid: {invalid.Item}");
@@ -556,16 +581,18 @@ internal static class CliCommands
             case RunError.Exited exited:
                 return exited.Item;
             default:
-                Console.Error.WriteLine($"Run failed: {outcome.ErrorValue}");
+                Console.Error.WriteLine($"Run failed: {error}");
                 return 1;
         }
     }
 
     /// <summary>
-    /// Lowers a successfully type-checked program to WebAssembly text, reporting failures to <paramref name="errors"/>.
-    /// With <paramref name="errorsDeferred"/>, a program whose errors were all deferred to traps is lowered too.
+    /// Lowers a successfully type-checked program to WebAssembly text with <paramref name="options"/>, reporting failures
+    /// to <paramref name="errors"/>. With <paramref name="errorsDeferred"/>, a program whose errors were all deferred to
+    /// traps is lowered too.
     /// </summary>
-    private static bool TryEmitWat(CompileResult result, TextWriter errors, out string wat, bool errorsDeferred = false)
+    private static bool TryEmitWat(
+        CompileResult result, TextWriter errors, out string wat, CodeGen.WasmOptions options, bool errorsDeferred = false)
     {
         wat = string.Empty;
 
@@ -575,7 +602,7 @@ internal static class CliCommands
         }
 
         // What the backend cannot compile is reported where it is written, like any other error.
-        var emitted = CodeGen.tryTranspileTypedModuleToWat(result.Typed.Value);
+        var emitted = CodeGen.tryTranspileTypedModuleWith(options, result.Typed.Value);
         if (emitted.IsError)
         {
             PrintDiagnostics(ListModule.OfSeq(new[] { emitted.ErrorValue }), errors);

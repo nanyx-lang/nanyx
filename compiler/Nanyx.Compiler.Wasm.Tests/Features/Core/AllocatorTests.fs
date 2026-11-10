@@ -22,7 +22,7 @@ type private Allocator(engine: Engine, store: Store, instance: Instance) =
 let private instantiate () =
     let engine = new Engine()
     let store = new Store(engine)
-    use module' = Module.FromText(engine, "allocator", allocatorModuleWat)
+    use module' = Module.FromText(engine, "allocator", allocatorModuleWat WasmOptions.Default)
     use linker = new Linker(engine)
     new Allocator(engine, store, linker.Instantiate(store, module'))
 
