@@ -82,6 +82,18 @@ def name = "Alex"
 def greeting = "Hello, {name}!"
 ```
 
+A hole can hold any value whose type has a [`ToString`](../advanced/contexts#tostringa): numbers, booleans, strings and tags without a payload have one already, and a type of your own gets one by attaching a `toString`:
+
+```nanyx
+type Point = (x: int, y: int)
+def Point.toString = { p -> "({p.x}, {p.y})" }
+
+def total = 3
+def where = "{total} items at {Point(x = 1, y = 2)}"   // "3 items at (1, 2)"
+```
+
+A list, a record or a function has no `ToString`, so putting one in a hole is an error. Turn it into a string first, or print it with [`dbg`](../stdlib/io#dbg).
+
 Single-quoted strings are _raw_: nothing inside them is interpolated or escaped, so braces, backslashes and quotes are taken literally. Use them for JSON, regular expressions, templates, and anything else that contains braces of its own:
 
 ```nanyx

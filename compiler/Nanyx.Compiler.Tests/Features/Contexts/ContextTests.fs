@@ -111,11 +111,16 @@ let private showContext =
     "type Point = (x: int, y: int)\n" +
     "def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }\n"
 
-/// Where each call in `source` that requires a parameterised context finds its instances, in the order written.
+/// Where each call in `source` that requires a parameterised context finds its instances, in the order written. The
+/// interpolation holes of built-in types, here and in the prelude, are left out.
 let private instancesIn (source: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value.ContextInstances |> Map.toList |> List.sortBy fst |> List.map snd
+    result.Typed.Value.ContextInstances
+    |> Map.toList
+    |> List.sortBy fst
+    |> List.map snd
+    |> List.filter ((<>) [ Some InstanceBuiltIn ])
 
 [<Fact>]
 let ``A call synthesizes a context's instance from the type's attached definitions`` () =
@@ -155,6 +160,15 @@ let ``A loaded instance is only used for the type it is for`` () =
         "  describe($Money(5))\n" +
         "}\n"
     Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "$Money.show" ]) ] ], instancesIn source)
+
+[<Fact>]
+let ``A loaded instance is checked against the context's members at the type it is for`` () =
+    let source = showContext + "def s = {\n  use Show(int) = ( show = { n -> n } )\n  1\n}\n"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+        Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]
 let ``A context that cannot be synthesized says which definition is missing or has the wrong type`` () =

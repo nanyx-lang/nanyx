@@ -4,7 +4,7 @@ description: "Which values can be interpolated into a string, and what dbg print
 order: 5
 ---
 
-> **Status: proposal.** Synthesizing a context from attached definitions, which `ToString` relies on, is implemented ([#328](https://github.com/nanyx-lang/nanyx/issues/328)), and so is the attached `toString` of `int`, `float`, `bool` and `string` ([#329](https://github.com/nanyx-lang/nanyx/issues/329)); the rest is not yet. This page records the intended design and the questions that remain open; see [Open questions](#open-questions) at the end. The remaining work is tracked in [#330](https://github.com/nanyx-lang/nanyx/issues/330) and [#331](https://github.com/nanyx-lang/nanyx/issues/331).
+> **Status: interpolation implemented, `dbg` proposed.** Interpolation goes through `ToString` as [Interpolation through a context](#interpolation-through-a-context) describes ([#330](https://github.com/nanyx-lang/nanyx/issues/330)); the user-facing description is on the [contexts page](../advanced/contexts#tostringa). `dbg` printing any value is not done yet ([#331](https://github.com/nanyx-lang/nanyx/issues/331)). See [Open questions](#open-questions) at the end for what remains open.
 
 Nanyx turns values into text in two places: string interpolation, `"Total: {total}"`, and [`dbg`](../stdlib/io#dbg). They serve different readers, so they follow different rules.
 
@@ -15,7 +15,7 @@ This is the same split as Rust's `Display` and `Debug`, or Python's `__str__` an
 
 # How it works today
 
-The type checker accepts any value in an interpolation hole and ignores its type. The WebAssembly backend then decides from the syntax which values it can print: integers, strings, booleans and tags. Anything else type-checks and then fails while generating code, and some values it can print fail because the backend cannot work out their type ([#193](https://github.com/nanyx-lang/nanyx/issues/193)). `dbg` has the same limits.
+Each interpolation hole is checked through `ToString`, as the rest of this page describes. `dbg` still prints only what the backend can print from a value's type: integers, floats, strings, booleans and tags whose payload is one of those.
 
 # Interpolation through a context
 
@@ -40,7 +40,7 @@ A function that does not write its type gets the requirement inferred, as it wou
 ## Where a ToString comes from
 
 - **Attached definitions.** The member is named `toString`, the name the docs already use for it, so any type with an [attached](../advanced/attached-definitions) `toString` gets the context by synthesis and needs nothing else. The `$Money.toString` in the [modules tour](../tour/modules#using-a-module-block-in-its-own-file) makes `"{price}"` work unchanged.
-- **The standard library.** `int`, `float`, `bool` and `string` have an attached `toString` in the prelude (see [Converting to text](../stdlib/standard-library#converting-to-text)), so they are not special cases in the type checker: a `ToString(int)` is already synthesized from `Int.toString` today. For now `Int.toString` and the others are written as an interpolation, `"{n}"`, which the backend converts by itself. Once a hole is checked as a call to `toString`, they need a conversion of their own (the backend's runtime helpers, reached directly), or each would call itself.
+- **The standard library.** `int`, `float`, `bool` and `string` have an attached `toString` in the prelude (see [Converting to text](../stdlib/standard-library#converting-to-text)), so they are not special cases in the type checker: a `ToString(int)` is already synthesized from `Int.toString` today. A hole of one of these types, and of a tag without a payload, uses the compiler's own `ToString`, which the backend writes directly, so `Int.toString` and the others are written as an interpolation, `"{n}"`, without calling themselves. A `use` still comes first.
 - **Tags.** A tag with no payload prints as its name, `#readwrite`, as the [tags page](../tour/tags#runtime-behavior) describes. This one is built in.
 - **`use`.** An explicit instance takes priority over synthesis, as it always does, which lets a block change how a type is shown:
 

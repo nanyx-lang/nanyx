@@ -94,14 +94,15 @@ module internal ContextInference =
     /// Finds the instances the calls in the unannotated top-level def `name` (declared as `symbol`) left to be found
     /// once it was inferred, now that it is generalised as `scheme`. A call whose arguments turned out to be variables
     /// of the def's own type finds the instance the def then requires itself; one whose arguments turned out to be
-    /// types finds the instance `synthesize` builds for them, if it can build one. The def is registered as requiring
+    /// types finds the instance `synthesize` finds or builds for them, if it can (or none, for a call it reports as
+    /// failed itself). The def is registered as requiring
     /// the contexts it was found to, and the annotation that would have said so is returned.
     let resolvePending
         (state: InferState)
         (name: Identifier)
         (symbol: SymbolId option)
         (scheme: TypeScheme)
-        (synthesize: PendingContextInstance -> Ty list -> InferState -> Result<(string * string) list * InferState, Diagnostic list> option)
+        (synthesize: PendingContextInstance -> Ty list -> InferState -> Result<ContextInstance option * InferState, Diagnostic list> option)
         : Result<TypeExpr option * InferState, Diagnostic list> =
         let pending, others = state.PendingContextInstances |> List.partition (fun p -> p.Def = name)
         let state = { state with PendingContextInstances = others }
@@ -129,8 +130,9 @@ module internal ContextInference =
                     match synthesize p argTys current with
                     | Some synthesized ->
                         synthesized
-                        |> Result.map (fun (members, next) ->
-                            { next with ContextInstances = withInstance p (InstanceSynthesized members) next.ContextInstances })
+                        |> Result.map (function
+                            | Some instance, next -> { next with ContextInstances = withInstance p instance next.ContextInstances }
+                            | None, next -> next)
                     | None -> Error p.Errors)) (Ok state)
         |> Result.map (fun current ->
             match written with

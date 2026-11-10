@@ -171,7 +171,7 @@ let ``Run - interpolated strings and dbg through the core IR`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def pick = { n -> if n > 0 then #some(\"yes\") else #none }\n" +
+        "def pick = { n -> if n > 0 then #yes else #no }\n" +
         "\n" +
         "def describe: int -> string = { n -> \"n is {n}, positive {n > 0}, pick {pick(n)}\" }\n" +
         "\n" +
@@ -193,4 +193,4 @@ let ``Run - interpolated strings and dbg through the core IR`` () =
         "\n" +
         "main()\n"
     runSource source
-    |> assertRan "n is 3, positive true, pick #some(\"yes\")\nn is -1, positive false, pick #none\nouter inner x end\ndbg: 2\ndbg: #some(2)\ndbg: #some(\"yes\")\n"
+    |> assertRan "n is 3, positive true, pick #yes\nn is -1, positive false, pick #no\nouter inner x end\ndbg: 2\ndbg: #some(2)\ndbg: #yes\n"

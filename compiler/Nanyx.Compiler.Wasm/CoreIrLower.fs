@@ -60,6 +60,9 @@ type LowerInput =
       /// Where a call to the definition of this name, at this node, finds each context member it requires, given the
       /// keys of the members in scope there; or why it cannot.
       ContextArguments: string -> NodeId -> Set<string> -> Result<ContextArgument list, string>
+      /// The calls of interpolation holes that use the compiler's own `ToString` (see `InterpolationHoles`), by node: the
+      /// value is written into the string as it is.
+      BuiltInHoles: Set<NodeId>
       /// The record types the module defines, whose names construct a record: `Person(name = "Ada", age = 36)`.
       RecordConstructors: Set<string>
       /// The nominal types whose shape is not a record (`type $Money = private int`). A value of one is its shape's
@@ -605,6 +608,9 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Atoms scope (record :: List.map snd slotsAndValues) (fun atoms ->
                 let updated = List.zip (List.map fst slotsAndValues) atoms.Tail
                 k (mk (UpdateRecord(atoms.Head, fields.Length, updated)) ty))
+        // The hole function called outside a string, at a built-in type: the value as a hole would write it.
+        | FunctionCall(_, _, [ value ]) when input.BuiltInHoles.Contains expr.Id ->
+            this.Complex scope { expr with Kind = InterpolatedString [ StringExpr value ] } k
         | FunctionCall(name, _, args) when input.NominalWrappers.Contains name && not (scope.Vars.ContainsKey name) ->
             // `$Money(pence)`: a nominal value is its shape's value.
             match flattenCallArgs args with
@@ -793,6 +799,14 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | Lambda([], body) -> this.Complex scope body k
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
+        // A hole the compiler writes itself holds its value, not a call to convert it.
+        | InterpolatedString parts when parts |> List.exists (function StringExpr hole -> input.BuiltInHoles.Contains hole.Id | StringText _ -> false) ->
+            let written =
+                parts
+                |> List.map (function
+                    | StringExpr (Kind (FunctionCall(_, _, [ value ])) as hole) when input.BuiltInHoles.Contains hole.Id -> StringExpr value
+                    | part -> part)
+            this.Complex scope { expr with Kind = InterpolatedString written } k
         | InterpolatedString parts when parts |> List.exists (function StringExpr hole -> tyOf hole = IrError | StringText _ -> false) ->
             // A hole of no known type cannot be printed. The holes are evaluated in order up to it, for what they do (the
             // hole itself most likely stops the program, through the deferred error that left its type unknown), and if

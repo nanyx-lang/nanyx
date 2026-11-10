@@ -72,20 +72,16 @@ let ``Run - a tag union rest passes the tags a match does not name through`` () 
     runSource source |> assertRan "21\nerror\n"
 
 [<Fact>]
-let ``Run - interpolating tags`` () =
+let ``Run - interpolating tags without a payload`` () =
     let source =
-        "def mapOption\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | other, _ -> other }\n" +
+        "def flip = { | #on -> #off | #off -> #on }\n" +
         "\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  def a = #some(5) \\mapOption { n -> n * 2 }\n" +
-        "  def b = #some(\"hi\")\n" +
-        "  def c = if 1 > 2 then #ok(true) else #none\n" +
-        "  println(\"{a} {b} {c} {#done}\")\n" +
+        "  def c = if 1 > 2 then #ok else #none\n" +
+        "  println(\"{c} {flip(#on)} {#done}\")\n" +
         "}\n"
-    runSource source |> assertRan "#some(10) #some(\"hi\") #none #done\n"
+    runSource source |> assertRan "#none #off #done\n"
 
 [<Fact>]
 let ``Run - interpolating a tag whose type names a tag no expression writes`` () =
