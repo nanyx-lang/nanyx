@@ -851,7 +851,6 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     else this.Complex insideHole hole store
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
-        | UseIn _ -> cannot "`use ... in`"
         | _ -> cannot "this kind of expression"
 
     /// A closure over the wrapper `wrapper` of a top-level function, at the function's own type.

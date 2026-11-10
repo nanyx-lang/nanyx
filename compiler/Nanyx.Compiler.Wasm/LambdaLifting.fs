@@ -460,7 +460,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             topLevelFunctions.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []
         | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
-        | UseIn(binding, body) -> rebuild (UseIn(binding, recur body))
+        // `use value in body` is the block `{ use value; body }`: what it loads is in scope for `body` only.
+        | UseIn(value, body) ->
+            recur { expr with Kind = Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ] }
         | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
         | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(recur value))
         | InterpolatedString parts ->

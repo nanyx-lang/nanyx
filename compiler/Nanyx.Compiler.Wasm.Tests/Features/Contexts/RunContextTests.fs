@@ -164,6 +164,32 @@ let ``Run - use loads a named instance of a parameterised context: a def, a loca
     runSource source |> assertRan "10\n25\n8\n102\n"
 
 [<Fact>]
+let ``Run - use ... in loads an instance for its body only (#320)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Counter = (next: int -> int)\n" +
+        "context Combine(a) = (combine: (a, a) -> a)\n" +
+        "\n" +
+        "def counted: [Counter] int -> int = { n -> next(n) }\n" +
+        "def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }\n" +
+        "def timesInt: Combine(int) = (combine = { a, b -> a * b })\n" +
+        "def plusInt: Combine(int) = (combine = { a, b -> a + b })\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def total = use Counter(next = { n -> n - 1 }) in counted(3)\n" +
+        "  println(\"{total}\")\n" +
+        "  use plusInt\n" +
+        "  println(\"{use timesInt in double(5)}\")\n" +
+        "  println(\"{double(5)}\")\n" +
+        "  def onTheNextLine = use timesInt in\n" +
+        "    double(2)\n" +
+        "  println(\"{onTheNextLine}\")\n" +
+        "}\n"
+    runSource source |> assertRan "2\n25\n10\n4\n"
+
+[<Fact>]
 let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
     let source =
         "import nanyx/console\n" +
