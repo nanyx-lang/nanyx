@@ -5,7 +5,8 @@ order: 23
 ---
 
 > **Status: in progress.** This page decides whether a record type allows fields it does not name. Built: closed
-> records have exactly their fields (stage 1 of the [plan](#plan)). Not built: writing `...` in a type. It is part
+> records and record patterns have exactly their fields, and a pattern may end in `...` (stage 1 of the
+> [plan](#plan)). Not built: writing `...` in a type. It is part
 > of the [compilation](./compilation) workstream, and its issues carry the `compilation` and `type checker` labels.
 
 # Summary
@@ -76,6 +77,23 @@ A type variable named in a row is generic like any other type variable in an ann
 function, so `(int, int, ...)` would let a two-argument function be called with three. A record's positional
 fields are always exactly the ones its type lists.
 
+## Patterns
+
+A record pattern by member name is closed in the same way. It names every field of the record, or ends in `...` to
+leave the others out, as Rust's `..` does:
+
+```nanyx
+def describe: (name: string, age: int) -> string = { r ->
+  match r
+    | (name = "Alice", ...) -> "Found Alice"
+    | (name = n, age = a) -> "{n} is {a}"
+}
+```
+
+Reading fewer fields than a record has cannot go wrong, but writing `...` says that leaving them out was on purpose,
+and a field added to the type later is then an error in each pattern that did not expect it. Matched against a value
+of no known type yet, `(x = 1)` makes it a `(x: int)` and `(x = 1, ...)` a `(x: int, …)`.
+
 ## Inference
 
 - **Reading a field** of a value whose type is not otherwise known gives it an open record type: `{ p -> p.x }` is
@@ -117,11 +135,12 @@ offsets, so open records cost code size, not speed.
   Until [#470](https://github.com/nanyx-lang/nanyx/issues/470), it accepted them when either's fields were a subset
   of the other's, so a call with a field more or a field fewer type-checked and then produced WebAssembly that
   Wasmtime rejected.
-- **A record pattern names some fields.** A pattern by member name, `(status = #some(n))`, tells inference the value
-  is an open record with those fields (`openRecordWith` in
-  [InferState.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/InferState.fs)), so it
-  matches a record with more, as if it ended in `...`. The parser does not accept that `...` yet
-  ([#459](https://github.com/nanyx-lang/nanyx/issues/459)).
+- **A record pattern names every field, or ends in `...`.** A pattern by member name is closed like a record
+  type: `(name = n, age = a)` matches a `(name: string, age: int)`, and `(name = n)` is an error that names `age`.
+  `(name = n, ...)` leaves the other fields out, and tells inference the value is an open record with at least
+  those fields (`openRecordWith` in
+  [InferState.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/InferState.fs)). A tuple
+  pattern's names, `(name, age)`, are closed too, and have no `...` form.
 - **Open records exist in inference only.** `TyOpenRecord` ([TypedAst.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/TypedAst.fs)) is what
   reading a field of an unknown value gives, and is printed `(x: int, ...a)`. Unification solves its row as the
   table above says. There is no syntax for it: the parser's `typeRecord` ([Types.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Parser/Types.fs))
@@ -133,7 +152,8 @@ offsets, so open records cost code size, not speed.
 # Plan
 
 1. **Closed means closed.** _Done._ Two closed records agree only when they have the same fields, with an error
-   that names the extra or missing ones. ([#470](https://github.com/nanyx-lang/nanyx/issues/470))
+   that names the extra or missing ones ([#470](https://github.com/nanyx-lang/nanyx/issues/470)). A record pattern
+   names every field or ends in `...` ([#459](https://github.com/nanyx-lang/nanyx/issues/459)).
 2. **`...` and `...r` in record types.** Parse them, lower them to `TyOpenRecord`, and have the formatter, hover
    and completion show them. ([#471](https://github.com/nanyx-lang/nanyx/issues/471))
 3. **Docs.** The [records tour](../tour/records#closed-and-open-records) describes the
@@ -141,10 +161,5 @@ offsets, so open records cost code size, not speed.
 
 # Open questions
 
-- **Record patterns.** Does a pattern that names some of a record's fields, `(x = a)` against `(x: int, y: int)`,
-  need a `...` to ignore the rest, as Rust's `..` does? Reading fewer fields cannot go wrong, but writing `...` says
-  that leaving fields out was on purpose. The [pattern matching tour](../tour/pattern-matching) writes the `...`;
-  the compiler does not require it today, and cannot until [#459](https://github.com/nanyx-lang/nanyx/issues/459)
-  lets it be written.
 - **Spread of an open record.** `(...p, z = 1)` where `p` is `(x: int, ...r)` is `(x: int, z: int, ...r)`, unless
   `r` has a `z`. Whether a spread may override a field that is only in a row needs deciding with the spread rules.

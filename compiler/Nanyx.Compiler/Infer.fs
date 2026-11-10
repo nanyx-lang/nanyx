@@ -1908,16 +1908,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors
-                | RecordMemberPattern members ->
+                | RecordMemberPattern(members, hasRest) ->
                     let mutable innerEnv = env'
                     let mutable innerState = state'
                     let mutable innerErrors: Diagnostic list = []
-                    let fieldHints = tryRecordFields scrutineeTy |> Option.defaultValue Map.empty
+                    let knownFields = tryRecordFields scrutineeTy
+                    let fieldHints = knownFields |> Option.defaultValue Map.empty
                     let mutable fieldMap = Map.empty
                     for (name, pat) in members do
-                        let hintTy = fieldHints |> Map.tryFind name
                         let memberTy, nextState =
-                            match hintTy with
+                            match fieldHints |> Map.tryFind name with
                             | Some ty -> ty, innerState
                             | None -> freshVar innerState
                         innerState <- nextState
@@ -1925,17 +1925,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (nextEnv, nextState, _) ->
                             innerEnv <- nextEnv
                             innerState <- nextState
-                            if hintTy.IsNone then
-                                fieldMap <- fieldMap.Add(name, memberTy)
+                            fieldMap <- fieldMap.Add(name, memberTy)
                         | Error err -> innerErrors <- err
                     if innerErrors.IsEmpty then
-                        // The pattern names some of the record's fields, not all of them.
-                        let constrained =
-                            if fieldMap.IsEmpty then innerState
-                            else
-                                let record, next = openRecordWith fieldMap innerState
-                                addConstraint scrutineeTy record next
-                        Ok (innerEnv, constrained, mkTypedPattern pattern scrutineeTy)
+                        // A record type is closed, so the pattern names every field, unless it ends in `...`. Where
+                        // the fields are known, they are checked rather than the value's type, which may be nominal.
+                        let patternRecord, next =
+                            if hasRest then openRecordWith fieldMap innerState else TyRecord fieldMap, innerState
+                        let matched = knownFields |> Option.map TyRecord |> Option.defaultValue scrutineeTy
+                        Ok (innerEnv, addConstraint matched patternRecord next, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors
 

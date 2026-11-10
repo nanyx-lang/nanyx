@@ -170,7 +170,9 @@ and PatternKind =
     | ElsePattern
     | TuplePattern of Pattern list
     | RecordPattern of Identifier * Pattern list  // Type name and patterns by position
-    | RecordMemberPattern of (Identifier * Pattern) list  // Patterns by member name
+    /// Patterns by member name, `(name = n, age = a)`. A record type is closed, so the pattern names every field
+    /// unless `hasRest`, when it ends in `...` to leave the others out: `(name = "Alice", ...)`.
+    | RecordMemberPattern of members: (Identifier * Pattern) list * hasRest: bool
     | ListPattern of Pattern list * Pattern option  // patterns, optional splat at end
     | ListSplatMiddle of Pattern list * Pattern list  // patterns before ..., patterns after
     | RangePattern of Expression * Expression  // start..end (inclusive)
@@ -419,7 +421,7 @@ module Pattern =
         | TuplePattern patterns
         | AndPattern patterns
         | RecordPattern(_, patterns) -> patterns |> List.collect expressions
-        | RecordMemberPattern members -> members |> List.collect (snd >> expressions)
+        | RecordMemberPattern(members, _) -> members |> List.collect (snd >> expressions)
         | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressions
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect expressions
         | TagPattern(_, payload) -> payload |> Option.toList |> List.collect expressions
@@ -436,7 +438,7 @@ module Pattern =
         | TuplePattern patterns
         | AndPattern patterns
         | RecordPattern(_, patterns) -> patterns |> List.collect boundNames
-        | RecordMemberPattern members -> members |> List.collect (snd >> boundNames)
+        | RecordMemberPattern(members, _) -> members |> List.collect (snd >> boundNames)
         | ListPattern(patterns, rest) -> (patterns @ Option.toList rest) |> List.collect boundNames
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNames
         | TagPattern(_, payload) -> payload |> Option.toList |> List.collect boundNames
@@ -470,7 +472,8 @@ module Pattern =
             | TuplePattern patterns -> TuplePattern(List.map recur patterns)
             | AndPattern patterns -> AndPattern(List.map recur patterns)
             | RecordPattern(name, patterns) -> RecordPattern(name, List.map recur patterns)
-            | RecordMemberPattern members -> RecordMemberPattern(members |> List.map (fun (name, p) -> name, recur p))
+            | RecordMemberPattern(members, hasRest) ->
+                RecordMemberPattern(members |> List.map (fun (name, p) -> name, recur p), hasRest)
             | ListPattern(patterns, rest) -> ListPattern(List.map recur patterns, Option.map recur rest)
             | ListSplatMiddle(before, after) -> ListSplatMiddle(List.map recur before, List.map recur after)
             | TagPattern(name, payload) -> TagPattern(name, Option.map recur payload)

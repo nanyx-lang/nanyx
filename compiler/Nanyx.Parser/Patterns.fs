@@ -53,18 +53,20 @@ let recordPatternByPosition =
             (sepBy1 (ws >>. pattern) (pstring "," .>> ws)))
         (fun typeName patterns -> RecordPattern(typeName, patterns))
 
-// Record pattern by member: (member1 = pat1, member2 = pat2, ...)
+// Record pattern by member: (member1 = pat1, member2 = pat2), naming every field, or ending in `...` to leave the
+// others out: (member1 = pat1, ...)
 let recordMemberPattern =
+    let memberPattern =
+        pipe2
+            (ws >>. identifierNoWs .>> ws)
+            (pstring "=" >>. ws >>. pattern)
+            (fun name pat -> (name, pat))
+    let rest = ws >>. pstring "..." .>> ws
     between
         (pstring "(")
         (pstring ")")
-        (sepBy1
-            (pipe2
-                (ws >>. identifierNoWs .>> ws)
-                (pstring "=" >>. ws >>. pattern)
-                (fun name pat -> (name, pat)))
-            (pstring "," .>> ws))
-    |>> RecordMemberPattern
+        (memberPattern .>>. many (attempt (pstring "," >>. memberPattern)) .>>. opt (attempt (pstring "," >>. rest)))
+    |>> fun ((first, others), rest) -> RecordMemberPattern(first :: others, rest.IsSome)
     |> spannedPattern
 
 // List pattern: [pat1, pat2, ...] or [pat1, ...rest] or [first, ..., last]

@@ -163,10 +163,10 @@ let ``Match accepts record catch-all`` () =
     let source =
         "def point = (x = 1, y = 2)\n" +
         "def result = match point\n" +
-        "| (x = 1) -> 1\n" +
+        "| (x = 1, ...) -> 1\n" +
         "| _ -> 0\n"
     let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty)
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
 
 [<Fact>]
 let ``Match rejects incompatible record patterns`` () =
@@ -446,7 +446,7 @@ let ``Matches that cover every value pass, however the arms split them`` () =
           "def f: #some(bool) | #none -> int = { o ->\n  match o\n    | #some(true) -> 1\n    | #some(false) -> 2\n    | #none -> 0\n}\n"
           "def f: list(bool) -> int = { xs ->\n  match xs\n    | [] -> 0\n    | [true, ..._rest] -> 1\n    | [false, ..._rest] -> 2\n}\n"
           // A record that is covered field by field.
-          "def f: (x: bool, y: int) -> int = { p ->\n  match p\n    | (x = true) -> 1\n    | (x = false) -> 0\n}\n" ]
+          "def f: (x: bool, y: int) -> int = { p ->\n  match p\n    | (x = true, ...) -> 1\n    | (x = false, ...) -> 0\n}\n" ]
     for source in sources do
         let result = Compiler.compile source
         Assert.True(result.Diagnostics.IsEmpty, $"{source}\n%A{result.Diagnostics}")

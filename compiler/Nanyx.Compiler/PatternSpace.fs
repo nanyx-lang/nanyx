@@ -35,7 +35,7 @@ module PatternSpace =
         | IdentifierPattern _ -> true
         | TuplePattern elements
         | RecordPattern(_, elements) -> elements |> List.forall isCatchAll
-        | RecordMemberPattern members -> members |> List.forall (snd >> isCatchAll)
+        | RecordMemberPattern(members, _) -> members |> List.forall (snd >> isCatchAll)
         | AndPattern parts -> parts |> List.forall isCatchAll
         | LiteralPattern _
         | ListPattern _
@@ -139,7 +139,7 @@ module PatternSpace =
             | _ -> uncertain
         | TagPattern(name, payload) -> Tag(name, payload |> Option.map (spaceOf certain) |> Option.defaultValue Any)
         | TuplePattern elements -> elements |> List.mapi (fun index element -> string index, spaceOf certain element) |> Map.ofList |> Fields
-        | RecordMemberPattern members -> members |> List.map (fun (name, member') -> name, spaceOf certain member') |> Map.ofList |> Fields
+        | RecordMemberPattern(members, _) -> members |> List.map (fun (name, member') -> name, spaceOf certain member') |> Map.ofList |> Fields
         | RecordPattern(name, elements) -> Named(name, elements |> List.map (spaceOf certain))
         | ListPattern(elements, rest) ->
             let tail = rest |> Option.map (spaceOf certain) |> Option.defaultValue Nil

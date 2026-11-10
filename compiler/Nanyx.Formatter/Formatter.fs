@@ -863,8 +863,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ElsePattern -> text "else"
         | TuplePattern ps -> cat [ text "("; commaJoin (List.map pattern ps); text ")" ]
         | RecordPattern(n, ps) -> cat [ text n; text "("; commaJoin (List.map pattern ps); text ")" ]
-        | RecordMemberPattern fields ->
-            cat [ text "("; commaJoin (fields |> List.map (fun (n, p) -> cat [ text n; text " = "; pattern p ])); text ")" ]
+        | RecordMemberPattern(fields, hasRest) ->
+            let restDoc = if hasRest then [ text "..." ] else []
+            cat [ text "("; commaJoin ((fields |> List.map (fun (n, p) -> cat [ text n; text " = "; pattern p ])) @ restDoc); text ")" ]
         | ListPattern(ps, rest) ->
             let restDoc =
                 match rest with
