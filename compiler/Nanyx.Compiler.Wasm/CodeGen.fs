@@ -15,6 +15,16 @@ exception UnsupportedConstruct of message: string * span: SourceSpan
 /// Fails with `message`, placed at `span`.
 let private unsupportedAt (span: SourceSpan) (message: string) : 'a = raise (UnsupportedConstruct(message, span))
 
+/// What a broken invariant of the backend (see `CoreIr.InternalError`) says to the user: the one place it gets its
+/// prefix.
+let private internalErrorMessage (reason: string) = $"Internal error: {reason}"
+
+/// What a function the core IR could not lower or finish says to the user.
+let lowerFailureMessage (failure: CoreIrLower.LowerFailure) =
+    match failure with
+    | CoreIrLower.Internal reason -> internalErrorMessage reason
+    | CoreIrLower.NotYet reason -> $"The WebAssembly backend cannot compile {reason} yet"
+
 type private ContextFn = string * int * int
 
 /// The module's function table (`$ctx_table`), as far as functions used as values are concerned: a top-level
@@ -564,10 +574,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
-    | (_, reason, span) :: _ ->
-        let message =
-            if reason.StartsWith "internal error: " then $"Internal error: {reason.Substring 16}"
-            else $"The WebAssembly backend cannot compile {reason} yet"
+    | (_, failure, span) :: _ ->
+        let message = lowerFailureMessage failure
         match span with
         | Some span -> unsupportedAt span message
         | None -> failwith message
@@ -603,12 +611,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             fun name ->
                 match tagIdMap |> Map.tryFind name with
                 | Some id -> id
-                | None -> failwith $"Internal error: missing tag discriminant for #{name}"
+                | None -> CoreIr.internalError $"missing tag discriminant for #{name}"
           StringOffset =
             fun value ->
                 match stringLiteralMap |> Map.tryFind value with
                 | Some offset -> offset
-                | None -> failwith $"Internal error: missing string literal offset for {value}"
+                | None -> CoreIr.internalError $"missing string literal offset for {value}"
           RecordLayoutId = recordLayoutId recordTable
           FunctionSlot = functionValueSlot functionTable
           IndirectCall = functionTable.IndirectArities.Add >> ignore }
@@ -833,8 +841,9 @@ let tryTranspileTypedModuleWith (options: WasmOptions) (typed: TypedModule) : Re
         Ok (transpileTypedModuleWithOptions options typed |> fst)
     with
     | UnsupportedConstruct(message, span) -> Error (Diagnostics.at DiagnosticCodes.UnsupportedByBackend span message)
+    | CoreIr.InternalError reason -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend (internalErrorMessage reason))
     | Failure message -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend message)
-    | ex -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend $"Internal error: {ex.Message}")
+    | ex -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend (internalErrorMessage ex.Message))
 
 /// `tryTranspileTypedModuleWith` the default options.
 let tryTranspileTypedModuleToWat (typed: TypedModule) : Result<string, Diagnostic> =

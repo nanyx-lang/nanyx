@@ -121,7 +121,7 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrList _
     | IrTags _ -> loadA @ loadB @ [ $"call ${equalsName ty}" ]
     | IrFunction _
-    | IrError -> failwith $"Internal error: an equality of {IrType.show ty}, which has none"
+    | IrError -> internalError $"an equality of {IrType.show ty}, which has none"
 
 /// Returns 0 from the function unless the code before it left 1.
 let private orReturnFalse = [ "i32.eqz"; "if"; "  i32.const 0"; "  return"; "end" ]
@@ -208,7 +208,7 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
           "  return"
           "end"
           yield! payloadsEqual ]
-    | _ -> failwith $"Internal error: an equality function for {IrType.show ty}, which needs none"
+    | _ -> internalError $"an equality function for {IrType.show ty}, which needs none"
 
 /// The runtime helpers the equality functions of `types` call.
 let helpersUsed (types: IrType list) : string list =

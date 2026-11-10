@@ -242,7 +242,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrInt
     | IrBool
     | IrUnit
-    | IrError -> failwith $"Internal error: a drop function for {IrType.show ty}, which is not on the heap"
+    | IrError -> internalError $"a drop function for {IrType.show ty}, which is not on the heap"
 
 /// The body of the dup function of `ty`, which takes the value in `$p` and leaves it.
 let private dupBody (ty: IrType) : string list =

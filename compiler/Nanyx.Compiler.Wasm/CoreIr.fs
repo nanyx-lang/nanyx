@@ -241,6 +241,13 @@ type Function =
       Result: IrType
       Body: Expr }
 
+/// A broken invariant of the backend: a bug in the compiler, not something it does not compile yet. The message says
+/// what went wrong without the "Internal error: " the diagnostic gives it.
+exception InternalError of string
+
+/// Fails with a broken invariant of the backend (see `InternalError`).
+let internalError message : 'a = raise (InternalError message)
+
 module IrType =
     /// Whether a record's fields are a tuple's: its positions, `0`, `1`, ...
     let isTuple (fields: (string * IrType) list) =
