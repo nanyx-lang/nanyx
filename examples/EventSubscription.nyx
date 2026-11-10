@@ -47,7 +47,7 @@ export def Client.new: Options -> Client = { options ->
           "Authorization" => "Bearer {options.token}"
         ]
         body = Json.encode(event)
-      ) \Result.then(checkOk)
+      ) \Result.bind(checkOk)
 
       def body = try Json.decode(response.body, idDecoder) \Result.mapError { _ -> #badResponse }
 

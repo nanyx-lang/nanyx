@@ -38,6 +38,25 @@ let ``A pipe finds the prelude's Result helpers by the Result alias`` () =
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["fallback"])
 
 [<Fact>]
+let ``The prelude's toList, values, mapOr, toOption and orElse keep the option's and result's types`` () =
+    let source =
+        "def name: #some(string) | #notFound = #some(\"abc\")\n" +
+        "def r: Result(int, string) = #error(\"x\")\n" +
+        "def listed = name \\ Option.toList\n" +
+        "def present = Option.values([name, name])\n" +
+        "def described = Result.mapOr(r, \"none\", { n -> \"n\" })\n" +
+        "def asOption = r \\ Result.toOption\n" +
+        "def recovered = Result.orElse(r, { e -> #error(1.5) })"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    Assert.Equal("list(string)", typeOf "listed")
+    Assert.Equal("list(string)", typeOf "present")
+    Assert.Equal("string", typeOf "described")
+    Assert.Equal("#some(int) | #none", typeOf "asOption")
+    Assert.Equal("Result(int, float)", typeOf "recovered")
+
+[<Fact>]
 let ``Int.parse is in the prelude`` () =
     let result = Compiler.compile "def n = Int.parse(\"42\")\ndef piped = \"7\" \\ Int.parse"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)

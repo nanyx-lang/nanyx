@@ -116,6 +116,40 @@ Option.mapOr(#none, default = 0) { .length }
 
 ---
 
+# toList
+
+```nanyx
+Option.toList: (#some(a) | r) -> list(a)
+```
+
+The value as a one-element list, or the empty list for any other tag. Spreading it adds an element only when it is present.
+
+```nanyx
+Option.toList(#some(3))
+-- [3]
+
+def identity: #some(string) | #notFound = #notFound
+["device", ...(identity \Option.toList)]
+-- ["device"]
+```
+
+---
+
+# values
+
+```nanyx
+Option.values: list(#some(a) | r) -> list(a)
+```
+
+The values of the `#some`s in a list, in order. The other tags are dropped.
+
+```nanyx
+["1", "x", "3"] \List.map(Int.parse) \Option.values
+-- [1, 3]
+```
+
+---
+
 # mapOrElse
 
 ```nanyx

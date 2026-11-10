@@ -53,7 +53,7 @@ def lookup: [Http] string -> #some(Verdict) | #error(LookupError) = { sha -> pro
   def response = try Http.get(
     url = "https://www.virustotal.com/api/v3/files/{hex}"
     headers = ["x-apikey" => apiKey]
-  ) \Result.then(checkOk)
+  ) \Result.bind(checkOk)
 
   def report = try Json.decode(response.body, reportDecoder) \Result.mapError { _ -> #badResponse }
   def #some(name) = report.names \head except #emptyList -> #some("<unknown>")

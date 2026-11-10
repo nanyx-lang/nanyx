@@ -135,6 +135,24 @@ export def Result.defaultValue: Result(a, e), a -> a = {
   | #error(_), fallback -> fallback
 }
 
+-- `f` applied to the success, or `default` for an error.
+export def Result.mapOr: Result(a, e), b, (a -> b) -> b = {
+  | #some(value), _, f -> f(value)
+  | #error(_), default, _ -> default
+}
+
+-- The success as `#some`, or `#none` for an error.
+export def Result.toOption: Result(a, e) -> #some(a) | #none = {
+  | #some(value) -> #some(value)
+  | #error(_) -> #none
+}
+
+-- The success as it is, or `f` applied to the error.
+export def Result.orElse: Result(a, e), (e -> Result(a, f)) -> Result(a, f) = {
+  | #some(value), _ -> #some(value)
+  | #error(e), f -> f(e)
+}
+
 export def Result.isOk: Result(a, e) -> bool = {
   | #some(_) -> true
   | #error(_) -> false
@@ -189,6 +207,22 @@ export def Option.toResult: (#some(a) | r), e -> Result(a, e) = {
 export def Option.mapOr: (#some(a) | r), b, (a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, default, _ -> default
+}
+
+-- The value of `#some` as a one-element list, or the empty list for any other tag.
+export def Option.toList: (#some(a) | r) -> list(a) = {
+  | #some(value) -> [value]
+  | _ -> []
+}
+
+-- The values of the `#some`s in `options`, in order. The other tags are dropped.
+export def Option.values: list(#some(a) | r) -> list(a) = { options ->
+  def keep = {
+    | acc, #some(value) -> [value, ...acc]
+    | acc, _ -> acc
+  }
+
+  options \List.fold([], keep) \List.reverse
 }
 
 -- Lists -----------------------------------------------------------------------------------------

@@ -31,6 +31,7 @@
     <Compile Include="Features\Operators\RunOperatorTests.fs" />
     <Compile Include="Features\Packages\PackageCommandTests.fs" />
     <Compile Include="Features\Records\RunRecordTests.fs" />
+    <Compile Include="Features\StdLib\RunOptionResultTests.fs" />
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />
