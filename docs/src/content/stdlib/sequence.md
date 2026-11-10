@@ -1,7 +1,7 @@
 ---
 title: "sequence"
 description: "Helpers for sequence processing"
-order: 8
+order: 10
 ---
 
 The `sequence` module provides operations on `seq(a)`, which is always finite. Potentially infinite sequences have the type `gen(a)` and their own attached definitions; `Gen.take` on a `gen` yields a `seq`, which is how an infinite generator is brought into the finite world where `fold` and `toList` are safe to call. Because the two are different types with their own attached definitions, `xs \take(10)` resolves to whichever applies to `xs`.

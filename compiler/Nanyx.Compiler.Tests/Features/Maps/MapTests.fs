@@ -65,3 +65,31 @@ let ``Maps cannot be compared with == yet (#618)`` () =
     let code, message = onlyDiagnostic "def same = [\"a\" => 1] == [\"a\" => 1]\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'map(string, int)' cannot be compared with ==: maps have no equality", message)
+
+[<Fact>]
+let ``A key whose type attaches == and no hash is an error at the literal`` () =
+    let source =
+        "type $Email = string\n" +
+        "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+        "def m = [$Email(\"a\") => 1]\n"
+    let code, message = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'__map' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
+
+[<Fact>]
+let ``set(a) and Set(a) are the same type, made by the Set functions`` () =
+    let source =
+        "def s = Set.fromList([1, 2, 2])\n" +
+        "def t: Set(int) = s \\insert(3)\n" +
+        "def u: set(string) = Set.empty\n" +
+        "def n = Set.count(t)\n"
+    Assert.Equal<string list>([ "set(int)"; "set(int)"; "set(string)"; "int" ], typesOf source [ "s"; "t"; "u"; "n" ])
+
+[<Fact>]
+let ``An element type with no equality is an error, and sets cannot be compared with == yet`` () =
+    let code, message = onlyDiagnostic "def s = Set.fromList([{ (x: int) -> x }])\n"
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'Set.fromList' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
+    let code, message = onlyDiagnostic "def same = Set.fromList([1]) == Set.fromList([1])\n"
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'set(int)' cannot be compared with ==: sets have no equality", message)

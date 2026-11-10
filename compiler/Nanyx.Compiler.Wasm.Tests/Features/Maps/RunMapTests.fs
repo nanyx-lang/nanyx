@@ -140,3 +140,35 @@ let ``Run - a for loop walks a map's entries, in the order their keys were added
           "for dict, 1.. | entry, i -> println(\"{i}: {entry.1}\")" ]
     |> runSource
     |> assertRan "one => un\ntwo => dos\n1: un\n2: dos\n"
+
+[<Fact>]
+let ``Run - a nominal type with its own == and hash can be a key, compared by its own ==`` () =
+    program
+        [ "type $Code = string"
+          "def $Code.`==`: $Code, $Code -> bool = { a, b -> true }"
+          "def $Code.hash: $Code -> int = { c -> 0 }" ]
+        [ "def m = [$Code(\"ab\") => 1] \\insert($Code(\"xy\"), 2)"
+          "println(\"{Map.count(m)}\")"
+          "found(m($Code(\"zz\")))" ]
+    |> runSource
+    |> assertRan "1\n2\n"
+
+[<Fact>]
+let ``Run - tags of different names can be keys of a map whose key type is written`` () =
+    program
+        [ "type Colour = #red | #green | #blue" ]
+        [ "def lights: map(Colour, int) = Map.empty \\insert(#red, 1) \\insert(#green, 2)"
+          "found(lights(#green))"
+          "found(lights(#blue))" ]
+    |> runSource
+    |> assertRan "2\nnot found\n"
+
+[<Fact>]
+let ``Run - keys and values give a map's keys and values in order`` () =
+    program
+        [ "def joined = { xs -> xs \\List.fold(\"\", { acc, x -> acc ++ x }) }" ]
+        [ "def m = [\"b\" => \"2\", \"a\" => \"1\"] \\insert(\"c\", \"3\")"
+          "println(joined(Map.keys(m)))"
+          "println(joined(Map.values(m)))" ]
+    |> runSource
+    |> assertRan "bac\n213\n"

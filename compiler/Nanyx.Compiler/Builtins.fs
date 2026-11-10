@@ -67,9 +67,14 @@ module Intrinsics =
     let mapOfEntries = prefix + "map_of_entries"
     /// The entries a map holds, as the list it was made of.
     let mapEntries = prefix + "map_entries"
+    /// A set holding a list's elements. The list is what the set holds, as it is: the prelude keeps each element in
+    /// it once.
+    let setOfElements = prefix + "set_of_elements"
+    /// The elements a set holds, as the list it was made of.
+    let setElements = prefix + "set_elements"
 
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
-    let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries ]
+    let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
 
     let private keyVar = { Id = -2; Name = Some "k" }
     let private valueVar = { Id = -3; Name = Some "v" }
@@ -94,6 +99,8 @@ module Intrinsics =
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy))
           mapOfEntries, overEntries (TyFunc(entries, map))
           mapEntries, overEntries (TyFunc(map, entries))
+          setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element); Symbol = None }
+          setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element); Symbol = None }
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy); Symbol = None }
           hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy); Symbol = None } ]

@@ -57,6 +57,7 @@ let private isBuiltInTypeName (name: string) =
     || name.Equals("list", StringComparison.OrdinalIgnoreCase)
     || name.Equals("seq", StringComparison.OrdinalIgnoreCase)
     || Maps.isTypeName name
+    || Sets.isTypeName name
     || name = "Option"
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
@@ -92,6 +93,7 @@ let rec attachedTypeNames (ty: Ty) : string list =
     | TyApply("list", _) -> [ "List" ]
     | TyApply("seq", _) -> [ "Seq" ]
     | Maps.MapType _ -> [ Maps.moduleName ]
+    | Sets.SetType _ -> [ Sets.moduleName ]
     | _ -> []
 
 /// The attached definition `x \funcName` calls: `Name.funcName` for the first name of `x`'s type that has one in
@@ -255,6 +257,8 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
             TyApply("list", [elementTy]), current
         elif Maps.isTypeName name && argTys.Length = 2 then
             Maps.ofTypes argTys.[0] argTys.[1], current
+        elif Sets.isTypeName name && argTys.Length = 1 then
+            Sets.ofType argTys.[0], current
         else
             match tryFindTypeDef name current with
             | Some info when not (isNominal info) ->
@@ -1483,7 +1487,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
         elif name = ForSyntax.builtIn then
             // `for xs, ys | arms`: the parser passes the iterables and a lambda of one element of each. Each iterable
-            // is a `list(a)`, a `seq(a)`, a `gen(a)` or a `map(k, v)`, and the loop is unit. It stops when the shortest iterable
+            // is a `list(a)`, a `seq(a)`, a `gen(a)`, a `map(k, v)` or a `set(a)`, and the loop is unit. It stops when the shortest iterable
             // does, so a `gen`, which may never end, is only walked in step with one that does.
             match expr.Kind with
             | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
@@ -1494,6 +1498,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | TyApply(("seq" | "list" | "gen") as sequence, [ elementTy ]) -> (elementTy, sequence = "gen"), afterIterable
                         // A map's elements are its entries, each a key and its value, in the order of `Map.toList`.
                         | Maps.MapType(key, value) -> (tupleRecordType [ key; value ], false), afterIterable
+                        | Sets.SetType element -> (element, false), afterIterable
                         | _ ->
                             let elementTy, next = freshVar afterIterable
                             (elementTy, false), addConstraint typedIterable.Type (listType elementTy) next)

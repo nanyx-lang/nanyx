@@ -1,7 +1,7 @@
 ---
 title: "option"
 description: "Working with optional values"
-order: 5
+order: 7
 ---
 
 The `Option` helpers work on [**option-like** unions](../advanced/option-like-types). They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
