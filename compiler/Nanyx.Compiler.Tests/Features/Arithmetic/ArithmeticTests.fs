@@ -56,3 +56,32 @@ let ``Negation without a written type is of an int or a float`` () =
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         Assert.Equal(expected, Unifier.tyToString result.Typed.Value.Types.["r"])
     Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' cannot be used with -: it is not a number", "-\"s\""), onlyDiagnostic "def r = -\"s\"\n")
+
+[<Fact>]
+let ``A function that writes its type must require Num of a type variable it multiplies, divides or takes the remainder of`` () =
+    let cases =
+        [ "def mul: a, a -> a = { x, y -> x * y }\n", "'mul' multiplies values of type 'a' with *, so its type must require Num(a): add [Num(a)] to the type of 'mul'", "x * y"
+          "def div: [Add(a)] a, a -> a = { x, y -> x / y }\n", "'div' divides values of type 'a' with /, so its type must require Num(a): add [Num(a)] to the type of 'div'", "x / y"
+          "def rem: a, a -> a = { x, y -> x % y }\n", "'rem' takes the remainder of values of type 'a' with %, so its type must require Num(a): add [Num(a)] to the type of 'rem'", "x % y" ]
+    for source, message, text in cases do
+        Assert.Equal((DiagnosticCodes.MissingContextMembers.Code, message, text), onlyDiagnostic source)
+
+[<Fact>]
+let ``A literal beside a value of a type variable is fromInt of it, which needs Num, and cannot be a decimal`` () =
+    Assert.Equal(
+        (DiagnosticCodes.MissingContextMembers.Code, "'1' is an 'a' here, which needs Num(a): add [Num(a)] to the type of 'inc'", "1"),
+        onlyDiagnostic "def inc: [Add(a)] a -> a = { x -> x + 1 }\n")
+    Assert.Equal(
+        (DiagnosticCodes.TypeMismatch.Code, "'0.5' cannot be an 'a': 'a' may be an integer type. Take the value as a parameter", "0.5"),
+        onlyDiagnostic "def half: [Num(a)] a -> a = { x -> x * 0.5 }\n")
+
+[<Fact>]
+let ``A function that requires Num multiplies, takes literals and calls one that requires Add`` () =
+    let source =
+        "def square: [Num(a)] a -> a = { x -> x * x }\n" +
+        "def twice: [Num(a)] a -> a = { x -> 2 * x + 0 }\n" +
+        "def mean: [Num(a)] list(a) -> a = { xs -> List.sum(xs) / fromInt(List.length(xs)) }\n" +
+        "def total = mean([1.5, 2.5]) + square(2.0) + twice(1.5)\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal("float", Unifier.tyToString result.Typed.Value.Types.["total"])

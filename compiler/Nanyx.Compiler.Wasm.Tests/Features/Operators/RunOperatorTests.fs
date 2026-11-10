@@ -95,6 +95,24 @@ let ``Run - generic code adds through Add, at ints, floats and a type that attac
     runSource source |> assertRan "6 4.0 0 400 -400\n4 2.5 5 400\n"
 
 [<Fact>]
+let ``Run - generic code multiplies and divides through Num, with integer literals, at ints and floats`` () =
+    // #610: `*`, `/` and `%` read through `Num`, a literal beside a value of the type variable is `fromInt` of it, and
+    // a function that requires `Num` passes it to one that requires `Add`.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def square: [Num(a)] a -> a = { x -> x * x }\n" +
+        "def halfPlusOne: [Num(a)] a -> a = { x -> x / 2 + 1 }\n" +
+        "def rem3: [Num(a)] a -> a = { x -> x % 3 }\n" +
+        "def mean: [Num(a)] list(a) -> a = { xs -> List.sum(xs) / fromInt(List.length(xs)) }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(\"{square(3)} {square(1.5)} {halfPlusOne(7)} {halfPlusOne(7.0)} {rem3(7)} {rem3(7.5)}\")\n" +
+        "  println(\"{mean([1, 2, 4])} {mean([1.0, 2.0, 4.5])} {Float.fromInt(3)} {Int.`*`(6, 7)}\")\n" +
+        "}\n"
+    runSource source |> assertRan "9 2.25 4 4.5 1 1.5\n2 2.5 3.0 42\n"
+
+[<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
     // #39: the docs make boolean operations keywords; `not` had no spelling at all.
     let source =

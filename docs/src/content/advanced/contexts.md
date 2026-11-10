@@ -200,6 +200,33 @@ def orZero: [Add(a)] a -> a = { x -> x + 0 }
 
 `List.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. Outside generic code nothing changes: `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
 
+## Num(a)
+
+`Num(a)` is the context for numbers: it has every member of `Add(a)`, and `x * y`, `x / y` and `x % y` are read through it too.
+
+```nanyx
+context Num(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+  `*`: (a, a) -> a
+  `/`: (a, a) -> a
+  `%`: (a, a) -> a
+  fromInt: int -> a
+)
+```
+
+In a function that requires `Num(a)`, an integer literal beside a value of type `a` is `fromInt` of it, so `2` in `x * 2` is an `a`. A decimal literal there is an error, since `a` may be an integer type.
+
+```nanyx
+def square: [Num(a)] a -> a = { x -> x * x }
+
+def mean: [Num(a)] list(a) -> a = { xs -> List.sum(xs) / fromInt(List.length(xs)) }
+```
+
+`mean` calls `List.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
+
 These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
 
 ## ToString(a)

@@ -4,7 +4,7 @@ description: "Add, Num, the arithmetic operators and number literals in generic 
 order: 9
 ---
 
-> **Status: agreed, steps 1 to 3 of the [order of work](#order-of-work) done.** It answers the questions in
+> **Status: agreed, steps 1 to 3 of the [order of work](#order-of-work) done, and step 4 but for `math`.** It answers the questions in
 > [#606](https://github.com/nanyx-lang/nanyx/issues/606) and picks up where
 > [Equality and well-known contexts](./equality-and-well-known-contexts#numeric-operators) stops. The decisions are
 > listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work).
@@ -14,7 +14,8 @@ order: 9
 # What is implemented
 
 `Nanyx.Compiler/ArithmeticOperators.fs` holds the checks and the names; `OperatorCalls.fs` decides which operators
-call a definition; the prelude declares `Add(a)`.
+call a definition; `ContextShapes.fs` lets an instance of one context serve another whose members it has; the
+prelude declares `Add(a)` and `Num(a)`.
 
 - **`%` is checked** with the other arithmetic operators, and an operand already known not to be a number is
   reported naming the operator: `'string' cannot be used with %: it is not a number`. Floats have a remainder, the
@@ -35,8 +36,23 @@ call a definition; the prelude declares `Add(a)`.
 - **`0` reads as `zero`** where it is an operand of an arithmetic operator and the other operand is of a variable of
   the type the function writes, in a function that requires `Add` of it: `x + 0` (`InferState.LiteralMembers`).
 - **`List.sum: [Add(a)] list(a) -> a`** ([#475](https://github.com/nanyx-lang/nanyx/issues/475)).
+- **`Num(a)` is a prelude context**, with `Add`'s members and `` `*` ``, `` `/` ``, `` `%` `` and `fromInt`; `*`, `/`
+  and `%` on a type variable call its members, and without `[Num(a)]` are `NYX0205`, as `+` is without `Add`. The
+  compiler's own `Num(int)` and `Num(float)` are again the members the prelude attaches to `Int` and `Float`
+  ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
+- **Integer literals are `fromInt`** where `0` would be `zero` and the function requires `Num`: `x * 2` is
+  `` `*`(x, fromInt(2)) ``. In a function that requires only `Add`, such a literal is `NYX0205`, `'1' is an 'a' here,
+  which needs Num(a): add [Num(a)] to the type of 'inc'`, and a decimal literal there is `NYX0201`, `'0.5' cannot be
+  an 'a': 'a' may be an integer type. Take the value as a parameter`. A `fromInt` is a call at run time, not folded
+  to a constant.
+- **A `Num` serves as an `Add`.** An instance in scope of a context that has every member of the one a call needs,
+  at the same types, is found for it (`ContextShapes.wider`), so a `[Num(a)]` function can call `List.sum`.
 
 Not done yet:
+
+- **`math` is still `int` only.** `abs` needs `Ord(a)` to compare with `zero`, and `min`, `max` and `clamp` need only
+  `Ord(a)`, so they wait on [#476](https://github.com/nanyx-lang/nanyx/issues/476) (the rest of
+  [#186](https://github.com/nanyx-lang/nanyx/issues/186)).
 
 - **`0` elsewhere in generic code.** A `0` that is not an operand beside a value of the type variable, such as the
   start of a `fold` or a function's result, is still an `int`; write `zero` there. Literals are typed before the
@@ -303,9 +319,9 @@ The language server's code action for the second and fourth adds the requirement
    implemented](#what-is-implemented)). `Add` in the prelude; `+` and `-` read through it; the compiler's own
    instances for `int` and `float`; prefix `-`; `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
    ([#609](https://github.com/nanyx-lang/nanyx/issues/609)).
-4. `Num`; `*`, `/` and `%` read through it; `fromInt` literals. Makes `math.abs` generic (#186); `min`, `max` and
-   `clamp` wait on `Ord` ([#476](https://github.com/nanyx-lang/nanyx/issues/476))
-   ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
+4. **Done**, but for `math`, which waits on `Ord`. `Num`; `*`, `/` and `%` read through it; `fromInt` literals.
+   Makes `math.abs` generic (#186); `min`, `max` and `clamp` wait on `Ord`
+   ([#476](https://github.com/nanyx-lang/nanyx/issues/476)) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
 5. `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 6. Instances for the sized numbers as they land ([#343](https://github.com/nanyx-lang/nanyx/issues/343)), and the
    dimension rules for `*` and `/` with units.

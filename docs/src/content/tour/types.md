@@ -41,7 +41,7 @@ def name: string = "Alice"
 def active: bool = true
 ```
 
-There is no separate `number` type. Numeric operations are generic over a `Num(a)` [context](../advanced/contexts), and `int` and `float` are the built-in types that satisfy it.
+There is no separate `number` type. Generic code over numbers requires a [context](../advanced/contexts): `Add(a)` to add and subtract, or `Num(a)` to multiply and divide as well. `int` and `float` are the built-in types that have both.
 
 `int` is a 64-bit integer and `float` a 64-bit floating-point number, on every platform. Numbers of other fixed widths (`I32`, `U8`, `F32` and so on) are planned; see [Sized numbers](../work-in-progress/sized-numbers).
 
