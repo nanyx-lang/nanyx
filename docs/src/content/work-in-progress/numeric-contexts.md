@@ -4,7 +4,7 @@ description: "Add, Num, the arithmetic operators and number literals in generic 
 order: 9
 ---
 
-> **Status: agreed, step 1 of the [order of work](#order-of-work) done.** It answers the questions in
+> **Status: agreed, steps 1 and 2 of the [order of work](#order-of-work) done.** It answers the questions in
 > [#606](https://github.com/nanyx-lang/nanyx/issues/606) and picks up where
 > [Equality and well-known contexts](./equality-and-well-known-contexts#numeric-operators) stops. The decisions are
 > listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work). The code references under [What exists today](#what-exists-today)
@@ -31,8 +31,9 @@ order: 9
 - **Generic code.** Where an operator's name is bound, as `` `+` `` is in a function that requires a user's
   `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
   (`OperatorCalls.fs:37-43`). That is how [contexts.md](../advanced/contexts#contexts-as-typeclasses)'s `Sum(a)` and
-  `Add(a)` work. Context members named in backticks parse (`prelude.nyx:61`); attached definitions named in
-  backticks do not ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
+  `Add(a)` work. Context members named in backticks parse (`prelude.nyx:61`), and so do attached definitions
+  named in backticks. *Since step 2:* an operator on a type that attaches it, `` def $Vector.`+` = ... ``, calls
+  that definition ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 - **`Num(a)` does not exist.** The docs use it: [math.md](../stdlib/math)'s `abs`, `min`, `max`, `clamp` and `pow`
   are `[Num(a)]`, but `math.nyx` takes `int` only ([#186](https://github.com/nanyx-lang/nanyx/issues/186)), and
   [types.md](../tour/types) says numeric operations are generic over it.
@@ -259,7 +260,8 @@ The language server's code action for the second and fourth adds the requirement
 
 1. **Done.** Check `%` as the other arithmetic operators are, and give floats a remainder: a bug fix that needs none
    of the rest ([#607](https://github.com/nanyx-lang/nanyx/issues/607)).
-2. Attached operator definitions ([#527](https://github.com/nanyx-lang/nanyx/issues/527)), shared with `Eq`.
+2. **Done.** Attached operator definitions ([#527](https://github.com/nanyx-lang/nanyx/issues/527)), shared with
+   `Eq`.
 3. `Add` in the prelude; `+` and `-` read through it; the compiler's own instances for `int` and `float`; prefix `-`;
    `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
    ([#609](https://github.com/nanyx-lang/nanyx/issues/609)).

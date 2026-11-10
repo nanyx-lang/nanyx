@@ -3,7 +3,8 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Operators that call a definition. Where an operator's name is bound, as `` `+` `` is in a function that requires
+/// Operators that call a definition. A type gets an operator by attaching it, `` def $Vector.`+` = ... ``, and then
+/// `v + w` on a `$Vector` calls it. Where an operator's name is bound, as `` `+` `` is in a function that requires
 /// `[Sum(a)]`, `x + y` calls that definition with its two operands, so generic code can add any type that has a
 /// `+`. On a built-in type the operator is still the built-in one, whatever is in scope, so `count + 1` in that
 /// same function adds ints.
@@ -32,20 +33,33 @@ module internal OperatorCalls =
             Unifier.unify ((funcTy, TyFunc(input, resultTy), Equal, SourceSpan.none) :: next.Constraints) |> Result.isOk
 
     /// The definition the binary operator `expr` calls with its operands (`input`, as a call's arguments are typed),
-    /// if it calls one: the binding of its name in `env`, unless its left operand (`leftTy`) is already known to be
-    /// of a built-in type. `and` and `or` are keywords, so their names are never bound.
-    let definition (env: TypeEnv) (state: InferState) (expr: Expression) (leftTy: Ty) (input: Ty) : TypeScheme option =
-        match expr.Kind, Unifier.unalias (resolveSoFar state leftTy) with
-        | _, TyPrimitive _ -> None
-        | BinaryOp(op, _, _), operandTy when EqualityOperators.isOperator op ->
-            TypeEnv.tryFind EqualityOperators.equals env |> Option.filter (compares state operandTy input)
-        | BinaryOp(op, _, _), _ -> TypeEnv.tryFind op env
+    /// if it calls one, and the name it calls it by. That is the definition attached under the operator's name to the
+    /// type of its left operand (`leftTy`), when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is
+    /// the binding of the operator's name in `env`, unless the left operand is already known to be of a built-in
+    /// type. `!=` calls what `==` does. `and` and `or` are keywords, so their names are never bound.
+    let definition
+        (attached: Identifier -> Identifier option)
+        (env: TypeEnv)
+        (state: InferState)
+        (expr: Expression)
+        (leftTy: Ty)
+        (input: Ty)
+        : (Identifier * TypeScheme) option =
+        let bound (name: Identifier) = TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme)
+        match expr.Kind with
+        | BinaryOp(op, _, _) ->
+            let name = if EqualityOperators.isOperator op then EqualityOperators.equals else op
+            match attached name, Unifier.unalias (resolveSoFar state leftTy) with
+            | Some attachedName, _ -> bound attachedName
+            | None, TyPrimitive _ -> None
+            | None, operandTy when EqualityOperators.isOperator op -> bound name |> Option.filter (snd >> compares state operandTy input)
+            | None, _ -> bound name
         | _ -> None
 
-    /// `expr`, a binary operator that calls `scheme`, typed as that call: the definition takes its operands
-    /// (`input`) and the operator's value is what it returns.
-    let infer (state: InferState) (expr: Expression) (scheme: TypeScheme) (input: Ty) : Ty * InferState =
+    /// `expr`, a binary operator that calls `scheme` by the name `callee`, typed as that call: the definition takes its
+    /// operands (`input`) and the operator's value is what it returns.
+    let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (input: Ty) : Ty * InferState =
         let funcTy, next = instantiate (recordReference expr scheme state) scheme
         let resultTy, next = freshVar next
         let next = addConstraint funcTy (TyFunc(input, resultTy)) next
-        resultTy, { next with CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy; OperatorCalls = next.OperatorCalls |> Set.add expr.Id }
+        resultTy, { next with CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy; OperatorCalls = next.OperatorCalls |> Map.add expr.Id callee }

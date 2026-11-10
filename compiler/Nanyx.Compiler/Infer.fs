@@ -1538,9 +1538,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Ok (rightExpr, nextState) ->
                 let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
                 let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
-                match OperatorCalls.definition env nextState expr leftExpr.Type input with
-                | Some scheme ->
-                    let resultTy, called = OperatorCalls.infer nextState expr scheme input
+                let attached = tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type)
+                match OperatorCalls.definition attached env nextState expr leftExpr.Type input with
+                | Some (callee, scheme) ->
+                    let resultTy, called = OperatorCalls.infer nextState expr callee scheme input
                     Ok (mkTypedExpr expr resultTy None None None, called)
                 | None ->
                 match expr.Kind with

@@ -173,7 +173,7 @@ module internal EqualityOperators =
                 { current with
                     ContextInstances = current.ContextInstances |> Map.remove pending.Call
                     CalleeTypes = current.CalleeTypes |> Map.add pending.Call memberTy
-                    OperatorCalls = current.OperatorCalls |> Set.add pending.Call }
+                    OperatorCalls = current.OperatorCalls |> Map.add pending.Call equals }
             | _ -> current) state
 
     /// Where a call to a function that requires `Eq` of the type `ty` finds it, when no instance is in scope.
