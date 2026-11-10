@@ -160,13 +160,22 @@ def contains: [Eq(a)] (list(a), a) -> bool = { xs, target ->
 
 A function that does not write its type has the requirement inferred: `def same = { x, y -> x == y }` is `[Eq(a)] a, a -> bool`. Comparing a type built from a variable requires `Eq` of the variable, so `==` on two `list(a)` needs `Eq(a)`.
 
-A nominal type can attach its own `==`, which a function that requires `Eq` then uses for it:
+A nominal type can attach its own `==`. Comparing two of its values then calls it, and so does a function that requires `Eq`:
 
 ```nanyx
 def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
 ```
 
 Only a nominal or protected type can: a structural type, such as `type Point = (x: int, y: int)`, and a built-in type always compare by their structure, so attaching `==` to one is an error. `!=` cannot be attached to any type, because it is always `not (a == b)`.
+
+An `==` passes through the structures around it. A tag with a payload, a tuple, a record and a list are compared part by part, each part with its own `==`:
+
+```nanyx
+#some($Email("A@x.io")) == #some($Email("a@x.io"))   // true
+[$Email("A@x.io")] == [$Email("a@x.io")]             // true
+
+def bothSome: [Eq(a)] (a, a) -> bool = { x, y -> #some(x) == #some(y) }   // compares x and y with Eq(a)
+```
 
 ## Default(a)
 
@@ -209,7 +218,7 @@ context ToString(a) = (
 )
 ```
 
-The compiler has its own `ToString` for `int`, `float`, `bool`, `string` and tags without a payload. Any other type gets one by attaching a `toString`, which is [synthesized](#context-synthesis) into the context:
+The compiler has its own `ToString` for `int`, `float`, `bool`, `string` and tags without a payload. A type of your own gets one by attaching a `toString`, which is [synthesized](#context-synthesis) into the context:
 
 ```nanyx
 type Point = (x: int, y: int)
@@ -238,7 +247,19 @@ def receipt = {
 
 The holes in the instance itself are checked before it is loaded, so they write their ints as usual.
 
-A value whose type has no `ToString`, such as a list, a record, a function or a tag with a payload, is an error at its hole. Turn it into a string first, or print it with [`dbg`](../stdlib/io#dbg).
+A tag with a payload, a tuple, a record and a list have a `ToString` when their parts do. The compiler derives it, writing each part with the `ToString` of its type:
+
+```nanyx
+"{#some(Point(x = 1, y = 2))}"   // "#some((1, 2))"
+"{[1, 2, 3]}"                    // "[1, 2, 3]"
+"{(name = "Ada", age = 36)}"     // "(age = 36, name = Ada)"
+
+def wrapped: [ToString(a)] a -> string = { value -> "{#some(value)}" }
+```
+
+A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code.
+
+A value whose type has no `ToString`, such as a function, or a structure that holds one, is an error at its hole.
 
 # Context synthesis
 

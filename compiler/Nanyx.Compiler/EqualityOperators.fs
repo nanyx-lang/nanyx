@@ -6,7 +6,9 @@ open NyxCompiler.InferState
 /// `==` and `!=` through the well-known context `Eq` (see "Equality and well-known contexts" in the docs' work in
 /// progress). Comparing two values of the type `T` needs an `Eq(T)`. Every type that holds no function has the
 /// compiler's own, which compares by structure, so only two things are checked: a function is never compared, and a
-/// function that compares values of one of its own type variables requires `Eq` of it. One that does not write its
+/// function that compares values of one of its own type variables requires `Eq` of it. A type with an `==` attached
+/// is compared by calling it, and a structure with a part that has an `==` of its own by a definition derived from
+/// its parts (see `StructuralInstances`). One that does not write its
 /// type has the requirement inferred, as it is for a call to a function that requires a context (see
 /// `ContextInference`), and its `==` then calls the member of the instance it is passed.
 ///
@@ -24,6 +26,9 @@ module internal EqualityOperators =
     /// The prelude function that compares two values by their structure: the member of the compiler's own instance,
     /// where one is passed to a function that requires `Eq`.
     let builtInFunction = "__equals"
+
+    /// The prelude function the derived `==` of a list calls, with the two lists and what compares two elements.
+    let listFunction = "__listEquals"
 
     /// The members of the compiler's own instance, as `InstanceSynthesized` has them.
     let builtInMembers = [ equals, builtInFunction ]
@@ -112,12 +117,25 @@ module internal EqualityOperators =
     /// `resolvePending`): in a def that does not write its type, that is once the def is inferred, when a variable
     /// that turns out to be one of the def's own is one the def requires `Eq` of (see `ContextInference`). Anywhere
     /// else, it is once the module is inferred. The prelude's `builtInFunction` is the comparison itself, of any type.
-    let require (env: TypeEnv) (state: InferState) (expr: Expression) (op: string) (operandTy: Ty) : Result<InferState, Diagnostic list> =
+    ///
+    /// A structure with a part that has an `==` of its own (`comparesParts`) is compared by a derived definition
+    /// (see `StructuralInstances`), which `derive` makes the comparison call once nothing of the type is left open.
+    let require
+        (comparesParts: Ty -> bool)
+        (derive: Ty -> InferState -> InferState option)
+        (env: TypeEnv)
+        (state: InferState)
+        (expr: Expression)
+        (op: string)
+        (operandTy: Ty)
+        : Result<InferState, Diagnostic list> =
         let ty = resolveSoFar state operandTy
         match noEquality ty, state.ContextScope with
         | Some reason, _ -> Error (error expr.Span (notComparable op ty reason))
         | None, DefScope(name, false) when name = builtInFunction -> Ok state
-        | None, _ when (comparedVars ty).IsEmpty || not (isDeclared state) -> Ok state
+        | None, _ when not (isDeclared state) -> Ok state
+        | None, _ when (TypeEnv.freeTyVars ty).IsEmpty -> Ok (derive ty state |> Option.defaultValue state)
+        | None, _ when (comparedVars ty).IsEmpty && not (comparesParts ty) -> Ok state
         | None, scope ->
             let def, annotatedDef =
                 match scope with
@@ -127,7 +145,7 @@ module internal EqualityOperators =
             let pending =
                 { Def = def; Call = expr.Id; Callee = op; Index = 0; Count = 1
                   Context = context; ArgTys = [ ty ]; Span = expr.Span
-                  Errors = error expr.Span (undeclared op (List.head (comparedVars ty)) annotatedDef); ChecksOnly = false }
+                  Errors = comparedVars ty |> List.tryHead |> Option.map (fun v -> error expr.Span (undeclared op v annotatedDef)) |> Option.defaultValue []; ChecksOnly = false }
             Ok { state with
                     PendingContextInstances = pending :: state.PendingContextInstances
                     HoleScopes = state.HoleScopes |> Map.add expr.Id (env, annotatedDef) }
@@ -140,10 +158,11 @@ module internal EqualityOperators =
     /// around it writes (`defScheme` gives a def's type) must be one that def requires `Eq` of (`hasInstance`, in the
     /// environment the comparison is written in). Any other variable is one of a local function generic in it: local
     /// functions require no contexts, and the backend compares at each type the function is specialised at. The
-    /// comparison is the compiler's own, so it finds no instance; one that fails failed to check, and the def around
-    /// it carries on.
+    /// comparison is the compiler's own, so it finds no instance, unless `derive` makes it call a derived definition
+    /// (see `require`); one that fails failed to check, and the def around it carries on.
     let resolvePending
         (hasInstance: TypeEnv -> Ty -> bool)
+        (derive: Ty -> InferState option)
         (defScheme: Identifier -> TypeScheme option)
         (state: InferState)
         (pending: PendingContextInstance)
@@ -159,7 +178,7 @@ module internal EqualityOperators =
         | None ->
             match comparedVars ty |> List.tryFind (fun v -> declaredVars.Contains v.Id && not (hasInstance env (TyVar v))) with
             | Some v -> failed (undeclared pending.Callee v annotatedDef)
-            | None -> Ok (None, state)
+            | None -> Ok (None, derive ty |> Option.defaultValue state)
 
     /// `state` with each comparison among `pendings` that found the instance its def requires (see `ContextInference`)
     /// calling that instance's `==`, as an operator whose name is bound does (see `OperatorCalls`). `inputOf` is the

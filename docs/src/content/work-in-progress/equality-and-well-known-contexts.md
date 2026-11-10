@@ -40,14 +40,25 @@ order: 8
   `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still
   names `Point`. The official linter's `noTagInCommon` rule warns about `#red == #some(1)`: closed types with no tag
   in common.
+- **A concrete `a == b` calls the `==` attached to the type**, if it has one. Inside that definition itself, `==` on
+  the type stays the compiler's own.
+- **Structural derivation that looks up each part.** A tag with a payload, a tuple, a record or a list with a part
+  that has an `==` of its own, one attached to the part's type or the `Eq` a function requires of a type variable,
+  is compared by a definition the compiler derives (`Nanyx.Compiler/StructuralInstances.fs`), which compares each
+  part with `==`. So a `list($Email)` compares its elements with `` $Email.`==` ``, and inside a function that
+  requires `[Eq(a)]`, `==` on a `list(a)` or a `#some(a)` compares through the instance. A structure with no such
+  part is still compared by the compiler's own. `ToString` is derived the same way (see
+  [printing values](./printing-values#structures)).
 
 Not done yet:
 
-- **Structural derivation that looks up each part.** The compiler's own instance compares a whole value by its
-  structure, so a `list($Email)` does not compare its elements with `` $Email.`==` ``, and inside a function that
-  requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance.
-- **A concrete `a == b` is still the built-in comparison** for a type with an attached `==`, and for a built-in type
-  with an `Eq` loaded by `use` (decision 2 below).
+- **A derived `==` reads only what the top of the module can see**
+  ([#630](https://github.com/nanyx-lang/nanyx/issues/630)). It uses a part's attached `==`, and the `Eq` of
+  a type variable, but not an `Eq` of a concrete part loaded by `use` in a block. A call that requires `Eq` of a
+  structure with a type variable in it, `same([x], [y])` inside a function that requires `[Eq(a)]`, is passed the
+  compiler's own instance, not one built from `Eq(a)`: compare with `==` there.
+- **A concrete `a == b` is still the built-in comparison** for a built-in type with an `Eq` loaded by `use`
+  (decision 2 below).
 - **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
   function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
 
@@ -151,7 +162,7 @@ The proposed set is small and closed:
 | `Eq(a)` | `` `==`: (a, a) -> bool `` | `==`, `!=` | numbers, bool, unit, string, tuples, records, lists, tags and unions |
 | `Ord(a)` | `compare: (a, a) -> #less \| #equal \| #greater` | `<`, `<=`, `>`, `>=` | numbers, bool, string, tuples, lists (see [Q3](#open-questions)) |
 | `Hash(a)` | `hash: a -> int` | none | the same types as `Eq` |
-| `ToString(a)` | `toString: a -> string` | interpolation holes | the built-in types only, as [printing values](./printing-values) proposes |
+| `ToString(a)` | `toString: a -> string` | interpolation holes | tags, tuples, records and lists, as [printing values](./printing-values#structures) describes |
 
 Not every context in the prelude is well-known. `FromString(a, e)`, which an attached `fromString` gives a type as
 `toString` gives it a `ToString`, is an ordinary prelude context: no syntax reads through it and it is never derived
@@ -265,8 +276,8 @@ design makes hashing the natural choice, since more types have it.
 # Printing
 
 Unchanged from [printing values](./printing-values): `ToString(a)` is a
-well-known context for interpolation holes, synthesized from an attached `toString`. Whether compound types get a
-derived `ToString` stays that page's open question. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
+well-known context for interpolation holes, synthesized from an attached `toString`, and derived part by part for
+tags with a payload, tuples, records and lists. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
 block, which is what that page already proposes.
 
 # Numeric operators

@@ -11,7 +11,7 @@ open NyxCompiler.InferState
 module internal ContextInference =
     /// The type variables of `ty`, each once, in the order they appear. A nominal's underlying type is not included,
     /// nor an alias's (its arguments are).
-    let private varsInOrder (ty: Ty) : TyVar list =
+    let varsInOrder (ty: Ty) : TyVar list =
         let rec collect ty =
             match ty with
             | TyVar v -> [ v ]
@@ -96,14 +96,17 @@ module internal ContextInference =
     /// of the def's own type finds the instance the def then requires itself; one whose arguments turned out to be
     /// types finds the instance `synthesize` finds or builds for them, if it can (or none, for a call it reports as
     /// failed itself). A call that requires `Eq` of a type with one of the def's variables in it, `Eq(list(a))`, makes
-    /// the def require `Eq` of the variable. The def is registered as requiring
-    /// the contexts it was found to, and the annotation that would have said so is returned.
+    /// the def require `Eq` of the variable, and so does one that requires a context whose instance for that type is
+    /// derived from its parts: `derivedVars` gives the variables such an instance requires the context of. `synthesize`
+    /// is also given the instance the def now requires for each of its own variables, by the context's name. The def
+    /// is registered as requiring the contexts it was found to, and the annotation that would have said so is returned.
     let resolvePending
         (state: InferState)
         (name: Identifier)
         (symbol: SymbolId option)
         (scheme: TypeScheme)
-        (synthesize: PendingContextInstance -> Ty list -> InferState -> Result<ContextInstance option * InferState, Diagnostic list> option)
+        (derivedVars: PendingContextInstance -> Ty list -> TyVar list)
+        (synthesize: (Identifier -> TyVar -> TypeExpr option) -> PendingContextInstance -> Ty list -> InferState -> Result<ContextInstance option * InferState, Diagnostic list> option)
         : Result<TypeExpr option * InferState, Diagnostic list> =
         let pending, others = state.PendingContextInstances |> List.partition (fun p -> p.Def = name)
         let state = { state with PendingContextInstances = others }
@@ -115,12 +118,12 @@ module internal ContextInference =
         let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.map _.Id
         // `Eq` of a type with more to it than a variable is `Eq` of each of the def's variables it compares values of.
         let reduced (p: PendingContextInstance) (argTys: Ty list) =
-            if p.Context <> EqualityOperators.context then []
-            else
-                argTys
-                |> List.collect EqualityOperators.comparedVars
-                |> List.filter (fun v -> scheme.Quantified.Contains v.Id)
-                |> List.map (fun v -> p.Context, [ v ])
+            let vars =
+                if p.Context = EqualityOperators.context then argTys |> List.collect EqualityOperators.comparedVars
+                else derivedVars p argTys
+            vars
+            |> List.filter (fun v -> scheme.Quantified.Contains v.Id)
+            |> List.map (fun v -> p.Context, [ v ])
         let required =
             resolved
             |> List.collect (fun (p, argTys) ->
@@ -129,6 +132,10 @@ module internal ContextInference =
                 | None -> reduced p argTys)
             |> List.distinctBy key
         let written = if required.IsEmpty then None else annotation scheme.Type required
+        let ownInstance (ctxName: Identifier) (var: TyVar) =
+            match written, required |> List.tryFindIndex (fun required -> key required = (ctxName, [ var.Id ])) with
+            | Some (contexts, _), Some index -> Some contexts.[index]
+            | _ -> None
         resolved
         |> List.fold (fun result (p, argTys) ->
             result
@@ -142,7 +149,7 @@ module internal ContextInference =
                 // A comparison in a def whose type cannot be written is the compiler's own, as it is in a local function.
                 | Some _, None when not (EqualityOperators.isPending p || p.ChecksOnly) -> Error p.Errors
                 | _ ->
-                    match synthesize p argTys current with
+                    match synthesize ownInstance p argTys current with
                     | Some synthesized ->
                         synthesized
                         |> Result.map (function

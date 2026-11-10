@@ -66,18 +66,53 @@ export def __equals: a, a -> bool = { x, y ->
   x == y
 }
 
+-- Whether the lists `xs` and `ys` hold equal elements in the same order, as `same` compares two
+-- elements. The `==` the compiler derives for a list whose elements have an `==` of their own
+-- calls it.
+export def __listEquals: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
+  match xs
+    | [] -> __isEmpty(ys)
+    | [x, ...restOfXs] ->
+      match ys
+        | [] -> false
+        | [y, ...restOfYs] ->
+          if same(x, y) then __listEquals(restOfXs, restOfYs, same) else false
+}
+
+def __isEmpty: list(a) -> bool = { xs ->
+  match xs
+    | [] -> true
+    | _ -> false
+}
+
 -- Text ------------------------------------------------------------------------------------------
 
 -- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
 -- through it, so a type can be interpolated when it has one: a type gets one by attaching a
 -- `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
--- `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload.
+-- `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
+-- and derives one for a tag with a payload, a tuple, a record and a list from the `ToString` of
+-- each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`.
 export context ToString(a) = (toString: a -> string)
 
 -- What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
 -- needs a `ToString` of its value's type, as a call to a function that requires one does.
 export def __interpolate: [ToString(a)] a -> string = { value ->
   toString(value)
+}
+
+-- What the derived `toString` of a list calls: `xs` in square brackets, each element written by
+-- `show`, with `, ` between them.
+export def __listToString: list(a), (a -> string) -> string = { xs, show ->
+  match xs
+    | [] -> "[]"
+    | [first, ...rest] -> "[{__listRestToString(rest, show, show(first))}]"
+}
+
+def __listRestToString: list(a), (a -> string), string -> string = { xs, show, text ->
+  match xs
+    | [] -> text
+    | [first, ...rest] -> __listRestToString(rest, show, "{text}, {show(first)}")
 }
 
 -- Each built-in type has an attached `toString`, so a value can be turned into text by a function

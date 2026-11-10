@@ -217,8 +217,9 @@ module Compiler =
             | other -> other)
 
     /// Every pipe in an expression that inference resolved to an attached definition (`targets`, by the pipe's
-    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \String.trim`.
-    let private retargetPipes (targets: Map<NodeId, Identifier>) (expr: Expression) : Expression =
+    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \String.trim`. So
+    /// is every call inference resolved to another definition: a hole that calls a derived `toString`.
+    let private retargetCalls (targets: Map<NodeId, Identifier>) (expr: Expression) : Expression =
         if targets.IsEmpty then
             expr
         else
@@ -226,22 +227,25 @@ module Compiler =
             |> mapExpressionKinds (fun current kind ->
                 match kind, targets |> Map.tryFind current.Id with
                 | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
+                | FunctionCall(_, rangeOpt, args), Some target -> FunctionCall(target, rangeOpt, args)
                 | other, _ -> other)
 
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
     /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``. `x != y` calls what `==` is
     /// bound to, and becomes `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are
-    /// recorded by.
-    let private callOperators (calls: Set<NodeId>) (expr: Expression) : Expression =
+    /// recorded by. A comparison of two structures calls the `==` derived for their type instead (`targets`, by the
+    /// operator's node).
+    let private callOperators (targets: Map<NodeId, Identifier>) (calls: Set<NodeId>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
         else
             expr
             |> mapExpressionKinds (fun current kind ->
+                let called (op: string) = targets |> Map.tryFind current.Id |> Option.defaultValue op
                 match kind with
                 | BinaryOp(op, left, right) when calls.Contains current.Id && op = EqualityOperators.notEquals ->
-                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(EqualityOperators.equals, None, [ left; right ]) } ])
-                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(op, None, [ left; right ])
+                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(called EqualityOperators.equals, None, [ left; right ]) } ])
+                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(called op, None, [ left; right ])
                 | other -> other)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
@@ -1118,13 +1122,13 @@ module Compiler =
             | _ -> kind)
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
+    /// attached function or a derived definition written with the name it resolved to (`callTargets`), each operator that calls a definition as
     /// that call (`operatorCalls`), each read of a built-in property as a call (`properties`), each builder block that
     /// uses no keyword as its block (`workflowBlocks`), and without import statements. `defer` compiles the module's
     /// errors to traps first, for a debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    let private moduleFromTypedItems (defer: Expression -> Expression) (callTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetCalls callTargets |> callOperators callTargets operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1401,7 +1405,7 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)

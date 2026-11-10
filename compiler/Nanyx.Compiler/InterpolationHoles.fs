@@ -11,10 +11,20 @@ open NyxCompiler.InferState
 ///
 /// The built-in types have the compiler's own instance (`InstanceBuiltIn`), which the backend writes itself: int,
 /// float, bool, string, and tags without a payload. The prelude's `Int.toString` and the others are written with a
-/// hole, which is how they avoid calling themselves.
+/// hole, which is how they avoid calling themselves. A tag with a payload, a tuple, a record and a list have one the
+/// compiler derives from their parts (see `StructuralInstances`).
 module InterpolationHoles =
+    /// The context a hole requires of its value's type.
+    let context = "ToString"
+
+    /// The member of `context`.
+    let memberName = "toString"
+
     /// The prelude function each hole calls.
     let holeFunction = "__interpolate"
+
+    /// The prelude function the derived `toString` of a list calls, with the list and what writes an element.
+    let listFunction = "__listToString"
 
     /// Whether a call to `calleeName` is a hole's.
     let isHole (calleeName: Identifier) = calleeName = holeFunction
@@ -51,8 +61,6 @@ module InterpolationHoles =
         | (TyAlias(name, _, _) | TyNominal(name, _, _)), _ ->
             $"'{tyText}' cannot be interpolated because it has no toString: attach '{name}.toString', or load an instance of `ToString({tyText})` with `use`"
         | _, TyFunc _ -> $"'{tyText}' cannot be interpolated: it is a function, and functions have no toString"
-        | _, (TyTag(_, Some _) | TyUnion _) ->
-            $"'{tyText}' cannot be interpolated: only a tag without a payload has a toString. Match on it, or print it with `dbg`"
         | _ -> $"'{tyText}' cannot be interpolated because it has no toString: turn it into a string first, or print it with `dbg`"
 
     /// The error for a hole of the type `ty`, one of the type variables of the function `defName` (if it is in one),
@@ -104,8 +112,8 @@ module InterpolationHoles =
 
     /// The instance the hole `pending` finds now that its type is known to be `argTys`, when it is not one of the
     /// variables of the def it is in: as it would have found it at once, through `instanceInScope` in the environment
-    /// it is written in, the compiler's own, or `synthesize` from a type's attached definitions. A hole that finds none
-    /// failed to check, as it would have then, and the def around it carries on.
+    /// it is written in, the compiler's own, or `synthesize` from a type's attached definitions or its parts. A hole
+    /// that finds none failed to check, as it would have then, and the def around it carries on.
     ///
     /// A type variable left open is an error where it is one of the variables of the type the def around the hole
     /// writes (`defScheme` gives a def's type), which does not require `ToString` of it. Any other is a variable of a
@@ -114,7 +122,7 @@ module InterpolationHoles =
     /// with more to it than a variable, such as a function's, has no `ToString` whatever its variables turn out to be.
     let resolvePending
         (instanceInScope: TypeEnv -> Identifier -> Ty list -> TypeExpr option)
-        (synthesize: TypeEnv -> Result<(string * string) list * InferState, Diagnostic list> option)
+        (synthesize: TypeEnv -> Result<ContextInstance * InferState, Diagnostic list> option)
         (defScheme: Identifier -> TypeScheme option)
         (state: InferState)
         (pending: PendingContextInstance)
@@ -129,7 +137,7 @@ module InterpolationHoles =
             | None when argTys |> List.forall hasBuiltInInstance -> Ok (InstanceBuiltIn, state)
             | None ->
                 match synthesize env with
-                | Some synthesized -> synthesized |> Result.map (fun (members, next) -> InstanceSynthesized members, next)
+                | Some synthesized -> synthesized
                 | None when not (Set.intersect openVars declaredVars).IsEmpty -> Error pending.Errors
                 | None when argTys |> List.forall (Unifier.unalias >> function TyVar _ -> true | _ -> false) -> Ok (InstanceBuiltIn, state)
                 | None -> Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (noInstance (List.head argTys)) ]
