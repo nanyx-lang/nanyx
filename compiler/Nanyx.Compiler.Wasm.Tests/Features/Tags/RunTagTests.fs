@@ -44,8 +44,8 @@ let ``Run - a piped lambda can match only the tags left of a union's rest`` () =
         "  | #bad(s) -> s\n" +
         "}\n" +
         "\n" +
-        "println(show(Int.parse(\"12\") \\mapError({ #invalidInt -> #bad(\"bad\") })))\n" +
-        "println(show(Int.parse(\"zz\") \\mapError({ #invalidInt -> #bad(\"bad\") })))\n"
+        "println(show(Int.fromString(\"12\") \\mapError({ #invalidInt -> #bad(\"bad\") })))\n" +
+        "println(show(Int.fromString(\"zz\") \\mapError({ #invalidInt -> #bad(\"bad\") })))\n"
     runSource source |> assertRan "some 12\nbad\n"
 
 [<Fact>]

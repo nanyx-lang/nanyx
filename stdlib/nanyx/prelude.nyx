@@ -26,7 +26,7 @@ def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
 -- The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
 -- anything else (an empty string, a sign alone, spaces, other characters). Overflow is not
 -- detected.
-export def Int.parse: string -> #some(int) | #invalidInt = { s ->
+export def Int.fromString: string -> #some(int) | #invalidInt = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
 
@@ -47,7 +47,7 @@ export def Int.toFloat: int -> float = { n ->
 
 -- The boolean `s` writes, `true` or `false` exactly as `Bool.toString` writes them, or
 -- `#invalidBool` for anything else (other capitalisation, spaces, an empty string).
-export def Bool.parse: string -> #some(bool) | #invalidBool = { s ->
+export def Bool.fromString: string -> #some(bool) | #invalidBool = { s ->
   if s == "true" then #some(true) else if s == "false" then #some(false) else #invalidBool
 }
 
@@ -101,6 +101,12 @@ export def Bool.toString: bool -> string = { b ->
 
 -- `s` itself.
 export def String.toString: string -> string = { s -> s }
+
+-- How a value of type `a` is read from text, with `e` for text that does not hold one: `Int.fromString`
+-- gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int` and
+-- `bool` do, so a function can read a value of whichever type it is called at:
+-- `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
+export context FromString(a, e) = (fromString: string -> #some(a) | e)
 
 -- Results ---------------------------------------------------------------------------------------
 

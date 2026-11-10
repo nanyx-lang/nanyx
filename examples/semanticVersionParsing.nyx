@@ -19,7 +19,7 @@ def splitOnce: (string, string) -> (string, #some(string) | #none) = { s, separa
 }
 
 def parseNumber: string -> #some(int) | #error(#invalidVersionNumber) = { s ->
-  Int.parse(s) \Result.mapError { _ -> #invalidVersionNumber }
+  Int.fromString(s) \Result.mapError { _ -> #invalidVersionNumber }
 }
 
 -- "1.2.3-beta+build42" has core "1.2.3-beta" and build metadata "build42";

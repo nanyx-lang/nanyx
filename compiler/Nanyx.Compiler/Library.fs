@@ -1012,12 +1012,19 @@ module Compiler =
     /// Applies the substitution found by unification to everything inference produced.
     /// A definition's type is reported with the rest variables that only stand for tags it gives out closed (see
     /// `Unifier.outputOnlyRestVars`): a union widened by a call, as a `proc` block's is by each `try`, is left
-    /// open for more tags, but no more can come once the definition is done.
-    let private resolveTypes (subst: Subst) (types: Map<string, Ty>) (typeDefs: Map<string, TypeDefInfo>) (items: TypedTopLevelItem list) =
-        let closeOutputRests ty =
-            let closed = Unifier.outputOnlyRestVars ty |> List.map (fun v -> v.Id, TyUnion []) |> Map.ofList
+    /// open for more tags, but no more can come once the definition is done. A rest a context the definition requires
+    /// is applied to is left open (`contexts` has each one's contexts): an instance can add tags to it, as
+    /// `FromString(int, #invalidInt)` does to the `e` of `[FromString(a, e)] string -> #some(a) | e`.
+    let private resolveTypes (subst: Subst) (types: Map<string, Ty>) (contexts: Map<string, TypeExpr list>) (typeDefs: Map<string, TypeDefInfo>) (items: TypedTopLevelItem list) =
+        let closeOutputRests name ty =
+            let contextVars = contexts |> Map.tryFind name |> Option.defaultValue [] |> List.collect NyxCompiler.Infer.annotationVarNames |> Set.ofList
+            let closed =
+                Unifier.outputOnlyRestVars ty
+                |> List.filter (fun v -> not (v.Name |> Option.exists contextVars.Contains))
+                |> List.map (fun v -> v.Id, TyUnion [])
+                |> Map.ofList
             if closed.IsEmpty then ty else Unifier.apply closed ty
-        let resolvedTypes = types |> Map.map (fun _ ty -> Unifier.apply subst ty |> closeOutputRests)
+        let resolvedTypes = types |> Map.map (fun name ty -> Unifier.apply subst ty |> closeOutputRests name)
         let resolvedTypeDefs =
             typeDefs
             |> Map.map (fun _ info ->
@@ -1393,7 +1400,7 @@ module Compiler =
                         let bySpan = mismatchErrors |> List.choose (fun diagnostic -> diagnostic.Span |> Option.map (fun span -> span, diagnostic)) |> Map.ofList
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
-                let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
+                let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.

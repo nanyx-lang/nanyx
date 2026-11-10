@@ -288,6 +288,8 @@ Context synthesis occurs when:
 
 If any member is missing or has an incompatible type, synthesis fails and the compiler requires you to load the context explicitly. The error names the definition that is missing, such as `Point.+`, or the one whose type does not fit.
 
+A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call: the definitions' types settle them. The prelude's [`FromString(a, e)`](../stdlib/standard-library#reading-from-text) is built for `int` from `Int.fromString`, whose type makes `e` the tag `#invalidInt`.
+
 Each call looks for its instance in this order, and takes the first it finds:
 
 1. An instance for that type loaded with `use` around the call, the nearest first.

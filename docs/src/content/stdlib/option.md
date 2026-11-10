@@ -37,7 +37,7 @@ Chains option-producing operations.
 
 ```nanyx
 def a: (#some(string) | #notFound) = #some("42")
-def b = a \Option.bind(Int.parse) -- b: (#some(int) | #notFound | #invalidInt)
+def b = a \Option.bind(Int.fromString) -- b: (#some(int) | #notFound | #invalidInt)
 ```
 
 ---
@@ -144,7 +144,7 @@ Option.values: list(#some(a) | r) -> list(a)
 The values of the `#some`s in a list, in order. The other tags are dropped.
 
 ```nanyx
-["1", "x", "3"] \List.map(Int.parse) \Option.values
+["1", "x", "3"] \List.map(Int.fromString) \Option.values
 -- [1, 3]
 ```
 

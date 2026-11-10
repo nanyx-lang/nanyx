@@ -54,7 +54,7 @@ def parseLine: string -> #some(OrderLine) | #badLine(string) | #badQuantity(stri
 }
 
 def parseQuantity = { text, sku, qty ->
-  match Int.parse(qty)
+  match Int.fromString(qty)
     | #some(n) -> if n > 0 then #some(OrderLine(sku = String.uppercase(sku), qty = n)) else #badQuantity(text)
     | #invalidInt -> #badQuantity(text)
 }
@@ -193,7 +193,7 @@ def isOperator: string -> bool = { token ->
 
 -- The stack after one more token.
 def push: (list(int), string) -> Calc(list(int)) = { stack, token ->
-  match Int.parse(token)
+  match Int.fromString(token)
     | #some(n) -> #some([n, ...stack])
     | #invalidInt -> #unknownToken(token)
 }

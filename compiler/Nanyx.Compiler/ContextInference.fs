@@ -87,7 +87,7 @@ module internal ContextInference =
         | _ -> None
 
     /// `instances` with the call `pending` names finding its context as `instance`.
-    let private withInstance (pending: PendingContextInstance) (instance: ContextInstance) (instances: Map<NodeId, ContextInstance option list>) =
+    let internal withInstance (pending: PendingContextInstance) (instance: ContextInstance) (instances: Map<NodeId, ContextInstance option list>) =
         let found = instances |> Map.tryFind pending.Call |> Option.defaultValue (List.replicate pending.Count None)
         instances |> Map.add pending.Call (found |> List.updateAt pending.Index (Some instance))
 
