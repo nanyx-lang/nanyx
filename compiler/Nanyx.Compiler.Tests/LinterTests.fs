@@ -30,8 +30,12 @@ let private options linters severities =
 
 let private source = "def one = 1\ndef two = one + 1"
 
-/// Compiles `source` with every linter the compiler has turned on, at its defaults.
-let private compileWithOfficial (source: string) = Compiler.compileWith Linters.everyLinter source
+/// Compiles `source` with every linter the compiler has turned on, at its defaults, but for `unusedPrivateDefinitions`:
+/// these tests write top-level defs nothing uses, and that rule has tests of its own.
+let private compileWithOfficial (source: string) =
+    Compiler.compileWith
+        { Linters.everyLinter with Severities = Map.ofList [ "default/unusedPrivateDefinitions", None ] }
+        source
 
 /// The text `span` covers in `source`.
 let private textAt (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
@@ -40,7 +44,9 @@ let private textAt (source: string) (span: SourceSpan) = source.Substring(span.S
 let ``The official linter is registered, and runs only when turned on`` () =
     let official = Assert.Single(Linters.all)
     Assert.Equal("default", official.Name)
-    Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon" ], official.Rules |> List.map (fun rule -> rule.Id))
+    Assert.Equal<string list>(
+        [ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon"; "unusedPrivateDefinitions" ],
+        official.Rules |> List.map (fun rule -> rule.Id))
     // Linters are opt-in: compiling without saying which to run runs none.
     Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
     Assert.Empty((compileWithOfficial source).Diagnostics)

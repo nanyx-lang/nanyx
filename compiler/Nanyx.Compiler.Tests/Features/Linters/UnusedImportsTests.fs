@@ -18,10 +18,13 @@ let private unusedImportsIn (result: CompileResult) (source: string) =
 
 let private reported (source: string) = unusedImportsIn (Compiler.compileWith Linters.everyLinter source) source
 
-/// `source` with the only fix of its only diagnostic applied, and the fix's title.
+/// `source` with the only fix of its only `unusedImports` diagnostic applied, and the fix's title.
 let private fixed' (source: string) =
-    let diagnostic = Assert.Single((Compiler.compileWith Linters.everyLinter source).Diagnostics)
-    Assert.Equal("default/unusedImports", diagnostic.Code)
+    let diagnostic =
+        Assert.Single(
+            (Compiler.compileWith Linters.everyLinter source).Diagnostics
+            |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
+        )
     let fix = Assert.Single(diagnostic.Fixes)
     applyFix source fix, fix.Title
 
@@ -81,8 +84,10 @@ let ``The rule's severity can be configured, or the rule turned off`` () =
     let source = "import nanyx/math as m\ndef x = 1\n"
     let compileWith severity =
         Compiler.compileWith { Linters.everyLinter with Severities = Map.ofList [ "default/unusedImports", severity ] } source
-    Assert.Empty((compileWith None).Diagnostics)
-    let promoted = Assert.Single((compileWith (Some Severity.Error)).Diagnostics)
+    let importDiagnostics severity =
+        (compileWith severity).Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
+    Assert.Empty(importDiagnostics None)
+    let promoted = Assert.Single(importDiagnostics (Some Severity.Error))
     Assert.Equal(Severity.Error, promoted.Severity)
 
 [<Fact>]

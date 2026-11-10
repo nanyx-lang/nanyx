@@ -1655,7 +1655,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | Some info when isNominal info && not (inNominalHome state info.Name calleeSpan) ->
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
                 | Some info ->
-                    let mutable current = state
+                    let mutable current = recordConstructorReference expr info state
                     let argResults =
                         args
                         |> List.map (fun arg ->
