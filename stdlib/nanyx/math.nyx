@@ -30,9 +30,15 @@ export def clamp: int, int, int -> int = { n, low, high ->
   if n < low then low else if n > high then high else n
 }
 
--- `base` multiplied by itself `exponent` times (1 when `exponent` is zero or negative).
+-- `acc` multiplied by `base` `exponent` times.
+def powOnto: int, int, int -> int = { base, exponent, acc ->
+  if exponent <= 0 then acc else powOnto(base, exponent - 1, acc * base)
+}
+
+-- `base` multiplied by itself `exponent` times (1 when `exponent` is zero or negative). Stack-safe: it
+-- works for any `exponent`.
 export def pow: int, int -> int = { base, exponent ->
-  if exponent <= 0 then 1 else base * pow(base, exponent - 1)
+  powOnto(base, exponent, 1)
 }
 
 -- The square root of `x` (NaN when `x` is negative).

@@ -395,13 +395,34 @@
     end
     local.get $count
   )
+  (func $__nanyx_list_cons_at (param $block i32) (param $head i32) (param $tail i32) (result i32)
+    (local $cell i32)
+    local.get $block
+    i32.eqz
+    if
+      local.get $head
+      local.get $tail
+      call $__nanyx_list_cons
+      return
+    end
+    local.get $block
+    i32.const 4
+    i32.add
+    local.tee $cell
+    local.get $head
+    i32.store
+    local.get $cell
+    local.get $tail
+    i32.store offset=4
+    local.get $cell
+  )
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (table $ctx_table 2 funcref)
   (elem (i32.const 0) $__lambda_0 $__nanyx_drop_env)
 
-  (func $List_filter__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32)
+  (func $prelude_reverseOnto__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x i32) (local $__payload_rest i32) (local $__reuse_1 i32)
     local.get $arg1
     local.set $__match_tmp_0
     local.get $arg2
@@ -417,8 +438,6 @@
         local.get $__match_tmp_0
     call $__nanyx_drop_list_int
     local.get $__match_tmp_1
-    call $__nanyx_drop_fn_int_to_bool
-    i32.const 0
       )
       (else
         local.get $__match_tmp_0
@@ -426,6 +445,86 @@
       i32.const 1
       i32.ge_s
       i32.const 1
+      i32.and
+    (if (result i32)
+      (then
+        local.get $__match_tmp_0
+      i32.load
+        local.set $__payload_x
+    local.get $__match_tmp_0
+      i32.const 4
+      i32.add
+      i32.load
+        local.set $__payload_rest
+    local.get $__match_tmp_0
+    i32.const 4
+    i32.sub
+    i32.load
+    i32.const 1
+    i32.eq
+    if
+      local.get $__match_tmp_0
+      i32.const 4
+      i32.sub
+      local.set $__reuse_1
+    else
+      local.get $__payload_rest
+    call $__nanyx_dup_list_int
+    drop
+      local.get $__match_tmp_0
+      i32.const 4
+      i32.sub
+      call $__nanyx_release
+      drop
+      i32.const 0
+      local.set $__reuse_1
+    end
+    local.get $__payload_rest
+    local.get $__reuse_1
+    local.get $__payload_x
+    local.get $__match_tmp_1
+    call $__nanyx_list_cons_at
+    return_call $prelude_reverseOnto__int
+      )
+      (else
+        unreachable
+      )
+    )
+      )
+    )
+  )
+
+  (func $prelude_filterReversed__int (param $arg1 i32) (param $arg2 i32) (param $arg3 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__match_tmp_2 i32) (local $__payload_x i32) (local $__payload_rest i32)
+    local.get $arg1
+    local.set $__match_tmp_0
+    local.get $arg2
+    local.set $__match_tmp_1
+    local.get $arg3
+    local.set $__match_tmp_2
+    local.get $__match_tmp_0
+      call $__nanyx_list_length
+      i32.const 0
+      i32.eq
+      i32.const 1
+      i32.const 1
+      i32.and
+      i32.and
+    (if (result i32)
+      (then
+        local.get $__match_tmp_0
+    call $__nanyx_drop_list_int
+    local.get $__match_tmp_1
+    call $__nanyx_drop_fn_int_to_bool
+    local.get $__match_tmp_2
+      )
+      (else
+        local.get $__match_tmp_0
+      call $__nanyx_list_length
+      i32.const 1
+      i32.ge_s
+      i32.const 1
+      i32.const 1
+      i32.and
       i32.and
     (if (result i32)
       (then
@@ -461,6 +560,8 @@
     local.get $__match_tmp_1
     call $__nanyx_dup_fn_int_to_bool
     drop
+    local.get $__payload_rest
+    local.get $__match_tmp_1
     local.get $__match_tmp_1
     local.get $__payload_x
     local.get $__match_tmp_1
@@ -469,17 +570,14 @@
     (if (result i32)
       (then
         local.get $__payload_x
-    local.get $__payload_rest
-    local.get $__match_tmp_1
-    call $List_filter__int
+    local.get $__match_tmp_2
     call $__nanyx_list_cons
       )
       (else
-        local.get $__payload_rest
-    local.get $__match_tmp_1
-    return_call $List_filter__int
+        local.get $__match_tmp_2
       )
     )
+    return_call $prelude_filterReversed__int
       )
       (else
         unreachable
@@ -487,6 +585,15 @@
     )
       )
     )
+  )
+
+  (func $List_filter__int (param $xs i32) (param $keep i32) (result i32)
+    local.get $xs
+    local.get $keep
+    i32.const 0
+    call $prelude_filterReversed__int
+    i32.const 0
+    return_call $prelude_reverseOnto__int
   )
 
   (func $items (result i32)

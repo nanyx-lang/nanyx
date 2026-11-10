@@ -12,6 +12,8 @@ Since lists are immutable, all transform operations on lists return new lists. W
 
 These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed (all but `groupBy`, `select` and `selectOne`, which are not there yet).
 
+Every one of them is stack-safe: `map`, `filter`, `take`, `flatten`, `zip`, `sortBy`, `unfold` and the rest work on a list of any length without running out of stack. Each walks the list with [tail calls](../tour/functions#tail-recursion), and those that build a list build it in reverse and reverse it at the end.
+
 ## all
 
 ```nanyx
