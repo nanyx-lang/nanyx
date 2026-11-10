@@ -300,6 +300,19 @@ module Unifier =
             | _ -> TyUnion spliced
         | TyPrimitive _ -> ty
 
+    /// `ty`, written with the type variables `parameters` (a type definition's or a context's), with each parameter
+    /// replaced by the type at the same position in `argTys`, all at once. `apply` would follow a replacement that is
+    /// a variable to that variable's own replacement, which is wrong here: an imported definition's parameters are
+    /// numbered by the module it came from, so an argument can be a variable of this module with the id of another
+    /// parameter.
+    let applyToParameters (parameters: TyVar list) (argTys: Ty list) (ty: Ty) : Ty =
+        let pairs = List.zip (List.truncate argTys.Length parameters) (List.truncate parameters.Length argTys)
+        // First to variables with ids no other variable has, then those to the arguments.
+        let placeholder index (parameter: TyVar) = { parameter with Id = System.Int32.MinValue + index }
+        let toPlaceholders = pairs |> List.mapi (fun index (parameter, _) -> parameter.Id, TyVar (placeholder index parameter)) |> Map.ofList
+        let toArguments = pairs |> List.mapi (fun index (parameter, argTy) -> (placeholder index parameter).Id, argTy) |> Map.ofList
+        ty |> apply toPlaceholders |> apply toArguments
+
     let private greekLetters = "αβγδεζηθικλμνξοπρστυφχψω"
 
     /// `index` in subscript digits: `12` is `₁₂`.

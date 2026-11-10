@@ -197,7 +197,7 @@ let ``nanyx/text reports a labelled argument passed by position once, not in the
     let source =
         "import nanyx/text\n\n" +
         "def pad = { n -> String.padStart(\"{n}\", 2, \"0\") }\n" +
-        "def quantity = { s -> match Int.parse(s)\n" +
+        "def quantity = { s -> match Int.fromString(s)\n" +
         "  | #some(n) -> n\n" +
         "  | #invalidInt -> 0\n" +
         "}\n"

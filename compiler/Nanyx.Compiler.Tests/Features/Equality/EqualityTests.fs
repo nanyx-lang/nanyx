@@ -184,3 +184,15 @@ let ``A call that requires Eq of a list of a type variable needs Eq of the varia
             "def wrapped: a, a -> bool = { x, y -> same([x], [y]) }\n")
     Assert.Equal("'same' requires the context 'Eq(list(a))', which needs 'Eq(a)', not available here: add [Eq(a)] to the type of 'wrapped'", message)
     Assert.Equal("same", at)
+
+[<Fact>]
+let ``Comparing with a tag joins the operands, leaving the other open to more tags`` () =
+    let typed = compileClean "def isNone = { o -> o == #none }\ndef b = isNone(#some(3)) or isNone(#none)\n"
+    let isNone = typed.SymbolTypes |> Map.values |> Seq.find (function TyFunc _ -> true | _ -> false)
+    Assert.Equal("#none | ... -> bool", Unifier.tyToDisplayString Ascii isNone)
+    compileClean "def isRed: #red | #green -> bool = { c -> c == #red }\ndef same = #some(1) != #some(2)\n" |> ignore
+
+[<Fact>]
+let ``Comparing tags with payloads of different types is still an error`` () =
+    let diagnostic = Assert.Single((Compiler.compile "def b = #some(1) == #some(\"a\")\n").Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)

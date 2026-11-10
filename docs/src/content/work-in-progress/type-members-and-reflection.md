@@ -90,6 +90,19 @@ context Indexed(c) = (
 )
 ```
 
+The prelude's `FromString` is the case that motivates this today. As an ordinary context, the tag `fromString` gives back for text it cannot read has to be a second parameter, so every generic signature carries it, `[FromString(a, e)] list(string) -> list(#some(a) | e)`, even though `e` is always determined by `a`. With an associated type it would be:
+
+```nanyx
+context FromString(a) = (
+  failure: type
+  fromString: string -> #some(a) | failure
+)
+
+def readAll: [FromString(a)] list(string) -> list(#some(a) | FromString(a).failure)
+```
+
+and `Int.fromString` would fix `failure` as `#invalidInt`.
+
 An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types.
 
 ## A type argument is a type member of the parameters

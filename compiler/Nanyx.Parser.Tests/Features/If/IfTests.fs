@@ -47,7 +47,7 @@ let ``multi-branch if desugars to nested ifs ending in the else arm`` () =
 let ``multi-branch if arms may test patterns with is, and a missing else is unit`` () =
     let source =
         "def x = { s ->\n" +
-        "  if | int.parse(s) is #some(i) -> i\n" +
+        "  if | Int.fromString(s) is #some(i) -> i\n" +
         "     | s == \"\" ->\n" +
         "       0\n" +
         "}\n"

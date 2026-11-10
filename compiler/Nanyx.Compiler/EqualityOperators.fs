@@ -31,6 +31,17 @@ module internal EqualityOperators =
     /// Whether `op` is `==` or `!=`.
     let isOperator (op: string) = op = equals || op = notEquals
 
+    /// Whether comparing values of the types `left` and `right` (resolved as far as they can be) joins them into one
+    /// union rather than making them equal: when either is a tag or a union of tags, so that `o == #none` compares
+    /// at `#none | r` and leaves `o` open to other tags.
+    let joinsOperands (left: Ty) (right: Ty) =
+        let isTags (ty: Ty) =
+            match Unifier.unalias ty with
+            | TyTag _
+            | TyUnion _ -> true
+            | _ -> false
+        isTags left || isTags right
+
     /// Whether the prelude's `Eq` is in scope: a module checked without the prelude has no context to require.
     let private isDeclared (state: InferState) =
         state.TypeDefs |> Map.tryFind context |> Option.exists (fun info -> info.IsContext && info.Parameters.Length = 1)

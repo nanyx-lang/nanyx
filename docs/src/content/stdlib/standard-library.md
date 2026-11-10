@@ -103,20 +103,48 @@ label(true)  -- "<true>"
 
 # Reading from text
 
-`int` and `bool` each have an attached `parse`, also in the prelude. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read:
+`int` and `bool` each have an attached `fromString`, also in the prelude. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read:
 
 ```nanyx
-Int.parse: string -> #some(int) | #invalidInt
-Bool.parse: string -> #some(bool) | #invalidBool
+Int.fromString: string -> #some(int) | #invalidInt
+Bool.fromString: string -> #some(bool) | #invalidBool
 ```
 
-`Int.parse` reads a decimal integer with an optional leading `-` or `+`. `Bool.parse` reads `true` or `false`, exactly as `Bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
+`Int.fromString` reads a decimal integer with an optional leading `-` or `+`. `Bool.fromString` reads `true` or `false`, exactly as `Bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
 
 ```nanyx
-def n = Int.parse("42")          -- #some(42)
-def b = "false" \Bool.parse      -- #some(false)
-def bad = Bool.parse("yes")      -- #invalidBool
+def n = Int.fromString("42")         -- #some(42)
+def b = "false" \Bool.fromString     -- #some(false)
+def bad = Bool.fromString("yes")     -- #invalidBool
 ```
+
+Each is the mirror of the type's `toString`, and, as `toString` gives a type a `ToString`, an attached `fromString` gives it the prelude's `FromString` context. It has a second parameter, `e`, for what `fromString` gives back when the text holds no value, so that each type keeps its own tag:
+
+```nanyx
+context FromString(a, e) = (fromString: string -> #some(a) | e)
+```
+
+A function that reads a value of any type from text requires it. A call finds the instance as it finds any other: [synthesized](../advanced/contexts#context-synthesis) from the attached `fromString` of the type it is called at, which also settles `e`. At `int` that is `FromString(int, #invalidInt)`:
+
+```nanyx
+def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \List.map(fromString) }
+
+def total: list(#some(int) | #invalidInt) -> int = { results -> results \Option.values \List.fold(0, { sum, n -> sum + n }) }
+
+def sumAll = { texts -> total(readAll(texts)) }
+
+sumAll(["1", "x", "30"])  -- 31
+```
+
+A type of your own gets one by attaching a `fromString`, with a tag of its own for text it cannot read:
+
+```nanyx
+def Point.fromString: string -> #some(Point) | #invalidPoint = { s -> ... }
+```
+
+The call has to settle `a` from what it is given or what its result is passed to. A result whose type is written only in an annotation, `def ints: list(#some(int) | #invalidInt) = readAll(texts)`, does not settle it yet ([#621](https://github.com/nanyx-lang/nanyx/issues/621)).
+
+The `e` parameter is expected to become an [associated type](../work-in-progress/type-members-and-reflection#associated-types) once those exist, as `e` is always determined by `a`.
 
 # Converting between numbers
 

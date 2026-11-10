@@ -256,11 +256,7 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
             | Some info when not (isNominal info) ->
                 let current = recordTypeReference typeExpr info current
                 if info.Parameters.Length = argTys.Length then
-                    let substitutions =
-                        (info.Parameters, argTys)
-                        ||> List.zip
-                        |> List.fold (fun acc (paramVar, argTy) -> acc |> Map.add paramVar.Id argTy) Map.empty
-                    TyAlias(name, argTys, Unifier.apply substitutions info.Underlying), current
+                    TyAlias(name, argTys, Unifier.applyToParameters info.Parameters argTys info.Underlying), current
                 else
                     TyApply(name, argTys), current
             | Some info -> TyApply(name, argTys), recordTypeReference typeExpr info current
@@ -420,10 +416,7 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
                         match ctxExpr.Kind with
                         | TypeApply(_, args) when args.Length = info.Parameters.Length -> args |> List.mapFold typeExprToTy state
                         | _ -> [], state
-                    let substitution =
-                        List.zip (List.truncate argTys.Length info.Parameters) argTys
-                        |> List.fold (fun acc (param, argTy) -> acc |> Map.add param.Id argTy) Map.empty
-                    fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.apply substitution ty, None) |> withSymbols, state
+                    fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.applyToParameters info.Parameters argTys ty, None) |> withSymbols, state
                 | _ -> [], state
             | None -> [], state
     | _ -> [], state
@@ -814,21 +807,30 @@ let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identif
 let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (Identifier * Ty) list option =
     match state.TypeDefs |> Map.tryFind ctxName with
     | Some info when info.Parameters.Length = argTys.Length ->
-        let substitution = List.zip info.Parameters argTys |> List.fold (fun acc (param, argTy) -> acc |> Map.add param.Id argTy) Map.empty
         match Unifier.unalias info.Underlying with
-        | TyRecord fields -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.apply substitution ty))
+        | TyRecord fields -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty))
         | _ -> None
     | _ -> None
 
-/// The instance of `ctxName` applied to `argTys` built from the definitions attached to the type it is for, as
-/// `Point.0` and `Point.+` make a `Sum(Point)`: each member's name and the definition it is. The definitions' types
-/// must be the members' types. `calleeName` requires the context at `span`.
+/// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
+/// is for, its first argument, has a name definitions can be attached to (not a variable, or a record written out).
+/// The others may still be open: the definitions' types settle them, as `Int.fromString` makes a
+/// `FromString(int, e)` a `FromString(int, #invalidInt)`.
+let private canSynthesize (argTys: Ty list) =
+    match argTys with
+    | forType :: _ -> not (List.isEmpty (attachedTypeNames forType))
+    | [] -> false
+
+/// The instance of `ctxName` applied to `argTys` built from the definitions attached to the type it is for, its first
+/// argument, as `Point.0` and `Point.+` make a `Sum(Point)`: each member's name and the definition it is. The
+/// definitions' types must be the members' types, which settles any other argument still open. `calleeName` requires
+/// the context at `span`.
 let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<(string * string) list * InferState, Diagnostic list> =
     let ctxText = $"""{ctxName}({argTys |> List.map Unifier.tyToString |> String.concat ", "})"""
     let requirer = InterpolationHoles.requirer calleeName argTys
     let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
     match argTys, contextMemberTypes state ctxName argTys with
-    | [ forType ], Some members ->
+    | forType :: _, Some members ->
         // The name a definition for the type is attached under: `Point`, `$Money`, `Int`.
         let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
         let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, tryResolveAttachedFunction env forType memberName)
@@ -857,8 +859,10 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
 /// The type of each of `args`, the arguments of a parameterised context a function requires, at a call where the
 /// function has the type `calleeTy`. `signature` is the type the function declares, which `args` name its type
 /// variables from; it is read afresh, and is the callee's type at the call. Without one, the type variables are
-/// matched by name against `generalTy`, the callee's type before it was instantiated.
-let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option) (generalTy: Ty) (calleeTy: Ty) (args: TypeExpr list) : Ty list * InferState =
+/// matched by name against `generalTy`, the callee's type before it was instantiated. Each is given resolved as far as
+/// the constraints so far tell, and as read: a type resolved now may have a union rest the unifier made up, which is
+/// numbered afresh each time the constraints are solved, so one to constrain later is the type as read.
+let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option) (generalTy: Ty) (calleeTy: Ty) (args: TypeExpr list) : Ty list * Ty list * InferState =
     // Read with no variables in scope, so each variable is a fresh one, shared by the signature and the arguments.
     let mutable current = { state with TypeVars = Map.empty }
     let read (typeExpr: TypeExpr) =
@@ -876,7 +880,7 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
             let names = namedVarsIn generalTy calleeTy
             args |> List.map (read >> replaceNamedVars names)
     let current = { current with TypeVars = state.TypeVars }
-    argTys |> List.map (resolveSoFar current), current
+    argTys |> List.map (resolveSoFar current), argTys, current
 
 /// Each parameterised context a value of the type `valueTy` is an instance of, applied to the types it is one for: a
 /// record with exactly the context's members, at types that settle each of its parameters. `use (`+` = ...)`, of a
@@ -941,7 +945,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                 match ctx.Kind with
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
                     let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
-                    let argTys, current = contextArgTysAtCall current signature scheme.Type calleeTy args
+                    let argTys, argTysAsRead, current = contextArgTysAtCall current signature scheme.Type calleeTy args
                     // `Eq` of a type with no `==` attached is the compiler's own (see `EqualityOperators.resolveCall`).
                     let equality =
                         equalityInstanceAtCall env current ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
@@ -953,8 +957,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                     // others, which are written with one.
                     | None, None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
                         Ok (found @ [ Some InstanceBuiltIn ], current)
-                    // A type with a name definitions can be attached to: not a variable, or a record written out.
-                    | None, None when argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) ->
+                    | None, None when canSynthesize argTys ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
                     | None, None when InterpolationHoles.isHole name ->
@@ -967,7 +970,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                         | Error errors, DefScope(defName, true) when argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not) ->
                             let pending =
                                 { Def = defName; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
-                                  Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors; ChecksOnly = false }
+                                  Context = ctxName; ArgTys = argTysAsRead; Span = calleeSpan; Errors = errors; ChecksOnly = false }
                             Ok (found @ [ None ], { current with PendingContextInstances = pending :: current.PendingContextInstances })
                         | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
@@ -982,7 +985,7 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
     let comparisons = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && EqualityOperators.isPending pending)
     ContextInference.resolvePending state name symbol scheme (fun pending argTys current ->
         let synthesize env =
-            if argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) then
+            if canSynthesize argTys then
                 Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
             else None
         let defScheme def = TypeEnv.tryFind def env
@@ -1026,6 +1029,31 @@ let private checkLocalComparisons (env: TypeEnv) (state: InferState) (call: Expr
                 | Some instance -> EqualityOperators.checkLocalCall env current call name calleeSpan ty instance
                 | None -> Ok current)) (Ok state)
     | _ -> Ok state
+
+/// Builds, before the def `name` is generalised, the instances of contexts of more than one parameter that its calls
+/// left to be found and that are now known to be for a type with a name, from that type's attached definitions, as a
+/// call does. Building one can settle the context's other arguments, as a `FromString(int, e)` built from
+/// `Int.fromString` makes `e` the `#invalidInt` it gives back, and the def's type must have them settled, not be
+/// generic in them. The others are left to `resolvePendingInstances`.
+let private synthesizeSettledInstances (env: TypeEnv) (state: InferState) (name: Identifier) : Result<InferState, Diagnostic list> =
+    let settled, others =
+        state.PendingContextInstances
+        |> List.partition (fun pending ->
+            pending.Def = name
+            && pending.ArgTys.Length > 1
+            && canSynthesize (pending.ArgTys |> List.map (resolveSoFar state)))
+    settled
+    |> List.rev
+    |> List.fold (fun result pending ->
+        result
+        |> Result.bind (fun (current: InferState) ->
+            // Only the type the instance is for is resolved. The others are constrained as the call has them: resolved,
+            // one may be a union rest the unifier made up, which is numbered afresh each time the constraints are solved.
+            let argTys = resolveSoFar current pending.ArgTys.Head :: pending.ArgTys.Tail
+            synthesizeInstance env current pending.Callee pending.Context argTys pending.Span
+            |> Result.map (fun (members, next) ->
+                { next with ContextInstances = ContextInference.withInstance pending (InstanceSynthesized members) next.ContextInstances })))
+        (Ok { state with PendingContextInstances = others })
 
 /// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
 /// value of no known type yet is taken to be a record with at least that field, and an open record without it
@@ -1535,7 +1563,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         |> addConstraint leftExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
                     Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, numericConstrained)
                 | BinaryOp(op, _, _) when EqualityOperators.isOperator op ->
-                    EqualityOperators.require env constrained expr op leftExpr.Type
+                    // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
+                    // tags. Anything else is made equal.
+                    let operandTy, joined =
+                        if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
+                            joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
+                        else leftExpr.Type, constrained
+                    EqualityOperators.require env joined expr op operandTy
                     |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
                 | BinaryOp(op, _, _) when ["and"; "or"] |> List.contains op ->
                     // Both operands are already unified with each other; pin them to bool.
@@ -2353,7 +2387,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             Error errors
 
 /// The names of the type variables written in an annotation, in order of first appearance.
-let rec private annotationVarNames (typeExpr: TypeExpr) : string list =
+let rec internal annotationVarNames (typeExpr: TypeExpr) : string list =
     let ofList items = items |> List.collect annotationVarNames
     let names =
         match typeExpr.Kind with
@@ -2624,9 +2658,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         match declaredTypeExprOpt with
                         | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr
                         | None -> Ok ()
-                    match rigidResult with
+                    match rigidResult |> Result.bind (fun () -> synthesizeSettledInstances env state name) with
                     | Error err -> abandon isExport name expr err
-                    | Ok () ->
+                    | Ok synthesizedState ->
+                        state <- synthesizedState
                         // Generalize against an env without this def's own pre-binding, so the fresh
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
                         // first, as a local def's is: `{ x -> x + 1 }` is `α -> α` until its constraints are

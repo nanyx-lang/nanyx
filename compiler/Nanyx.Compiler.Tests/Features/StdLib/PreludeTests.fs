@@ -57,8 +57,8 @@ let ``The prelude's toList, values, mapOr, toOption and orElse keep the option's
     Assert.Equal("Result(int, float)", typeOf "recovered")
 
 [<Fact>]
-let ``Int.parse is in the prelude`` () =
-    let result = Compiler.compile "def n = Int.parse(\"42\")\ndef piped = \"7\" \\ Int.parse"
+let ``Int.fromString is in the prelude`` () =
+    let result = Compiler.compile "def n = Int.fromString(\"42\")\ndef piped = \"7\" \\ Int.fromString"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["n"])
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
@@ -71,8 +71,8 @@ let ``Int.toFloat is in the prelude`` () =
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["piped"])
 
 [<Fact>]
-let ``Bool.parse is in the prelude`` () =
-    let result = Compiler.compile "def b = Bool.parse(\"true\")\ndef piped = \"false\" \\ Bool.parse"
+let ``Bool.fromString is in the prelude`` () =
+    let result = Compiler.compile "def b = Bool.fromString(\"true\")\ndef piped = \"false\" \\ Bool.fromString"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["b"])
     Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["piped"])
@@ -101,6 +101,32 @@ let ``A context of toString is synthesized for a built-in type from its attached
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["text"])
+
+[<Fact>]
+let ``FromString is in the prelude, and a function that requires it keeps its failure type open`` () =
+    let source = "def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \\List.map(fromString) }"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("list(string) -> list(#some(a) | e)", Unifier.tyToString result.Typed.Value.Types.["readAll"])
+
+[<Fact>]
+let ``A FromString is synthesized from an attached fromString, and settles the failure type`` () =
+    // Each def gives back the failure as it is, so its type shows the tag the instance settled `e` to.
+    let source =
+        "def readOne: [FromString(a, e)] string -> #some(a) | e = { s -> fromString(s) }\n" +
+        "def number = { s -> match readOne(s)\n" +
+        "  | #some(n) -> #some(n + 1)\n" +
+        "  | failure -> failure\n" +
+        "}\n" +
+        "def flag = { s -> match readOne(s)\n" +
+        "  | #some(b) -> #some(if b then 1 else 2)\n" +
+        "  | failure -> failure\n" +
+        "}"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    Assert.Equal("string -> #some(int) | #invalidInt", typeOf "number")
+    Assert.Equal("string -> #some(int) | #invalidBool", typeOf "flag")
 
 [<Fact>]
 let ``The prelude's List functions are found by a pipe on a list`` () =
