@@ -31,7 +31,7 @@ need it first. This workstream fills it with content.
 
 - **Diagnostics are structured** ([#97](https://github.com/nanyx-lang/nanyx/issues/97)): every compiler error has
   a code and title from the table in `Diagnostics.fs` (`DiagnosticCodes`), and the span, in its own file, of the
-  node it is about. Few use related locations yet, and none has suggestions or fixes.
+  node it is about. Few use related locations yet.
 - **Some spans are approximate.** Field names, type annotations and attributes have no spans yet
   ([#96](https://github.com/nanyx-lang/nanyx/issues/96)), so errors about them are reported at the nearest node
   that has one. A type mismatch is reported where the constraint that failed was made, which is not always where
@@ -39,7 +39,9 @@ need it first. This workstream fills it with content.
 - **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
   and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
 - **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.
-- **There are no suggestions or fixes.**
+- **Few errors have fixes.** An unknown name that a standard library module exports offers to import it, and a
+  named parameter passed by position (NYX0218) offers to name the arguments when each fits just one parameter.
+  None has suggestions yet.
 
 # Goals
 

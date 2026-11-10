@@ -10,6 +10,7 @@
     <Compile Include="TestSupport.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attributes\AttributeTests.fs" />
+    <Compile Include="Features\Calls\NamedArgumentTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
