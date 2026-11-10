@@ -887,14 +887,27 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | _ -> cannot "this kind of expression"
 
     /// A closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for a generic
-    /// function, at `memberTy`, the type of the context member it is passed as.
+    /// function, at `memberTy`, the type of the context member it is passed as. A union's rest that nothing closes adds
+    /// no tags (see `toIrType`): `ToString(#red | r)` is passed at `#red`.
     member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Expr =
         let wrapped =
             match input.Lifted |> Map.tryFind wrapper with
             | Some (FunctionWrapper wrapped) -> wrapped
             | _ -> cannot $"internal error: '{wrapper}' is not a function's wrapper"
+        let rec withoutOpenRests (ty: Ty) =
+            match ty with
+            | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
+            | TyFunc(input, output) -> TyFunc(withoutOpenRests input, withoutOpenRests output)
+            | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutOpenRests))
+            | TyTag(name, payload) -> TyTag(name, payload |> Option.map withoutOpenRests)
+            | TyApply(name, args) -> TyApply(name, args |> List.map withoutOpenRests)
+            | TyNominal(name, underlying, isPrivate) -> TyNominal(name, withoutOpenRests underlying, isPrivate)
+            | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map withoutOpenRests, withoutOpenRests underlying)
+            | TyVar _
+            | TyPrimitive _
+            | TyOpenRecord _ -> ty
         let key, wrappedTy =
-            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy with
+            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map withoutOpenRests with
             | Some ty, _ when (freeVars ty).IsEmpty -> (wrapper, []), ty
             | Some _, Some ty when (freeVars ty).IsEmpty -> (wrapper, [ toIrType ty ]), ty
             | _ -> cannot $"passing the generic function '{wrapped}' as a context member"

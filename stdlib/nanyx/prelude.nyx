@@ -80,6 +80,12 @@ export def __interpolate: [ToString(a)] a -> string = { value ->
   toString(value)
 }
 
+-- The `toString` of the compiler's own `ToString` of a tag without a payload: what a function
+-- that requires `ToString(a)` is passed when it is called with one. It writes the tag's name.
+export def __toString: a -> string = { value ->
+  "{value}"
+}
+
 -- Each built-in type has an attached `toString`, so a value can be turned into text by a function
 -- that can be passed around, `scores \map(Int.toString)`, as well as by interpolation. Each one
 -- writes the value as interpolation does, with the compiler's own `ToString` for the type.
