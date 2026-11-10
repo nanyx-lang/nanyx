@@ -144,6 +144,19 @@ let ``A record's rest is left unnamed in every hint of a def when it is named no
         typeHints TypeHints.inlayHintsWithTopLevel source |> List.map (fun (name, ty, _) -> name, ty))
 
 [<Fact>]
+let ``A lambda's parameters take their types from the def's signature`` () =
+    let source =
+        "def a: (x: string, y: int) = (x = \"\", y = 1)\n" +
+        "def g: typeof a -> string = { x, y -> \"x = {x}, y = {y}\" }\n" +
+        "def h: string, int -> string = { s, n -> s }\n"
+    Assert.Equal<(string * string * int) list>(
+        [ "x", "string", offsetOf source "x, y ->" 0 0
+          "y", "int", offsetOf source "y ->" 0 0
+          "s", "string", offsetOf source "s, n" 0 0
+          "n", "int", offsetOf source "n ->" 0 0 ],
+        typeHints TypeHints.inlayHints source)
+
+[<Fact>]
 let ``Hints keep the names of type aliases`` () =
     let source =
         "type Customer = (name: string)\n" +
