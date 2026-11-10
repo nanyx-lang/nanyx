@@ -6,15 +6,17 @@ open NyxCompiler.InferState
 /// Which types may attach the members of the well-known contexts (see "Equality and well-known contexts" in the docs'
 /// work in progress). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
 /// whether or not the alias it is written with is known: only a nominal or protected type, `$Email`, may attach its
-/// own `==` or `compare`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's order is
-/// always the compiler's own, so a `compare` attached to one, as the prelude's `Int.compare` is, is an ordinary function
-/// that the ordering operators and `Ord` do not read (see `WellKnownContexts.isBuiltIn`).
+/// own `==`, `compare` or `hash`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's
+/// order and hash are always the compiler's own, so a `compare` or `hash` attached to one, as the prelude's `Int.compare`
+/// and `Int.hash` are, is an ordinary function that the operators, `Ord` and `Hash` do not read (see
+/// `WellKnownContexts.isBuiltIn`).
 module internal AttachedOperators =
     /// The members only a nominal or protected type may attach, each with what it decides and what a structural type's
     /// is, as a message says them, and whether a built-in type may attach it too.
     let private nominalOnly =
         [ EqualityOperators.equals, "equality", "its equality is always that of its structure", false
-          WellKnownContexts.ordering.Member, "order", "it is only ordered by its structure, and records and tags have none", true ]
+          WellKnownContexts.ordering.Member, "order", "it is only ordered by its structure, and records and tags have none", true
+          WellKnownContexts.hashing.Member, "hash", "its hash is always that of its structure", true ]
 
     /// What a type that a definition is attached to is, as far as these rules care.
     type private AttachedTo =

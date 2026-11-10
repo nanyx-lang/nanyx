@@ -4,20 +4,21 @@ description: "What equality is, and which contexts the compiler knows about"
 order: 8
 ---
 
-> **Status: agreed, partly implemented.** `Eq(a)` and `Ord(a)` are in the prelude: `==` and `!=` require `Eq`, `<`,
-> `<=`, `>` and `>=` require `Ord`, functions have no equality, and records and tags have no order.
+> **Status: agreed, partly implemented.** `Eq(a)`, `Ord(a)` and `Hash(a)` are in the prelude: `==` and `!=` require
+> `Eq`, `<`, `<=`, `>` and `>=` require `Ord`, functions have no equality or hash, and records and tags have no order.
 > [What is implemented](#what-is-implemented) says what is done and what is left of
-> [#532](https://github.com/nanyx-lang/nanyx/issues/532) and [#476](https://github.com/nanyx-lang/nanyx/issues/476).
+> [#532](https://github.com/nanyx-lang/nanyx/issues/532), [#476](https://github.com/nanyx-lang/nanyx/issues/476) and
+> [#533](https://github.com/nanyx-lang/nanyx/issues/533).
 > The decisions are listed under [Open questions](#open-questions); one small question remains. The code references
 > under [What existed before](#what-existed-before) are at commit `b84acc0`.
 
 # What is implemented
 
-`Nanyx.Compiler/WellKnownContexts.fs` holds what the two contexts share: which types the compiler has an instance of
+`Nanyx.Compiler/WellKnownContexts.fs` holds what the three contexts share: which types the compiler has an instance of
 its own for, how a call that requires one finds it, and how an operator on a type with a variable in it is checked
 once the type is known. `EqualityOperators.fs` and `OrderingOperators.fs` hold what is particular to each context's
-operators. The prelude declares `Eq(a)` and `__equals`, and `Ord(a)`, `__compare` and the four functions the ordering
-operators call.
+operators. The prelude declares `Eq(a)` and `__equals`, `Ord(a)`, `__compare` and the four functions the ordering
+operators call, and `Hash(a)` and `__hash`.
 
 ## Equality
 
@@ -35,7 +36,7 @@ operators call.
   generic function that compares by structure at the type it is specialised for.
 - **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
-  the rule, with a list of the members it covers, `==` and `compare`, for `hash` to join.
+  the rule, with a list of the members it covers: `==`, `compare` and `hash`.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
@@ -102,6 +103,34 @@ Not done yet, as for `Eq`:
 - **Structural derivation that looks up each part, beyond one list.** A tuple holding a `$Version`, or a list of lists
   of them, is still an error, and `<` on a `list(a)` whose type is only known later orders by structure
   ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
+
+## Hashing
+
+- **`Hash(a)` is a prelude context**, `context Hash(a) = (hash: a -> int)`, with no operators. It is the third
+  well-known context (`WellKnownContexts.hashing`), so a call that requires it finds an instance as one that requires
+  `Eq` does: one in scope, then the `hash` attached to a type that is not a built-in one, then the compiler's own.
+- **The compiler's own hashes by structure**, for every type it has its own `Eq` for, so values `==` finds equal by
+  their structure have the same hash: ints, bools and unit are their own hash, a float is hashed by its bits with
+  `-0.0` as `0.0`, a string by its bytes (FNV-1a), and records, tuples, lists and tags part by part. Its member is
+  `__hash`, which calls the intrinsic `__nanyx_hash`; the backend writes one hash function per type
+  (`CoreIrHashing.fs`). `Int`, `Float`, `Bool` and `String` each attach a `hash` that is the compiler's own, to call
+  when writing a type's own `hash`.
+- **Functions have no hash**: passing a function, or anything that holds one, to a function that requires `Hash` is
+  `NYX0205` at the call, naming the part.
+- **A type that attaches its own `==` must attach `hash` too.** `WellKnownContext.AgreesWith` says that `hash` must
+  agree with `==`, and `WellKnownContexts.disagreeing` finds a type, in the one asked for, that attaches `==` and no
+  `hash`: `Hash($Email)`, or `Hash(list($Email))`, is then `NYX0205`, which says to attach `$Email.hash`.
+- **Only nominal and protected types attach `hash`** (decision 6), as for `==` and `compare`.
+- **Generic code says it hashes**, as for `Eq`: a def that passes a value of its type variable to a function that
+  requires `Hash` needs `[Hash(a)]`, written or inferred.
+
+Not done yet:
+
+- **Structural derivation that looks up each part.** The compiler's own hash hashes every part by its structure, so
+  a type that holds a part with its own `hash`, such as a `list($Email)` where `$Email` attaches `==` and `hash`, has
+  no `Hash` for now, since `==` on it compares the elements through `` $Email.`==` ``
+  ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
+- **Maps and sets keyed by `Hash`.** Maps are keyed by `Eq` alone so far; see [Maps and sets](./maps-and-sets).
 
 # What existed before
 
@@ -344,7 +373,7 @@ Each is reported by the type checker, with a span; none reaches the backend.
 | Attached `==` with the wrong type | the existing `MissingContextMembers` message |
 | `!=` attached to a type | `'!=' cannot be defined: it is always 'not (a == b)'. Attach '==' instead` |
 | `==`, `compare` or `hash` attached to a structural type | `'Point.==' cannot be defined: Point is a structural type, so it always compares by its fields. Make it nominal ($Point) to define its own equality` |
-| `Hash(T)` wanted where `T` has its own `==` | `'Map' needs Hash($Email), and $Email defines its own ==, so its hash must agree with it: attach '$Email.hash'` |
+| `Hash(T)` wanted where `T` has its own `==` | `'Map.insert' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'` (implemented) |
 | Closed types with nothing in common | warning: `'#red' and '#some(int)' have no tag in common, so this is always false` |
 
 The language server's code action for the third adds the requirement to the signature.
@@ -364,7 +393,7 @@ The language server's code action for the third adds the requirement to the sign
 2. `Eq` in the prelude; `==` and `!=` read through it; structural derivation; per-type equality functions in the
    backend; the join for open unions. Closes #424 and #526.
 3. `Ord`, `compare` and the four operators; `List.sort`, `min`, `max`, generic `sortBy`. Closes #476.
-4. `Hash`, then maps and sets.
+4. `Hash` (done, [#533](https://github.com/nanyx-lang/nanyx/issues/533)), then maps and sets keyed by it.
 5. `ToString` per printing values (#330).
 
 # Open questions

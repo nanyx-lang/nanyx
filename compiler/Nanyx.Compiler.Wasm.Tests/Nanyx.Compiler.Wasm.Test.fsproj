@@ -21,6 +21,7 @@
     <Compile Include="Features\Errors\RunErrorTests.fs" />
     <Compile Include="Features\Except\RunExceptTests.fs" />
     <Compile Include="Features\Functions\RunFunctionTests.fs" />
+    <Compile Include="Features\Hashing\RunHashTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />

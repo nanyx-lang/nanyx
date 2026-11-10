@@ -930,12 +930,16 @@ let private useInstance (env: TypeEnv) (state: InferState) (value: Expression) (
 
 /// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is a
 /// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type variable is in scope.
+/// A type that holds one that attaches `==` and no `hash` has no `Hash` (see `WellKnownContexts.disagreeing`).
 let private wellKnownInstanceAtCall (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list) (hasInstance: Ty -> bool) =
     match argTys, WellKnownContexts.tryFind ctxName with
     // Without the prelude there is no instance of the compiler's own to pass.
     | [ ty ], Some wellKnown when (TypeEnv.tryFind wellKnown.BuiltInFunction env).IsSome ->
-        let hasAttached = not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty wellKnown.Member).IsSome
-        Some (wellKnown, WellKnownContexts.atCall wellKnown hasAttached hasInstance ty)
+        let attaches (part: Ty) (memberName: Identifier) =
+            not (WellKnownContexts.isBuiltIn part) && (tryResolveAttachedFunction env part memberName).IsSome
+        match WellKnownContexts.disagreeing wellKnown attaches ty with
+        | Some reason -> Some (wellKnown, WellKnownContexts.NoInstance reason)
+        | None -> Some (wellKnown, WellKnownContexts.atCall wellKnown (attaches ty wellKnown.Member) hasInstance ty)
     | _ -> None
 
 /// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than

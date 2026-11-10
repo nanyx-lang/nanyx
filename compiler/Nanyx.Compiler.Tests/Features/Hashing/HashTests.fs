@@ -1,0 +1,61 @@
+module Nanyx.Compiler.Tests.Features.Hashing
+
+open Xunit
+open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
+
+/// A function generic in what it hashes, which requires `Hash` of it.
+let private hashing = "def h: [Hash(a)] a -> int = { x -> hash(x) }\n"
+
+/// A nominal type that attaches its own `==`, and `hash` when `withHash` is set.
+let private email (withHash: bool) =
+    "type $Email = string\n" +
+    "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+    (if withHash then "def $Email.hash: $Email -> int = { e -> 7 }\n" else "")
+
+[<Fact>]
+let ``A call that requires Hash of a type with no hash of its own is passed the compiler's own`` () =
+    let typed = compileClean (hashing + "def a = h(1)\ndef b = h((name = \"x\", tags = [#red]))\n")
+    Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "hash", "__hash" ]; InstanceSynthesized [ "hash", "__hash" ] ], instancesOf typed)
+
+[<Fact>]
+let ``A call that requires Hash of a nominal type that attaches hash is passed it`` () =
+    let typed = compileClean (hashing + email true + "def a = h($Email(\"x\"))\n")
+    Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "hash", "$Email.hash" ] ], instancesOf typed)
+
+[<Fact>]
+let ``A type that attaches == and no hash has no Hash, and nor has anything that holds it`` () =
+    let message, at = missingContext (hashing + email false + "def a = h($Email(\"x\"))\n")
+    Assert.Equal("'h' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
+    Assert.Equal("h", at)
+    let message, _ = missingContext (hashing + email false + "def a = h([$Email(\"x\")])\n")
+    Assert.Equal("'h' hashes values of type 'list($Email)', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
+
+[<Fact>]
+let ``A type that holds one with its own hash has no Hash yet (#641)`` () =
+    let message, _ = missingContext (hashing + email true + "def a = h([$Email(\"x\")])\n")
+    Assert.Equal("'h' hashes values of type 'list($Email)', which cannot be hashed: its part '$Email' has its own hash, which the compiler's own hash of the whole does not read yet", message)
+
+[<Fact>]
+let ``Functions have no hash`` () =
+    let message, _ = missingContext (hashing + "def a = h({ (x: int) -> x })\n")
+    Assert.Equal("'h' hashes values of type 'int -> int', which cannot be hashed: functions have no hash", message)
+    let message, _ = missingContext (hashing + "def a = h((name = \"x\", onClick = { (x: int) -> x }))\n")
+    Assert.Equal("'h' hashes values of type '(name: string, onClick: (int -> int))', which cannot be hashed: its field 'onClick' is a function, and functions have no hash", message)
+
+[<Fact>]
+let ``A def that hashes values of its type variable requires Hash of it`` () =
+    let message, _ = missingContext (hashing + "def g: a -> int = { x -> h(x) }\n")
+    Assert.Equal("'h' requires the context 'Hash(a)', which is not available here: add [Hash(a)] to the type of 'g'", message)
+    let typed = compileClean (hashing + "def g = { x -> h([x]) }\ndef n = g(1)\n")
+    match typed.InferredContextTypes |> Map.values |> List.ofSeq with
+    | [ [ TyApply("Hash", [ TyVar _ ]) ] ] -> ()
+    | other -> failwith $"Unexpected inferred contexts: %A{other}"
+
+[<Fact>]
+let ``Only a nominal type may attach hash`` () =
+    match (Compiler.compile "type Point = (x: int, y: int)\ndef Point.hash: Point -> int = { p -> p.x }\n").Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
+        Assert.Equal("'Point.hash' cannot be defined: 'Point' is a structural type, so its hash is always that of its structure. Make it nominal ('$Point') to define its own hash", diagnostic.Message)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"

@@ -379,6 +379,41 @@ export def String.compare: string, string -> #less | #equal | #greater = { x, y 
   __compare(x, y)
 }
 
+-- Hashing ---------------------------------------------------------------------------------------
+
+-- How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
+-- so that a map can find a key by its hash. The compiler has its own for every type it has its own
+-- `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
+-- `hash` that agrees with it, or it has none: `def $Email.hash = { e -> String.hash(lower(e)) }`
+-- for an `==` that ignores case. A function that hashes values of one of its type variables
+-- requires it: `def bucket: [Hash(a)] a, int -> int`.
+export context Hash(a) = (hash: a -> int)
+
+-- The `hash` of the compiler's own `Hash`: what a function that requires `Hash(a)` is passed when
+-- it is called with a type that has no `hash` of its own.
+export def __hash: a -> int = { x ->
+  __nanyx_hash(x)
+}
+
+-- Each built-in type has its hash attached as `hash`, so that a type's own `hash` can be built from
+-- its parts' hashes. A built-in type's hash is always the compiler's own: `Hash` does not read
+-- these.
+export def Int.hash: int -> int = { x ->
+  __hash(x)
+}
+
+export def Float.hash: float -> int = { x ->
+  __hash(x)
+}
+
+export def Bool.hash: bool -> int = { x ->
+  __hash(x)
+}
+
+export def String.hash: string -> int = { s ->
+  __hash(s)
+}
+
 -- Text ------------------------------------------------------------------------------------------
 
 -- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
