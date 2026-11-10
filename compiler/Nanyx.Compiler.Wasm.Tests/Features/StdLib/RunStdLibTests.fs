@@ -370,7 +370,7 @@ let ``Run - nanyx/math sqrt, floor, ceil and round`` () =
         "println(\"{math.floor(3.9)} {math.floor(-3.1)} {math.floor(4.0)}\")\n" +
         "println(\"{math.ceil(3.1)} {math.ceil(-3.9)} {math.ceil(4.0)}\")\n" +
         "println(\"{math.round(3.5)} {math.round(2.5)} {math.round(-2.5)} {math.round(2.4999)} {math.round(-0.4)}\")\n"
-    runSource source |> assertRan "9.0 1.414214\n3 -4 4\n4 -3 4\n4 3 -3 2 0\n"
+    runSource source |> assertRan "9.0 1.4142135623730951\n3 -4 4\n4 -3 4\n4 3 -3 2 0\n"
 
 [<Fact>]
 let ``Run - nanyx/math truncate drops the fraction towards zero`` () =

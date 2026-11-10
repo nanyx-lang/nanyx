@@ -23,7 +23,7 @@ let ``Run - float arithmetic and printing`` () =
         "  println(if 2.5 > 1.0 and 1.5 <= 1.5 and 0.1 + 0.2 != 0.3 then \"cmp ok\" else \"cmp wrong\")\n" +
         "  dbg(1.5 + 2.25)\n" +
         "}\n"
-    runSource source |> assertRan "6.28\n4.0 -1.5 0.333333 2.5 1234567.25\ncmp ok\ndbg: 3.75\n"
+    runSource source |> assertRan "6.28\n4.0 -1.5 0.3333333333333333 2.5 1234567.25\ncmp ok\ndbg: 3.75\n"
 
 [<Fact>]
 let ``Run - an operator on a type that attaches it calls the attached definition`` () =
@@ -126,7 +126,7 @@ let ``Run - ** is the prelude's pow, and Float.pow takes any exponent`` () =
         "  println(\"{Float.pow(2.0, 0.5)} {Float.pow(2.0, 10.0)} {Float.pow(10.0, -1.5)} {Float.pow(0.0, 0.5)}\")\n" +
         "  println(\"{math.pow(2, 8)} {math.pow(1.5, 3)} {pow(3, 4)} {cube(2)} {cube(0.5)}\")\n" +
         "}\n"
-    runSource source |> assertRan "1024 2.25 512 64 18 0 0.25\n1.414214 1024.0 0.031623 0.0\n256 3.375 81 8 0.125\n"
+    runSource source |> assertRan "1024 2.25 512 64 18 0 0.25\n1.414213562373095 1024.0 0.0316227766016838 0.0\n256 3.375 81 8 0.125\n"
 
 [<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
