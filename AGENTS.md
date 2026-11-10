@@ -36,6 +36,23 @@ those files workable. The reasoning behind them, and the current state of the co
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 
+## Nanyx code
+
+- **Format the Nanyx you write.** Before you commit a `.nyx` file you added or changed, in `stdlib/`,
+  `examples/` or anywhere else, run the formatter on it. From `compiler/`:
+
+  ```bash
+  dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format <files>
+  ```
+
+  CI fails if any file under `stdlib/` is not formatted. Format only the files you touched: formatting other
+  files belongs in a PR of its own. Leave test inputs alone where their layout is what the test checks, such
+  as parser and formatter fixtures.
+- **Check the standard library when you change the formatter.** A change to how the formatter lays code
+  out can leave `stdlib/` unformatted. Run
+  `dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format --check ../stdlib` from
+  `compiler/` before you push.
+
 ## Tests
 
 - **One file per feature.** A test goes in the `Features/<Area>/` file for the feature it covers. If no such
