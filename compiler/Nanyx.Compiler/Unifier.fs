@@ -148,9 +148,10 @@ module Unifier =
         | TyApply(name, args) -> $"{name}({items args})"
         // A union of no tags has no values: the bottom type.
         | TyUnion [] -> "undefined"
+        // A rest named nothing (see `displayRenaming`) is written as a bare spread: `#some(int) | ...`.
         | TyUnion members ->
             members
-            |> List.map grouped
+            |> List.map (function TyPrimitive "" -> spread | item -> grouped item)
             |> String.concat " | "
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
@@ -322,9 +323,10 @@ module Unifier =
                 items |> List.map collect |> Set.unionMany |> Set.union rests
         collect ty
 
-    /// The ids of the made-up variables in `ty` that stand for the rest of an open record and appear nowhere else in
-    /// it. Such a row only says the record may have more fields, so it needs no name: `(name: α, …) -> α`.
-    let private loneRecordRows (ty: Ty) : Set<int> =
+    /// The ids of the made-up variables in `ty` that stand for the rest of an open record or union and appear nowhere
+    /// else in it. Such a rest only says there may be more fields or tags, so it needs no name: `(name: α, …) -> α`,
+    /// `#some(int) | … -> int`.
+    let private loneRests (ty: Ty) : Set<int> =
         let occurrences = varOccurrences ty
         let once =
             occurrences
@@ -332,7 +334,7 @@ module Unifier =
             |> List.choose (fun (id, count) -> if count = 1 then Some id else None)
             |> Set.ofList
         let unnamed = occurrences |> List.filter (fun v -> v.Name.IsNone) |> List.map (fun v -> v.Id) |> Set.ofList
-        restVarIds false ty |> Set.intersect once |> Set.intersect unnamed
+        restVarIds true ty |> Set.intersect once |> Set.intersect unnamed
 
     /// Replaces the type variables the compiler made up in `ty` with primitives that print as their names for a
     /// reader. They are named in the order they appear, through the Greek (`α`, `β`, ...) or Latin (`a`, `b`, ...)
@@ -342,8 +344,8 @@ module Unifier =
     /// When the two ends run into each other, the alphabet is split where they met while giving out its letters
     /// the first time, and each end goes round its own part again with a suffix: `α₁`, `ω₁` (`a1`, `z1`).
     ///
-    /// The record rows in `unnamedRows` are given no name and no letter, so they print as a bare spread.
-    let private displayRenaming (notation: TypeNotation) (unnamedRows: Set<int>) (ty: Ty) : Subst =
+    /// The rests in `unnamedRests` are given no name and no letter, so they print as a bare spread.
+    let private displayRenaming (notation: TypeNotation) (unnamedRests: Set<int>) (ty: Ty) : Subst =
         let alphabet, suffix =
             match notation with
             | Unicode -> greekLetters, subscript
@@ -355,7 +357,7 @@ module Unifier =
             match alphabet |> String.filter (fun letter -> not (taken.Contains (string letter))) with
             | "" -> alphabet
             | free -> free
-        let unnamed = vars |> List.filter (fun v -> v.Name.IsNone && not (unnamedRows.Contains v.Id))
+        let unnamed = vars |> List.filter (fun v -> v.Name.IsNone && not (unnamedRests.Contains v.Id))
         let rests = restVarIds true ty
         let isRest (v: TyVar) = rests.Contains v.Id
         let ordinary, rest = unnamed |> List.partition (isRest >> not)
@@ -379,7 +381,7 @@ module Unifier =
         // Each made-up variable is replaced by a primitive that prints as its new name.
         Seq.append (Seq.zip ordinary (free fromFront)) (Seq.zip rest (free fromBack))
         |> Seq.map (fun (v, name) -> v.Id, TyPrimitive name)
-        |> Seq.append (unnamedRows |> Seq.map (fun id -> id, TyPrimitive ""))
+        |> Seq.append (unnamedRests |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
 
     /// `ty` as `tyToString` writes it, with a spread written in `notation`.
@@ -387,17 +389,17 @@ module Unifier =
         printTy (match notation with Unicode -> "…" | Ascii -> "...") true ty
 
     /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
-    /// describes, and a record row that appears nowhere else written as a bare spread: `(name: α, …)`.
+    /// describes, and a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`.
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string =
-        printIn notation (apply (displayRenaming notation (loneRecordRows ty) ty) ty)
+        printIn notation (apply (displayRenaming notation (loneRests ty) ty) ty)
 
     /// Each of `tys` for a reader, as `tyToDisplayString` writes it, with a variable they share given the same name
     /// in each. The first one's variables are named first, so it reads as it would alone unless the others use a
-    /// name from an annotation that it would have been given. A record row is a bare spread only where it is in
+    /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list =
         let lone =
-            let loneIn = tys |> List.map (fun ty -> loneRecordRows ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
+            let loneIn = tys |> List.map (fun ty -> loneRests ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
             loneIn
             |> List.map fst
             |> Set.unionMany
