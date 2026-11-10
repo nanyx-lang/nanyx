@@ -72,7 +72,26 @@ let private unwrapContextType (typeExpr: TypeExpr option) : TypeExpr option =
     | other -> other
 
 
-/// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`).
+/// The keys of the members of the contexts each definition in `defs` requires, by the definition's name, from the
+/// members of each context in `typeLayouts`. For a parameterised context the key is qualified (`ToString_a_toString`),
+/// and for a plain one it is the member's name (`println`).
+let private contextMemberKeys (defs: (string * TypeExpr option * Expression) list) (typeLayouts: Map<string, string list>) : Map<string, string list> =
+    defs
+    |> List.choose (fun (name, typeOpt, _) ->
+        let keys =
+            extractContextTypes typeOpt
+            |> List.collect (fun ctxType ->
+                let baseName =
+                    match ctxType.Kind with
+                    | TypeName n
+                    | TypeApply(n, _) -> n
+                    | _ -> "unknown"
+                typeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (contextMemberKey (Some ctxType)))
+        if keys.IsEmpty then None else Some (name, keys))
+    |> Map.ofList
+
+
+///// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`).
 let private isNominalTypeName (name: string) =
     let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
     own.StartsWith "$"
@@ -264,7 +283,12 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
         |> Seq.collect (List.choose (function Some (InstanceSynthesized members) -> Some members | _ -> None) >> List.concat)
         |> Seq.map snd
         |> Set.ofSeq
-    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers module'
+    // A lambda lifted out of a function that requires contexts captures the function's members, by the names of the
+    // parameters they come in, so that it can call them and pass them on.
+    let memberCaptures =
+        let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
+        contextMemberKeys defs (fst (extractTypeLayouts module')) |> Map.map (fun _ keys -> keys |> List.map contextMemberParameter)
+    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures module'
     let defs =
         module'
         |> List.choose (function
@@ -297,34 +321,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             | contextTypes -> Some (name, contextTypes))
         |> Map.ofList
 
-    let functionContextRequirements =
-        defs
-        |> List.choose (fun (name, typeOpt, _) ->
-            let contextTypes = extractContextTypes typeOpt
-            if contextTypes.IsEmpty then None
-            else
-                // For each context type, get its field names and generate appropriate keys
-                let contextFnNames =
-                    contextTypes
-                    |> List.collect (fun ctxType ->
-                        let baseName = match ctxType.Kind with
-                                       | TypeName n -> n
-                                       | TypeApply(n, _) -> n
-                                       | _ -> "unknown"
-                        let needsQualified = match ctxType.Kind with
-                                             | TypeApply _ -> true  // Parameterized - need qualified
-                                             | _ -> false           // Simple - keep simple names
-                        typeLayouts |> Map.tryFind baseName 
-                        |> Option.defaultValue []
-                        |> List.map (fun memberName ->
-                            if needsQualified then
-                                let ctxKey = typeExprToKey ctxType
-                                $"{ctxKey}_{memberName}"
-                            else
-                                memberName))
-                if contextFnNames.IsEmpty then None
-                else Some (name, contextFnNames))
-        |> Map.ofList
+    let functionContextRequirements = contextMemberKeys defs typeLayouts
 
     // The ambient context instance: a module-level function named like a member of a declared context stands
     // in for that member whenever a callee requires the context and the caller has nothing else to supply.
@@ -454,7 +451,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             functionContextRequirements.[name]
             |> List.map (fun key ->
                 { CoreIrLower.ContextParameter.Key = key
-                  CoreIrLower.ContextParameter.Name = $"__ctx_{sanitizeIdentifier key}"
+                  CoreIrLower.ContextParameter.Name = contextMemberParameter key
                   CoreIrLower.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
         parameters, contextMemberAliases name |> Map.ofList
 
@@ -491,7 +488,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
               NominalWrappers = nominalWrappers
               Lifted =
-                [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLower.LiftedLambda(origin.Lambda, origin.Captured))
+                [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLower.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner))
                   yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLower.FunctionWrapper wrapped) ]
                 |> Map.ofList
               TopLevel = topLevelExprs

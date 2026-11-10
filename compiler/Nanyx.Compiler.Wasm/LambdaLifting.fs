@@ -226,11 +226,17 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// parameter or local. The top-level functions that can stand in for a context member when nothing in
 /// scope supplies one (the ambient instance, like the runtime's `Console`) get wrappers up front, as do
 /// `synthesized`, the top-level functions an instance the compiler builds from attached definitions is made of.
-let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
+///
+/// `memberCaptures` names, for each definition that requires contexts, the parameters its context members come in. A
+/// lambda lifted out of it captures all of them, as it captures a local, so that it can call the members and pass them
+/// on to what it calls.
+let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
     let mutable owner = ""
+    // The names the context members of `owner` are captured by.
+    let mutable ownerMembers: string list = []
     let mutable counter = 0
 
     let topLevelFunctions =
@@ -289,6 +295,9 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
     /// The closure block for the lifted function `liftedName` over the given captured names, standing in for
     /// `origin` (the lambda or function reference it replaces), whose id and span it keeps. (A marker call
     /// rather than a tuple, so that `f(closure)` is not flattened into one argument per field.)
+    /// `captured` with the context members of `owner` after it, those it does not capture already.
+    let withMembers (captured: string list) = captured @ (ownerMembers |> List.filter (fun name -> not (List.contains name captured)))
+
     let closureOf (origin: Expression) (liftedName: string) (captured: string list) =
         { origin with
             Kind =
@@ -364,6 +373,7 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
                         Set.difference (referencedNames liftedBody |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add envParameter)
                         |> Set.intersect scope
                         |> Set.toList
+                        |> withMembers
                     lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
                     origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda }
                     [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
@@ -460,6 +470,7 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
             Set.difference (referencedNames liftedBody |> Set.ofList) innerScope
             |> Set.intersect scope
             |> Set.toList
+            |> withMembers
         let name = $"__lambda_{counter}"
         counter <- counter + 1
         lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda lambda args captured liftedBody))))
@@ -471,13 +482,16 @@ let lift (synthesized: Set<string>) (module': Module) : Module * Map<string, Lif
         // A definition's own lambda is the function being defined; lift inside its body only.
         | Def (ValueDef(isExport, name, typeOpt, (Kind (Lambda(args, body)) as lambda))) ->
             owner <- name
-            let scope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
+            ownerMembers <- memberCaptures |> Map.tryFind name |> Option.defaultValue []
+            let scope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList) |> Set.union (Set.ofList ownerMembers)
             { item with Kind = Def (ValueDef(isExport, name, typeOpt, { lambda with Kind = Lambda(args, liftExpr scope body) })) }
         | Def (ValueDef(isExport, name, typeOpt, rhs)) ->
             owner <- name
+            ownerMembers <- []
             { item with Kind = Def (ValueDef(isExport, name, typeOpt, liftExpr (boundNames rhs |> Set.ofList) rhs)) }
         | Expr expr ->
             owner <- ""
+            ownerMembers <- []
             { item with Kind = Expr (liftExpr (boundNames expr |> Set.ofList) expr) }
         | _ -> item
 

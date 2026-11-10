@@ -30,3 +30,7 @@ let sanitizeIdentifier (name: string) =
     if String.IsNullOrWhiteSpace sanitized then "_"
     elif Char.IsDigit sanitized.[0] then "_" + sanitized
     else sanitized
+
+/// The name of the parameter a function that requires a context takes one of its members in, by the member's key.
+/// A lambda lifted out of the function captures the member under the same name.
+let contextMemberParameter (key: string) = $"__ctx_{sanitizeIdentifier key}"

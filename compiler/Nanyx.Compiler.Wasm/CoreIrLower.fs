@@ -16,8 +16,9 @@ open Transpiler.Wasm.CoreIr
 /// A function lambda lifting made (see `LambdaLifting.fs`), which the IR lowers where a closure over it is made.
 type LiftedFunction =
     /// A lambda, or a `rec` local function, lifted out of a definition: the lambda as written (which the type checker
-    /// typed), and the names it captures, in the order its environment holds them.
-    | LiftedLambda of Expression * string list
+    /// typed), the names it captures, in the order its environment holds them, and the definition it was lifted out of.
+    /// It captures that definition's context members under the names of the parameters they come in.
+    | LiftedLambda of Expression * string list * owner: string
     /// What lets the top-level function of this name be passed as a value: it takes an environment and ignores it.
     | FunctionWrapper of string
 
@@ -339,6 +340,9 @@ type private Scope =
       /// The context members in scope, by key (and by the other names they can be called by): each a variable holding
       /// the member's closure.
       Members: Map<string, Var>
+      /// In a lifted lambda, the captured locals that hold context members (`__ctx_<key>`), each with the keys and other
+      /// names the member is in scope by once the local is bound.
+      CapturedMembers: Map<string, string list>
       /// How many `for` loops enclose the expression, which names a loop's locals.
       ForDepth: int }
 
@@ -900,7 +904,11 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let localName = uniqueName name
             this.Complex scope rhs (fun value ->
                 let local = newVar localName Local value.Type
-                let body = this.Block { scope with Vars = scope.Vars |> Map.add name local } rest k
+                let members =
+                    match scope.CapturedMembers |> Map.tryFind name with
+                    | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
+                    | None -> scope.Members
+                let body = this.Block { scope with Vars = scope.Vars |> Map.add name local; Members = members } rest k
                 mk (Let(local, value, body)) body.Type)
         | ExprStatement first :: rest ->
             this.Complex scope first (fun value ->
@@ -1027,6 +1035,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               LivePayloads = Set.empty
               InterpolationDepth = 0
               Members = Map.empty
+              CapturedMembers = Map.empty
               ForDepth = 0 }
         // An expression that holds errors deferred to run time, and cannot be lowered because of them, reports them
         // when it is reached instead.
@@ -1110,6 +1119,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               LivePayloads = Set.empty
               InterpolationDepth = 0
               Members = Map.empty
+              CapturedMembers = Map.empty
               ForDepth = 0 }
         let make (parameters: Var list) (result: IrType) (body: Expr) =
             { Name = functionName
@@ -1138,14 +1148,18 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let memberScope =
                 aliases
                 |> Map.fold (fun acc alias key -> acc |> Map.add alias (Map.ofList members).[key]) (Map.ofList members)
-            let scope = { scopeOf parameters with Members = memberScope }
+            // A lambda lifted out of the function captures each member by its parameter's name.
+            let parameterVars =
+                List.map2 (fun (parameter: ContextParameter) (_, var) -> parameter.Name, var) contextParameters members
+            let scope = scopeOf parameters
+            let scope = { scope with Members = memberScope; Vars = parameterVars |> List.fold (fun acc (name, var) -> acc |> Map.add name var) scope.Vars }
             make (parameters @ List.map snd members) (toIrType resultTy) (this.Tail scope body)
         | LiftedCapturing capturedTys ->
             // The environment first: the function's table slot, then what it captures. The rest are the lambda's
             // parameters, typed as the lambda was where it was written.
-            let lambda =
+            let lambda, owner =
                 match input.Lifted |> Map.tryFind name with
-                | Some (LiftedLambda(lambda, _)) -> lambda
+                | Some (LiftedLambda(lambda, _, owner)) -> lambda, owner
                 | _ -> cannot $"'{name}' is not a lifted lambda"
             let lambdaTy =
                 match input.ExprTypes |> Map.tryFind lambda.Id with
@@ -1156,7 +1170,15 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let parameters =
                 parameterOf parameterNames.Head environment
                 :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
-            make parameters (toIrType resultTy) (this.Tail (scopeOf parameters) body)
+            // The owner's context members are bound from the environment with what else it captures.
+            let capturedMembers =
+                let contextParameters, aliases = input.ContextParameters |> Map.tryFind owner |> Option.defaultValue ([], Map.empty)
+                contextParameters
+                |> List.map (fun parameter ->
+                    let otherNames = aliases |> Map.filter (fun _ key -> key = parameter.Key) |> Map.keys |> List.ofSeq
+                    parameter.Name, parameter.Key :: otherNames)
+                |> Map.ofList
+            make parameters (toIrType resultTy) (this.Tail { scopeOf parameters with CapturedMembers = capturedMembers } body)
         | WrapperCalling(wrapped, instanceTy) ->
             // Takes an environment, ignores it, and calls the function with the rest.
             if input.ContextParameters.ContainsKey wrapped then cannot $"a wrapper of '{wrapped}', which requires contexts"
