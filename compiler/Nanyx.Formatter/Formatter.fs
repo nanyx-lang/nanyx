@@ -107,15 +107,17 @@ let format (options: Options) (parsed: SourceModule) : string =
             i <- i - 1
         if i >= 0 && i < source.Length then source[i] else '\000'
 
-    /// Whether the match `e` on `value` was written `value \match | ...`, rather than `match value | ...`.
-    let isPipedMatch (e: Expression) (value: Expression) =
+    /// Where the `\match` is, if the match `e` on `value` was written `value \match | ...`, rather than `match value | ...`.
+    let pipedMatchAt (e: Expression) (value: Expression) =
         if not (valid e.Span && valid value.Span) || startsWith e.Span "match" then
-            false
+            None
         else
             let mutable i = value.Span.End
             while i < e.Span.End && (Char.IsWhiteSpace source[i] || source[i] = ')') do
                 i <- i + 1
-            i + 6 <= source.Length && String.CompareOrdinal(source, i, "\\match", 0, 6) = 0
+            if i + 6 <= source.Length && String.CompareOrdinal(source, i, "\\match", 0, 6) = 0 then Some i else None
+
+    let isPipedMatch (e: Expression) (value: Expression) = (pipedMatchAt e value).IsSome
 
     // Comments are placed once each; whatever no construct places goes before the line it was in.
     let comments =
@@ -389,15 +391,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
         | Lambda(parameters, body) -> lambdaDoc e parameters body false
-        | Pipe(value, n, nameSpan, args) ->
-            let target = cat [ text "\\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
-            match value.Kind with
-            // The arms of a `\match` take the rest of their lines, so a pipe after them goes on a line of its own.
-            | Match([ scrutinee ], arms) when isPipedMatch value scrutinee ->
-                cat [ pipedMatchDoc value scrutinee arms; nest (cat [ hard; target ]) ]
-            | _ -> cat [ expr { position with Tail = false; Prec = 0 } value; text " "; target ]
+        | Pipe _ -> pipeChain position e
         | Block _ -> block e
-        | Match([ scrutinee ], arms) when isPipedMatch e scrutinee -> pipedMatchDoc e scrutinee arms
+        | Match([ scrutinee ], arms) when isPipedMatch e scrutinee -> pipeChain position e
         | Match(scrutinees, arms) ->
             match ifArm e with
             | Some _ -> ifDoc e
@@ -721,9 +717,56 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text "match"; Doc.nest (2 * options.IndentSize) (cat [ hard; block scrutinee ]); armsDoc ]
         | _ -> cat [ text "match "; commaJoin (List.map (expr { full with Tail = false }) scrutinees); armsDoc ]
 
-    /// `value \match` with the arms on the lines after it.
-    and pipedMatchDoc (e: Expression) (value: Expression) (arms: MatchArm list) : Doc =
-        cat [ expr { full with Tail = false; Prec = 0 } value; text " \\match"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
+    /// A pipe chain, `value \f \g(x)`, perhaps with `\match` steps. It stays on one line when it was written on one and
+    /// fits; otherwise each step goes on a line of its own, indented once from the line the chain starts on, as the
+    /// parser needs a pipe that continues a statement to be indented more than the statement's line. A chain that
+    /// takes up lines anyway, with a lambda that spans lines in it, is broken only if it was written so. A step after
+    /// a `\match` always goes on a line of its own, since the arms take the rest of their lines. A chain in a position
+    /// that something follows on its line stays on one line.
+    and pipeChain (position: Position) (e: Expression) : Doc =
+        // The value at the start of the chain, and each step with the expression that is the chain up to it: the value
+        // it pipes, the offset of its `\` or name in the source, and its document.
+        let rec collect (e: Expression) steps =
+            match e.Kind with
+            | Pipe(value, n, nameSpan, args) ->
+                let at = match nameSpan with Some span when valid span -> span.Start | _ -> -1
+                let doc = cat [ text "\\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
+                collect value ((value, at, false, doc) :: steps)
+            | Match([ value ], arms) ->
+                match pipedMatchAt e value with
+                | Some at ->
+                    let doc = cat [ text "\\match"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
+                    collect value ((value, at, true, doc) :: steps)
+                | None -> e, steps
+            | _ -> e, steps
+        let root, steps = collect e []
+        let rootDoc = expr { position with Tail = false; Prec = 0 } root
+        let isMatch = steps |> List.map (fun (_, _, isMatch, _) -> isMatch)
+        let afterMatch = false :: List.truncate (steps.Length - 1) isMatch
+        // Whether the step at `at` starts a line of its own after the value it pipes.
+        let startsLine (value: Expression) at = at >= 0 && valid value.Span && value.Span.End > 0 && lineOf at > lineOf (value.Span.End - 1)
+        let writtenOnLines =
+            List.zip steps afterMatch |> List.exists (fun ((value, at, _, _), afterMatch) -> not afterMatch && startsLine value at)
+        let stepDocs = steps |> List.map (fun (_, _, _, doc) -> doc)
+        // The comments between a step and the value it pipes: one at the end of the value's last line stays there, and
+        // any other goes on a line of its own before the step.
+        let commentsBefore (value: Expression) at =
+            if at < 0 || not (valid value.Span) then
+                Doc.empty
+            else
+                cat [ for i in unplacedIn value.Span.End at ->
+                          placed[i] <- true
+                          let commentText, span = comments[i]
+                          if lineOf span.Start = lineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
+                          else cat [ hard; text commentText ] ]
+        if position.Tail && writtenOnLines then
+            cat [ rootDoc; nest (cat [ for value, at, _, doc in steps -> cat [ commentsBefore value at; hard; doc ] ]) ]
+        elif position.Tail && steps.Length > 1 && not (List.contains true isMatch)
+             && not (List.exists Doc.hasHardLine (rootDoc :: stepDocs)) then
+            Doc.group (cat [ rootDoc; nest (cat [ for doc in stepDocs -> cat [ Doc.line; doc ] ]) ])
+        else
+            let step doc afterMatch = if afterMatch then nest (cat [ hard; doc ]) else cat [ text " "; doc ]
+            cat (rootDoc :: List.map2 step stepDocs afterMatch)
 
     /// `value except pattern -> replacement` when there is one arm (perhaps with alternatives), and otherwise `value
     /// except` with the arms on the lines after it, as a match has them.
