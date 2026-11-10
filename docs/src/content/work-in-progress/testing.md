@@ -37,7 +37,7 @@ def `adds points` = {
 }
 ```
 
-Backticks already let a definition be named by an operator, as in `` def Point.`+` ``. Here they hold any text but a backtick or a line break, so a test reads as what it checks, and the runner reports it as `` geometry.`adds points` ``. A plain name, `def addsPoints`, works too.
+A [name in backticks](../tour/naming-conventions#names-in-backticks) can be any text but a backtick, a line break or a dot, so a test reads as what it checks, and the runner reports it as `` geometry.`adds points` ``. A plain name, `def addsPoints`, works too.
 
 A test takes no arguments and returns `()`. It passes if it finishes, and fails if it panics: an `assert` that does not hold, a [deferred error](#deferred-errors), a non-exhaustive match or any other panic.
 
@@ -188,5 +188,5 @@ These fit the design but are not part of the first version:
 
 - **`assert` in release builds.** Should a release build keep every `assert`, as Rust's `assert!` does, or should there also be a debug-only form, like Rust's `debug_assert!`?
 - **A message.** Should `assert` take an optional message, `assert(ok, "the cache was warm")`, or are the printed values always enough?
-- **Calling a sentence-named definition.** A test is never called, but any definition can now have a name with spaces. Should that be allowed only for tests, or everywhere, as F#'s double-backtick names are?
+- **Dots in test names.** A name in backticks cannot hold a dot, because dots separate the parts of a qualified name, so a test cannot be called `` `parses 1.5` ``. Is that worth lifting for tests?
 - **Private definitions in test files.** Should a file selected by `tests` be able to reach the private definitions of a module it names, as Go's tests in the same package can?
