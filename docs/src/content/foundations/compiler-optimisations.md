@@ -18,6 +18,8 @@ In practice this means:
 
 Tail calls are the exception: a call in tail position never uses up stack. That is a guarantee of the language, not an optimisation, and every compiler version keeps it. See [Tail recursion](../tour/functions#tail-recursion).
 
+Freeing memory is not an optimisation either: a value is freed as soon as nothing refers to it, by [reference counting](../advanced/reference-counting), not left for a garbage collector.
+
 # Typical optimisation areas
 
 Depending on code shape and target backend, the compiler may perform optimisations such as:
@@ -26,6 +28,7 @@ Depending on code shape and target backend, the compiler may perform optimisatio
 - inlining of small expressions,
 - dead-code elimination,
 - copy elision and reduced temporary allocations,
+- reuse in place: a value a `match` takes apart and holds the only reference to is rewritten into a new value of the same size, so mapping over a list nothing else refers to allocates nothing (see [Reference counting](../advanced/reference-counting#reuse-in-place)),
 - improved passing strategy for values (for example by-value vs by-reference decisions).
 
 For allocation-specific behavior, see [Stack vs heap allocation](../advanced/stack-vs-heap-allocation).

@@ -8,6 +8,8 @@ Mutation in Nanyx is available but bounded. Mutable values require the `$Memory`
 
 `$Memory` is a [nominal context](./nominal-and-protected-types) owned by the standard library, so `memory { ... }` is the only way to obtain an instance of it; user code cannot construct one with `use`.
 
+This page is about mutating values. For how Nanyx frees memory, and updates immutable values in place when nothing else refers to them, see [Reference counting](./reference-counting).
+
 # Local mutation
 
 ```nanyx
