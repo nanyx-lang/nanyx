@@ -67,6 +67,54 @@ Result.defaultValue(#error("x"), 0)
 
 ---
 
+# mapOr
+
+```nanyx
+Result.mapOr: ((#some(a) | #error(e)), b, (a -> b)) -> b
+```
+
+Maps the success value or returns a default for an error.
+
+```nanyx
+Result.mapOr(#some(21), 0) { * 2 }
+-- 42
+
+Result.mapOr(#error("bad"), 0) { * 2 }
+-- 0
+```
+
+---
+
+# toOption
+
+```nanyx
+Result.toOption: (#some(a) | #error(e)) -> #some(a) | #none
+```
+
+Keeps the success value and drops the error.
+
+```nanyx
+Result.toOption(#error("bad"))
+-- #none
+```
+
+---
+
+# orElse
+
+```nanyx
+Result.orElse: ((#some(a) | #error(e)), (e -> (#some(a) | #error(f)))) -> #some(a) | #error(f)
+```
+
+Recovers from an error: the fallback gets the error and gives another result. A success is left as it is.
+
+```nanyx
+readConfig(path)
+  \Result.orElse { _ -> readConfig(defaultPath) }
+```
+
+---
+
 # isOk
 
 ```nanyx

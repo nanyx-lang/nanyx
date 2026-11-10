@@ -59,7 +59,7 @@ export type Payload =
 export type Context = #companionRegistration | #trustCircleOnboarding
 
 def keyIndexListTs: Element -> #some(int) | #notFound = { el ->
-  el \subtag("key_index_list") \Option.then { .attr("ts") } \Option.then(Int.parse)
+  el \subtag("key_index_list") \Option.bind { .attr("ts") } \Option.bind(Int.parse)
 }
 
 export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #error(#extractionFailed) = {
@@ -85,7 +85,7 @@ export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #err
 
   | el, #trustCircleOnboarding -> proc {
       return #trustCircle(TrustCircleOnboarding(
-        appId = try required(el \subtagText("app_id") \Option.then(Int.parse))
+        appId = try required(el \subtagText("app_id") \Option.bind(Int.parse))
         authKey = try required(el \subtagText("auth_key"))
         deviceIdentity = try required(el \subtagText("device_identity"))
         famDeviceId = try required(el \subtagBinary("fam_device_id"))
