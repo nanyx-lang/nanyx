@@ -50,12 +50,40 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj --no-build --configuration Release -- format --check ../stdlib
 
+      # The Wasm tests run in the job below.
       - name: Test
-        run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release
+        run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true
 
+  # The Wasm tests take the longest by far (most of them start the CLI in a child process), so they get a
+  # runner to themselves rather than share its cores with the other test projects.
+  wasm-test:
+    name: Wasm tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PROJECT: Nanyx.Compiler.Wasm.Tests/Nanyx.Compiler.Wasm.Test.fsproj
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT }}
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT }} --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release
+
+  # Runs alongside the tests, not after them: only a release has to wait for both.
   publish:
     name: Publish (${{ matrix.rid }})
-    needs: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -128,7 +156,7 @@ jobs:
   # as compiler/<version>, unless that tag already exists. Nothing is rebuilt for a release.
   release:
     name: Release
-    needs: publish
+    needs: [test, wasm-test, publish]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
