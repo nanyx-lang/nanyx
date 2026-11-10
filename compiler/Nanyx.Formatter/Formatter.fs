@@ -392,7 +392,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
         | Lambda(parameters, body) -> lambdaDoc e parameters body false
         | Pipe _ -> pipeChain position e
-        | Block _ -> block e
+        // A block where a def's value, an arm's body or a branch would not take one is a `do` block.
+        | Block _ -> cat [ text "do"; nest (cat [ hard; block e ]) ]
         | Match([ scrutinee ], arms) when isPipedMatch e scrutinee -> pipeChain position e
         | Match(scrutinees, arms) ->
             match ifArm e with

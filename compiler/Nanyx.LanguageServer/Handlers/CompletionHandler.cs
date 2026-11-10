@@ -21,8 +21,8 @@ public sealed class CompletionHandler : CompletionHandlerBase
     /// <summary>The words the language reserves, offered wherever a name is.</summary>
     private static readonly string[] Keywords =
     [
-        "as", "await", "context", "def", "defer", "else", "except", "export", "for", "if", "import", "in", "match",
-        "module", "mut", "private", "rec", "return", "then", "try", "type", "typeof", "use", "while", "with", "yield"
+        "as", "await", "context", "def", "defer", "do", "else", "except", "export", "for", "if", "import", "in", "match",
+        "module","mut", "private", "rec", "return", "then", "try", "type", "typeof", "use", "while", "with", "yield"
     ];
 
     private readonly DocumentStore _documents;

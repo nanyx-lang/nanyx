@@ -13,6 +13,7 @@
     <Compile Include="Features\Attributes\AttributeTests.fs" />
     <Compile Include="Features\Bindings\BindingTests.fs" />
     <Compile Include="Features\Blocks\BlockTests.fs" />
+    <Compile Include="Features\Blocks\DoBlockTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\FieldAccess\FieldAccessTests.fs" />

@@ -575,6 +575,17 @@ let useValue =
                  + $"with `def name: {head} = (...)`, then load it with `use name`.")
     oldInstance <|> expression
 
+// `do` followed by an indented block of statements is that block, as in F#: a way to start a block wherever an
+// expression goes, for instance to keep the defs in it from the statements after it. It is not a loop. A `do`
+// without a block fails at the `do` (see `reportFocused`).
+let doExpr =
+    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
+    attempt (getPosition .>> pstring "do" .>> keywordEnd)
+    >>= fun position ->
+        attempt (blockExpr ())
+        <|> reportFocused position "`do` starts a block: put its statements on the lines after it, indented"
+    <?> "do block"
+
 // Use-in expression: use X in expr
 let useInExpr =
     spanned (
@@ -623,7 +634,7 @@ let contextMemberAccess =
 // `pattern string -> ...` is some other mistake.
 let private workflowKeywordApplication =
     let reservedWords =
-        set [ "and"; "as"; "context"; "def"; "else"; "except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
+        set [ "and"; "as"; "context"; "def"; "do"; "else";"except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
               "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
     let operandStart c = isLetter c || isDigit c || c = '_' || c = '"' || c = '#' || c = '(' || c = '['
     let keyword =
@@ -648,6 +659,7 @@ let primaryExprNoWs =
         attempt useInExpr
         attempt unitExpr
         attempt ifExpr  // if-then-else must be early to avoid partial matches
+        doExpr
         attempt forExpr
         attempt matchExpr
         attempt lambda
