@@ -2232,7 +2232,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         match typeOpt with
                         | Some typeExpr -> inferTypeOfValues env' current typeExpr
                         | None -> Ok current
-                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> AttachedOperators.check current name (declarationSpan current DefValue expr)) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
                     | Error err -> errors <- err
                     | Ok inferredState ->
                         current <- inferredState
@@ -2539,7 +2539,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match typeOpt with
                 | Some typeExpr -> inferTypeOfValues (withoutTopLevel name env) state typeExpr
                 | None -> Ok state
-            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> AttachedOperators.check state name (declarationSpan state DefValue expr)) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
             | Error err -> abandon isExport name expr err
             | Ok inferredState ->
                 state <- inferredState
