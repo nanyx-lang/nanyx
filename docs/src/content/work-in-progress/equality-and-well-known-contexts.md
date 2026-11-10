@@ -53,11 +53,16 @@ operators call.
   [#527](https://github.com/nanyx-lang/nanyx/issues/527)). Inside the attached `==` itself, `==` on its own type is
   the built-in comparison. Only the type of the operands as written is looked up, not their parts: see the next item.
 
+- **A list is compared through its elements' `Eq`.** `==` and `!=` on two lists whose elements have an `Eq` other
+  than the compiler's own (one in scope, or an attached `==`) call the prelude's `__listEquals` with it
+  (`WellKnownContexts.throughElements`): `[$Email("a")] == [$Email("b")]` uses `` $Email.`==` ``, and so does `==` on a
+  `list(a)` in a function that requires `[Eq(a)]` with the `Eq(a)` it is passed. `Ord` does the same for `<`.
+
 Not done yet:
 
-- **Structural derivation that looks up each part.** The compiler's own instance compares a whole value by its
-  structure, so a `list($Email)` does not compare its elements with `` $Email.`==` ``, and inside a function that
-  requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance
+- **Structural derivation that looks up each part, beyond one list.** A record, tuple or tag that holds an `$Email`,
+  and a list of lists of them, still compare the `$Email` by its structure, and so does `==` on a `list(a)` where the
+  operator's type is only known later (in a def that does not write its type)
   ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
 - **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
   function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
@@ -87,13 +92,16 @@ Not done yet:
   `List.max`, which give `#emptyList` for an empty list, as `List.head` does.
 - **Local functions are checked at each call**, as for `Eq`: a call to a local `def lt = { x, y -> x < y }` with
   records is `NYX0205` at the call, and a def that calls it with one of its own type variables requires `Ord` of it.
+- **A list is ordered through its elements' `Ord`**, as for `Eq`: `[v(1), v(2)] < [v(3)]` on `list($Version)` calls
+  the prelude's `__listLess` (and `__listLessOrEqual`, `__listGreater`, `__listGreaterOrEqual`) with
+  `$Version.compare`, lexicographically with a prefix first, and so does `<` on a `list(a)` in a function that
+  requires `[Ord(a)]`.
 
 Not done yet, as for `Eq`:
 
-- **Structural derivation that looks up each part.** `<` on a `list($Version)` is an error, as `$Version` is a record
-  inside, though it attaches `compare`; `List.sort` of one works, through the instance. Inside a function that
-  requires `[Ord(a)]`, `<` on a `list(a)` orders the elements by their structure, not through the instance: a record
-  there is ordered field by field, and a tag is reported by the backend, as `NYX0301`.
+- **Structural derivation that looks up each part, beyond one list.** A tuple holding a `$Version`, or a list of lists
+  of them, is still an error, and `<` on a `list(a)` whose type is only known later orders by structure
+  ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
 
 # What existed before
 

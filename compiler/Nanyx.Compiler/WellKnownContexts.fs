@@ -26,6 +26,9 @@ module internal WellKnownContexts =
           BuiltInFunction: Identifier
           /// Why values of a type have no instance of the compiler's own, if they have none.
           Lacks: Ty -> string option
+          /// The prelude function each operator calls on two lists whose elements have an instance other than the
+          /// compiler's own, which it is passed: `__listEquals` for `==` (and `!=`, which is `not` of it).
+          ListHelpers: Map<string, Identifier>
           /// What the context does with two values, as messages say it: `compares`, `Comparing` and `compared`.
           Verb: string
           Gerund: string
@@ -83,6 +86,7 @@ module internal WellKnownContexts =
           Operators = [ "=="; "!=" ]
           BuiltInFunction = "__equals"
           Lacks = lacking "equality" (function TyFunc _ -> Some ("a function", "functions") | _ -> None)
+          ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           Verb = "compares"
           Gerund = "Comparing"
           Participle = "compared" }
@@ -103,6 +107,8 @@ module internal WellKnownContexts =
                 | TyTag _
                 | TyUnion _ -> Some ("a tag", "tags")
                 | _ -> None)
+          ListHelpers =
+            Map.ofList [ "<", "__listLess"; "<=", "__listLessOrEqual"; ">", "__listGreater"; ">=", "__listGreaterOrEqual" ]
           Verb = "orders"
           Gerund = "Ordering"
           Participle = "ordered" }
@@ -152,6 +158,39 @@ module internal WellKnownContexts =
         match defName with
         | Some name -> $"'{name}' {wellKnown.Verb} values of type '{tyText}' with {op}, so its type must require {context}({tyText}): add [{context}({tyText})] to the type of '{name}'"
         | None -> $"{wellKnown.Gerund} values of type '{tyText}' with {op} requires the context '{context}({tyText})', which is not available here"
+
+    /// The instance of a well-known context of a type, in an environment, other than the compiler's own, if it has
+    /// one: one in scope, or one built from the member attached to it. Building one can fail, when the attached
+    /// member has the wrong type.
+    type InstanceOf = TypeEnv -> InferState -> Ty -> Result<ContextInstance option * InferState, Diagnostic list>
+
+    /// `state` with `expr`, the operator `op` of `wellKnown` on two lists of the type `ty` (given as `input`, as a
+    /// call's arguments are typed), calling the prelude's list helper for it (see `ListHelpers`) with the instance its
+    /// elements have, when `instanceOf` finds one other than the compiler's own: `==` on a `list($Email)` compares the
+    /// elements with `` $Email.`==` ``, and `<` on a `list(a)` in a function that requires `Ord(a)` orders them with
+    /// the `compare` it is passed. `None` for any other type, whose parts are all the compiler's own.
+    let throughElements
+        (wellKnown: WellKnownContext)
+        (instanceOf: InstanceOf)
+        (env: TypeEnv)
+        (state: InferState)
+        (expr: Expression)
+        (op: string)
+        (input: Ty)
+        (ty: Ty)
+        : Result<InferState option, Diagnostic list> =
+        match Unifier.unalias ty, wellKnown.ListHelpers |> Map.tryFind op with
+        | TyApply("list", [ element ]), Some helper when isDeclared wellKnown state ->
+            instanceOf env state (resolveSoFar state element)
+            |> Result.map (function
+                | Some instance, next ->
+                    Some
+                        { next with
+                            CalleeTypes = next.CalleeTypes |> Map.add expr.Id (TyFunc(input, TyPrimitive "bool"))
+                            OperatorCalls = next.OperatorCalls |> Map.add expr.Id helper
+                            ContextInstances = next.ContextInstances |> Map.add expr.Id [ Some instance ] }
+                | None, _ -> None)
+        | _ -> Ok None
 
     /// Whether `pending` is an operator a well-known context's `require` left to be checked, rather than a call.
     let isOperatorPending (pending: PendingContextInstance) =

@@ -66,6 +66,15 @@ export def __equals: a, a -> bool = { x, y ->
   x == y
 }
 
+-- What `xs == ys` calls on two lists whose elements have an `Eq` other than the compiler's own:
+-- `==` on a `list($Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
+-- compared element by element through that `Eq`. `!=` is `not` of it.
+export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
+  | [], [] -> true
+  | [x, ...xs], [y, ...ys] -> (if x == y then __listEquals(xs, ys) else false)
+  | _, _ -> false
+}
+
 -- Arithmetic ------------------------------------------------------------------------------------
 
 -- The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
@@ -308,6 +317,45 @@ export def __greater: [Ord(a)] a, a -> bool = { x, y ->
 
 export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
   match compare(x, y)
+    | #less -> false
+    | _ -> true
+}
+
+-- What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
+-- `<` on a `list($Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
+-- ordered element by element through that `Ord`, and a list that is a prefix of the other comes
+-- first. `<=`, `>` and `>=` call the three after it.
+export def __listCompare: [Ord(a)] list(a), list(a) -> #less | #equal | #greater = {
+  | [], [] -> #equal
+  | [], _ -> #less
+  | _, [] -> #greater
+  | [x, ...xs], [y, ...ys] ->
+    match compare(x, y)
+      | #equal -> __listCompare(xs, ys)
+      | #less -> #less
+      | #greater -> #greater
+}
+
+export def __listLess: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #less -> true
+    | _ -> false
+}
+
+export def __listLessOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #greater -> false
+    | _ -> true
+}
+
+export def __listGreater: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #greater -> true
+    | _ -> false
+}
+
+export def __listGreaterOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
     | #less -> false
     | _ -> true
 }

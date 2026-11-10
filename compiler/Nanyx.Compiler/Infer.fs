@@ -934,16 +934,19 @@ let private wellKnownInstanceAtCall (env: TypeEnv) (ctxName: Identifier) (argTys
         Some (wellKnown, WellKnownContexts.atCall wellKnown hasAttached hasInstance ty)
     | _ -> None
 
-/// The instance of `Ord` the ordering operator `op` at `span` reads on values of a type, other than the compiler's own
-/// (see `OrderingOperators.InstanceOf`): one in scope, or else one built from the `compare` attached to a type that is
-/// not a built-in one (see `WellKnownContexts.isBuiltIn`).
-let private orderingInstance (op: string) (span: SourceSpan) : OrderingOperators.InstanceOf = fun env state ty ->
-    match instanceInScope env state OrderingOperators.context [ ty ] with
+/// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
+/// the compiler's own (see `WellKnownContexts.InstanceOf`): one in scope, or else one built from the member attached to
+/// a type that is not a built-in one (see `WellKnownContexts.isBuiltIn`).
+let private wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (op: string) (span: SourceSpan) : WellKnownContexts.InstanceOf = fun env state ty ->
+    match instanceInScope env state wellKnown.Context [ ty ] with
     | Some written -> Ok (Some (InstanceInScope written), state)
-    | None when not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty WellKnownContexts.ordering.Member).IsSome ->
-        synthesizeInstance env state op OrderingOperators.context [ ty ] span
+    | None when not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty wellKnown.Member).IsSome ->
+        synthesizeInstance env state op wellKnown.Context [ ty ] span
         |> Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)
     | None -> Ok (None, state)
+
+/// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`).
+let private orderingInstance (op: string) (span: SourceSpan) = wellKnownInstance WellKnownContexts.ordering op span
 
 /// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
 /// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
@@ -1609,7 +1612,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
                             joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
                         else leftExpr.Type, constrained
-                    EqualityOperators.require env joined expr op operandTy
+                    EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) env joined expr op operandTy input
                     |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
                 | BinaryOp(op, _, _) when ["and"; "or"] |> List.contains op ->
                     // Both operands are already unified with each other; pin them to bool.
