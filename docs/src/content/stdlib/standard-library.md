@@ -119,20 +119,24 @@ label(true)  -- "<true>"
 
 # Reading from text
 
-`int` and `bool` each have an attached `fromString`, also in the prelude. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read:
+`int`, `float` and `bool` each have an attached `fromString`, also in the prelude. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read:
 
 ```nanyx
 Int.fromString: string -> #some(int) | #invalidInt
+Float.fromString: string -> #some(float) | #invalidFloat
 Bool.fromString: string -> #some(bool) | #invalidBool
 ```
 
-`Int.fromString` reads a decimal integer with an optional leading `-` or `+`. `Bool.fromString` reads `true` or `false`, exactly as `Bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
+`Int.fromString` reads a decimal integer with an optional leading `-` or `+`. `Float.fromString` reads an optional sign, digits with an optional `.` among them, and an optional exponent, `e` or `E` and an integer, so `"1.5"`, `"-0.25"`, `"42"`, `".5"`, `"5."` and `"1.0e-7"` are all read; it also reads `NaN`, `Infinity` and `-Infinity` as `Float.toString` writes them. `""`, `"-"`, `"abc"`, `"1.2.3"` and `" 1.5"` are `#invalidFloat`. `Bool.fromString` reads `true` or `false`, exactly as `Bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
 
 ```nanyx
 def n = Int.fromString("42")         -- #some(42)
+def x = Float.fromString("-0.25")    -- #some(-0.25)
 def b = "false" \Bool.fromString     -- #some(false)
 def bad = Bool.fromString("yes")     -- #invalidBool
 ```
+
+A float read from text is the nearest float to the decimal when the decimal has at most 15 significant digits and its exponent, with the point moved to the end of the digits, is between -22 and 22. That covers numbers written by hand, and every float `Float.toString` writes with 15 digits or fewer. Past that the result is not correctly rounded and can be a unit in the last place away from the nearest float, so a float written with 16 or 17 digits does not always read back as itself.
 
 Each is the mirror of the type's `toString`, and, as `toString` gives a type a `ToString`, an attached `fromString` gives it the prelude's `FromString` context. It has a second parameter, `e`, for what `fromString` gives back when the text holds no value, so that each type keeps its own tag:
 
