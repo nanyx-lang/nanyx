@@ -166,6 +166,8 @@ A nominal type can attach its own `==`, which a function that requires `Eq` then
 def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
 ```
 
+Only a nominal or protected type can: a structural type, such as `type Point = (x: int, y: int)`, and a built-in type always compare by their structure, so attaching `==` to one is an error. `!=` cannot be attached to any type, because it is always `not (a == b)`.
+
 ## Default(a)
 
 Use `Default(a)` when a function needs a fallback value for a type.
