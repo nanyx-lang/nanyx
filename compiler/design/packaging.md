@@ -93,6 +93,10 @@ A package name is dotted, as in the docs: `acme.web`, `nanyx.http`. The first se
 Every published package has at least two segments (`namespace.name`), so a bare name like `json` can never be
 claimed by whoever gets there first.
 
+[Package ownership and locking](../../docs/src/content/work-in-progress/package-ownership-and-locking.md) proposes
+how a claim survives a GitHub rename (it is kept by account ID), how organisations grant publishers, what
+`nanyx.lock` records, and dependencies on a single file or a git repository.
+
 ### Versions and resolution
 
 - Versions are semantic versions. In a manifest, `acme.core = "2.1"` means "2.1 or later, before 3.0", the
