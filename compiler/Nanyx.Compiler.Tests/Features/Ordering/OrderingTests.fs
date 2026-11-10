@@ -147,6 +147,8 @@ let ``A def that calls a local function ordering its own type variable requires 
     match inferredContexts typed with
     | [ TyApply("Ord", [ TyVar _ ]) ] -> ()
     | other -> failwith $"Unexpected inferred contexts: %A{other}"
+
+[<Fact>]
 let ``A list of a type with its own compare is ordered through it, element by element`` () =
     let typed =
         compileClean (

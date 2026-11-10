@@ -162,6 +162,8 @@ let ``Run - a local function orders at each type it is called with`` () =
           "both(\"a\", \"b\")" ]
     |> runSource
     |> assertRan "T\nF\nT\n"
+
+[<Fact>]
 let ``Run - a list of a type with its own compare is ordered through it, element by element`` () =
     comparing
         [ yield! version

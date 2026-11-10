@@ -116,6 +116,8 @@ let ``Run - comparing with a tag takes a value of any union that has it`` () =
           "isNone(#some(s))" ]
     |> runSource
     |> assertRan "T\nF\nF\n"
+
+[<Fact>]
 let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
     comparing
         [ "type $Point = (x: int, y: int)"
