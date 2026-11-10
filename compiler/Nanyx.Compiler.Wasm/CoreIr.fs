@@ -91,7 +91,7 @@ type InterpolationPart =
 
 /// How `dbg` prints its value, which it then leaves. Each holds the value in a scratch local meanwhile.
 type DbgForm =
-    /// An int or a bool, printed as a number. `Some depth` when the value is not a literal: the old path then
+    /// An int or unit, printed as a number. `Some depth` when the value is not a literal: the old path then
     /// declares the locals it would print a tag through (an interpolated string at that depth), whatever the type.
     | DbgNumber of Var * int option
     /// A string, printed as it is. `Some depth` as for a number.
@@ -100,9 +100,9 @@ type DbgForm =
     | DbgFloat of Var * int option
     /// A tag literal without a payload, printed by a host function of its own.
     | DbgTag of string * Var
-    /// A tag literal with a payload (the atom), printed by a host function of its own.
+    /// A tag literal with an int payload (the atom), printed by a host function of its own.
     | DbgTagPayload of string * Var
-    /// A value of a union of tags, printed as `"{value}"` would print it: the hole is already evaluated.
+    /// A bool, or a value of a union of tags, printed as `"{value}"` would print it: the hole is already evaluated.
     | DbgTagValue of Var * HoleType * Var
 
 /// Where a function value that is called comes from. The old path evaluates it twice (once to pass it, once to read

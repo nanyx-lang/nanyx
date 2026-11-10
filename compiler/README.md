@@ -284,8 +284,10 @@ Current WASM backend support is intentionally minimal and focused on bootstrappi
 - every object on the heap has a reference count in its header, and the compiler inserts `dup` and `drop` (Perceus
   reference counting), so an object is freed once nothing refers to it, and one a `match` takes apart and holds
   the only reference to is rewritten in place into a new one of the same size (see `compiler/design/memory.md`)
-- `dbg(...)` of integers and strings, and `nanyx/console`, write to stdout through WASI `fd_write`
-- `dbg(#tag)` calls a host import `(import "env" "dbg_tag_<tag>" (func))`, which the runtime provides
+- `dbg(...)` of integers, floats, strings and bools (`true`/`false`), and `nanyx/console`, write to stdout through
+  WASI `fd_write`; a value of a union of tags is printed as `"{value}"` would print it
+- `dbg(#tag)` and `dbg(#tag(n))` of an int `n` call a host import (`env.dbg_tag_<tag>`,
+  `env.dbg_tag_payload_<tag>`), which the runtime provides
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a
   `use` binding supplies them, otherwise a module-level function of the member's name does (that is how
   the runtime's `Console` reaches `@entry`)
