@@ -109,6 +109,31 @@ let ``Run - use bindings of parameterised contexts and records`` () =
     runSource source |> assertRan "3cm & three\n42\n"
 
 [<Fact>]
+let ``Run - a use of a record value of a parameterised context's shape loads it as the instance`` () =
+    // `int` has its own `+`, which an instance found by the record's shape is nearer than (#581).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Add(a) = (`+`: (a, a) -> a)\n" +
+        "\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }\n" +
+        "\n" +
+        "def named = {\n" +
+        "  def addInt: Add(int) = ( `+` = { x, y -> x * 10 + y } )\n" +
+        "  use addInt\n" +
+        "  add(1, 2)\n" +
+        "}\n" +
+        "\n" +
+        "def written = {\n" +
+        "  use ( `+` = { x, y -> x * 100 + y } )\n" +
+        "  add(3, 4)\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = { println(\"{named()} {written()}\") }\n"
+    runSource source |> assertRan "12 304\n"
+
+[<Fact>]
 let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
     let source =
         "import nanyx/console\n" +

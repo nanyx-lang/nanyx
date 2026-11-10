@@ -699,8 +699,8 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
 // Instances of parameterised contexts.
 //
 // A function that requires `[Sum(a)]` is passed an instance of `Sum` for whatever `a` is at each call. The call finds
-// it, nearest first, among the instances in scope (each `use Sum(T) = ...` around the call, and each context the type
-// of the function around the call declares), or else builds it from the definitions attached to the type, as
+// it, nearest first, among the instances in scope (each `use Sum(T) = ...` or `use` of a value of `Sum`'s shape around
+// the call, and each context the type of the function around the call declares), or else builds it from the definitions attached to the type, as
 // `Point.0` and `Point.+` make a `Sum(Point)`. Where it was found is kept by the call's node, for the backend.
 
 /// What the names of the instances in scope start with, in the environment. No name written in the source can, so
@@ -863,11 +863,34 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
     let current = { current with TypeVars = state.TypeVars }
     argTys |> List.map (resolveSoFar current), current
 
-/// `env` with the instance `use C(T) = ...` loads in scope, when `binding` is one of a parameterised context.
-let private useInstance (env: TypeEnv) (state: InferState) (binding: UseBinding) : TypeEnv * InferState =
+/// Each parameterised context a value of the type `valueTy` is an instance of, applied to the types it is one for: a
+/// record with exactly the context's members, at types that settle each of its parameters. `def addInt: Add(int) =
+/// (...)` is typed as its record, so `use addInt` finds that it is an `Add(int)` by the record's shape.
+let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
+    match Unifier.unalias (resolveSoFar state valueTy) with
+    | TyRecord fields ->
+        [ for KeyValue(ctxName, info) in state.TypeDefs do
+            if info.IsContext && not info.Parameters.IsEmpty then
+                let paramTys, scratch = info.Parameters |> List.mapFold (fun current _ -> freshVar current) state
+                match contextMemberTypes scratch ctxName paramTys with
+                | Some members when Set.ofList (List.map fst members) = Set.ofSeq fields.Keys ->
+                    let scratch = members |> List.fold (fun current (name, memberTy) -> addConstraint memberTy fields.[name] current) scratch
+                    if Unifier.unify scratch.Constraints |> Result.isOk then
+                        let argTys = paramTys |> List.map (resolveSoFar scratch)
+                        if argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty) then
+                            match argTys |> List.map (ContextInference.typeExprOf Map.empty) with
+                            | args when args |> List.forall Option.isSome ->
+                                yield TypeExpr.synthetic (TypeApply(ctxName, args |> List.map Option.get))
+                            | _ -> ()
+                | _ -> () ]
+    | _ -> []
+
+/// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
+/// context: `use C(T) = ...`, or a value of a context's shape (see `contextsOfValue`).
+let private useInstance (env: TypeEnv) (state: InferState) (binding: UseBinding) (valueTy: Ty) : TypeEnv * InferState =
     match binding with
     | UseContextInstance(ctxType, _) -> bindInstance env state ctxType
-    | UseValue _ -> env, state
+    | UseValue _ -> bindInstances env state (contextsOfValue state valueTy)
 
 /// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
 /// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
@@ -1460,7 +1483,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match inferUseBinding env state binding with
         | Error err -> Error err
         | Ok (typedBinding, nextState) ->
-            let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedBinding.Type) nextState binding
+            let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedBinding.Type) nextState binding typedBinding.Type
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) -> Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
             | Error err -> Error err
@@ -2228,7 +2251,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then
                     match inferUseBinding env' current binding with
                     | Ok (typedExpr, next) ->
-                        let withUse, next = useInstance (extendEnvWithRecordFields env' typedExpr.Type) next binding
+                        let withUse, next = useInstance (extendEnvWithRecordFields env' typedExpr.Type) next binding typedExpr.Type
                         current <- next
                         env' <- withUse
                         typedStatements <- typedStatements @ [ TypedUseStatement(binding, Some typedExpr) ]
