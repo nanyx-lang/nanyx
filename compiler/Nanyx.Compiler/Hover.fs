@@ -119,6 +119,13 @@ let typeExprsAt (offset: int) (module': Module) : TypeExpr list =
     let written = (module' |> List.collect topLevelTypes) @ (expressionsAt offset module' |> List.collect expressionTypes)
     written |> List.fold search []
 
+/// The type of a def, written for a reader as `type` is, after the contexts it requires, as its annotation would write
+/// them: `[Show(α)] α -> string`. `written` are the contexts as written for a reader, named together with the type.
+let withContexts (written: string list) (typeWritten: string) =
+    match written with
+    | [] -> typeWritten
+    | _ -> $"""[{String.concat ", " written}] {typeWritten}"""
+
 /// The span of a call's or pipe's function name, when it has one.
 let private calleeSpan (expr: Expression) =
     match expr.Kind with
@@ -138,37 +145,43 @@ let private calleeSpan (expr: Expression) =
 let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
-        // Only the module's own declarations have types recorded, so no imported one is found here.
+        // Only the module's own declarations have types recorded, so no imported one is found here. A def that does
+        // not write its type shows the contexts it was inferred to require too.
         let declarations =
             typed.SymbolTypes
             |> Map.toList
             |> List.choose (fun (id, ty) ->
                 let declaration = typed.Symbols.[id].Declaration
-                if contains offset declaration then Some (ty, declaration) else None)
+                let contexts = typed.InferredContextTypes |> Map.tryFind id |> Option.defaultValue []
+                if contains offset declaration then Some (ty, contexts, declaration) else None)
         let candidates =
             // A declaration's name is written as it is, so it comes before any expression of the same span.
-            (declarations |> List.map (fun (ty, span) -> ty, span, System.Int32.MaxValue, 0))
+            (declarations |> List.map (fun (ty, contexts, span) -> ty, contexts, span, System.Int32.MaxValue, 0))
             @ (expressionsAt offset syntax
             |> List.mapi (fun depth expr ->
                 let callee =
                     match calleeSpan expr with
                     | Some nameSpan when contains offset nameSpan ->
-                        typed.CalleeTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, nameSpan, depth, 0)
+                        typed.CalleeTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, [], nameSpan, depth, 0)
                     | _ -> None
-                let own = typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, expr.Span, depth, 1)
+                let own = typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, [], expr.Span, depth, 1)
                 Option.toList callee @ Option.toList own)
             |> List.concat)
             // A `_` in a type shows what it was inferred to be.
             @ (typeExprsAt offset syntax
             |> List.choose (fun typeExpr ->
                 match typeExpr.Kind with
-                | TypeHole -> typed.ExprTypes |> Map.tryFind typeExpr.Id |> Option.map (fun ty -> ty, typeExpr.Span, 0, 0)
+                | TypeHole -> typed.ExprTypes |> Map.tryFind typeExpr.Id |> Option.map (fun ty -> ty, [], typeExpr.Span, 0, 0)
                 | _ -> None))
         match candidates with
         | [] -> None
         | _ ->
             // Depth counts outwards from the innermost; a callee's name is inside its call, so it comes first.
-            let ty, span, _, _ =
-                candidates |> List.minBy (fun (_, span, depth, rank) -> span.End - span.Start, -depth, rank)
-            Some { Type = Unifier.tyToDisplayString names ty; Span = span }
+            let ty, contexts, span, _, _ =
+                candidates |> List.minBy (fun (_, _, span, depth, rank) -> span.End - span.Start, -depth, rank)
+            let written =
+                match contexts, Unifier.tysToDisplayStrings names (ty :: contexts) with
+                | _ :: _, typeWritten :: contextsWritten -> withContexts contextsWritten typeWritten
+                | _ -> Unifier.tyToDisplayString names ty
+            Some { Type = written; Span = span }
     | _ -> None

@@ -70,7 +70,9 @@ what the compiler keeps: exact spans, resolved names and types.
   its type gets a lens above it with its whole type; a local def, lambda parameter or pattern variable gets an
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
-  the `α` in its def's lens (see `NyxCompiler.TypeHints`). A def that writes only its contexts
+  the `α` in its def's lens (see `NyxCompiler.TypeHints`). The lens, and hover on the def's name, show the
+  parameterised contexts the def was inferred to require before its type (`[Show(α)] α -> string`, from
+  `TypedModule.InferredContextTypes`). A def that writes only its contexts
   (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,
   without a colon (`[Log] string -> ()`), rather than after the name. Each hint carries its declaration's
   `SymbolKind`, so the server's settings can turn off the hints for local defs, parameters or pattern variables

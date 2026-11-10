@@ -156,6 +156,10 @@ type ContextInstance =
 /// `ContextInstances` says, by the node of each call (or pipe) to a function that requires a parameterised context,
 /// where the call finds each context the callee's type declares, in the order it declares them: `None` for one that is
 /// not parameterised, or whose instance is left to be found by its members' names.
+///
+/// `InferredContextTypes` holds the parameterised contexts each top-level def that does not write its type was
+/// inferred to require, by the def's symbol, as types over the variables of its type in `SymbolTypes`: `Show(a)` is
+/// `TyApply("Show", [a])`. Resolved for the root module only, as `SymbolTypes` is.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -172,5 +176,6 @@ type TypedModule =
       ModuleNames: Map<string, SymbolId>
       ImportedTypes: Map<SymbolId, Ty>
       ContextInstances: Map<NodeId, ContextInstance option list>
+      InferredContextTypes: Map<SymbolId, Ty list>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }

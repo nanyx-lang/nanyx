@@ -194,11 +194,12 @@ let private contextArguments
                 failwith $"Context function {requiredKey} not available in current scope. Available: [{available}]"
 
     // Where the type checker found each context the callee requires, as each required member's instance, in the order
-    // of `required`: none for a call it found nothing for.
+    // of `required`: none for a call it found nothing for. A function that does not write its type may also require
+    // ambient contexts, after the parameterised ones its type is given (see `ContextInference`): they are not passed.
     let instances =
         match contextInstances |> Map.tryFind callId, contextTypes |> Map.tryFind name with
-        | Some found, Some types when found.Length = types.Length ->
-            List.zip types found
+        | Some found, Some types when found.Length >= types.Length ->
+            List.zip types (List.truncate types.Length found)
             |> List.collect (fun (contextType, instance) ->
                 let baseName = match contextType.Kind with TypeName n | TypeApply(n, _) -> n | _ -> "unknown"
                 typeLayouts |> Map.tryFind baseName |> Option.defaultValue [] |> List.map (fun memberName -> memberName, instance))

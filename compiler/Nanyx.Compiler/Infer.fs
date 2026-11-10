@@ -510,14 +510,6 @@ let private ensureContextsExist (state: InferState) (name: Identifier) (span: So
         |> List.map (fun ctxName -> Diagnostics.at DiagnosticCodes.UnknownContext span $"Unknown context '{ctxName}' in the signature of '{name}'")
         |> Error
 
-let private registerContextRequirement (state: InferState) (name: Identifier) (contexts: TypeExpr list) (signature: TypeExpr option) =
-    { state with
-        ContextRequirements = state.ContextRequirements |> Map.add name contexts
-        ContextSignatures =
-            match signature with
-            | Some signature -> state.ContextSignatures |> Map.add name signature
-            | None -> state.ContextSignatures |> Map.remove name }
-
 /// Whether `name` is bound in `env` to the ambient instance's member, not to something nearer that shadows it: a
 /// member of a context the def declares, or of an instance a `use` loads.
 let private isAmbientMember (env: TypeEnv) (state: InferState) (name: Identifier) =
@@ -898,13 +890,29 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
                     | None ->
-                        ensureContextAvailable true env current name [ ctx ] calleeSpan
-                        |> Result.map (fun next -> found @ [ None ], next)
+                        match ensureContextAvailable true env current name [ ctx ] calleeSpan, current.ContextScope with
+                        | Ok next, _ -> Ok (found @ [ None ], next)
+                        // In an unannotated def, a type the call leaves open may be settled by the rest of the body,
+                        // or be one of the def's own variables, which the def then requires the context at.
+                        | Error errors, DefScope(defName, true) when argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not) ->
+                            let pending =
+                                { Def = defName; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
+                                  Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors }
+                            Ok (found @ [ None ], { current with PendingContextInstances = pending :: current.PendingContextInstances })
+                        | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
         |> Result.map (fun (found, current) ->
             if found |> List.forall Option.isNone then current
             else { current with ContextInstances = current.ContextInstances |> Map.add call.Id found })
     | _ -> Ok state
+
+/// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
+/// type it is for, as a call does.
+let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) : Result<TypeExpr option * InferState, Diagnostic list> =
+    ContextInference.resolvePending state name symbol scheme (fun pending argTys current ->
+        if argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) then
+            Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
+        else None)
 
 /// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
 /// value of no known type yet is taken to be a record with at least that field, and an open record without it
@@ -2480,10 +2488,16 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         // first, as a local def's is: `{ x -> x + 1 }` is `α -> α` until its constraints are
                         // applied, and generalising that would make every use `α -> α` too.
                         let scheme, generalizedState = generalizeDef (withoutTopLevel name env) state declaredTy
-                        state <- generalizedState
-                        env <- declareTopLevel name symbol scheme env
-                        types <- types |> Map.add name declaredTy
-                        items <- items @ [ TypedDef (TypedValueDef(isExport, name, typeOpt, typedExpr)) ]
+                        // The parameterised contexts an unannotated def requires are part of its type, as if written.
+                        match resolvePendingInstances env generalizedState name symbol scheme with
+                        | Error err ->
+                            state <- generalizedState
+                            abandon isExport name expr err
+                        | Ok (inferredAnnotation, resolvedState) ->
+                            state <- resolvedState
+                            env <- declareTopLevel name symbol scheme env
+                            types <- types |> Map.add name declaredTy
+                            items <- items @ [ TypedDef (TypedValueDef(isExport, name, Option.orElse inferredAnnotation typeOpt, typedExpr)) ]
                 | Error err -> abandon isExport name expr err
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
@@ -2532,14 +2546,16 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 for ctxName in Set.difference required.[used.Callee] used.Available do
                     errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span ]
             | _ -> ()
-        // What an unannotated function needs is part of its type, as a context written in its type is.
+        // What an unannotated function needs is part of its type, as a context written in its type is. They come after
+        // the parameterised contexts it requires, which its calls have already found instances of in that order.
         state <-
             { state with
                 ContextRequirements =
                     required
                     |> Map.filter (fun _ contexts -> not contexts.IsEmpty)
                     |> Map.fold (fun acc name contexts ->
-                        acc |> Map.add name (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic))) state.ContextRequirements }
+                        let parameterized = acc |> Map.tryFind name |> Option.defaultValue []
+                        acc |> Map.add name (parameterized @ (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic)))) state.ContextRequirements }
 
     // The defs that failed and the expressions that failed inside the others, in the order they are in the source. An
     // expression inferred more than once (a lambda checked again against its expected type) is reported once.

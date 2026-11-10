@@ -218,3 +218,45 @@ let ``Run - a lambda in a generic function calls the members of the context the 
         "  println(nested([Point(x = 5, y = 6)]))\n" +
         "}\n"
     runSource source |> assertRan "(1, 2)(3, 4)\n(1, 2)(3, 4)\n<(1, 2)><(3, 4)>\n(5, 6)(5, 6)\n"
+
+/// A parameterised context, two types with instances of it, and a function that requires it, for the tests of the
+/// contexts a function that does not write its type requires (#544).
+let private inferredShowPrelude =
+    "import nanyx/console\n" +
+    "\n" +
+    "context Show(a) = (show: a -> string)\n" +
+    "\n" +
+    "type Point = (x: int, y: int)\n" +
+    "type Size = (w: int)\n" +
+    "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
+    "def Size.show: Size -> string = { s -> \"{s.w}px\" }\n" +
+    "def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }\n" +
+    "def twice = { v -> describe(v) ++ describe(v) }\n" +
+    "\n"
+
+[<Fact>]
+let ``Run - a function that does not write its type passes on the parameterised context it was inferred to require`` () =
+    let source =
+        inferredShowPrelude +
+        "@entry\n" +
+        "def main = { println(twice(Point(x = 1, y = 2))) }\n"
+    runSource source |> assertRan "(1, 2)(1, 2)\n"
+
+[<Fact>]
+let ``Run - an inferred parameterised context passes through two functions and is used at two types`` () =
+    let source =
+        inferredShowPrelude +
+        "def thrice = { v -> twice(v) ++ describe(v) }\n" +
+        "def both = { p, s -> describe(p) ++ \" \" ++ describe(s) }\n" +
+        "def logged = { v -> println(describe(v)) }\n" +
+        "def lengths = { xs -> List.map(xs, { x -> describe(x) }) \\List.length }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(thrice(Point(x = 1, y = 2)))\n" +
+        "  println(twice(Size(w = 3)))\n" +
+        "  println(both(Point(x = 4, y = 5), Size(w = 6)))\n" +
+        "  logged(Size(w = 7))\n" +
+        "  println(Int.toString(lengths([Size(w = 8), Size(w = 9)])))\n" +
+        "}\n"
+    runSource source |> assertRan "(1, 2)(1, 2)(1, 2)\n3px3px\n(4, 5) 6px\n7px\n2\n"

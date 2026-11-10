@@ -1442,6 +1442,8 @@ module Compiler =
                           ModuleNames = moduleNames
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                          // Resolved for the root module only, by `compileWith`.
+                          InferredContextTypes = state.InferredContextTypes
                           // Filled in for the root module only, by `compileWith`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }
@@ -1530,6 +1532,8 @@ module Compiler =
                     ExprTypes = resolve checkedModule.RawExprTypes
                     CalleeTypes = resolve checkedModule.RawCalleeTypes
                     SymbolTypes = resolve checkedModule.RawSymbolTypes
+                    InferredContextTypes =
+                        checkedModule.Typed.InferredContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.apply checkedModule.Subst))
                     InlinedExprTypes = resolveInlined _.RawExprTypes
                     InlinedCalleeTypes = resolveInlined _.RawCalleeTypes }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still

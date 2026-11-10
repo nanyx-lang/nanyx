@@ -193,3 +193,75 @@ let ``A context and the function that requires it can come from an import`` () =
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         Assert.Contains(Some (InstanceSynthesized [ "show", "Point.show" ]), result.Typed.Value.ContextInstances |> Map.values |> Seq.concat))
+
+/// `showContext` with a `Point.show` and a function that calls `describe` without writing its type (#544).
+let private inferredShow =
+    showContext +
+    "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
+    "def twice = { v -> describe(v) ++ describe(v) }\n"
+
+[<Fact>]
+let ``A def that does not write its type requires the parameterised context it calls a function with at its own type`` () =
+    // `twice` passes its own instance of `Show(a)` on, and the call to it builds one for `Point`.
+    let source = inferredShow + "def s = twice(Point(x = 1, y = 2))\n"
+    match instancesIn source with
+    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+        [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
+let ``An inferred parameterised context passes through another def that does not write its type`` () =
+    let source =
+        inferredShow +
+        "def thrice = { v -> twice(v) ++ describe(v) }\n" +
+        "def s = thrice(Point(x = 1, y = 2))\n"
+    match instancesIn source with
+    | [ _; _; [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+        [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
+let ``A def with an inferred parameterised context can be used at two types`` () =
+    let source =
+        inferredShow +
+        "type Size = (w: int)\n" +
+        "def Size.show: Size -> string = { s -> \"{s.w}px\" }\n" +
+        "def s = twice(Point(x = 1, y = 2)) ++ twice(Size(w = 3))\n"
+    match instancesIn source with
+    | [ _; _; [ Some (InstanceSynthesized [ "show", "Point.show" ]) ]; [ Some (InstanceSynthesized [ "show", "Size.show" ]) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
+let ``A context needed at a type the call leaves open is found once the rest of the def settles it`` () =
+    let source =
+        inferredShow +
+        "def onlyPoint: Point -> int = { p -> p.x }\n" +
+        "def settled = { v ->\n" +
+        "  def s = describe(v)\n" +
+        "  s ++ Int.toString(onlyPoint(v))\n" +
+        "}\n"
+    match instancesIn source with
+    | [ _; _; [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
+let ``A context needed at a type that is not one of the def's own is still missing`` () =
+    // `v.x` is a variable of the def's type, but of an open record, which no annotation can write.
+    let result = Compiler.compile (showContext + "def bad = { v -> describe(v.x) }\n")
+    match result.Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+        Assert.Equal("'describe' requires the context 'Show', which is not available here", diagnostic.Message)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``Hover and the type lens show the parameterised contexts a def was inferred to require`` () =
+    let source = inferredShow
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let hover = Hover.typeAt Unicode result (offsetOf source "twice" 0 0)
+    Assert.Equal(Some "[Show(α)] α -> string", hover |> Option.map _.Type)
+    let lenses = TypeHints.typeLenses Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
+    Assert.Equal<(string * string) list>([ "twice", "[Show(α)] α -> string" ], lenses)
