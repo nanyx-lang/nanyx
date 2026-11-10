@@ -135,8 +135,7 @@ let internal ambiguousReference (name: string) (expr: Expression) (scheme: TypeS
     match state.AmbiguousImports |> Map.tryFind name with
     | Some (symbol, candidates) when scheme.Symbol = Some symbol ->
         let quoted = candidates |> List.map (fun candidate -> $"'{candidate}'")
-        let listed = String.concat ", " (List.take (quoted.Length - 1) quoted) + " and " + List.last quoted
-        [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"'{name}' is ambiguous between {listed}; import all but one of them with 'as'" ]
+        [ Diagnostics.at DiagnosticCodes.AmbiguousName expr.Span $"'{name}' is ambiguous between {Diagnostics.listed quoted}; import all but one of them with 'as'" ]
     | _ -> []
 
 /// The errors for a reference to `name`, bound to `scheme`, that the name alone does not show: a definition a module

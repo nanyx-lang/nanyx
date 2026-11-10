@@ -628,19 +628,14 @@ let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: 
         let contextNames =
             named |> List.choose (fun (ctx, _) -> match ctx.Kind with TypeName ctxName | TypeApply(ctxName, _) -> Some ctxName | _ -> None) |> quoted
         let memberNames = unnamed |> List.collect snd |> quoted
-        let listed (items: string list) =
-            match items with
-            | [] -> ""
-            | [ only ] -> only
-            | _ -> String.concat ", " (List.truncate (items.Length - 1) items) + " and " + List.last items
         let message =
             match contextNames, memberNames with
             | [ single ], [] -> $"'{name}' requires the context {single}, which is not available here"
-            | _, [] -> $"'{name}' requires the contexts {listed contextNames}, which are not available here"
-            | [], _ -> $"'{name}' requires the context members {listed memberNames}, which are not available here"
+            | _, [] -> $"'{name}' requires the contexts {Diagnostics.listed contextNames}, which are not available here"
+            | [], _ -> $"'{name}' requires the context members {Diagnostics.listed memberNames}, which are not available here"
             | _ ->
                 let contextsText = if contextNames.Length = 1 then "the context" else "the contexts"
-                $"'{name}' requires {contextsText} {listed contextNames} and the context members {listed memberNames}, which are not available here"
+                $"'{name}' requires {contextsText} {Diagnostics.listed contextNames} and the context members {Diagnostics.listed memberNames}, which are not available here"
         Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
 
 let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
@@ -860,12 +855,8 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
                         fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
         | _ when InterpolationHoles.isHole calleeName -> fail (InterpolationHoles.noInstance forType)
         | missing ->
-            let listed =
-                match missing with
-                | [ only ] -> only
-                | _ -> String.concat ", " (List.truncate (missing.Length - 1) missing) + " and " + List.last missing
             let notDefined = if missing.Length = 1 then "is not defined: define it" else "are not defined: define them"
-            fail $"{requirer} requires the context '{ctxText}', which is not loaded here, and {listed} {notDefined}, or load an instance with `use`"
+            fail $"{requirer} requires the context '{ctxText}', which is not loaded here, and {Diagnostics.listed missing} {notDefined}, or load an instance with `use`"
     | _ -> fail $"{requirer} requires the context '{ctxText}', which is not loaded here: load an instance with `use`"
 
 /// The type of each of `args`, the arguments of a parameterised context a function requires, at a call where the
