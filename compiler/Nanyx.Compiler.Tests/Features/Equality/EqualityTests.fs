@@ -198,3 +198,15 @@ let ``A concrete comparison calls the == attached to its type, except in that de
             | _ -> [])
         |> List.filter (fun (_, callee) -> callee = "$Point.==")
     Assert.Equal<(string * string) list>([ "b", "$Point.==" ], calls)
+
+[<Fact>]
+let ``A list of a type with its own == is compared through it, element by element`` () =
+    let typed =
+        compileClean (
+            "type $Email = string\n" +
+            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+            "def b = [$Email(\"a\")] != [$Email(\"b\")]\n" +
+            "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }\n")
+    Assert.Contains(InstanceSynthesized [ "==", "$Email.==" ], instancesOf typed)
+    let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
+    Assert.Contains(instances, function InstanceInScope (Kind (TypeApply("Eq", [ Kind (TypeVar "a") ]))) -> true | _ -> false)

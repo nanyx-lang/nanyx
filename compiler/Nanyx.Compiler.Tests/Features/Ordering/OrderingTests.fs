@@ -126,3 +126,16 @@ let ``Only a nominal type may attach compare, and a built-in type's attached com
     // The prelude attaches `Int.compare`, but `List.sort` of ints uses the compiler's own.
     let typed = compileClean "def sorted = List.sort([2, 1])\n"
     Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "compare", "__compare" ] ], instancesOf typed)
+
+[<Fact>]
+let ``A list of a type with its own compare is ordered through it, element by element`` () =
+    let typed =
+        compileClean (
+            "type $Version = (major: int, minor: int)\n" +
+            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> Int.compare(a.major, b.major) }\n" +
+            "def v = { major -> $Version(major = major, minor = 0) }\n" +
+            "def a = [v(1), v(2)] < [v(3)]\n" +
+            "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n")
+    Assert.Contains(InstanceSynthesized [ "compare", "$Version.compare" ], instancesOf typed)
+    let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
+    Assert.Contains(instances, function InstanceInScope (Kind (TypeApply("Ord", [ Kind (TypeVar "a") ]))) -> true | _ -> false)
