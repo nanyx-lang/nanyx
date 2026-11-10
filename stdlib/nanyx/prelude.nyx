@@ -478,7 +478,7 @@ export def Int.toString: int -> string = { n ->
   "{n}"
 }
 
--- `x` in decimal.
+-- `x` in decimal, with the fewest digits that read back as `x`.
 export def Float.toString: float -> string = { x ->
   "{x}"
 }

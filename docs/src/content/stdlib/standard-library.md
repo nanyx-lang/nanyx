@@ -90,6 +90,22 @@ def answer = 42 \toString
 -- "42"
 ```
 
+A float is written as the shortest decimal that reads back as the same float, as JavaScript and Python's `repr` write one, and always with a point, so that it never looks like an `int`. From `1e-6` up to (but not including) `1e21` it is written in full; otherwise it is one digit, a point, the rest of its digits and an exponent, which is how a float literal is written in Nanyx. NaN and the infinities are written as words, and negative zero keeps its sign:
+
+```nanyx
+"{0.1 + 0.2}"        -- "0.30000000000000004"
+"{1.0 / 3.0}"        -- "0.3333333333333333"
+"{5.0}"              -- "5.0"
+"{0.000001}"         -- "0.000001"
+"{0.0000001}"        -- "1.0e-7"
+"{1.0e20}"           -- "100000000000000000000.0"
+"{1.0e21}"           -- "1.0e21"
+"{math.sqrt(-1.0)}"  -- "NaN"
+"{1.0 / 0.0}"        -- "Infinity"
+"{-1.0 / 0.0}"       -- "-Infinity"
+"{0.0 * -1.0}"       -- "-0.0"
+```
+
 A [context](../advanced/contexts) whose one member is `toString: a -> string` is [synthesized](../advanced/contexts#context-synthesis) for these types from their `toString`, as it is for any other type with one attached, so nothing in the compiler treats them specially:
 
 ```nanyx
