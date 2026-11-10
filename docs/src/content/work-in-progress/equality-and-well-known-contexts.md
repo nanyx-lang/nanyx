@@ -4,14 +4,46 @@ description: "What equality is, and which contexts the compiler knows about"
 order: 8
 ---
 
-> **Status: agreed, not implemented.** The decisions are listed under [Open questions](#open-questions); one small
-> question remains. Code references are at commit `b84acc0`.
+> **Status: agreed, partly implemented.** `Eq(a)` is in the prelude, `==` and `!=` require it, and functions have no
+> equality; [What is implemented](#what-is-implemented) says what is done and what is left of
+> [#532](https://github.com/nanyx-lang/nanyx/issues/532). The decisions are listed under
+> [Open questions](#open-questions); one small question remains. The code references under
+> [What existed before](#what-existed-before) are at commit `b84acc0`.
 
-Nanyx mentions `Eq(a)`, `Ord(a)`, `Sum(a)` and `ToString(a)` in several places, but has never decided what equality
-*is*, or which contexts the compiler knows about. This document records what exists today, then proposes one design
-for equality and applies the same pattern to ordering, hashing and printing.
+# What is implemented
 
-# What exists today
+`Nanyx.Compiler/EqualityOperators.fs` holds the checks; the prelude declares `Eq(a)` and `__equals`.
+
+- **`Eq(a)` is a prelude context**, `` context Eq(a) = (`==`: (a, a) -> bool) ``.
+- **Functions have no equality.** `==` or `!=` on a function, or on a record, list, tag or nominal type that holds
+  one, is `NYX0205` at the comparison, naming the part that is a function. So is passing such a type to a function
+  that requires `Eq`.
+- **Generic code says it compares.** `==` on a type variable of a def that writes its type needs `[Eq(a)]` in that
+  type. A def that does not write its type has the requirement inferred, and its `==` then calls the member of the
+  instance it is passed. A requirement on a type built from a variable reduces to the variable: `==` on a `list(a)`
+  needs `Eq(a)`. `List.distinct` is `[Eq(a)] list(a) -> list(a)`.
+- **`!=` is not a member.** It is `not (a == b)`, and calls whatever `==` calls.
+- **Instances at a call.** A call that requires `Eq(T)` finds: an instance in scope (a `use`, or the enclosing
+  signature); then the `==` attached to `T`; then the compiler's own, whose member is the prelude's `__equals`, a
+  generic function that compares by structure at the type it is specialised for.
+
+Not done yet:
+
+- **Structural derivation that looks up each part.** The compiler's own instance compares a whole value by its
+  structure, so a `list($Email)` does not compare its elements with `` $Email.`==` ``, and inside a function that
+  requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance.
+- **A concrete `a == b` is still the built-in comparison** for a type with an attached `==`, and for a built-in type
+  with an `Eq` loaded by `use` (decision 2 below).
+- **Local functions require no contexts**, so a local `def same = { x, y -> x == y }` is not checked when it is
+  called with functions; the backend reports that, as `NYX0301`.
+- **Joining the operands** for open tag unions, the rules on which types may attach `==`, and the warning for
+  types with no tag in common.
+
+# What existed before
+
+This design was written when Nanyx mentioned `Eq(a)`, `Ord(a)`, `Sum(a)` and `ToString(a)` in several places, but had
+not decided what equality *is*, or which contexts the compiler knows about. This section records what existed then;
+the rest proposes one design for equality and applies the same pattern to ordering, hashing and printing.
 
 # Contexts: designed and implemented
 

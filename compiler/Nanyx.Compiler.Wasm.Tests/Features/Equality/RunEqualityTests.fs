@@ -73,3 +73,36 @@ let ``Each type compared gets one equality function, and its parts their own`` (
             "def b: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p != q }\n")
     Assert.Equal(1, countOccurrences "(func $__nanyx_equals_list_" wat)
     Assert.Equal(1, countOccurrences "(func $__nanyx_equals_rec_" wat)
+
+[<Fact>]
+let ``Run - a function that compares its type variable compares each type it is called with`` () =
+    comparing
+        [ "type Point = (x: int, y: int)"
+          "def same = { x, y -> x == y }"
+          "def differ = { x, y -> x != y }"
+          "def holds = { xs, x -> xs \\List.any({ y -> y == x }) }"
+          "def written: [Eq(a)] a, list(a) -> bool = { x, xs -> x != x or xs == [x] }" ]
+        [ "same(1, 1)"
+          "same(s, \"ab\")"
+          "same(Point(x = 1, y = 2), Point(x = 1, y = 2))"
+          "same([1.5], [1.5])"
+          "same(#some(s), #some(\"aa\"))"
+          "differ(1, 1)"
+          "differ([s], [\"b\"])"
+          "holds([1, 2, 3], 3)"
+          "written(1, [1])"
+          "List.distinct([s, \"aa\", \"b\"]) == [\"aa\", \"b\"]" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\nT\nF\nT\nT\nT\nT\n"
+
+[<Fact>]
+let ``Run - a function that compares its type variable uses the == attached to a type`` () =
+    comparing
+        [ "type $Email = string"
+          "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
+          "def same = { x, y -> x == y }"
+          "def differ = { x, y -> x != y }" ]
+        [ "same($Email(\"a\"), $Email(\"b\"))"
+          "differ($Email(\"a\"), $Email(\"b\"))" ]
+    |> runSource
+    |> assertRan "T\nF\n"

@@ -66,7 +66,7 @@ Returns a new list with the element added to the end.
 ## distinct
 
 ```nanyx
-List.distinct: list(a) -> list(a)
+List.distinct: [Eq(a)] list(a) -> list(a)
 ```
 
 Returns a new list with duplicate values removed, keeping first occurrence order.
@@ -76,7 +76,7 @@ List.distinct([1, 2, 2, 3, 1])
 -- [1, 2, 3]
 ```
 
-Elements are compared with `==`, which compares records, tuples, lists and tags by their structure. A list of functions cannot be made distinct, since functions have no equality.
+Elements are compared with `==`, which compares records, tuples, lists and tags by their structure. A list of functions cannot be made distinct, since functions have no equality: it is a type error. See [`Eq(a)`](../advanced/contexts#eqa).
 
 ---
 

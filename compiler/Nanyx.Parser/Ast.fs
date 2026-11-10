@@ -366,6 +366,10 @@ module RangeSyntax =
         | FunctionCall(name, _, [ first ]) when name = builtIn -> Some (first, None)
         | _ -> None
 
+/// `not x`: a call to the built-in "not" with its operand.
+module NotSyntax =
+    let builtIn = "not"
+
 module TypeExpr =
     /// A type expression written at `span`.
     let at (span: SourceSpan) (kind: TypeExprKind) : TypeExpr =

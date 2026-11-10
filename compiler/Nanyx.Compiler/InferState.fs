@@ -76,7 +76,8 @@ type InferState =
             PendingContextInstances: PendingContextInstance list;
             /// Where each interpolation hole among `PendingContextInstances` is, by the hole's node: the environment
             /// there, whose instances it finds its `ToString` among once its type is known, and the def that writes
-            /// its type it is in, if it is in one.
+            /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
+            /// (see `EqualityOperators`).
             HoleScopes: Map<NodeId, TypeEnv * Identifier option>;
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.

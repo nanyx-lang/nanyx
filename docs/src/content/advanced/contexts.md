@@ -140,16 +140,30 @@ In practice, a small set of capability contexts appears frequently in generic AP
 
 ## Eq(a)
 
-Use `Eq(a)` when a function needs equality checks but should stay generic over the concrete type.
+`Eq(a)` is the standard library's context for equality. `x == y` is read through it, and `x != y` is `not (x == y)`.
 
 ```nanyx
 context Eq(a) = (
   `==`: (a, a) -> bool
 )
+```
 
+Every type that holds no function has an `Eq`: the compiler compares records field by field, lists element by element, and tags by name and then payload. Functions have no equality, so comparing two functions, or two values that hold one, is a type error.
+
+A function that compares values of one of its type variables requires `Eq` of it:
+
+```nanyx
 def contains: [Eq(a)] (list(a), a) -> bool = { xs, target ->
   xs \any { == target }
 }
+```
+
+A function that does not write its type has the requirement inferred: `def same = { x, y -> x == y }` is `[Eq(a)] a, a -> bool`. Comparing a type built from a variable requires `Eq` of the variable, so `==` on two `list(a)` needs `Eq(a)`.
+
+A nominal type can attach its own `==`, which a function that requires `Eq` then uses for it:
+
+```nanyx
+def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
 ```
 
 ## Default(a)
