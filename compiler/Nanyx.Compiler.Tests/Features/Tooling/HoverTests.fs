@@ -147,7 +147,7 @@ let ``Hover on a declaration's name shows the type of what it declares`` () =
     Assert.Equal(Some "α", hoverType source (offsetOf source "x ->" 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "half" 0 2))
     Assert.Equal(Some "int", hoverType source (offsetOf source "(n)" 0 1))
-    Assert.Equal(Some "#some(int) | ω -> int", hoverType source (offsetOf source "describe" 0 0))
+    Assert.Equal(Some "#some(int) | … -> int", hoverType source (offsetOf source "describe" 0 0))
     // The range is the declared name.
     let info = (hoverAt source (offsetOf source "half" 0 2)).Value
     Assert.Equal(offsetOf source "half" 0 0, info.Span.Start)
@@ -204,6 +204,17 @@ let ``A union's rest variable is named from the end of the alphabet`` () =
         "}\n"
     Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     Assert.Equal(Some "#some(a) | z, (a -> b) -> #some(b) | z", latinHoverType source (offsetOf source "{" 0 0))
+
+[<Fact>]
+let ``A union's rest is named only where it appears more than once`` () =
+    let source =
+        "def describe = { o ->\n" +
+        "  match o\n" +
+        "  | #some(n) -> n\n" +
+        "  | _ -> 0\n" +
+        "}\n"
+    Assert.Equal(Some "#some(int) | … -> int", hoverType source (offsetOf source "describe" 0 0))
+    Assert.Equal(Some "#some(int) | ... -> int", latinHoverType source (offsetOf source "describe" 0 0))
 
 [<Fact>]
 let ``A def's type is resolved before it is generalised, so a use of it has the inferred type`` () =
@@ -292,13 +303,15 @@ let ``The empty union is the bottom type`` () =
 [<Fact>]
 let ``Where the two ends of the alphabet meet, each goes round its own part again`` () =
     let var id = TyVar { Id = id; Name = None }
-    let open' id = TyUnion [ TyTag("x", None); var id ]
+    // Each rest is given back as well as taken, so it is named.
+    let open' id = TyFunc(TyUnion [ TyTag("x", None); var id ], TyUnion [ TyTag("x", None); var id ])
     // 20 variables and 4 rests take the whole alphabet the first time, so the front keeps α to υ and the back
     // φ to ω; the rests and variables after that go round their own parts again.
     let ty = TyApply("f", [ for id in 1..20 -> var id ] @ [ for id in 21..26 -> open' id ] @ [ var 27; var 28 ])
     Assert.Equal(
         "f(α, β, γ, δ, ε, ζ, η, θ, ι, κ, λ, μ, ν, ξ, ο, π, ρ, σ, τ, υ, "
-        + "#x | ω, #x | ψ, #x | χ, #x | φ, #x | ω₁, #x | ψ₁, α₁, β₁)",
+        + "(#x | ω -> #x | ω), (#x | ψ -> #x | ψ), (#x | χ -> #x | χ), (#x | φ -> #x | φ), "
+        + "(#x | ω₁ -> #x | ω₁), (#x | ψ₁ -> #x | ψ₁), α₁, β₁)",
         Unifier.tyToDisplayString Unicode ty)
 
 [<Fact>]

@@ -8,9 +8,9 @@ import * as vscode from "vscode";
 /**
  * The oldest compiler release the extension works with. The extension downloads the newest compiler
  * release at or above it, so bump it only when the extension starts relying on something a compiler
- * release added (0.5.2: `nanyx lsp --latin-type-vars`).
+ * release added (0.20.0: `nanyx lsp --ascii`).
  */
-export const MINIMUM_COMPILER_VERSION = "0.5.2";
+export const MINIMUM_COMPILER_VERSION = "0.20.0";
 
 /**
  * Where a release lives. `${version}`, `${rid}` and `${ext}` are substituted; this is what the
