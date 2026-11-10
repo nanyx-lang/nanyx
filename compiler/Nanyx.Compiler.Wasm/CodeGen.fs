@@ -255,7 +255,8 @@ let private contextArguments
         | Some (memberName, Some (InstanceInScope written)) ->
             let key = contextMemberKey (Some written) memberName
             acc @ [ memberFor requiredKey key ], used.Add key
-        // An instance built from the attached definitions: each member is one of them.
+        // An instance built from the attached definitions: each member is one of them, a function passed as a closure
+        // over its wrapper, or a value passed as it is.
         | Some (memberName, Some (InstanceSynthesized members)) ->
             let definition = members |> List.find (fun (n, _) -> n = memberName) |> snd
             let argument =

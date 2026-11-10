@@ -456,6 +456,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | IdentifierExpr name ->
             match scope.Vars |> Map.tryFind name with
             | Some var -> k (mk (Atom(AVar var)) var.Type)
+            // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
+            | None when scope.Members.ContainsKey name ->
+                let memberVar = scope.Members.[name]
+                k (mk (Atom(AVar memberVar)) memberVar.Type)
             | None when definitions.ContainsKey name && not (isFunction name) ->
                 // A top-level value is compiled to a function of no parameters: evaluate it.
                 let ty = tyOf expr
@@ -709,19 +713,35 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let call atoms =
                 match input.ContextParameters |> Map.tryFind name with
                 | None -> k (mk (Call(target, atoms)) ty)
-                | Some _ ->
+                | Some (contextParameters, _) ->
+                    // The type of each member at this call, where the callee's type gives it.
+                    let memberTys =
+                        let bindings =
+                            match input.DefinitionTypes |> Map.tryFind name with
+                            | Some scheme -> bindScheme Map.empty scheme (substitute subst instanceTy)
+                            | None -> Map.empty
+                        contextParameters |> List.map (fun parameter -> parameter.Type |> Option.map (substitute bindings >> substitute subst))
                     match input.ContextArguments name expr.Id (scope.Members |> Map.keys |> Set.ofSeq) with
                     | Error reason -> cannot reason
                     | Ok arguments ->
-                        let rec pass (remaining: ContextArgument list) (acc: Atom list) =
+                        let rec pass (remaining: (ContextArgument * Ty option) list) (acc: Atom list) =
                             match remaining with
                             | [] -> k (mk (Call(target, atoms @ List.rev acc)) ty)
-                            | MemberInScope key :: rest -> pass rest (AVar scope.Members.[key] :: acc)
-                            | ClosureOverWrapper wrapper :: rest ->
-                                let closure = this.WrapperClosure wrapper
+                            | (MemberInScope key, _) :: rest -> pass rest (AVar scope.Members.[key] :: acc)
+                            | (ClosureOverWrapper wrapper, memberTy) :: rest ->
+                                let closure = this.WrapperClosure wrapper memberTy
                                 bindTemp closure (fun atom -> pass rest (atom :: acc))
-                            | DefinitionValue definition :: _ -> cannot $"the context member '{definition}' passed by its value"
-                        pass arguments []
+                            | (DefinitionValue definition, _) :: rest ->
+                                // A member that is a value (`Point.`0``): the top-level value, evaluated.
+                                let definitionTy =
+                                    match input.DefinitionTypes |> Map.tryFind definition with
+                                    | Some ty when (freeVars ty).IsEmpty -> ty
+                                    | _ -> cannot $"passing the generic value '{definition}' as a context member"
+                                let value = mk (Call(callee definition definitionTy, [])) (toIrType definitionTy)
+                                bindTemp value (fun atom -> pass rest (atom :: acc))
+                        if arguments.Length <> memberTys.Length then
+                            cannot $"internal error: {arguments.Length} context members found for the {memberTys.Length} '{name}' requires"
+                        pass (List.zip arguments memberTys) []
             let parameters = parameterNames name
             // The arguments as the callee takes them, in the shapes the old path accepts.
             match flattenCallArgs args with
@@ -795,6 +815,12 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar memberVar, atoms)) ty))
             | None -> cannot $"the context member {key}, which is not in scope"
+        | ContextMemberAccess(contextType, memberName) ->
+            // `C(T).m`: the member of that instance of the context as a value.
+            let key = contextMemberKey (Some contextType) memberName
+            match scope.Members |> Map.tryFind key with
+            | Some memberVar -> k (mk (Atom(AVar memberVar)) memberVar.Type)
+            | None -> cannot $"the context member {key}, which is not in scope"
         // A lambda of no parameters that is not a function's own runs where it is written, as the old path runs it.
         | Lambda([], body) -> this.Complex scope body k
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
@@ -854,17 +880,19 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | UseIn _ -> cannot "`use ... in`"
         | _ -> cannot "this kind of expression"
 
-    /// A closure over the wrapper `wrapper` of a top-level function, at the function's own type.
-    member this.WrapperClosure (wrapper: string) : Expr =
+    /// A closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for a generic
+    /// function, at `memberTy`, the type of the context member it is passed as.
+    member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Expr =
         let wrapped =
             match input.Lifted |> Map.tryFind wrapper with
             | Some (FunctionWrapper wrapped) -> wrapped
-            | _ -> cannot $"'{wrapper}' is not a function's wrapper"
-        let wrappedTy =
-            match input.DefinitionTypes |> Map.tryFind wrapped with
-            | Some ty when (freeVars ty).IsEmpty -> ty
+            | _ -> cannot $"internal error: '{wrapper}' is not a function's wrapper"
+        let key, wrappedTy =
+            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy with
+            | Some ty, _ when (freeVars ty).IsEmpty -> (wrapper, []), ty
+            | Some _, Some ty when (freeVars ty).IsEmpty -> (wrapper, [ toIrType ty ]), ty
             | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
-        let name = request (wrapper, []) subst (WrapperCalling(wrapped, wrappedTy))
+        let name = request key subst (WrapperCalling(wrapped, wrappedTy))
         mk (MakeClosure(name, parameterNames wrapper |> List.length, [])) (toIrType wrappedTy)
 
     /// The type of `expr` where it is: a name in scope has its variable's type, and a field of one the field's, which
