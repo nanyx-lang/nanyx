@@ -75,16 +75,6 @@ let ``What the backend cannot compile is reported where it is written`` () =
     let message, line, column = backendFailure printed
     Assert.Equal("The WebAssembly backend cannot compile `dbg` of a value of type (0: int, 1: int) yet", message)
     Assert.Equal(placeOf "dbg(t)" printed, (line, column))
-    let useIn =
-        "context Ask = (ask: () -> int)\n" +
-        "def twice: [Ask] () -> int = { ask() + ask() }\n" +
-        "def main = {\n" +
-        "  def n = use Ask(ask = { 21 }) in twice()\n" +
-        "  n\n" +
-        "}\n"
-    let message, line, column = backendFailure useIn
-    Assert.Equal("The WebAssembly backend cannot compile `use ... in` yet", message)
-    Assert.Equal(placeOf "use Ask" useIn, (line, column))
 
 [<Fact>]
 let ``Transpile block local variable`` () =

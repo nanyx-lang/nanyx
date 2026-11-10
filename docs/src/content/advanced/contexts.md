@@ -42,12 +42,11 @@ def main = {
 }
 ```
 
-You can also load a context for a single expression or block with `use ... in`:
+You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
 ```nanyx
 def result = use Console(println = hostPrint) in
   println("Hello from a scoped context")
-
 ```
 
 `use` loads the value of any expression. An instance of a parameterised context is a value whose type is the context applied to a type, so define it with `def` and load it by name:

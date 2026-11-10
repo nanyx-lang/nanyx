@@ -90,3 +90,17 @@ let ``Run - a tail call that passes contexts on uses no stack`` () =
         "\n" +
         "main()\n"
     runSource source |> assertRan "1000000\n"
+
+[<Fact>]
+let ``Run - the body of use ... in is in tail position`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Counter = (next: int -> int)\n" +
+        "\n" +
+        "def loop: (int, int) -> int = { n, acc ->\n" +
+        "  if n == 0 then acc else use Counter(next = { m -> m - 1 }) in loop(next(n), acc + 1)\n" +
+        "}\n" +
+        "\n" +
+        "println(\"{loop(1000000, 0)}\")\n"
+    runSource source |> assertRan "1000000\n"
