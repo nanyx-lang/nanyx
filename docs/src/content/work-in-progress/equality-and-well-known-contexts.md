@@ -35,6 +35,11 @@ order: 8
   of its own type variables requires `Eq` of it (`EqualityOperators.checkLocalCall`). Only a call by name is
   checked, not a local function passed as a value. A local generic function compares strings and lists wrongly in
   the backend ([#616](https://github.com/nanyx-lang/nanyx/issues/616)).
+- **The operands are joined when one is a tag.** `{ o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))`
+  checks, as the join for `if` and `match` branches does (`BranchJoin.joinBranchTypes`, chosen by
+  `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still
+  names `Point`. The official linter's `noTagInCommon` rule warns about `#red == #some(1)`: closed types with no tag
+  in common.
 
 Not done yet:
 
@@ -43,7 +48,8 @@ Not done yet:
   requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance.
 - **A concrete `a == b` is still the built-in comparison** for a type with an attached `==`, and for a built-in type
   with an `Eq` loaded by `use` (decision 2 below).
-- **Joining the operands** for open tag unions, and the warning for types with no tag in common.
+- **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
+  function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
 
 # What existed before
 

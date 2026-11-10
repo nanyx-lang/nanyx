@@ -1562,7 +1562,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         |> addConstraint leftExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
                     Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, numericConstrained)
                 | BinaryOp(op, _, _) when EqualityOperators.isOperator op ->
-                    EqualityOperators.require env constrained expr op leftExpr.Type
+                    // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
+                    // tags. Anything else is made equal.
+                    let operandTy, joined =
+                        if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
+                            joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
+                        else leftExpr.Type, constrained
+                    EqualityOperators.require env joined expr op operandTy
                     |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
                 | BinaryOp(op, _, _) when ["and"; "or"] |> List.contains op ->
                     // Both operands are already unified with each other; pin them to bool.

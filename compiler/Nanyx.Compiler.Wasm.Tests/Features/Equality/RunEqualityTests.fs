@@ -119,3 +119,13 @@ let ``Run - a function that compares its type variable uses the == attached to a
           "differ($Email(\"a\"), $Email(\"b\"))" ]
     |> runSource
     |> assertRan "T\nF\n"
+
+[<Fact>]
+let ``Run - comparing with a tag takes a value of any union that has it`` () =
+    comparing
+        [ "def isNone = { o -> o == #none }" ]
+        [ "isNone(#none)"
+          "isNone(#some(3))"
+          "isNone(#some(s))" ]
+    |> runSource
+    |> assertRan "T\nF\nF\n"

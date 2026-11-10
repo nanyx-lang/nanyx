@@ -135,7 +135,7 @@ let ``Strings, lists and intrinsics go through the core IR`` () =
         "\n" +
         "def differ: (string, string) -> bool = { a, b -> a != b }\n" +
         "\n" +
-        "def isNone = { o -> o == #none }\n" +
+        "def isNone: #none -> bool = { o -> o == #none }\n" +
         "\n" +
         "def heads: list(int) -> int = { xs ->\n" +
         "  match xs\n" +
