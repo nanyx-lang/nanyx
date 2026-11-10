@@ -27,7 +27,8 @@
     <Compile Include="Features\Tooling\HoverTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />
-    <Compile Include="Features\Tooling\TypeHintsTests.fs" />    <Compile Include="Features\Types\AnnotationsTests.fs" />
+    <Compile Include="Features\Tooling\TypeHintsTests.fs" />
+    <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
     <Compile Include="Features\Types\TypeOfTests.fs" />
