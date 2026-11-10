@@ -52,14 +52,23 @@ module Helpers =
     /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
     let procExit = "proc_exit"
 
-let heapBaseOffset = 4096  // Start heap after string data region
+/// The lowest address the table of free-list heads starts at. A module whose string literals end past it puts the table
+/// after them instead (see `heapBaseAfter`).
+let minimumHeapBase = 4096
+
+/// Where the table of free-list heads starts in a module whose data segments end at `dataEnd`: at `minimumHeapBase`,
+/// or past the data, 8-byte aligned so that the blocks `alloc` hands out stay 8-byte aligned.
+let heapBaseAfter (dataEnd: int) = max minimumHeapBase ((dataEnd + 7) &&& ~~~7)
 
 /// The largest block size, in bytes, with a free list of its own; larger blocks share one list.
 let largestSizeClass = 32
 
-/// Where `$heap_ptr` starts: after the table of free-list heads, one word per small size and one for the large
-/// blocks.
-let heapStartOffset = heapBaseOffset + largestSizeClass + 4
+/// Where `$heap_ptr` starts, given where the table of free-list heads starts (`heapBase`): after the table, one word
+/// per small size and one for the large blocks.
+let heapStartOffset (heapBase: int) = heapBase + largestSizeClass + 4
+
+/// The pages of memory a module starts with: enough to hold everything below `heapStart`, and at least one.
+let initialMemoryPages (heapStart: int) = max 1 ((heapStart + 65535) / 65536)
 
 /// What a module compiled with memory checks adds (see `checkedRuntimeHelpers`): two counters, and the functions that
 /// stop the program when a block is freed twice or an object is counted after it was freed. They write what went
@@ -88,26 +97,27 @@ module MemoryChecks =
 
 let private lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
 
-// Leaves on the stack the address of the head of the free list for a block of `$size` bytes.
-let private freeListHead =
+// Leaves on the stack the address of the head of the free list for a block of `$size` bytes, in the table at
+// `heapBase`.
+let private freeListHead (heapBase: int) =
     [ "  local.get $size"
       $"  i32.const {largestSizeClass}"
       "  i32.le_u"
       "  if (result i32)"
-      $"    i32.const {heapBaseOffset - 4}"
+      $"    i32.const {heapBase - 4}"
       "    local.get $size"
       "    i32.add"
       "  else"
-      $"    i32.const {heapBaseOffset + largestSizeClass}"
+      $"    i32.const {heapBase + largestSizeClass}"
       "  end" ]
 
 // Adds `delta` to the global `name`.
 let private bump (name: string) (delta: int) =
     [ $"  global.get ${name}"; $"  i32.const {delta}"; "  i32.add"; $"  global.set ${name}" ]
 
-/// `alloc`. With `checks`, it counts the call and the block it hands out, and clears the freed mark of a block it
-/// takes from a free list.
-let private allocHelper (checks: bool) =
+/// `alloc`, with the free-list heads at `heapBase`. With `checks`, it counts the call and the block it hands out, and
+/// clears the freed mark of a block it takes from a free list.
+let private allocHelper (checks: bool) (heapBase: int) =
     lines
         [ yield $"(func ${Helpers.alloc} (param $size i32) (result i32)"
           yield "  (local $link i32)"
@@ -128,7 +138,7 @@ let private allocHelper (checks: bool) =
           yield "  end"
           // Walk the free list from its head, taking the first block that is big enough: on a small size's
           // list that is the first block. A freed mark makes a size odd, which leaves the comparison unchanged.
-          yield! freeListHead
+          yield! freeListHead heapBase
           yield "  local.set $link"
           yield "  block $empty"
           yield "    loop $search"
@@ -200,9 +210,9 @@ let private allocHelper (checks: bool) =
           yield "  local.get $ptr"
           yield ")" ]
 
-/// `free`. With `checks`, it stops the program on a block that is already free, fills the block with `MemoryChecks.poison`, marks
-/// it freed, and counts it.
-let private freeHelper (checks: bool) =
+/// `free`, with the free-list heads at `heapBase`. With `checks`, it stops the program on a block that is already free,
+/// fills the block with `MemoryChecks.poison`, marks it freed, and counts it.
+let private freeHelper (checks: bool) (heapBase: int) =
     lines
         [ yield $"(func ${Helpers.free} (param $ptr i32)"
           yield "  (local $size i32)"
@@ -249,7 +259,7 @@ let private freeHelper (checks: bool) =
               yield "  i32.or"
               yield "  i32.store"
               yield! bump MemoryChecks.liveBlocks -1
-          yield! freeListHead
+          yield! freeListHead heapBase
           yield "  local.set $head"
           yield "  local.get $ptr"
           yield "  local.get $head"
@@ -314,12 +324,13 @@ let private retainHelper (checks: bool) =
           yield "  end"
           yield ")" ]
 
-/// The globals and functions the checked `alloc`, `free`, `retain` and `release` use, given where each of
-/// `MemoryChecks.messages` is. They call `writeStderr` and WASI `proc_exit`, which the module must have. `checkLive`
+/// The globals and functions the checked `alloc`, `free`, `retain` and `release` use, given where the free-list heads
+/// are (`heapBase`) and where each of `MemoryChecks.messages` is. They call `writeStderr` and WASI `proc_exit`, which
+/// the module must have. `checkLive`
 /// stops the program when the object whose count is at `$count` is on the heap and its block is marked freed: an
 /// object's count is the first word of its block, so its size word is the one before. A string literal is below the
 /// heap and has no size word.
-let memoryCheckFunctions (messageOffset: string -> int) =
+let memoryCheckFunctions (heapBase: int) (messageOffset: string -> int) =
     let fail (name: string) (message: string) =
         lines
             [ $"(func ${name}"
@@ -335,7 +346,7 @@ let memoryCheckFunctions (messageOffset: string -> int) =
       lines
           [ $"(func ${MemoryChecks.checkLive} (param $count i32)"
             "  local.get $count"
-            $"  i32.const {heapStartOffset}"
+            $"  i32.const {heapStartOffset heapBase}"
             "  i32.ge_u"
             "  if"
             "    local.get $count"
@@ -371,15 +382,15 @@ let memoryCheckFunctions (messageOffset: string -> int) =
 /// The allocator hands out 4-byte-aligned blocks, so a pointer is never odd. Every block has its size (the
 /// requested size rounded up to 4 bytes, and at least 4) in the word before it, and `free` puts a block back on the
 /// free list for its size: blocks of up to 32 bytes have a list per size, larger ones share one list searched
-/// first-fit. The list heads are a table at `heapBaseOffset` (see `freeListHead`), and a free block keeps the next
-/// block of its list in its first word. `alloc` takes from a list when it can, and otherwise bumps `$heap_ptr`,
-/// growing the memory when it runs out.
+/// first-fit. The list heads are a table at `heapBase`, past the string literals (see `heapBaseAfter` and
+/// `freeListHead`), and a free block keeps the next block of its list in its first word. `alloc` takes from a list
+/// when it can, and otherwise bumps `$heap_ptr`, which starts after the table, growing the memory when it runs out.
 ///
 /// With `checks`, `alloc`, `free`, `retain` and `release` also count blocks and stop the program on a double free or a
 /// use after free, drawing on `memoryCheckFunctions`.
-let private helpersWith (checks: bool) : Map<string, string> =
-    [ Helpers.alloc, allocHelper checks
-      Helpers.free, freeHelper checks
+let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
+    [ Helpers.alloc, allocHelper checks heapBase
+      Helpers.free, freeHelper checks heapBase
       // An object of `$size` bytes with a count of one and no info word: `size -> p`.
       Helpers.newCell,
       lines
@@ -960,12 +971,14 @@ let private helpersWith (checks: bool) : Map<string, string> =
             ")" ] ]
     |> Map.ofList
 
-/// The WebAssembly helper functions, keyed by name (see `helpersWith`).
-let runtimeHelpers = helpersWith false
+/// The WebAssembly helper functions, keyed by name, with the free-list heads at `heapBase` (see `helpersWith`).
+let runtimeHelpers (heapBase: int) = helpersWith false heapBase
 
 /// `runtimeHelpers`, with an allocator and reference counts that check themselves (see `MemoryChecks`).
-let checkedRuntimeHelpers = helpersWith true
+let checkedRuntimeHelpers (heapBase: int) = helpersWith true heapBase
 
+/// Where the string literals start. They run on for as long as they need, and the heap starts after them (see
+/// `heapBaseAfter`).
 let stringDataBaseOffset = 256
 
 let dbgDataBaseOffset = 128

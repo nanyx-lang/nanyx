@@ -51,6 +51,32 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
     runSource source |> assertRan "[   tea][   2]\n   tea!|  2|<2>\n£2.89 and £12.05\n"
 
 [<Fact>]
+let ``Run - string literals larger than the space below the heap`` () =
+    // The literals used to run from 256 into a heap and table of free-list heads fixed at 4096, so that `alloc`
+    // overwrote them, or read a literal's bytes as the head of a free list (#375, #571). The last literal crosses the
+    // first page of memory too.
+    let literal (letter: char) (length: int) = String.replicate (length / 10) $"{letter}123456789"
+    let literals = [ literal 'a' 1500; literal 'b' 1500; literal 'c' 1500; literal 'd' 70000 ]
+    let names = [ "a"; "b"; "c"; "d" ]
+    let source =
+        [ "import nanyx/console"
+          ""
+          yield! List.map2 (fun name value -> $"def {name} = \"{value}\"") names literals
+          ""
+          "@entry"
+          "def main = {"
+          "  for [1, 2, 3] | n ->"
+          "    def made = \"made {n}\" ++ \"!\""
+          "    println(made)"
+          yield! names |> List.map (fun name -> $"  println({name})")
+          "  println(if a ++ b == a ++ b then \"equal\" else \"different\")"
+          "}" ]
+        |> String.concat "\n"
+    let expected =
+        [ "made 1!"; "made 2!"; "made 3!"; yield! literals; "equal" ] |> List.map (fun line -> line + "\n") |> String.concat ""
+    runSource source |> assertRan expected
+
+[<Fact>]
 let ``Run - string concatenation and equality`` () =
     let source =
         "import nanyx/console\n" +

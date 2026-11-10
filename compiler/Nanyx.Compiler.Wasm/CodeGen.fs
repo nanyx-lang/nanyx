@@ -136,7 +136,7 @@ let private escapeWasmData (bytes: byte array) =
 
 /// Where each string literal is in the data segment, and the segment's bytes. A literal is laid out as a string on the
 /// heap is (see `WasmRuntime.runtimeHelpers`), with a count of 0 so that it is never freed, and padded so that the
-/// next one is 4-byte aligned.
+/// next one is 4-byte aligned. The heap starts after them (see `stringDataEnd`).
 let private buildStringLiteralMap (literals: string list) =
     let mutable offset = stringDataBaseOffset
     let entries =
@@ -154,6 +154,10 @@ let private buildStringLiteralMap (literals: string list) =
     let map = entries |> List.map (fun (value, baseOffset, _) -> value, baseOffset + 8) |> Map.ofList
     map, entries
 
+/// Where the string literals laid out as `entries` (see `buildStringLiteralMap`) end.
+let private stringDataEnd (entries: (string * int * byte array) list) =
+    entries |> List.fold (fun dataEnd (_, offset, bytes) -> max dataEnd (offset + bytes.Length)) stringDataBaseOffset
+
 /// The data segments that lay out `entries` (see `buildStringLiteralMap`).
 let private renderDataSegments (entries: (string * int * byte array) list) =
     entries
@@ -164,22 +168,23 @@ let private renderDataSegments (entries: (string * int * byte array) list) =
 /// `CheckMemory`, it is the checked allocator, and exports `retain`, `release` and the counters too; a failed check
 /// writes to stderr and exits through WASI.
 let allocatorModuleWat (options: WasmOptions) =
-    let helpers = if options.CheckMemory then checkedRuntimeHelpers else runtimeHelpers
     let messageOffsets, messageData = buildStringLiteralMap MemoryChecks.messages
+    let heapBase = heapBaseAfter (stringDataEnd messageData)
+    let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
     [ yield "(module"
       if options.CheckMemory then
           yield "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))"
           yield $"  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func ${Helpers.procExit} (param i32)))"
       yield "  (memory 1)"
       yield "  (export \"memory\" (memory 0))"
-      yield $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset}))"
+      yield $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset heapBase}))"
       yield helpers |> Map.find Helpers.alloc
       yield helpers |> Map.find Helpers.free
       yield $"  (export \"alloc\" (func ${Helpers.alloc}))"
       yield $"  (export \"free\" (func ${Helpers.free}))"
       if options.CheckMemory then
           yield renderDataSegments messageData
-          yield memoryCheckFunctions (fun message -> messageOffsets |> Map.find message)
+          yield memoryCheckFunctions heapBase (fun message -> messageOffsets |> Map.find message)
           for name in [ Helpers.retain; Helpers.release; Helpers.stringLength; Helpers.writeStderr ] do
               yield helpers |> Map.find name
           yield $"  (export \"retain\" (func ${Helpers.retain}))"
@@ -605,6 +610,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         if options.CheckMemory then facts.Strings @ (MemoryChecks.messages |> List.except facts.Strings)
         else facts.Strings
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap literals
+    // The free-list heads and the heap go after the literals, however far they run.
+    let heapBase = heapBaseAfter (stringDataEnd stringLiteralData)
+    let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
 
     let context: CoreIrEmit.EmitContext =
         { TagId =
@@ -695,14 +703,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // Everything that allocates does it through `$alloc`.
     let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc
     let renderedHelpers =
-        let helpers = if options.CheckMemory then checkedRuntimeHelpers else runtimeHelpers
+        let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
         [ yield!
               helperDependencies
               |> List.map fst
               |> List.filter usedHelperSet.Contains
               |> List.map (fun name -> helpers |> Map.find name)
           if checksMemory then
-              yield memoryCheckFunctions (fun message -> stringLiteralMap |> Map.find message)
+              yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
               yield $"  (export \"{CheckedExports.liveBlocks}\" (global ${MemoryChecks.liveBlocks}))"
               yield $"  (export \"{CheckedExports.allocations}\" (global ${MemoryChecks.allocations}))"
           if options.CheckMemory && moduleUsesHeap then
@@ -716,7 +724,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                   "  (import \"wasi_snapshot_preview1\" \"fd_read\" (func $fd_read (param i32 i32 i32 i32) (result i32)))"
               if usedHelperSet.Contains Helpers.procExit then
                   "  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func $proc_exit (param i32)))"
-              "  (memory 1)"
+              memoryDirective
               "  (export \"memory\" (memory 0))"
               if facts.UsesDbgHelpers then
                   $"  (data (i32.const {dbgDataBaseOffset}) \"dbg: \")"
@@ -787,14 +795,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         (not (List.isEmpty stringLiteralData) || moduleUsesHeap || readsTagCells || freesObjects) && not moduleUsesIoHelpers
     let memorySection =
         if needsMemory then
-            "  (memory 1)\n  (export \"memory\" (memory 0))"
+            memoryDirective + "\n  (export \"memory\" (memory 0))"
         else
             ""
 
     // Add heap global if we use heap allocation
     let heapSection =
         if moduleUsesHeap then
-            $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset}))"
+            $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset heapBase}))"
         else
             ""
 
