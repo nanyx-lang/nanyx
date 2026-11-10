@@ -88,6 +88,35 @@ let ``A piped match stays piped, and a pipe after its arms goes on a line of its
     unchanged (lines [ "def f = { n ->"; "  n \\match"; "    | 0 -> \"zero\""; "    | _ -> \"other\""; "    \\println"; "}" ])
 
 [<Fact>]
+let ``A pipe chain written over several lines keeps each step on a line of its own`` () =
+    unchanged (lines [ "def r ="; "  rules"; "    \\map { x -> f(x) }"; "    \\String.join(\"\")" ])
+    unchanged (lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\String.join(\"\")" ])
+    // One step on a line of its own puts them all on lines of their own.
+    Assert.Equal(lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\String.join(\"\")" ], format (lines [ "def r = rules \\map { x -> f(x) }"; "      \\String.join(\"\")" ]))
+    unchanged "def r = rules \\map { x -> f(x) } \\String.join(\"\")\n"
+
+[<Fact>]
+let ``A pipe chain over several lines in a lambda body is indented once from its line`` () =
+    unchanged (lines [ "def f = { xs ->"; "  xs"; "    \\map { x -> x + 1 }"; "    \\sum"; "}" ])
+    unchanged (lines [ "def f = { xs ->"; "  def total = xs"; "    \\map { x -> x + 1 }"; "    \\sum"; ""; "  total"; "}" ])
+    unchanged (lines [ "def f = { xs -> xs"; "    \\map { x -> x + 1 }"; "    \\sum"; "}" ])
+
+[<Fact>]
+let ``A pipe chain over several lines can go through a \match`` () =
+    unchanged (lines [ "def f = { n ->"; "  n"; "    \\trim"; "    \\match"; "      | \"\" -> \"empty\""; "      | s -> s"; "    \\toUpper"; "    \\println"; "}" ])
+    unchanged (lines [ "def f = { n ->"; "  n \\match"; "    | 0 -> \"zero\""; "    | _ -> \"other\""; "    \\trim \\println"; "}" ])
+
+[<Fact>]
+let ``A pipe chain that spans lines keeps a multi-line lambda and the comments between its steps`` () =
+    unchanged (lines [ "def r ="; "  xs"; "    \\map { x ->"; "      def y = x + 1"; "      y * 2"; "    } -- doubled"; "    -- add them up"; "    \\sum" ])
+    unchanged (lines [ "def r = xs \\map { x ->"; "  x + 1"; "} \\sum" ])
+
+[<Fact>]
+let ``A pipe chain that does not fit puts each step on a line of its own`` () =
+    let long = "def total = someLongValueName \\List.map { x -> x + someOtherLongName } \\List.filter { y -> y > 100 } \\List.sum"
+    Assert.Equal(lines [ "def total = someLongValueName"; "  \\List.map { x -> x + someOtherLongName }"; "  \\List.filter { y -> y > 100 }"; "  \\List.sum" ], format long)
+
+[<Fact>]
 let ``An except keeps one arm on its line and puts several on the lines after it`` () =
     unchanged "def v = Int.fromString(s) except #invalidInt -> #invalidVersionNumber\n"
     unchanged "def v = xs \\find(p) except #notFound | #empty -> #none\n"

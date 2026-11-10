@@ -125,7 +125,18 @@ issue):
   }
   ```
 
-- A pipeline that does not fit puts each stage on its own line, indented once.
+- A pipeline written with a stage at the start of a line, or one of two or more stages that does not fit, puts each
+  stage on its own line, indented once from the line the pipeline starts on (the parser needs a stage that continues
+  a statement to be indented more than the statement's line). A pipeline written on one line that fits stays on it, as
+  does one whose stages take up lines anyway, with a lambda that spans lines. A stage after a `\match`'s arms always
+  starts a line, and a comment between stages stays between them:
+
+  ```nanyx
+  def total = orders
+    \List.filter { o -> o.paid }
+    \List.map { o -> o.amount }
+    \List.sum
+  ```
 - A record, list, tuple or call's arguments that does not fit puts each element on its own line, separated by newlines
   instead of commas, as the docs write them, with the closing bracket on a line of its own; trailing commas therefore
   never arise. The outermost brackets break first.
