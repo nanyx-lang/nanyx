@@ -3,8 +3,11 @@
 /// when the first comes first, 0 when they are equal and a positive one when it comes after. Numbers and bools are
 /// ordered numerically (`false` first), strings by their bytes, tuples position by position and lists element by
 /// element, a list that is a prefix of the other first. Floats are in a total order, with NaN after every other float:
-/// it is `<` on floats, not this, that follows IEEE 754. Records and tags have no order, and never reach here. An
-/// ordering function only reads its operands: it borrows them, as every runtime helper does.
+/// it is `<` on floats, not this, that follows IEEE 754. Records and tags have no order. A record only reaches here
+/// inside a list or tuple that a function requiring `Ord(a)` orders as a `list(a)`, whose elements are ordered by their
+/// structure rather than through the instance (see the equality design page's `What is implemented`): it is then
+/// ordered field by field, in the order the fields are stored. Tags never reach here. An ordering function only reads
+/// its operands: it borrows them, as every runtime helper does.
 module Transpiler.Wasm.CoreIrOrdering
 
 open Transpiler.Wasm.Identifiers

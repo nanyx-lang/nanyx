@@ -88,9 +88,10 @@ Not done yet:
 
 Not done yet, as for `Eq`:
 
-- **Structural derivation that looks up each part**: a `list($Version)` orders its elements by their structure, not
-  with `$Version.compare`, and a nominal type with a `compare` of its own inside a list or tuple is ordered as its
-  underlying type is (a record or tag in it is then an error).
+- **Structural derivation that looks up each part.** `<` on a `list($Version)` is an error, as `$Version` is a record
+  inside, though it attaches `compare`; `List.sort` of one works, through the instance. Inside a function that
+  requires `[Ord(a)]`, `<` on a `list(a)` orders the elements by their structure, not through the instance: a record
+  there is ordered field by field, and a tag is reported by the backend, as `NYX0301`.
 - **Calls to local functions are not checked for `Ord`** as they are for `Eq`: a local generic function that orders
   its parameters is ordered by the backend at each type it is called with, and calling it with records is reported
   there, as `NYX0301`.

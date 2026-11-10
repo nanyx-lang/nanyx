@@ -242,6 +242,24 @@ type Function =
       Body: Expr }
 
 module IrType =
+    /// Whether a record's fields are a tuple's: its positions, `0`, `1`, ...
+    let isTuple (fields: (string * IrType) list) =
+        Set.ofList (List.map fst fields) = Set.ofList (List.init fields.Length string)
+
+    /// Whether a value of `ty` is, or holds, a tag or a function, which have no order.
+    let rec holdsUnordered (ty: IrType) =
+        match ty with
+        | IrTags _
+        | IrFunction _
+        | IrError -> true
+        | IrRecord fields -> fields |> List.exists (snd >> holdsUnordered)
+        | IrList element -> holdsUnordered element
+        | IrInt
+        | IrBool
+        | IrUnit
+        | IrString
+        | IrFloat -> false
+
     let rec show (ty: IrType) =
         match ty with
         | IrInt -> "int"

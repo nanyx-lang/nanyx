@@ -507,10 +507,14 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 if op = "==" then k equal
                 else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
         | BinaryOp(("<" | "<=" | ">" | ">=") as op, left, right) when (match tyOf left with
-                                                                      | IrString | IrRecord _ | IrList _ -> true
+                                                                      | IrString | IrList _ -> true
+                                                                      | IrRecord fields -> IrType.isTuple fields
                                                                       | _ -> false) ->
             // A string, a tuple and a list are ordered by their structure (see `CoreIrOrdering`): their order, a
-            // number, is compared with 0.
+            // number, is compared with 0. Records, tags and functions have no order: a local function that orders them
+            // is not supported. (A record inside a list or tuple is ordered field by field, only where a generic
+            // function orders a `list(a)`, see `CoreIrOrdering`.)
+            if IrType.holdsUnordered (tyOf left) then cannot $"the operator {op} on a value of type {IrType.show (tyOf left)}"
             this.Atoms scope [ left; right ] (fun atoms ->
                 let order = mk (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (mk (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
