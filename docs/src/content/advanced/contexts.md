@@ -106,7 +106,7 @@ export def sum: [Sum(a)] list(a) -> a
   = { items -> items \fold(`0`) { + } }
 ```
 
-For ergonomic generic API design with associated members and constrained capabilities, see [Associated types and constraints](./associated-types-and-constraints).
+Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Common contexts
 

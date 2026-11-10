@@ -144,7 +144,7 @@ def zip: (list(a), list(b)) -> list((a, b)) = { xs, ys ->
 }
 ```
 
-Type variables are automatically created when used in a function definition, and must be a single lowercase character such as `a`, `b`, or `c`. Type variables with multiple characters are reserved for [associated types](../advanced/associated-types-and-constraints).
+Type variables are automatically created when used in a function definition, and must be a single lowercase character such as `a`, `b`, or `c`. Type variables with multiple characters are reserved for [associated types](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Type aliases
 

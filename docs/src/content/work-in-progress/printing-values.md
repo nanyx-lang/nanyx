@@ -57,7 +57,7 @@ A [protected type](../advanced/nominal-and-protected-types) such as `$UserId` ca
 
 ## What cannot be interpolated, for now
 
-Lists, records, tuples and tags with a payload have no `ToString`. Giving `list(a)` one needs an instance built from the instance for `a`, and Nanyx has no instances that depend on other instances (see [structural context synthesis](./type-arguments-and-reflection#structural-context-synthesis)). Until it does, these are an error at the hole:
+Lists, records, tuples and tags with a payload have no `ToString`. Giving `list(a)` one needs an instance built from the instance for `a`, and Nanyx has no instances that depend on other instances (see [structural context synthesis](./type-members-and-reflection#structural-context-synthesis)). Until it does, these are an error at the hole:
 
 ```
 "{scores}": 'list(int)' cannot be interpolated because it has no toString.

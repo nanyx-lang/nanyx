@@ -54,7 +54,7 @@ def unique: Set(int) = [1, 2, 2, 3]
 
 A square-bracket literal takes its type from the annotation or the surrounding usage. When neither says otherwise, `[1, 2, 3]` is a `list(a)` and `["a" => 1]` is a `map(k, v)`.
 
-For advanced patterns such as associated types and constrained collection capabilities, see [Associated types and constraints](../advanced/associated-types-and-constraints).
+Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Syntax
 
