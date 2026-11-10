@@ -104,6 +104,43 @@ let ``Parse dotted def name`` () =
         | [Kind (Def (ValueDef(_, name, _, _)))] -> name |> should equal "Person.fullName"
         | _ -> failwith "Expected dotted def name"
 
+[<Fact>]
+let ``a name that starts with true or false is a name, not a boolean`` () =
+    match parseModule "def trueish = 1\ndef falsey = 2\ndef total = trueish + falsey" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "trueish", _, Kind (LiteralExpr (IntLit 1)))))
+                  Kind (Def (ValueDef (_, "falsey", _, Kind (LiteralExpr (IntLit 2)))))
+                  Kind (Def (ValueDef (_, "total", _, Kind (BinaryOp ("+", Kind (IdentifierExpr "trueish"),
+                                                                        Kind (IdentifierExpr "falsey")))))) ] -> ()
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Theory>]
+[<InlineData("nan")>]
+[<InlineData("inf")>]
+[<InlineData("infinity")>]
+[<InlineData("NaN")>]
+[<InlineData("Infinity")>]
+let ``nan, inf and infinity are names, not floats`` (name: string) =
+    match parseModule $"def {name} = 3\ndef x = {name}\ndef scale = {{ {name} -> {name} * 2 }}" with
+    | Result.Ok [ Kind (Def (ValueDef (_, defName, _, Kind (LiteralExpr (IntLit 3)))))
+                  Kind (Def (ValueDef (_, "x", _, Kind (IdentifierExpr used))))
+                  Kind (Def (ValueDef (_, "scale", _, Kind (Lambda ([ (param, None) ],
+                                                                    Kind (BinaryOp ("*", Kind (IdentifierExpr body),
+                                                                                    Kind (LiteralExpr (IntLit 2))))))))) ] ->
+        Assert.Equal(name, defName)
+        Assert.Equal(name, used)
+        Assert.Equal(name, param)
+        Assert.Equal(name, body)
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
+let ``float literals with a fraction or an exponent still parse`` () =
+    match parseModule "def a = 1.5\ndef b = 2.5e3" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (LiteralExpr (FloatLit a)))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (LiteralExpr (FloatLit b))))) ] ->
+        Assert.Equal(1.5, a)
+        Assert.Equal(2500.0, b)
+    | other -> failwith $"Unexpected: %A{other}"
+
 // Literal Tests
 [<Fact>]
 let ``Parse string literal`` () =
