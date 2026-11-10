@@ -77,6 +77,16 @@ match n
 
 The rule (`unreachableArms`) reports an arm that the arms before it already match every value of: one after a catch-all such as `_` or a name, one after an arm that matches everything it does (`#some(5)` after `#some(_)`, `5` after `1..10`), and one after arms that between them match every value it does: every tag of a union, both booleans, every length of list, every int of a range (`3..8` after `1..5` and `6..10`), or every combination of the values a match is on. It points at the arms that cover it, and its fix removes the arm. An arm with a guard (`{ > 0 }`) never counts as covering another, since whether it matches depends on more than the value's shape.
 
+## Comparison that is always false
+
+```nanyx
+def isRed: #red | #green -> bool = { c ->
+  c == #blue -- Linter warning: '#red | #green' and '#blue' have no tag in common, so this is always false
+}
+```
+
+The rule (`noTagInCommon`) reports `==` or `!=` on two values whose types are closed tag unions that share no tag. The comparison type-checks, since `==` accepts any two tags it can join into one union, but it can never be true (or, with `!=`, never false). A comparison with an open union, such as `o == #none` where `o` can be any tag, is not reported.
+
 ## Unreachable code path
 
 ```nanyx

@@ -209,7 +209,9 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > the module the exhaustiveness check in `Infer.fs` uses too. Its fourth is `unusedImports`
 > ([#102](https://github.com/nanyx-lang/nanyx/issues/102)): an `ImportedModule` symbol that no entry of
 > `ImportReferences` names. A type name in a type expression records its import there as a value's name does, so a
-> type used only in an annotation keeps its import. The rules for unused and unreachable code are tracked in
+> type used only in an annotation keeps its import. Its fifth is `noTagInCommon`
+> ([#532](https://github.com/nanyx-lang/nanyx/issues/532)): `==` or `!=` on closed tag types that share no tag, which
+> type-checks because the operands are joined. The rules for unused and unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
 >

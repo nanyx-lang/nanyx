@@ -2,7 +2,7 @@
   (memory 1)
   (export "memory" (memory 0))
 
-  (func $classify (param $value i32) (result i32)
+  (func $classify__tags_ (param $value i32) (result i32)
     local.get $value
     i32.const 3
     call $__nanyx_equals_tags_ok
@@ -15,11 +15,10 @@
       )
     )
   )
-  (export "classify" (func $classify))
 
   (func $main (result i32)
     i32.const 3
-    return_call $classify
+    return_call $classify__tags_
   )
   (export "main" (func $main))
 

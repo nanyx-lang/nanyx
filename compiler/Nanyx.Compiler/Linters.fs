@@ -472,14 +472,60 @@ module UnusedImports =
                   Fixes = [ { Title = $"Remove the import of `{symbol.Name}`"; Edits = [ removal model.Source statement items item ] } ] }))
         |> List.ofSeq
 
+/// The official linter's `noTagInCommon` rule: `==` or `!=` on two values of closed tag types that share no tag, such
+/// as `#red == #some(1)`. The operands are joined, not made equal (see "Equality and well-known contexts" in the docs'
+/// work in progress), so this type-checks, and is always false (or always true).
+module NoTagInCommon =
+    let rule =
+        { Id = "noTagInCommon"
+          Title = "Comparison of types with no tag in common"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "`==` or `!=` on two values whose types are closed tag unions with no tag in common, so that the comparison is always false (or always true)." }
+
+    /// The names of the tags a value of the type `ty` can be, if it is a tag or a union closed to others.
+    let private closedTags (ty: Ty) : Set<string> option =
+        let tagName (item: Ty) =
+            match Unifier.unalias item with
+            | TyTag(name, _) -> Some name
+            | _ -> None
+        match Unifier.unalias ty with
+        | TyTag(name, _) -> Some (Set.singleton name)
+        | TyUnion items when items |> List.forall (tagName >> Option.isSome) -> Some (items |> List.choose tagName |> Set.ofList)
+        | _ -> None
+
+    let lint (model: SemanticModel) : Report list =
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.expressionsWithin
+        |> List.choose (fun expr ->
+            match expr.Kind with
+            | BinaryOp(op, left, right) when EqualityOperators.isOperator op ->
+                match model.Types |> Map.tryFind left.Id, model.Types |> Map.tryFind right.Id with
+                | Some leftTy, Some rightTy ->
+                    match closedTags leftTy, closedTags rightTy with
+                    | Some leftTags, Some rightTags when (Set.intersect leftTags rightTags).IsEmpty ->
+                        let tys = Unifier.tysToDisplayStrings Ascii [ leftTy; rightTy ]
+                        let always = if op = EqualityOperators.equals then "false" else "true"
+                        Some
+                            { Rule = rule.Id
+                              Span = expr.Span
+                              Message = $"'{tys.[0]}' and '{tys.[1]}' have no tag in common, so this is always {always}"
+                              Related = []
+                              Fixes = [] }
+                    | _ -> None
+                | _ -> None
+            | _ -> None)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
-          Rules = [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule ]
+          Rules = [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule ]
           Lint =
             fun model ->
-                UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model }
+                UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
+                @ NoTagInCommon.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

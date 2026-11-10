@@ -40,7 +40,7 @@ let private textAt (source: string) (span: SourceSpan) = source.Substring(span.S
 let ``The official linter is registered, and runs only when turned on`` () =
     let official = Assert.Single(Linters.all)
     Assert.Equal("default", official.Name)
-    Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports" ], official.Rules |> List.map (fun rule -> rule.Id))
+    Assert.Equal<string list>([ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon" ], official.Rules |> List.map (fun rule -> rule.Id))
     // Linters are opt-in: compiling without saying which to run runs none.
     Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
     Assert.Empty((compileWithOfficial source).Diagnostics)
