@@ -546,7 +546,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let scratch = dbgLocal ()
             match value.Kind with
             | TagExpr(name, None) -> k (mk (Dbg(ATag name, DbgTag(name, scratch))) ty)
-            | TagExpr(name, Some payload) ->
+            | TagExpr(name, Some payload) when this.TypeIn scope payload = IrInt ->
+                // The host function prints the payload as an int, so only an int payload goes this way.
                 this.Atoms scope [ payload ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgTagPayload(name, scratch))) ty))
             | _ ->
                 // For any value but a literal, the old path declares the locals it would print a tag with.
@@ -559,10 +560,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | IrString -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgString(scratch, holeDepth))) ty))
                 | IrFloat -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgFloat(scratch, holeDepth))) ty))
                 | IrInt
-                | IrBool
                 | IrUnit -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgNumber(scratch, holeDepth))) ty))
+                | IrBool
                 | IrTags _ ->
-                    // A tag value prints as `"{value}"` would: evaluated into a hole, a level deeper.
+                    // A bool or a tag value prints as `"{value}"` would: evaluated into a hole, a level deeper.
                     let holeType = this.HoleType scope value
                     let hole = newVar (Interpolation.holeLocalName scope.InterpolationDepth 0) InterpolationHole (tyOf value)
                     this.Complex { scope with InterpolationDepth = scope.InterpolationDepth + 1 } value (fun lowered ->

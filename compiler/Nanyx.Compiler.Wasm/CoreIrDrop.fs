@@ -119,6 +119,8 @@ let collect (functions: Function list) : Drops =
         | ForEach loop ->
             variable loop.Element
             expr loop.Body
+        // These print through a string of their own, which they drop once printed.
+        | Dbg(_, (DbgFloat _ | DbgTagValue _)) -> add IrString
         | CallRuntime(name, [ first; _ ], _) when name = Helpers.listConcat ->
             match atomType first with
             | IrList element when isHeapType element && not (listConcats.Contains element) -> listConcats.Add element
