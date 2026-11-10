@@ -78,7 +78,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | TuplePattern ps -> TuplePattern(List.map pattern ps)
             | AndPattern ps -> AndPattern(List.map pattern ps)
             | RecordPattern(n, ps) -> RecordPattern(n, List.map pattern ps)
-            | RecordMemberPattern fields -> RecordMemberPattern(fields |> List.map (fun (n, p) -> n, pattern p))
+            | RecordMemberPattern(fields, hasRest) -> RecordMemberPattern(fields |> List.map (fun (n, p) -> n, pattern p), hasRest)
             | ListPattern(ps, rest) -> ListPattern(List.map pattern ps, Option.map pattern rest)
             | ListSplatMiddle(before, after) -> ListSplatMiddle(List.map pattern before, List.map pattern after)
             | RangePattern(a, b) -> RangePattern(expr a, expr b)

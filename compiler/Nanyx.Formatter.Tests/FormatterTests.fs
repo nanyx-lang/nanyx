@@ -126,6 +126,11 @@ let ``And-patterns are printed as written`` () =
     unchanged (lines [ "def i = {"; "  | #some (a & b) -> 1"; "  | _ -> 2"; "}" ])
 
 [<Fact>]
+let ``Record patterns by member name keep their ...`` () =
+    unchanged (lines [ "def f = {"; "  | (name = \"Alice\", ...) -> 1"; "  | (name = n, age = a) -> 2"; "}" ])
+    Assert.Equal("def g = { | (a = 1, ...) -> 1 }\n", format "def g = { | ( a = 1 ,... ) -> 1 }")
+
+[<Fact>]
 let ``A shorthand lambda's spacing is tidied`` () =
     Assert.Equal("def a = xs \\map { * 2 }\n", format "def a = xs \\map {   *   2   }")
     Assert.Equal("def b = { .name }\n", format "def b = {.name}")

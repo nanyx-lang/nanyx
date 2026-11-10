@@ -345,7 +345,7 @@ module Compiler =
         | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesInPattern
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesInPattern
         | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesInPattern
-        | RecordMemberPattern members -> members |> List.collect (snd >> referencedNamesInPattern)
+        | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencedNamesInPattern)
         | TagPattern(_, None)
         | LiteralPattern _
         | IdentifierPattern _
