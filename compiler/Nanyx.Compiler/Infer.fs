@@ -924,15 +924,26 @@ let private useInstance (env: TypeEnv) (state: InferState) (value: Expression) (
         | None -> env, state
     | _ -> bindInstances env state (contextsOfValue state valueTy)
 
-/// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is `Eq`
-/// (see `EqualityOperators.atCall`). `hasInstance` says whether an `Eq` of a type variable is in scope.
-let private equalityInstanceAtCall (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) (hasInstance: Ty -> bool) : EqualityOperators.CallInstance option =
-    match argTys with
+/// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is a
+/// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type variable is in scope.
+let private wellKnownInstanceAtCall (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list) (hasInstance: Ty -> bool) =
+    match argTys, WellKnownContexts.tryFind ctxName with
     // Without the prelude there is no instance of the compiler's own to pass.
-    | [ ty ] when ctxName = EqualityOperators.context && (TypeEnv.tryFind EqualityOperators.builtInFunction env).IsSome ->
-        let hasAttached = (tryResolveAttachedFunction env ty EqualityOperators.equals).IsSome
-        Some (EqualityOperators.atCall hasAttached hasInstance ty)
+    | [ ty ], Some wellKnown when (TypeEnv.tryFind wellKnown.BuiltInFunction env).IsSome ->
+        let hasAttached = not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty wellKnown.Member).IsSome
+        Some (wellKnown, WellKnownContexts.atCall wellKnown hasAttached hasInstance ty)
     | _ -> None
+
+/// The instance of `Ord` the ordering operator `op` at `span` reads on values of a type, other than the compiler's own
+/// (see `OrderingOperators.InstanceOf`): one in scope, or else one built from the `compare` attached to a type that is
+/// not a built-in one (see `WellKnownContexts.isBuiltIn`).
+let private orderingInstance (op: string) (span: SourceSpan) : OrderingOperators.InstanceOf = fun env state ty ->
+    match instanceInScope env state OrderingOperators.context [ ty ] with
+    | Some written -> Ok (Some (InstanceInScope written), state)
+    | None when not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty WellKnownContexts.ordering.Member).IsSome ->
+        synthesizeInstance env state op OrderingOperators.context [ ty ] span
+        |> Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)
+    | None -> Ok (None, state)
 
 /// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
 /// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
@@ -950,11 +961,13 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
                     let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
                     let argTys, argTysAsRead, current = contextArgTysAtCall current signature scheme.Type calleeTy args
-                    // `Eq` of a type with no `==` attached is the compiler's own (see `EqualityOperators.resolveCall`).
-                    let equality =
-                        equalityInstanceAtCall env current ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
-                        |> Option.bind (EqualityOperators.resolveCall env current call name calleeSpan found contexts.Length argTys.Head)
-                    match instanceInScope env current ctxName argTys, equality with
+                    // A well-known context of a type with no member attached is the compiler's own (see
+                    // `WellKnownContexts.resolveCall`).
+                    let wellKnown =
+                        wellKnownInstanceAtCall env ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
+                        |> Option.bind (fun (wellKnown, instance) ->
+                            WellKnownContexts.resolveCall wellKnown env current call name calleeSpan found contexts.Length argTys.Head instance)
+                    match instanceInScope env current ctxName argTys, wellKnown with
                     | Some written, _ -> Ok (found @ [ Some (InstanceInScope written) ], current)
                     | None, Some resolved -> resolved
                     // A hole of a built-in type is written by the backend, not by the prelude's `Int.toString` and the
@@ -991,36 +1004,41 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
 /// type it is for, as a call does. A hole finds its instance as `InterpolationHoles.resolvePending` says.
 let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) : Result<TypeExpr option * InferState, Diagnostic list> =
-    let comparisons = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && EqualityOperators.isPending pending)
+    let operators (isPending: PendingContextInstance -> bool) = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && isPending pending)
+    let comparisons, orderings = operators EqualityOperators.isPending, operators OrderingOperators.isPending
     ContextInference.resolvePending state name symbol scheme (fun pending argTys current ->
         let synthesize env =
             if canSynthesize argTys then
                 Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
             else None
         let defScheme def = TypeEnv.tryFind def env
+        let hasInstanceIn env ty = (instanceInScope env current pending.Context [ ty ]).IsSome
         if InterpolationHoles.isHole pending.Callee then
             Some (InterpolationHoles.resolvePending (fun env -> instanceInScope env current) synthesize defScheme current pending argTys)
         elif EqualityOperators.isPending pending then
-            Some (EqualityOperators.resolvePending (fun env ty -> (instanceInScope env current pending.Context [ ty ]).IsSome) defScheme current pending argTys)
+            Some (EqualityOperators.resolvePending hasInstanceIn defScheme current pending argTys)
+        elif OrderingOperators.isPending pending then
+            Some (OrderingOperators.resolvePending (orderingInstance pending.Callee pending.Span) hasInstanceIn defScheme current pending argTys)
         else
-            // The def now requires `Eq` of each of its variables the call compares values of. A call left to the end of
-            // the module needs an instance for each variable of the type the def around it writes.
+            // The def now requires a well-known context of each of its variables the call compares values of. A call left
+            // to the end of the module needs an instance for each variable of the type the def around it writes.
             let scopeEnv, annotatedDef = current.HoleScopes |> Map.tryFind pending.Call |> Option.defaultValue (env, None)
             let declaredVars = annotatedDef |> Option.bind defScheme |> Option.map _.Quantified |> Option.defaultValue Set.empty
             let hasInstance (ty: Ty) =
                 match ty with
-                | TyVar v when declaredVars.Contains v.Id -> (instanceInScope scopeEnv current pending.Context [ ty ]).IsSome
+                | TyVar v when declaredVars.Contains v.Id -> hasInstanceIn scopeEnv ty
                 | _ -> true
-            match equalityInstanceAtCall env current pending.Context argTys hasInstance with
-            | Some (EqualityOperators.Open _) -> Some (Error pending.Errors)
-            | Some (EqualityOperators.NoInstance reason) ->
-                Some (Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (EqualityOperators.noInstanceAtCall pending.Callee (List.head argTys) reason) ])
-            | Some EqualityOperators.BuiltIn -> Some (Ok (Some (InstanceSynthesized EqualityOperators.builtInMembers), current))
+            match wellKnownInstanceAtCall env pending.Context argTys hasInstance with
+            | Some (_, WellKnownContexts.Open _) -> Some (Error pending.Errors)
+            | Some (wellKnown, WellKnownContexts.NoInstance reason) ->
+                Some (Error (WellKnownContexts.error pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
+            | Some (wellKnown, WellKnownContexts.BuiltIn) -> Some (Ok (Some (InstanceSynthesized (WellKnownContexts.builtInMembers wellKnown)), current))
             | _ when InterpolationHoles.passesBuiltIn env pending.Context argTys ->
                 Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
             | _ -> synthesize env |> Option.map (Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)))
     |> Result.map (fun (annotation, resolved) ->
-        annotation, EqualityOperators.callMembers (fun ty -> inputTypeFromArgs [ ty; ty ]) comparisons resolved)
+        let inputOf ty = inputTypeFromArgs [ ty; ty ]
+        annotation, resolved |> EqualityOperators.callMembers inputOf comparisons |> OrderingOperators.callHelpers inputOf orderings)
 
 /// Checks `call`, a call to `name` that inference has just typed, when `name` is a local function that compares values
 /// of type variables it is generic in: each needs an `Eq` of the type it is at the call (see
@@ -1036,8 +1054,8 @@ let private checkLocalComparisons (env: TypeEnv) (state: InferState) (call: Expr
             |> Result.bind (fun (current: InferState) ->
                 let ty = resolveSoFar current ty
                 let hasInstance ty = (instanceInScope env current EqualityOperators.context [ ty ]).IsSome
-                match equalityInstanceAtCall env current EqualityOperators.context [ ty ] hasInstance with
-                | Some instance -> EqualityOperators.checkLocalCall env current call name calleeSpan ty instance
+                match wellKnownInstanceAtCall env EqualityOperators.context [ ty ] hasInstance with
+                | Some (_, instance) -> EqualityOperators.checkLocalCall env current call name calleeSpan ty instance
                 | None -> Ok current)) (Ok state)
     | _ -> Ok state
 
@@ -1132,8 +1150,8 @@ let private generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSche
         (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
         |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
 
-/// Arithmetic and ordering work on `int` and `float`. Without numeric type classes yet, an operation is on
-/// floats when either operand is already known to be one, and defaults to `int` otherwise.
+/// Arithmetic works on `int` and `float`. Without numeric type classes yet, an operation is on floats when either
+/// operand is already known to be one, and defaults to `int` otherwise. (Ordering is `OrderingOperators`'.)
 let private numericOperandType (state: InferState) (leftTy: Ty) (rightTy: Ty) =
     let isFloat ty =
         match Unifier.unalias (resolveSoFar state ty) with
@@ -1579,11 +1597,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | BinaryOp(op, _, _) when ArithmeticOperators.isOperator op ->
                     ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
                     |> Result.map (fun numericConstrained -> mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
-                | BinaryOp(op, _, _) when ["<"; ">"; "<="; ">="] |> List.contains op ->
-                    let numericConstrained =
-                        constrained
-                        |> addConstraint leftExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
-                    Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, numericConstrained)
+                | BinaryOp(op, _, _) when OrderingOperators.isOperator op ->
+                    OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
+                    |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
                 | BinaryOp(op, _, _) when EqualityOperators.isOperator op ->
                     // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
                     // tags. Anything else is made equal.

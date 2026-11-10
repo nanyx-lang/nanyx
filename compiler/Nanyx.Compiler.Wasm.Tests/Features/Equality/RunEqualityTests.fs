@@ -3,19 +3,6 @@ module TranspilerWasmTests.Features.Equality.Run
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// A program that prints `T` or `F` for each of `comparisons`, one per line, after the definitions in `definitions`.
-let private comparing (definitions: string list) (comparisons: string list) =
-    [ "import nanyx/console"
-      ""
-      "def show = { b -> if b then \"T\" else \"F\" }"
-      yield! definitions
-      ""
-      "@entry"
-      "def main = {"
-      "  def s = \"a\" ++ \"a\""
-      yield! comparisons |> List.map (fun comparison -> $"  println(show({comparison}))")
-      "}" ]
-    |> String.concat "\n"
 
 [<Fact>]
 let ``Run - records and tuples compare field by field`` () =

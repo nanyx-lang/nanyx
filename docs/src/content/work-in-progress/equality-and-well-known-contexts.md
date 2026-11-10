@@ -4,20 +4,27 @@ description: "What equality is, and which contexts the compiler knows about"
 order: 8
 ---
 
-> **Status: agreed, partly implemented.** `Eq(a)` is in the prelude, `==` and `!=` require it, and functions have no
-> equality; [What is implemented](#what-is-implemented) says what is done and what is left of
-> [#532](https://github.com/nanyx-lang/nanyx/issues/532). The decisions are listed under
-> [Open questions](#open-questions); one small question remains. The code references under
-> [What existed before](#what-existed-before) are at commit `b84acc0`.
+> **Status: agreed, partly implemented.** `Eq(a)` and `Ord(a)` are in the prelude: `==` and `!=` require `Eq`, `<`,
+> `<=`, `>` and `>=` require `Ord`, functions have no equality, and records and tags have no order.
+> [What is implemented](#what-is-implemented) says what is done and what is left of
+> [#532](https://github.com/nanyx-lang/nanyx/issues/532) and [#476](https://github.com/nanyx-lang/nanyx/issues/476).
+> The decisions are listed under [Open questions](#open-questions); one small question remains. The code references
+> under [What existed before](#what-existed-before) are at commit `b84acc0`.
 
 # What is implemented
 
-`Nanyx.Compiler/EqualityOperators.fs` holds the checks; the prelude declares `Eq(a)` and `__equals`.
+`Nanyx.Compiler/WellKnownContexts.fs` holds what the two contexts share: which types the compiler has an instance of
+its own for, how a call that requires one finds it, and how an operator on a type with a variable in it is checked
+once the type is known. `EqualityOperators.fs` and `OrderingOperators.fs` hold what is particular to each context's
+operators. The prelude declares `Eq(a)` and `__equals`, and `Ord(a)`, `__compare` and the four functions the ordering
+operators call.
+
+## Equality
 
 - **`Eq(a)` is a prelude context**, `` context Eq(a) = (`==`: (a, a) -> bool) ``.
 - **Functions have no equality.** `==` or `!=` on a function, or on a record, list, tag or nominal type that holds
   one, is `NYX0205` at the comparison, naming the part that is a function. So is passing such a type to a function
-  that requires `Eq`.
+  that requires `Eq`, unless the type attaches its own `==`, which is found first.
 - **Generic code says it compares.** `==` on a type variable of a def that writes its type needs `[Eq(a)]` in that
   type. A def that does not write its type has the requirement inferred, and its `==` then calls the member of the
   instance it is passed. A requirement on a type built from a variable reduces to the variable: `==` on a `list(a)`
@@ -28,7 +35,7 @@ order: 8
   generic function that compares by structure at the type it is specialised for.
 - **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
-  the rule, with a list of the members it covers for `compare` and `hash` to join.
+  the rule, with a list of the members it covers, `==` and `compare`, for `hash` to join.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
@@ -54,6 +61,40 @@ Not done yet:
   ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
 - **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
   function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
+
+## Ordering
+
+- **`Ord(a)` is a prelude context**, `context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)`, and the
+  four operators read it, so they cannot disagree. `Ord` does not require `Eq`.
+- **The compiler's own orders** numbers, bools (`false` first), strings (by bytes), and tuples and lists of them,
+  lexicographically. On floats the operators follow IEEE 754, while `__compare`, the member of the compiler's own
+  instance, and `Float.compare` are a total order with NaN last, so `List.sort` of floats is well defined. The
+  backend writes one ordering function per type (`CoreIrOrdering.fs`), reached through the intrinsic
+  `__nanyx_compare`. `Int`, `Float`, `Bool` and `String` each attach a `compare` that is the compiler's own, as a
+  function to call; a built-in type's `Ord` is always the compiler's own, so nothing reads an attached `compare` for one.
+- **Records, tags and functions have no order.** `<` on one, or on a tuple or list that holds one, is `NYX0205` at
+  the operator, naming the part; so is passing one to a function that requires `Ord`. The message for a record or
+  tag says to attach `compare` to a nominal type, or to sort by a key.
+- **Generic code says it orders**, as for `Eq`: `<` on a type variable needs `[Ord(a)]` in a written type, and has
+  it inferred in a def that does not write one. `<` on a `list(a)` needs `Ord(a)`.
+- **Instances.** An operator, like a call, finds an instance in scope (a `use`, decision 2, or the enclosing
+  signature, which also covers a concrete `"a" < "b"`), then the `compare` attached to a type that is not a built-in
+  one, then the compiler's own. Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
+  (and `<=`, `>`, `>=` call `__lessOrEqual`, `__greater` and `__greaterOrEqual`), which is passed the instance.
+- **Only nominal and protected types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
+  as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
+- **Lists.** `List.sort` and `List.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `List.min` and
+  `List.max`, which give `#emptyList` for an empty list, as `List.head` does.
+
+Not done yet, as for `Eq`:
+
+- **Structural derivation that looks up each part.** `<` on a `list($Version)` is an error, as `$Version` is a record
+  inside, though it attaches `compare`; `List.sort` of one works, through the instance. Inside a function that
+  requires `[Ord(a)]`, `<` on a `list(a)` orders the elements by their structure, not through the instance: a record
+  there is ordered field by field, and a tag is reported by the backend, as `NYX0301`.
+- **Calls to local functions are not checked for `Ord`** as they are for `Eq`: a local generic function that orders
+  its parameters is ordered by the backend at each type it is called with, and calling it with records is reported
+  there, as `NYX0301`.
 
 # What existed before
 

@@ -95,8 +95,8 @@ module internal ContextInference =
     /// once it was inferred, now that it is generalised as `scheme`. A call whose arguments turned out to be variables
     /// of the def's own type finds the instance the def then requires itself; one whose arguments turned out to be
     /// types finds the instance `synthesize` finds or builds for them, if it can (or none, for a call it reports as
-    /// failed itself). A call that requires `Eq` of a type with one of the def's variables in it, `Eq(list(a))`, makes
-    /// the def require `Eq` of the variable. The def is registered as requiring
+    /// failed itself). A call that requires a well-known context of a type with one of the def's variables in it,
+    /// `Eq(list(a))`, makes the def require it of the variable. The def is registered as requiring
     /// the contexts it was found to, and the annotation that would have said so is returned.
     let resolvePending
         (state: InferState)
@@ -113,12 +113,13 @@ module internal ContextInference =
             let vars = argTys |> List.map (function TyVar v when scheme.Quantified.Contains v.Id -> Some v | _ -> None)
             if vars |> List.forall Option.isSome then Some (vars |> List.map Option.get) else None
         let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.map _.Id
-        // `Eq` of a type with more to it than a variable is `Eq` of each of the def's variables it compares values of.
+        // A well-known context of a type with more to it than a variable is that context of each of the def's
+        // variables it compares values of: `Eq(list(a))` is `Eq(a)`.
         let reduced (p: PendingContextInstance) (argTys: Ty list) =
-            if p.Context <> EqualityOperators.context then []
+            if (WellKnownContexts.tryFind p.Context).IsNone then []
             else
                 argTys
-                |> List.collect EqualityOperators.comparedVars
+                |> List.collect WellKnownContexts.comparedVars
                 |> List.filter (fun v -> scheme.Quantified.Contains v.Id)
                 |> List.map (fun v -> p.Context, [ v ])
         let required =
@@ -139,8 +140,8 @@ module internal ContextInference =
                 | Some vars, Some (contexts, _) ->
                     let context = contexts.[required |> List.findIndex (fun required -> key required = key (p.Context, vars))]
                     Ok { current with ContextInstances = withInstance p (InstanceInScope context) current.ContextInstances }
-                // A comparison in a def whose type cannot be written is the compiler's own, as it is in a local function.
-                | Some _, None when not (EqualityOperators.isPending p || p.ChecksOnly) -> Error p.Errors
+                // An operator in a def whose type cannot be written is the compiler's own, as it is in a local function.
+                | Some _, None when not (WellKnownContexts.isOperatorPending p || p.ChecksOnly) -> Error p.Errors
                 | _ ->
                     match synthesize p argTys current with
                     | Some synthesized ->

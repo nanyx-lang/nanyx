@@ -29,6 +29,7 @@
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
     <Compile Include="Features\Matches\NestedTagPatternTests.fs" />
+    <Compile Include="Features\Ordering\OrderingTests.fs" />
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />
     <Compile Include="Features\StdLib\StackSafetyTests.fs" />

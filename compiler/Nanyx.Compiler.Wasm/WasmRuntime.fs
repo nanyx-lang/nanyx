@@ -18,6 +18,9 @@ module Helpers =
     /// Not a helper: `==` on a record, a list or tags, which calls the equality function of its operands' type (see
     /// `CoreIrEquality`).
     let valueEquals = "__nanyx_equals"
+    /// Not a helper: the ordering intrinsic, and `<` on a string, a tuple or a list, which call the ordering function
+    /// of their operands' type (see `CoreIrOrdering`).
+    let valueCompare = NyxCompiler.Intrinsics.compare
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
     /// `%` on floats, which WebAssembly has no instruction for.

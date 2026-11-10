@@ -48,3 +48,27 @@ let offsetOf (source: string) (text: string) (occurrence: int) (within: int) =
         elif remaining = 0 then index
         else find (index + 1) (remaining - 1)
     find 0 occurrence + within
+
+/// `source` compiled, with no diagnostics.
+let compileClean (source: string) =
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    result.Typed.Value
+
+/// The one diagnostic `source` has, which must be a missing context: its message, and the text it is reported at.
+let missingContext (source: string) =
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+        let span = diagnostic.Span.Value
+        diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+/// The instances the calls in `typed`'s own module found, by each call's node. `ContextInstances` also holds those of
+/// the definitions the module imports, the prelude's among them, for the backend.
+let ownContextInstances (typed: TypedModule) =
+    typed.ContextInstances |> Map.filter (fun node _ -> typed.ExprTypes.ContainsKey node)
+
+/// Every instance the calls (and holes) in `typed`'s own module found, in the order they are written.
+let instancesOf (typed: TypedModule) =
+    ownContextInstances typed |> Map.toList |> List.sortBy fst |> List.map snd |> List.concat |> List.choose id

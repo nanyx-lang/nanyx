@@ -1,4 +1,4 @@
-def inRange = { x, lo, hi -> x >= lo and x <= hi }
+def inRange: int, int, int -> bool = { x, lo, hi -> x >= lo and x <= hi }
 
 def check = { a, b ->
     if a or b then 1 else 0

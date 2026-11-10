@@ -6,10 +6,15 @@ open NyxCompiler.InferState
 /// Which types may attach the members of the well-known contexts (see "Equality and well-known contexts" in the docs'
 /// work in progress). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
 /// whether or not the alias it is written with is known: only a nominal or protected type, `$Email`, may attach its
-/// own `==`. `!=` is never attached by anything: it is always `not (a == b)`.
+/// own `==` or `compare`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's order is
+/// always the compiler's own, so a `compare` attached to one, as the prelude's `Int.compare` is, is an ordinary function
+/// that the ordering operators and `Ord` do not read (see `WellKnownContexts.isBuiltIn`).
 module internal AttachedOperators =
-    /// The members only a nominal or protected type may attach, each with what it decides, as a message says it.
-    let private nominalOnly = [ EqualityOperators.equals, "equality" ]
+    /// The members only a nominal or protected type may attach, each with what it decides and what a structural type's
+    /// is, as a message says them, and whether a built-in type may attach it too.
+    let private nominalOnly =
+        [ EqualityOperators.equals, "equality", "its equality is always that of its structure", false
+          WellKnownContexts.ordering.Member, "order", "it is only ordered by its structure, and records and tags have none", true ]
 
     /// What a type that a definition is attached to is, as far as these rules care.
     type private AttachedTo =
@@ -39,9 +44,9 @@ module internal AttachedOperators =
             if memberName = EqualityOperators.notEquals then
                 error $"'{name}' cannot be defined: '!=' is always 'not (a == b)'. Attach '==' instead"
             else
-                match nominalOnly |> List.tryFind (fst >> (=) memberName), kindOf state typeName with
-                | Some (_, decides), Some Structural ->
-                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so its {decides} is always that of its structure. Make it nominal ('${typeName}') to define its own {decides}"
-                | Some (_, decides), Some (BuiltIn builtIn) ->
+                match nominalOnly |> List.tryFind (fun (attached, _, _, _) -> attached = memberName), kindOf state typeName with
+                | Some (_, decides, structural, _), Some Structural ->
+                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so {structural}. Make it nominal ('${typeName}') to define its own {decides}"
+                | Some (_, decides, _, false), Some (BuiltIn builtIn) ->
                     error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its {decides} is the compiler's own. Make a nominal type of it to define its own {decides}"
                 | _ -> Ok ()

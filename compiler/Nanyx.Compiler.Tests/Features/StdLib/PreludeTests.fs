@@ -163,13 +163,6 @@ let ``The prelude's distinct, sortBy and unfold have the docs' types`` () =
     Assert.Equal("list(string)", typeOf "counted")
 
 [<Fact>]
-let ``List.sortBy needs an int key`` () =
-    let result = Compiler.compile "def sorted = List.sortBy([\"b\", \"a\"], { s -> s })"
-    let diagnostic = Assert.Single result.Diagnostics
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.Contains("string vs int", diagnostic.Message)
-
-[<Fact>]
 let ``A module's own definition wins over the prelude's`` () =
     let result = Compiler.compile "def proc = 5\ndef x = proc + 1"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
