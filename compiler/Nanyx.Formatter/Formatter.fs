@@ -374,6 +374,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ expr operandPosition record; text " with "; commaJoin (List.mapi update fields) ]
         | ForSyntax.Call(iterables, loop, parameters, _) when parameters = List.init iterables.Length (fun index -> (ForSyntax.element (index + 1), None)) ->
             forDoc iterables loop
+        | MapSyntax.Call entries -> mapDoc e.Span entries
         | FunctionCall(n, nameSpan, args) ->
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
@@ -524,6 +525,19 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text "["; nest (cat [ hard; sequence false span.Start span.End children ]); hard; text "]" ]
         else
             bracketed "[" "]" (List.mapi itemDoc items)
+
+    /// A map literal, `[k => v, ...]`, laid out as a list's items are.
+    and mapDoc (span: SourceSpan) (entries: (Expression * Expression) list) : Doc =
+        let count = entries.Length
+        let entryDoc index (key: Expression, value: Expression) =
+            cat [ expr { full with Tail = false } key; text " => "; expr { full with Tail = (index = count - 1) } value ]
+        if valid span && hasCommentsIn span.Start span.End then
+            let children =
+                entries
+                |> List.mapi (fun index ((key: Expression, value: Expression) as entry) -> key.Span.Start, value.Span.End, fun () -> entryDoc index entry)
+            cat [ text "["; nest (cat [ hard; sequence false span.Start span.End children ]); hard; text "]" ]
+        else
+            bracketed "[" "]" (List.mapi entryDoc entries)
 
     /// Items between brackets, on one line separated by commas if they fit, or else one per line, separated by line
     /// breaks, with the closing bracket on a line of its own (as a record's fields or a list's items may be written):

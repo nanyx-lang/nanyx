@@ -22,6 +22,7 @@
     <Compile Include="Features\Integration\IntegrationTests.fs" />
     <Compile Include="Features\Lambdas\LambdaTests.fs" />
     <Compile Include="Features\Literals\LiteralsTests.fs" />
+    <Compile Include="Features\Maps\MapLiteralTests.fs" />
     <Compile Include="Features\Matches\MatchTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />

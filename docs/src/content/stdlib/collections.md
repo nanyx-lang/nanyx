@@ -10,7 +10,7 @@ The `collections` module provides functions for working with lists, maps, sets, 
 
 Since lists are immutable, all transform operations on lists return new lists. When nothing else refers to the list you transform, the new list may be built in the old one's memory: `List.map` rewrites its cells in place (see [Reference counting](../foundations/reference-counting#reuse-in-place)).
 
-These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed (all but `groupBy`, `select` and `selectOne`, which are not there yet).
+These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed (all but `select` and `selectOne`, which are not there yet).
 
 Every one of them is stack-safe: `map`, `filter`, `take`, `flatten`, `zip`, `sortBy`, `unfold` and the rest work on a list of any length without running out of stack. Each walks the list with [tail calls](../tour/functions#tail-recursion), and those that build a list build it in reverse and reverse it at the end.
 
@@ -173,17 +173,15 @@ Reduces a list to a single value. Runs through the list backwards (from right to
 ## groupBy
 
 ```nanyx
-List.groupBy: (list(a), (a -> b)) -> map(b, list(a))
+List.groupBy: [Eq(b)] (list(a), (a -> b)) -> map(b, list(a))
 ```
 
-Groups elements of a list by a key function, returning a map from keys to lists of elements.
+Groups elements of a list by a key function, returning a [map](#map) from each key to the elements that have it, in order. The keys are in the order they first appear. Keys are compared with `==`.
 
 ```nanyx
 [1, 2, 3, 4] \List.groupBy { % 2 }
--- Map [ 0 => [2, 4], 1 => [1, 3] ]
+-- [1 => [1, 3], 0 => [2, 4]]
 ```
-
-Not in the prelude yet: it waits on the `map` type ([#477](https://github.com/nanyx-lang/nanyx/issues/477)).
 
 ---
 
@@ -417,3 +415,113 @@ Combines two lists element-by-element into tuples. Length is the smaller input l
 List.zip([1, 2, 3], ["a", "b"])
 -- [(1, "a"), (2, "b")]
 ```
+
+# Map
+
+A `map(k, v)` holds one value of type `v` for each of its keys, of type `k`. It is written with the square-bracket literal syntax and `=>`, and calling a map looks a key up:
+
+```nanyx
+def prices = ["tea" => 3, "cake" => 4]
+
+prices("tea")   -- #some(3)
+prices("pie")   -- #notFound
+```
+
+A key written twice in a literal holds the value written last. `[]` is always the empty list; the empty map is `Map.empty`. `for prices | name, price -> ...` walks a map's entries.
+
+Keys are compared with `==`, so every function that looks one up requires an [`Eq`](../advanced/contexts#eqa) of the key type: numbers, strings, tags, records and tuples can all be keys, but a type that holds a function cannot. Two maps cannot be compared with `==` yet ([#618](https://github.com/nanyx-lang/nanyx/issues/618)).
+
+These functions are attached to `Map`, so `m \insert(k, v)` resolves to `Map.insert` when `m` is a map, and are in the [prelude](../tour/modules#modules-in-the-standard-library). Maps are immutable: every function gives back a new map. For now a map keeps its entries in the order their keys were first added, and a lookup takes time in proportion to its size (see [Maps and sets](../work-in-progress/maps-and-sets)).
+
+## empty
+
+```nanyx
+Map.empty: map(k, v)
+```
+
+The map with no keys.
+
+---
+
+## fromList
+
+```nanyx
+Map.fromList: [Eq(k)] list((k, v)) -> map(k, v)
+```
+
+The map holding each key and value of a list of pairs. Of two pairs with the same key, the later wins.
+
+```nanyx
+Map.fromList([(1, "one"), (2, "two"), (1, "uno")])
+-- [1 => "uno", 2 => "two"]
+```
+
+---
+
+## toList
+
+```nanyx
+Map.toList: map(k, v) -> list((k, v))
+```
+
+The entries of a map, each a key and its value, in the order the keys were first added.
+
+---
+
+## get
+
+```nanyx
+Map.get: [Eq(k)] (map(k, v), k) -> #some(v) | #notFound
+```
+
+The value a map holds for a key, or `#notFound`. Calling the map, `m(key)`, is the same.
+
+```nanyx
+["a" => 1] \Map.get("a")
+-- #some(1)
+```
+
+---
+
+## containsKey
+
+```nanyx
+Map.containsKey: [Eq(k)] (map(k, v), k) -> bool
+```
+
+Whether a map holds a value for a key.
+
+---
+
+## insert
+
+```nanyx
+Map.insert: [Eq(k)] (map(k, v), k, v) -> map(k, v)
+```
+
+The map with a key holding a value, in place of any value it held before.
+
+```nanyx
+["a" => 1] \insert("b", 2) \insert("a", 10)
+-- ["a" => 10, "b" => 2]
+```
+
+---
+
+## remove
+
+```nanyx
+Map.remove: [Eq(k)] (map(k, v), k) -> map(k, v)
+```
+
+The map without a key or its value. A map that does not have the key is given back as it is.
+
+---
+
+## count
+
+```nanyx
+Map.count: map(k, v) -> int
+```
+
+The number of keys in a map.

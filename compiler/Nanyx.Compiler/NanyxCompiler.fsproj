@@ -18,6 +18,7 @@
     <Compile Include="TypeEnv.fs" />
     <Compile Include="Constraints.fs" />
     <Compile Include="Unifier.fs" />
+    <Compile Include="Maps.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="BranchJoin.fs" />
     <Compile Include="Visibility.fs" />

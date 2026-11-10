@@ -56,6 +56,7 @@ let private isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
     || name.Equals("list", StringComparison.OrdinalIgnoreCase)
     || name.Equals("seq", StringComparison.OrdinalIgnoreCase)
+    || Maps.isTypeName name
     || name = "Option"
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
@@ -90,6 +91,7 @@ let rec attachedTypeNames (ty: Ty) : string list =
     | TyPrimitive name -> [ string (Char.ToUpperInvariant name.[0]) + name.Substring 1; name ]
     | TyApply("list", _) -> [ "List" ]
     | TyApply("seq", _) -> [ "Seq" ]
+    | Maps.MapType _ -> [ Maps.moduleName ]
     | _ -> []
 
 /// The attached definition `x \funcName` calls: `Name.funcName` for the first name of `x`'s type that has one in
@@ -251,6 +253,8 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
                 | [single] -> single
                 | multiple -> tupleRecordType multiple
             TyApply("list", [elementTy]), current
+        elif Maps.isTypeName name && argTys.Length = 2 then
+            Maps.ofTypes argTys.[0] argTys.[1], current
         else
             match tryFindTypeDef name current with
             | Some info when not (isNominal info) ->
@@ -1216,6 +1220,12 @@ let private recordExprType (result: Result<TypedExpr * InferState, Diagnostic li
 /// with whatever its surroundings make of it, so checking carries on around it and this never gives `Error`. What
 /// inferring it did before it failed is dropped. The smallest expression that fails is the one recorded: one whose
 /// parts check but that does not itself (a call with the wrong number of arguments) is recorded whole.
+/// Whether a value of the type `ty` is a map, as far as `state` knows yet.
+let private isMap (state: InferState) (ty: Ty) =
+    match Unifier.unalias (resolveSoFar state ty) with
+    | Maps.MapType _ -> true
+    | _ -> false
+
 let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     let outer = state.Origin
     let origin = if SourceSpan.isNone expr.Span then outer else expr.Span
@@ -1354,7 +1364,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
         elif name = ForSyntax.builtIn then
             // `for xs, ys | arms`: the parser passes the iterables and a lambda of one element of each. Each iterable
-            // is a `list(a)`, a `seq(a)` or a `gen(a)`, and the loop is unit. It stops when the shortest iterable
+            // is a `list(a)`, a `seq(a)`, a `gen(a)` or a `map(k, v)`, and the loop is unit. It stops when the shortest iterable
             // does, so a `gen`, which may never end, is only walked in step with one that does.
             match expr.Kind with
             | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
@@ -1363,6 +1373,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     |> Result.map (fun (typedIterable, afterIterable) ->
                         match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
                         | TyApply(("seq" | "list" | "gen") as sequence, [ elementTy ]) -> (elementTy, sequence = "gen"), afterIterable
+                        // A map's elements are its entries, each a key and its value, in the order of `Map.toList`.
+                        | Maps.MapType(key, value) -> (tupleRecordType [ key; value ], false), afterIterable
                         | _ ->
                             let elementTy, next = freshVar afterIterable
                             (elementTy, false), addConstraint typedIterable.Type (listType elementTy) next)
@@ -1393,6 +1405,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Ok state ->
             match TypeEnv.tryFind name env with
             | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
+            | Some scheme when isMap state scheme.Type -> inferMapLookup env state expr (Expression.from expr (IdentifierExpr name)) spanOpt args
             | Some scheme ->
                 let mutable current = state
                 let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
@@ -1552,7 +1565,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     // dot was meant to reach a definition attached to its type, which is a pipe's to do.
                     let dot = name.LastIndexOf '.'
                     let receiver = if dot > 0 then name.Substring(0, dot) else ""
+                    let field = name.Substring(dot + 1)
                     match TypeEnv.tryFind receiver env with
+                    // `machine.inventory(name)`, where the field is a map, is a lookup in it.
+                    | Some scheme when dot > 0 && not (receiver.Contains '.')
+                                       && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isMap state) ->
+                        let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
+                        inferMapLookup env state expr map spanOpt args
                     | Some scheme when dot > 0 && not (receiver.Contains '.') ->
                         let memberName = name.Substring(dot + 1)
                         let receiverTy = resolveSoFar state scheme.Type
@@ -2204,6 +2223,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             Ok (mkTypedExpr expr ty None None None, next)
         else
             Error errors
+
+/// `expr`, a call of the map `map` with `args`: a lookup, read as the call `Map.get(map, args...)` (see `Maps`) and
+/// recorded in `ReadAs` to be written as it. The call keeps the node of `expr`, which is what its types and the
+/// instances it finds are recorded by.
+and private inferMapLookup (env: TypeEnv) (state: InferState) (expr: Expression) (map: Expression) (spanOpt: SourceSpan option) (args: Expression list) =
+    let lookup = { expr with Kind = FunctionCall(Maps.lookup, spanOpt, map :: args) }
+    inferExpr env state lookup
+    |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id lookup })
 
 /// `baseExpr.memberName`, where `expr` is that member access and `receiver` the base as written if it is a name: a
 /// record's field, or else a built-in property of the base's type as far as the code before it settles that type,

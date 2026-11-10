@@ -39,7 +39,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 |-----------------|-------------------|---------|
 | `List(a)` | `list(a)` | Indexable collections |
 | `Set(a)` | - | Membership checks |
-| `Map(k, v)` | `k -> #some(v) \| #notFound` | Key/value lookup (a map is callable, and calling it is a lookup) |
+| `Map(k, v)` | `map(k, v)` | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
 | `Collection(a)` | - | Any in-memory collection |
 | `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
 | `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |

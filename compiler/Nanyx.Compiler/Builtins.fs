@@ -59,6 +59,20 @@ module Intrinsics =
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
     /// total order, with NaN after every other float.
     let compare = prefix + "compare"
+    /// A map holding a list's entries, each a key and its value. The list is what the map holds, as it is: the prelude
+    /// keeps each key in it once.
+    let mapOfEntries = prefix + "map_of_entries"
+    /// The entries a map holds, as the list it was made of.
+    let mapEntries = prefix + "map_entries"
+
+    /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
+    let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries ]
+
+    let private keyVar = { Id = -2; Name = Some "k" }
+    let private valueVar = { Id = -3; Name = Some "v" }
+    let private entries = listOf (tuple [ TyVar keyVar; TyVar valueVar ])
+    let private map = Maps.ofTypes (TyVar keyVar) (TyVar valueVar)
+    let private overEntries (ty: Ty) = { Quantified = set [ keyVar.Id; valueVar.Id ]; Type = ty; Symbol = None }
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
@@ -75,6 +89,8 @@ module Intrinsics =
           floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy))
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy))
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy))
+          mapOfEntries, overEntries (TyFunc(entries, map))
+          mapEntries, overEntries (TyFunc(map, entries))
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None }
           compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy); Symbol = None } ]
 

@@ -368,6 +368,22 @@ module RangeSyntax =
         | FunctionCall(name, _, [ first ]) when name = builtIn -> Some (first, None)
         | _ -> None
 
+/// `[k => v, ...]` (see the collections page): a call to the prelude's "__map" with a list of the entries, each a
+/// tuple of its key and its value, in the order they are written.
+module MapSyntax =
+    let builtIn = "__map"
+
+    /// A map literal's entries, each its key and its value.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ Kind (ListExpr entries) ]) when name = builtIn ->
+            entries
+            |> List.map (function
+                | Kind (TupleExpr [ key; value ]) -> Some (key, value)
+                | _ -> None)
+            |> fun pairs -> if pairs |> List.forall Option.isSome then Some (pairs |> List.choose id) else None
+        | _ -> None
+
 /// `not x`: a call to the built-in "not" with its operand.
 module NotSyntax =
     let builtIn = "not"

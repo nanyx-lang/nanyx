@@ -414,16 +414,14 @@ let tupleOrParenExpr =
 //     a
 //     ...xs
 //   ]
+//
+// When every item is an entry, `key => value`, the literal is a map: a call to the prelude's `__map` with the list of
+// the entries as tuples (see `MapSyntax`).
 let listExpr =
     let item =
         (pstring "..." >>. ws >>. expression |>> Choice2Of2)
-        <|> (expression |>> Choice1Of2)
-    withSpan (
-        between
-            (pstring "[")
-            (ws >>. pstring "]")
-            (ws >>. opt (byCommaOrLine item) |>> Option.defaultValue []))
-    |>> fun (items, span) ->
+        <|> (expression .>>. opt (attempt (wsInline >>. pstring "=>") >>. ws >>. expression) |>> Choice1Of2)
+    let list (items: Choice<Expression, Expression> list) (span: SourceSpan) =
         // Each segment is a run of elements or a spread list.
         let segments =
             items
@@ -439,6 +437,22 @@ let listExpr =
         match segments with
         | [] -> Expression.at span (ListExpr [])
         | _ -> segments |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", left, right)))
+    withSpan (
+        between
+            (pstring "[")
+            (ws >>. pstring "]")
+            (ws >>. opt (byCommaOrLine item) |>> Option.defaultValue []))
+    >>= fun (items, span) ->
+        let entries = items |> List.choose (function Choice1Of2 (key, Some value) -> Some (key, value) | _ -> None)
+        if entries.IsEmpty then
+            items
+            |> List.map (function Choice1Of2 (element, _) -> Choice1Of2 element | Choice2Of2 spread -> Choice2Of2 spread)
+            |> fun items -> preturn (list items span)
+        elif entries.Length = items.Length then
+            let tuples = entries |> List.map (fun (key, value) -> Expression.from key (TupleExpr [ key; value ]))
+            preturn (Expression.at span (FunctionCall(MapSyntax.builtIn, None, [ Expression.at span (ListExpr tuples) ])))
+        else
+            fail "a map literal's items are all entries, written `key => value`"
 
 // Tag expression parser: #tagName or #tagName(expr)
 // The payload is written like a call's arguments: several values make a tuple, named ones a record, and none at
