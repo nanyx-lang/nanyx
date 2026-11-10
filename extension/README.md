@@ -18,7 +18,12 @@ from the Nanyx language server.
   does. A file that does not parse is left as it is. To format on save, set `"editor.formatOnSave": true`, or
   `"[nanyx]": { "editor.formatOnSave": true }` for Nanyx files only. Compilers released before formatting
   existed do not offer it.
-- Commands: **Nanyx: Download the compiler** and **Nanyx: Restart the language server**.
+- Running a file: the run button in a `.nyx` editor's title bar, or **Nanyx: Run the current file**, saves
+  the file and runs it with `nanyx run`, as a task in a terminal of its own, so the program can read from
+  stdin and Ctrl+C stops it. It uses the `nanyx` the language server runs from, and its working directory is
+  the file's workspace folder, or the file's own folder when it is in none.
+- Commands: **Nanyx: Run the current file**, **Nanyx: Download the compiler** and **Nanyx: Restart the
+  language server**.
 
 ## How the extension finds `nanyx`
 

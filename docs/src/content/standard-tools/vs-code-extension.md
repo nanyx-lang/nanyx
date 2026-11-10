@@ -13,6 +13,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and runs the 
 - completion of names, record fields, module members and import paths
 - quick fixes, such as adding the import for a standard-library name
 - **Format Document**, which formats the file as `nanyx format` does
+- a run button, which runs the file as `nanyx run` does
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
 
@@ -74,10 +75,19 @@ VS Code's own `editor.codeLens` and `editor.inlayHints.enabled` settings turn al
 
 **Format Document** formats a `.nyx` file with the [standard formatter](./formatter). A file that does not parse is left as it is. To format every time you save, set `editor.formatOnSave` to `true`, as in the example above.
 
+# Running a file
+
+The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current file** from the command palette, saves the file and runs it with `nanyx run`. The program runs in a terminal of its own in the panel, so it can read what you type, and Ctrl+C stops it. Running the file again uses the same terminal.
+
+The program's working directory is the workspace folder the file is in, or the file's own folder when it is in none. The file runs as a script, even when it is part of a package.
+
+The command has no keyboard shortcut. To give it one, look for it in **Keyboard Shortcuts**.
+
 # Commands
 
 | Command | What it does |
 |---------|--------------|
+| **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |
 | **Nanyx: Restart the language server** | Stops the server and starts it again. |
 
