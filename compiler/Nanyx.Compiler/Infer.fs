@@ -1547,7 +1547,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Ok (leftExpr, rightExpr, nextState) ->
                 let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
                 let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
-                let attached = tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type)
+                // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
+                let attached (name: Identifier) =
+                    tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type) name
+                    |> Option.filter (fun found ->
+                        name <> EqualityOperators.equals
+                        || (nextState.ContextScope <> DefScope(found, false) && nextState.ContextScope <> DefScope(found, true)))
                 match OperatorCalls.definition attached env nextState expr leftExpr.Type input with
                 | Some (callee, scheme) ->
                     let resultTy, called = OperatorCalls.infer nextState expr callee scheme input

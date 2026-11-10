@@ -154,7 +154,7 @@ def contains: [Eq(a)] (list(a), a) -> bool = { xs, target ->
 
 A function that does not write its type has the requirement inferred: `def same = { x, y -> x == y }` is `[Eq(a)] a, a -> bool`. Comparing a type built from a variable requires `Eq` of the variable, so `==` on two `list(a)` needs `Eq(a)`.
 
-A nominal type can attach its own `==`, which a function that requires `Eq` then uses for it:
+A nominal type can attach its own `==`, which `a == b` on it, and a function that requires `Eq`, then use for it:
 
 ```nanyx
 def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }

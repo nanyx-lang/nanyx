@@ -129,3 +129,31 @@ let ``Run - comparing with a tag takes a value of any union that has it`` () =
           "isNone(#some(s))" ]
     |> runSource
     |> assertRan "T\nF\nF\n"
+let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
+    comparing
+        [ "type $Point = (x: int, y: int)"
+          "def $Point.`==`: $Point, $Point -> bool = { p, q -> p.x == q.x }" ]
+        [ "$Point(x = 1, y = 2) == $Point(x = 1, y = 3)"
+          "$Point(x = 1, y = 2) != $Point(x = 1, y = 3)"
+          "$Point(x = 1, y = 2) == $Point(x = 2, y = 2)" ]
+    |> runSource
+    |> assertRan "T\nF\nF\n"
+
+[<Fact>]
+let ``Run - an Eq loaded with use changes a concrete comparison in its block`` () =
+    comparing
+        [ "def always: Eq(string) = (`==` = { a, b -> true })"
+          "def loose = { a, b ->"
+          "  use always"
+          "  a == b"
+          "}"
+          "def literal = { a, b ->"
+          "  use (`==` = { x, y -> false })"
+          "  a == b"
+          "}" ]
+        [ "loose(\"ab\", \"cd\")"
+          "loose(\"ab\", \"ab\")"
+          "literal(\"ab\", \"ab\")"
+          "\"ab\" == \"cd\"" ]
+    |> runSource
+    |> assertRan "T\nT\nF\nF\n"

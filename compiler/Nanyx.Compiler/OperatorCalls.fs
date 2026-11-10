@@ -38,6 +38,10 @@ module internal OperatorCalls =
     /// that type, when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is the binding of the
     /// operator's name in `env`. `!=` calls what `==` does, and `-x` what `negate` is. `and` and `or` are keywords, so
     /// their names are never bound.
+    ///
+    /// `==` is a lookup of `Eq` at its operands' type, whose order puts an instance in scope before the type's own: a
+    /// binding of `==` that takes the operands comes first, on a built-in type too, so after `use ignoringCase`, an
+    /// `Eq(string)`, `a == b` on strings calls its `==`.
     let definition
         (attached: Identifier -> Identifier option)
         (env: TypeEnv)
@@ -53,8 +57,11 @@ module internal OperatorCalls =
             | BinaryOp(op, _, _) -> Some op
             | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> Some ArithmeticOperators.negate
             | _ -> None
+        let inScope (name: Identifier) (operandTy: Ty) =
+            if name = EqualityOperators.equals then bound name |> Option.filter (snd >> compares state operandTy input) else None
         match name, Unifier.unalias (resolveSoFar state leftTy) with
-        | None, _
+        | None, _ -> None
+        | Some name, operandTy when (inScope name operandTy).IsSome -> inScope name operandTy
         | Some _, TyPrimitive _ -> None
         | Some name, operandTy ->
             match attached name with

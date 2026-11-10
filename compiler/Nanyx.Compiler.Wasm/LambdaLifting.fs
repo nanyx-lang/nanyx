@@ -433,10 +433,16 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                                 let key = contextMemberKey contextType memberName
                                 let local = $"__use_{sanitizeIdentifier key}_{counter}"
                                 counter <- counter + 1
-                                key, local, liftMember contextType memberName value)
+                                memberName, key, local, liftMember contextType memberName value)
+                        // Each member by its key, and by its own name too, as the block can call it by that (`a == b`
+                        // after `use ignoringCase` calls its `==`).
+                        let fields =
+                            locals
+                            |> List.collect (fun (memberName, key, local, _) ->
+                                [ key; memberName ] |> List.distinct |> List.map (fun name -> NamedField(name, Expression.synthetic (IdentifierExpr local))))
                         [ yield! evaluated
-                          yield! locals |> List.map (fun (_, local, value) -> Statement.from value (DefStatement(false, local, None, value)))
-                          keep (UseStatement(Expression.synthetic (RecordExpr(locals |> List.map (fun (key, local, _) -> NamedField(key, Expression.synthetic (IdentifierExpr local))))))) ]
+                          yield! locals |> List.map (fun (_, _, local, value) -> Statement.from value (DefStatement(false, local, None, value)))
+                          keep (UseStatement(Expression.synthetic (RecordExpr fields))) ]
                 | ImportStatement _ | TypeDefStatement _ -> [ statement ])
             |> Block
             |> rebuild
