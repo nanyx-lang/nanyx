@@ -9,7 +9,7 @@ namespace Nanyx.LanguageServer;
 /// <param name="TopLevelTypeHints">Where to show the inferred types of top-level defs that do not write theirs.</param>
 /// <param name="Linters">
 /// Which linters run on each document and how serious their diagnostics are. When <c>null</c>, a document in a package
-/// gets the linters its <c>.nyxpack</c> manifest configures, as <c>nanyx build</c> does, and any other document those
+/// gets the linters its <c>.nyxp</c> manifest configures, as <c>nanyx build</c> does, and any other document those
 /// its <c>::linters</c> directives configure, or none if it has none, as <c>nanyx run</c> does for a script.
 /// </param>
 /// <param name="StandardLibrarySource">

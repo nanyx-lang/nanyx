@@ -123,7 +123,7 @@ operand of, the function it is passed to, the list it goes into, the name it is 
 
 - **It is `info` by default.** Recursion that is not in tail position is often right: walking a tree recurses as
   deep as the tree, and `List.map` is written that way until tail recursion modulo cons exists. A project that
-  wants every loop to be stack-safe raises it to a warning or an error in its `.nyxpack`.
+  wants every loop to be stack-safe raises it to a warning or an error in its `.nyxp`.
 - **Only a function's own calls count.** A call from a lambda written in the function (a workflow block, a `for`
   loop's body, an argument to `List.map`) is a call from that lambda, and is not reported. Nor is mutual recursion:
   the rule looks at one function at a time.

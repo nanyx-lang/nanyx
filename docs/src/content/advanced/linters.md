@@ -40,7 +40,7 @@ When you create a new project with `nanyx new`, the default linter is already co
 
 # Configuring linters
 
-Linters are declared in the package manifest (the `.nyxpack` file, see [Packages and projects](../tour/packages)). Each linter can be enabled, disabled, or have its individual rules configured:
+Linters are declared in the package manifest (the `.nyxp` file, see [Packages and projects](../tour/packages)). Each linter can be enabled, disabled, or have its individual rules configured:
 
 ```toml
 [linters.default]

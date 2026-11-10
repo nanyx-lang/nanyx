@@ -39,7 +39,7 @@ def main = {
 
 # Choosing a host
 
-A program's host is a deployment concern. It decides which runtime gets linked, so it's declared in the `.nyxpack` manifest rather than in source:
+A program's host is a deployment concern. It decides which runtime gets linked, so it's declared in the `.nyxp` manifest rather than in source:
 
 ```toml
 [package]

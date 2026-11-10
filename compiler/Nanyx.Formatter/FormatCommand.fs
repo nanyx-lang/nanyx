@@ -21,7 +21,7 @@ type Formatting =
     /// The formatted text would not say the same thing, or would lose a comment: a bug in the formatter, so the file
     /// is left alone.
     | NotSafe of string
-    /// The formatter's settings for it, in its `.nyxpack` manifest, are not valid: the message names the manifest
+    /// The formatter's settings for it, in its `.nyxp` manifest, are not valid: the message names the manifest
     /// and what is wrong. No file under that manifest is formatted.
     | BadSettings of string
 

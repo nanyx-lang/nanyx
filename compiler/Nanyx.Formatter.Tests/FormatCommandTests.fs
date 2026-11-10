@@ -131,12 +131,17 @@ let ``With no manifest the defaults apply`` () =
 
 [<Fact>]
 let ``With a manifest that has no formatter table the defaults apply`` () =
-    let directory = directoryWith [ "app.nyxpack", "name = \"app\"\n\n[dependencies]\n"; "a.nyx", block ]
+    let directory = directoryWith [ "app.nyxp", "name = \"app\"\n\n[dependencies]\n"; "a.nyx", block ]
+    Assert.Equal(Formatter.Options.defaults, settingsOf (Path.Combine(directory, "a.nyx")))
+
+[<Fact>]
+let ``A manifest with the old .nyxpack extension is not read`` () =
+    let directory = directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "a.nyx", block ]
     Assert.Equal(Formatter.Options.defaults, settingsOf (Path.Combine(directory, "a.nyx")))
 
 [<Fact>]
 let ``indentSize sets the indent`` () =
-    let directory = directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "a.nyx", block ]
+    let directory = directoryWith [ "app.nyxp", "[formatter]\nindentSize = 4\n"; "a.nyx", block ]
     let file = Path.Combine(directory, "a.nyx")
     Assert.Equal({ Formatter.Options.defaults with IndentSize = 4 }, settingsOf file)
     run Write [ file ] |> ignore
@@ -144,7 +149,7 @@ let ``indentSize sets the indent`` () =
 
 [<Fact>]
 let ``lineWidth sets the line width`` () =
-    let directory = directoryWith [ "app.nyxpack", "[formatter]\nlineWidth = 20\n"; "a.nyx", unformatted ]
+    let directory = directoryWith [ "app.nyxp", "[formatter]\nlineWidth = 20\n"; "a.nyx", unformatted ]
     let file = Path.Combine(directory, "a.nyx")
     let options = { Formatter.Options.defaults with LineWidth = 20 }
     Assert.Equal(options, settingsOf file)
@@ -154,7 +159,7 @@ let ``lineWidth sets the line width`` () =
 [<Fact>]
 let ``The nearest manifest in a parent directory applies`` () =
     let directory =
-        directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "src/deep/a.nyx", block; "src/b.nyx", block ]
+        directoryWith [ "app.nyxp", "[formatter]\nindentSize = 4\n"; "src/deep/a.nyx", block; "src/b.nyx", block ]
     Assert.Equal(4, (settingsOf (Path.Combine(directory, "src/deep/a.nyx"))).IndentSize)
     Assert.Equal(4, (settingsOf (Path.Combine(directory, "src/b.nyx"))).IndentSize)
 
@@ -162,9 +167,9 @@ let ``The nearest manifest in a parent directory applies`` () =
 let ``Two packages with different settings are formatted in one run, each with its own`` () =
     let directory =
         directoryWith [
-            "one/one.nyxpack", "[formatter]\nindentSize = 4\n"
+            "one/one.nyxp", "[formatter]\nindentSize = 4\n"
             "one/a.nyx", block
-            "two/two.nyxpack", "[formatter]\nindentSize = 3\n"
+            "two/two.nyxp", "[formatter]\nindentSize = 3\n"
             "two/b.nyx", block
         ]
     let results = run Write (found directory [])
@@ -177,10 +182,10 @@ let ``Two packages with different settings are formatted in one run, each with i
 let private badSettings (formatter: string) =
     let directory =
         directoryWith [
-            "bad/bad.nyxpack", formatter
+            "bad/bad.nyxp", formatter
             "bad/a.nyx", unformatted
             "bad/src/b.nyx", unformatted
-            "good/good.nyxpack", "[formatter]\nlineWidth = 80\n"
+            "good/good.nyxp", "[formatter]\nlineWidth = 80\n"
             "good/c.nyx", unformatted
         ]
     let results = run Write (found directory [])
@@ -191,7 +196,7 @@ let private badSettings (formatter: string) =
     match results |> List.map snd with
     | [ Failed(BadSettings message); Failed(BadSettings message'); Changed ] ->
         Assert.Equal(message, message')
-        Assert.Contains(Path.Combine(directory, "bad", "bad.nyxpack"), message)
+        Assert.Contains(Path.Combine(directory, "bad", "bad.nyxp"), message)
         message
     | other -> failwith $"Unexpected results: %A{other}"
 
@@ -250,8 +255,8 @@ let ``A formatter directive that is not valid is an error naming the file and li
 
 [<Fact>]
 let ``A formatter directive in a file of a package is an error saying to use the manifest`` () =
-    let directory = directoryWith [ "app.nyxpack", "[formatter]\nindentSize = 4\n"; "a.nyx", "::formatter.indentSize = 2\n" + block ]
+    let directory = directoryWith [ "app.nyxp", "[formatter]\nindentSize = 4\n"; "a.nyx", "::formatter.indentSize = 2\n" + block ]
     let file = Path.Combine(directory, "a.nyx")
     match run Write [ file ] with
-    | [ _, Failed(BadSettings error) ] -> Assert.Contains("[formatter] table of " + Path.Combine(directory, "app.nyxpack"), error)
+    | [ _, Failed(BadSettings error) ] -> Assert.Contains("[formatter] table of " + Path.Combine(directory, "app.nyxp"), error)
     | other -> failwith $"Unexpected results: %A{other}"

@@ -1,4 +1,4 @@
-/// The formatter's settings for a file: the `[formatter]` table of the package's `.nyxpack` manifest, the nearest one
+/// The formatter's settings for a file: the `[formatter]` table of the package's `.nyxp` manifest, the nearest one
 /// in the file's directory or above it, or for a script its `::formatter` directives. Only that table is read; the
 /// rest of the manifest is the packaging workstream's, whose reader will replace this one.
 module Nanyx.Formatter.Settings
@@ -12,13 +12,13 @@ open Tomlyn.Model
 /// The manifest in `directory` or the nearest directory above it that has one, or an error if that directory has more
 /// than one.
 let rec manifestIn (directory: string) : Result<string option, string> =
-    match Directory.GetFiles(directory, "*.nyxpack") |> Array.sort with
+    match Directory.GetFiles(directory, "*.nyxp") |> Array.sort with
     | [| manifest |] -> Result.Ok(Some manifest)
     | [||] ->
         match Path.GetDirectoryName directory with
         | null -> Result.Ok None
         | parent -> manifestIn parent
-    | several -> Result.Error $"""{directory} has more than one .nyxpack manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
+    | several -> Result.Error $"""{directory} has more than one .nyxp manifest: {several |> Array.map Path.GetFileName |> String.concat ", "}"""
 
 /// A TOML value as an error message names it.
 let private describe (value: obj) =

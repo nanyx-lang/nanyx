@@ -28,16 +28,55 @@ internal static class CliCommands
     }
 
     /// <summary>
-    /// Compile a Nanyx source file.
+    /// Check a Nanyx source file, or every source file of a package, and write nothing.
     /// </summary>
-    /// <param name="inputFile">The path to the .nyx file to compile.</param>
-    /// <param name="outputPath">Optional output path for generated artifacts.</param>
+    /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     [Consolo("check")]
-    public static int Check(
-        string inputFile,
-        [Consolo("out", Alias = "o")] string? outputPath = null)
+    public static int Check(params string[] path)
     {
-        return Execute(inputFile, Target.Check, outputPath);
+        if (!TrySinglePath(path, out var single))
+        {
+            return 2;
+        }
+
+        if (single is not null && !IsPackagePath(single))
+        {
+            return Execute(single, Target.Check, outputPath: null);
+        }
+
+        if (!TryFindPackage(single, out var package))
+        {
+            return 1;
+        }
+
+        var build = PackageModule.build(package);
+        PrintDiagnostics(build.Diagnostics, Console.Out);
+        Console.WriteLine($"Checked {package.Manifest.Name} ({FileCount(package)}).");
+        return HasErrors(build.Diagnostics) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Make a new package: a .nyxp manifest and src/main.nyx, whose @entry prints a greeting.
+    /// </summary>
+    /// <param name="name">The package's name: lower case, with words separated by dots, as in acme.web.</param>
+    /// <param name="directory">Where to make it, which must be new or empty; the default is the name's last segment.</param>
+    [Consolo("new")]
+    public static int New(string name, params string[] directory)
+    {
+        if (!TrySinglePath(directory, out var single))
+        {
+            return 2;
+        }
+
+        var created = NewPackage.create(name, single ?? NewPackage.defaultDirectory(name));
+        if (created.IsError)
+        {
+            Console.Error.WriteLine(created.ErrorValue);
+            return 1;
+        }
+
+        Console.WriteLine($"Created {name}: {DisplayPath(created.ResultValue)}");
+        return 0;
     }
 
     /// <summary>
@@ -58,7 +97,7 @@ internal static class CliCommands
     /// <summary>
     /// Run a Nanyx program: a .nyx file, or the @entry of a package.
     /// </summary>
-    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
+    /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Optional output path for generated artifacts.</param>
     [Consolo("run")]
     public static int Run(
@@ -107,7 +146,7 @@ internal static class CliCommands
     /// <summary>
     /// Build a Nanyx package: check every source file the manifest selects, and write its @entry program as WebAssembly text.
     /// </summary>
-    /// <param name="path">The package's directory or .nyxpack manifest; none means the package the current directory is in.</param>
+    /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     [Consolo("build")]
@@ -130,7 +169,7 @@ internal static class CliCommands
         }
 
         var entry = PackageModule.entryResult(build);
-        var files = package.Sources.Length == 1 ? "1 file" : $"{package.Sources.Length} files";
+        var files = FileCount(package);
         if (entry is null)
         {
             // With no program to write, the build is only a check, and errors fail it.
@@ -168,6 +207,10 @@ internal static class CliCommands
 
         return true;
     }
+
+    /// <summary>"1 file", "3 files": how many source files the package has.</summary>
+    private static string FileCount(Package package) =>
+        package.Sources.Length == 1 ? "1 file" : $"{package.Sources.Length} files";
 
     /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
     private static bool IsPackagePath(string path) =>
