@@ -202,6 +202,19 @@ let ``Run - Bool.parse reads true and false and rejects anything else`` () =
     runSource source |> assertRan "#some(true)\n#some(false)\n#invalidBool\n#invalidBool\n#invalidBool\n#invalidBool\n#some(false)\n"
 
 [<Fact>]
+let ``Run - Int.toFloat turns an int into a float, called and piped`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def n = 3\n" +
+        "def x: float = Int.toFloat(n) * 1.5\n" +
+        "println(\"{x}\")\n" +
+        "println(\"{Int.toFloat(-7)}\")\n" +
+        "println(\"{Int.toFloat(0)}\")\n" +
+        "println(\"{(7 \\toFloat) / (2 \\toFloat)}\")\n"
+    runSource source |> assertRan "4.5\n-7.0\n0.0\n3.5\n"
+
+[<Fact>]
 let ``Run - toString of an int, a float, a bool and a string, called and piped`` () =
     let source =
         "import nanyx/console\n" +
@@ -274,6 +287,27 @@ let ``Run - nanyx/math sqrt, floor, ceil and round`` () =
         "println(\"{math.ceil(3.1)} {math.ceil(-3.9)} {math.ceil(4.0)}\")\n" +
         "println(\"{math.round(3.5)} {math.round(2.5)} {math.round(-2.5)} {math.round(2.4999)} {math.round(-0.4)}\")\n"
     runSource source |> assertRan "9.0 1.414214\n3 -4 4\n4 -3 4\n4 3 -3 2 0\n"
+
+[<Fact>]
+let ``Run - nanyx/math truncate drops the fraction towards zero`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "println(\"{math.truncate(3.9)} {math.truncate(-3.9)} {math.truncate(4.0)} {math.truncate(-0.5)}\")\n" +
+        "println(\"{math.truncate(Int.toFloat(10) / 4.0)}\")\n"
+    runSource source |> assertRan "3 -3 4 0\n2\n"
+
+[<Fact>]
+let ``Run - nanyx/math truncate of an infinity stops the program`` () =
+    let source =
+        "import nanyx/math as math\n" +
+        "\n" +
+        "dbg(math.truncate(1.0 / 0.0))\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Contains("wasm trap: integer overflow", outcome.StandardError)
 
 [<Fact>]
 let ``Run - nanyx/math floor of a float out of the range of int stops the program`` () =

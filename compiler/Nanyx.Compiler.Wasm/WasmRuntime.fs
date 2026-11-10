@@ -33,6 +33,7 @@ module Helpers =
     let floatCeil = NyxCompiler.Intrinsics.floatCeil
     let floatTrunc = NyxCompiler.Intrinsics.floatTrunc
     let floatToInt = NyxCompiler.Intrinsics.floatToInt
+    let intToFloat = NyxCompiler.Intrinsics.intToFloat
     let free = "__nanyx_free"
     let newCell = "__nanyx_new_cell"
     let newObject = "__nanyx_new_object"
@@ -895,6 +896,14 @@ let runtimeHelpers : Map<string, string> =
             "  f64.load"
             "  i32.trunc_f64_s"
             ")" ]
+      // An int as a boxed float: `f64.convert_i32_s` is exact for every `int`.
+      Helpers.intToFloat,
+      lines
+          [ $"(func ${Helpers.intToFloat} (param $value i32) (result i32)"
+            "  local.get $value"
+            "  f64.convert_i32_s"
+            $"  call ${Helpers.floatBox}"
+            ")" ]
       Helpers.listCons,
       lines
           [ $"(func ${Helpers.listCons} (param $head i32) (param $tail i32) (result i32)"
@@ -1001,7 +1010,8 @@ let helperDependencies =
       Helpers.floatFloor, [ Helpers.floatBox ]
       Helpers.floatCeil, [ Helpers.floatBox ]
       Helpers.floatTrunc, [ Helpers.floatBox ]
-      Helpers.floatToInt, [] ]
+      Helpers.floatToInt, []
+      Helpers.intToFloat, [ Helpers.floatBox ] ]
 let rec closeHelpers (acc: Set<string>) (pending: string list) =
     match pending with
     | [] -> acc

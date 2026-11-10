@@ -172,8 +172,9 @@ let ``nanyx/math exports float functions with their types`` () =
             "def s = math.sqrt(81.0)\n" +
             "def f = math.floor(3.9)\n" +
             "def c = math.ceil(3.1)\n" +
-            "def r = math.round(3.5)")
+            "def r = math.round(3.5)\n" +
+            "def t = math.truncate(-3.9)")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["s"])
-    for name in [ "f"; "c"; "r" ] do
+    for name in [ "f"; "c"; "r"; "t" ] do
         Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])

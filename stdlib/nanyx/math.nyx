@@ -3,8 +3,8 @@ module math
 -- nanyx/math: numeric utilities.
 --
 -- The language docs make `abs`, `min`, `max`, `clamp` and `pow` generic over the `Num(a)` context, so that
--- they take an `int` or a `float`; for now they take `int` only. `sqrt`, `floor`, `ceil` and `round` take a
--- `float`, and are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
+-- they take an `int` or a `float`; for now they take `int` only. `sqrt`, `floor`, `ceil`, `round` and `truncate`
+-- take a `float`, and are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
 -- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`.
 --
 -- Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified
@@ -60,4 +60,9 @@ export def round: float -> int = { x ->
   if x - whole >= 0.5
     then __nanyx_float_to_int(whole + 1.0)
     else if whole - x >= 0.5 then __nanyx_float_to_int(whole - 1.0) else __nanyx_float_to_int(whole)
+}
+
+-- `x` with its fraction dropped, towards zero: `truncate(3.9)` is 3 and `truncate(-3.9)` is -3.
+export def truncate: float -> int = { x ->
+  __nanyx_float_to_int(__nanyx_float_trunc(x))
 }

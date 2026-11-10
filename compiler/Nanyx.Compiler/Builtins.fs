@@ -53,6 +53,8 @@ module Intrinsics =
     let floatTrunc = prefix + "float_trunc"
     /// A whole float as an int. A float that is NaN, infinite or out of the range of `int` stops the program.
     let floatToInt = prefix + "float_to_int"
+    /// An int as a float. Every `int` has an exact `float`, so this never fails.
+    let intToFloat = prefix + "int_to_float"
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
@@ -68,6 +70,7 @@ module Intrinsics =
           floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy))
           floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy))
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy))
+          intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy))
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None } ]
 
     let names : Set<string> = all |> List.map fst |> Set.ofList

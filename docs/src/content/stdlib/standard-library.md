@@ -93,6 +93,22 @@ def b = "false" \Bool.parse      -- #some(false)
 def bad = Bool.parse("yes")      -- #invalidBool
 ```
 
+# Converting between numbers
+
+Arithmetic doesn't mix `int` and `float`: `n * 1.5` is a type error when `n` is an `int`. `Int.toFloat`, in the prelude, turns an `int` into a `float`. Every `int` has an exact `float`, so it never fails.
+
+```nanyx
+Int.toFloat: int -> float
+```
+
+```nanyx
+def n = 3
+def x = Int.toFloat(n) * 1.5     -- 4.5
+def half = (7 \toFloat) / 2.0    -- 3.5
+```
+
+To turn a `float` back into an `int`, choose how to drop the fraction with `floor`, `ceil`, `round` or `truncate` from [`nanyx/math`](math).
+
 # Map literals
 
 Maps are written with the square-bracket literal syntax and the `=>` operator:

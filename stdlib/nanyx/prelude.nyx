@@ -37,6 +37,12 @@ export def Int.parse: string -> #some(int) | #invalidInt = { s ->
       else parseDigits(s, start, 0)
 }
 
+-- `n` as a float: `Int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
+-- `floor`, `ceil`, `round` and `truncate` in `nanyx/math`.
+export def Int.toFloat: int -> float = { n ->
+  __nanyx_int_to_float(n)
+}
+
 -- Booleans --------------------------------------------------------------------------------------
 
 -- The boolean `s` writes, `true` or `false` exactly as `Bool.toString` writes them, or
