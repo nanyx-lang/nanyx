@@ -479,6 +479,15 @@ module Unifier =
             let var = TyVar { Id = nextRestId; Name = None }
             nextRestId <- nextRestId + 1
             var
+        // Where to report that none of a union's members could be the type given for it, at the constraint from
+        // `origin`, given how trying each one failed, in the order tried. A member is tried against the constraints
+        // after it too, so one whose failure is elsewhere fitted here, and what failed is a constraint further on,
+        // which may be in another def altogether: that is reported, not this constraint (`solve` would otherwise set
+        // this one aside as wrong too). Only when every member failed here is the last one's failure reported.
+        let unionFailure (origin: SourceSpan) (failures: (string * SourceSpan) list) =
+            failures
+            |> List.tryFind (fun (_, span) -> span <> origin)
+            |> Option.orElse (List.tryLast failures)
         let rec loop (subst: Subst) (remaining: ConstraintSet) =
             let unifyRecordFields origin (lFields: Map<string, Ty>) (rFields: Map<string, Ty>) rest left right =
                 let lKeys = keySet lFields
@@ -622,37 +631,37 @@ module Unifier =
                     | Ok (lMap, lRest) ->
                         let tags = lMap |> Map.toList |> List.map snd
                         // A member of the union that unifies with `ty` is tried against the rest of the
-                        // constraints too, so when none works the failure may come from later on; report
-                        // the innermost failure rather than a bare mismatch here.
-                        let rec tryItems items (lastError: (string * SourceSpan) option) =
+                        // constraints too, so when none works the failure may come from later on (see
+                        // `unionFailure`) rather than be a bare mismatch here.
+                        let rec tryItems items (failures: (string * SourceSpan) list) =
                             match items with
                             | [] ->
                                 // The rest takes a tag the union does not name; one it names is that member, which
                                 // did not unify (`#some(int)` is not the rest of `#some() | r`).
                                 match lRest with
                                 | Some restVar when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
-                                | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
+                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin))
                             | item :: restItems ->
                                 match loop subst ((item, ty, Equal, origin) :: emptyRest lRest @ rest) with
                                 | Ok result -> Ok result
-                                | Error inner -> tryItems restItems (Some inner)
-                        tryItems tags None
+                                | Error inner -> tryItems restItems (failures @ [ inner ])
+                        tryItems tags []
                     | Error message -> Error (message, origin)
                 | ty, TyUnion rItems ->
                     match parseTagUnion rItems with
                     | Ok (rMap, rRest) ->
                         let tags = rMap |> Map.toList |> List.map snd
-                        let rec tryItems items (lastError: (string * SourceSpan) option) =
+                        let rec tryItems items (failures: (string * SourceSpan) list) =
                             match items with
                             | [] ->
                                 match rRest with
                                 | Some restVar when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
-                                | _ -> Error (lastError |> Option.defaultValue (mismatchMessage l r, origin))
+                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin))
                             | item :: restItems ->
                                 match loop subst ((ty, item, Equal, origin) :: emptyRest rRest @ rest) with
                                 | Ok result -> Ok result
-                                | Error inner -> tryItems restItems (Some inner)
-                        tryItems tags None
+                                | Error inner -> tryItems restItems (failures @ [ inner ])
+                        tryItems tags []
                     | Error message -> Error (message, origin)
                 | _ -> Error (mismatchMessage l r, origin)
             match remaining with

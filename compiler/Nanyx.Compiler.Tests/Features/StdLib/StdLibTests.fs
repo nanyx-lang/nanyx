@@ -187,3 +187,19 @@ let ``nanyx/text rejects a labelled argument passed by position`` () =
     Assert.StartsWith("Record field mismatch: {0, 1} vs {0, on}.", diagnostic.Message)
     let named = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", on = \",\")"
     Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")
+
+[<Fact>]
+let ``nanyx/text reports a labelled argument passed by position once, not in the defs after it`` () =
+    // As `shop.nyx` wrote it before `padStart`'s `width` and `fill` had to be named: the matches after it were
+    // reported as errors too.
+    let source =
+        "import nanyx/text\n\n" +
+        "def pad = { n -> String.padStart(\"{n}\", 2, \"0\") }\n" +
+        "def quantity = { s -> match Int.parse(s)\n" +
+        "  | #some(n) -> n\n" +
+        "  | #invalidInt -> 0\n" +
+        "}\n"
+    let diagnostic = List.exactlyOne (Compiler.compile source).Diagnostics
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.StartsWith("Record field mismatch: {0, 1, 2} vs {0, fill, width}.", diagnostic.Message)
+    Assert.Equal(2, diagnostic.Span.Value.StartLine)

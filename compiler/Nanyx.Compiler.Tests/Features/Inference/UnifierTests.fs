@@ -95,3 +95,22 @@ let ``Solving constraints that agree gives what unify gives`` () =
     let subst, failures = Unifier.solve constraints
     Assert.Empty(failures)
     Assert.Equal(Unifier.unify constraints, Ok subst)
+
+[<Fact>]
+let ``A union's member that fits is not blamed for a failure in a later constraint`` () =
+    // `#none` fits `#none | #some(int)`; the conflict is `int` and `string`, solved after it. Trying `#some(int)` as
+    // well, which does not fit, must not make the union the one reported.
+    let atTag = { SourceSpan.none with Start = 10; StartLine = 1 }
+    let atConflict = { SourceSpan.none with Start = 20; StartLine = 2 }
+    let union = TyUnion [ TyTag("none", None); TyTag("some", Some (TyPrimitive "int")) ]
+    let conflict = (TyPrimitive "int", TyPrimitive "string", Equal, atConflict)
+    for tagConstraint in [ (TyTag("none", None), union, Assignable, atTag); (union, TyTag("none", None), Equal, atTag) ] do
+        match Unifier.unify [ tagConstraint; conflict ] with
+        | Ok _ -> Assert.Fail "Expected the conflict to fail"
+        | Error (message, span) ->
+            Assert.Equal("Type mismatch: int vs string.", message)
+            Assert.Equal(atConflict, span)
+    // With every member failing at the union itself, the union is still what is reported.
+    match Unifier.unify [ (TyTag("other", None), union, Assignable, atTag) ] with
+    | Ok _ -> Assert.Fail "Expected the tag not to fit"
+    | Error (_, span) -> Assert.Equal(atTag, span)
