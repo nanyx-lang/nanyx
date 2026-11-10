@@ -38,4 +38,4 @@ let ``A tuple pattern still matches a tuple by position`` () =
 let ``A name that is not one of the record's fields is matched by position, and the record has none there`` () =
     let result = Compiler.compile "def f: (name: string, age: int) -> string = { r -> match r\n  | (name, years) -> name }\n"
     let diagnostic = Assert.Single result.Diagnostics
-    Assert.StartsWith("Record field mismatch: {age, name} vs {1, name}.", diagnostic.Message)
+    Assert.StartsWith("Record field mismatch: {age, name} vs {1, name}: only the first has age; only the second has 1.", diagnostic.Message)
