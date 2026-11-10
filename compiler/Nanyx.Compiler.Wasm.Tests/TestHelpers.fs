@@ -29,6 +29,9 @@ let transpileWat (source: string) =
         let messages = result.Diagnostics |> List.map (fun d -> d.Message) |> String.concat "\n"
         failwith $"Compile error: {messages}"
 
+/// How many times `text` occurs in `wat`.
+let countOccurrences (text: string) (wat: string) = Text.RegularExpressions.Regex.Matches(wat, Text.RegularExpressions.Regex.Escape text).Count
+
 let transpileWatFile (filePath: string) =
     match Compiler.compileFile filePath with
     | result when not result.Diagnostics.IsEmpty ->

@@ -6,6 +6,7 @@ open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm
 open Transpiler.Wasm.CodeGen
+open TranspilerWasmTestHelpers
 
 let private typedModule (source: string) =
     let result = Compiler.compile source
@@ -14,8 +15,6 @@ let private typedModule (source: string) =
     result.Typed.Value
 
 let private compileWithReport (source: string) = transpileTypedModuleWithReport (typedModule source)
-
-let private count (text: string) (wat: string) = Regex.Matches(wat, Regex.Escape text).Count
 
 /// The diagnostic the backend gives `source`, which type-checks but which it cannot compile.
 let private backendError (source: string) =
@@ -44,17 +43,11 @@ let ``Every function goes through the core IR`` () =
     Assert.Equal<string list>([ "add"; "classify"; "size" ], report.Functions)
 
 [<Fact>]
-let ``Comparing or printing a record is a compile error`` () =
-    // `==` is built in only for numbers, strings and tags, and `dbg` prints no record.
+let ``Printing a record is a compile error`` () =
+    // `dbg` prints no record yet (#331).
     Assert.Equal(
         "The WebAssembly backend cannot compile `dbg` of a value of type (0: int, 1: int) yet",
         backendError "def shout: (int, int) -> (int, int) = { t -> dbg(t) }\n")
-    Assert.Equal(
-        "The WebAssembly backend cannot compile the operator == on a value of type (a: int) yet",
-        backendError "def same: (a: int), (a: int) -> bool = { x, y -> x == y }\n")
-    Assert.Equal(
-        "The WebAssembly backend cannot compile the operator == on a value of type list(int) yet",
-        backendError "def same: list(int), list(int) -> bool = { x, y -> x == y }\n")
 
 [<Fact>]
 let ``A generic function is emitted once per instantiation`` () =
@@ -70,13 +63,13 @@ let ``A generic function is emitted once per instantiation`` () =
         "}\n"
     let wat, report = compileWithReport source
     Assert.Equal<string list>([ "id__int"; "id__string"; "id__tags_ok"; "main" ], report.Functions)
-    Assert.Equal(1, count "(func $id__int " wat)
-    Assert.Equal(1, count "(func $id__string " wat)
-    Assert.Equal(1, count "(func $id__tags_ok " wat)
-    Assert.Equal(2, count "call $id__int\n" wat)
+    Assert.Equal(1, countOccurrences "(func $id__int " wat)
+    Assert.Equal(1, countOccurrences "(func $id__string " wat)
+    Assert.Equal(1, countOccurrences "(func $id__tags_ok " wat)
+    Assert.Equal(2, countOccurrences "call $id__int\n" wat)
     // A generic definition exists only as its specialisations.
-    Assert.Equal(0, count "(func $id " wat)
-    Assert.Equal(0, count "(export \"id\"" wat)
+    Assert.Equal(0, countOccurrences "(func $id " wat)
+    Assert.Equal(0, countOccurrences "(export \"id\"" wat)
 
 [<Fact>]
 let ``A specialisation specialises the generic functions it calls`` () =
@@ -99,7 +92,7 @@ let ``A specialisation specialises the generic functions it calls`` () =
     let wat, report = compileWithReport source
     for name in [ "wrap__int"; "wrap__string"; "orElse__int"; "orElse__string"; "roundTrip__int"; "roundTrip__string" ] do
         Assert.Contains(name, report.Functions)
-        Assert.Equal(1, count $"(func ${name} " wat)
+        Assert.Equal(1, countOccurrences $"(func ${name} " wat)
     Assert.Contains("call $wrap__string\n    local.get $fallback\n    return_call $orElse__string", wat)
 
 [<Fact>]
@@ -165,7 +158,7 @@ let ``Strings, lists and intrinsics go through the core IR`` () =
     Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.Functions)
     Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)
     Assert.Contains("call $__nanyx_list_concat", wat)
-    Assert.Contains("call $__nanyx_tag_equals", wat)
+    Assert.Contains("call $__nanyx_equals_tags_none", wat)
 
 [<Fact>]
 let ``Interpolated strings and dbg go through the core IR`` () =

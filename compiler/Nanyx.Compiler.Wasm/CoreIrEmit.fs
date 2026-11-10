@@ -321,6 +321,8 @@ type private FunctionEmitter(context: EmitContext) =
             let element = match atomType first with IrList element -> element | _ -> IrUnit
             helper Helpers.listCons |> ignore
             join "\n    " [ atoms args; $"call ${CoreIrDrop.listConcatName element}" ]
+        | CallRuntime(name, ([ first; _ ] as args), _) when name = Helpers.valueEquals ->
+            join "\n    " [ atoms args; $"call ${CoreIrEquality.equalsName (atomType first)}" ]
         | CallRuntime(name, args, returnsValue) ->
             // Every value is an i32, so a helper that returns nothing leaves unit, 0.
             join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]

@@ -279,8 +279,7 @@ export def List.zip: list(a), list(b) -> list((a, b)) = {
 }
 
 -- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
--- so this works for lists of the types `==` compiles for: numbers, bools, strings and tags. Records
--- and lists are not compared yet (#424).
+-- by their structure, so this works for lists of anything but functions.
 export def List.distinct: list(a) -> list(a) = { xs ->
   List.reverse(
     List.fold(xs, [], { seen, x -> if List.any(seen, { y -> y == x }) then seen else [x, ...seen] })

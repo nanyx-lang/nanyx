@@ -480,15 +480,15 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (CallRuntime(helper, atoms, true)) ty))
-        | BinaryOp(("==" | "!=") as op, left, right) when (match tyOf left, tyOf right with
-                                                           | (IrString | IrTags _), _ | _, (IrString | IrTags _) -> true
+        | BinaryOp(("==" | "!=") as op, left, right) when (match tyOf left with
+                                                           | IrString | IrTags _ | IrRecord _ | IrList _ -> true
                                                            | _ -> false) ->
-            // A string is a pointer to its bytes, and a tag with a payload to its cell: equality compares what they
-            // point to.
+            // A string, a record, a list and a tag with a payload are pointers: equality compares what they point to,
+            // by the operands' structure (see `CoreIrEquality`).
             let helper =
-                match tyOf left, tyOf right with
-                | IrString, _ | _, IrString -> Helpers.stringEquals
-                | _ -> Helpers.tagEquals
+                match tyOf left with
+                | IrString -> Helpers.stringEquals
+                | _ -> Helpers.valueEquals
             this.Atoms scope [ left; right ] (fun atoms ->
                 let equal = mk (CallRuntime(helper, atoms, true)) IrBool
                 if op = "==" then k equal
