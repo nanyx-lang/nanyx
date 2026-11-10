@@ -6,8 +6,8 @@ module text
 -- `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
 -- `s.trim` is an error.
 --
--- Strings are UTF-8. This first slice works byte by byte: `length` counts bytes (not grapheme
--- clusters, as the language docs promise), indices and widths are byte offsets, `uppercase` and
+-- Strings are UTF-8. This first slice works byte by byte: `length` counts bytes (not characters
+-- or grapheme clusters), indices and widths are byte offsets, `uppercase` and
 -- `lowercase` only change ASCII letters, and the trimming and `words` functions only treat ASCII
 -- whitespace as whitespace. Multi-byte characters pass through unchanged, except that `padStart` and
 -- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character.

@@ -112,11 +112,17 @@ A pattern that the value can never match is a type error, as it is in a `match`.
 
 # Chaining with pipelines
 
+The helpers in the prelude's `Option` and `Result` modules take the value first, so a chain of steps reads as a pipeline:
+
 ```nanyx
-input
-  \parseInt
-  \Result.map { * 2 }
-  \Result.defaultValue(0)
+def doubled: string -> int = { input ->
+  input
+    \Int.fromString
+    \Option.map { * 2 }
+    \Option.defaultValue(0)
+}
 ```
+
+`Int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [option](../stdlib/option) and [result](../stdlib/result).
 
 > **Philosophy:** By making errors explicit in the type system, Nanyx ensures you always handle failure cases. No more unexpected crashes!
