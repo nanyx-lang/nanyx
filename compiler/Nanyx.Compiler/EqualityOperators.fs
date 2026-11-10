@@ -37,16 +37,31 @@ module internal EqualityOperators =
             | _ -> false
         isTags left || isTags right
 
-    /// Checks `expr`, a `==` or `!=` (`op`) in `env` that compares two values of the type `operandTy` and calls no
-    /// definition. A function is an error there. A type with a variable left in it is checked once it is known (see
-    /// `WellKnownContexts.pendingOperator`). The prelude's `builtInFunction` is the comparison itself, of any type.
-    let require (env: TypeEnv) (state: InferState) (expr: Expression) (op: string) (operandTy: Ty) : Result<InferState, Diagnostic list> =
+    /// Checks `expr`, a `==` or `!=` (`op`) in `env` that compares two values of the type `operandTy` (given as
+    /// `input`, as a call's arguments are typed) and calls no definition. Two lists whose elements have an `Eq` other
+    /// than the compiler's own, which `instanceOf` finds, are compared through it (see
+    /// `WellKnownContexts.throughElements`). A function is an error. A type with a variable left in it is checked once
+    /// it is known (see `WellKnownContexts.pendingOperator`). The prelude's `builtInFunction` is the comparison itself,
+    /// of any type.
+    let require
+        (instanceOf: InstanceOf)
+        (env: TypeEnv)
+        (state: InferState)
+        (expr: Expression)
+        (op: string)
+        (operandTy: Ty)
+        (input: Ty)
+        : Result<InferState, Diagnostic list> =
         let ty = resolveSoFar state operandTy
-        match equality.Lacks ty, state.ContextScope with
-        | Some reason, _ -> Error (error expr.Span (cannotUse equality op ty reason))
-        | None, DefScope(name, false) when name = builtInFunction -> Ok state
-        | None, _ when (comparedVars ty).IsEmpty || not (isDeclared equality state) -> Ok state
-        | None, _ -> Ok (pendingOperator equality env state expr op ty)
+        match throughElements equality instanceOf env state expr op input ty with
+        | Error errors -> Error errors
+        | Ok (Some called) -> Ok called
+        | Ok None ->
+            match equality.Lacks ty, state.ContextScope with
+            | Some reason, _ -> Error (error expr.Span (cannotUse equality op ty reason))
+            | None, DefScope(name, false) when name = builtInFunction -> Ok state
+            | None, _ when (comparedVars ty).IsEmpty || not (isDeclared equality state) -> Ok state
+            | None, _ -> Ok (pendingOperator equality env state expr op ty)
 
     /// Whether `pending` is a comparison `require` left to be checked, rather than a call.
     let isPending (pending: PendingContextInstance) = pending.Context = context && isOperator pending.Callee

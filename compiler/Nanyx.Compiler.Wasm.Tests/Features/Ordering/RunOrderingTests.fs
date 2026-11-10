@@ -149,3 +149,17 @@ let ``Each type ordered gets one ordering function, and its parts their own`` ()
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_list_" wat)
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_rec_" wat)
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_string" wat)
+
+[<Fact>]
+let ``Run - a list of a type with its own compare is ordered through it, element by element`` () =
+    comparing
+        [ yield! version
+          "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs < ys }" ]
+        [ "[v(1, 0), v(2, 0)] < [v(3, 0)]"
+          "[v(3, 0)] <= [v(1, 0), v(2, 0)]"
+          "[v(1, 5)] > [v(1, 2)]"
+          "[v(1, 0)] >= [v(1, 0), v(0, 0)]"
+          "before([v(1, 0)], [v(1, 0), v(0, 0)])"
+          "before([v(2, 0)], [v(1, 9)])" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nF\nT\nF\n"

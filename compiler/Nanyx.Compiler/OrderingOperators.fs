@@ -28,11 +28,6 @@ module internal OrderingOperators =
     /// The prelude function the ordering operator `op` calls to read its instance.
     let private callee (op: string) = helpers.[op]
 
-    /// The instance of `Ord` of a type, in an environment, other than the compiler's own, if it has one: one in scope,
-    /// or one built from the `compare` attached to it. Building one can fail, when the attached `compare` has the
-    /// wrong type.
-    type InstanceOf = TypeEnv -> InferState -> Ty -> Result<ContextInstance option * InferState, Diagnostic list>
-
     /// `state` with `expr`, the operator `op`, calling its prelude function (see `callee`) with `instance`. The
     /// function takes the operands (`input`, as a call's arguments are typed) and gives a bool.
     let private callWith (state: InferState) (expr: Expression) (op: string) (input: Ty) (instance: ContextInstance) =
@@ -60,9 +55,9 @@ module internal OrderingOperators =
         | _ -> ""
 
     /// Checks `expr`, the operator `op` in `env` on two values of the type `operandTy`, given as `input` (as a call's
-    /// arguments are typed). An instance `instanceOf` finds is called. Otherwise the operator is the compiler's own:
-    /// a type with no order is an error there, and a type with a variable left in it is checked once it is known (see
-    /// `resolvePending`).
+    /// arguments are typed). An instance `instanceOf` finds is called, and so is one of a list's elements (see
+    /// `WellKnownContexts.throughElements`). Otherwise the operator is the compiler's own: a type with no order is an
+    /// error there, and a type with a variable left in it is checked once it is known (see `resolvePending`).
     let require
         (instanceOf: InstanceOf)
         (env: TypeEnv)
@@ -77,6 +72,10 @@ module internal OrderingOperators =
         | Error errors -> Error errors
         | Ok (Some instance, next) -> Ok (callWith next expr op input instance)
         | Ok (None, next) ->
+            match throughElements ordering instanceOf env next expr op input ty with
+            | Error errors -> Error errors
+            | Ok (Some called) -> Ok called
+            | Ok None ->
             match ordering.Lacks ty with
             | Some reason -> Error (error expr.Span (cannotUse ordering op ty reason + advice ty))
             | None when (comparedVars ty).IsEmpty || not (isDeclared ordering next) -> Ok next
