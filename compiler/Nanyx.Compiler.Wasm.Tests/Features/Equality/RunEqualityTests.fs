@@ -96,6 +96,19 @@ let ``Run - a function that compares its type variable compares each type it is 
     |> assertRan "T\nF\nT\nT\nT\nF\nT\nT\nT\nT\n"
 
 [<Fact>]
+let ``Run - a local function compares at each type it is called with`` () =
+    comparing
+        [ "def both = { v, w ->"
+          "  def same = { x, y -> x == y }"
+          "  same(v, w)"
+          "}" ]
+        [ "both(1, 1)"
+          "both(1, 2)"
+          "both(#red, #red)" ]
+    |> runSource
+    |> assertRan "T\nF\nT\n"
+
+[<Fact>]
 let ``Run - a function that compares its type variable uses the == attached to a type`` () =
     comparing
         [ "type $Email = string"

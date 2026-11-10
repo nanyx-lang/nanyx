@@ -763,27 +763,31 @@ let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
     | TyApply(name, args) -> TyApply(name, List.map recur args)
     | TyUnion items -> TyUnion(List.map recur items)
 
-/// The type each named type variable of `general` stands for in `specific`, a type of the same shape: a function's
-/// type as it is declared, against the same type instantiated at a call.
-let rec private namedVarsIn (general: Ty) (specific: Ty) : Map<string, Ty> =
+/// The type each type variable of `general` that `keyOf` gives a key stands for in `specific`, a type of the same
+/// shape: a function's type as it is declared, against the same type instantiated at a call.
+let rec private varsIn (keyOf: TyVar -> 'key option) (general: Ty) (specific: Ty) : Map<'key, Ty> =
+    let recur = varsIn keyOf
     let all (pairs: (Ty * Ty) list) =
-        pairs |> List.fold (fun acc (g, s) -> namedVarsIn g s |> Map.fold (fun acc name ty -> acc |> Map.add name ty) acc) Map.empty
+        pairs |> List.fold (fun acc (g, s) -> recur g s |> Map.fold (fun acc key ty -> acc |> Map.add key ty) acc) Map.empty
     let fieldPairs (generalFields: Map<string, Ty>) (specificFields: Map<string, Ty>) =
         [ for KeyValue(name, g) in generalFields do
             match specificFields |> Map.tryFind name with
             | Some s -> yield g, s
             | None -> () ]
     match general, specific with
-    | TyVar { Name = Some name }, _ -> Map.ofList [ name, specific ]
+    | TyVar v, _ -> keyOf v |> Option.map (fun key -> Map.ofList [ key, specific ]) |> Option.defaultValue Map.empty
     | TyFunc(ga, gr), TyFunc(sa, sr) -> all [ ga, sa; gr, sr ]
     | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> all (List.zip gs ss)
     | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
-    | TyNominal(_, gu, _), TyNominal(_, su, _) -> namedVarsIn gu su
+    | TyNominal(_, gu, _), TyNominal(_, su, _) -> recur gu su
     | TyRecord gf, TyRecord sf -> all (fieldPairs gf sf)
     | TyOpenRecord(gf, _), TyOpenRecord(sf, _) -> all (fieldPairs gf sf)
-    | TyTag(_, Some g), TyTag(_, Some s) -> namedVarsIn g s
+    | TyTag(_, Some g), TyTag(_, Some s) -> recur g s
     | TyUnion gs, TyUnion ss when gs.Length = ss.Length -> all (List.zip gs ss)
     | _ -> Map.empty
+
+/// The type each named type variable of `general` stands for in `specific` (see `varsIn`).
+let private namedVarsIn (general: Ty) (specific: Ty) : Map<string, Ty> = varsIn _.Name general specific
 
 /// Whether the types `a` and `b`, resolved as far as they can be, are the same type.
 let private sameType (a: Ty) (b: Ty) =
@@ -963,7 +967,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                         | Error errors, DefScope(defName, true) when argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not) ->
                             let pending =
                                 { Def = defName; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
-                                  Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors }
+                                  Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors; ChecksOnly = false }
                             Ok (found @ [ None ], { current with PendingContextInstances = pending :: current.PendingContextInstances })
                         | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
@@ -1003,6 +1007,25 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
             | _ -> synthesize env |> Option.map (Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)))
     |> Result.map (fun (annotation, resolved) ->
         annotation, EqualityOperators.callMembers (fun ty -> inputTypeFromArgs [ ty; ty ]) comparisons resolved)
+
+/// Checks `call`, a call to `name` that inference has just typed, when `name` is a local function that compares values
+/// of type variables it is generic in: each needs an `Eq` of the type it is at the call (see
+/// `EqualityOperators.checkLocalCall`).
+let private checkLocalComparisons (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
+    match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
+    | Some ({ Symbol = Some symbol } as scheme), Some calleeTy when state.LocalComparisons.ContainsKey symbol ->
+        let compared = state.LocalComparisons.[symbol]
+        varsIn (fun v -> if compared.Contains v.Id then Some v.Id else None) scheme.Type calleeTy
+        |> Map.values
+        |> Seq.fold (fun result ty ->
+            result
+            |> Result.bind (fun (current: InferState) ->
+                let ty = resolveSoFar current ty
+                let hasInstance ty = (instanceInScope env current EqualityOperators.context [ ty ]).IsSome
+                match equalityInstanceAtCall env current EqualityOperators.context [ ty ] hasInstance with
+                | Some instance -> EqualityOperators.checkLocalCall env current call name calleeSpan ty instance
+                | None -> Ok current)) (Ok state)
+    | _ -> Ok state
 
 /// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
 /// value of no known type yet is taken to be a record with at least that field, and an open record without it
@@ -1140,7 +1163,9 @@ let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) 
             match expr.Kind with
             // A call to a function that requires a parameterised context finds its instance once its arguments are typed.
             | FunctionCall(name, spanOpt, _) ->
-                resolveCallInstances env next expr name (nameSpan spanOpt expr) |> Result.map (fun next -> typedExpr, next)
+                resolveCallInstances env next expr name (nameSpan spanOpt expr)
+                |> Result.bind (fun next -> checkLocalComparisons env next expr name (nameSpan spanOpt expr))
+                |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
     let recovered =
         match inferred with
@@ -2284,7 +2309,11 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let scheme, generalizedState =
                                 if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
                                 else generalizeDef env' current declaredTy
-                            current <- generalizedState
+                            current <-
+                                match symbol, EqualityOperators.comparedByLocal generalizedState scheme.Quantified with
+                                | Some symbol, compared when not compared.IsEmpty ->
+                                    { generalizedState with LocalComparisons = generalizedState.LocalComparisons |> Map.add symbol compared }
+                                | _ -> generalizedState
                             env' <- TypeEnv.declare name symbol scheme env'
                             typedStatements <- typedStatements @ [ TypedDefStatement(isExport, name, typeOpt, typedExpr) ]
                             lastExpr <- typedExpr

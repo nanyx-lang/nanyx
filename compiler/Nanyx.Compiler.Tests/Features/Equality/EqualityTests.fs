@@ -93,6 +93,33 @@ let ``A local function generic in the type it compares is not an error`` () =
     compileClean "def f = { n ->\n  def same = { x, y -> x == y }\n  same(n + 1, 2)\n}\n" |> ignore
 
 [<Fact>]
+let ``Calling a local function that compares with functions is an error at the call`` () =
+    let cases =
+        [ "def f = { n -> n + 1 }\ndef b = {\n  def same = { x, y -> x == y }\n  same(f, f)\n}\n",
+          "'same' compares values of type 'int -> int', which cannot be compared: functions have no equality",
+          "same"
+          "def f = { n -> n + 1 }\ndef b = {\n  def holds = { xs, x -> xs == [x] }\n  holds([f], f)\n}\n",
+          "'holds' compares values of type 'int -> int', which cannot be compared: functions have no equality",
+          "holds"
+          "def g: a -> bool = { v ->\n  def same = { x, y -> x == y }\n  same(v, v)\n}\n",
+          "'same' requires the context 'Eq(a)', which is not available here: add [Eq(a)] to the type of 'g'",
+          "same" ]
+    for source, expectedMessage, expectedAt in cases do
+        let message, at = missingContext source
+        Assert.Equal(expectedMessage, message)
+        Assert.Equal(expectedAt, at)
+
+[<Fact>]
+let ``A def that calls a local function comparing its own type variable requires Eq of it`` () =
+    let typed = compileClean "def g = { v ->\n  def same = { x, y -> x == y }\n  same(v, v)\n}\ndef b = g(1)\n"
+    match inferredContexts typed with
+    | [ TyApply("Eq", [ TyVar _ ]) ] -> ()
+    | other -> failwith $"Unexpected inferred contexts: %A{other}"
+    let message, at = missingContext "def g = { v ->\n  def same = { x, y -> x == y }\n  same(v, v)\n}\ndef f = { n -> n + 1 }\ndef b = g(f)\n"
+    Assert.Equal("'g' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
+    Assert.Equal("g", at)
+
+[<Fact>]
 let ``Comparing functions is an error at the comparison`` () =
     let cases =
         [ "def f = { n -> n + 1 }\ndef b = f == f\n",

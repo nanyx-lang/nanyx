@@ -24,7 +24,9 @@ type DeferredContextUse =
 /// types the call alone does not settle and for which no instance is in scope: `Show(t)` where `t` is a parameter's
 /// type. Once the def is inferred, the context is found for the types they turned out to be, or, where they are
 /// variables of the def's type, required by the def itself. `Index` is the context's place among the `Count` the
-/// callee requires, and `Errors` what to report if neither can be done.
+/// callee requires, and `Errors` what to report if neither can be done. A call that `ChecksOnly` is passed no
+/// instance: its callee is a local function, which requires no contexts, and the context only has to exist (see
+/// `EqualityOperators.checkLocalCall`).
 type PendingContextInstance =
     { Def: Identifier
       Call: NodeId
@@ -34,7 +36,8 @@ type PendingContextInstance =
       Context: Identifier
       ArgTys: Ty list
       Span: SourceSpan
-      Errors: Diagnostic list }
+      Errors: Diagnostic list
+      ChecksOnly: bool }
 
 /// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
 type BlockImport =
@@ -79,6 +82,10 @@ type InferState =
             /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
             /// (see `EqualityOperators`).
             HoleScopes: Map<NodeId, TypeEnv * Identifier option>;
+            /// The type variables each local function compares values of, among those it is generic in, by the
+            /// function's symbol: a call to it needs an `Eq` of the types they are at the call (see
+            /// `EqualityOperators.checkLocalCall`).
+            LocalComparisons: Map<SymbolId, Set<int>>;
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
             InferredContextTypes: Map<SymbolId, Ty list>;
@@ -185,6 +192,7 @@ let emptyState =
             DeferredContextUses = [];
             PendingContextInstances = [];
             HoleScopes = Map.empty;
+            LocalComparisons = Map.empty;
             InferredContextTypes = Map.empty;
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
