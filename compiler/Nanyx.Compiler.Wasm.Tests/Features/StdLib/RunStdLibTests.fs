@@ -231,6 +231,54 @@ let ``Run - Bool.fromString reads true and false and rejects anything else`` () 
         "show(\"false\" \\ Bool.fromString)\n"
     runSource source |> assertRan "#some(true)\n#some(false)\n#invalidBool\n#invalidBool\n#invalidBool\n#invalidBool\n#some(false)\n"
 
+[<Fact>]
+let ``Run - Float.fromString reads decimals and rejects anything else`` () =
+    let inputs =
+        [ "1.5"; "-0.25"; "42"; "+3.0"; ".5"; "5."; "007.50"; "1.5e3"; "2E-3"; "1.0e-7"; "1.0e21"; "-0.0"
+          "1e400"; "1e-400"; "NaN"; "Infinity"; "-Infinity"
+          ""; "-"; "abc"; "1.2.3"; "."; "e5"; "1e"; "1e+"; " 1.5"; "1.5 "; "1,5"; "--1"; "1x" ]
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def show: [Console] (#some(float) | #invalidFloat) -> () = {\n" +
+        "  | #some(x) -> println(\"#some({x})\")\n" +
+        "  | #invalidFloat -> println(\"#invalidFloat\")\n" +
+        "}\n" +
+        "\n" +
+        (inputs |> List.map (fun input -> $"show(Float.fromString(\"{input}\"))\n") |> String.concat "") +
+        "show(\"0.5\" \\ Float.fromString)\n"
+    let expected =
+        [ "#some(1.5)"; "#some(-0.25)"; "#some(42.0)"; "#some(3.0)"; "#some(0.5)"; "#some(5.0)"; "#some(7.5)"
+          "#some(1500.0)"; "#some(0.002)"; "#some(1.0e-7)"; "#some(1.0e21)"; "#some(-0.0)"
+          "#some(Infinity)"; "#some(0.0)"; "#some(NaN)"; "#some(Infinity)"; "#some(-Infinity)" ]
+        @ List.replicate 13 "#invalidFloat"
+        @ [ "#some(0.5)" ]
+    runSource source |> assertRan (expected |> List.map (fun line -> line + "\n") |> String.concat "")
+
+[<Fact>]
+let ``Run - Float.fromString reads back the floats Float.toString writes`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def check: [Console] float -> () = { x ->\n" +
+        "  match Float.fromString(Float.toString(x))\n" +
+        "    | #some(y) -> println(if y == x then \"{x} reads back\" else \"{x} reads back as {y}\")\n" +
+        "    | #invalidFloat -> println(\"{x} does not read back\")\n" +
+        "}\n" +
+        "\n" +
+        "check(0.1 + 0.2)\n" +
+        "check(1.0 / 3.0)\n" +
+        "check(2.0 / 3.0)\n" +
+        "check(-123.456)\n" +
+        "check(6.02214076e23)\n" +
+        "check(1.0e-7)\n" +
+        "check(1.0e21)\n" +
+        "check(5.0)\n"
+    runSource source
+    |> assertRan (
+        "0.30000000000000004 reads back\n0.3333333333333333 reads back\n0.6666666666666666 reads back\n" +
+        "-123.456 reads back\n6.02214076e23 reads back\n1.0e-7 reads back\n1.0e21 reads back\n5.0 reads back\n")
+
 /// `readAll`, generic in the prelude's `FromString`, and a function of each result type that sums or counts what was read.
 let private readAllSource =
     "import nanyx/console\n" +

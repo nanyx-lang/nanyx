@@ -286,6 +286,113 @@ export def Float.pow: float, float -> float = { x, y ->
     else floatExp(y * floatLn(x))
 }
 
+-- Reading floats --------------------------------------------------------------------------------
+
+-- A decimal is read as a whole number `m`, its digits with the point taken out, and a power of ten
+-- `e` that puts the point back: "12.5e3" is 125 times 10 ** 2. `m` is held as a float, exactly
+-- while it is below 2 ** 53.
+
+-- `m` times 10 ** `e`, for a whole `m` of zero or more. When `m` is below 2 ** 53 and `e` is
+-- between -22 and 22 both are exact, so the one multiplication or division rounds to the nearest
+-- float. Otherwise the power of ten is rounded too.
+def scaleByTens: float, int -> float = { m, e ->
+  if m == 0.0
+    then 0.0
+    else if e >= 0
+      then m * 10.0 ** e
+      else if e < -300 then m / 10.0 ** 300 / 10.0 ** (-300 - e) else m / 10.0 ** -e
+}
+
+-- The decimal `s` writes from byte `i` on, with `m` and `e` the number read so far, `digits` how
+-- many digits that is, and `afterPoint` whether they included a `.`. Digits past the first 18 or so
+-- only move the point, as `m` holds no more.
+def readDecimal
+  : string, int, float, int, int, bool -> #some(float) | #invalidFloat
+  = { s, i, m, e, digits, afterPoint ->
+    if i >= __nanyx_string_length(s)
+      then (if digits == 0 then #invalidFloat else #some(scaleByTens(m, e)))
+      else readDecimalByte(s, i, m, e, digits, afterPoint, __nanyx_string_byte_at(s, i))
+  }
+
+-- `readDecimal` at the byte `b`, which is byte `i` of `s`.
+def readDecimalByte
+  : string, int, float, int, int, bool, int -> #some(float) | #invalidFloat
+  = { s, i, m, e, digits, afterPoint, b ->
+    if digitValue(b) >= 0
+      then (if m < 1.0e17
+        then readDecimal(
+          s
+          i + 1
+          m * 10.0 + Int.toFloat(digitValue(b))
+          (if afterPoint then e - 1 else e)
+          digits + 1
+          afterPoint
+        )
+        else readDecimal(s, i + 1, m, (if afterPoint then e else e + 1), digits + 1, afterPoint))
+      else if b == 46 and not afterPoint
+        then readDecimal(s, i + 1, m, e, digits, true)
+        else if (b == 101 or b == 69) and digits > 0
+          then readExponent(s, i + 1, m, e)
+          else #invalidFloat
+  }
+
+-- The exponent that starts at byte `i` of `s`, after its `e`, with its optional sign, applied to
+-- `m` and `e`.
+def readExponent: string, int, float, int -> #some(float) | #invalidFloat = { s, i, m, e ->
+  def sign = __nanyx_string_byte_at(s, i)
+
+  if sign == 45
+    then readExponentDigits(s, i + 1, m, e, -1, 0, 0)
+    else readExponentDigits(s, (if sign == 43 then i + 1 else i), m, e, 1, 0, 0)
+}
+
+-- The digits of an exponent from byte `i` of `s` on, with `n` and `digits` the value and count read
+-- so far. An exponent past 100000 is held there: it makes infinity or zero all the same.
+def readExponentDigits
+  : string, int, float, int, int, int, int -> #some(float) | #invalidFloat
+  = { s, i, m, e, sign, n, digits ->
+    if i >= __nanyx_string_length(s)
+      then (if digits == 0 then #invalidFloat else #some(scaleByTens(m, e + sign * n)))
+      else if digitValue(__nanyx_string_byte_at(s, i)) < 0
+        then #invalidFloat
+        else readExponentDigits(
+          s
+          i + 1
+          m
+          e
+          sign
+          (if n > 100000 then n else n * 10 + digitValue(__nanyx_string_byte_at(s, i)))
+          digits + 1
+        )
+  }
+
+-- The float `s` writes in decimal, or `#invalidFloat` for anything else (an empty string, a sign
+-- alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
+-- an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
+-- exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
+-- `Float.toString` writes them. A number too large for a float is infinity.
+--
+-- The result is the nearest float to the decimal when it has at most 15 significant digits and an
+-- exponent, once the point is moved to the end, between -22 and 22, which covers most text written
+-- by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
+export def Float.fromString: string -> #some(float) | #invalidFloat = { s ->
+  def first = __nanyx_string_byte_at(s, 0)
+  def start = if first == 45 or first == 43 then 1 else 0
+
+  if s == "NaN"
+    then #some(0.0 / 0.0)
+    else if first == 45
+      then Option.map(readFloatMagnitude(s, start), Float.negate)
+      else readFloatMagnitude(s, start)
+}
+
+-- The float `s` writes from byte `start` on, after any sign.
+def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start ->
+  if s == "Infinity" or s == "+Infinity" or s == "-Infinity"
+    then #some(1.0 / 0.0)
+    else readDecimal(s, start, 0.0, 0, 0, false)
+}
+
 -- Ordering --------------------------------------------------------------------------------------
 
 -- How two values of type `a` are put in order. `x < y`, `x <= y`, `x > y` and `x >= y` are read
@@ -486,8 +593,8 @@ export def Bool.toString: bool -> string = { b ->
 export def String.toString: string -> string = { s -> s }
 
 -- How a value of type `a` is read from text, with `e` for text that does not hold one: `Int.fromString`
--- gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int` and
--- `bool` do, so a function can read a value of whichever type it is called at:
+-- gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
+-- `float` and `bool` do, so a function can read a value of whichever type it is called at:
 -- `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
 export context FromString(a, e) = (fromString: string -> #some(a) | e)
 

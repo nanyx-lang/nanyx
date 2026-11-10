@@ -71,6 +71,13 @@ let ``Int.toFloat is in the prelude`` () =
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["piped"])
 
 [<Fact>]
+let ``Float.fromString is in the prelude`` () =
+    let result = Compiler.compile "def x = Float.fromString(\"1.5\")\ndef piped = \"7\" \\ Float.fromString"
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("#some(float) | #invalidFloat", Unifier.tyToString result.Typed.Value.Types.["x"])
+    Assert.Equal("#some(float) | #invalidFloat", Unifier.tyToString result.Typed.Value.Types.["piped"])
+
+[<Fact>]
 let ``Bool.fromString is in the prelude`` () =
     let result = Compiler.compile "def b = Bool.fromString(\"true\")\ndef piped = \"false\" \\ Bool.fromString"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)

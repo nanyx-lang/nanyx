@@ -20,7 +20,7 @@ def toCsvLine: Stock -> string = { s ->
   [s.ticker, quote(s.name), "{s.price}", "{s.change}", "{s.pct}"] \String.join(",")
 }
 
-def fromCsvLine: string -> #some(Stock) | #error(#malformed | #notANumber) = { line ->
+def fromCsvLine: string -> #some(Stock) | #error(#malformed) | #invalidFloat = { line ->
   match line \split(on = ",")
     | [ticker, name, price, change, pct] -> proc {
         return Stock(
@@ -49,6 +49,6 @@ def main: [Console & FileSystem] () -> () = {
       | #some(stock) ->
         def #some(status) = statusLabels(Math.sign(stock.change)) except #notFound -> #some("unknown")
         println("{stock.name} is {status} {stock.pct}")
-      | #error(_) ->
+      | _ ->
         println("Skipping malformed line: {line}")
 }
