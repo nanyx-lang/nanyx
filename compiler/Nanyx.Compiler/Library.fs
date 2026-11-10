@@ -724,10 +724,10 @@ module Compiler =
                 unreachable <- outerUnreachable
                 if used then body'.Kind
                 else FunctionCall(name, rangeOpt, [ { lambda with Kind = Lambda([], body') } ])
-            // A `for` loop's body is a lambda of the element, which the loop runs once per element.
-            | FunctionCall("__for", rangeOpt, [ iterable; Kind (Lambda(parameters, body)) as loop ]) ->
+            // A `for` loop's body is a lambda of the elements, which the loop runs once per step.
+            | ForSyntax.Call(iterables, loop, parameters, body) ->
                 let body' = within InLoopBody (fun () -> desugarExpr body)
-                FunctionCall("__for", rangeOpt, [ desugarExpr iterable; { loop with Kind = Lambda(parameters, body') } ])
+                FunctionCall(ForSyntax.builtIn, None, List.map desugarExpr iterables @ [ { loop with Kind = Lambda(parameters, body') } ])
             | FunctionCall(name, rangeOpt, args) ->
                 FunctionCall(name, rangeOpt, args |> List.map desugarExpr)
             | Lambda(args, body) ->

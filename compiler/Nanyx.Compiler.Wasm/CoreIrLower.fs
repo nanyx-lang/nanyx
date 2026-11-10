@@ -514,24 +514,41 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
         | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
-        | FunctionCall("__for", _, [ iterable; Kind (Lambda([ (parameter, _) ], body)) ]) ->
-            // `for iterable | arms`: the body runs for each element, in a local the body names by the parameter. A
-            // range counts from its start to its end; a list walks its cells.
+        | ForSyntax.Call(iterables, _, parameters, body) when parameters.Length = iterables.Length ->
+            // `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body
+            // names by its parameter. A range counts from its start (to its end, if it has one); a list walks its cells.
             let depth = scope.ForDepth
-            let cursor = newVar $"__for_cursor_{depth}" ForLoop IrInt
-            let finish = newVar $"__for_end_{depth}" ForLoop IrInt
-            let loop (source: ForSource) (elementTy: IrType) =
-                let element = newVar $"__for_{sanitizeIdentifier parameter}_{depth}" ForLoop elementTy
-                let bodyScope = { scope with Vars = scope.Vars |> Map.add parameter element; ForDepth = depth + 1 }
-                let forLoop: ForLoop = { Source = source; Depth = depth; Cursor = cursor; End = finish; Element = element; Body = this.Tail bodyScope body }
-                k (mk (ForEach forLoop) IrUnit)
-            match iterable.Kind with
-            | FunctionCall("__range", _, [ first; last ]) ->
-                this.Atoms scope [ first; last ] (fun atoms -> loop (OverRange(atoms.[0], atoms.[1])) IrInt)
-            | _ ->
-                match tyOf iterable with
-                | IrList elementTy -> this.Atoms scope [ iterable ] (fun atoms -> loop (OverList atoms.Head) elementTy)
-                | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
+            // The first stream's locals keep the names a loop over one iterable has always had.
+            let suffix index = if index = 0 then "" else $"_{index}"
+            // Each iterable's operands, and how to make its source and element type from their atoms.
+            let source (iterable: Expression) : Expression list * (Atom list -> ForSource * IrType) =
+                match iterable.Kind with
+                | RangeSyntax.Call(first, Some last) -> [ first; last ], fun atoms -> OverRange(atoms.[0], atoms.[1]), IrInt
+                | RangeSyntax.Call(first, None) -> [ first ], fun atoms -> OverRangeFrom atoms.Head, IrInt
+                | _ ->
+                    match tyOf iterable with
+                    | IrList elementTy -> [ iterable ], fun atoms -> OverList atoms.Head, elementTy
+                    | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
+            let walkers =
+                iterables |> List.mapi (fun index _ ->
+                    newVar $"__for_cursor_{depth}{suffix index}" ForLoop IrInt, newVar $"__for_end_{depth}{suffix index}" ForLoop IrInt)
+            let sources = iterables |> List.map source
+            this.Atoms scope (sources |> List.collect fst) (fun atoms ->
+                let streams =
+                    List.zip3 sources parameters walkers
+                    |> List.mapFold (fun (remaining: Atom list) ((operands, make), (parameter, _), (cursor, finish)) ->
+                        let source, elementTy = make (List.take operands.Length remaining)
+                        let stream =
+                            { Source = source
+                              Cursor = cursor
+                              End = finish
+                              Element = newVar $"__for_{sanitizeIdentifier parameter}_{depth}" ForLoop elementTy }
+                        (parameter, stream), List.skip operands.Length remaining) atoms
+                    |> fst
+                let vars = streams |> List.fold (fun vars (parameter, stream) -> vars |> Map.add parameter stream.Element) scope.Vars
+                let bodyScope = { scope with Vars = vars; ForDepth = depth + 1 }
+                let forLoop: ForLoop = { Streams = List.map snd streams; Depth = depth; Body = this.Tail bodyScope body }
+                k (mk (ForEach forLoop) IrUnit))
         | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError

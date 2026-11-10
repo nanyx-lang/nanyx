@@ -198,7 +198,7 @@ shape. A body is an expression with a type on every node:
 | `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures |
 | `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
 | `boxFloat(value)` | boxes a float constant (floats are boxed, and `prim` on floats unboxes its operands) |
-| `forEach(loop)` | a `for` loop over a list or a range, its body run for each element |
+| `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |
 | `panic(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
 | `dbg(atom, form)` | prints a value as `dbg` does for its type, and leaves it |

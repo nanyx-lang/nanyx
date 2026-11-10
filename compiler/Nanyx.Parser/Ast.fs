@@ -325,6 +325,36 @@ module Expression =
     /// An expression the compiler made up that has no source of its own.
     let synthetic (kind: ExpressionKind) = at SourceSpan.none kind
 
+/// `for xs, ys | arms` (see the loops page): a call to the built-in "__for" with the iterables and then a lambda that
+/// takes one element of each, in order. The loop walks the iterables in step and stops when the shortest ends.
+module ForSyntax =
+    let builtIn = "__for"
+
+    /// The loop lambda's parameter for an element of the `position`th iterable (counted from 1). Like a shorthand
+    /// lambda's parameter, no code can write it.
+    let element (position: int) = if position = 1 then "__for_element" else $"__for_element{position}"
+
+    /// A `for` loop's iterables and its loop lambda, with that lambda's parameters and body.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, args) when name = builtIn && args.Length >= 2 ->
+            match List.last args with
+            | { Kind = Lambda(parameters, body) } as loop -> Some (List.take (args.Length - 1) args, loop, parameters, body)
+            | _ -> None
+        | _ -> None
+
+/// `a..b` (see the ranges page): a call to the built-in "__range" with its bounds, or with only its start for the
+/// unbounded `a..`.
+module RangeSyntax =
+    let builtIn = "__range"
+
+    /// A range's start, and its end when it has one.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ first; last ]) when name = builtIn -> Some (first, Some last)
+        | FunctionCall(name, _, [ first ]) when name = builtIn -> Some (first, None)
+        | _ -> None
+
 module TypeExpr =
     /// A type expression written at `span`.
     let at (span: SourceSpan) (kind: TypeExprKind) : TypeExpr =

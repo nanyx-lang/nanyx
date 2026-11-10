@@ -51,8 +51,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Field(atom, _)
     | Dbg(atom, _)
     | If(atom, _, _) -> ofAtoms [ atom ]
-    | ForEach { Source = OverList list } -> ofAtoms [ list ]
-    | ForEach { Source = OverRange(first, last) } -> ofAtoms [ first; last ]
+    | ForEach loop -> ofAtoms (ForLoop.sourceAtoms loop)
     | Dup(_, body)
     | Drop(_, body)
     | DropAfter(body, _)
@@ -421,20 +420,41 @@ type private FunctionEmitter(context: EmitContext) =
         | AString value -> $"i32.const {context.StringOffset value}"
         | ATag name -> $"i32.const {tagCode (context.TagId name)}"
 
-    /// A `for` loop: the body's value is dropped each time round, and the loop is unit.
+    /// A `for` loop: each time round, every stream gives its next element (or ends the loop), the body's value is
+    /// dropped, and every stream moves on. The loop is unit.
     member this.ForLoop (loop: ForLoop) (atomCode: Atom -> string) : string =
         let depth = loop.Depth
-        let cursor, finish, element = loop.Cursor.Name, loop.End.Name, loop.Element.Name
+        let done' = $"br_if $__for_done_{depth}"
+        // What each stream does before the loop, at the top of each time round, and at the bottom.
+        let start (stream: ForStream) =
+            match stream.Source with
+            | OverRange(first, last) -> [ atomCode first; $"local.set ${stream.Element.Name}"; atomCode last; $"local.set ${stream.End.Name}" ]
+            | OverRangeFrom first -> [ atomCode first; $"local.set ${stream.Element.Name}" ]
+            | OverList list -> [ atomCode list; $"local.set ${stream.Cursor.Name}" ]
+        let next (stream: ForStream) =
+            match stream.Source with
+            | OverRange _ -> [ $"local.get ${stream.Element.Name}"; $"local.get ${stream.End.Name}"; "i32.gt_s"; done' ]
+            | OverRangeFrom _ -> []
+            | OverList _ ->
+                let cursor = stream.Cursor.Name
+                [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; "i32.load"; $"local.set ${stream.Element.Name}" ]
+        let advance (stream: ForStream) =
+            match stream.Source with
+            | OverRange _
+            | OverRangeFrom _ ->
+                let element = stream.Element.Name
+                [ $"local.get ${element}"; "i32.const 1"; "i32.add"; $"local.set ${element}" ]
+            | OverList _ ->
+                let cursor = stream.Cursor.Name
+                [ $"local.get ${cursor}"; "i32.const 4"; "i32.add"; "i32.load"; $"local.set ${cursor}" ]
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type
-        match loop.Source with
-        | OverRange(first, last) ->
-            let firstCode = atomCode first
-            let lastCode = atomCode last
-            $"{firstCode}\n    local.set ${element}\n    {lastCode}\n    local.set ${finish}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${element}\n        local.get ${finish}\n        i32.gt_s\n        br_if $__for_done_{depth}\n        {bodyCode}\n        {bodyDrop}\n        local.get ${element}\n        i32.const 1\n        i32.add\n        local.set ${element}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
-        | OverList list ->
-            let listCode = atomCode list
-            $"{listCode}\n    local.set ${cursor}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        local.get ${cursor}\n        i32.eqz\n        br_if $__for_done_{depth}\n        local.get ${cursor}\n        i32.load\n        local.set ${element}\n        {bodyCode}\n        {bodyDrop}\n        local.get ${cursor}\n        i32.const 4\n        i32.add\n        i32.load\n        local.set ${cursor}\n        br $__for_next_{depth}\n      end\n    end\n    i32.const 0"
+        // The starting atoms are read in the order `tempsUsedBy` gives them.
+        let startCode = loop.Streams |> List.collect start |> String.concat "\n    "
+        let inLoop =
+            List.collect next loop.Streams @ [ bodyCode; bodyDrop ] @ List.collect advance loop.Streams @ [ $"br $__for_next_{depth}" ]
+            |> String.concat "\n        "
+        $"{startCode}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        {inLoop}\n      end\n    end\n    i32.const 0"
 
     /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
@@ -591,9 +611,7 @@ let private declaredLocals (body: Expr) : string list =
         | Panic _ -> ()
         | Interpolate _ -> interpolates.Value <- true
         | ForEach loop ->
-            loops.Add loop.Cursor
-            loops.Add loop.End
-            loops.Add loop.Element
+            ForLoop.locals loop |> List.iter loops.Add
             walk loop.Body
         | Dbg(_, form) ->
             match form with

@@ -81,3 +81,16 @@ let ``Counting - tags with payloads are freed on every branch`` () =
         "}\n" +
         loop
     assertRunsInConstantMemory source
+
+[<Fact>]
+let ``Counting - a loop over lists in step frees them`` () =
+    let source =
+        count +
+        "def step: int -> int = { i ->\n" +
+        "  def words = [\"one {i}\", \"two {i}\", \"three\"]\n" +
+        "  def groups = [[\"a {i}\"], [\"b\", \"c {i}\"]]\n" +
+        "  for words, groups, 0.. | word, group, n -> count([word, ...group]) + n\n" +
+        "  count(words)\n" +
+        "}\n" +
+        loop
+    assertRunsInConstantMemory source

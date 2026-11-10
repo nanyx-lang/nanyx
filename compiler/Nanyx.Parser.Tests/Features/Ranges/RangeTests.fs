@@ -23,6 +23,26 @@ let ``for with arms is a call to __for with a pattern lambda, and -> without an 
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``a.. with nothing after it is a call to __range with only its start`` () =
+    match parseModule "def a = 0..\ndef b = n + 1..\ndef c = 1.. \\take(3)\ndef d = f(0..)" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__range", None, [ Kind (LiteralExpr (IntLit 0)) ])))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__range", None, [ Kind (BinaryOp ("+", _, _)) ])))))
+                  Kind (Def (ValueDef (_, "c", _, Kind (Pipe (Kind (FunctionCall ("__range", None, [ _ ])), "take", _, _)))))
+                  Kind (Def (ValueDef (_, "d", _, Kind (FunctionCall ("f", _, [ Kind (FunctionCall ("__range", None, [ _ ])) ]))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``for over several iterables is a call to __for with a lambda of one element of each`` () =
+    match parseModule "def a = for xs, 0.. | x, i -> f(x, i)\ndef b = for xs, ys -> g()" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__for", None, [ Kind (IdentifierExpr "xs"); Kind (FunctionCall ("__range", _, [ _ ])); Kind (Lambda ([ (first, None); (second, None) ], Kind (Match ([ Kind (IdentifierExpr firstScrutinee); Kind (IdentifierExpr secondScrutinee) ], [ [ Kind (IdentifierPattern "x"); Kind (IdentifierPattern "i") ], _ ])))) ])))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__for", None, [ Kind (IdentifierExpr "xs"); Kind (IdentifierExpr "ys"); Kind (Lambda ([ _; _ ], Kind (FunctionCall ("g", _, _)))) ]))))) ] ->
+        Assert.Equal<string list>([ first; second ], [ firstScrutinee; secondScrutinee ])
+        Assert.NotEqual<string>(first, second)
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
 let ``rec is a def whose value is wrapped in __rec`` () =
     match parseModule "def f = {\n  rec loop = { i -> loop(i) }\n  loop(1)\n}" with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (false, "loop", None, Kind (FunctionCall ("__rec", None, [ Kind (Lambda _) ])))); Kind (ExprStatement _) ])))))) ] -> ()

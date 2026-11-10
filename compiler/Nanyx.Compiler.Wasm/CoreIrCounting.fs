@@ -52,8 +52,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Interpolate parts -> parts |> List.choose (function Hole(hole, _) -> Some(AVar hole, Borrowed) | Text _ -> None)
     // `dbg` leaves the value it prints, or puts it in the cell of the tag it prints.
     | Dbg(value, _) -> [ value, Owned ]
-    | ForEach { Source = OverList list } -> [ list, Borrowed ]
-    | ForEach { Source = OverRange(first, last) } -> all Borrowed [ first; last ]
+    | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
     | If(cond, _, _) -> [ cond, Borrowed ]
     | BoxFloat _
     | Panic _
@@ -234,7 +233,7 @@ type private Counter(ownership: Ownership, func: Function) =
                         Set.unionMany ((Set.difference (this.Free arm.Body) bound) :: ofGuards)
                     Set.unionMany ((scrutinees |> List.map _.Id |> Set.ofList) :: List.map ofArm arms)
                 | ForEach loop ->
-                    let loopVars = Set.ofList [ loop.Cursor.Id; loop.End.Id; loop.Element.Id ]
+                    let loopVars = ForLoop.locals loop |> List.map _.Id |> Set.ofList
                     let source = operands ownership e |> List.map (fst >> this.FreeIn) |> Set.unionMany
                     Set.union source (Set.difference (this.Free loop.Body) loopVars)
                 | Dup(dupped, body)
@@ -304,7 +303,7 @@ type private Counter(ownership: Ownership, func: Function) =
             mk (Match(scrutinees, List.map countArm arms)) e.Type
         | ForEach loop ->
             // The body only borrows what it uses from outside, which lives on until the loop is done.
-            let loopVars = Set.ofList [ loop.Cursor.Id; loop.End.Id; loop.Element.Id ]
+            let loopVars = ForLoop.locals loop |> List.map _.Id |> Set.ofList
             let fromOutside = Set.difference (this.Free loop.Body) loopVars |> sortedVars |> List.map (fun var -> AVar var, Borrowed)
             let dups, drops = this.Operands owned after (operands ownership e @ fromOutside)
             let body = this.Count Set.empty Set.empty loop.Body

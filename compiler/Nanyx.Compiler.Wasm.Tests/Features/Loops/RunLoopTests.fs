@@ -30,6 +30,37 @@ let ``Run - for loops over ranges and lists`` () =
     runSource source |> assertRan "1\n2\n3\na\nb\nReady...\nReady...\nReady...\nReady...\nGo!\ntick\ntick\n1,1\n1,2\n2,1\n2,2\nhey!\n"
 
 [<Fact>]
+let ``Run - for loops over several iterables walk them in step`` () =
+    // The program from the loops page: a list zipped with a range that has no end counts its elements.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def things = [\n" +
+        "  \"Alex\"\n" +
+        "  \"Sam\"\n" +
+        "  \"Jo\"\n" +
+        "]\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  for things | thing ->\n" +
+        "    println(thing)\n" +
+        "  for things, 0.. | thing, i ->\n" +
+        "    println(\"{i}: {thing}\")\n" +
+        "  for things, 1..2 | \"Sam\", i -> println(\"Sam is {i}\")\n" +
+        "                   | thing, _ -> println(\"not Sam: {thing}\")\n" +
+        "  for 10..12, [[1], [2, 3], [4, 5, 6], [7]], 100.. | a, xs, c -> println(\"{a} {List.length(xs)} {c}\")\n" +
+        "  for things, things -> println(\"tick\")\n" +
+        "  for things, 0.. | thing, i ->\n" +
+        "    for [true, false], 0.. | flag, j -> println(\"{i}.{j} {thing} {flag}\")\n" +
+        "}\n"
+    let expected =
+        "Alex\nSam\nJo\n0: Alex\n1: Sam\n2: Jo\nnot Sam: Alex\nSam is 2\n10 1 100\n11 2 101\n12 3 102\n" +
+        "tick\ntick\ntick\n" +
+        "0.0 Alex true\n0.1 Alex false\n1.0 Sam true\n1.1 Sam false\n2.0 Jo true\n2.1 Jo false\n"
+    runSource source |> assertRan expected
+
+[<Fact>]
 let ``Run - rec local loops`` () =
     // Regression: `rec loop = { ... }` was a parse error (#38).
     let source =

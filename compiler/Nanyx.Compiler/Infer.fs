@@ -1152,36 +1152,48 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         else Error errors
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` expects a record and the fields to update" ]
 
-        elif name = "__range" then
-            // `a..b`: a bounded range of ints, a `seq(int)` (see the ranges page).
+        elif name = RangeSyntax.builtIn then
+            // `a..b`: a bounded range of ints, a `seq(int)`; `a..` has no end, so it is a `gen(int)` (see the ranges page).
             let mutable current = state
             let mutable errors: Diagnostic list = []
             for arg in args do
                 match inferExpr env current arg with
                 | Ok (typedArg, next) -> current <- addConstraint typedArg.Type (TyPrimitive "int") next
                 | Error err -> errors <- errors @ err
-            if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply("seq", [ TyPrimitive "int" ])) None None None, current)
+            let sequence = if args.Length = 1 then "gen" else "seq"
+            if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply(sequence, [ TyPrimitive "int" ])) None None None, current)
             else Error errors
         elif name = "__rec" then
             // `rec name = value`: the value of a self-referencing local def; the block already binds the name.
             match args with
             | [ inner ] -> inferExpr env state inner
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
-        elif name = "__for" then
-            // `for iterable | arms`: the parser passes the iterable and a one-parameter lambda. The lambda's
-            // parameter is an element of the iterable (a `list(a)` or a `seq(a)`), and the loop is unit.
-            match args with
-            | [ iterable; Kind (Lambda(lambdaArgs, lambdaBody)) as lambdaExpr ] ->
-                match inferExpr env state iterable with
-                | Error err -> Error err
-                | Ok (typedIterable, afterIterable) ->
-                    let elementTy, constrained =
+        elif name = ForSyntax.builtIn then
+            // `for xs, ys | arms`: the parser passes the iterables and a lambda of one element of each. Each iterable
+            // is a `list(a)`, a `seq(a)` or a `gen(a)`, and the loop is unit. It stops when the shortest iterable
+            // does, so a `gen`, which may never end, is only walked in step with one that does.
+            match expr.Kind with
+            | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
+                let elementOf (current: InferState) (iterable: Expression) =
+                    inferExpr env current iterable
+                    |> Result.map (fun (typedIterable, afterIterable) ->
                         match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
-                        | TyApply(("seq" | "list"), [ elementTy ]) -> elementTy, afterIterable
+                        | TyApply(("seq" | "list" | "gen") as sequence, [ elementTy ]) -> (elementTy, sequence = "gen"), afterIterable
                         | _ ->
                             let elementTy, next = freshVar afterIterable
-                            elementTy, addConstraint typedIterable.Type (listType elementTy) next
-                    match inferLambdaWithExpected env constrained lambdaExpr lambdaArgs lambdaBody (Some elementTy) None with
+                            (elementTy, false), addConstraint typedIterable.Type (listType elementTy) next)
+                let elements =
+                    iterables |> List.fold (fun result iterable ->
+                        result |> Result.bind (fun (found, current) ->
+                            elementOf current iterable |> Result.map (fun (element, next) -> found @ [ element ], next))) (Ok ([], state))
+                match elements with
+                | Error err -> Error err
+                | Ok (elements, _) when elements |> List.forall snd ->
+                    let message = "A `for` loop over a `gen` alone may never end: walk it in step with a list or a bounded range, as `for xs, 0.. | x, i` does"
+                    Error [ Diagnostics.at DiagnosticCodes.EndlessForLoop (List.head iterables).Span message ]
+                | Ok (elements, constrained) ->
+                    let expectedInput = inputTypeFromArgs (List.map fst elements)
+                    match inferLambdaWithExpected env constrained lambdaExpr lambdaArgs lambdaBody (Some expectedInput) None with
                     | Ok (_, next) -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, next)
                     | Error err -> Error err
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]

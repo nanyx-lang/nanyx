@@ -14,6 +14,12 @@ def naturalNumbers = 0..
 def oneToTen = 1..10
 ```
 
+An unbounded range such as `0..` counts up forever, so a `for` loop can only walk it [in step with something that ends](./loops#enumerating-with-indexes):
+
+```nanyx
+for ["a", "b", "c"], 1.. | letter, n -> println("{n}. {letter}")
+```
+
 # Types and ranges
 
 Any type can be used in a range if it supports `succ` and comparison:

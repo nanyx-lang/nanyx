@@ -106,11 +106,7 @@ let collect (functions: Function list) : ModuleFacts =
         | BoxFloat _ -> ()
         | Panic messages -> strings.AddRange messages
         | ForEach loop ->
-            match loop.Source with
-            | OverList list -> atom list
-            | OverRange(first, last) ->
-                atom first
-                atom last
+            ForLoop.sourceAtoms loop |> List.iter atom
             expr loop.Body
         | Let(var, value, body) when var.Kind = Temp ->
             deferred.[var.Id] <- value
