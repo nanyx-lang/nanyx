@@ -318,6 +318,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | BinaryOp(op, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
         | RangeSyntax.Call _ -> 4 < position.Prec || position.Inline
         | FunctionCall("not", _, [ _ ]) -> 8 < position.Prec || position.Inline
+        | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> 8 < position.Prec
         | Pipe _ -> 0 < position.Prec
         | _ when isOpenEnded e -> not position.Tail || position.Prec > 8
         | _ -> false
@@ -347,6 +348,15 @@ let format (options: Options) (parsed: SourceModule) : string =
             | Some segments -> listDoc e.Span segments
             | None -> binary position op l r
         | FunctionCall("not", _, [ operand ]) -> cat [ text "not "; expr operandPosition operand ]
+        // `-` is written against its operand. A number or another negation after it is parenthesized, since `-5` is a
+        // literal and `--` starts a comment.
+        | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
+            let joinsTheMinus =
+                match operand.Kind with
+                | LiteralExpr(IntLit _ | FloatLit _) -> true
+                | FunctionCall(inner, _, [ _ ]) -> inner = NegateSyntax.builtIn
+                | _ -> false
+            cat [ text "-"; (if joinsTheMinus then parens (exprBare full operand) else expr operandPosition operand) ]
         | RangeSyntax.Call(a, Some b) ->
             cat [ expr { position with Tail = false; Prec = 4 } a; text ".."; expr { position with Prec = 5 } b ]
         | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = 4 } a; text ".." ]

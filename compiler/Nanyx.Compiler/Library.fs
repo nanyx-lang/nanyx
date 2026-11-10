@@ -1010,12 +1010,13 @@ module Compiler =
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
     /// attached function written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
-    /// that call (`operatorCalls`), each read of a built-in property as a call (`properties`), each builder block that
-    /// uses no keyword as its block (`workflowBlocks`), and without import statements. `defer` compiles the module's
-    /// errors to traps first, for a debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    /// that call (`operatorCalls`), each literal that reads as a context's member as that member (`literalMembers`),
+    /// each read of a built-in property as a call (`properties`), each builder block that uses no keyword as its block
+    /// (`workflowBlocks`), and without import statements. `defer` compiles the module's errors to traps first, for a
+    /// debug build.
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (literalMembers: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callOperators pipeTargets operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> readLiteralMembers literalMembers |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1292,7 +1293,7 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.LiteralMembers state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)

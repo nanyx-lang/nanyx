@@ -167,3 +167,29 @@ let ``Parse equality operators`` () =
             ()
         | _ -> failwith "Expected equality operator"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
+let ``Prefix minus negates its operand, tighter than every infix operator`` () =
+    let negated (operand: ExpressionKind -> bool) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, None, [ Kind inner ]) -> name = NegateSyntax.builtIn && operand inner
+        | _ -> false
+    let isName name = function IdentifierExpr n -> n = name | _ -> false
+    match parseModule "def a = -x * y\ndef b = 3 - -x\ndef c = -f(x)\ndef d = -5\ndef e = a -b\n" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (BinaryOp ("*", Kind left, _)))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (BinaryOp ("-", _, Kind right)))))
+                  Kind (Def (ValueDef (_, "c", _, Kind call)))
+                  Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (IntLit -5)))))
+                  Kind (Def (ValueDef (_, "e", _, Kind (BinaryOp ("-", _, _))))) ] ->
+        Assert.True(negated (isName "x") left, $"%A{left}")
+        Assert.True(negated (isName "x") right, $"%A{right}")
+        Assert.True(negated (function FunctionCall("f", _, _) -> true | _ -> false) call, $"%A{call}")
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``A shorthand lambda that starts with minus still subtracts from its argument`` () =
+    match parseModule "def f = { -x }\n" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ _ ], Kind (BinaryOp ("-", _, Kind (IdentifierExpr "x"))))))))] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"

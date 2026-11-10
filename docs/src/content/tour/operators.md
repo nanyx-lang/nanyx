@@ -42,7 +42,7 @@ Also, lambda syntax supports an [operator-based shorthand](../tour/functions#sho
 
 # Arithmetic and comparison
 
-Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) on the built-in types are [attached definitions](../advanced/attached-definitions): `1 + 2` resolves to `` int.`+` ``, exactly as any other attached function is resolved by the type of its first argument (here, the left operand). To give your own type an operator, attach a definition to it:
+Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` and `x - y` read through [`Add`](../advanced/contexts#adda), and `x == y` through [`Eq`](../advanced/contexts#eqa). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
 
 ```nanyx
 def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
@@ -50,7 +50,11 @@ def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
 def c = a + b   -- resolves to Vector.`+` because `a` is a Vector
 ```
 
-Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Sum(a)]` or `[Num(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading a context with `use` only overrides the instance that such generic code sees for that particular type; it never changes what `1 + 2` means. Equality is the exception: `a == b` is always a lookup of `Eq` at the operands' type, so after `use ignoringCase`, an `Eq(string)`, a plain `a == b` on strings in that block calls its `==` too, and `a == b` on a nominal type with an attached `==` calls that.
+The operator is found by the type of its left operand, exactly as any other attached function is resolved by the type of its first argument.
+
+`-x` negates: it binds tighter than every infix operator, so `-x * y` is `(-x) * y`, and it is written against its operand. `-5` is a literal. On an `int` or a `float` it is the built-in negation (`-0.0` is negative zero); on any other type it is that type's `negate`, the member of `Add`. In a [shorthand lambda](../tour/functions#shorthand-lambdas), a leading `-` is still the infix operator, so `{ -x }` is `{ n -> n - x }`.
+
+Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Add(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading an `Add` with `use` changes the instance that such generic code sees for that type; making it change a concrete `1 + 2` too, as it will, is [not done yet](../work-in-progress/numeric-contexts#what-is-implemented). Equality already works that way: `a == b` is always a lookup of `Eq` at the operands' type, so after `use ignoringCase`, an `Eq(string)`, a plain `a == b` on strings in that block calls its `==`.
 
 # Pipe and composition
 
@@ -96,7 +100,7 @@ Some sequences built from operator characters are syntax, not operators, and can
 | `?` | Optional marker |
 | `???` | Unimplemented placeholder |
 
-The following operators are defined by the standard library as attached definitions on the built-in types. You can attach them to your own types, but you cannot redefine them globally:
+The following operators are built in. You can attach them to your own types, but you cannot redefine them globally:
 
 | Operators | Meaning |
 |---|---|

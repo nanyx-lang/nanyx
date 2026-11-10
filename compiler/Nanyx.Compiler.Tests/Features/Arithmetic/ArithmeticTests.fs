@@ -28,3 +28,31 @@ let ``The remainder of two ints is an int and of two floats a float`` () =
         Assert.Empty(result.Diagnostics)
         let ty = result.Typed.Value.Types |> Map.find "r"
         Assert.Equal(expected, Unifier.tyToString ty)
+
+[<Fact>]
+let ``A function that writes its type must require Add of a type variable it adds, subtracts or negates`` () =
+    let cases =
+        [ "def add: a, a -> a = { x, y -> x + y }\n", "'add' adds values of type 'a' with +, so its type must require Add(a): add [Add(a)] to the type of 'add'", "x + y"
+          "def sub: a, a -> a = { x, y -> x - y }\n", "'sub' subtracts values of type 'a' with -, so its type must require Add(a): add [Add(a)] to the type of 'sub'", "x - y"
+          "def neg: a -> a = { x -> -x }\n", "'neg' negates values of type 'a' with -, so its type must require Add(a): add [Add(a)] to the type of 'neg'", "-x" ]
+    for source, message, text in cases do
+        Assert.Equal((DiagnosticCodes.MissingContextMembers.Code, message, text), onlyDiagnostic source)
+
+[<Fact>]
+let ``Adding and negating values of a type variable calls the members of the Add the function requires`` () =
+    let source =
+        "def double: [Add(a)] a -> a = { x -> x + x }\n" +
+        "def orZero: [Add(a)] a -> a = { x -> x + 0 }\n" +
+        "def flip: [Add(a)] a -> a = { x -> 0 - x + -x }\n" +
+        "def total = [1.5, 2.5] \\List.sum\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal("float", Unifier.tyToString result.Typed.Value.Types.["total"])
+
+[<Fact>]
+let ``Negation without a written type is of an int or a float`` () =
+    for source, expected in [ "def r = { x -> -x }\n", "int -> int"; "def r = -2.5\n", "float"; "def r = { x: float -> -x }\n", "float -> float" ] do
+        let result = Compiler.compile source
+        Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+        Assert.Equal(expected, Unifier.tyToString result.Typed.Value.Types.["r"])
+    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' cannot be used with -: it is not a number", "-\"s\""), onlyDiagnostic "def r = -\"s\"\n")

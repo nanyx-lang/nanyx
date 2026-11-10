@@ -127,12 +127,16 @@ type InferState =
             /// ambiguous; one to a definition of the module's own, or to a local, is not.
             AmbiguousImports: Map<string, SymbolId * string list>;
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
-            /// `x \trim` on a string calls `String.trim`. An operator among `OperatorCalls` that calls an attached
-            /// definition has it here too: `a == b` on `$Email`s calls `` $Email.`==` ``.
+            /// `x \trim` on a string calls `String.trim`.
             PipeTargets: Map<NodeId, Identifier>;
-            /// The operators that call the definition their name is bound to, by the operator's node: `x + y` in a
-            /// function that requires `[Sum(a)]` calls the context's `` `+` ``.
-            OperatorCalls: Set<NodeId>;
+            /// The operators that call a definition, by the operator's node, with the name they call it by: `x + y`
+            /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
+            /// `` $Vector.`+` `` when that is attached.
+            OperatorCalls: Map<NodeId, Identifier>;
+            /// The literals that read as a context's member, by the literal's node, each with what it is written as:
+            /// `0` in `x + 0`, where `x` is of a type variable `a` of a function that requires `Add(a)`, is `zero`
+            /// (see `ArithmeticOperators`).
+            LiteralMembers: Map<NodeId, Expression>;
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
@@ -211,7 +215,8 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
-            OperatorCalls = Set.empty;
+            OperatorCalls = Map.empty;
+            LiteralMembers = Map.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;
