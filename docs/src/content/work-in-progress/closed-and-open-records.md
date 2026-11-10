@@ -65,7 +65,7 @@ compiler already prints for an inferred open record:
 ```nanyx
 def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
 
-def moved = moveRight((x = 1, y = 2, label = "a"))   -- (x: int, y: int, label: string)
+def moved = moveRight((x = 1, y = 2, label = "a"))   -- (label: string, x: int, y: int)
 ```
 
 A type variable named in a row is generic like any other type variable in an annotation.
@@ -79,7 +79,7 @@ fields are always exactly the ones its type lists.
 ## Inference
 
 - **Reading a field** of a value whose type is not otherwise known gives it an open record type: `{ p -> p.x }` is
-  `(x: a, ...r) -> a`. This is what the type checker does today (`TyOpenRecord`).
+  `(x: α, …) -> α` in an editor. This is what the type checker does today (`TyOpenRecord`).
 - **A record literal** has a closed type: `(x = 1, y = 2)` is `(x: int, y: int)`.
 - **An annotation** is taken as written: `(x: int, y: int)` is closed, however the value it annotates was
   inferred.

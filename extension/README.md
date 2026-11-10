@@ -49,6 +49,9 @@ the extension says so and you can run **Nanyx: Download the compiler** later or 
 
 ## Settings
 
+The [VS Code extension](https://nanyx.dev/docs/standard-tools/vs-code-extension) page of the Nanyx docs
+describes these settings too. A change to them goes on both.
+
 - `nanyx.path`: path to the `nanyx` executable. Empty (the default) means search `PATH`, then the
   downloaded copy.
 - `nanyx.developmentMode`: for working on the compiler; see

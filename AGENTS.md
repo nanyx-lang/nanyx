@@ -45,6 +45,9 @@ those files workable. The reasoning behind them, and the current state of the co
   the same PR: mark plan items done, move settled questions into the design, and correct what the page
   says about the code. If you start on something that has no page, add one. When a feature is finished
   and described in the language docs, cut the page down to what is still open, or delete it.
+- **Keep the VS Code extension page up to date.** A change to the extension in `extension/` (a setting, a
+  command, a feature, how it finds `nanyx`) updates
+  [VS Code extension](docs/src/content/standard-tools/vs-code-extension.md) in the same PR.
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 
