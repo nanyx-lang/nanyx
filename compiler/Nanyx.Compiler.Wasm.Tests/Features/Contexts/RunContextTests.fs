@@ -343,6 +343,102 @@ let ``Run - an inferred parameterised context passes through two functions and i
         "}\n"
     runSource source |> assertRan "(1, 2)(1, 2)(1, 2)\n3px3px\n(4, 5) 6px\n7px\n2\n"
 
+/// `Sum`, whose `` `0` `` is a value rather than a function, with an instance for `Point` synthesized from its attached
+/// definitions, for the tests of context members used as values (#580).
+let private sumPrelude =
+    "import nanyx/console\n" +
+    "\n" +
+    "context Sum(a) = (`0`: a, `+`: (a, a) -> a)\n" +
+    "\n" +
+    "type Point = (x: int, y: int)\n" +
+    "def Point.`0`: Point = Point(x = 0, y = 0)\n" +
+    "def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + q.y) }\n" +
+    "\n"
+
+[<Fact>]
+let ``Run - a context member that is a value is passed from a synthesized instance`` () =
+    let source =
+        sumPrelude +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(`0`) { + } }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def total = sum([Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)])\n" +
+        "  println(\"{total.x}, {total.y}\")\n" +
+        "}\n"
+    runSource source |> assertRan "9, 12\n"
+
+[<Fact>]
+let ``Run - a context member that is a value is named through its context`` () =
+    let source =
+        sumPrelude +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(Sum(a).`0`) { a, b -> Sum(a).`+`(a, b) } }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def total = sum([Point(x = 1, y = 2), Point(x = 3, y = 4)])\n" +
+        "  println(\"{total.x}, {total.y}\")\n" +
+        "}\n"
+    runSource source |> assertRan "4, 6\n"
+
+[<Fact>]
+let ``Run - a synthesized instance from attached definitions that do not write their types`` () =
+    // `Point.`+`` reads the fields of any record that has them, so it is generic: it is passed at the member's type.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Sum(a) = (`0`: a, `+`: (a, a) -> a)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.`0` = Point(x = 0, y = 0)\n" +
+        "def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }\n" +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(`0`) { a, b -> `+`(a, b) } }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def total = sum([Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)])\n" +
+        "  println(\"{total.x}, {total.y}\")\n" +
+        "}\n"
+    runSource source |> assertRan "9, 12\n"
+
+[<Fact>]
+let ``Run - a function member of no parameters is passed from a synthesized instance`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Zero(a) = (zero: () -> a)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.zero: () -> Point = { Point(x = 7, y = 8) }\n" +
+        "def origin: [Zero(a)] () -> a = { zero() }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def p: Point = origin()\n" +
+        "  println(\"{p.x}, {p.y}\")\n" +
+        "}\n"
+    runSource source |> assertRan "7, 8\n"
+
+[<Fact>]
+let ``Run - a function member is passed on as a value, by its name and through its context`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Show(a) = (show: a -> string)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
+        "def concat: list(string) -> string = { xs -> xs \\List.fold(\"\") { acc, s -> acc ++ s } }\n" +
+        "def shown: [Show(a)] list(a) -> string = { xs -> concat(List.map(xs, show)) }\n" +
+        "def qualified: [Show(a)] list(a) -> string = { xs -> concat(List.map(xs, Show(a).show)) }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(shown([Point(x = 1, y = 2), Point(x = 3, y = 4)]))\n" +
+        "  println(qualified([Point(x = 5, y = 6)]))\n" +
+        "}\n"
+    runSource source |> assertRan "(1, 2)(3, 4)\n(5, 6)\n"
+
 [<Fact>]
 let ``Run - an operator in a generic function calls the member of the context the function requires`` () =
     let source =

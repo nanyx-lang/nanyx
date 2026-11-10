@@ -237,12 +237,15 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
     let mutable ownerMembers: string list = []
     let mutable counter = 0
 
-    let topLevelFunctions =
+    // Every top-level function, with its number of parameters. One of none (`{ ... }`) is used as a value only as a
+    // member of a synthesized instance: a name elsewhere that refers to it is a call.
+    let topLevelArities =
         module'
         |> List.choose (function
-            | Kind (Def (ValueDef(_, name, _, Kind (Lambda(args, _))))) when not args.IsEmpty -> Some (name, args.Length)
+            | Kind (Def (ValueDef(_, name, _, Kind (Lambda(args, _))))) -> Some (name, args.Length)
             | _ -> None)
         |> Map.ofList
+    let topLevelFunctions = topLevelArities |> Map.filter (fun _ arity -> arity > 0)
 
     /// The type parameters and member types of every record type, by name: contexts are declared as
     /// records, with or without the `context` modifier.
@@ -284,8 +287,12 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         | true, existing -> existing
         | _ ->
             let wrapperName = $"__fn_{sanitizeIdentifier name}"
-            let parameters = [ for index in 1 .. topLevelFunctions.[name] -> $"__arg{index}" ]
-            let call = Expression.synthetic (FunctionCall(name, None, [ Expression.synthetic (TupleExpr (parameters |> List.map (fun p -> Expression.synthetic (IdentifierExpr p)))) ]))
+            let parameters = [ for index in 1 .. topLevelArities.[name] -> $"__arg{index}" ]
+            let arguments =
+                match parameters with
+                | [] -> []
+                | _ -> [ Expression.synthetic (TupleExpr (parameters |> List.map (fun p -> Expression.synthetic (IdentifierExpr p)))) ]
+            let call = Expression.synthetic (FunctionCall(name, None, arguments))
             lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, wrapperName, None, Expression.synthetic (Lambda((envParameter, None) :: (parameters |> List.map (fun p -> p, None)), call))))))
             wrappers.[name] <- wrapperName
             wrapperName
@@ -535,7 +542,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         |> List.distinct
         |> List.filter (fun name -> topLevelFunctions.ContainsKey name && not (takesContexts defTypes.[name]))
         |> List.iter (wrapperOf >> ignore)
-    synthesized |> Set.filter topLevelFunctions.ContainsKey |> Set.iter (wrapperOf >> ignore)
+    synthesized |> Set.filter topLevelArities.ContainsKey |> Set.iter (wrapperOf >> ignore)
 
     items @ List.ofSeq lifted,
     origins |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
