@@ -481,7 +481,9 @@ type private FunctionEmitter(context: EmitContext) =
             | PWildcard
             | PBind _ -> "i32.const 1"
             | PInt value -> $"{valueCode}\n      i32.const {value}\n      i32.eq"
-            | PBool value -> $"""{valueCode}\n      i32.const {if value then 1 else 0}\n      i32.eq"""
+            | PBool value ->
+                let flag = if value then 1 else 0
+                $"{valueCode}\n      i32.const {flag}\n      i32.eq"
             | PTag(name, payload) ->
                 let discriminant =
                     $"{valueCode}\n      call ${helper Helpers.tagCode}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
