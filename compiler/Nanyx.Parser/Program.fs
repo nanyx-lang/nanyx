@@ -817,13 +817,17 @@ let private pipeTarget =
                 PipeCall(funcName, funcRange, args))
     attempt matchStep <|> callStep
 
-// Inline operator precedence parser (no newlines in operator whitespace)
+// Inline operator precedence parser (no newlines in operator whitespace). It parses a block's statements and a match
+// arm's body, so it has every operator `opp` has but `..`, each taking only the space on its line after it.
 let oppInline = new OperatorPrecedenceParser<Operand, unit, ParseState>()
-oppInline.TermParser <- prefixed minus
+let private notKeywordInline =
+    attempt (withSpan (pstring "not" .>> keywordEnd)) .>> wsInline |>> fun (_, span) -> NotSyntax.builtIn, span
+oppInline.TermParser <- prefixed (notKeywordInline <|> minus)
 
 oppInline.AddOperator(InfixOperator("**", wsInline, 8, Associativity.Right, binary "**"))
 oppInline.AddOperator(InfixOperator("*", wsInline, 7, Associativity.Left, binary "*"))
 oppInline.AddOperator(InfixOperator("/", wsInline, 7, Associativity.Left, binary "/"))
+oppInline.AddOperator(InfixOperator("%", wsInline, 7, Associativity.Left, binary "%"))
 
 oppInline.AddOperator(InfixOperator("+", wsInline, 6, Associativity.Left, binary "+"))
 oppInline.AddOperator(InfixOperator("-", minusEnd >>. wsInline, 6, Associativity.Left, binary "-"))
@@ -836,6 +840,11 @@ oppInline.AddOperator(InfixOperator(">=", wsInline, 4, Associativity.Left, binar
 
 oppInline.AddOperator(InfixOperator("==", wsInline, 3, Associativity.Left, binary "=="))
 oppInline.AddOperator(InfixOperator("!=", wsInline, 3, Associativity.Left, binary "!="))
+
+oppInline.AddOperator(InfixOperator("and", keywordEnd >>. wsInline, 2, Associativity.Left, binary "and"))
+oppInline.AddOperator(InfixOperator("or", keywordEnd >>. wsInline, 1, Associativity.Left, binary "or"))
+oppInline.AddOperator(InfixOperator("&&", wsInline, 2, Associativity.Left, binary "and"))
+oppInline.AddOperator(InfixOperator("||", wsInline, 1, Associativity.Left, binary "or"))
 
 /// `expr \f \g(a)`: each pipe spans from the start of `expr`'s text to the end of its own target.
 let private applyPipes (value: Operand) pipes =
