@@ -66,6 +66,7 @@ module DiagnosticCodes =
     let DirectiveInPackage = code 10 "Directive in a package" Severity.Error
     let UnsupportedDirective = code 11 "Unsupported directive" Severity.Error
     let CodeInModuleBlock = code 12 "Code in a module block" Severity.Error
+    let UnexpectedAttributeArgument = code 13 "Unexpected attribute argument" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -105,7 +106,7 @@ module DiagnosticCodes =
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
-          UnsupportedDirective; CodeInModuleBlock
+          UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

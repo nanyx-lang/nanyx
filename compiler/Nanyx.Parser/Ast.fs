@@ -224,8 +224,9 @@ and TopLevelItemKind =
     | Def of Definition
     | Import of ImportItem list
     | Expr of Expression
-    /// An `@name` attribute line; it applies to the top-level item that follows it (e.g. `@entry`).
-    | Attribute of Identifier
+    /// An `@name` attribute line; it applies to the top-level item that follows it (e.g. `@entry`). An argument is
+    /// written in parentheses straight after the name, like a tag's payload: `@test(#io)`.
+    | Attribute of Identifier * Expression option
 
 /// An expression and where it came from. Equality and comparison look only at `Kind`, leaving out the name spans
 /// some kinds carry: two expressions are the same when they are the same code, wherever it was written. It is

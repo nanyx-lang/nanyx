@@ -1179,7 +1179,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items
         | Expr value -> expr statementPosition value
-        | Attribute n -> text $"@{n}"
+        | Attribute(n, None) -> text $"@{n}"
+        | Attribute(n, Some (Kind UnitExpr)) -> text $"@{n}()"
+        | Attribute(n, Some argument) -> cat [ text ("@" + n); parenFields argument (i.Span.Start + 1 + n.Length) i.Span.End ]
 
     let code = Doc.render options.LineWidth (topLevel true headerEnd source.Length parsed.Items)
     if headerEnd = 0 then

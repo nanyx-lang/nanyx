@@ -1091,9 +1091,13 @@ let topLevelExpr: Parser<TopLevelItem, ParseState> =
     spannedItem (exprWithoutCrossingNewlines |>> Expr)
     <?> "top-level expression"
 
-// Parser for an attribute line such as `@entry`; it annotates the next top-level item
+// Parser for an attribute line such as `@entry`; it annotates the next top-level item. Its argument, if it has one,
+// is written straight after the name as a tag's payload is, `@test(#io)`, so `@entry (x)` is an attribute and then an
+// expression.
 let attributeItem: Parser<TopLevelItem, ParseState> =
-    spannedItem (pchar '@' >>. identifierNoWs |>> Attribute)
+    spannedItem (
+        pchar '@' >>. identifierNoWs .>>. opt (attempt unitExpr <|> parenArguments)
+        |>> Attribute)
     <?> "attribute"
 
 let private importLine: Parser<TopLevelItem, ParseState> =

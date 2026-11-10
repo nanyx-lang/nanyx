@@ -134,8 +134,8 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
     let rec item (i: TopLevelItem) : TopLevelItem =
         let kind =
             match i.Kind with
-            | ModuleDecl _
-            | Attribute _ -> i.Kind
+            | ModuleDecl _ -> i.Kind
+            | Attribute(n, argument) -> Attribute(n, Option.map expr argument)
             | ModuleBlock(n, items) -> ModuleBlock(n, items' items)
             | Def(ValueDef(isExport, n, t, value)) -> Def(ValueDef(isExport, name n, Option.map typeExpr t, expr value))
             | Def(TypeDef(n, modifiers, parameters, body)) -> Def(TypeDef(typeDef (n, modifiers, parameters, body)))
