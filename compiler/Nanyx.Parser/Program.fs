@@ -590,7 +590,7 @@ let doExpr =
 let useInExpr =
     spanned (
         pipe2
-            (pstring "use" >>. ws >>. useValue .>> ws .>> pstring "in" .>> ws)
+            (pstring "use" >>. keywordEnd >>. ws >>. useValue .>> ws .>> pstring "in" .>> keywordEnd .>> ws)
             expression
             (fun value body -> UseIn(value, body)))
     <?> "use-in expression"
@@ -1083,7 +1083,7 @@ do
         pstring "import" >>. wsNoNl() >>. importItems |>> ImportStatement
 
     let useStatement =
-        (pstring "use" >>. ws >>. useValue .>> notFollowedBy (ws >>. pstring "in"))
+        (pstring "use" >>. keywordEnd >>. ws >>. useValue .>> notFollowedBy (ws >>. pstring "in" >>. keywordEnd))
         |>> UseStatement
 
     let typeDefStatement =

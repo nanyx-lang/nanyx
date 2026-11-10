@@ -32,14 +32,14 @@ let internal fillTypeRefs () =
 
     let typeMemberField =
         pipe2
-            (pstring "type" >>. ws >>. identifierNoWs .>> wsNoNl())
+            (pstring "type" >>. keywordEnd >>. ws >>. identifierNoWs .>> wsNoNl())
             (opt (attempt (pstring "=" >>. wsNoNl() >>. typeExpr)))
             (fun name typeOpt -> TypeMember(name, typeOpt))
 
     // A named field's name is noted, for the record type it is in to declare.
     let typeField =
         pipe5
-            (opt (pstring "mut" >>. ws))
+            (opt (attempt (pstring "mut" >>. keywordEnd >>. ws)))
             (getPosition .>>. nameNoWs >>= fun (start, name) -> noteName start name >>% name)
             (opt (pstring "?" >>% true))
             (wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
@@ -158,7 +158,6 @@ let internal fillTypeRefs () =
     // `typeof x` takes a value, not a type, so its operand is a name or a path of fields (`config.server`) and
     // never an arbitrary expression. Brackets only group: `typeof(x)` is `typeof x`.
     let typeOf =
-        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         let path =
             withSpan (spanned (identifierNoWs |>> IdentifierExpr)) >>= fun (head, headText) ->
                 many (attempt (pstring "." >>. withSpan identifierNoWs)) |>> fun fields ->

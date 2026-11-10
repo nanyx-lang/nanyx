@@ -147,6 +147,19 @@ let ``typeof is a keyword only on its own`` () =
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
+let ``a record field's name may start with a keyword`` () =
+    let annotationOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
+        | other -> failwith $"Unexpected parse: %A{other}"
+    let field name isMutable = TypeField (name, isMutable, false, Some (named "string"), None)
+    annotationOf "def r: (typeName: string) = r" |> should equal (ty (TypeRecord [ field "typeName" false ]))
+    annotationOf "def r: (mutable: string) = r" |> should equal (ty (TypeRecord [ field "mutable" false ]))
+    annotationOf "def r: (mut typeName: string) = r" |> should equal (ty (TypeRecord [ field "typeName" true ]))
+    annotationOf "def r: (type Item = int, typeName: string) = r"
+    |> should equal (ty (TypeRecord [ TypeMember ("Item", Some (named "int")); field "typeName" false ]))
+
+[<Fact>]
 let ``typeof in a module block names the block's own value`` () =
     let source =
         "module config =\n" +
