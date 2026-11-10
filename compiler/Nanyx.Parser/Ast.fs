@@ -204,7 +204,8 @@ and StatementKind =
     | DefStatement of bool * Identifier * TypeExpr option * Expression
     | TypeDefStatement of Identifier * TypeDefModifier list * (Identifier * TypeExpr option) list * TypeExpr
     | ImportStatement of ImportItem list
-    | UseStatement of UseBinding
+    /// `use value`: `value`, a context instance, is loaded for the rest of the block.
+    | UseStatement of Expression
     | ExprStatement of Expression
 
 and Definition =
@@ -293,7 +294,7 @@ and ExpressionKind =
     | MemberAccess of Expression * Identifier * SourceSpan option  // expr.field
     | ContextMemberAccess of TypeExpr * Identifier  // C(T).field - qualified context access (as value)
     | ContextMemberCall of TypeExpr * Identifier * Expression list  // C(T).field(args) - qualified context call
-    | UseIn of UseBinding * Expression
+    | UseIn of Expression * Expression  // use value in body
     | WorkflowBindExpr of Identifier * Expression
     | WorkflowReturnExpr of Expression
     | InterpolatedString of StringPart list
@@ -308,10 +309,6 @@ and RecordField =
     | PositionalField of Expression
 
 and MatchArm = Pattern list * Expression  // Multiple patterns for multi-value match
-
-and UseBinding =
-    | UseValue of Expression
-    | UseContextInstance of TypeExpr * Expression  // use C(T) = expr
 
 // Helper type for parsing list patterns
 type ListPatternElement =
@@ -523,8 +520,7 @@ module Statement =
         match kind with
         | ExprStatement expr
         | DefStatement(_, _, _, expr)
-        | UseStatement (UseValue expr)
-        | UseStatement (UseContextInstance(_, expr)) -> Some expr
+        | UseStatement expr -> Some expr
         | ImportStatement _
         | TypeDefStatement _ -> None
 

@@ -189,7 +189,7 @@ let rec private expressionsOfKind (kind: ExpressionKind) : Expression list =
     | IfExpr (cond, ifTrue, ifFalse) -> expressions cond @ expressions ifTrue @ expressions ifFalse
     | MemberAccess (value, _, _) -> expressions value
     | ContextMemberCall (_, _, args) -> args |> List.collect expressions
-    | UseIn (binding, body) -> expressionsOfUse binding @ expressions body
+    | UseIn (value, body) -> expressions value @ expressions body
     | WorkflowBindExpr (_, value)
     | WorkflowReturnExpr value -> expressions value
     | InterpolatedString parts ->
@@ -206,13 +206,8 @@ and private expressionsOfStatement (statement: Statement) =
     | TypeDefStatement (_, _, parameters, typeExpr) ->
         (parameters |> List.collect (snd >> Option.toList >> List.collect expressionsOfType)) @ expressionsOfType typeExpr
     | ImportStatement _ -> []
-    | UseStatement binding -> expressionsOfUse binding
+    | UseStatement value
     | ExprStatement value -> expressions value
-
-and private expressionsOfUse (binding: UseBinding) =
-    match binding with
-    | UseValue value -> expressions value
-    | UseContextInstance (typeExpr, value) -> expressionsOfType typeExpr @ expressions value
 
 and private expressionsOfPattern (pattern: Pattern) =
     match pattern.Kind with
@@ -301,18 +296,12 @@ let private blockStatements (expr: Expression) =
 /// The types annotating parameters.
 let private parameterTypes (parameters: (Identifier * TypeExpr option) list) = parameters |> List.collect (snd >> Option.toList)
 
-let private typesOfUse (binding: UseBinding) =
-    match binding with
-    | UseContextInstance (contextType, _) -> [ contextType ]
-    | UseValue _ -> []
-
 /// The type expressions an expression itself is written with (not those of the expressions in it).
 let private typesOfExpression (expr: Expression) =
     match expr.Kind with
     | Lambda (parameters, _) -> parameterTypes parameters
     | ContextMemberAccess (contextType, _)
     | ContextMemberCall (contextType, _, _) -> [ contextType ]
-    | UseIn (binding, _) -> typesOfUse binding
     | _ -> []
 
 /// The type expressions a statement itself is written with.
@@ -320,7 +309,7 @@ let private typesOfStatement (statement: Statement) =
     match statement.Kind with
     | DefStatement (_, _, typeOpt, _) -> Option.toList typeOpt
     | TypeDefStatement (_, _, parameters, body) -> parameterTypes parameters @ [ body ]
-    | UseStatement binding -> typesOfUse binding
+    | UseStatement _
     | ImportStatement _
     | ExprStatement _ -> []
 
@@ -714,10 +703,10 @@ let ``each type expression spans its text, and nested types span theirs`` () =
     | other -> failwith $"Expected the Shape type, got %A{other}"
 
 [<Fact>]
-let ``the types of lambda parameters, context accesses and use bindings span their text`` () =
+let ``the types of lambda parameters, context accesses and context instances span their text`` () =
     let source =
         "def f = { x: int, y -> ToString(list(a)).toString(x) }\n" +
-        "def g = { z ->\n  use Sum(int) = (sum = add)\n  0\n}"
+        "def g = { z ->\n  def sumInt: Sum(int) = (sum = add)\n  use sumInt\n  0\n}"
     let module' = parse source
     match (valueOf "f" module').Kind with
     | Lambda ([ ("x", Some int); ("y", None) ], Kind (ContextMemberCall (context, "toString", _))) ->
@@ -725,8 +714,10 @@ let ``the types of lambda parameters, context accesses and use bindings span the
         textOf source context.Span |> should equal "ToString(list(a))"
     | other -> failwith $"Expected a lambda calling a context member, got %A{other}"
     match lambdaStatements "g" module' with
-    | Kind (UseStatement (UseContextInstance (context, _))) :: _ -> textOf source context.Span |> should equal "Sum(int)"
-    | other -> failwith $"Expected a use of a context instance, got %A{other}"
+    | Kind (DefStatement (_, "sumInt", Some context, _)) :: Kind (UseStatement value) :: _ ->
+        textOf source context.Span |> should equal "Sum(int)"
+        textOf source value.Span |> should equal "sumInt"
+    | other -> failwith $"Expected a context instance and a use of it, got %A{other}"
 
 [<Fact>]
 let ``type expressions are equal wherever they were written`` () =

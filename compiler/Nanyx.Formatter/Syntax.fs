@@ -55,7 +55,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | MemberAccess(target, f, span) -> MemberAccess(expr target, f, span)
             | ContextMemberAccess(t, f) -> ContextMemberAccess(typeExpr t, f)
             | ContextMemberCall(t, f, args) -> ContextMemberCall(typeExpr t, f, List.map expr args)
-            | UseIn(binding, body) -> UseIn(useBinding binding, expr body)
+            | UseIn(value, body) -> UseIn(expr value, expr body)
             | WorkflowBindExpr(n, value) -> WorkflowBindExpr(n, expr value)
             | WorkflowReturnExpr value -> WorkflowReturnExpr(expr value)
             | InterpolatedString parts ->
@@ -66,11 +66,6 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
         match f with
         | NamedField(n, value) -> NamedField(n, expr value)
         | PositionalField value -> PositionalField(expr value)
-
-    and useBinding (binding: UseBinding) =
-        match binding with
-        | UseValue value -> UseValue(expr value)
-        | UseContextInstance(t, value) -> UseContextInstance(typeExpr t, expr value)
 
     and pattern (p: Pattern) : Pattern =
         let kind =
@@ -127,7 +122,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | DefStatement(isExport, n, t, value) -> DefStatement(isExport, name n, Option.map typeExpr t, expr value)
             | TypeDefStatement(n, modifiers, parameters, body) -> TypeDefStatement(typeDef (n, modifiers, parameters, body))
             | ImportStatement items -> ImportStatement(List.map importItem items)
-            | UseStatement binding -> UseStatement(useBinding binding)
+            | UseStatement value -> UseStatement(expr value)
             | ExprStatement value -> ExprStatement(expr value)
         { s with Kind = kind }
 

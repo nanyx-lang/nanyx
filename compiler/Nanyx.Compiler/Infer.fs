@@ -699,37 +699,39 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
 // Instances of parameterised contexts.
 //
 // A function that requires `[Sum(a)]` is passed an instance of `Sum` for whatever `a` is at each call. The call finds
-// it, nearest first, among the instances in scope (each `use Sum(T) = ...` or `use` of a value of `Sum`'s shape around
-// the call, and each context the type of the function around the call declares), or else builds it from the definitions attached to the type, as
+// it, nearest first, among the instances in scope (each `use` of a `Sum(T)`, or of a value of `Sum`'s shape, around
+// the call, and each context the type of the function around the call declares), or else builds it from the
+// definitions attached to the type, as
 // `Point.0` and `Point.+` make a `Sum(Point)`. Where it was found is kept by the call's node, for the backend.
 
 /// What the names of the instances in scope start with, in the environment. No name written in the source can, so
 /// an instance never shadows a name, or is shadowed by one.
 let private instancePrefix = "@instance "
 
+/// Whether `name` is the name of a context.
+let private isContextName (state: InferState) (name: Identifier) =
+    state.ContextDefs.ContainsKey name || (state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext)
+
 /// Whether `ctx` names a parameterised context: `Sum(a)`, `Show(int)`.
 let private isParameterizedContext (state: InferState) (ctx: TypeExpr) =
     match ctx.Kind with
-    | TypeApply(name, _ :: _) ->
-        state.ContextDefs.ContainsKey name || (state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext)
+    | TypeApply(name, _ :: _) -> isContextName state name
     | _ -> false
 
-/// `env` with the instance `ctx` in scope, if it is one of a parameterised context: bound under a name of its own, with
+/// `env` with the instance of `ctxName` applied to `argTys` in scope, as `written`: bound under a name of its own, with
 /// the context applied to its arguments as its type (`Sum(Point)` is `TyApply("Sum", [Point])`). Of two instances of
 /// one context, the one put in scope later is nearer.
+let private bindInstanceOf (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) (written: TypeExpr) : TypeEnv * InferState =
+    let bindingName = $"{instancePrefix}{ctxName} {state.NextId}"
+    let state = { state with NextId = state.NextId + 1; InstanceContexts = state.InstanceContexts |> Map.add bindingName written }
+    TypeEnv.extend bindingName (TypeEnv.mono (TyApply(ctxName, argTys))) env, state
+
+/// `env` with the instance `ctx` in scope, if it is one of a parameterised context (see `bindInstanceOf`).
 let private bindInstance (env: TypeEnv) (state: InferState) (ctx: TypeExpr) : TypeEnv * InferState =
     match ctx.Kind with
     | TypeApply(ctxName, args) when isParameterizedContext state ctx ->
-        let mutable current = state
-        let argTys =
-            args
-            |> List.map (fun arg ->
-                let ty, next = typeExprToTy current arg
-                current <- next
-                ty)
-        let bindingName = $"{instancePrefix}{ctxName} {current.NextId}"
-        let current = { current with NextId = current.NextId + 1; InstanceContexts = current.InstanceContexts |> Map.add bindingName ctx }
-        TypeEnv.extend bindingName (TypeEnv.mono (TyApply(ctxName, argTys))) env, current
+        let argTys, state = args |> List.mapFold typeExprToTy state
+        bindInstanceOf env state ctxName argTys ctx
     | _ -> env, state
 
 /// `env` with each instance of a parameterised context among `contexts` in scope (see `bindInstance`).
@@ -864,8 +866,8 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
     argTys |> List.map (resolveSoFar current), current
 
 /// Each parameterised context a value of the type `valueTy` is an instance of, applied to the types it is one for: a
-/// record with exactly the context's members, at types that settle each of its parameters. `def addInt: Add(int) =
-/// (...)` is typed as its record, so `use addInt` finds that it is an `Add(int)` by the record's shape.
+/// record with exactly the context's members, at types that settle each of its parameters. `use (`+` = ...)`, of a
+/// record whose type does not name a context, finds that it is an `Add(int)` by the record's shape.
 let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
     match Unifier.unalias (resolveSoFar state valueTy) with
     | TyRecord fields ->
@@ -886,11 +888,20 @@ let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
     | _ -> []
 
 /// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
-/// context: `use C(T) = ...`, or a value of a context's shape (see `contextsOfValue`).
-let private useInstance (env: TypeEnv) (state: InferState) (binding: UseBinding) (valueTy: Ty) : TypeEnv * InferState =
-    match binding with
-    | UseContextInstance(ctxType, _) -> bindInstance env state ctxType
-    | UseValue _ -> bindInstances env state (contextsOfValue state valueTy)
+/// context: a value whose type is the context applied to types, as `def addInt: Sum(int) = (...)` makes `addInt`
+/// (recorded by the node of `value`, see `TypedModule.UseContexts`), or else a record of a context's shape (see
+/// `contextsOfValue`).
+let private useInstance (env: TypeEnv) (state: InferState) (value: Expression) (valueTy: Ty) : TypeEnv * InferState =
+    match resolveSoFar state valueTy with
+    | TyAlias(ctxName, (_ :: _ as argTys), _)
+    | TyApply(ctxName, (_ :: _ as argTys)) when isContextName state ctxName ->
+        let context = TyApply(ctxName, argTys)
+        match ContextInference.typeExprOf (ContextInference.varNames context) context with
+        | Some written ->
+            let env, state = bindInstanceOf env state ctxName argTys written
+            env, { state with UseContexts = state.UseContexts |> Map.add value.Id written }
+        | None -> env, state
+    | _ -> bindInstances env state (contextsOfValue state valueTy)
 
 /// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
 /// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
@@ -1479,11 +1490,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Ok (typedCall, finalState) ->
                 Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
             | Error err -> Error err
-    | UseIn(binding, body) ->
-        match inferUseBinding env state binding with
+    | UseIn(value, body) ->
+        match inferExpr env state value with
         | Error err -> Error err
-        | Ok (typedBinding, nextState) ->
-            let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedBinding.Type) nextState binding typedBinding.Type
+        | Ok (typedValue, nextState) ->
+            let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedValue.Type) nextState value typedValue.Type
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) -> Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
             | Error err -> Error err
@@ -2060,22 +2071,6 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
                 |> Error
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
-and inferUseBinding (env: TypeEnv) (state: InferState) (binding: UseBinding) : Result<TypedExpr * InferState, Diagnostic list> =
-    match binding with
-    | UseValue expr -> inferExpr env state expr
-    // The instance is the context's record at the types it is loaded for, so `use Show(int) = (show = { n -> ... })`
-    // types `n` as an int.
-    | UseContextInstance(ctxType, expr) ->
-        inferExpr env state expr
-        |> Result.map (fun (typedExpr, next) ->
-            match ctxType.Kind with
-            | TypeApply(ctxName, args) when isParameterizedContext next ctxType ->
-                let argTys, next = args |> List.mapFold typeExprToTy next
-                match contextMemberTypes next ctxName argTys with
-                | Some members -> typedExpr, addConstraintAt expr.Span typedExpr.Type (TyRecord(Map.ofList members)) next
-                | None -> typedExpr, next
-            | _ -> typedExpr, next)
-
 /// Infers the value named by each `typeof` in `typeExpr`, so that reading the annotation finds their types.
 and private inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: TypeExpr) : Result<InferState, Diagnostic list> =
     typeOfValues typeExpr
@@ -2247,14 +2242,14 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 // Checked once the type is registered, so it can name itself.
                 if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
-            | UseStatement binding ->
+            | UseStatement value ->
                 if errors.IsEmpty then
-                    match inferUseBinding env' current binding with
+                    match inferExpr env' current value with
                     | Ok (typedExpr, next) ->
-                        let withUse, next = useInstance (extendEnvWithRecordFields env' typedExpr.Type) next binding typedExpr.Type
+                        let withUse, next = useInstance (extendEnvWithRecordFields env' typedExpr.Type) next value typedExpr.Type
                         current <- next
                         env' <- withUse
-                        typedStatements <- typedStatements @ [ TypedUseStatement(binding, Some typedExpr) ]
+                        typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]
                     | Error err -> errors <- err
             | ExprStatement expr ->
                 if errors.IsEmpty then

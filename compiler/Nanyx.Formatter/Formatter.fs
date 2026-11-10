@@ -388,7 +388,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let count = args.Length
             let argument index arg = expr { full with Tail = (index = count - 1) } arg
             cat [ contextHead context; text "."; text (Names.written field); text "("; commaJoin (List.mapi argument args); text ")" ]
-        | UseIn(binding, body) -> cat [ text "use "; useBinding { full with Tail = false } binding; text " in "; expr full body ]
+        | UseIn(value, body) -> cat [ text "use "; expr { full with Tail = false } value; text " in "; expr full body ]
         | WorkflowBindExpr(n, value) ->
             let keyword = if n = "try" && not (startsWith e.Span "try!") then "try " else n + "! "
             cat [ text keyword; expr full value ]
@@ -767,12 +767,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | _ -> cat [ head; armBody true body ]
         | _ -> head
 
-    and useBinding (position: Position) (binding: UseBinding) : Doc =
-        match binding with
-        | UseValue value -> expr position value
-        | UseContextInstance(context, value) -> cat [ contextHead context; text " = "; expr position value ]
-
-    /// A context and its type arguments, as in `C(T).field` and `use C(T) = ...`.
+    /// A context and its type arguments, as in `C(T).field`.
     and contextHead (context: TypeExpr) : Doc =
         match context.Kind with
         | TypeApply(n, args) -> cat [ text n; text "("; commaJoin (List.map typeExpr args); text ")" ]
@@ -808,7 +803,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | DefStatement(isExport, n, t, value) -> defDoc isExport "def" n t value
         | TypeDefStatement(n, modifiers, parameters, body) -> typeDefDoc n modifiers parameters body
         | ImportStatement items -> importDoc s.Span.Start s.Span.End items
-        | UseStatement binding -> cat [ text "use "; useBinding full binding ]
+        | UseStatement value -> cat [ text "use "; expr full value ]
         | ExprStatement value -> expr statementPosition value
 
     and defDoc (isExport: bool) (keyword: string) (name: string) (typeOpt: TypeExpr option) (value: Expression) : Doc =

@@ -174,8 +174,8 @@ module Compiler =
             | MemberAccess(baseExpr, fieldName, rangeOpt) -> MemberAccess(mapExpr baseExpr, fieldName, rangeOpt)
             | ContextMemberCall(ctxType, memberName, args) ->
                 ContextMemberCall(ctxType, memberName, args |> List.map mapExpr)
-            | UseIn(binding, body) ->
-                UseIn(mapBinding binding, mapExpr body)
+            | UseIn(value, body) ->
+                UseIn(mapExpr value, mapExpr body)
             | InterpolatedString parts ->
                 InterpolatedString(
                     parts
@@ -187,17 +187,13 @@ module Compiler =
             | ContextMemberAccess _
             | UnitExpr
             | LiteralExpr _ -> current.Kind
-        and mapBinding binding =
-            match binding with
-            | UseValue valueExpr -> UseValue(mapExpr valueExpr)
-            | UseContextInstance(ctxType, valueExpr) -> UseContextInstance(ctxType, mapExpr valueExpr)
         and mapStatement (statement: Statement) =
             { statement with Kind = mapStatementKind statement.Kind }
         and mapStatementKind kind =
             match kind with
             | DefStatement(isExport, name, typeOpt, value) -> DefStatement(isExport, name, typeOpt, mapExpr value)
             | ExprStatement value -> ExprStatement(mapExpr value)
-            | UseStatement binding -> UseStatement(mapBinding binding)
+            | UseStatement value -> UseStatement(mapExpr value)
             | ImportStatement _
             | TypeDefStatement _ -> kind
         mapExpr expr
@@ -317,7 +313,7 @@ module Compiler =
         | TagExpr(_, payload) -> payload |> Option.map referencedNames |> Option.defaultValue []
         | MemberAccess(inner, memberName, _) ->
             $".{memberName}" :: (dottedName expr |> Option.toList) @ referencedNames inner
-        | UseIn(binding, body) -> referencedNamesInBinding binding @ referencedNames body
+        | UseIn(value, body) -> referencedNames value @ referencedNames body
         | WorkflowBindExpr(_, value)
         | WorkflowReturnExpr value -> referencedNames value
         | InterpolatedString parts ->
@@ -331,14 +327,9 @@ module Compiler =
         match statement.Kind with
         | DefStatement(_, _, _, value) -> referencedNames value
         | ExprStatement value -> referencedNames value
-        | UseStatement binding -> referencedNamesInBinding binding
+        | UseStatement value -> referencedNames value
         | ImportStatement _
         | TypeDefStatement _ -> []
-
-    and private referencedNamesInBinding (binding: UseBinding) : string list =
-        match binding with
-        | UseValue value
-        | UseContextInstance(_, value) -> referencedNames value
 
     and private referencedNamesInPattern (pattern: Pattern) : string list =
         match pattern.Kind with
@@ -677,8 +668,7 @@ module Compiler =
                 match statement.Kind with
                 | DefStatement(_, _, _, value)
                 | ExprStatement value
-                | UseStatement (UseValue value)
-                | UseStatement (UseContextInstance(_, value)) -> usesKeyword value
+                | UseStatement value -> usesKeyword value
                 | ImportStatement _
                 | TypeDefStatement _ -> false
             match expr.Kind with
@@ -788,9 +778,7 @@ module Compiler =
             | MemberAccess(baseExpr, field, rangeOpt) -> MemberAccess(desugarExpr baseExpr, field, rangeOpt)
             | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(ctxType, field)
             | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(ctxType, field, args |> List.map desugarExpr)
-            | UseIn(binding, body) ->
-                let binding' = desugarUseBinding binding
-                UseIn(binding', desugarExpr body)
+            | UseIn(value, body) -> UseIn(desugarExpr value, desugarExpr body)
             // A keyword the rest of its builder's block cannot follow is an error; the value stands in for it, as
             // nothing is checked once desugaring fails.
             | WorkflowBindExpr(keyword, value) ->
@@ -816,10 +804,6 @@ module Compiler =
             | UnitExpr
             | LiteralExpr _
             | IdentifierExpr _ -> expr.Kind
-        and desugarUseBinding binding =
-            match binding with
-            | UseValue expr -> UseValue (desugarExpr expr)
-            | UseContextInstance(ctxType, expr) -> UseContextInstance(ctxType, desugarExpr expr)
         and desugarStatement (stmt: Statement) =
             match stmt.Kind with
             | DefStatement(isExport, name, typeOpt, expr) ->
@@ -830,7 +814,7 @@ module Compiler =
                     | _ -> desugarExpr expr
                 { stmt with Kind = DefStatement(isExport, name, typeOpt, expr') }
             | ExprStatement expr -> { stmt with Kind = ExprStatement (desugarExpr expr) }
-            | UseStatement binding -> { stmt with Kind = UseStatement (desugarUseBinding binding) }
+            | UseStatement value -> { stmt with Kind = UseStatement (desugarExpr value) }
             | ImportStatement _
             | TypeDefStatement _ -> stmt
         // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
@@ -1045,8 +1029,7 @@ module Compiler =
             | TypedDefStatement(isExport, name, typeOpt, expr) ->
                 TypedDefStatement(isExport, name, typeOpt, applyTypedExpr expr)
             | TypedExprStatement expr -> TypedExprStatement (applyTypedExpr expr)
-            | TypedUseStatement(binding, exprOpt) ->
-                TypedUseStatement(binding, exprOpt |> Option.map applyTypedExpr)
+            | TypedUseStatement expr -> TypedUseStatement (applyTypedExpr expr)
             | TypedImportStatement _
             | TypedTypeDefStatement _ -> statement
         and applyTypedMatchArm (patterns, expr) =
@@ -1197,6 +1180,8 @@ module Compiler =
             let mutable inlinedTypes: Map<string, Ty> = Map.empty
             // Where the calls in the imported modules' definitions, which are inlined, find their instances.
             let mutable inlinedInstances: Map<NodeId, ContextInstance option list> = Map.empty
+            // The instances the `use`s in the imported modules' definitions load.
+            let mutable inlinedUseContexts: Map<NodeId, TypeExpr> = Map.empty
             // The modules that bring each name in unqualified, by the module's key, with the name of the module.
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
             let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
@@ -1325,6 +1310,7 @@ module Compiler =
                     inlined <- inlined @ inlinedItemsForImport item imported
                 inlinedTypes <- inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
                 inlinedInstances <- imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                inlinedUseContexts <- imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
             for item in imports do
                 // An import of a module that is still being checked, because it imports this one, is a cycle.
                 let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
@@ -1464,6 +1450,7 @@ module Compiler =
                           ModuleNames = moduleNames
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                          UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
                           // Resolved for the root module only, by `compileWith`.
                           InferredContextTypes = state.InferredContextTypes
                           // Filled in for the root module only, by `compileWith`.

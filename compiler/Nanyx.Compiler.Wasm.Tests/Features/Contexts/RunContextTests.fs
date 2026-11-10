@@ -99,8 +99,10 @@ let ``Run - use bindings of parameterised contexts and records`` () =
         "@entry\n" +
         "def main = {\n" +
         "  def unit = \"cm\"\n" +
-        "  use Show(int) = ( show = { n -> \"{n}{unit}\" } )\n" +
-        "  use Show(string) = ( show = { s -> s } )\n" +
+        "  def showInt: Show(int) = ( show = { n -> \"{n}{unit}\" } )\n" +
+        "  use showInt\n" +
+        "  def showString: Show(string) = ( show = { s -> s } )\n" +
+        "  use showString\n" +
         "  println(describe(3, \"three\"))\n" +
         "  def answers = (ask = { 21 })\n" +
         "  use answers\n" +
@@ -134,6 +136,34 @@ let ``Run - a use of a record value of a parameterised context's shape loads it 
     runSource source |> assertRan "12 304\n"
 
 [<Fact>]
+let ``Run - use loads a named instance of a parameterised context: a def, a local, a parameter or a call's result (#581)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Combine(a) = (combine: (a, a) -> a)\n" +
+        "\n" +
+        "def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }\n" +
+        "def timesInt: Combine(int) = (combine = { a, b -> a * b })\n" +
+        "def plusAnd: int -> Combine(int) = { k -> (combine = { a, b -> a + b + k }) }\n" +
+        "def viaParameter: (Combine(int), int) -> int = { instance, x ->\n" +
+        "  use instance\n" +
+        "  double(x)\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def plusInt: Combine(int) = (combine = { a, b -> a + b })\n" +
+        "  use plusInt\n" +
+        "  println(\"{double(5)}\")\n" +
+        "  use timesInt\n" +
+        "  println(\"{double(5)}\")\n" +
+        "  println(\"{viaParameter(plusInt, 4)}\")\n" +
+        "  use plusAnd(100)\n" +
+        "  println(\"{double(1)}\")\n" +
+        "}\n"
+    runSource source |> assertRan "10\n25\n8\n102\n"
+
+[<Fact>]
 let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
     let source =
         "import nanyx/console\n" +
@@ -162,7 +192,8 @@ let ``Run - a call synthesizes a context's instance from attached definitions, a
         "  println(both($Money(5), p))\n" +
         "  println(twice(p))\n" +
         "  println(p \\describe)\n" +
-        "  use Show(Point) = ( show = { q -> \"nearer {q.y}\" } )\n" +
+        "  def nearer: Show(Point) = ( show = { q -> \"nearer {q.y}\" } )\n" +
+        "  use nearer\n" +
         "  println(describe(p))\n" +
         "  println(describe($Money(7)))\n" +
         "}\n"

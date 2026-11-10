@@ -144,8 +144,11 @@ type InferState =
             /// node (see `TypedModule.ContextInstances`).
             ContextInstances: Map<NodeId, ContextInstance option list>;
             /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
-            /// as written there, by the name they are bound under in the environment (see `instanceBinding`).
+            /// as written there, by the name they are bound under in the environment (see `bindInstance`).
             InstanceContexts: Map<string, TypeExpr>;
+            /// The instance of a parameterised context each `use` loads, by the node of the value it loads (see
+            /// `TypedModule.UseContexts`).
+            UseContexts: Map<NodeId, TypeExpr>;
             /// The expressions that failed to check, each by its node with its diagnostics, the latest first. Each is
             /// typed as anything, and checking carries on around it.
             FailedExprs: (NodeId * Diagnostic list) list;
@@ -207,6 +210,7 @@ let emptyState =
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
             InstanceContexts = Map.empty;
+            UseContexts = Map.empty;
             FailedExprs = [];
             UnhandledMatches = [];
             UnknownTypeUses = [];

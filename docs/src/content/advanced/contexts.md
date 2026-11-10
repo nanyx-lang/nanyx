@@ -50,6 +50,23 @@ def result = use Console(println = hostPrint) in
 
 ```
 
+`use` loads the value of any expression. An instance of a parameterised context is a value whose type is the context applied to a type, so define it with `def` and load it by name:
+
+```nanyx
+context Show(a) = (show: a -> string)
+
+def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
+
+def numbered: Show(int) = (show = { n -> "#{n}" })
+
+def main = {
+  use numbered
+  describe(42)   // "#42"
+}
+```
+
+A parameter of the context's type, or a call that returns an instance, can be loaded the same way: `use instance`, `use numberedFrom(100)`.
+
 # Contexts are part of the type
 
 A value's context requirement is part of its type. You can annotate just the contexts and let the rest infer:
@@ -198,7 +215,8 @@ A `use` changes how its block writes a type, generic code called from the block 
 
 ```nanyx
 def receipt = {
-  use ToString(int) = ( toString = { pence -> "£{pence / 100}.{pence % 100}" } )
+  def pounds: ToString(int) = (toString = { pence -> "£{pence / 100}.{pence % 100}" })
+  use pounds
   "Total: {250}"   // "Total: £2.50"
 }
 ```
@@ -261,7 +279,7 @@ Each call looks for its instance in this order, and takes the first it finds:
 2. An instance the type of the function around the call declares: a generic `def total: [Sum(a)] list(a) -> a` passes its own `Sum(a)` on to the functions it calls.
 3. An instance synthesized from the type's attached definitions.
 
-An instance is for one type: a `use Sum(int)` in scope does not stand in for a `Sum(Point)`.
+An instance is for one type: a `Sum(int)` loaded with `use` does not stand in for a `Sum(Point)`.
 
 Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle. With `def sumInt: Sum(int) = (...)`, `use sumInt` loads a `Sum(int)`, as `use Sum(int)(...)` would.
 

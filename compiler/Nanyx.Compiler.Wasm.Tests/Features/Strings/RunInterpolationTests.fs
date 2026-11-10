@@ -45,7 +45,8 @@ let ``Run - a use changes how a hole writes its type`` () =
         "@entry\n" +
         "def main = {\n" +
         "  println(\"before {1}\")\n" +
-        "  use ToString(int) = ( toString = { n -> \"<{Int.toString(n)}>\" } )\n" +
+        "  def bracketed: ToString(int) = ( toString = { n -> \"<{Int.toString(n)}>\" } )\n" +
+        "  use bracketed\n" +
         "  println(\"after {1}\")\n" +
         "}\n"
     runSource source |> assertRan "before 1\nafter <1>\n"

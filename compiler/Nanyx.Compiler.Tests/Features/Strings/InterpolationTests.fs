@@ -51,7 +51,8 @@ let ``A hole uses an instance loaded with use ahead of the compiler's own`` () =
     let typed =
         compileClean (
             "def s = {\n" +
-            "  use ToString(int) = ( toString = { n -> \"#{n}\" } )\n" +
+            "  def hashInt: ToString(int) = ( toString = { n -> \"#{n}\" } )\n" +
+            "  use hashInt\n" +
             "  \"{1}\"\n" +
             "}\n")
     let loaded =
@@ -102,7 +103,7 @@ let ``A hole of a type with no ToString is an error at the hole`` () =
           "'#some(int)' cannot be interpolated: only a tag without a payload has a toString. Match on it, or print it with `dbg`",
           "#some(1)"
           "type $Money = private int\ndef m = $Money(5)\ndef s = \"{m}\"\n",
-          "'$Money' cannot be interpolated because it has no toString: attach '$Money.toString', or load an instance with `use ToString($Money)`",
+          "'$Money' cannot be interpolated because it has no toString: attach '$Money.toString', or load an instance of `ToString($Money)` with `use`",
           "m" ]
     for source, expectedMessage, expectedAt in cases do
         let message, at = missingContext source

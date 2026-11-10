@@ -139,7 +139,8 @@ let ``A loaded instance wins over synthesis, and a generic function passes its o
         "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
         "def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }\n" +
         "def main = {\n" +
-        "  use Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  use showPoint\n" +
         "  describe(Point(x = 1, y = 2))\n" +
         "}\n"
     match instancesIn source with
@@ -149,21 +150,40 @@ let ``A loaded instance wins over synthesis, and a generic function passes its o
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
+let ``A call finds an instance loaded with use by name, from a def or a parameter (#581)`` () =
+    let source =
+        showContext +
+        "def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "def viaParameter: (Show(Point), Point) -> string = { instance, p ->\n" +
+        "  use instance\n" +
+        "  describe(p)\n" +
+        "}\n" +
+        "def main = {\n" +
+        "  use showPoint\n" +
+        "  describe(Point(x = 1, y = 2))\n" +
+        "}\n"
+    match instancesIn source with
+    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ]
+        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
 let ``A loaded instance is only used for the type it is for`` () =
-    // `use Show(Point)` does not make a `Show($Money)`: that one is still synthesized.
+    // A `Show(Point)` loaded with `use` does not make a `Show($Money)`: that one is still synthesized.
     let source =
         showContext +
         "type $Money = private int\n" +
         "def $Money.show: $Money -> string = { m -> \"money\" }\n" +
         "def main = {\n" +
-        "  use Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  use showPoint\n" +
         "  describe($Money(5))\n" +
         "}\n"
     Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "$Money.show" ]) ] ], instancesIn source)
 
 [<Fact>]
-let ``A loaded instance is checked against the context's members at the type it is for`` () =
-    let source = showContext + "def s = {\n  use Show(int) = ( show = { n -> n } )\n  1\n}\n"
+let ``An instance is checked against the context's members at the type it is for`` () =
+    let source = showContext + "def s = {\n  def showInt: Show(int) = ( show = { n -> n } )\n  use showInt\n  1\n}\n"
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
