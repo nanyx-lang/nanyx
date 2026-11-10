@@ -114,3 +114,15 @@ let ``List.sortBy takes a key of any type with an order`` () =
     let typed = compileClean "def sorted = List.sortBy([\"bb\", \"a\"], { s -> s })\ndef byPair = List.sortBy([1, 2], { n -> (n, \"x\") })\n"
     Assert.Equal("list(string)", Unifier.tyToString typed.Types.["sorted"])
     Assert.Equal("list(int)", Unifier.tyToString typed.Types.["byPair"])
+
+[<Fact>]
+let ``Only a nominal type may attach compare, and a built-in type's attached compare is not read`` () =
+    let source = "type Point = (x: int, y: int)\ndef Point.compare: Point, Point -> #less | #equal | #greater = { p, q -> Int.compare(p.x, q.x) }\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
+    Assert.Equal(
+        "'Point.compare' cannot be defined: 'Point' is a structural type, so it is only ordered by its structure, and records and tags have none. Make it nominal ('$Point') to define its own order",
+        diagnostic.Message)
+    // The prelude attaches `Int.compare`, but `List.sort` of ints uses the compiler's own.
+    let typed = compileClean "def sorted = List.sort([2, 1])\n"
+    Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "compare", "__compare" ] ], instancesOf typed)

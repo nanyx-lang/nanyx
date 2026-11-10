@@ -10,11 +10,11 @@ open NyxCompiler.InferState
 /// always the compiler's own, so a `compare` attached to one, as the prelude's `Int.compare` is, is an ordinary function
 /// that the ordering operators and `Ord` do not read (see `WellKnownContexts.isBuiltIn`).
 module internal AttachedOperators =
-    /// The members only a nominal or protected type may attach, each with what it decides, as a message says it, and
-    /// whether a built-in type may attach it too.
+    /// The members only a nominal or protected type may attach, each with what it decides and what a structural type's
+    /// is, as a message says them, and whether a built-in type may attach it too.
     let private nominalOnly =
-        [ EqualityOperators.equals, "equality", false
-          WellKnownContexts.ordering.Member, "order", true ]
+        [ EqualityOperators.equals, "equality", "its equality is always that of its structure", false
+          WellKnownContexts.ordering.Member, "order", "it is only ordered by its structure, and records and tags have none", true ]
 
     /// What a type that a definition is attached to is, as far as these rules care.
     type private AttachedTo =
@@ -44,9 +44,9 @@ module internal AttachedOperators =
             if memberName = EqualityOperators.notEquals then
                 error $"'{name}' cannot be defined: '!=' is always 'not (a == b)'. Attach '==' instead"
             else
-                match nominalOnly |> List.tryFind (fun (attached, _, _) -> attached = memberName), kindOf state typeName with
-                | Some (_, decides, _), Some Structural ->
-                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so its {decides} is always that of its structure. Make it nominal ('${typeName}') to define its own {decides}"
-                | Some (_, decides, false), Some (BuiltIn builtIn) ->
+                match nominalOnly |> List.tryFind (fun (attached, _, _, _) -> attached = memberName), kindOf state typeName with
+                | Some (_, decides, structural, _), Some Structural ->
+                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so {structural}. Make it nominal ('${typeName}') to define its own {decides}"
+                | Some (_, decides, _, false), Some (BuiltIn builtIn) ->
                     error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its {decides} is the compiler's own. Make a nominal type of it to define its own {decides}"
                 | _ -> Ok ()
