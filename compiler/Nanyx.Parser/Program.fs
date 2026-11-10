@@ -600,7 +600,9 @@ let contextMemberAccess =
 // blocks are lambdas, so only a name inside a lambda is taken for a keyword: outside one, a line such as
 // `pattern string -> ...` is some other mistake.
 let private workflowKeywordApplication =
-    let reservedWords = Names.keywords
+    let reservedWords =
+        set [ "and"; "as"; "context"; "def"; "else"; "except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
+              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
     let operandStart c = isLetter c || isDigit c || c = '_' || c = '"' || c = '#' || c = '(' || c = '['
     let keyword =
         identifierNoWs >>= fun name ->

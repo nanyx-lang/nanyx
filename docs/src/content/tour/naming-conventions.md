@@ -34,7 +34,7 @@ Custom patterns use Pascal case after the `#` so that they are visually distinct
 
 # Names in backticks
 
-A name that is not an identifier is written in backticks, wherever a name goes: an operator, a keyword, or a whole sentence.
+A name that is not an identifier is written in backticks, wherever a name goes: an operator, or a whole sentence.
 
 ```nanyx
 def `adds two points` = { ... }

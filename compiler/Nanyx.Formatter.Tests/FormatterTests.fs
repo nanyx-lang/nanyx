@@ -331,10 +331,10 @@ let ``Names that are operators keep their backticks`` () =
     unchanged (lines [ "def main = {"; "  use Eq(int) = (`==` = { a, b -> true })"; "  1"; "}" ])
 
 [<Fact>]
-let ``Names that are sentences or keywords keep their backticks, and an identifier loses them`` () =
+let ``Names that are sentences keep their backticks, and an identifier loses them`` () =
     unchanged "def `adds two points` = 1\n"
     unchanged "def `is it empty?` = `adds two points`(1)\n"
-    unchanged "def `match` = 1\n"
+    unchanged "def builder = (try = { m, f -> f(m) }, return = { v -> v })\n"
     unchanged "def r = (`first name` = \"Ada\")\n"
     unchanged "def n = r.`first name`\n"
     Assert.Equal("def plain = 1\n", format "def `plain` = 1")

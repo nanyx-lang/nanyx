@@ -30,18 +30,12 @@ module Names =
         && (System.Char.IsLetter name[0] || name[0] = '_')
         && String.forall (fun c -> System.Char.IsLetterOrDigit c || c = '_') name
 
-    /// The words the language reserves, which a name that is one of them is written in backticks to avoid:
-    /// `` `match` ``.
-    let keywords =
-        set [ "and"; "as"; "context"; "def"; "else"; "except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
-              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
-
     /// `name` as it is written where a name goes: an identifier or a nominal type's name (`$Email`) as it is, and
-    /// anything else, such as an operator, a sentence or a keyword, in backticks. Each part of a qualified name is
-    /// written on its own: `` Point.`+` ``.
+    /// anything else, such as an operator or a sentence, in backticks. A keyword is an identifier here: it is a name
+    /// where a name is expected, as a workflow builder's `try` and `return` fields are. Each part of a qualified name
+    /// is written on its own: `` Point.`+` ``.
     let written (name: string) =
-        let isBare (part: string) =
-            (isIdentifier part && not (keywords.Contains part)) || (part.StartsWith "$" && isIdentifier part[1..])
+        let isBare (part: string) = isIdentifier part || (part.StartsWith "$" && isIdentifier part[1..])
         name.Split '.'
         |> Array.map (fun part -> if isBare part then part else $"`{part}`")
         |> String.concat "."
