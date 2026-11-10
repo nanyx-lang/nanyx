@@ -182,7 +182,8 @@ which exits with 1 on any error.
 
 When there is a test runner, it should run every test in a debug build: a test that reaches a deferred error fails
 with that error's message, and the others pass or fail on their own merits. This is what makes the feature useful
-for red-green iteration.
+for red-green iteration. The proposed runner, `nanyx test`, does this; see
+[Testing](../../docs/src/content/work-in-progress/testing.md#deferred-errors).
 
 ## Plan
 
