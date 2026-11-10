@@ -122,7 +122,7 @@ and says why the call is not in tail position by naming what is done with its re
 operand of, the function it is passed to, the list it goes into, the name it is bound to, and so on.
 
 - **It is `info` by default.** Recursion that is not in tail position is often right: walking a tree recurses as
-  deep as the tree, and `List.map` is written that way until tail recursion modulo cons exists. A project that
+  deep as the tree, and it is the plainest way to write a function that builds a list. A project that
   wants every loop to be stack-safe raises it to a warning or an error in its `.nyxp`.
 - **Only a function's own calls count.** A call from a lambda written in the function (a workflow block, a `for`
   loop's body, an argument to `List.map`) is a call from that lambda, and is not reported. Nor is mutual recursion:
@@ -136,10 +136,13 @@ documentation that the compiler checks, not a request to optimise: the guarantee
 
 ### The standard library
 
-Each standard-library function that walks a collection says whether it is stack-safe. `List.map` and
-`List.filter` should be. Tail recursion modulo cons (writing a list cell's tail after the recursive call returns,
-as OCaml and Koka do) makes them stack-safe as written, but it is an optimisation and not part of the promise;
-until it exists, they can build in reverse and reverse the result.
+Each standard-library function that walks a collection says whether it is stack-safe, and today every one of them
+is: `default/nonTailRecursion` reports nothing in `stdlib/nanyx`, which a test checks. Tail recursion modulo cons
+(writing a list cell's tail after the recursive call returns, as OCaml and Koka do) would let `List.map` and the
+like be written as plainly as they read, but it is an optimisation and not part of the promise; until it exists,
+the functions that build a list build it in reverse with an accumulator and reverse the result. `++` on lists is
+not yet stack-safe (its runtime helper recurses once per element of its left operand,
+[#558](https://github.com/nanyx-lang/nanyx/issues/558)), so the library does not use it on a list that can be long.
 
 ## Plan
 
@@ -155,7 +158,9 @@ until it exists, they can build in reverse and reverse the result.
    million deep with counting in.
 5. **Stack overflow error.** Report running out of stack as a Nanyx error.
 6. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
-7. **Stack-safe `List.map` and `List.filter`.**
+7. **Stack-safe `List.map` and `List.filter`.** **Done:** they and every other walk in the standard library
+   (`List.take`, `flatten`, `zip`, `sortBy`, `unfold`, `append`; `String.repeat`, `split`, `replace`, `lines`,
+   `words`; `math.pow`) call themselves only in tail position, with tests that run them on 20,000 elements.
 
 ## Open questions
 

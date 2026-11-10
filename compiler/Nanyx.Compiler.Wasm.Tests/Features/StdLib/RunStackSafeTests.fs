@@ -5,7 +5,8 @@ open TranspilerWasmTestHelpers
 
 // The standard library's walks are stack-safe (compiler/design/tail-calls.md): each of these ran out of stack when
 // the function recursed once per element other than in tail position, as every one of them traps on 20,000 elements
-// written that way. The lists are 20,000 long, not more, only to keep the suite quick.
+// written that way. The lists are 20,000 long, not more, only to keep the suite quick: matching a list pattern counts
+// the whole list for now, so a walk takes time in the square of the list's length (#557).
 
 /// The start of each program: `xs` is the list 1 to 20,000, and `show` gives a list's length, first element and
 /// last element.
@@ -60,6 +61,19 @@ let ``Run - List.sortBy works on 20,000 elements`` () =
 let ``Run - List.unfold works for 20,000 elements`` () =
     let body = "println(show(List.unfold(1, { i -> if i <= 20000 then #some(i, i + 1) else #done })))\n"
     runSource (withList body) |> assertRan "20000 1 20000\n"
+
+[<Fact>]
+let ``Run - List.append works on 20,000 elements`` () =
+    runSource (withList "println(show(List.append(xs, 0)))\n") |> assertRan "20001 1 0\n"
+
+[<Fact>]
+let ``Run - math.pow works for an exponent of 100,000`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "println(\"{math.pow(1, 100000)} {math.pow(-1, 99999)} {math.pow(3, 4)} {math.pow(2, 0)}\")\n"
+    runSource source |> assertRan "1 -1 81 1\n"
 
 [<Fact>]
 let ``Run - String.repeat works 100,000 times`` () =

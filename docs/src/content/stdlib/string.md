@@ -8,6 +8,8 @@ The `string` module provides functions for working with UTF-8 strings. Import it
 
 These functions are [attached definitions](../advanced/attached-definitions) on `String`, so when the receiver is known to be a string they can be piped into without qualification: `s \split(on = ",")`, `s \startsWith("nan")`. A string's length is also a built-in property, read with a dot: `s.length`.
 
+Every one of them is stack-safe: `repeat`, `split`, `replace`, `lines`, `words` and the rest work on a string of any length, and give any number of pieces, without running out of stack. Each walks the string with [tail calls](../tour/functions#tail-recursion).
+
 `String.toString`, which gives back the string itself, is in the prelude rather than in this module, with the `toString` of the other built-in types: see [Converting to text](./standard-library#converting-to-text).
 
 # length
