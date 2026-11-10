@@ -323,8 +323,23 @@ allocation `reusing` a token.
   a one-element list whose cell `++` copies, so that it allocates one cell, and can reuse one.
 
 The tests in `Features/Memory` check that a loop over lists, records, closures and tags runs in constant memory,
-that the examples that compile give back every byte they allocate, and, counting what the allocator hands out, that
+that the examples that compile free every block they allocate, and, counting what the allocator hands out, that
 mapping over a list, a tuple or a tag's cell held once allocates nothing.
+
+**Memory checks.** `nanyx run --check-memory` (`WasmOptions.CheckMemory`) compiles the program with an allocator
+and counts that check themselves (`checkedRuntimeHelpers` and `MemoryChecks` in `WasmRuntime.fs`):
+
+- `alloc` and `free` count the blocks still in use. The program's start function is exported rather than run on
+  instantiation, so the CLI can read the count once the program has finished. A count above 0 fails the run.
+- `free` sets the low bit of a block's size word (sizes are multiples of 4), and `alloc` clears it when it hands
+  the block out again. Freeing a marked block, or a `retain` or `release` of an object on the heap whose block is
+  marked, writes what went wrong to stderr and exits with 70. A check uses WASI `proc_exit`, not a trap: a trap
+  raised inside the Wasm test host crashes it.
+- `free` fills a block after its free-list link with `0xDEADBEEF`, so a field read after the block was freed is a
+  pointer far outside memory, and following it traps.
+
+Every Wasm test that runs a program through the CLI passes `--check-memory`, and the in-process tests compile with
+the checks to read the counters. So a leak, a double free or a use after free in any test program fails that test.
 
 On the examples that compile (blocks allocated, and the heap's peak in bytes):
 
@@ -367,6 +382,6 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
   should the boxing fallback kick in?
 - **Should reuse be visible?** Koka's `fip` annotation lets a function promise it runs fully in place, and the
   compiler checks it. That would suit Nanyx's stance on predictable performance, but is not needed to start.
-- **Measuring.** Both, for now: the tests run long loops in constant memory, and the table above gives allocations
-  and peak memory on the examples. The examples are small and mostly build strings; a benchmark that transforms
-  large data structures would show what reuse is worth.
+- **Measuring.** Both, for now: every test program runs with the memory checks, the tests run long loops in
+  constant memory, and the table above gives allocations and peak memory on the examples. The examples are small
+  and mostly build strings; a benchmark that transforms large data structures would show what reuse is worth.

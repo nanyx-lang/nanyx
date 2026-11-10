@@ -34,24 +34,29 @@ type private RecordTable =
     { /// Field names in storage order -> the layout's number.
       LayoutIds: System.Collections.Generic.Dictionary<string list, int> }
 
-/// A module of just the allocator, exporting `alloc`, `free` and the memory, so that tests can drive it directly.
-let allocatorModuleWat =
-    [ "(module"
-      "  (memory 1)"
-      "  (export \"memory\" (memory 0))"
-      $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset}))"
-      runtimeHelpers |> Map.find Helpers.alloc
-      runtimeHelpers |> Map.find Helpers.free
-      $"  (export \"alloc\" (func ${Helpers.alloc}))"
-      $"  (export \"free\" (func ${Helpers.free}))"
-      ")" ]
-    |> String.concat "\n"
+/// How a module is compiled.
+type WasmOptions =
+    { /// Check the heap as the program runs: the allocator counts the blocks it hands out and takes back, and stops
+      /// the program on a block freed twice or an object counted after it was freed, with a message on stderr and
+      /// `CheckedExports.failureExitCode` (see `WasmRuntime.MemoryChecks`). The module exports its start function
+      /// rather than running it when instantiated, and exports the counters and `$heap_ptr`, so that a host can see
+      /// what was left on the heap once the program has run (see `CheckedExports`).
+      CheckMemory: bool }
 
-/// Where the heads of the allocator's free lists are, one per small size and then the one for large blocks, and where
-/// `$heap_ptr` starts: what a test needs to work out how much of the heap is still in use.
-let allocatorLayout =
-    [ for size in 4 .. 4 .. largestSizeClass -> heapBaseOffset - 4 + size ] @ [ heapBaseOffset + largestSizeClass ],
-    heapStartOffset
+    static member Default = { CheckMemory = false }
+
+/// The names a module compiled with `CheckMemory` exports.
+module CheckedExports =
+    /// The start function, which runs the program's top-level code.
+    let start = CoreIrLower.startFunctionName
+    /// How many blocks the program allocated and has not freed.
+    let liveBlocks = MemoryChecks.liveBlocks
+    /// How many blocks the program allocated.
+    let allocations = MemoryChecks.allocations
+    /// The top of the heap: the most it has grown to.
+    let heapPointer = "heap_ptr"
+    /// The exit code a program stops with when a memory check fails.
+    let failureExitCode = MemoryChecks.exitCode
 
 let private ctxFnName (name: string, _, _) = name
 let private ctxFnSlot (_, slot: int, _) = slot
@@ -138,6 +143,41 @@ let private buildStringLiteralMap (literals: string list) =
             value, currentOffset, dataBytes)
     let map = entries |> List.map (fun (value, baseOffset, _) -> value, baseOffset + 8) |> Map.ofList
     map, entries
+
+/// The data segments that lay out `entries` (see `buildStringLiteralMap`).
+let private renderDataSegments (entries: (string * int * byte array) list) =
+    entries
+    |> List.map (fun (_, offset, bytes) -> $"  (data (i32.const {offset}) \"{escapeWasmData bytes}\")")
+    |> String.concat "\n"
+
+/// A module of just the allocator, exporting `alloc`, `free` and the memory, so that tests can drive it directly. With
+/// `CheckMemory`, it is the checked allocator, and exports `retain`, `release` and the counters too; a failed check
+/// writes to stderr and exits through WASI.
+let allocatorModuleWat (options: WasmOptions) =
+    let helpers = if options.CheckMemory then checkedRuntimeHelpers else runtimeHelpers
+    let messageOffsets, messageData = buildStringLiteralMap MemoryChecks.messages
+    [ yield "(module"
+      if options.CheckMemory then
+          yield "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))"
+          yield $"  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func ${Helpers.procExit} (param i32)))"
+      yield "  (memory 1)"
+      yield "  (export \"memory\" (memory 0))"
+      yield $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset}))"
+      yield helpers |> Map.find Helpers.alloc
+      yield helpers |> Map.find Helpers.free
+      yield $"  (export \"alloc\" (func ${Helpers.alloc}))"
+      yield $"  (export \"free\" (func ${Helpers.free}))"
+      if options.CheckMemory then
+          yield renderDataSegments messageData
+          yield memoryCheckFunctions (fun message -> messageOffsets |> Map.find message)
+          for name in [ Helpers.retain; Helpers.release; Helpers.stringLength; Helpers.writeStderr ] do
+              yield helpers |> Map.find name
+          yield $"  (export \"retain\" (func ${Helpers.retain}))"
+          yield $"  (export \"release\" (func ${Helpers.release}))"
+          yield $"  (export \"{CheckedExports.liveBlocks}\" (global ${MemoryChecks.liveBlocks}))"
+          yield $"  (export \"{CheckedExports.allocations}\" (global ${MemoryChecks.allocations}))"
+      yield ")" ]
+    |> String.concat "\n"
 
 /// The number of the record layout with `fieldNames` (in storage order), numbering it if it is new.
 let private recordLayoutId (table: RecordTable) (fieldNames: string list) =
@@ -272,8 +312,8 @@ type BackendReport =
       /// The specialisations among them, each with the definition it specialises.
       Specialisations: (string * string) list }
 
-/// `typed` as WebAssembly text, and the functions it was compiled into.
-let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport =
+/// `typed` as WebAssembly text compiled with `options`, and the functions it was compiled into.
+let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) : string * BackendReport =
     let contextInstances = typed.ContextInstances
     let checkedTypes = typed.ExprTypes
     let module' = typed.Module
@@ -529,7 +569,11 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
     let tagIdMap = facts.Tags |> List.mapi (fun index name -> name, index + 1) |> Map.ofList
-    let stringLiteralMap, stringLiteralData = buildStringLiteralMap facts.Strings
+    // A checked module lays out what its memory checks write with its own literals.
+    let literals =
+        if options.CheckMemory then facts.Strings @ (MemoryChecks.messages |> List.except facts.Strings)
+        else facts.Strings
+    let stringLiteralMap, stringLiteralData = buildStringLiteralMap literals
 
     let context: CoreIrEmit.EmitContext =
         { TagId =
@@ -561,7 +605,10 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             let emitted = CoreIrEmit.emitStart context func
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
-            emitted.Text, "  (start $__nanyx_start)"
+            let directive =
+                if options.CheckMemory then $"  (export \"{CheckedExports.start}\" (func ${CoreIrLower.startFunctionName}))"
+                else $"  (start ${CoreIrLower.startFunctionName})"
+            emitted.Text, directive
         | None -> "", ""
 
     // A drop and a dup function for each type on the heap the functions above use, a function for what each of their
@@ -587,6 +634,14 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             |> List.collect (fun (name, _, _) ->
                 lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map (fun (func, _) -> func.Name, sanitizeIdentifier name)) }
 
+    // The checked allocator and counts call the memory checks, which write to stderr and exit.
+    let checksMemory =
+        options.CheckMemory
+        && [ Helpers.alloc; Helpers.free; Helpers.retain; Helpers.release ]
+           |> List.exists (closeHelpers Set.empty (usedHelpers |> Seq.toList)).Contains
+    if checksMemory then
+        usedHelpers.Add Helpers.writeStderr |> ignore
+        usedHelpers.Add Helpers.procExit |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     let moduleUsesStandardStreams =
         [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte ] |> List.exists usedHelperSet.Contains
@@ -597,10 +652,18 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
     // Everything that allocates does it through `$alloc`.
     let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc
     let renderedHelpers =
-        helperDependencies
-        |> List.map fst
-        |> List.filter usedHelperSet.Contains
-        |> List.map (fun name -> runtimeHelpers |> Map.find name)
+        let helpers = if options.CheckMemory then checkedRuntimeHelpers else runtimeHelpers
+        [ yield!
+              helperDependencies
+              |> List.map fst
+              |> List.filter usedHelperSet.Contains
+              |> List.map (fun name -> helpers |> Map.find name)
+          if checksMemory then
+              yield memoryCheckFunctions (fun message -> stringLiteralMap |> Map.find message)
+              yield $"  (export \"{CheckedExports.liveBlocks}\" (global ${MemoryChecks.liveBlocks}))"
+              yield $"  (export \"{CheckedExports.allocations}\" (global ${MemoryChecks.allocations}))"
+          if options.CheckMemory && moduleUsesHeap then
+              yield $"  (export \"{CheckedExports.heapPointer}\" (global $heap_ptr))" ]
         |> String.concat "\n"
 
     let dbgPrelude =
@@ -671,11 +734,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
             let importName = $"dbg_tag_payload_{sanitizeImportSuffix tagName}"
             $"  (import \"env\" \"{importName}\" (func ${importName} (param i32)))")
 
-    let dataSegments =
-        stringLiteralData
-        |> List.map (fun (_, offset, bytes) ->
-            $"  (data (i32.const {offset}) \"{escapeWasmData bytes}\")")
-        |> String.concat "\n"
+    let dataSegments = renderDataSegments stringLiteralData
 
     // Add memory if we have string literals, heap allocation or reads of tag cells, but no dbg helpers (dbgPrelude
     // already includes memory)
@@ -723,15 +782,23 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
         let body = String.concat "\n\n" parts
         $"(module\n{body}\n)", report
 
+/// `typed` as WebAssembly text, and the functions it was compiled into.
+let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport =
+    transpileTypedModuleWithOptions WasmOptions.Default typed
+
 let transpileTypedModuleToWat (typed: TypedModule) : string =
     transpileTypedModuleWithReport typed |> fst
 
-/// `transpileTypedModuleToWat`, with what the backend cannot compile reported as a diagnostic at the place in the source
-/// it is written: the innermost expression it is in that has one, or else the definition.
-let tryTranspileTypedModuleToWat (typed: TypedModule) : Result<string, Diagnostic> =
+/// `typed` as WebAssembly text compiled with `options`, with what the backend cannot compile reported as a diagnostic
+/// at the place in the source it is written: the innermost expression it is in that has one, or else the definition.
+let tryTranspileTypedModuleWith (options: WasmOptions) (typed: TypedModule) : Result<string, Diagnostic> =
     try
-        Ok (transpileTypedModuleToWat typed)
+        Ok (transpileTypedModuleWithOptions options typed |> fst)
     with
     | UnsupportedConstruct(message, span) -> Error (Diagnostics.at DiagnosticCodes.UnsupportedByBackend span message)
     | Failure message -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend message)
     | ex -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend $"Internal error: {ex.Message}")
+
+/// `tryTranspileTypedModuleWith` the default options.
+let tryTranspileTypedModuleToWat (typed: TypedModule) : Result<string, Diagnostic> =
+    tryTranspileTypedModuleWith WasmOptions.Default typed

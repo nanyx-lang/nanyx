@@ -42,8 +42,13 @@ module WasmRunner =
                     failwith $"The program imports an unknown host function: env.{name}"
             | _ -> ()
 
-    /// Instantiates (and therefore runs) the module described by `wat`.
-    let run (wat: string) : Result<unit, RunError> =
+    /// Whether `ex` is the program ending itself through WASI `proc_exit` with exit code 0.
+    let private exitedCleanly (ex: WasmtimeException) = ex.ExitCode.HasValue && ex.ExitCode.Value = 0
+
+    /// Instantiates the module described by `wat`, which runs its start function, then calls its export `start` if it
+    /// is given and the module exports it, and gives what `read` makes of the instance afterwards: `None` when the program ended itself while it
+    /// was being instantiated, so there is no instance.
+    let private execute (wat: string) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
         use engine = new Engine()
         let moduleResult =
             try Ok (Module.FromText(engine, "nanyx", wat))
@@ -62,9 +67,29 @@ module WasmRunner =
                     .WithInheritedStandardError())
             try
                 defineHostImports linker module'
-                linker.Instantiate(store, module') |> ignore
-                Ok ()
+                let instance = linker.Instantiate(store, module')
+                // A program with no top-level code has no start function to export.
+                match start |> Option.map instance.GetAction with
+                | Some null
+                | None -> ()
+                | Some action ->
+                    try action.Invoke()
+                    with :? WasmtimeException as ex when exitedCleanly ex -> ()
+                Ok (read (Some instance))
             with
-            | :? WasmtimeException as ex when ex.ExitCode.HasValue ->
-                if ex.ExitCode.Value = 0 then Ok () else Error (Exited ex.ExitCode.Value)
+            | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
+            | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
             | :? WasmtimeException as ex -> Error (Trapped ex.Message)
+
+    /// Instantiates (and therefore runs) the module described by `wat`.
+    let run (wat: string) : Result<unit, RunError> = execute wat None ignore
+
+    /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
+    /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global
+    /// the module does not export counts as 0: a module that never allocates has no allocation counters.
+    let runReading (start: string) (globals: string array) (wat: string) : Result<int array, RunError> =
+        execute wat (Some start) (fun instance ->
+            globals |> Array.map (fun name ->
+                match instance |> Option.map _.GetGlobal(name) with
+                | Some null | None -> 0
+                | Some global' -> global'.GetValue() :?> int))

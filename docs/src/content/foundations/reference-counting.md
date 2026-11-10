@@ -95,7 +95,9 @@ fields of a value are on the heap, and an integer keeps its full width.
 
 # Status
 
-Reference counting and reuse are in the WebAssembly backend, the one `nanyx run` uses. A way to ask the compiler to
+Reference counting and reuse are in the WebAssembly backend, the one `nanyx run` uses. `nanyx run --check-memory`
+runs a program with an allocator that checks its counts. It stops the program at an object freed twice or used after
+it was freed, and fails the run if anything is left unfreed at the end. A way to ask the compiler to
 check that a function runs entirely in place, as Koka's `fip` functions do, is an open question. The design, with
 how values are laid out in memory, is in
 [memory.md](https://github.com/nanyx-lang/nanyx/blob/main/compiler/design/memory.md) in the compiler's design notes.
