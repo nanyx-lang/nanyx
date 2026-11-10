@@ -151,6 +151,17 @@ let ``Each type ordered gets one ordering function, and its parts their own`` ()
     Assert.Equal(1, countOccurrences "(func $__nanyx_compare_string" wat)
 
 [<Fact>]
+let ``Run - a local function orders at each type it is called with`` () =
+    comparing
+        [ "def both = { v, w ->"
+          "  def lt = { x, y -> x < y }"
+          "  lt(v, w)"
+          "}" ]
+        [ "both(1, 2)"
+          "both(2, 1)"
+          "both(\"a\", \"b\")" ]
+    |> runSource
+    |> assertRan "T\nF\nT\n"
 let ``Run - a list of a type with its own compare is ordered through it, element by element`` () =
     comparing
         [ yield! version

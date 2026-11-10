@@ -39,7 +39,7 @@ operators call.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
-  of its own type variables requires `Eq` of it (`EqualityOperators.checkLocalCall`). Only a call by name is
+  of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). Only a call by name is
   checked, not a local function passed as a value. A local generic function compares strings and lists wrongly in
   the backend ([#616](https://github.com/nanyx-lang/nanyx/issues/616)).
 - **The operands are joined when one is a tag.** `{ o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))`
@@ -90,6 +90,8 @@ Not done yet:
   as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
 - **Lists.** `List.sort` and `List.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `List.min` and
   `List.max`, which give `#emptyList` for an empty list, as `List.head` does.
+- **Local functions are checked at each call**, as for `Eq`: a call to a local `def lt = { x, y -> x < y }` with
+  records is `NYX0205` at the call, and a def that calls it with one of its own type variables requires `Ord` of it.
 - **A list is ordered through its elements' `Ord`**, as for `Eq`: `[v(1), v(2)] < [v(3)]` on `list($Version)` calls
   the prelude's `__listLess` (and `__listLessOrEqual`, `__listGreater`, `__listGreaterOrEqual`) with
   `$Version.compare`, lexicographically with a prefix first, and so does `<` on a `list(a)` in a function that
@@ -100,9 +102,6 @@ Not done yet, as for `Eq`:
 - **Structural derivation that looks up each part, beyond one list.** A tuple holding a `$Version`, or a list of lists
   of them, is still an error, and `<` on a `list(a)` whose type is only known later orders by structure
   ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
-- **Calls to local functions are not checked for `Ord`** as they are for `Eq`: a local generic function that orders
-  its parameters is ordered by the backend at each type it is called with, and calling it with records is reported
-  there, as `NYX0301`.
 
 # What existed before
 

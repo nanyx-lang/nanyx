@@ -1043,23 +1043,25 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
         let inputOf ty = inputTypeFromArgs [ ty; ty ]
         annotation, resolved |> EqualityOperators.callMembers inputOf comparisons |> OrderingOperators.callHelpers inputOf orderings)
 
-/// Checks `call`, a call to `name` that inference has just typed, when `name` is a local function that compares values
-/// of type variables it is generic in: each needs an `Eq` of the type it is at the call (see
-/// `EqualityOperators.checkLocalCall`).
+/// Checks `call`, a call to `name` that inference has just typed, when `name` is a local function that compares or
+/// orders values of type variables it is generic in: each needs that well-known context of the type it is at the call
+/// (see `WellKnownContexts.checkLocalCall`).
 let private checkLocalComparisons (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
     | Some ({ Symbol = Some symbol } as scheme), Some calleeTy when state.LocalComparisons.ContainsKey symbol ->
-        let compared = state.LocalComparisons.[symbol]
-        varsIn (fun v -> if compared.Contains v.Id then Some v.Id else None) scheme.Type calleeTy
-        |> Map.values
-        |> Seq.fold (fun result ty ->
-            result
-            |> Result.bind (fun (current: InferState) ->
-                let ty = resolveSoFar current ty
-                let hasInstance ty = (instanceInScope env current EqualityOperators.context [ ty ]).IsSome
-                match wellKnownInstanceAtCall env EqualityOperators.context [ ty ] hasInstance with
-                | Some (_, instance) -> EqualityOperators.checkLocalCall env current call name calleeSpan ty instance
-                | None -> Ok current)) (Ok state)
+        state.LocalComparisons.[symbol]
+        |> Map.toList
+        |> List.fold (fun result (ctxName, used) ->
+            varsIn (fun v -> if used.Contains v.Id then Some v.Id else None) scheme.Type calleeTy
+            |> Map.values
+            |> Seq.fold (fun result ty ->
+                result
+                |> Result.bind (fun (current: InferState) ->
+                    let ty = resolveSoFar current ty
+                    let hasInstance ty = (instanceInScope env current ctxName [ ty ]).IsSome
+                    match wellKnownInstanceAtCall env ctxName [ ty ] hasInstance with
+                    | Some (wellKnown, instance) -> WellKnownContexts.checkLocalCall wellKnown env current call name calleeSpan ty instance
+                    | None -> Ok current)) result) (Ok state)
     | _ -> Ok state
 
 /// Builds, before the def `name` is generalised, the instances of contexts of more than one parameter that its calls
@@ -2388,7 +2390,12 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
                                 else generalizeDef env' current declaredTy
                             current <-
-                                match symbol, EqualityOperators.comparedByLocal generalizedState scheme.Quantified with
+                                let used =
+                                    [ WellKnownContexts.equality; WellKnownContexts.ordering ]
+                                    |> List.map (fun wellKnown -> wellKnown.Context, WellKnownContexts.usedByLocal wellKnown generalizedState scheme.Quantified)
+                                    |> List.filter (snd >> Set.isEmpty >> not)
+                                    |> Map.ofList
+                                match symbol, used with
                                 | Some symbol, compared when not compared.IsEmpty ->
                                     { generalizedState with LocalComparisons = generalizedState.LocalComparisons |> Map.add symbol compared }
                                 | _ -> generalizedState
