@@ -211,7 +211,13 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > `ImportReferences` names. A type name in a type expression records its import there as a value's name does, so a
 > type used only in an annotation keeps its import. Its fifth is `noTagInCommon`
 > ([#532](https://github.com/nanyx-lang/nanyx/issues/532)): `==` or `!=` on closed tag types that share no tag, which
-> type-checks because the operands are joined. The rules for unused and unreachable code are tracked in
+> type-checks because the operands are joined. Its sixth is `unusedPrivateDefinitions`
+> ([#496](https://github.com/nanyx-lang/nanyx/issues/496)): a top-level def, type or context the module does not
+> export, or a member of such a context, that no entry of `References` names from outside the definition itself. A
+> call that makes a value of a type (`Point(x = 1)`) records a reference to the type for it. The `SemanticModel`
+> carries `ContextInstances`, so that a def an instance built from attached definitions picks up counts as used; the
+> call to `@entry`'s def that `applyAttributes` adds is a reference like any other. The rules for unused and
+> unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
 >

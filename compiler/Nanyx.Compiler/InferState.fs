@@ -347,6 +347,16 @@ let internal recordTypeReference (typeExpr: TypeExpr) (info: TypeDefInfo) (state
             ImportReferences = importReferenceOf typeExpr.Id typeExpr.Span symbol state }
     | None -> state
 
+/// Records that `expr`, a call such as `Point(x = 1)`, makes a value of the type definition `info`, if it declares a
+/// symbol, and the import it came through if it was imported.
+let internal recordConstructorReference (expr: Expression) (info: TypeDefInfo) (state: InferState) =
+    match info.Symbol with
+    | Some symbol ->
+        { state with
+            References = state.References |> Map.add expr.Id symbol
+            ImportReferences = importReferenceOf expr.Id expr.Span symbol state }
+    | None -> state
+
 /// Records that `expr`, a qualified `Context.member`, names that member of the context `ctxType` names, and that
 /// `ctxType` names the context.
 let internal recordContextMemberReference (expr: Expression) (ctxType: TypeExpr) (memberName: Identifier) (state: InferState) =

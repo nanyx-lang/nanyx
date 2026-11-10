@@ -67,6 +67,20 @@ def x = m.sqrt(16.0)
 
 The rule (`unusedImports`) reports an import that nothing in the module uses. A value, type or context it brings in counts as a use, whether it is written through the import's alias (`m.sqrt`, `m.Shape`) or unqualified, and a type named only in an annotation counts too. The prelude, which every module imports, is never reported, and neither is the import `@entry` adds for you, nor an alias starting with `_`. Its fix removes the import: the whole `import` line when it is the only one there, or just that module's line from an `import (...)` group.
 
+## Unused private definition
+
+```nanyx
+module shapes
+
+def scale = 2              -- Linter warning: `scale` is never used
+type Corner = (x: int)     -- Linter warning: type `Corner` is never used
+export def area = { w, h -> w * h }
+```
+
+The rule (`unusedPrivateDefinitions`) reports a top-level def, type or context that the module does not export, and a member of such a context, when nothing in the module uses it. Only the module can name what it does not export, so an unused one is dead code. A use from within the definition itself, such as a function calling itself or a type naming itself, does not count. In a `module name =` block, the defs the block does not export are private to it, and are reported in the same way.
+
+It is a rule of its own, apart from `unusedBindings`, so a project can keep one and turn the other off. It leaves alone `@entry`'s def, which the runtime calls; a definition attached to a type that an instance picks up, such as a `Point.toString` that string interpolation uses; and names starting with `_`. Its fix removes the definition's lines. An unused context member has no fix, since removing it means editing the context's type.
+
 ## Unreachable match branch
 
 ```nanyx

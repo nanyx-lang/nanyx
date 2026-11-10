@@ -30,7 +30,10 @@ type SemanticModel =
       /// The symbol each identifier, call, pipe target and qualified name resolved to, by its node.
       References: Map<NodeId, SymbolId>
       /// The import each name brought in by an import came through, by the node that names it.
-      ImportReferences: Map<NodeId, SymbolId> }
+      ImportReferences: Map<NodeId, SymbolId>
+      /// Where each call to a function that requires a parameterised context finds each instance, by the call's node
+      /// (as `TypedModule.ContextInstances` has it): an instance built from attached definitions names them.
+      ContextInstances: Map<NodeId, ContextInstance option list> }
 
 module SemanticModel =
     /// The model of a type-checked module, from its text, the module as parsed, and what checking it found.
@@ -41,7 +44,8 @@ module SemanticModel =
           SymbolTypes = typed.SymbolTypes
           Symbols = typed.Symbols
           References = typed.References
-          ImportReferences = typed.ImportReferences }
+          ImportReferences = typed.ImportReferences
+          ContextInstances = typed.ContextInstances }
 
 /// Something one of a linter's rules found. The host turns it into a diagnostic with the rule's code and
 /// configured severity.
@@ -139,8 +143,8 @@ module private SourceEdits =
             { Span = span; NewText = "" }
 
 /// The official linter's `unusedBindings` rule: a local def, a lambda's argument or a variable a pattern binds that
-/// nothing refers to. Top-level defs are left alone, since another module may use them, and so are names starting
-/// with `_`, which say they are unused on purpose.
+/// nothing refers to. Top-level defs are left to `unusedPrivateDefinitions`, and names starting with `_`, which say
+/// they are unused on purpose, are left alone.
 module UnusedBindings =
     let rule =
         { Id = "unusedBindings"
@@ -471,6 +475,109 @@ module UnusedImports =
                   Fixes = [ { Title = $"Remove the import of `{symbol.Name}`"; Edits = [ removal model.Source statement items item ] } ] }))
         |> List.ofSeq
 
+/// The official linter's `unusedPrivateDefinitions` rule: a top-level def, type or context the module does not export,
+/// or a member of such a context, that nothing refers to. Only the module can name what it does not export, so with no
+/// references it is dead. A reference from within the definition itself (a function calling itself, a type naming
+/// itself) is not a use. Left alone: `@entry`'s def, which the runtime calls; a def an instance built from attached
+/// definitions picks up (`InstanceSynthesized`); and names starting with `_`. A `module name =` block's defs that it
+/// does not export are private to the block, and are reported the same way.
+module UnusedPrivateDefinitions =
+    let rule =
+        { Id = "unusedPrivateDefinitions"
+          Title = "Unused private definition"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported." }
+
+    /// The definitions the module writes, each the item that writes it, a `module name =` block's among them.
+    let rec private definitionsOf (items: TopLevelItem list) : TopLevelItem list =
+        items
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Def _ -> [ item ]
+            | ModuleBlock(_, items) -> definitionsOf items
+            | ModuleDecl _
+            | Import _
+            | Attribute _
+            | Expr _ -> [])
+
+    /// The names of the definitions that an instance built from attached definitions picks up somewhere in the module.
+    let private synthesizedMembers (model: SemanticModel) : Set<string> =
+        model.ContextInstances
+        |> Map.values
+        |> Seq.collect id
+        |> Seq.collect (function
+            | Some (InstanceSynthesized members) -> members |> List.map snd
+            | Some (InstanceInScope _)
+            | Some InstanceBuiltIn
+            | None -> [])
+        |> Set.ofSeq
+
+    let private messageFor (symbol: Symbol) =
+        match symbol.Kind with
+        | TypeDefinition -> $"Type `{symbol.Name}` is never used"
+        | ContextMember -> $"Context member `{symbol.Name}` is never used"
+        | TopLevelValue
+        | LocalValue
+        | Parameter
+        | PatternVariable
+        | ImportedModule -> $"`{symbol.Name}` is never used"
+
+    let lint (model: SemanticModel) : Report list =
+        let definitions = definitionsOf model.Syntax
+        let picked = synthesizedMembers model
+        // The span of each expression as written, so that a reference from within a definition to itself is told
+        // apart. Nodes desugaring made are not among them, and their references count as uses: the call to
+        // `@entry`'s def that `applyAttributes` adds is one.
+        let spans =
+            model.Syntax
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect SyntaxTree.expressionsWithin
+            |> List.map (fun expr -> expr.Id, expr.Span)
+            |> Map.ofList
+        let usesBySymbol =
+            model.References
+            |> Map.toList
+            |> List.groupBy snd
+            |> List.map (fun (symbol, references) -> symbol, references |> List.map (fun (node, _) -> spans |> Map.tryFind node))
+            |> Map.ofList
+        let definitionOf (symbol: Symbol) =
+            definitions |> List.tryFind (fun item -> SourceSpan.contains item.Span symbol.Declaration)
+        let isUsed (symbol: Symbol) (definition: TopLevelItem) =
+            usesBySymbol
+            |> Map.tryFind symbol.Id
+            |> Option.defaultValue []
+            |> List.exists (function
+                | Some span -> not (SourceSpan.contains definition.Span span)
+                | None -> true)
+        model.Symbols
+        |> Map.values
+        |> Seq.filter (fun symbol ->
+            match symbol.Kind with
+            | TopLevelValue
+            | TypeDefinition
+            | ContextMember -> not symbol.IsExported && not (symbol.Name.StartsWith "_")
+            | LocalValue
+            | Parameter
+            | PatternVariable
+            | ImportedModule -> false)
+        |> Seq.choose (fun symbol -> definitionOf symbol |> Option.map (fun definition -> symbol, definition))
+        |> Seq.filter (fun (symbol, definition) ->
+            not (isUsed symbol definition)
+            && not (symbol.Kind = TopLevelValue && picked.Contains symbol.Name))
+        |> Seq.sortBy (fun (symbol, _) -> symbol.Declaration.Start)
+        |> Seq.map (fun (symbol, definition) ->
+            { Rule = rule.Id
+              Span = symbol.Declaration
+              Message = messageFor symbol
+              Related = []
+              // A member is one field of its context, which has no span of its own to remove.
+              Fixes =
+                match symbol.Kind with
+                | ContextMember -> []
+                | _ -> [ { Title = $"Remove `{symbol.Name}`"; Edits = [ SourceEdits.removal model.Source definition.Span ] } ] })
+        |> List.ofSeq
+
 /// The official linter's `noTagInCommon` rule: `==` or `!=` on two values of closed tag types that share no tag, such
 /// as `#red == #some(1)`. The operands are joined, not made equal (see "Equality and well-known contexts" in the docs'
 /// work in progress), so this type-checks, and is always false (or always true).
@@ -520,11 +627,13 @@ module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
-          Rules = [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule ]
+          Rules =
+            [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
+              UnusedPrivateDefinitions.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
-                @ NoTagInCommon.lint model }
+                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

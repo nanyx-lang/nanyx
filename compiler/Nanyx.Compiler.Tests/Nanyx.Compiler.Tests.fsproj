@@ -28,6 +28,7 @@
     <Compile Include="Features\Inference\UnifierTests.fs" />
     <Compile Include="Features\Linters\UnusedImportsTests.fs" />
     <Compile Include="Features\Linters\NoTagInCommonTests.fs" />
+    <Compile Include="Features\Linters\UnusedPrivateDefinitionsTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
     <Compile Include="Features\Maps\MapTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
