@@ -20,6 +20,22 @@ type DeferredContextUse =
       Span: SourceSpan
       Available: Set<Identifier> }
 
+/// A call, in the unannotated top-level def `Def`, that requires the parameterised context `Context` at `ArgTys`,
+/// types the call alone does not settle and for which no instance is in scope: `Show(t)` where `t` is a parameter's
+/// type. Once the def is inferred, the context is found for the types they turned out to be, or, where they are
+/// variables of the def's type, required by the def itself. `Index` is the context's place among the `Count` the
+/// callee requires, and `Errors` what to report if neither can be done.
+type PendingContextInstance =
+    { Def: Identifier
+      Call: NodeId
+      Callee: Identifier
+      Index: int
+      Count: int
+      Context: Identifier
+      ArgTys: Ty list
+      Span: SourceSpan
+      Errors: Diagnostic list }
+
 /// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
 type BlockImport =
     { Import: ImportItem
@@ -56,6 +72,11 @@ type InferState =
             /// The module's unannotated top-level functions, by name, with their symbols.
             UnannotatedDefs: Map<Identifier, SymbolId>;
             DeferredContextUses: DeferredContextUse list;
+            /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
+            PendingContextInstances: PendingContextInstance list;
+            /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
+            /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
+            InferredContextTypes: Map<SymbolId, Ty list>;
             LocalNominals: Set<string>;
             LocalPrivateNominals: Set<string>;
             /// The type of every expression inferred so far, and of every `_` written in a type, by node. These are
@@ -151,6 +172,8 @@ let emptyState =
             InferredContexts = Map.empty;
             UnannotatedDefs = Map.empty;
             DeferredContextUses = [];
+            PendingContextInstances = [];
+            InferredContextTypes = Map.empty;
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
             ExprTypes = Map.empty;
@@ -217,6 +240,15 @@ let internal declareSymbol (declarer: Declarer) (holder: NodeId) (name: string) 
                 DeclarationSymbols = state.DeclarationSymbols |> Map.add key symbol.Id
                 Symbols = state.Symbols |> Map.add symbol.Id symbol
                 Scopes = state.Scopes |> Map.add symbol.Id scope }
+
+/// Records that the function `name` requires `contexts`, and the type it declares without them, if it writes one.
+let internal registerContextRequirement (state: InferState) (name: Identifier) (contexts: TypeExpr list) (signature: TypeExpr option) =
+    { state with
+        ContextRequirements = state.ContextRequirements |> Map.add name contexts
+        ContextSignatures =
+            match signature with
+            | Some signature -> state.ContextSignatures |> Map.add name signature
+            | None -> state.ContextSignatures |> Map.remove name }
 
 /// Records `ty` as the type of the declaration `symbol`, if the parser saw one.
 let internal recordSymbolType (symbol: SymbolId option) (ty: Ty) (state: InferState) =

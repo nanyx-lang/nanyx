@@ -93,8 +93,17 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
             runs
             |> List.map (fun (def, members) ->
                 let defType = def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id)
-                let types = Option.toList defType @ (members |> List.map (fun symbol -> typed.SymbolTypes.[symbol.Id]))
-                let written = Unifier.tysToDisplayStrings names types
+                // The contexts the def was inferred to require are named with its type, and written before it.
+                let contexts =
+                    match def, defType with
+                    | Some symbol, Some _ -> typed.InferredContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
+                    | _ -> []
+                let types = Option.toList defType @ contexts @ (members |> List.map (fun symbol -> typed.SymbolTypes.[symbol.Id]))
+                let written =
+                    match Unifier.tysToDisplayStrings names types with
+                    | defWritten :: rest when not contexts.IsEmpty ->
+                        Hover.withContexts (List.take contexts.Length rest) defWritten :: List.skip contexts.Length rest
+                    | written -> written
                 let hint (symbol: Symbol) ty =
                     { Name = symbol.Name
                       Type = ty
