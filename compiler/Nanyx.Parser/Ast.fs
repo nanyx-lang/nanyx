@@ -352,6 +352,15 @@ module Pattern =
         | UnitPattern
         | ElsePattern -> []
 
+    /// The field of a record with the fields `fields` that the `index`th element of a tuple pattern matches. A name
+    /// alone is shorthand for `name = name` where the record has a field of that name, so `(name, age)` takes apart
+    /// `(name: string, age: int)`, and `#some(x, y)` the payload of `#some(x: string, y: string)`. Any other element
+    /// matches the field at its position, as in a tuple.
+    let tupleElementField (fields: Set<string>) (index: int) (element: Pattern) : string =
+        match element.Kind with
+        | IdentifierPattern name when fields.Contains name -> name
+        | _ -> string index
+
     /// The expressions written in the patterns of match arms, as `expressions` gives them.
     let armExpressions (arms: (Pattern list * Expression) list) : Expression list =
         arms |> List.collect (fst >> List.collect expressions)

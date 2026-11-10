@@ -1660,7 +1660,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             currentState <- next
                             ty)
                         |> fun tys -> tys, currentState
-                    let tupleRecord = tupleRecordType itemTypes
+                    // A name alone matches the field it names, where the value is already known to be a record with
+                    // one; the other elements match fields by position.
+                    let knownFields =
+                        if patterns |> List.exists (function Kind (IdentifierPattern _) -> true | _ -> false) then
+                            recordFieldsSoFar state' scrutineeTy |> Option.map (Map.keys >> Set.ofSeq)
+                        else None
+                    let tupleRecord =
+                        match knownFields with
+                        | Some fields ->
+                            List.zip patterns itemTypes
+                            |> List.mapi (fun index (pat, ty) -> Pattern.tupleElementField fields index pat, ty)
+                            |> Map.ofList
+                            |> TyRecord
+                        | None -> tupleRecordType itemTypes
                     let constrained = addConstraint scrutineeTy tupleRecord nextState
                     let mutable innerEnv = env'
                     let mutable innerState = constrained

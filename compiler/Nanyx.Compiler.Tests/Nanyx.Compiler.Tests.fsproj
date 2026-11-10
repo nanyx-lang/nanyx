@@ -21,13 +21,15 @@
     <Compile Include="Features\Linters\UnusedImportsTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
+    <Compile Include="Features\Matches\RecordPatternTests.fs" />
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />
-    <Compile Include="Features\Tooling\TypeHintsTests.fs" />    <Compile Include="Features\Types\AnnotationsTests.fs" />
+    <Compile Include="Features\Tooling\TypeHintsTests.fs" />
+    <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
     <Compile Include="Features\Types\TypeOfTests.fs" />

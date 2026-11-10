@@ -157,6 +157,16 @@ let ``A lambda's parameters take their types from the def's signature`` () =
         typeHints TypeHints.inlayHints source)
 
 [<Fact>]
+let ``A lambda's tag pattern parameter takes its names' types from the def's signature`` () =
+    let source =
+        "def a: #some(x: string, y: string) = #some(x = \"\", y = \"\")\n" +
+        "def g: typeof a -> string = { #some(x, y) -> \"x = {x}, y = {y}\" }\n"
+    Assert.Equal<(string * string * int) list>(
+        [ "x", "string", offsetOf source "x, y)" 0 0
+          "y", "string", offsetOf source "y) ->" 0 0 ],
+        typeHints TypeHints.inlayHints source)
+
+[<Fact>]
 let ``Hints keep the names of type aliases`` () =
     let source =
         "type Customer = (name: string)\n" +
