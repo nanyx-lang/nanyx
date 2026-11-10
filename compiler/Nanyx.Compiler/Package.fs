@@ -211,7 +211,7 @@ module Package =
     /// Whether the module at `path` declares an `@entry`. A file that does not parse does not; building it reports why.
     let private declaresEntry (path: string) =
         match parseModuleFile path (File.ReadAllText path) with
-        | Result.Ok items -> items |> List.exists (function Kind (Attribute name) -> name = Compiler.entryAttribute | _ -> false)
+        | Result.Ok items -> items |> List.exists (function Kind (Attribute(name, _)) -> name = Compiler.entryAttribute | _ -> false)
         | Result.Error _ -> false
 
     /// The package whose manifest is at `manifestPath`, or what is wrong with it.

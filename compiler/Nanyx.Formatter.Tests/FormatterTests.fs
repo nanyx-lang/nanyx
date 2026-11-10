@@ -218,6 +218,12 @@ let ``An attribute stays on the line before its item`` () =
         format (lines [ "def a = 1"; "@entry"; "def main = {"; "  a"; "}" ]))
 
 [<Fact>]
+let ``An attribute's argument is printed as a tag's payload is`` () =
+    unchanged (lines [ "@test(#io)"; "def readsConfig = 1" ])
+    unchanged (lines [ "@test()"; "def x = 1" ])
+    Assert.Equal(lines [ "@retry(times = 3, #slow)"; "def x = 1" ], format (lines [ "@retry( times=3 , #slow )"; "def x = 1" ]))
+
+[<Fact>]
 let ``Imports stay together, however many lines they span`` () =
     unchanged (lines [ "import nanyx/console"; ""; "import ("; "  nanyx/text"; "  nanyx/math"; ")"; ""; "import nanyx/result"; ""; "def a = 1" ])
 

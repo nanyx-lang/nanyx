@@ -129,7 +129,7 @@ let ``The model is the module as written, with what type checking found`` () =
     Assert.Empty((Compiler.compileWith (options [ recorder ] []) source).Diagnostics)
     let model = seen.Value
     // Attributes are kept: the model is the syntax before `@entry` is applied.
-    Assert.True(model.Syntax |> List.exists (function Kind (Attribute "entry") -> true | _ -> false))
+    Assert.True(model.Syntax |> List.exists (function Kind (Attribute("entry", None)) -> true | _ -> false))
     // The `x` in `x + 1` resolves to the local `x`, which has a type.
     let local = model.Symbols |> Map.values |> Seq.find (fun symbol -> symbol.Name = "x")
     Assert.Equal(LocalValue, local.Kind)

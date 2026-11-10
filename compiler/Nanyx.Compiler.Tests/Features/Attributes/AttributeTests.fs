@@ -39,3 +39,12 @@ let ``Entry attribute must precede a definition, and is reported at the attribut
     Assert.Contains("must be followed by a definition", diagnostic.Message)
     let span = diagnostic.Span.Value
     Assert.Equal((0, 6), (span.Start, span.End))
+
+[<Fact>]
+let ``Entry attribute with an argument is an error, reported at the argument`` () =
+    let result = Compiler.compile "@entry(#now)\ndef main = { 1 }"
+    let diagnostic = result.Diagnostics |> List.head
+    Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, diagnostic.Code)
+    Assert.Contains("Attribute '@entry' takes no argument", diagnostic.Message)
+    let span = diagnostic.Span.Value
+    Assert.Equal((7, 11), (span.Start, span.End))

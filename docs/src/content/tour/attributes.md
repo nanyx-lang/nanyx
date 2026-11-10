@@ -22,6 +22,8 @@ def optionChain = (...)
 
 A declaration can have one or more attributes, each on its own line. An attribute may also precede a field inside a record literal.
 
+An attribute that takes an argument has it in parentheses straight after its name, written as a tag's payload is: `@customKeywordType(#bind)`. Several values make a tuple and named ones a record. `@entry` takes no argument.
+
 # Common attributes
 
 ## `@entry`

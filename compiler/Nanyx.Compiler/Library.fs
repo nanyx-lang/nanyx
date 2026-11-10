@@ -976,18 +976,21 @@ module Compiler =
     /// Resolves `@attribute` lines. `@entry` on a definition appends a call to that definition at the end
     /// of the module, so it runs as the program's start function, and imports `nanyx/console` for the module
     /// (the context the runtime supplies to the entry point); any other attribute, or an attribute that does
-    /// not precede a value definition, is an error.
+    /// not precede a value definition, is an error. `@entry` takes no argument.
     let applyAttributes (module': Module) : Result<Module, Diagnostic list> =
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entryCalls: TopLevelItem list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entryCalls, List.rev errors
-            | Kind (Attribute name) as attribute :: rest when name <> entryAttribute ->
+            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute ->
                 loop rest acc entryCalls (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}'" :: errors)
+            | Kind (Attribute(name, Some argument)) :: rest ->
+                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span $"Attribute '@{name}' takes no argument"
+                loop rest acc entryCalls (error :: errors)
             | Kind (Attribute _) :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest ->
                 // The call is made up for the def, and reported there.
                 let call = TopLevelItem.at def.Span (Expr (Expression.from value (FunctionCall(name, None, []))))
                 loop rest (def :: acc) (call :: entryCalls) errors
-            | Kind (Attribute name) as attribute :: rest ->
+            | Kind (Attribute(name, _)) as attribute :: rest ->
                 loop rest acc entryCalls (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
             | item :: rest -> loop rest (item :: acc) entryCalls errors
         match loop module' [] [] [] with
