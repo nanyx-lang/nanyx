@@ -6,15 +6,21 @@ open NyxCompiler.InferState
 /// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Numeric contexts" in the docs' work in progress). On `int` and
 /// `float` they are the built-in operators. `+`, `-` and prefix `-` read through the prelude's well-known context
 /// `Add`, whose members are `zero`, `` `+` ``, `` `-` `` and `negate`: on a type that attaches them, or a type variable
-/// of a function that requires `Add` of it, the operator calls the member (see `OperatorCalls`). The compiler's own
-/// `Add(int)` and `Add(float)` are the members the prelude attaches to `Int` and `Float`, which are what generic code is
-/// passed.
+/// of a function that requires `Add` of it, the operator calls the member (see `OperatorCalls`). `*`, `/` and `%` read
+/// through `Num`, which has `Add`'s members and those three, and `fromInt`. The compiler's own instances for `int` and
+/// `float` are the members the prelude attaches to `Int` and `Float`, which are what generic code is passed.
 module internal ArithmeticOperators =
     /// The prelude's context of the values that add and subtract.
     let addContext = "Add"
 
+    /// The prelude's context of the numbers: `Add`'s members, and `*`, `/`, `%` and `fromInt`.
+    let numContext = "Num"
+
     /// `Add`'s member that the literal `0` reads as where a value of a type variable is added to it.
     let zero = "zero"
+
+    /// `Num`'s member that any other integer literal is given to there.
+    let fromInt = "fromInt"
 
     /// `Add`'s member that prefix `-` reads.
     let negate = "negate"
@@ -47,11 +53,15 @@ module internal ArithmeticOperators =
             | _ -> ""
         $"'{Unifier.tyToDisplayString Ascii ty}' cannot be used with {written op}: it is not a number{advice}"
 
-    /// The context the operator `op` needs of a type variable it is used on, if it is one there is: `Add` for `+`, `-`
-    /// and prefix `-`.
+    /// The context the operator `op` needs of a type variable it is used on, and what the operator does, as a
+    /// diagnostic says it: `Add` for `+`, `-` and prefix `-`, and `Num` for `*`, `/` and `%`.
     let private contextFor (op: string) =
         match op with
-        | "+" | "-" -> Some (addContext, (if op = "+" then "adds" else "subtracts"))
+        | "+" -> Some (addContext, "adds")
+        | "-" -> Some (addContext, "subtracts")
+        | "*" -> Some (numContext, "multiplies")
+        | "/" -> Some (numContext, "divides")
+        | "%" -> Some (numContext, "takes the remainder of")
         | _ when op = NegateSyntax.builtIn -> Some (addContext, "negates")
         | _ -> None
 
@@ -81,17 +91,43 @@ module internal ArithmeticOperators =
             Ok { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs }
         | _ -> Ok (addConstraint leftTy numberTy state)
 
-    /// The member the literal `literal` reads as, an operand of an arithmetic operator whose other operand is of the
-    /// type `otherTy`, if it reads as one: where that is a type variable of the type the function around it writes, `0`
-    /// is `zero`, when `env` binds it (a function that requires `Add` binds it).
-    let private literalMember (env: TypeEnv) (state: InferState) (literal: Expression) (otherTy: Ty) : Identifier option =
+    /// What a literal operand of an arithmetic operator is, where it is not the literal it would be elsewhere.
+    type private LiteralReading =
+        /// The member of the context the function requires that it is written as.
+        | AsMember of Expression
+        /// An error: the literal cannot be of the type it is used at.
+        | Wrong of DiagnosticCode * string
+
+    /// What the literal `literal` is, an operand of an arithmetic operator whose other operand is of the type
+    /// `otherTy`, where that is a type variable of the type the function around it writes, in a function that requires
+    /// `Add` or `Num` of it (and so binds `zero` in `env`). `0` is `zero`, and any other integer `fromInt` of it, which
+    /// needs `Num`. A decimal literal cannot be of the variable: it may be an integer type.
+    ///
+    /// The other operand may be of a variable the constraints so far have put in place of the type's own, as the
+    /// result of `x * x` is: the operator calls the member there all the same. Only an error needs to name the type's.
+    let private literalReading (env: TypeEnv) (state: InferState) (literal: Expression) (otherTy: Ty) : LiteralReading option =
+        let bound (name: Identifier) = (TypeEnv.tryFind name env).IsSome
         match literal.Kind, Unifier.unalias (resolveSoFar state otherTy), state.ContextScope with
-        | LiteralExpr(IntLit 0), TyVar { Name = Some _ }, DefScope(_, false) when (TypeEnv.tryFind zero env).IsSome -> Some zero
+        | LiteralExpr value, (TyVar v as var), DefScope(defName, false) when bound zero ->
+            let tyText = Unifier.tyToDisplayString Ascii var
+            match value with
+            | IntLit 0 -> Some (AsMember { literal with Kind = IdentifierExpr zero })
+            | IntLit n when bound fromInt ->
+                Some (AsMember { literal with Kind = FunctionCall(fromInt, None, [ Expression.at literal.Span (LiteralExpr(IntLit n)) ]) })
+            | _ when v.Name.IsNone -> None
+            | IntLit n ->
+                Some (Wrong (DiagnosticCodes.MissingContextMembers, $"'{n}' is an '{tyText}' here, which needs {numContext}({tyText}): add [{numContext}({tyText})] to the type of '{defName}'"))
+            | FloatLit x ->
+                let text = x.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                let text = if text.Contains '.' || text.Contains 'E' then text else text + ".0"
+                Some (Wrong (DiagnosticCodes.TypeMismatch, $"'{text}' cannot be an '{tyText}': '{tyText}' may be an integer type. Take the value as a parameter"))
+            | _ -> None
         | _ -> None
 
-    /// The operands `left` and `right` of `expr`, an arithmetic operator, with a literal among them that reads as a
-    /// member (see `literalMember`) inferred again as that member, by `infer`, and recorded in `LiteralMembers` to be
-    /// written as it.
+    /// The operands `left` and `right` of `expr`, an arithmetic operator, with a literal among them that is not the
+    /// literal it would be elsewhere (see `literalReading`) inferred again as the member it is written as, by `infer`,
+    /// and recorded in `LiteralMembers` to be written as it. A literal that cannot be of the type it is used at fails to
+    /// check, and is taken to be of that type, so that the operator is not also reported.
     let readLiterals
         (infer: InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
         (env: TypeEnv)
@@ -101,11 +137,13 @@ module internal ArithmeticOperators =
         (right: TypedExpr)
         : Result<TypedExpr * TypedExpr * InferState, Diagnostic list> =
         let reread (operand: TypedExpr) (other: TypedExpr) (state: InferState) =
-            match expr.Kind, literalMember env state operand.Expr other.Type with
-            | BinaryOp(op, _, _), Some memberName when isOperator op ->
-                let asMember = { operand.Expr with Kind = IdentifierExpr memberName }
+            match expr.Kind, literalReading env state operand.Expr other.Type with
+            | BinaryOp(op, _, _), Some (AsMember asMember) when isOperator op ->
                 infer state asMember
                 |> Result.map (fun (typed, next) -> typed, { next with LiteralMembers = next.LiteralMembers |> Map.add asMember.Id asMember })
+            | BinaryOp(op, _, _), Some (Wrong(code, message)) when isOperator op ->
+                let error = Diagnostics.at code operand.Expr.Span message
+                Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)
         reread left right state
         |> Result.bind (fun (left, next) -> reread right left next |> Result.map (fun (right, next) -> left, right, next))

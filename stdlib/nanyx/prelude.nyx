@@ -79,9 +79,26 @@ export context Add(a) = (
   negate: a -> a
 )
 
--- The compiler's own `Add(int)` and `Add(float)`: the members attached to `Int` and `Float`, which
--- are what a function that requires `Add` is passed. `+` on an `int` or a `float` is the built-in
--- operator, not a call.
+-- The numbers of type `a`: `Add`'s members, and `x * y`, `x / y` and `x % y`. In a function whose
+-- type requires it, any other integer literal beside a value of type `a` is `fromInt` of it, so
+-- `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
+-- A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
+-- an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
+-- IEEE 754's.
+export context Num(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+  `*`: (a, a) -> a
+  `/`: (a, a) -> a
+  `%`: (a, a) -> a
+  fromInt: int -> a
+)
+
+-- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `Int` and
+-- `Float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
+-- the built-in operator, not a call.
 
 -- The `int` that adds nothing.
 export def Int.zero: int = 0
@@ -101,6 +118,26 @@ export def Int.negate: int -> int = { n ->
   -n
 }
 
+-- `x` times `y`.
+export def Int.`*`: int, int -> int = { x, y ->
+  x * y
+}
+
+-- `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
+export def Int.`/`: int, int -> int = { x, y ->
+  x / y
+}
+
+-- The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+export def Int.`%`: int, int -> int = { x, y ->
+  (x % y)
+}
+
+-- `n` itself.
+export def Int.fromInt: int -> int = { n ->
+  n
+}
+
 -- The `float` that adds nothing.
 export def Float.zero: float = 0.0
 
@@ -117,6 +154,26 @@ export def Float.`-`: float, float -> float = { x, y ->
 -- `x` with its sign changed: `Float.negate(0.0)` is negative zero.
 export def Float.negate: float -> float = { x ->
   -x
+}
+
+-- `x` times `y`.
+export def Float.`*`: float, float -> float = { x, y ->
+  x * y
+}
+
+-- `x` divided by `y`.
+export def Float.`/`: float, float -> float = { x, y ->
+  x / y
+}
+
+-- The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
+export def Float.`%`: float, float -> float = { x, y ->
+  (x % y)
+}
+
+-- `n` as a float, as `Int.toFloat(n)` is.
+export def Float.fromInt: int -> float = { n ->
+  Int.toFloat(n)
 }
 
 -- Text ------------------------------------------------------------------------------------------

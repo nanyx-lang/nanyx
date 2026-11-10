@@ -6,7 +6,7 @@ order: 7
 
 The `math` module provides common numeric and floating-point operations.
 
-Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts); `int` and `float` are its built-in instances, so these functions accept either without conversion. Functions that only make sense for floating-point values take `float` directly.
+Functions that work on any numeric type are to be generic over the `Num(a)` [context](../advanced/contexts) (with `Ord(a)` to compare); `int` and `float` are its built-in instances, so these functions will accept either without conversion. For now `abs`, `min`, `max`, `clamp` and `pow` take `int` only: making them generic waits on `Ord` ([#186](https://github.com/nanyx-lang/nanyx/issues/186), [#476](https://github.com/nanyx-lang/nanyx/issues/476)). Functions that only make sense for floating-point values take `float` directly.
 
 `floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `Int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 

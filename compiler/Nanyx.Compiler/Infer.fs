@@ -788,21 +788,6 @@ let private sameType (a: Ty) (b: Ty) =
     || ((TypeEnv.freeTyVars a).IsEmpty && (TypeEnv.freeTyVars b).IsEmpty
         && Unifier.unify [ a, b, Equal, SourceSpan.none ] |> Result.isOk)
 
-/// The instance of `ctxName` applied to `argTys` nearest in scope in `env`, as written where it is put in scope.
-let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : TypeExpr option =
-    let prefix = $"{instancePrefix}{ctxName} "
-    env
-    |> Map.toSeq
-    |> Seq.filter (fun (name, _) -> name.StartsWith prefix)
-    |> Seq.choose (fun (name, scheme) ->
-        match resolveSoFar state scheme.Type with
-        | TyApply(_, instanceArgs) when instanceArgs.Length = argTys.Length && List.forall2 sameType instanceArgs argTys ->
-            Some (int (name.Substring prefix.Length), name)
-        | _ -> None)
-    |> Seq.sortByDescending fst
-    |> Seq.tryHead
-    |> Option.bind (fun (_, name) -> state.InstanceContexts |> Map.tryFind name)
-
 /// The members of the context `ctxName` with its parameters bound to `argTys`, each with its type.
 let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (Identifier * Ty) list option =
     match state.TypeDefs |> Map.tryFind ctxName with
@@ -811,6 +796,25 @@ let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys
         | TyRecord fields -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty))
         | _ -> None
     | _ -> None
+
+/// The instance of `ctxName` applied to `argTys` nearest in scope in `env`, as written where it is put in scope: one of
+/// `ctxName` itself, else one of a context that has all its members (see `ContextShapes`).
+let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : TypeExpr option =
+    let ofContext (ctxName: Identifier) =
+        let prefix = $"{instancePrefix}{ctxName} "
+        env
+        |> Map.toSeq
+        |> Seq.filter (fun (name, _) -> name.StartsWith prefix)
+        |> Seq.choose (fun (name, scheme) ->
+            match resolveSoFar state scheme.Type with
+            | TyApply(_, instanceArgs) when instanceArgs.Length = argTys.Length && List.forall2 sameType instanceArgs argTys ->
+                Some (int (name.Substring prefix.Length), name)
+            | _ -> None)
+        |> Seq.sortByDescending fst
+        |> Seq.tryHead
+        |> Option.bind (fun (_, name) -> state.InstanceContexts |> Map.tryFind name)
+    ofContext ctxName
+    |> Option.orElse (ContextShapes.wider state (fun other -> contextMemberTypes state other argTys) ctxName |> List.tryPick ofContext)
 
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
 /// is for, its first argument, has a name definitions can be attached to (not a variable, or a record written out).

@@ -42,7 +42,7 @@ def sum: [Add(a)] list(a) -> a = { items ->
 }
 ```
 
-For multiplying and dividing as well there will be `Num(a)`, which has every member of `Add(a)` and more (see [numeric contexts](../work-in-progress/numeric-contexts)).
+For multiplying and dividing as well there is `Num(a)`, which has every member of `Add(a)` and more, so a function that requires `[Num(a)]` can call `sum`.
 
 The mindset shift here is to think in terms of capabilities (what operations are needed) for a type _which are not required to be intrinsic to the type_. Think of it as "Given a way of summing `a`" rather than "Given a type `a` that **is** `Summable`." A function states what it needs (`Add(a)`), not which concrete type hierarchy it depends on.
 
