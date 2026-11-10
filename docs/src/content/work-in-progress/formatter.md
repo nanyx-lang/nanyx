@@ -113,6 +113,9 @@ issue):
   ```
 
 - A lambda with match cases puts each case on its own line, the `|`s aligned under the first.
+- A `for` loop or an `except` with one arm (perhaps with alternatives, `| a | b -> ...`) keeps it on the head's line,
+  `for xs | x -> body`, with a block body on the lines after the `->`. With several arms, each goes on a line of its
+  own after the head, indented once.
 - A lambda whose body is on the `->`'s line but spans lines indents the body once, and puts its `}` back at the
   lambda's line's indent, so two closing braces never line up (decided 2026-11-07):
 

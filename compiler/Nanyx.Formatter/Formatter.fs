@@ -773,11 +773,15 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// except` with the arms on the lines after it, as a match has them.
     and exceptDoc (position: Position) (e: Expression) (value: Expression) (arms: MatchArm list) : Doc =
         let valueDoc = expr { position with Tail = false; Prec = 0 } value
+        match singleArm arms with
+        | Some(patterns, body) -> cat [ valueDoc; text " except "; patterns; armBody true body ]
+        | None -> cat [ valueDoc; text " except"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
+
+    /// The patterns of arms that all share one body, joined as alternatives `a | b`, and that body.
+    and singleArm (arms: MatchArm list) : (Doc * Expression) option =
         match List.distinctBy (fun (_, body: Expression) -> body.Id) arms with
-        | [ _, body ] ->
-            let patterns = arms |> List.map (fun (ps, _) -> commaJoin (List.map pattern ps)) |> Doc.join (text " | ")
-            cat [ valueDoc; text " except "; patterns; armBody true body ]
-        | _ -> cat [ valueDoc; text " except"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
+        | [ _, body ] -> Some(arms |> List.map (fun (ps, _) -> commaJoin (List.map pattern ps)) |> Doc.join (text " | "), body)
+        | _ -> None
 
     /// An `if` as its head, its `then` branch and its `else` branch if it has one (a left-out `else` is `()` made up at
     /// the `then` branch). `if x is pattern then a else b` is parsed as a match of `x` against the pattern and `_`.
@@ -848,14 +852,17 @@ let format (options: Options) (parsed: SourceModule) : string =
                         else cat [ keyword; text " "; expr full elseBranch ]
                 cat [ text "if "; ifHead head; thenDoc; elseDoc ]
 
-    /// `for xs, ys | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the elements.
+    /// `for xs, ys | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the elements. One arm
+    /// (perhaps with alternatives) stays on the head's line, `for xs | x -> body`; several go on the lines after it.
     and forDoc (iterables: Expression list) (loop: Expression) : Doc =
         let head = cat [ text "for "; commaJoin (iterables |> List.map (expr { full with Tail = false })) ]
         match loop.Kind with
         | Lambda(parameters, body) ->
             match body.Kind with
             | Match(elements, arms) when elements |> List.map _.Kind = (parameters |> List.map (fst >> IdentifierExpr)) && body.Span = loop.Span ->
-                cat [ head; nest (cat [ hard; armsInSequence loop.Span.Start loop.Span.End arms ]) ]
+                match singleArm arms with
+                | Some(patterns, armBodyExpr) -> cat [ head; text " | "; patterns; armBody true armBodyExpr ]
+                | None -> cat [ head; nest (cat [ hard; armsInSequence loop.Span.Start loop.Span.End arms ]) ]
             | _ -> cat [ head; armBody true body ]
         | _ -> head
 
