@@ -263,6 +263,8 @@ Each call looks for its instance in this order, and takes the first it finds:
 
 An instance is for one type: a `use Sum(int)` in scope does not stand in for a `Sum(Point)`.
 
+Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle. With `def sumInt: Sum(int) = (...)`, `use sumInt` loads a `Sum(int)`, as `use Sum(int)(...)` would.
+
 ## Explicit loading takes priority
 
 If you manually load a context with `use`, that instance is always used, even if attached definitions exist. This lets you override the default behavior when needed:
