@@ -238,6 +238,8 @@ let rec private toIrType (ty: Ty) : IrType =
     | TyRecord fields -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal(_, underlying, _) -> toIrType underlying
     | TyApply("list", [ element ]) -> IrList(toIrType element)
+    // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
+    | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ]) ]))
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc(input, output) -> IrFunction(toIrType input, toIrType output)
@@ -656,6 +658,9 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
             this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar scope.Members.[name], atoms)) ty))
+        | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
+            // A map and the list of its entries are held the same way: the value is its argument.
+            this.Complex scope value k
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name.

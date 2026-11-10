@@ -156,7 +156,10 @@ takes `(a -> int)` keys (`prelude.nyx:301-302`) and there is no `List.sort`
 
 # Hashing, maps and sets: nothing
 
-There is no `Hash` context, no map or set type, and no map literal (#191, `groupBy`).
+There was no `Hash` context, no map or set type, and no map literal (#191, `groupBy`). Since then `map(k, v)`, map
+literals and `List.groupBy` exist, keyed by `Eq` alone ([#477](https://github.com/nanyx-lang/nanyx/issues/477)); see
+[Maps and sets](./maps-and-sets). `Hash` and sets are still to come
+([#533](https://github.com/nanyx-lang/nanyx/issues/533)).
 
 # Printing: designed, partly implemented
 

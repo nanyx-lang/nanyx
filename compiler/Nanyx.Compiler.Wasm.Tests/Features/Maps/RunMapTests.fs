@@ -1,0 +1,142 @@
+module TranspilerWasmTests.Features.Maps.Run
+
+open Xunit
+open TranspilerWasmTestHelpers
+
+/// A program that runs `lines` in its entry point, after the definitions in `definitions`. `found` prints what a
+/// lookup of an int found.
+let private program (definitions: string list) (lines: string list) =
+    [ "import nanyx/console"
+      ""
+      "def found = {"
+      "  | #some(n) -> println(\"{n}\")"
+      "  | #notFound -> println(\"not found\")"
+      "}"
+      yield! definitions
+      ""
+      "@entry"
+      "def main = {"
+      yield! lines |> List.map (fun line -> "  " + line)
+      "}" ]
+    |> String.concat "\n"
+
+[<Fact>]
+let ``Run - calling a map looks a key up`` () =
+    program
+        []
+        [ "def m = [\"a\" => 1, \"b\" => 2]"
+          "found(m(\"a\"))"
+          "found(m(\"b\"))"
+          "found(m(\"c\"))"
+          "def counts = [1 => 10, 2 => 20]"
+          "found(counts([\"x\", \"y\"] \\List.length))" ]
+    |> runSource
+    |> assertRan "1\n2\nnot found\n20\n"
+
+[<Fact>]
+let ``Run - a map literal can be written one entry per line`` () =
+    program
+        []
+        [ "def m = ["
+          "  1 => \"one\""
+          "  2 => \"two\""
+          "]"
+          "println(Map.get(m, 2) \\Option.defaultValue(\"none\"))" ]
+    |> runSource
+    |> assertRan "two\n"
+
+[<Fact>]
+let ``Run - a key written twice in a literal holds the value written last`` () =
+    program
+        []
+        [ "def m = [\"a\" => 1, \"b\" => 2, \"a\" => 3]"
+          "found(m(\"a\"))"
+          "println(\"{Map.count(m)}\")" ]
+    |> runSource
+    |> assertRan "3\n2\n"
+
+[<Fact>]
+let ``Run - insert adds a key, or replaces its value, and leaves the map it was given as it was`` () =
+    program
+        [ "def keys = { m -> Map.toList(m) \\List.map({ entry -> entry.0 }) \\List.fold(\"\", { acc, k -> acc ++ k }) }" ]
+        [ "def m = [\"a\" => 1, \"b\" => 2]"
+          "def added = m \\insert(\"c\", 3)"
+          "def replaced = added \\Map.insert(\"a\", 10)"
+          "found(added(\"c\"))"
+          "found(replaced(\"a\"))"
+          "found(m(\"c\"))"
+          "println(keys(replaced))"
+          "println(\"{Map.count(replaced)}\")" ]
+    |> runSource
+    |> assertRan "3\n10\nnot found\nabc\n3\n"
+
+[<Fact>]
+let ``Run - remove takes a key out, and containsKey says whether a map has one`` () =
+    program
+        [ "def show = { b -> if b then \"T\" else \"F\" }" ]
+        [ "def m = Map.fromList([(1, 10), (2, 20), (3, 30)])"
+          "def removed = Map.remove(m, 2)"
+          "println(show(Map.containsKey(m, 2)))"
+          "println(show(Map.containsKey(removed, 2)))"
+          "found(removed(3))"
+          "println(\"{Map.count(Map.remove(removed, 7))}\")" ]
+    |> runSource
+    |> assertRan "T\nF\n30\n2\n"
+
+[<Fact>]
+let ``Run - records and tags can be keys, compared by their structure`` () =
+    program
+        [ "type Point = (x: int, y: int)" ]
+        [ "def byPoint = [Point(x = 1, y = 2) => 12, Point(x = 3, y = 4) => 34]"
+          "found(byPoint(Point(x = 3, y = 4)))"
+          "found(byPoint(Point(x = 4, y = 3)))"
+          "def byTag = [#rgb(0, 0, 0) => 1, #rgb(1, 2, 3) => 2]"
+          "found(byTag(#rgb(1, 2, 3)))"
+          "found(byTag(#rgb(3, 2, 1)))" ]
+    |> runSource
+    |> assertRan "34\nnot found\n2\nnot found\n"
+
+[<Fact>]
+let ``Run - a map in a record's field is looked up by calling the field`` () =
+    program
+        [ "type Shop = (prices: map(string, int))" ]
+        [ "def shop = Shop(prices = [\"tea\" => 3, \"cake\" => 4])"
+          "found(shop.prices(\"cake\"))" ]
+    |> runSource
+    |> assertRan "4\n"
+
+[<Fact>]
+let ``Run - a map is passed to and given back from functions`` () =
+    program
+        [ "def stock: map(string, int), string -> int = { m, name ->"
+          "  match m(name)"
+          "    | #some(n) -> n"
+          "    | #notFound -> 0"
+          "}"
+          "def restock: map(string, int), string -> map(string, int) = { m, name -> m \\insert(name, stock(m, name) + 1) }" ]
+        [ "def m = restock(restock([\"tea\" => 1], \"tea\"), \"cake\")"
+          "println(\"{stock(m, \"tea\")} {stock(m, \"cake\")} {stock(m, \"pie\")}\")" ]
+    |> runSource
+    |> assertRan "2 1 0\n"
+
+[<Fact>]
+let ``Run - List.groupBy groups elements by a key, in order`` () =
+    program
+        [ "def show = { xs -> xs \\List.map(Int.toString) \\List.fold(\"\", { acc, s -> acc ++ s }) }" ]
+        [ "def groups = [1, 2, 3, 4, 5] \\List.groupBy { x -> x % 2 }"
+          "println(show(groups(1) \\Option.defaultValue([])))"
+          "println(show(groups(0) \\Option.defaultValue([])))"
+          "println(show(Map.toList(groups) \\List.map({ group -> group.0 })))"
+          "println(\"{Map.count(List.groupBy([], { (x: int) -> x }))}\")" ]
+    |> runSource
+    |> assertRan "135\n24\n10\n0\n"
+
+[<Fact>]
+let ``Run - a for loop walks a map's entries, in the order their keys were added`` () =
+    program
+        []
+        [ "def dict = [\"one\" => \"uno\", \"two\" => \"dos\"] \\insert(\"one\", \"un\")"
+          "for dict | key, value -> println(\"{key} => {value}\")"
+          "for dict, 1.. | entry, i -> println(\"{i}: {entry.1}\")" ]
+    |> runSource
+    |> assertRan "one => un\ntwo => dos\n1: un\n2: dos\n"

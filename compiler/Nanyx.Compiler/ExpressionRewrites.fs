@@ -97,8 +97,10 @@ module internal ExpressionRewrites =
                 | other, _ -> other)
 
     /// Every expression that inference read as another (`readAs`, by the node of the one written) written as that
-    /// one: `0` in `x + 0` becomes `zero`, and `x ** n` becomes `__pow(x, n)` (see `ArithmeticOperators`). A call an
-    /// operator is read as takes the operands as they are rewritten, since one may be read as another too.
+    /// one: `0` in `x + 0` becomes `zero`, `x ** n` becomes `__pow(x, n)` (see `ArithmeticOperators`), and a call of a
+    /// map, `m(k)`, becomes `Map.get(m, k)` (see `Maps`). A call an operator is read as takes the operands as they are
+    /// rewritten, since one may be read as another too, and so does a call that a call is read as with the callee
+    /// first: the map's lookup takes the call's arguments as they are rewritten.
     let writeAsRead (readAs: Map<NodeId, Expression>) (expr: Expression) : Expression =
         if readAs.IsEmpty then
             expr
@@ -107,6 +109,8 @@ module internal ExpressionRewrites =
             |> mapExpressionKinds (fun current kind ->
                 match kind, readAs |> Map.tryFind current.Id with
                 | BinaryOp(_, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
+                | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, receiver :: readArgs) } when readArgs.Length = args.Length ->
+                    FunctionCall(callee, span, receiver :: args)
                 | _, Some read -> read.Kind
                 | _, None -> kind)
 

@@ -788,3 +788,104 @@ def unfoldReversed: b, (b -> #some(a, b) | #done), list(a) -> list(a) = { state,
 export def List.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
   reverseOnto(unfoldReversed(state, step, []), [])
 }
+
+-- Maps ------------------------------------------------------------------------------------------
+--
+-- A `map(k, v)` holds one value for each of its keys. It is written `["a" => 1, "b" => 2]`, and
+-- calling it looks a key up: `m("a")` is `Map.get(m, "a")`. Keys are compared with `==`, so a map
+-- needs an `Eq` of its key type. Attached to `Map`, so they are called as `Map.insert(m, k, v)`, or
+-- as `m \insert(k, v)` when `m` is known to be a map. Maps are immutable: every function gives back
+-- a new map.
+--
+-- For now a map holds a list of its entries, each key once, in the order the keys were first added,
+-- so a lookup walks the list (see docs/src/content/work-in-progress/maps-and-sets.md).
+
+-- The value `entries` holds for `key`, or `#notFound`.
+def findEntry: [Eq(k)] list((k, v)), k -> #some(v) | #notFound = {
+  | [], _ -> #notFound
+  | [(entryKey, value), ...rest], key -> if entryKey == key
+    then #some(value)
+    else findEntry(rest, key)
+}
+
+-- `entries` with `key` holding `value`: in its place if `entries` has it, else at the end. `acc`
+-- holds the entries before, last first.
+def insertEntry: [Eq(k)] list((k, v)), k, v, list((k, v)) -> list((k, v)) = {
+  | [], key, value, acc -> reverseOnto(acc, [(key, value)])
+  | [(entryKey, entryValue), ...rest], key, value, acc -> if entryKey == key
+    then reverseOnto(acc, [(key, value), ...rest])
+    else insertEntry(rest, key, value, [(entryKey, entryValue), ...acc])
+}
+
+-- `entries` without `key`. `acc` holds the entries before, last first.
+def removeEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
+  | [], _, acc -> reverseOnto(acc, [])
+  | [(entryKey, value), ...rest], key, acc -> if entryKey == key
+    then reverseOnto(acc, rest)
+    else removeEntry(rest, key, [(entryKey, value), ...acc])
+}
+
+-- `m` with each of `entries` inserted in turn.
+def insertAll: [Eq(k)] map(k, v), list((k, v)) -> map(k, v) = {
+  | m, [] -> m
+  | m, [(key, value), ...rest] -> insertAll(Map.insert(m, key, value), rest)
+}
+
+-- The map with no keys. A map literal has at least one entry, since [] is the empty list.
+export def Map.empty: map(k, v) = __nanyx_map_of_entries([])
+
+-- What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
+-- `__map([("a", 1), ("b", 2)])`. A key written twice holds the value written last.
+export def __map: [Eq(k)] list((k, v)) -> map(k, v) = { entries ->
+  insertAll(Map.empty, entries)
+}
+
+-- The map holding each of `entries`, in order: of two entries with the same key, the later wins.
+export def Map.fromList: [Eq(k)] list((k, v)) -> map(k, v) = { entries ->
+  insertAll(Map.empty, entries)
+}
+
+-- The entries of `m`, each a key and its value, in the order the keys were first added.
+export def Map.toList: map(k, v) -> list((k, v)) = { m ->
+  __nanyx_map_entries(m)
+}
+
+-- The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
+export def Map.get: [Eq(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
+  findEntry(__nanyx_map_entries(m), key)
+}
+
+-- Whether `m` holds a value for `key`.
+export def Map.containsKey: [Eq(k)] map(k, v), k -> bool = { m, key ->
+  Option.isSome(findEntry(__nanyx_map_entries(m), key))
+}
+
+-- `m` with `key` holding `value`, in place of any value it held before.
+export def Map.insert: [Eq(k)] map(k, v), k, v -> map(k, v) = { m, key, value ->
+  __nanyx_map_of_entries(insertEntry(__nanyx_map_entries(m), key, value, []))
+}
+
+-- `m` without `key` or its value. A map that has no `key` is given back as it is.
+export def Map.remove: [Eq(k)] map(k, v), k -> map(k, v) = { m, key ->
+  __nanyx_map_of_entries(removeEntry(__nanyx_map_entries(m), key, []))
+}
+
+-- The number of keys.
+export def Map.count: map(k, v) -> int = { m ->
+  List.length(__nanyx_map_entries(m))
+}
+
+-- `groups` with the elements of `xs` added, each to the front of the group of its key.
+def groupInto: [Eq(b)] list(a), (a -> b), map(b, list(a)) -> map(b, list(a)) = {
+  | [], _, groups -> groups
+  | [x, ...rest], key, groups ->
+    def group = Option.defaultValue(Map.get(groups, key(x)), [])
+    groupInto(rest, key, Map.insert(groups, key(x), [x, ...group]))
+}
+
+-- The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
+-- order. The keys are in the order they first appear.
+export def List.groupBy: [Eq(b)] list(a), (a -> b) -> map(b, list(a)) = { xs, key ->
+  def groups = __nanyx_map_entries(groupInto(xs, key, Map.empty))
+  __nanyx_map_of_entries(List.map(groups, { group -> (group.0, List.reverse(group.1)) }))
+}

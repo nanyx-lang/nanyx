@@ -182,15 +182,17 @@ def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
 
 # Callable values
 
-Any value with a function type can be called like a function. A dictionary is one such value: its type is `k -> #some(v) | #notFound`, and calling it is a lookup.
+Any value with a function type can be called like a function. A [map](../stdlib/collections#map) can be called too, and calling it is a lookup, which gives `#some(v) | #notFound`:
 
 ```nanyx
-def dict: string -> #some(string) | #notFound =
+def dict: map(string, string) =
   ["Hello" => "Bonjour", "Goodbye" => "Au revoir"]
 
 dict("Hello") -- #some("Bonjour")
 dict("Hola")  -- #notFound
 ```
+
+A map is not a function value yet: where a function is wanted, pass `{ word -> dict(word) }` (see [Maps and sets](../work-in-progress/maps-and-sets#open-questions)).
 
 # Higher-order functions
 

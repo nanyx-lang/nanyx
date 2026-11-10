@@ -168,7 +168,11 @@ Maps are written with the square-bracket literal syntax and the `=>` operator:
 
 ```nanyx
 def myMap = ["hello" => "world", "foo" => "bar"]
+
+myMap("hello")   -- #some("world")
 ```
+
+A literal whose items are all `key => value` is a `map(k, v)`; calling it looks a key up. The functions on maps are in [collections](collections#map).
 
 Square-bracket literals desugar to a call to the target type's builder, which is what makes the same syntax work for lists, sets and maps. See [Collections](../tour/collections).
 

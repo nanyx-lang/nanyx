@@ -79,13 +79,18 @@ module internal WellKnownContexts =
         | TyApply("list", _) -> true
         | _ -> false
 
-    /// `Eq`: every type that holds no function has the compiler's own, which compares by structure.
+    /// `Eq`: every type that holds no function, and no map, has the compiler's own, which compares by structure.
     let equality =
         { Context = "Eq"
           Member = "=="
           Operators = [ "=="; "!=" ]
           BuiltInFunction = "__equals"
-          Lacks = lacking "equality" (function TyFunc _ -> Some ("a function", "functions") | _ -> None)
+          Lacks =
+            lacking "equality" (function
+                | TyFunc _ -> Some ("a function", "functions")
+                // Comparing the lists of their entries would depend on the order the keys were added in (#618).
+                | Maps.MapType _ -> Some ("a map", "maps")
+                | _ -> None)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           Verb = "compares"
           Gerund = "Comparing"
@@ -102,6 +107,7 @@ module internal WellKnownContexts =
           Lacks =
             lacking "order" (function
                 | TyFunc _ -> Some ("a function", "functions")
+                | Maps.MapType _ -> Some ("a map", "maps")
                 | TyRecord fields when not (isTuple fields) -> Some ("a record", "records")
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
