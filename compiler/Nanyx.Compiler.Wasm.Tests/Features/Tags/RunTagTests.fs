@@ -28,6 +28,27 @@ let ``Run - an unannotated function whose branches return different tags`` () =
     runSource source |> assertRan "There was a message\nNo message available\n"
 
 [<Fact>]
+let ``Run - a piped lambda can match only the tags left of a union's rest`` () =
+    // The rest `ω` is `#invalidInt` from the piped value, and the lambda's input is `#invalidInt` from its pattern:
+    // one type, a tag alone and a union of one (#457).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def mapError = {\n" +
+        "  | #some(x), _ -> #some(x)\n" +
+        "  | other, f -> f(other)\n" +
+        "}\n" +
+        "\n" +
+        "def show: #some(int) | #bad(string) -> string = {\n" +
+        "  | #some(n) -> \"some {n}\"\n" +
+        "  | #bad(s) -> s\n" +
+        "}\n" +
+        "\n" +
+        "println(show(Int.parse(\"12\") \\mapError({ #invalidInt -> #bad(\"bad\") })))\n" +
+        "println(show(Int.parse(\"zz\") \\mapError({ #invalidInt -> #bad(\"bad\") })))\n"
+    runSource source |> assertRan "some 12\nbad\n"
+
+[<Fact>]
 let ``Run - a tag union rest passes the tags a match does not name through`` () =
     let source =
         "import nanyx/console\n" +

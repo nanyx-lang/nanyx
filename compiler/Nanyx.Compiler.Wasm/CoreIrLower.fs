@@ -146,10 +146,16 @@ let rec private substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
 
 /// Binds the type variables of `scheme` so that it is `instance`, adding to `bindings`.
 let rec private bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<int, Ty> =
+    // A tag alone is a union of one: a union's rest left with one tag is bound as `TyUnion [ tag ]`, and a lambda that
+    // takes its input from its pattern has the tag itself (#457).
+    let oneTagAsTag ty =
+        match ty with
+        | TyUnion [ TyTag _ as tag ] -> tag
+        | _ -> ty
     match Unifier.unalias scheme, Unifier.unalias instance with
     | TyVar v, _ ->
         match bindings |> Map.tryFind v.Id with
-        | Some bound when bound <> instance -> cannot "a type variable stands for two types in one call"
+        | Some bound when oneTagAsTag bound <> oneTagAsTag instance -> cannot "a type variable stands for two types in one call"
         | _ -> bindings |> Map.add v.Id instance
     | TyPrimitive a, TyPrimitive b when a = b -> bindings
     | TyFunc(input, output), TyFunc(input', output') -> bindScheme (bindScheme bindings input input') output output'
