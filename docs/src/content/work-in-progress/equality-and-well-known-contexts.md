@@ -35,7 +35,7 @@ operators call.
   generic function that compares by structure at the type it is specialised for.
 - **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
-  the rule, with a list of the members it covers for `compare` and `hash` to join.
+  the rule, with a list of the members it covers, `==` and `compare`, for `hash` to join.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
