@@ -171,3 +171,40 @@ let ``Run - List.unfold builds a list from a state until #done`` () =
         "println(show(List.unfold(3, { n -> if n == 0 then #done else #some(n, n - 1) })))\n" +
         "println(show(List.unfold(0, { n -> #done })))\n"
     runSource source |> assertRan "0 1 1 2 3 5 8 13 21 34 55 89 []\n3 2 1 []\n[]\n"
+
+[<Fact>]
+let ``Run - List search and slicing helpers`` () =
+    let source =
+        showInts +
+        "def xs = [3, 1, 4, 1, 5]\n" +
+        "def empty: list(int) = []\n" +
+        "def describe: #some(int) | #notFound -> string = {\n" +
+        "  | #some(n) -> \"at {n}\"\n" +
+        "  | #notFound -> \"not found\"\n" +
+        "}\n" +
+        "def describeLast: #some(int) | #emptyList -> string = {\n" +
+        "  | #some(n) -> \"last {n}\"\n" +
+        "  | #emptyList -> \"no last\"\n" +
+        "}\n" +
+        "println(if List.contains(xs, 4) then \"has 4\" else \"no 4\")\n" +
+        "println(if xs \\ contains(9) then \"has 9\" else \"no 9\")\n" +
+        "println(if List.contains([\"a\", \"b\"], \"b\") then \"has b\" else \"no b\")\n" +
+        "println(describe(List.indexOf(xs, 1)))\n" +
+        "println(describe(List.indexOf(xs, 9)))\n" +
+        "dbg(List.count(xs, { x -> x > 1 }))\n" +
+        "dbg(List.count(empty, { x -> x > 1 }))\n" +
+        "println(if List.isEmpty(empty) then \"empty\" else \"not empty\")\n" +
+        "println(if xs \\ isEmpty then \"empty\" else \"not empty\")\n" +
+        "println(describeLast(List.last(xs)))\n" +
+        "println(describeLast(List.last(empty)))\n" +
+        "println(show(List.dropLast(xs)))\n" +
+        "println(show(List.dropLast(empty)))\n" +
+        "println(show(List.takeWhile(xs, { x -> x < 4 })))\n" +
+        "println(show(List.takeWhile(xs, { x -> x > 9 })))\n" +
+        "println(show(List.mapIndexed(xs, { i, x -> i * 10 + x })))\n" +
+        "println(show(List.flatMap([1, 2, 3], { x -> List.take([x, x, x], x) })))\n" +
+        "println(show(List.flatMap(empty, { x -> [x] })))\n"
+    runSource source
+    |> assertRan (
+        "has 4\nno 9\nhas b\nat 1\nnot found\ndbg: 3\ndbg: 0\nempty\nnot empty\nlast 5\nno last\n" +
+        "3 1 4 1 []\n[]\n3 1 []\n[]\n3 11 24 31 45 []\n1 2 2 3 3 3 []\n[]\n")

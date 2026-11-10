@@ -63,6 +63,36 @@ Returns a new list with the element added to the end.
 
 ---
 
+## contains
+
+```nanyx
+List.contains: [Eq(a)] (list(a), a) -> bool
+```
+
+Returns `true` if any element is equal to the value. Elements are compared with `==`, by their structure.
+
+```nanyx
+[1, 2, 3] \List.contains(2)
+-- true
+```
+
+---
+
+## count
+
+```nanyx
+List.count: (list(a), (a -> bool)) -> int
+```
+
+Returns the number of elements that satisfy the predicate.
+
+```nanyx
+[1, 2, 3, 4] \List.count { > 2 }
+-- 2
+```
+
+---
+
 ## distinct
 
 ```nanyx
@@ -77,6 +107,21 @@ List.distinct([1, 2, 2, 3, 1])
 ```
 
 Elements are compared with `==`, which compares records, tuples, lists and tags by their structure. A list of functions cannot be made distinct, since functions have no equality: it is a type error. See [`Eq(a)`](../advanced/contexts#eqa).
+
+---
+
+## dropLast
+
+```nanyx
+List.dropLast: list(a) -> list(a)
+```
+
+Returns all the elements but the last. An empty list gives an empty list.
+
+```nanyx
+List.dropLast([1, 2, 3])
+-- [1, 2]
+```
 
 ---
 
@@ -106,6 +151,21 @@ Returns the first element matching the predicate.
 ```nanyx
 [1, 2, 3] \List.find { > 1 }
 -- #some(2)
+```
+
+---
+
+## flatMap
+
+```nanyx
+List.flatMap: (list(a), (a -> list(b))) -> list(b)
+```
+
+Applies a function that gives a list to every element, and joins the lists end to end. It is a `map` followed by a `flatten`.
+
+```nanyx
+[1, 2, 3] \List.flatMap { x -> [x, x * 10] }
+-- [1, 10, 2, 20, 3, 30]
 ```
 
 ---
@@ -185,6 +245,51 @@ Groups elements of a list by a key function, returning a [map](map) from each ke
 
 ---
 
+## indexOf
+
+```nanyx
+List.indexOf: [Eq(a)] (list(a), a) -> #some(int) | #notFound
+```
+
+Returns the position of the first element equal to the value, counting from 0, or `#notFound`. Elements are compared with `==`, by their structure.
+
+```nanyx
+["a", "b", "c"] \List.indexOf("b")
+-- #some(1)
+```
+
+---
+
+## isEmpty
+
+```nanyx
+List.isEmpty: list(a) -> bool
+```
+
+Returns `true` if the list has no elements.
+
+```nanyx
+List.isEmpty([])
+-- true
+```
+
+---
+
+## last
+
+```nanyx
+List.last: list(a) -> #some(a) | #emptyList
+```
+
+Returns the last element if the list is non-empty.
+
+```nanyx
+List.last([10, 20, 30])
+-- #some(30)
+```
+
+---
+
 ## length
 
 ```nanyx
@@ -211,6 +316,21 @@ Applies a function to every element in a list, collecting the results in a new l
 ```nanyx
 [1, 2, 3] \List.map { * 2 }
 -- [2, 4, 6]
+```
+
+---
+
+## mapIndexed
+
+```nanyx
+List.mapIndexed: (list(a), ((int, a) -> b)) -> list(b)
+```
+
+Like `map`, but the function is also given each element's position, counting from 0.
+
+```nanyx
+["a", "b"] \List.mapIndexed { i, s -> "{i}:{s}" }
+-- ["0:a", "1:b"]
 ```
 
 ---
@@ -333,6 +453,21 @@ Returns the first `count` elements.
 
 ```nanyx
 List.take([1, 2, 3, 4], 2)
+-- [1, 2]
+```
+
+---
+
+## takeWhile
+
+```nanyx
+List.takeWhile: (list(a), (a -> bool)) -> list(a)
+```
+
+Returns the elements before the first one that fails the predicate.
+
+```nanyx
+[1, 2, 5, 1] \List.takeWhile { < 3 }
 -- [1, 2]
 ```
 

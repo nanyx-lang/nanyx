@@ -80,18 +80,12 @@ export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
 -- calls it.
 export def __listEqualsBy: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
   match xs
-    | [] -> __isEmpty(ys)
+    | [] -> List.isEmpty(ys)
     | [x, ...restOfXs] ->
       match ys
         | [] -> false
         | [y, ...restOfYs] ->
           if same(x, y) then __listEqualsBy(restOfXs, restOfYs, same) else false
-}
-
-def __isEmpty: list(a) -> bool = { xs ->
-  match xs
-    | [] -> true
-    | _ -> false
 }
 
 -- Arithmetic ------------------------------------------------------------------------------------
@@ -677,10 +671,45 @@ export def List.sum: [Add(a)] list(a) -> a = { xs ->
   List.fold(xs, zero, { total, x -> total + x })
 }
 
+-- Whether there are no elements.
+export def List.isEmpty: list(a) -> bool = {
+  | [] -> true
+  | _ -> false
+}
+
+-- The number of elements `test` holds for.
+export def List.count: list(a), (a -> bool) -> int = { xs, test ->
+  List.fold(xs, 0, { count, x -> if test(x) then count + 1 else count })
+}
+
 -- The first element, or `#emptyList`.
 export def List.head: list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ..._] -> #some(x)
+}
+
+-- The last element, or `#emptyList`.
+export def List.last: list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x] -> #some(x)
+  | [_, ...rest] -> List.last(rest)
+}
+
+-- Whether any element is equal to `x`. Elements are compared with `==`, by their structure.
+export def List.contains: [Eq(a)] list(a), a -> bool = { xs, x ->
+  List.any(xs, { y -> y == x })
+}
+
+-- The position of the first element of `xs` equal to `x`, counting `xs` as starting at `index`.
+def indexOfFrom: [Eq(a)] list(a), a, int -> #some(int) | #notFound = {
+  | [], _, _ -> #notFound
+  | [y, ...rest], x, index -> if y == x then #some(index) else indexOfFrom(rest, x, index + 1)
+}
+
+-- The position of the first element equal to `x`, counting from 0, or `#notFound`. Elements are
+-- compared with `==`, by their structure.
+export def List.indexOf: [Eq(a)] list(a), a -> #some(int) | #notFound = { xs, x ->
+  indexOfFrom(xs, x, 0)
 }
 
 -- `xs` reversed, in front of `tail`. It takes `xs` apart in a match arm that builds a cell of the same
@@ -699,6 +728,25 @@ def mapReversed: list(a), (a -> b), list(b) -> list(b) = {
 -- `f` applied to each element, in order. Stack-safe: it works on a list of any length.
 export def List.map: list(a), (a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapReversed(xs, f, []), [])
+}
+
+-- `f` applied to each element of `xs` and its position, counting `xs` as starting at `index`, last
+-- first, in front of `acc`.
+def mapIndexedReversed: list(a), int, (int, a -> b), list(b) -> list(b) = {
+  | [], _, _, acc -> acc
+  | [x, ...rest], index, f, acc -> mapIndexedReversed(rest, index + 1, f, [f(index, x), ...acc])
+}
+
+-- `f` applied to each element's position, counting from 0, and the element, in order. Stack-safe:
+-- it works on a list of any length.
+export def List.mapIndexed: list(a), (int, a -> b) -> list(b) = { xs, f ->
+  reverseOnto(mapIndexedReversed(xs, 0, f, []), [])
+}
+
+-- The lists `f` gives for each element, joined end to end. Stack-safe: it works however long the
+-- lists are.
+export def List.flatMap: list(a), (a -> list(b)) -> list(b) = { xs, f ->
+  reverseOnto(List.fold(xs, [], { acc, x -> reverseOnto(f(x), acc) }), [])
 }
 
 -- The elements of `xs` that `keep` holds for, last first, in front of `acc`.
@@ -758,6 +806,25 @@ def takeReversed: list(a), int, list(a) -> list(a) = {
 -- any length.
 export def List.take: list(a), int -> list(a) = { xs, count ->
   reverseOnto(takeReversed(xs, count, []), [])
+}
+
+-- The elements of `xs` before the first one `keep` fails for, last first, in front of `acc`.
+def takeWhileReversed: list(a), (a -> bool), list(a) -> list(a) = {
+  | [], _, acc -> acc
+  | [x, ...rest], keep, acc -> if keep(x) then takeWhileReversed(rest, keep, [x, ...acc]) else acc
+}
+
+-- The elements before the first one `keep` fails for. Stack-safe: it works on a list of any length.
+export def List.takeWhile: list(a), (a -> bool) -> list(a) = { xs, keep ->
+  reverseOnto(takeWhileReversed(xs, keep, []), [])
+}
+
+-- All the elements but the last (no elements for an empty list). Stack-safe: it works on a list of
+-- any length.
+export def List.dropLast: list(a) -> list(a) = { xs ->
+  match reverseOnto(xs, [])
+    | [] -> []
+    | [_, ...rest] -> reverseOnto(rest, [])
 }
 
 -- The elements after the first `count`.
