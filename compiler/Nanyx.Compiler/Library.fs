@@ -232,6 +232,18 @@ module Compiler =
                 | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
                 | other, _ -> other)
 
+    /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
+    /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``.
+    let private callOperators (calls: Set<NodeId>) (expr: Expression) : Expression =
+        if calls.IsEmpty then
+            expr
+        else
+            expr
+            |> mapExpressionKinds (fun current kind ->
+                match kind with
+                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(op, None, [ left; right ])
+                | other -> other)
+
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
     /// prelude's `List.length`, which every module imports.
     let private builtInPropertyFunction (property: BuiltInProperty) : Identifier =
@@ -1108,12 +1120,13 @@ module Compiler =
             | _ -> kind)
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
-    /// call (`properties`), each builder block that uses no keyword as its block (`workflowBlocks`), and without
-    /// import statements. `defer` compiles the module's errors to traps first, for a debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    /// attached function written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
+    /// that call (`operatorCalls`), each read of a built-in property as a call (`properties`), each builder block that
+    /// uses no keyword as its block (`workflowBlocks`), and without import statements. `defer` compiles the module's
+    /// errors to traps first, for a debug build.
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1387,7 +1400,7 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
-                let own = moduleFromTypedItems defer state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)

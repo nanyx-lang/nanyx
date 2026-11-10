@@ -260,3 +260,30 @@ let ``Run - an inferred parameterised context passes through two functions and i
         "  println(Int.toString(lengths([Size(w = 8), Size(w = 9)])))\n" +
         "}\n"
     runSource source |> assertRan "(1, 2)(1, 2)(1, 2)\n3px3px\n(4, 5) 6px\n7px\n2\n"
+
+[<Fact>]
+let ``Run - an operator in a generic function calls the member of the context the function requires`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Add(a) = (`+`: (a, a) -> a)\n" +
+        "context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + q.y) }\n" +
+        "\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" +
+        "def addCounting: [Add(a)] a, a, int -> (a, int) = { x, y, n -> (x + y, n + 1) }\n" +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(zero()) { + } }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def p = add(Point(x = 1, y = 2), Point(x = 3, y = 4))\n" +
+        "  println(\"{p.x} {p.y}\")\n" +
+        "  use Add(string) = (`+` = { a, b -> a ++ b })\n" +
+        "  def (s, n) = addCounting(\"a\", \"b\", 41)\n" +
+        "  println(\"{s} {n}\")\n" +
+        "  use Sum(int) = (zero = { 0 }, `+` = { a, b -> a * 10 + b })\n" +
+        "  println(\"{sum([1, 2, 3])}\")\n" +
+        "}\n"
+    runSource source |> assertRan "4 6\nab 42\n123\n"

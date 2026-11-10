@@ -106,6 +106,16 @@ export def sum: [Sum(a)] list(a) -> a
   = { items -> items \fold(`0`) { + } }
 ```
 
+Inside `sum`, the operator `+` calls the context's `` `+` ``, so `sum` adds whatever type it is given an instance for. An operator calls whatever its name is bound to where it is written, such as a member of a context the function requires, whenever its left operand is not of a built-in type: on an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, so a counter's `n + 1` in the same function still adds ints.
+
+```nanyx
+context Add(a) = (
+  `+`: (a, a) -> a
+)
+
+def add: [Add(a)] a, a -> a = { x, y -> x + y }
+```
+
 Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Common contexts

@@ -279,3 +279,35 @@ let ``Hover and the type lens show the parameterised contexts a def was inferred
     Assert.Equal(Some "[Show(α)] α -> string", hover |> Option.map _.Type)
     let lenses = TypeHints.typeLenses Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
     Assert.Equal<(string * string) list>([ "twice", "[Show(α)] α -> string" ], lenses)
+
+/// A context whose member is an operator, and a generic function that requires it.
+let private addContext =
+    "context Add(a) = (`+`: (a, a) -> a)\n"
+
+[<Fact>]
+let ``An operator in a generic function calls the member of that name of the context the function requires`` () =
+    let source =
+        addContext +
+        "context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(zero()) { + } }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``An operator on ints is the built-in one in a function that requires a context with that operator`` () =
+    let source =
+        addContext +
+        "def addCounting: [Add(a)] a, a, int -> (a, int) = { x, y, n -> (x + y, n + 1) }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``An operator that calls a context member checks its operands against the member's type`` () =
+    let source =
+        addContext +
+        "def addOne: [Add(a)] a -> a = { x -> x + 1 }\n"
+    let result = Compiler.compile source
+    match result.Diagnostics with
+    | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.AnnotationTooGeneral.Code, diagnostic.Code)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
