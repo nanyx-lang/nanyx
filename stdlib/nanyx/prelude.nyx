@@ -66,23 +66,336 @@ export def __equals: a, a -> bool = { x, y ->
   x == y
 }
 
+-- What `xs == ys` calls on two lists whose elements have an `Eq` other than the compiler's own:
+-- `==` on a `list($Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
+-- compared element by element through that `Eq`. `!=` is `not` of it.
+export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
+  | [], [] -> true
+  | [x, ...xs], [y, ...ys] -> (if x == y then __listEquals(xs, ys) else false)
+  | _, _ -> false
+}
+
 -- Whether the lists `xs` and `ys` hold equal elements in the same order, as `same` compares two
 -- elements. The `==` the compiler derives for a list whose elements have an `==` of their own
 -- calls it.
-export def __listEquals: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
+export def __listEqualsBy: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
   match xs
     | [] -> __isEmpty(ys)
     | [x, ...restOfXs] ->
       match ys
         | [] -> false
         | [y, ...restOfYs] ->
-          if same(x, y) then __listEquals(restOfXs, restOfYs, same) else false
+          if same(x, y) then __listEqualsBy(restOfXs, restOfYs, same) else false
 }
 
 def __isEmpty: list(a) -> bool = { xs ->
   match xs
     | [] -> true
     | _ -> false
+}
+
+-- Arithmetic ------------------------------------------------------------------------------------
+
+-- The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
+-- so is `0` beside a value of type `a` in a function whose type requires it:
+-- `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
+-- `def $Money.zero = ...`, `` def $Money.`+` = ... ``, and so on.
+export context Add(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+)
+
+-- The numbers of type `a`: `Add`'s members, and `x * y`, `x / y` and `x % y`. In a function whose
+-- type requires it, any other integer literal beside a value of type `a` is `fromInt` of it, so
+-- `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
+-- A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
+-- an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
+-- IEEE 754's.
+export context Num(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+  `*`: (a, a) -> a
+  `/`: (a, a) -> a
+  `%`: (a, a) -> a
+  fromInt: int -> a
+)
+
+-- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `Int` and
+-- `Float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
+-- the built-in operator, not a call.
+
+-- The `int` that adds nothing.
+export def Int.zero: int = 0
+
+-- `x` plus `y`.
+export def Int.`+`: int, int -> int = { x, y ->
+  x + y
+}
+
+-- `x` minus `y`.
+export def Int.`-`: int, int -> int = { x, y ->
+  x - y
+}
+
+-- `n` with its sign changed.
+export def Int.negate: int -> int = { n ->
+  -n
+}
+
+-- `x` times `y`.
+export def Int.`*`: int, int -> int = { x, y ->
+  x * y
+}
+
+-- `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
+export def Int.`/`: int, int -> int = { x, y ->
+  x / y
+}
+
+-- The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+export def Int.`%`: int, int -> int = { x, y ->
+  (x % y)
+}
+
+-- `n` itself.
+export def Int.fromInt: int -> int = { n ->
+  n
+}
+
+-- The `float` that adds nothing.
+export def Float.zero: float = 0.0
+
+-- `x` plus `y`.
+export def Float.`+`: float, float -> float = { x, y ->
+  x + y
+}
+
+-- `x` minus `y`.
+export def Float.`-`: float, float -> float = { x, y ->
+  x - y
+}
+
+-- `x` with its sign changed: `Float.negate(0.0)` is negative zero.
+export def Float.negate: float -> float = { x ->
+  -x
+}
+
+-- `x` times `y`.
+export def Float.`*`: float, float -> float = { x, y ->
+  x * y
+}
+
+-- `x` divided by `y`.
+export def Float.`/`: float, float -> float = { x, y ->
+  x / y
+}
+
+-- The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
+export def Float.`%`: float, float -> float = { x, y ->
+  (x % y)
+}
+
+-- `n` as a float, as `Int.toFloat(n)` is.
+export def Float.fromInt: int -> float = { n ->
+  Int.toFloat(n)
+}
+
+-- Powers ----------------------------------------------------------------------------------------
+
+-- `acc` times `base` to the power `exponent`, for an `exponent` of zero or more: by repeated
+-- squaring, so it takes as many steps as `exponent` has bits.
+def powOnto: [Num(a)] a, int, a -> a = { base, exponent, acc ->
+  if exponent == 0
+    then acc
+    else powOnto(base * base, exponent / 2, if exponent % 2 == 0 then acc else acc * base)
+}
+
+-- What `base ** exponent` is: `base` multiplied by itself `exponent` times, so `2 ** 10` is 1024
+-- and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent`, so on an `int` it truncates
+-- towards zero.
+export def __pow: [Num(a)] a, int -> a = { base, exponent ->
+  if exponent < 0
+    then fromInt(1) / powOnto(base, -exponent, fromInt(1))
+    else powOnto(base, exponent, fromInt(1))
+}
+
+-- `base ** exponent`, as a function that can be passed around.
+export def pow: [Num(a)] a, int -> a = { base, exponent ->
+  base ** exponent
+}
+
+-- `2 ** n` times `x`, for an `n` that is a whole number of any size.
+def scaleByTwos: float, int -> float = { x, n ->
+  if n >= 0 then x * 2.0 ** n else x / 2.0 ** -n
+}
+
+-- The sum of the series for `e ** r`, from the term `term` (which is `r ** k / k!`) on, with `sum`
+-- the terms before it. Twenty terms are enough for any `r` of at most `ln(2) / 2`.
+def expSeries: float, float, float, int -> float = { r, term, sum, k ->
+  if k > 20 then sum else expSeries(r, term * r / Int.toFloat(k + 1), sum + term, k + 1)
+}
+
+-- `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`.
+def floatExp: float -> float = { z ->
+  if z != z
+    then z
+    else if z > 709.8
+      then 1.0 / 0.0
+      else if z < -745.2
+        then 0.0
+        else expAround(z, __nanyx_float_floor(z / 0.6931471805599453 + 0.5))
+}
+
+-- `e ** z`, for `n` the number of `ln(2)`s nearest `z`.
+def expAround: float, float -> float = { z, n ->
+  scaleByTwos(expSeries(z - n * 0.6931471805599453, 1.0, 0.0, 0), __nanyx_float_to_int(n))
+}
+
+-- The sum of the series for `atanh(t)`, from the term `term` (which is `t ** (2k + 1)`) on, with
+-- `sum` the terms before it. Thirty terms are enough for any `t` below 1/3.
+def atanhSeries: float, float, float, int -> float = { term, tt, sum, k ->
+  if k > 30 then sum else atanhSeries(term * tt, tt, sum + term / Int.toFloat(2 * k + 1), k + 1)
+}
+
+-- The natural logarithm of `m * 2 ** k`, for an `m` above zero: `m` is moved into [1, 2) first.
+def lnScaled: float, int -> float = { m, k ->
+  if m >= 2.0
+    then lnScaled(m / 2.0, k + 1)
+    else if m < 1.0 then lnScaled(m * 2.0, k - 1) else lnOfReduced(m, k)
+}
+
+-- The natural logarithm of `m * 2 ** k`, for an `m` in [1, 2): `ln(m)` is `2 * atanh((m - 1) / (m + 1))`.
+def lnOfReduced: float, int -> float = { m, k ->
+  def t = (m - 1.0) / (m + 1.0)
+  2.0 * atanhSeries(t, t * t, 0.0, 0) + Int.toFloat(k) * 0.6931471805599453
+}
+
+-- The natural logarithm of `x`: minus infinity at zero, and NaN below it.
+def floatLn: float -> float = { x ->
+  if x != x or x < 0.0
+    then 0.0 / 0.0
+    else if x == 0.0 then -1.0 / 0.0 else if x == 1.0 / 0.0 then x else lnScaled(x, 0)
+}
+
+-- `x` to the power `y`, which need not be a whole number: `Float.pow(2.0, 0.5)` is the square root
+-- of 2. A whole `y` is `x ** y`, exactly; any other is `e ** (y * ln(x))`, so a negative `x` gives
+-- NaN.
+export def Float.pow: float, float -> float = { x, y ->
+  def whole = __nanyx_float_trunc(y)
+
+  if whole == y and y < 2147483648.0 and y > -2147483648.0
+    then x ** __nanyx_float_to_int(whole)
+    else floatExp(y * floatLn(x))
+}
+
+-- Ordering --------------------------------------------------------------------------------------
+
+-- How two values of type `a` are put in order. `x < y`, `x <= y`, `x > y` and `x >= y` are read
+-- through it, so the four cannot disagree. The compiler has its own for numbers, `bool` (`false`
+-- first), `string` (by bytes, which is the order of code points), and tuples and lists of them
+-- (position by position, and a list that is a prefix of another first). Records and tags have no
+-- order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
+-- with `List.sortBy`. A function that orders values of one of its type variables requires it:
+-- `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
+-- should keep them consistent.
+export context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
+
+-- The `compare` of the compiler's own `Ord`: what a function that requires `Ord(a)` is passed when
+-- it is called with a type that has no `compare` of its own. On floats it is a total order, with
+-- NaN after every other float, while `<` and the others on floats follow IEEE 754.
+export def __compare: a, a -> #less | #equal | #greater = { x, y ->
+  def order = __nanyx_compare(x, y)
+
+  if order < 0 then #less else if order > 0 then #greater else #equal
+}
+
+-- What `x < y` calls when it reads an `Ord` other than the compiler's own: one a function
+-- requires, one loaded with `use`, or one built from an attached `compare`. `<=`, `>` and `>=`
+-- call the three after it.
+export def __less: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #less -> true
+    | _ -> false
+}
+
+export def __lessOrEqual: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #greater -> false
+    | _ -> true
+}
+
+export def __greater: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #greater -> true
+    | _ -> false
+}
+
+export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #less -> false
+    | _ -> true
+}
+
+-- What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
+-- `<` on a `list($Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
+-- ordered element by element through that `Ord`, and a list that is a prefix of the other comes
+-- first. `<=`, `>` and `>=` call the three after it.
+export def __listCompare: [Ord(a)] list(a), list(a) -> #less | #equal | #greater = {
+  | [], [] -> #equal
+  | [], _ -> #less
+  | _, [] -> #greater
+  | [x, ...xs], [y, ...ys] ->
+    match compare(x, y)
+      | #equal -> __listCompare(xs, ys)
+      | #less -> #less
+      | #greater -> #greater
+}
+
+export def __listLess: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #less -> true
+    | _ -> false
+}
+
+export def __listLessOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #greater -> false
+    | _ -> true
+}
+
+export def __listGreater: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #greater -> true
+    | _ -> false
+}
+
+export def __listGreaterOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #less -> false
+    | _ -> true
+}
+
+-- Each built-in type with an order has its order attached as `compare`, so it can be called and
+-- passed around: `Float.compare` puts NaN after every other float. A built-in type's order is
+-- always the compiler's own: `<` and `Ord` do not read these.
+export def Int.compare: int, int -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def Float.compare: float, float -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def Bool.compare: bool, bool -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def String.compare: string, string -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
 }
 
 -- Text ------------------------------------------------------------------------------------------
@@ -99,6 +412,12 @@ export context ToString(a) = (toString: a -> string)
 -- needs a `ToString` of its value's type, as a call to a function that requires one does.
 export def __interpolate: [ToString(a)] a -> string = { value ->
   toString(value)
+}
+
+-- The `toString` of the compiler's own `ToString` of a tag without a payload: what a function
+-- that requires `ToString(a)` is passed when it is called with one. It writes the tag's name.
+export def __toString: a -> string = { value ->
+  "{value}"
 }
 
 -- What the derived `toString` of a list calls: `xs` in square brackets, each element written by
@@ -318,6 +637,11 @@ export def List.length: list(a) -> int = { xs ->
   List.fold(xs, 0, { count, _ -> count + 1 })
 }
 
+-- The elements added together: `[1, 2, 3] \List.sum` is 6, and the sum of no elements is `zero`.
+export def List.sum: [Add(a)] list(a) -> a = { xs ->
+  List.fold(xs, zero, { total, x -> total + x })
+}
+
 -- The first element, or `#emptyList`.
 export def List.head: list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
@@ -430,7 +754,7 @@ export def List.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
 -- `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
 -- elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
 -- same key, the one from `xs` comes first.
-def mergeBy: list(a), list(a), (a -> int), list(a) -> list(a) = {
+def mergeBy: [Ord(b)] list(a), list(a), (a -> b), list(a) -> list(a) = {
   | [], ys, _, acc -> reverseOnto(acc, ys)
   | xs, [], _, acc -> reverseOnto(acc, xs)
   | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
@@ -439,23 +763,52 @@ def mergeBy: list(a), list(a), (a -> int), list(a) -> list(a) = {
 }
 
 -- `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
-def mergePairs: list(list(a)), (a -> int), list(list(a)) -> list(list(a)) = {
+def mergePairs: [Ord(b)] list(list(a)), (a -> b), list(list(a)) -> list(list(a)) = {
   | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
   | rest, _, acc -> reverseOnto(acc, rest)
 }
 
 -- The elements of `runs`, each run already in order of `key`, merged into one list in that order.
-def mergeRuns: list(list(a)), (a -> int) -> list(a) = {
+def mergeRuns: [Ord(b)] list(list(a)), (a -> b) -> list(a) = {
   | [], _ -> []
   | [run], _ -> run
   | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
 }
 
 -- The elements in ascending order of `key`. The sort is stable: elements with the same key keep
--- their order. Keys are ints for now, since `<` only orders ints (#476). Stack-safe: it works on a
--- list of any length.
-export def List.sortBy: list(a), (a -> int) -> list(a) = { xs, key ->
+-- their order. A key can be of any type with an order: `List.sortBy(people, { p -> p.name })`.
+-- Stack-safe: it works on a list of any length.
+export def List.sortBy: [Ord(b)] list(a), (a -> b) -> list(a) = { xs, key ->
   mergeRuns(List.map(xs, { x -> [x] }), key)
+}
+
+-- The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
+export def List.sort: [Ord(a)] list(a) -> list(a) = { xs ->
+  List.sortBy(xs, { x -> x })
+}
+
+-- The least of `least` and the elements of `xs`, the first of them when several are least.
+def leastOf: [Ord(a)] list(a), a -> a = {
+  | [], least -> least
+  | [x, ...rest], least -> leastOf(rest, if x < least then x else least)
+}
+
+-- The greatest of `greatest` and the elements of `xs`, the first of them when several are greatest.
+def greatestOf: [Ord(a)] list(a), a -> a = {
+  | [], greatest -> greatest
+  | [x, ...rest], greatest -> greatestOf(rest, if x > greatest then x else greatest)
+}
+
+-- The least element, or `#emptyList`. Of several least elements, the first.
+export def List.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ...rest] -> #some(leastOf(rest, x))
+}
+
+-- The greatest element, or `#emptyList`. Of several greatest elements, the first.
+export def List.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ...rest] -> #some(greatestOf(rest, x))
 }
 
 -- The elements `step` gives from `state` on, last first, in front of `acc`.

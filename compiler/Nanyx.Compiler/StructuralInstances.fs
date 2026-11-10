@@ -57,8 +57,7 @@ module internal StructuralInstances =
         | RecordShape of (string * Ty) list
         | ListShape of Ty
 
-    let private isTuple (fields: Map<string, Ty>) =
-        not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string)
+    let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
 
     let private tupleItems (fields: Map<string, Ty>) = List.init fields.Count (fun index -> fields.[string index])
 
@@ -324,15 +323,16 @@ module internal StructuralInstances =
                     let instances = vars |> List.map (instanceOf >> Option.map InstanceInScope)
                     Ok (InstanceBuiltIn, { next with DerivedCalls = next.DerivedCalls |> Map.add call (name, instances) }))
 
-    /// `state` with the comparison `call`, at `span`, of two values of the type `ty` calling the `==` derived for the
-    /// type, with the instance `instanceOf` finds for each variable of it. `None` if none can be derived, or a
-    /// variable has no instance: the comparison is then the compiler's own. `rigid` is as `instance` has it.
-    let comparison (rigid: Set<int>) (instanceOf: TyVar -> TypeExpr option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : InferState option =
+    /// The `==` derived for the type `ty`, which the comparison `call`, at `span`, of two values of it calls, and
+    /// `state` with the comparison finding the instance `instanceOf` finds for each variable of the type. `None` if
+    /// none can be derived, or a variable has no instance: the comparison is then the compiler's own. `rigid` is as
+    /// `instance` has it.
+    let comparison (rigid: Set<int>) (instanceOf: TyVar -> TypeExpr option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : (Identifier * InferState) option =
         derive rigid span EqualityOperators.context ty state
         |> Option.bind (fun (name, vars, next) ->
             if vars |> List.forall (instanceOf >> Option.isSome) then
                 let instances = vars |> List.map (instanceOf >> Option.map InstanceInScope)
-                Some { next with DerivedCalls = next.DerivedCalls |> Map.add call (name, instances) }
+                Some (name, { next with DerivedCalls = next.DerivedCalls |> Map.add call (name, instances) })
             else None)
 
     /// The definitions written since they were last taken, to be inferred, and the state without them.
@@ -348,6 +348,7 @@ module internal StructuralInstances =
                 |> Map.fold (fun instances call (_, found) -> if found.IsEmpty then instances else instances |> Map.add call found) state.ContextInstances }
 
     /// The definition each call is written as a call to for the backend: a pipe's attached definition, and the
-    /// derived definition a hole or a comparison calls in place of the hole function or the compiler's own `==`.
+    /// derived definition a hole calls in place of the hole function. A comparison is not a call until it is
+    /// written as one (see `InferState.OperatorCalls`), so its name here changes nothing.
     let callTargets (state: InferState) : Map<NodeId, Identifier> =
         state.DerivedCalls |> Map.fold (fun targets call (name, _) -> targets |> Map.add call name) state.PipeTargets

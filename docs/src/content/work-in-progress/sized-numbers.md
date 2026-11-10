@@ -54,9 +54,10 @@ A literal that does not fit its type is a compile error: `def small: U8 = 300` i
 
 # Arithmetic
 
-Arithmetic and comparison work on two values of the same type, through the [`Num(a)`](../advanced/contexts)
-context that every numeric type satisfies. Nothing is converted implicitly, so adding an `I32` to an `int` is a type
-error until one side is [converted](#conversions).
+Arithmetic and comparison work on two values of the same type, through the [`Add(a)` and `Num(a)`](../advanced/contexts)
+contexts, which every numeric type will have (a measured type has only `Add`; see [numeric
+contexts](./numeric-contexts#units-and-dimensions)). Nothing is converted implicitly, so adding an `I32` to an `int` is
+a type error until one side is [converted](#conversions).
 
 [Units](./units-and-dimensions) attach to any of these types: `I64(Bytes)`, `F32(Time)`.
 

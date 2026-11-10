@@ -42,7 +42,7 @@ Also, lambda syntax supports an [operator-based shorthand](../tour/functions#sho
 
 # Arithmetic and comparison
 
-Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) on the built-in types are [attached definitions](../advanced/attached-definitions): `1 + 2` resolves to `` int.`+` ``, exactly as any other attached function is resolved by the type of its first argument (here, the left operand). To give your own type an operator, attach a definition to it:
+Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` and `x - y` read through [`Add`](../advanced/contexts#adda), `x == y` through [`Eq`](../advanced/contexts#eqa), and `x < y` through [`Ord`](../advanced/contexts#orda). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
 
 ```nanyx
 def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
@@ -50,7 +50,15 @@ def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
 def c = a + b   -- resolves to Vector.`+` because `a` is a Vector
 ```
 
-Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Sum(a)]` or `[Num(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading a context with `use` only overrides the instance that such generic code sees for that particular type; it never changes what `1 + 2` means.
+The operator is found by the type of its left operand, exactly as any other attached function is resolved by the type of its first argument.
+
+`-x` negates: it binds tighter than every infix operator, so `-x * y` is `(-x) * y`, and it is written against its operand. `-5` is a literal. On an `int` or a `float` it is the built-in negation (`-0.0` is negative zero); on any other type it is that type's `negate`, the member of `Add`. In a [shorthand lambda](../tour/functions#shorthand-lambdas), a leading `-` is still the infix operator, so `{ -x }` is `{ n -> n - x }`.
+
+`x ** n` is `x` to the power `n`: it binds tighter than every other infix operator and groups to the right, so `2 * 3 ** 2` is `2 * 9` and `2 ** 3 ** 2` is `2 ** 9`, 512. As prefix `-` binds tighter still, `-x ** 2` is `(-x) ** 2`. It is not a member of a context: `x ** n` is the prelude's `pow(x, n)`, `[Num(a)] (a, int) -> a`, so it works on any number type, and the exponent is an `int`. A negative exponent is `1 / x ** -n`, which truncates on an `int`. For a fractional exponent, use `Float.pow(x, y)`.
+
+Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Add(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading an `Add` with `use` changes the instance that such generic code sees for that type; making it change a concrete `1 + 2` too, as it will, is [not done yet](../work-in-progress/numeric-contexts#what-is-implemented). Equality already works that way: `a == b` is always a lookup of `Eq` at the operands' type, so after `use ignoringCase`, an `Eq(string)`, a plain `a == b` on strings in that block calls its `==`.
+
+Comparison is read through the standard library's contexts instead: `==` and `!=` through [`Eq(a)`](../advanced/contexts#eqa), and `<`, `<=`, `>` and `>=` through [`Ord(a)`](../advanced/contexts#orda), whose one member is `compare`. Numbers, strings, tuples and lists are ordered already; a nominal type is ordered by attaching a `compare`, and records and tags have no order. A function that orders values of one of its type variables requires `[Ord(a)]`, and an `Ord` loaded with `use` changes what `<` means in its block, on built-in types too.
 
 # Pipe and composition
 
@@ -96,7 +104,7 @@ Some sequences built from operator characters are syntax, not operators, and can
 | `?` | Optional marker |
 | `???` | Unimplemented placeholder |
 
-The following operators are defined by the standard library as attached definitions on the built-in types. You can attach them to your own types, but you cannot redefine them globally:
+The following operators are built in. You can attach them to your own types, but you cannot redefine them globally:
 
 | Operators | Meaning |
 |---|---|

@@ -129,6 +129,20 @@ let runSourceWithInput (standardInput: string) (source: string) : RunOutcome =
 
 let runSource (source: string) : RunOutcome = runSourceWithInput "" source
 
+/// A program that prints `T` or `F` for each of `comparisons`, one per line, after the definitions in `definitions`.
+/// The comparisons can use `s`, the string "aa" made at run time.
+let comparing (definitions: string list) (comparisons: string list) =
+    [ "import nanyx/console"
+      ""
+      "def show = { b -> if b then \"T\" else \"F\" }"
+      yield! definitions
+      ""
+      "@entry"
+      "def main = {"
+      "  def s = \"a\" ++ \"a\""
+      yield! comparisons |> List.map (fun comparison -> $"  println(show({comparison}))")
+      "}" ]
+    |> String.concat "\n"
 let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
     Assert.Equal(expectedOutput, outcome.StandardOutput)

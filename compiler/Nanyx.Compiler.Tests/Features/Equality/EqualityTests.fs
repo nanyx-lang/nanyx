@@ -3,31 +3,13 @@ module Nanyx.Compiler.Tests.Features.Equality
 open Xunit
 open NyxCompiler
 open Parser.Program
-
-/// `source` compiled, with no diagnostics.
-let private compileClean (source: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value
-
-/// The one diagnostic `source` has, which must be a missing context: its message, and the text it is reported at.
-let private missingContext (source: string) =
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] ->
-        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        let span = diagnostic.Span.Value
-        diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
+open Nanyx.Compiler.Tests.TestSupport
 
 /// The contexts the one def of `typed` that requires any was inferred to require.
 let private inferredContexts (typed: TypedModule) =
     match typed.InferredContextTypes |> Map.values |> List.ofSeq with
     | [ contexts ] -> contexts
     | other -> failwith $"Expected one def with inferred contexts, got %A{other}"
-
-/// Every instance the module's own calls found.
-let private instancesOf (typed: TypedModule) =
-    typed.ContextInstances |> Map.toList |> List.sortBy fst |> List.map snd |> List.concat |> List.choose id
 
 [<Fact>]
 let ``A def that does not write its type requires Eq of a type variable it compares`` () =
@@ -196,3 +178,35 @@ let ``Comparing with a tag joins the operands, leaving the other open to more ta
 let ``Comparing tags with payloads of different types is still an error`` () =
     let diagnostic = Assert.Single((Compiler.compile "def b = #some(1) == #some(\"a\")\n").Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+let ``A concrete comparison calls the == attached to its type, except in that definition`` () =
+    let typed =
+        compileClean (
+            "type $Point = (x: int, y: int)\n" +
+            "def $Point.`==`: $Point, $Point -> bool = { p, q -> p == q }\n" +
+            "def b = $Point(x = 1, y = 2) != $Point(x = 1, y = 3)\n")
+    let calls =
+        typed.Module
+        |> List.collect (function
+            | Kind (Def (ValueDef(_, name, _, value))) ->
+                let rec calledIn (expr: Expression) =
+                    match expr.Kind with
+                    | FunctionCall(callee, _, args) -> callee :: List.collect calledIn args
+                    | Lambda(_, body) -> calledIn body
+                    | BinaryOp(_, left, right) -> calledIn left @ calledIn right
+                    | _ -> []
+                calledIn value |> List.map (fun callee -> name, callee)
+            | _ -> [])
+        |> List.filter (fun (_, callee) -> callee = "$Point.==")
+    Assert.Equal<(string * string) list>([ "b", "$Point.==" ], calls)
+
+[<Fact>]
+let ``A list of a type with its own == is compared through it, element by element`` () =
+    let typed =
+        compileClean (
+            "type $Email = string\n" +
+            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+            "def b = [$Email(\"a\")] != [$Email(\"b\")]\n" +
+            "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }\n")
+    Assert.Contains(InstanceSynthesized [ "==", "$Email.==" ], instancesOf typed)
+    let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
+    Assert.Contains(instances, function InstanceInScope (Kind (TypeApply("Eq", [ Kind (TypeVar "a") ]))) -> true | _ -> false)

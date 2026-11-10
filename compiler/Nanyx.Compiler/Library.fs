@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 open Parser.Program
+open NyxCompiler.ExpressionRewrites
 
 type CompilationPhase =
     | Parsed
@@ -136,68 +137,6 @@ module Compiler =
             | Kind (ModuleDecl name) -> Some name
             | _ -> None)
 
-    /// An expression with `visit` applied to every node, inner nodes first: `visit` is given the node as it was
-    /// (for its id) and its kind with the children already visited, and returns the node's new kind.
-    let private mapExpressionKinds (visit: Expression -> ExpressionKind -> ExpressionKind) (expr: Expression) : Expression =
-        let rec mapExpr (current: Expression) : Expression =
-            { current with Kind = visit current (mapKind current) }
-        and mapKind current =
-            match current.Kind with
-            | IdentifierExpr _ -> current.Kind
-            | FunctionCall(name, rangeOpt, args) ->
-                FunctionCall(name, rangeOpt, args |> List.map mapExpr)
-            | Lambda(parameters, body) ->
-                Lambda(parameters, mapExpr body)
-            | BinaryOp(op, left, right) ->
-                BinaryOp(op, mapExpr left, mapExpr right)
-            | Pipe(value, name, rangeOpt, args) ->
-                Pipe(mapExpr value, name, rangeOpt, args |> List.map mapExpr)
-            | Block statements ->
-                Block(statements |> List.map mapStatement)
-            | Match(values, arms) ->
-                let mappedValues = values |> List.map mapExpr
-                let mappedArms = arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr)
-                Match(mappedValues, mappedArms)
-            | Except(value, arms) ->
-                Except(mapExpr value, arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr))
-            | TupleExpr items -> TupleExpr(items |> List.map mapExpr)
-            | RecordExpr fields ->
-                RecordExpr(
-                    fields
-                    |> List.map (function
-                        | NamedField(name, value) -> NamedField(name, mapExpr value)
-                        | PositionalField value -> PositionalField(mapExpr value)))
-            | ListExpr items -> ListExpr(items |> List.map mapExpr)
-            | TagExpr(tagName, payloadOpt) -> TagExpr(tagName, payloadOpt |> Option.map mapExpr)
-            | IfExpr(cond, thenExpr, elseExpr) ->
-                IfExpr(mapExpr cond, mapExpr thenExpr, mapExpr elseExpr)
-            | MemberAccess(baseExpr, fieldName, rangeOpt) -> MemberAccess(mapExpr baseExpr, fieldName, rangeOpt)
-            | ContextMemberCall(ctxType, memberName, args) ->
-                ContextMemberCall(ctxType, memberName, args |> List.map mapExpr)
-            | UseIn(value, body) ->
-                UseIn(mapExpr value, mapExpr body)
-            | InterpolatedString parts ->
-                InterpolatedString(
-                    parts
-                    |> List.map (function
-                        | StringText text -> StringText text
-                        | StringExpr value -> StringExpr(mapExpr value)))
-            | WorkflowBindExpr(keyword, value) -> WorkflowBindExpr(keyword, mapExpr value)
-            | WorkflowReturnExpr value -> WorkflowReturnExpr(mapExpr value)
-            | ContextMemberAccess _
-            | UnitExpr
-            | LiteralExpr _ -> current.Kind
-        and mapStatement (statement: Statement) =
-            { statement with Kind = mapStatementKind statement.Kind }
-        and mapStatementKind kind =
-            match kind with
-            | DefStatement(isExport, name, typeOpt, value) -> DefStatement(isExport, name, typeOpt, mapExpr value)
-            | ExprStatement value -> ExprStatement(mapExpr value)
-            | UseStatement value -> UseStatement(mapExpr value)
-            | ImportStatement _
-            | TypeDefStatement _ -> kind
-        mapExpr expr
-
     /// Renames every reference to a name in `renames` throughout an expression. Used when a module is
     /// inlined into its importer, so that its definitions keep pointing at each other under their new names.
     /// A name that inference resolved to a parameter, a local definition or a pattern variable of the module
@@ -215,58 +154,6 @@ module Compiler =
             | FunctionCall(name, rangeOpt, args) -> FunctionCall(rename current name, rangeOpt, args)
             | Pipe(value, name, rangeOpt, args) -> Pipe(value, rename current name, rangeOpt, args)
             | other -> other)
-
-    /// Every pipe in an expression that inference resolved to an attached definition (`targets`, by the pipe's
-    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \String.trim`. So
-    /// is every call inference resolved to another definition: a hole that calls a derived `toString`.
-    let private retargetCalls (targets: Map<NodeId, Identifier>) (expr: Expression) : Expression =
-        if targets.IsEmpty then
-            expr
-        else
-            expr
-            |> mapExpressionKinds (fun current kind ->
-                match kind, targets |> Map.tryFind current.Id with
-                | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
-                | FunctionCall(_, rangeOpt, args), Some target -> FunctionCall(target, rangeOpt, args)
-                | other, _ -> other)
-
-    /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
-    /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``. `x != y` calls what `==` is
-    /// bound to, and becomes `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are
-    /// recorded by. A comparison of two structures calls the `==` derived for their type instead (`targets`, by the
-    /// operator's node).
-    let private callOperators (targets: Map<NodeId, Identifier>) (calls: Set<NodeId>) (expr: Expression) : Expression =
-        if calls.IsEmpty then
-            expr
-        else
-            expr
-            |> mapExpressionKinds (fun current kind ->
-                let called (op: string) = targets |> Map.tryFind current.Id |> Option.defaultValue op
-                match kind with
-                | BinaryOp(op, left, right) when calls.Contains current.Id && op = EqualityOperators.notEquals ->
-                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(called EqualityOperators.equals, None, [ left; right ]) } ])
-                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(called op, None, [ left; right ])
-                | other -> other)
-
-    /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
-    /// prelude's `List.length`, which every module imports.
-    let private builtInPropertyFunction (property: BuiltInProperty) : Identifier =
-        match property with
-        | StringLength -> Intrinsics.stringLength
-        | ListLength -> "List.length"
-
-    /// `expr` with each read of a built-in property (`properties`, by the member access's node) written as a call to
-    /// the function that reads it, for the backend, which knows only records' fields: `s.length` is
-    /// `__nanyx_string_length(s)`.
-    let private callBuiltInProperties (properties: Map<NodeId, BuiltInProperty>) (expr: Expression) : Expression =
-        if properties.IsEmpty then
-            expr
-        else
-            expr
-            |> mapExpressionKinds (fun current kind ->
-                match kind, properties |> Map.tryFind current.Id with
-                | MemberAccess(target, _, rangeOpt), Some property -> FunctionCall(builtInPropertyFunction property, rangeOpt, [ target ])
-                | other, _ -> other)
 
     /// `module'` with each name a block import brought in (`zero`, `$Money.new`) written as the definition it stands
     /// for (`money.zero`), which is the only name the backend knows. Only a name inference resolved to that definition
@@ -360,10 +247,10 @@ module Compiler =
     /// The inlined items `own` uses: the value definitions it reaches, directly or through other inlined
     /// definitions, and every type definition, in their original order. A definition named like a member of a
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the
-    /// runtime's `Console`, say) without anything naming it. So is each of `synthesized`, the attached definitions
-    /// an instance the type checker built is made of (`Int.toString` for a `ToString(int)`), which the backend
-    /// passes where the instance is required, again without anything naming it.
-    let private reachedItems (synthesized: string list) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
+    /// runtime's `Console`, say) without anything naming it. So is each attached definition an instance the type
+    /// checker built for a call in `own`, or in a definition kept, is made of (`instances`, by the call's node), as
+    /// `Int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed.
+    let private reachedItems (instances: Map<NodeId, ContextInstance option list>) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
         let bodies =
             inlined
             |> List.choose (function
@@ -379,8 +266,7 @@ module Compiler =
         let rootNames =
             own
             |> List.collect (function
-                | Kind (Def (ValueDef(_, _, _, value))) -> referencedNames value
-                | Kind (Expr value) -> referencedNames value
+                | Kind (Def (ValueDef(_, _, _, value))) | Kind (Expr value) -> referencedNames value @ synthesizedMembersIn instances value
                 | _ -> [])
         let isReferenced (referenced: Set<string>) (name: string) =
             referenced.Contains name
@@ -392,9 +278,9 @@ module Compiler =
             if newlyReached.IsEmpty then
                 reached
             else
-                let referenced = newlyReached |> List.collect (snd >> referencedNames) |> List.fold (fun acc name -> Set.add name acc) referenced
+                let referenced = newlyReached |> List.collect (fun (_, value) -> referencedNames value @ synthesizedMembersIn instances value) |> List.fold (fun acc name -> Set.add name acc) referenced
                 reach referenced (newlyReached |> List.fold (fun acc (name, _) -> Set.add name acc) reached)
-        let reached = reach (Set.ofList (rootNames @ synthesized)) Set.empty
+        let reached = reach (Set.ofList rootNames) Set.empty
         inlined
         |> List.filter (function
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name
@@ -1122,13 +1008,14 @@ module Compiler =
             | _ -> kind)
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function or a derived definition written with the name it resolved to (`callTargets`), each operator that calls a definition as
-    /// that call (`operatorCalls`), each read of a built-in property as a call (`properties`), each builder block that
-    /// uses no keyword as its block (`workflowBlocks`), and without import statements. `defer` compiles the module's
-    /// errors to traps first, for a debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (callTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    /// attached function, and each hole that calls a derived definition, written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
+    /// that call (`operatorCalls`), each expression inference read as another as that one (`readAs`),
+    /// each read of a built-in property as a call (`properties`), each builder block that uses no keyword as its block
+    /// (`workflowBlocks`), and without import statements. `defer` compiles the module's errors to traps first, for a
+    /// debug build.
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (readAs: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetCalls callTargets |> callOperators callTargets operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> writeAsRead readAs |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1405,22 +1292,18 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
-                let synthesizedMembers =
-                    Seq.append (Map.values state.ContextInstances) (Map.values inlinedInstances)
-                    |> Seq.concat
-                    |> Seq.collect (function Some (InstanceSynthesized members) -> members |> List.map snd | _ -> [])
-                    |> List.ofSeq
+                let instances = inlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     inlined @ preludeInlined
                     |> List.filter (function
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> distinctDefinitions
-                    |> reachedItems synthesizedMembers own
+                    |> reachedItems instances own
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.

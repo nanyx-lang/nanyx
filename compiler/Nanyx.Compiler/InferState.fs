@@ -82,10 +82,10 @@ type InferState =
             /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
             /// (see `EqualityOperators`).
             HoleScopes: Map<NodeId, TypeEnv * Identifier option>;
-            /// The type variables each local function compares values of, among those it is generic in, by the
-            /// function's symbol: a call to it needs an `Eq` of the types they are at the call (see
-            /// `EqualityOperators.checkLocalCall`).
-            LocalComparisons: Map<SymbolId, Set<int>>;
+            /// The type variables each local function compares or orders values of, among those it is generic in, by
+            /// the function's symbol and then by the well-known context it needs of them (`Eq`, `Ord`): a call to it
+            /// needs that context of the types they are at the call (see `WellKnownContexts.checkLocalCall`).
+            LocalComparisons: Map<SymbolId, Map<Identifier, Set<int>>>;
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
             InferredContextTypes: Map<SymbolId, Ty list>;
@@ -129,9 +129,14 @@ type InferState =
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
             /// `x \trim` on a string calls `String.trim`.
             PipeTargets: Map<NodeId, Identifier>;
-            /// The operators that call the definition their name is bound to, by the operator's node: `x + y` in a
-            /// function that requires `[Sum(a)]` calls the context's `` `+` ``.
-            OperatorCalls: Set<NodeId>;
+            /// The operators that call a definition, by the operator's node, with the name they call it by: `x + y`
+            /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
+            /// `` $Vector.`+` `` when that is attached.
+            OperatorCalls: Map<NodeId, Identifier>;
+            /// The expressions inference read as another, by the node of the one written, each with what it is written
+            /// as: `0` in `x + 0`, where `x` is of a type variable `a` of a function that requires `Add(a)`, is `zero`,
+            /// and `x ** n` is `__pow(x, n)` (see `ArithmeticOperators`).
+            ReadAs: Map<NodeId, Expression>;
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
@@ -220,7 +225,8 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
-            OperatorCalls = Set.empty;
+            OperatorCalls = Map.empty;
+            ReadAs = Map.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;

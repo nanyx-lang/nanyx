@@ -4,13 +4,76 @@ description: "Add, Num, the arithmetic operators and number literals in generic 
 order: 9
 ---
 
-> **Status: agreed, step 1 of the [order of work](#order-of-work) done.** It answers the questions in
+> **Status: agreed, steps 1 to 5 of the [order of work](#order-of-work) done, but for `math.abs`, `min`, `max` and `clamp`, which wait on `Ord`.** It answers the questions in
 > [#606](https://github.com/nanyx-lang/nanyx/issues/606) and picks up where
 > [Equality and well-known contexts](./equality-and-well-known-contexts#numeric-operators) stops. The decisions are
-> listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work). The code references under [What exists today](#what-exists-today)
-> are at commit `af48c0a`, before step 1.
+> listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work).
+> [What is implemented](#what-is-implemented) says where the code is now; the references under
+> [What existed before](#what-existed-before) are at commit `af48c0a`, before step 1.
 
-# What exists today
+# What is implemented
+
+`Nanyx.Compiler/ArithmeticOperators.fs` holds the checks and the names; `OperatorCalls.fs` decides which operators
+call a definition; `ContextShapes.fs` lets an instance of one context serve another whose members it has; the
+prelude declares `Add(a)` and `Num(a)`.
+
+- **`%` is checked** with the other arithmetic operators, and an operand already known not to be a number is
+  reported naming the operator: `'string' cannot be used with %: it is not a number`. Floats have a remainder, the
+  runtime helper `__nanyx_float_rem` ([#607](https://github.com/nanyx-lang/nanyx/issues/607)).
+- **An operator on a type that attaches it calls the attached definition**: `v + w` on a `$Vector` calls
+  `` $Vector.`+` `` ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
+- **`Add(a)` is a prelude context**, with `zero`, `` `+` ``, `` `-` `` and `negate`. On a type variable of a
+  function that requires it, `+` and `-` call its members, as an operator whose name is bound does. A function that
+  writes its type and adds, subtracts or negates values of one of its variables without `[Add(a)]` is `NYX0205`:
+  `'total' adds values of type 'a' with +, so its type must require Add(a): add [Add(a)] to the type of 'total'`.
+- **The compiler's own `Add(int)` and `Add(float)`** are the members the prelude attaches to `Int` and `Float`
+  (`Int.zero`, `` Int.`+` ``, ...), found by the usual synthesis by name. A `+` on an `int` is still the built-in
+  operator, not a call; only generic code is passed the members.
+- **Prefix `-x`** parses, as a call to the reserved `__negate` (`NegateSyntax`). On `int` it is `0 - x`, and on
+  `float` `-0.0 - x`, which is IEEE 754's negation. On any other type it calls that type's attached `negate`, or the
+  `negate` of the `Add` the function requires. In a shorthand lambda's body a leading `-` stays the infix operator,
+  so `{ -x }` is `{ n -> n - x }`.
+- **`0` reads as `zero`** where it is an operand of an arithmetic operator and the other operand is of a variable of
+  the type the function writes, in a function that requires `Add` of it: `x + 0` (`InferState.LiteralMembers`).
+- **`List.sum: [Add(a)] list(a) -> a`** ([#475](https://github.com/nanyx-lang/nanyx/issues/475)).
+- **`Num(a)` is a prelude context**, with `Add`'s members and `` `*` ``, `` `/` ``, `` `%` `` and `fromInt`; `*`, `/`
+  and `%` on a type variable call its members, and without `[Num(a)]` are `NYX0205`, as `+` is without `Add`. The
+  compiler's own `Num(int)` and `Num(float)` are again the members the prelude attaches to `Int` and `Float`
+  ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
+- **Integer literals are `fromInt`** where `0` would be `zero` and the function requires `Num`: `x * 2` is
+  `` `*`(x, fromInt(2)) ``. In a function that requires only `Add`, such a literal is `NYX0205`, `'1' is an 'a' here,
+  which needs Num(a): add [Num(a)] to the type of 'inc'`, and a decimal literal there is `NYX0201`, `'0.5' cannot be
+  an 'a': 'a' may be an integer type. Take the value as a parameter`. A `fromInt` is a call at run time, not folded
+  to a constant.
+- **A `Num` serves as an `Add`.** An instance in scope of a context that has every member of the one a call needs,
+  at the same types, is found for it (`ContextShapes.wider`), so a `[Num(a)]` function can call `List.sum`.
+- **`**` parses**, binding tighter than `*` and grouping to the right, and `x ** n` is read as a call to the
+  prelude's reserved `__pow` (`ArithmeticOperators.inferPower`, `InferState.ReadAs`), which no module's own `pow`
+  can shadow. The prelude's `pow` and `math.pow` are `{ b, n -> b ** n }`. `__pow` squares repeatedly, so it takes
+  as many steps as the exponent has bits ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
+- **`Float.pow(x, y)`** takes any `y`: a whole one is `x ** y`, and any other `e ** (y * ln(x))`, with `exp` and `ln`
+  written in the prelude from their series, since WebAssembly has neither.
+- **An instance built for a call in the prelude is only compiled when that call is**: the definitions it is made of
+  are reached from the definition the call is in, not from every module (`Library.reachedItems`).
+
+Not done yet:
+
+- **A negative exponent on an integer type** is `1 / x ** -n`, which truncates, rather than stopping the program as
+  the design says: `__pow` is generic, and cannot tell an integer type from a float without a member to ask.
+- **`math` is still `int` only.** `abs` needs `Ord(a)` to compare with `zero`, and `min`, `max` and `clamp` need only
+  `Ord(a)`, so they wait on [#476](https://github.com/nanyx-lang/nanyx/issues/476) (the rest of
+  [#186](https://github.com/nanyx-lang/nanyx/issues/186)).
+
+- **`0` elsewhere in generic code.** A `0` that is not an operand beside a value of the type variable, such as the
+  start of a `fold` or a function's result, is still an `int`; write `zero` there. Literals are typed before the
+  type they are expected to have is known, so reading them by their expected type needs a pass after the def is
+  inferred.
+- **`use` does not change concrete arithmetic** (decision 6): an `Add(int)` loaded with `use` reaches generic code
+  called from its block, but a concrete `1 + 2` there is still the built-in `+`.
+- **A user context can still give `+` another meaning**: an operator calls whatever its name is bound to on a type
+  variable, so a user's `context Sum(a) = (`` `+` ``: ...)` still works.
+
+# What existed before
 
 - **Parsing.** `*`, `/` and `%` bind tighter than `+` and `-` (`Nanyx.Parser/Program.fs:714-722`). There is no `**`,
   although [operators.md](../tour/operators) lists it, and no prefix `-`: `-5` is one literal token
@@ -31,8 +94,9 @@ order: 9
 - **Generic code.** Where an operator's name is bound, as `` `+` `` is in a function that requires a user's
   `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
   (`OperatorCalls.fs:37-43`). That is how [contexts.md](../advanced/contexts#contexts-as-typeclasses)'s `Sum(a)` and
-  `Add(a)` work. Context members named in backticks parse (`prelude.nyx:61`); attached definitions named in
-  backticks do not ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
+  `Add(a)` work. Context members named in backticks parse (`prelude.nyx:61`), and so do attached definitions
+  named in backticks. *Since step 2:* an operator on a type that attaches it, `` def $Vector.`+` = ... ``, calls
+  that definition ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 - **`Num(a)` does not exist.** The docs use it: [math.md](../stdlib/math)'s `abs`, `min`, `max`, `clamp` and `pow`
   are `[Num(a)]`, but `math.nyx` takes `int` only ([#186](https://github.com/nanyx-lang/nanyx/issues/186)), and
   [types.md](../tour/types) says numeric operations are generic over it.
@@ -259,14 +323,16 @@ The language server's code action for the second and fourth adds the requirement
 
 1. **Done.** Check `%` as the other arithmetic operators are, and give floats a remainder: a bug fix that needs none
    of the rest ([#607](https://github.com/nanyx-lang/nanyx/issues/607)).
-2. Attached operator definitions ([#527](https://github.com/nanyx-lang/nanyx/issues/527)), shared with `Eq`.
-3. `Add` in the prelude; `+` and `-` read through it; the compiler's own instances for `int` and `float`; prefix `-`;
-   `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
+2. **Done.** Attached operator definitions ([#527](https://github.com/nanyx-lang/nanyx/issues/527)), shared with
+   `Eq`.
+3. **Done**, but for `0` outside an operand and `use` on concrete arithmetic (see [What is
+   implemented](#what-is-implemented)). `Add` in the prelude; `+` and `-` read through it; the compiler's own
+   instances for `int` and `float`; prefix `-`; `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
    ([#609](https://github.com/nanyx-lang/nanyx/issues/609)).
-4. `Num`; `*`, `/` and `%` read through it; `fromInt` literals. Makes `math.abs` generic (#186); `min`, `max` and
-   `clamp` wait on `Ord` ([#476](https://github.com/nanyx-lang/nanyx/issues/476))
-   ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
-5. `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
+4. **Done**, but for `math`, which waits on `Ord`. `Num`; `*`, `/` and `%` read through it; `fromInt` literals.
+   Makes `math.abs` generic (#186); `min`, `max` and `clamp` wait on `Ord`
+   ([#476](https://github.com/nanyx-lang/nanyx/issues/476)) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
+5. **Done.** `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 6. Instances for the sized numbers as they land ([#343](https://github.com/nanyx-lang/nanyx/issues/343)), and the
    dimension rules for `*` and `/` with units.
 

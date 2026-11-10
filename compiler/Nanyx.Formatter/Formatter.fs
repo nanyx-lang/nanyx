@@ -37,6 +37,7 @@ let private operandPosition = { Inline = false; Tail = false; Prec = 9 }
 
 let private precedence op =
     match op with
+    | "**" -> 8
     | "*" | "/" | "%" -> 7
     | "+" | "-" -> 6
     | "++" -> 5
@@ -47,7 +48,10 @@ let private precedence op =
     | _ -> 6
 
 /// The operators the parser takes where it does not cross lines (see `Position.Inline`).
-let private inlineOperators = set [ "*"; "/"; "+"; "-"; "++"; "<"; ">"; "<="; ">="; "=="; "!=" ]
+let private inlineOperators = set [ "**"; "*"; "/"; "+"; "-"; "++"; "<"; ">"; "<="; ">="; "=="; "!=" ]
+
+/// The operators that group to the right: `a ++ b ++ c` is `a ++ (b ++ c)`, and `2 ** 3 ** 2` is `2 ** (3 ** 2)`.
+let private rightAssociative = set [ "++"; "**" ]
 
 /// The name a destructuring def binds its whole value to (see `Syntax`).
 let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
@@ -318,6 +322,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | BinaryOp(op, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
         | RangeSyntax.Call _ -> 4 < position.Prec || position.Inline
         | FunctionCall("not", _, [ _ ]) -> 8 < position.Prec || position.Inline
+        | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> 8 < position.Prec
         | Pipe _ -> 0 < position.Prec
         | _ when isOpenEnded e -> not position.Tail || position.Prec > 8
         | _ -> false
@@ -347,6 +352,15 @@ let format (options: Options) (parsed: SourceModule) : string =
             | Some segments -> listDoc e.Span segments
             | None -> binary position op l r
         | FunctionCall("not", _, [ operand ]) -> cat [ text "not "; expr operandPosition operand ]
+        // `-` is written against its operand. A number or another negation after it is parenthesized, since `-5` is a
+        // literal and `--` starts a comment.
+        | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
+            let joinsTheMinus =
+                match operand.Kind with
+                | LiteralExpr(IntLit _ | FloatLit _) -> true
+                | FunctionCall(inner, _, [ _ ]) -> inner = NegateSyntax.builtIn
+                | _ -> false
+            cat [ text "-"; (if joinsTheMinus then parens (exprBare full operand) else expr operandPosition operand) ]
         | RangeSyntax.Call(a, Some b) ->
             cat [ expr { position with Tail = false; Prec = 4 } a; text ".."; expr { position with Prec = 5 } b ]
         | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = 4 } a; text ".." ]
@@ -427,13 +441,13 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// parser takes a line break after an operator, not before one), and the lines after the first indented once.
     and binary (position: Position) (op: string) (l: Expression) (r: Expression) : Doc =
         let p = precedence op
-        let rightAssociative = op = "++"
+        let isRight = rightAssociative.Contains op
         // A node of the chain: same precedence, needing no brackets where it is, and not a list with spreads.
         let continues (x: Expression) =
             match x.Kind with
             | BinaryOp(op', _, _) ->
                 precedence op' = p
-                && (op' = "++") = rightAssociative
+                && rightAssociative.Contains op' = isRight
                 && not (position.Inline && not (inlineOperators.Contains op'))
                 && (spreadSegments x).IsNone
             | _ -> false
@@ -450,7 +464,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                 a :: operands, writtenOperator op' a b :: operators
             | _ -> [ x ], []
         let operands, operators =
-            if rightAssociative then
+            if isRight then
                 let rest, operators = flattenRight r
                 l :: rest, writtenOperator op l r :: operators
             else
@@ -460,7 +474,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let operandDoc index operand =
             let isLast = index = count - 1
             let prec =
-                if rightAssociative then (if isLast then p else p + 1)
+                if isRight then (if isLast then p else p + 1)
                 else (if index = 0 then p else p + 1)
             expr { position with Tail = isLast && position.Tail; Prec = prec } operand
         let docs = List.mapi operandDoc operands

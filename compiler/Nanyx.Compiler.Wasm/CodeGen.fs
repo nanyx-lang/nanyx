@@ -650,6 +650,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     for helper in CoreIrEquality.helpersUsed equalityTypes do
         usedHelpers.Add helper |> ignore
 
+    // An ordering function for each type the ordering intrinsic or an operator orders, and for each of its parts.
+    let orderingTypes = CoreIrOrdering.collect (definitionFunctions @ Option.toList startFunction)
+    let renderedOrderings = CoreIrOrdering.render orderingTypes |> String.concat "\n\n"
+    for helper in CoreIrOrdering.helpersUsed orderingTypes do
+        usedHelpers.Add helper |> ignore
+
     let report =
         { Functions = [ yield! definitionFunctions |> List.map _.Name; yield! startFunction |> Option.map _.Name |> Option.toList ]
           Specialisations =
@@ -800,6 +806,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               if not (String.IsNullOrWhiteSpace renderedFunctions) then renderedFunctions
               if not (String.IsNullOrWhiteSpace renderedDrops) then renderedDrops
               if not (String.IsNullOrWhiteSpace renderedEqualities) then renderedEqualities
+              if not (String.IsNullOrWhiteSpace renderedOrderings) then renderedOrderings
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
         let body = String.concat "\n\n" parts

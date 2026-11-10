@@ -26,9 +26,12 @@
     <Compile Include="TypeHoles.fs" />
     <Compile Include="ArmUnion.fs" />
     <Compile Include="InterpolationHoles.fs" />
+    <Compile Include="WellKnownContexts.fs" />
     <Compile Include="EqualityOperators.fs" />
+    <Compile Include="OrderingOperators.fs" />
     <Compile Include="AttachedOperators.fs" />
     <Compile Include="ArithmeticOperators.fs" />
+    <Compile Include="ContextShapes.fs" />
     <Compile Include="ContextInference.fs" />
     <Compile Include="StructuralInstances.fs" />
     <Compile Include="OperatorCalls.fs" />
@@ -38,6 +41,7 @@
     <Compile Include="TailPosition.fs" />
     <Compile Include="Linters.fs" />
     <Compile Include="ImportFixes.fs" />
+    <Compile Include="ExpressionRewrites.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />

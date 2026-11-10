@@ -4,20 +4,27 @@ description: "What equality is, and which contexts the compiler knows about"
 order: 8
 ---
 
-> **Status: agreed, partly implemented.** `Eq(a)` is in the prelude, `==` and `!=` require it, and functions have no
-> equality; [What is implemented](#what-is-implemented) says what is done and what is left of
-> [#532](https://github.com/nanyx-lang/nanyx/issues/532). The decisions are listed under
-> [Open questions](#open-questions); one small question remains. The code references under
-> [What existed before](#what-existed-before) are at commit `b84acc0`.
+> **Status: agreed, partly implemented.** `Eq(a)` and `Ord(a)` are in the prelude: `==` and `!=` require `Eq`, `<`,
+> `<=`, `>` and `>=` require `Ord`, functions have no equality, and records and tags have no order.
+> [What is implemented](#what-is-implemented) says what is done and what is left of
+> [#532](https://github.com/nanyx-lang/nanyx/issues/532) and [#476](https://github.com/nanyx-lang/nanyx/issues/476).
+> The decisions are listed under [Open questions](#open-questions); one small question remains. The code references
+> under [What existed before](#what-existed-before) are at commit `b84acc0`.
 
 # What is implemented
 
-`Nanyx.Compiler/EqualityOperators.fs` holds the checks; the prelude declares `Eq(a)` and `__equals`.
+`Nanyx.Compiler/WellKnownContexts.fs` holds what the two contexts share: which types the compiler has an instance of
+its own for, how a call that requires one finds it, and how an operator on a type with a variable in it is checked
+once the type is known. `EqualityOperators.fs` and `OrderingOperators.fs` hold what is particular to each context's
+operators. The prelude declares `Eq(a)` and `__equals`, and `Ord(a)`, `__compare` and the four functions the ordering
+operators call.
+
+## Equality
 
 - **`Eq(a)` is a prelude context**, `` context Eq(a) = (`==`: (a, a) -> bool) ``.
 - **Functions have no equality.** `==` or `!=` on a function, or on a record, list, tag or nominal type that holds
   one, is `NYX0205` at the comparison, naming the part that is a function. So is passing such a type to a function
-  that requires `Eq`.
+  that requires `Eq`, unless the type attaches its own `==`, which is found first.
 - **Generic code says it compares.** `==` on a type variable of a def that writes its type needs `[Eq(a)]` in that
   type. A def that does not write its type has the requirement inferred, and its `==` then calls the member of the
   instance it is passed. A requirement on a type built from a variable reduces to the variable: `==` on a `list(a)`
@@ -28,11 +35,11 @@ order: 8
   generic function that compares by structure at the type it is specialised for.
 - **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
-  the rule, with a list of the members it covers for `compare` and `hash` to join.
+  the rule, with a list of the members it covers, `==` and `compare`, for `hash` to join.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
-  of its own type variables requires `Eq` of it (`EqualityOperators.checkLocalCall`). Only a call by name is
+  of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). Only a call by name is
   checked, not a local function passed as a value. A local generic function compares strings and lists wrongly in
   the backend ([#616](https://github.com/nanyx-lang/nanyx/issues/616)).
 - **The operands are joined when one is a tag.** `{ o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))`
@@ -40,14 +47,24 @@ order: 8
   `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still
   names `Point`. The official linter's `noTagInCommon` rule warns about `#red == #some(1)`: closed types with no tag
   in common.
-- **A concrete `a == b` calls the `==` attached to the type**, if it has one. Inside that definition itself, `==` on
-  the type stays the compiler's own.
-- **Structural derivation that looks up each part.** A tag with a payload, a tuple, a record or a list with a part
-  that has an `==` of its own, one attached to the part's type or the `Eq` a function requires of a type variable,
-  is compared by a definition the compiler derives (`Nanyx.Compiler/StructuralInstances.fs`), which compares each
-  part with `==`. So a `list($Email)` compares its elements with `` $Email.`==` ``, and inside a function that
-  requires `[Eq(a)]`, `==` on a `list(a)` or a `#some(a)` compares through the instance. A structure with no such
-  part is still compared by the compiler's own. `ToString` is derived the same way (see
+- **A concrete `a == b` is a lookup too** (decision 2). Where `==` is bound to a definition that takes the operands,
+  as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other; else, on
+  a type with a `==` attached, it calls that, as any operator on a type that attaches it does (`OperatorCalls.fs`,
+  [#527](https://github.com/nanyx-lang/nanyx/issues/527)). Inside the attached `==` itself, `==` on its own type is
+  the built-in comparison.
+
+- **A list is compared through its elements' `Eq`.** `==` and `!=` on two lists whose elements have an `Eq` other
+  than the compiler's own (one in scope, or an attached `==`) call the prelude's `__listEquals` with it
+  (`WellKnownContexts.throughElements`): `[$Email("a")] == [$Email("b")]` uses `` $Email.`==` ``, and so does `==` on a
+  `list(a)` in a function that requires `[Eq(a)]` with the `Eq(a)` it is passed. `Ord` does the same for `<`.
+
+- **Structural derivation that looks up each part** ([#631](https://github.com/nanyx-lang/nanyx/issues/631)). A tag
+  with a payload, a tuple, a record or a list of them with a part that has an `==` of its own, one attached to the
+  part's type or the `Eq` a function requires of a type variable, is compared by a definition the compiler derives
+  (`Nanyx.Compiler/StructuralInstances.fs`), which compares each part with `==`. So a record that holds an `$Email`
+  compares it with `` $Email.`==` ``, and inside a function that requires `[Eq(a)]`, `==` on a `#some(a)` compares
+  through the instance, also where the operands' type is only known later. A structure with no such part is still
+  compared by the compiler's own. `ToString` is derived the same way (see
   [printing values](./printing-values#structures)).
 
 Not done yet:
@@ -55,12 +72,46 @@ Not done yet:
 - **A derived `==` reads only what the top of the module can see**
   ([#630](https://github.com/nanyx-lang/nanyx/issues/630)). It uses a part's attached `==`, and the `Eq` of
   a type variable, but not an `Eq` of a concrete part loaded by `use` in a block. A call that requires `Eq` of a
-  structure with a type variable in it, `same([x], [y])` inside a function that requires `[Eq(a)]`, is passed the
-  compiler's own instance, not one built from `Eq(a)`: compare with `==` there.
-- **A concrete `a == b` is still the built-in comparison** for a built-in type with an `Eq` loaded by `use`
-  (decision 2 below).
+  structure with a type variable in it, `same(#some(x), #some(y))` inside a function that requires `[Eq(a)]`, is
+  passed the compiler's own instance, not one built from `Eq(a)`: compare with `==` there.
 - **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
   function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
+
+## Ordering
+
+- **`Ord(a)` is a prelude context**, `context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)`, and the
+  four operators read it, so they cannot disagree. `Ord` does not require `Eq`.
+- **The compiler's own orders** numbers, bools (`false` first), strings (by bytes), and tuples and lists of them,
+  lexicographically. On floats the operators follow IEEE 754, while `__compare`, the member of the compiler's own
+  instance, and `Float.compare` are a total order with NaN last, so `List.sort` of floats is well defined. The
+  backend writes one ordering function per type (`CoreIrOrdering.fs`), reached through the intrinsic
+  `__nanyx_compare`. `Int`, `Float`, `Bool` and `String` each attach a `compare` that is the compiler's own, as a
+  function to call; a built-in type's `Ord` is always the compiler's own, so nothing reads an attached `compare` for one.
+- **Records, tags and functions have no order.** `<` on one, or on a tuple or list that holds one, is `NYX0205` at
+  the operator, naming the part; so is passing one to a function that requires `Ord`. The message for a record or
+  tag says to attach `compare` to a nominal type, or to sort by a key.
+- **Generic code says it orders**, as for `Eq`: `<` on a type variable needs `[Ord(a)]` in a written type, and has
+  it inferred in a def that does not write one. `<` on a `list(a)` needs `Ord(a)`.
+- **Instances.** An operator, like a call, finds an instance in scope (a `use`, decision 2, or the enclosing
+  signature, which also covers a concrete `"a" < "b"`), then the `compare` attached to a type that is not a built-in
+  one, then the compiler's own. Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
+  (and `<=`, `>`, `>=` call `__lessOrEqual`, `__greater` and `__greaterOrEqual`), which is passed the instance.
+- **Only nominal and protected types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
+  as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
+- **Lists.** `List.sort` and `List.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `List.min` and
+  `List.max`, which give `#emptyList` for an empty list, as `List.head` does.
+- **Local functions are checked at each call**, as for `Eq`: a call to a local `def lt = { x, y -> x < y }` with
+  records is `NYX0205` at the call, and a def that calls it with one of its own type variables requires `Ord` of it.
+- **A list is ordered through its elements' `Ord`**, as for `Eq`: `[v(1), v(2)] < [v(3)]` on `list($Version)` calls
+  the prelude's `__listLess` (and `__listLessOrEqual`, `__listGreater`, `__listGreaterOrEqual`) with
+  `$Version.compare`, lexicographically with a prefix first, and so does `<` on a `list(a)` in a function that
+  requires `[Ord(a)]`.
+
+Not done yet, as for `Eq`:
+
+- **Structural derivation that looks up each part, beyond one list.** A tuple holding a `$Version`, or a list of lists
+  of them, is still an error, and `<` on a `list(a)` whose type is only known later orders by structure
+  ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
 
 # What existed before
 
@@ -130,7 +181,7 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 | The docs say | The compiler does |
 |---|---|
 | Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. An operator on a value of a type variable calls the member of that name of a context the function requires. |
-| A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks does not parse, attached or not, and neither does an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). So the docs' `Eq(a)` and `Sum(a)`, whose members are `` `==` `` and `` `+` ``, cannot be declared. |
+| A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks did not parse, attached or not, and neither did an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). *Since fixed:* they parse, and `a + b` on a type that attaches `` `+` `` calls it. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
 | `List.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
@@ -282,13 +333,10 @@ block, which is what that page already proposes.
 
 # Numeric operators
 
-`+`, `-`, `*`, `/`, `%` and `**` stay as they are for now: typed directly, on numbers only, with `++` on strings and
-lists. The one exception is generic code: where an operator's name is bound, as `` `+` `` is in a function that
-requires `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
-(`OperatorCalls.fs`), so `{ x, y -> x + y }` can be `[Sum(a)] a, a -> a`. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
-operator or one `Num`, how literals like `0` are typed, and how units and dimensions fit. They are answered in
+Making the arithmetic operators well-known contexts raises separate questions: one context per operator or one
+`Num`, how literals like `0` are typed, and how units and dimensions fit. They are answered in
 [Numeric contexts](./numeric-contexts), which keeps the principle this design sets: a built-in operator is sugar for
-a well-known context's member.
+a well-known context's member. `+`, `-` and prefix `-` now read through the prelude's `Add(a)`.
 
 # Diagnostics
 
@@ -318,7 +366,8 @@ The language server's code action for the third adds the requirement to the sign
 
 # Order of work
 
-1. Parse backtick-named definitions and context members ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
+1. **Done.** Parse backtick-named definitions and context members, and call an attached operator
+   ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 2. `Eq` in the prelude; `==` and `!=` read through it; structural derivation; per-type equality functions in the
    backend; the join for open unions. Closes #424 and #526.
 3. `Ord`, `compare` and the four operators; `List.sort`, `min`, `max`, generic `sortBy`. Closes #476.

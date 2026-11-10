@@ -28,24 +28,21 @@ let private needsFunction (ty: IrType) =
     | IrFunction _
     | IrError -> false
 
-/// The types whose equality functions the functions of a module call, in the order they are first needed: each type
-/// `==` compares at, and the parts of those types that need a function of their own too.
-let collect (functions: Function list) : IrType list =
+/// The types of the operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
+/// (`parts` gives a type's own), each once, in the order they are first needed, where `needsFunction` holds: the types
+/// a module needs a function of its own of, each written by its operands' structure.
+let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -> IrType list) (functions: Function list) : IrType list =
     let types = ResizeArray<IrType>()
     let seen = HashSet<IrType>()
 
     let rec add (ty: IrType) =
         if needsFunction ty && seen.Add ty then
             types.Add ty
-            match ty with
-            | IrList element -> add element
-            | IrRecord fields -> fields |> List.iter (snd >> add)
-            | IrTags tags -> tags |> List.iter (snd >> Option.iter add)
-            | _ -> ()
+            parts ty |> List.iter add
 
     let rec expr (e: Expr) =
         match e.Kind with
-        | CallRuntime(name, [ first; _ ], _) when name = Helpers.valueEquals -> add (atomType first)
+        | CallRuntime(name, [ first; _ ], _) when name = helper -> add (atomType first)
         | Let(_, value, body) ->
             expr value
             expr body
@@ -99,6 +96,17 @@ let collect (functions: Function list) : IrType list =
     for func in functions do
         expr func.Body
     List.ofSeq types
+
+/// The types whose equality functions the functions of a module call, in the order they are first needed: each type
+/// `==` compares at, and the parts of those types that need a function of their own too.
+let collect (functions: Function list) : IrType list =
+    let parts (ty: IrType) =
+        match ty with
+        | IrList element -> [ element ]
+        | IrRecord fields -> fields |> List.map snd
+        | IrTags tags -> tags |> List.choose snd
+        | _ -> []
+    collectFor Helpers.valueEquals needsFunction parts functions
 
 /// The code that compares the two values `loadA` and `loadB` leave on the stack, as values of type `ty`, and leaves 1
 /// when they are equal.

@@ -112,9 +112,18 @@ let ``A structure with a part that has an == attached is compared by a derived =
         compileClean (
             "type $Email = string\n" +
             "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
-            "def b = [$Email(\"a\")] == [$Email(\"b\")]\n" +
-            "def c = [$Email(\"a\")] != []\n")
+            "def b = #some($Email(\"a\")) == #some($Email(\"b\"))\n" +
+            "def c = #some($Email(\"a\")) != #some($Email(\"c\"))\n")
     Assert.Equal(1, (derivedDefs "__equals_" typed).Length)
+
+[<Fact>]
+let ``A list whose elements have an == attached is compared through it without a derived ==`` () =
+    let typed =
+        compileClean (
+            "type $Email = string\n" +
+            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+            "def b = [$Email(\"a\")] == [$Email(\"b\")]\n")
+    Assert.Empty(derivedDefs "__equals_" typed)
 
 [<Fact>]
 let ``A function that requires Eq is passed the one derived for a structure whose part has an == attached`` () =

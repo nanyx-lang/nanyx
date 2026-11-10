@@ -3,19 +3,6 @@ module TranspilerWasmTests.Features.Equality.Run
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// A program that prints `T` or `F` for each of `comparisons`, one per line, after the definitions in `definitions`.
-let private comparing (definitions: string list) (comparisons: string list) =
-    [ "import nanyx/console"
-      ""
-      "def show = { b -> if b then \"T\" else \"F\" }"
-      yield! definitions
-      ""
-      "@entry"
-      "def main = {"
-      "  def s = \"a\" ++ \"a\""
-      yield! comparisons |> List.map (fun comparison -> $"  println(show({comparison}))")
-      "}" ]
-    |> String.concat "\n"
 
 [<Fact>]
 let ``Run - records and tuples compare field by field`` () =
@@ -129,3 +116,51 @@ let ``Run - comparing with a tag takes a value of any union that has it`` () =
           "isNone(#some(s))" ]
     |> runSource
     |> assertRan "T\nF\nF\n"
+let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
+    comparing
+        [ "type $Point = (x: int, y: int)"
+          "def $Point.`==`: $Point, $Point -> bool = { p, q -> p.x == q.x }" ]
+        [ "$Point(x = 1, y = 2) == $Point(x = 1, y = 3)"
+          "$Point(x = 1, y = 2) != $Point(x = 1, y = 3)"
+          "$Point(x = 1, y = 2) == $Point(x = 2, y = 2)" ]
+    |> runSource
+    |> assertRan "T\nF\nF\n"
+
+[<Fact>]
+let ``Run - an Eq loaded with use changes a concrete comparison in its block`` () =
+    comparing
+        [ "def always: Eq(string) = (`==` = { a, b -> true })"
+          "def loose = { a, b ->"
+          "  use always"
+          "  a == b"
+          "}"
+          "def literal = { a, b ->"
+          "  use (`==` = { x, y -> false })"
+          "  a == b"
+          "}" ]
+        [ "loose(\"ab\", \"cd\")"
+          "loose(\"ab\", \"ab\")"
+          "literal(\"ab\", \"ab\")"
+          "\"ab\" == \"cd\"" ]
+    |> runSource
+    |> assertRan "T\nT\nF\nF\n"
+
+[<Fact>]
+let ``Run - a list of a type with its own == is compared through it, element by element`` () =
+    comparing
+        [ "type $Email = string"
+          "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
+          "def always: Eq(string) = (`==` = { a, b -> true })"
+          "def loose: list(string), list(string) -> bool = { xs, ys ->"
+          "  use always"
+          "  xs == ys"
+          "}"
+          "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }" ]
+        [ "[$Email(\"a\")] == [$Email(\"b\")]"
+          "[$Email(\"a\")] != [$Email(\"b\")]"
+          "[$Email(\"a\")] == [$Email(\"a\"), $Email(\"b\")]"
+          "same([$Email(\"a\")], [$Email(\"b\")])"
+          "loose([\"a\"], [\"b\"])"
+          "[\"a\"] == [\"b\"]" ]
+    |> runSource
+    |> assertRan "T\nF\nF\nT\nT\nF\n"

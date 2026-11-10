@@ -217,6 +217,36 @@ Applies a function to every element in a list, collecting the results in a new l
 
 ---
 
+## max
+
+```nanyx
+List.max: [Ord(a)] list(a) -> #some(a) | #emptyList
+```
+
+Returns the greatest element, or `#emptyList` for an empty list. Of several greatest elements, the first. Elements are ordered by their [`Ord`](../advanced/contexts#orda), so a list of records has no `max`: use a key with `sortBy`.
+
+```nanyx
+List.max([3, 8, 1])
+-- #some(8)
+```
+
+---
+
+## min
+
+```nanyx
+List.min: [Ord(a)] list(a) -> #some(a) | #emptyList
+```
+
+Returns the least element, or `#emptyList` for an empty list. Of several least elements, the first.
+
+```nanyx
+List.min(["pear", "apple", "fig"])
+-- #some("apple")
+```
+
+---
+
 ## reverse
 
 ```nanyx
@@ -247,20 +277,51 @@ List.skip([1, 2, 3, 4], 2)
 
 ---
 
+## sort
+
+```nanyx
+List.sort: [Ord(a)] list(a) -> list(a)
+```
+
+Sorts a list in ascending order of its elements' [`Ord`](../advanced/contexts#orda): numbers numerically, strings by their bytes, tuples and lists position by position. The sort is stable. Records and tags have no order, so sort a list of them with `sortBy`.
+
+```nanyx
+List.sort([3, 1, 2])
+-- [1, 2, 3]
+```
+
+---
+
 ## sortBy
 
 ```nanyx
-List.sortBy: (list(a), (a -> b)) -> list(a)
+List.sortBy: [Ord(b)] (list(a), (a -> b)) -> list(a)
 ```
 
-Sorts a list in ascending order of the key the projection function gives each element. The sort is stable: elements with equal keys keep their order.
+Sorts a list in ascending order of the key the projection function gives each element. The key can be of any type with an order, a tuple of keys included. The sort is stable: elements with equal keys keep their order.
 
 ```nanyx
 List.sortBy(["bbb", "a", "cc"], { .length })
 -- ["a", "cc", "bbb"]
 ```
 
-For now the prelude's `List.sortBy` takes `(a -> int)`: the key must be an `int`, since `<` does not order other types yet ([#476](https://github.com/nanyx-lang/nanyx/issues/476)).
+---
+
+## sum
+
+```nanyx
+List.sum: [Add(a)] list(a) -> a
+```
+
+Adds the elements together with `+`. The sum of an empty list is `zero`. It works on any type with an [`Add`](../advanced/contexts#adda): ints, floats, and a type that attaches `zero`, `+`, `-` and `negate`.
+
+```nanyx
+[1, 2, 3] \List.sum
+-- 6
+
+[1.5, 2.5] \List.sum
+-- 4.0
+```
 
 ---
 

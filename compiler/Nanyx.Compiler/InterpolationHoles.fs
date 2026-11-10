@@ -11,8 +11,9 @@ open NyxCompiler.InferState
 ///
 /// The built-in types have the compiler's own instance (`InstanceBuiltIn`), which the backend writes itself: int,
 /// float, bool, string, and tags without a payload. The prelude's `Int.toString` and the others are written with a
-/// hole, which is how they avoid calling themselves. A tag with a payload, a tuple, a record and a list have one the
-/// compiler derives from their parts (see `StructuralInstances`).
+/// hole, which is how they avoid calling themselves. A function that requires `ToString` of a tag is passed the
+/// prelude's `__toString` (`builtInFunction`), which writes it the same way. A tag with a payload, a tuple, a record
+/// and a list have one the compiler derives from their parts (see `StructuralInstances`).
 module InterpolationHoles =
     /// The context a hole requires of its value's type.
     let context = "ToString"
@@ -42,6 +43,29 @@ module InterpolationHoles =
         | TyPrimitive("int" | "float" | "bool" | "string" | "?error") -> true
         | TyTag(_, None) -> true
         | TyUnion items -> items |> List.forall isPlainTag
+        | _ -> false
+
+    /// The prelude function that writes a value with the compiler's own `ToString`, through a hole on its type
+    /// variable: the member of the compiler's own instance, where one is passed to a function that requires
+    /// `ToString` of a tag. The backend writes the hole at each type the function is specialised at.
+    let builtInFunction = "__toString"
+
+    /// The members of the compiler's own instance, as `InstanceSynthesized` has them.
+    let builtInMembers = [ "toString", builtInFunction ]
+
+    /// Whether `ty` is a tag, or a union of tags. Tags have no name a `toString` can be attached to.
+    let private isTags (ty: Ty) =
+        match Unifier.unalias ty with
+        | TyTag _
+        | TyUnion _ -> true
+        | _ -> false
+
+    /// Whether a call that requires `ctxName` at `argTys`, with no instance in scope, is passed the compiler's own
+    /// `ToString`, whose member is `builtInFunction`: a tag without a payload, or a union of them, when `env` has the
+    /// prelude. Every other type the compiler has its own for has an attached `toString` to synthesize one from.
+    let passesBuiltIn (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list) =
+        match argTys with
+        | [ ty ] -> ctxName = context && isTags ty && hasBuiltInInstance ty && (TypeEnv.tryFind builtInFunction env).IsSome
         | _ -> false
 
     /// `ty` as a diagnostic writes it, with the variables the compiler made up named `a`, `b`, ...
@@ -138,7 +162,8 @@ module InterpolationHoles =
             | None ->
                 match synthesize env with
                 | Some synthesized -> synthesized
-                | None when not (Set.intersect openVars declaredVars).IsEmpty -> Error pending.Errors
+                // The prelude's `builtInFunction` writes a value of its type variable with the compiler's own.
+                | None when not (Set.intersect openVars declaredVars).IsEmpty && annotatedDef <> Some builtInFunction -> Error pending.Errors
                 | None when argTys |> List.forall (Unifier.unalias >> function TyVar _ -> true | _ -> false) -> Ok (InstanceBuiltIn, state)
                 | None -> Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (noInstance (List.head argTys)) ]
         match found with

@@ -28,6 +28,26 @@ let ``Parentheses are kept where precedence needs them, and only there`` () =
     unchanged "def a = not (b == c)\n"
 
 [<Fact>]
+let ``Prefix minus is written against its operand`` () =
+    unchanged "def a = -x * y\n"
+    unchanged "def a = -(x * y)\n"
+    unchanged "def a = 3 - -x\n"
+    unchanged "def a = -f(x).y\n"
+    // A number or another negation after it would be read as a literal or a comment.
+    unchanged "def a = -(5)\n"
+    unchanged "def a = -(-x)\n"
+    unchanged (lines [ "def f = { x ->"; "  def y = x * 2"; "  -y"; "}" ])
+
+[<Fact>]
+let ``** groups to the right, and its brackets are kept where they say otherwise`` () =
+    unchanged "def a = 2 ** 3 ** 2\n"
+    unchanged "def a = (2 ** 3) ** 2\n"
+    unchanged "def a = 2 * 3 ** 2\n"
+    unchanged "def a = (2 * 3) ** 2\n"
+    unchanged "def a = 2 ** -x\n"
+    Assert.Equal("def a = (-x) ** 2\n", format "def a = -x ** 2")
+
+[<Fact>]
 let ``Operators a statement cannot take without parentheses keep them`` () =
     unchanged (lines [ "def f = { x ->"; "  (x % 2)"; "}" ])
     unchanged (lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> (x and y)"; "    | _ -> x + 1"; "}" ])

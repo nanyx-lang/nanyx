@@ -506,6 +506,18 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 let equal = mk (CallRuntime(helper, atoms, true)) IrBool
                 if op = "==" then k equal
                 else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
+        | BinaryOp(("<" | "<=" | ">" | ">=") as op, left, right) when (match tyOf left with
+                                                                      | IrString | IrList _ -> true
+                                                                      | IrRecord fields -> IrType.isTuple fields
+                                                                      | _ -> false) ->
+            // A string, a tuple and a list are ordered by their structure (see `CoreIrOrdering`): their order, a
+            // number, is compared with 0. Records, tags and functions have no order: a local function that orders them
+            // is not supported. (A record inside a list or tuple is ordered field by field, only where a generic
+            // function orders a `list(a)`, see `CoreIrOrdering`.)
+            if IrType.holdsUnordered (tyOf left) then cannot $"the operator {op} on a value of type {IrType.show (tyOf left)}"
+            this.Atoms scope [ left; right ] (fun atoms ->
+                let order = mk (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
+                bindTemp order (fun result -> k (mk (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
         | BinaryOp(op, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
@@ -522,6 +534,15 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
         | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
+        | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
+            // `-x` on a built-in number (on any other type it calls a `negate`). An int is `0 - x`, and a float
+            // `-0.0 - x`, which is IEEE 754's negation: `-0.0 - 0.0` is `-0.0`, and `-0.0 - -0.0` is `0.0`.
+            let ty = tyOf expr
+            this.Atoms scope [ operand ] (fun atoms ->
+                match ty with
+                | IrFloat -> bindTemp (mk (BoxFloat -0.0) IrFloat) (fun zero -> k (mk (Prim(FloatBinary "-", zero :: atoms)) ty))
+                | IrInt -> k (mk (Prim(Binary "-", AInt 0L :: atoms)) ty)
+                | other -> cannot $"the operator - on a value of type {IrType.show other}")
         | ForSyntax.Call(iterables, _, parameters, body) when parameters.Length = iterables.Length ->
             // `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body
             // names by its parameter. A range counts from its start (to its end, if it has one); a list walks its cells.
@@ -887,14 +908,27 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | _ -> cannot "this kind of expression"
 
     /// A closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for a generic
-    /// function, at `memberTy`, the type of the context member it is passed as.
+    /// function, at `memberTy`, the type of the context member it is passed as. A union's rest that nothing closes adds
+    /// no tags (see `toIrType`): `ToString(#red | r)` is passed at `#red`.
     member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Expr =
         let wrapped =
             match input.Lifted |> Map.tryFind wrapper with
             | Some (FunctionWrapper wrapped) -> wrapped
             | _ -> cannot $"internal error: '{wrapper}' is not a function's wrapper"
+        let rec withoutOpenRests (ty: Ty) =
+            match ty with
+            | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
+            | TyFunc(input, output) -> TyFunc(withoutOpenRests input, withoutOpenRests output)
+            | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutOpenRests))
+            | TyTag(name, payload) -> TyTag(name, payload |> Option.map withoutOpenRests)
+            | TyApply(name, args) -> TyApply(name, args |> List.map withoutOpenRests)
+            | TyNominal(name, underlying, isPrivate) -> TyNominal(name, withoutOpenRests underlying, isPrivate)
+            | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map withoutOpenRests, withoutOpenRests underlying)
+            | TyVar _
+            | TyPrimitive _
+            | TyOpenRecord _ -> ty
         let key, wrappedTy =
-            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy with
+            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map withoutOpenRests with
             | Some ty, _ when (freeVars ty).IsEmpty -> (wrapper, []), ty
             | Some _, Some ty when (freeVars ty).IsEmpty -> (wrapper, [ toIrType ty ]), ty
             | _ -> cannot $"passing the generic function '{wrapped}' as a context member"

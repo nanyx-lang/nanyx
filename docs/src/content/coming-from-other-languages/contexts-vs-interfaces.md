@@ -27,20 +27,24 @@ interface ISummable<T> {
 sum<T>(items: List<T>) where T : ISummable<T>
 ```
 
-In Nanyx, you model that as a context constraint:
+In Nanyx, you model that as a context constraint. The prelude already has one for adding, `Add(a)`:
 
 ```nanyx
-context Sum(a) = (
-  `0`: a
+context Add(a) = (
+  zero: a
   `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
 )
 
-def sum: [Sum(a)] list(a) -> a = { items ->
-  items \fold(`0`) { + }
+def sum: [Add(a)] list(a) -> a = { items ->
+  items \fold(zero) { + }
 }
 ```
 
-The mindset shift here is to think in terms of capabilities (what operations are needed) for a type _which are not required to be intrinsic to the type_. Think of it as "Given a way of summing `a`" rather than "Given a type `a` that **is** `Summable`." A function states what it needs (`Sum(a)`), not which concrete type hierarchy it depends on.
+For multiplying and dividing as well there is `Num(a)`, which has every member of `Add(a)` and more, so a function that requires `[Num(a)]` can call `sum`.
+
+The mindset shift here is to think in terms of capabilities (what operations are needed) for a type _which are not required to be intrinsic to the type_. Think of it as "Given a way of summing `a`" rather than "Given a type `a` that **is** `Summable`." A function states what it needs (`Add(a)`), not which concrete type hierarchy it depends on.
 
 This allows capabilities to be "bolted on" to types without modifying their definitions, and for functions to be more flexible in what they can operate on (since abstractions and their implementations don't have to have been defined by the type's author).
 
@@ -51,9 +55,11 @@ This allows capabilities to be "bolted on" to types without modifying their defi
 You can provide implementations with `use`:
 
 ```nanyx
-use Sum(int)(
-  `0` = 0
+use Add(int)(
+  zero = 0
   `+` = { a, b -> a + b }
+  `-` = { a, b -> a - b }
+  negate = { a -> -a }
 )
 
 sum([1, 2, 3])
@@ -80,7 +86,7 @@ def greet: [Console] string -> () = { name ->
 The same mechanism (`[Context(...)]`) handles:
 
 - effect requirements (`Console`, `FileSystem`, `$Memory`)
-- generic capabilities (`Sum(a)`, `Iter(a)`, etc.)
+- generic capabilities (`Add(a)`, `Iter(a)`, etc.)
 
 # Contexts vs interfaces: when to choose what
 
