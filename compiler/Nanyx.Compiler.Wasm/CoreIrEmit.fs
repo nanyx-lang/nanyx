@@ -184,7 +184,7 @@ type private FunctionEmitter(context: EmitContext) =
         // A store with a temporary still waiting to be used would have to leave it on the stack beneath the store,
         // under whatever its user pushes first. The lowering never makes one (see `Atoms` in `CoreIrLower.fs`).
         let flush () =
-            if waiting.Count > 0 then failwith "Internal error: a store in the core IR while a temporary waits to be used"
+            if waiting.Count > 0 then internalError "a store in the core IR while a temporary waits to be used"
 
         let rec walk (expr: Expr) =
             match expr.Kind with
@@ -215,10 +215,10 @@ type private FunctionEmitter(context: EmitContext) =
                 walk body
             | _ ->
                 claim expr
-                if waiting.Count > 0 then failwith "Internal error: a temporary in the core IR is never used"
+                if waiting.Count > 0 then internalError "a temporary in the core IR is never used"
                 parts.Add(this.Value tail deferred onStack expr)
         walk expr
-        if deferred.Count > 0 || onStack.Count > 0 then failwith "Internal error: a temporary in the core IR is used out of order"
+        if deferred.Count > 0 || onStack.Count > 0 then internalError "a temporary in the core IR is used out of order"
         join "\n    " parts
 
     /// The code of a value that is not a `Let` or `Do`.
@@ -231,7 +231,7 @@ type private FunctionEmitter(context: EmitContext) =
             |> List.map (fun atom ->
                 match atom with
                 | AVar v when v.Kind = Temp && onStack.Contains v.Id ->
-                    if pushed then failwith "Internal error: a temporary in the core IR is used out of order"
+                    if pushed then internalError "a temporary in the core IR is used out of order"
                     onStack.Remove v.Id |> ignore
                     ""
                 | _ ->
@@ -249,7 +249,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(Binary op, operands) ->
             match wasmBinaryInstruction op with
             | Some instruction -> join "\n    " [ atoms operands; instruction ]
-            | None -> failwith $"Internal error: no instruction for the operator {op}"
+            | None -> internalError $"no instruction for the operator {op}"
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
         | Prim(FloatBinary op, [ left; right ]) ->
             // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves.
@@ -260,8 +260,8 @@ type private FunctionEmitter(context: EmitContext) =
                 let compute = join "\n    " [ atoms [ left ]; "f64.load"; atomsAfter true [ right ]; "f64.load"; instruction ]
                 if [ "eq"; "ne"; "lt"; "le"; "gt"; "ge" ] |> List.exists instruction.EndsWith then compute
                 else $"{compute}\n    call ${helper Helpers.floatBox}"
-            | None -> failwith $"Internal error: no instruction for the operator {op} on floats"
-        | Prim(FloatBinary op, _) -> failwith $"Internal error: the operator {op} on floats with other than two operands"
+            | None -> internalError $"no instruction for the operator {op} on floats"
+        | Prim(FloatBinary op, _) -> internalError $"the operator {op} on floats with other than two operands"
         | BoxFloat value -> $"f64.const {wasmFloatConst value}\n    call ${helper Helpers.floatBox}"
         | Panic messages ->
             // Writes each message to stderr and exits with 1. `unreachable` after the exit, which never returns, lets
@@ -399,7 +399,7 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [
                 $"local.get ${token.Name}\n    i32.const {fields.Length * 4}\n    i32.const {layoutId}\n    call ${helper Helpers.reuseObject}"
                 yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value)) ]
-        | Reuse _ -> failwith "Internal error: a reuse of a block by something other than an allocation"
+        | Reuse _ -> internalError "a reuse of a block by something other than an allocation"
         | DropAfter(body, vars) ->
             // A temporary among `vars` is kept in a local as its value is pushed, to be dropped once `body` is done.
             // Nothing can follow a tail call, so `body` is not one.
@@ -418,7 +418,7 @@ type private FunctionEmitter(context: EmitContext) =
                 match droppedTemps.TryGetValue v.Id with
                 | true, local -> $"{this.Value false deferred onStack value}\n    local.tee ${local}"
                 | _ -> this.Value false deferred onStack value
-            | _ -> failwith "Internal error: a temporary in the core IR is used twice"
+            | _ -> internalError "a temporary in the core IR is used twice"
         | AVar v -> $"local.get ${v.Name}"
         | AInt value -> $"i32.const {value}"
         | ABool value -> if value then "i32.const 1" else "i32.const 0"
@@ -562,7 +562,7 @@ let private declaredLocals (body: Expr) : string list =
     let holePlace (name: string) =
         match name.Substring("__interp_hole_".Length).Split('_') with
         | [| depth; index |] -> int depth, int index
-        | _ -> failwith $"Internal error: {name} is not a hole local"
+        | _ -> internalError $"{name} is not a hole local"
     let rec pattern (p: Pattern) =
         match p with
         | PBind var -> found.Add var
@@ -669,7 +669,7 @@ let emitStart (context: EmitContext) (func: Function) : Emitted =
         match expr.Kind with
         | Do(value, rest) -> value :: expressions rest
         | Atom AUnit -> []
-        | _ -> failwith "Internal error: the start function is not a sequence of top-level expressions"
+        | _ -> internalError "the start function is not a sequence of top-level expressions"
     let bodyCode =
         expressions func.Body
         |> List.map (fun value -> $"{emitter.Sequence false value}\n    {dropValue value.Type}")

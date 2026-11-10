@@ -79,6 +79,13 @@ type LowerInput =
 /// The name of the start function, which evaluates the module's top-level expressions.
 let startFunctionName = "__nanyx_start"
 
+/// Why a function could not be lowered or finished.
+type LowerFailure =
+    /// Something the backend does not compile yet.
+    | NotYet of string
+    /// A broken invariant of the backend (see `InternalError`).
+    | Internal of string
+
 /// A function the IR lowered, and what it was finished into (see `lowerModule`).
 type Lowered<'T> =
     { /// The definitions lowered as they are, by name.
@@ -86,7 +93,7 @@ type Lowered<'T> =
       /// The specialisations of each generic definition, by the definition's name, in the order they were asked for.
       Specialisations: Map<string, (Function * 'T) list>
       /// What could not be lowered, in the order it was met: the function (by its definition's name), why, and where.
-      Failures: (string * string * SourceSpan option) list }
+      Failures: (string * LowerFailure * SourceSpan option) list }
 
 /// Something the IR cannot lower yet, and why.
 exception CannotLower of string
@@ -775,7 +782,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                                 let value = mk (Call(callee definition definitionTy, [])) (toIrType definitionTy)
                                 bindTemp value (fun atom -> pass rest (atom :: acc))
                         if arguments.Length <> memberTys.Length then
-                            cannot $"internal error: {arguments.Length} context members found for the {memberTys.Length} '{name}' requires"
+                            internalError $"{arguments.Length} context members found for the {memberTys.Length} '{name}' requires"
                         pass (List.zip arguments memberTys) []
             let parameters = parameterNames name
             // The arguments as the callee takes them, in the shapes the old path accepts.
@@ -921,7 +928,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         let wrapped =
             match input.Lifted |> Map.tryFind wrapper with
             | Some (FunctionWrapper wrapped) -> wrapped
-            | _ -> cannot $"internal error: '{wrapper}' is not a function's wrapper"
+            | _ -> internalError $"'{wrapper}' is not a function's wrapper"
         let rec withoutOpenRests (ty: Ty) =
             match ty with
             | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
@@ -1312,7 +1319,7 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
     let pending = System.Collections.Generic.Queue<SpecKey * Map<int, Ty> * Lowering>()
     let counts = System.Collections.Generic.Dictionary<string, int>()
     // Every function lowered, by its key, with the specialisations it calls; or why it could not be.
-    let results = System.Collections.Generic.Dictionary<SpecKey, Result<Function * 'T, string * SourceSpan option>>()
+    let results = System.Collections.Generic.Dictionary<SpecKey, Result<Function * 'T, LowerFailure * SourceSpan option>>()
     let order = ResizeArray<SpecKey>()
 
     let lowerOne (key: SpecKey) (subst: Map<int, Ty>) (how: Lowering) (functionName: string) =
@@ -1346,9 +1353,10 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
                 let func = lowering.Function how (fst key) functionName (snd key)
                 Ok (func, finish func)
             with
-            | CannotLower reason -> Error (reason, lowering.CurrentSpan)
-            | Failure reason -> Error ($"internal error: {reason}", lowering.CurrentSpan)
-            | ex -> Error ($"internal error: {ex.Message}", lowering.CurrentSpan)
+            | CannotLower reason -> Error (NotYet reason, lowering.CurrentSpan)
+            | InternalError reason
+            | Failure reason -> Error (Internal reason, lowering.CurrentSpan)
+            | ex -> Error (Internal ex.Message, lowering.CurrentSpan)
         // A definition that holds errors deferred to run time may be what cannot be lowered because of them (a value of
         // no known type to interpolate, say): it reports them as soon as it is called instead.
         let messages =
@@ -1363,8 +1371,9 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
                     let func = trap.Trap (fst key) functionName (snd key) messages
                     Ok (func, finish func)
                 with
-                | CannotLower reason
-                | Failure reason -> Error (reason, None)
+                | CannotLower reason -> Error (NotYet reason, None)
+                | InternalError reason
+                | Failure reason -> Error (Internal reason, None)
             | result -> result
 
     let isGeneric (name: string) =

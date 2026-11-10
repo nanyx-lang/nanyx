@@ -347,23 +347,25 @@ let ``A function that reads a field of any record is specialised for each layout
     let specialisations = wat.Substring(wat.IndexOf "(func $nOf__")
     Assert.DoesNotContain("call $__nanyx_open_field", specialisations)
 
+/// What the core IR lowers from `typed`, with no contexts, records or lifted functions.
+let private lowerInput (typed: TypedModule) : CoreIrLower.LowerInput =
+    { Definitions =
+        typed.Module |> List.choose (function Kind (Def (ValueDef(_, name, _, expr))) -> Some (name, expr) | _ -> None)
+      ExprTypes = typed.ExprTypes
+      CalleeTypes = typed.CalleeTypes
+      DefinitionTypes = typed.Types
+      ContextParameters = Map.empty
+      ContextArguments = fun _ _ _ -> Ok []
+      BuiltInHoles = Set.empty
+      RecordConstructors = Set.empty
+      NominalWrappers = Set.empty
+      Lifted = Map.empty
+      TopLevel = []
+      NamedTypes = Map.empty }
+
 [<Fact>]
 let ``Every intermediate value in the core IR is named`` () =
-    let typed = typedModule "def f = { x, y -> (x + 1) * (y - 2) }\n"
-    let input: CoreIrLower.LowerInput =
-        { Definitions =
-            typed.Module |> List.choose (function Kind (Def (ValueDef(_, name, _, expr))) -> Some (name, expr) | _ -> None)
-          ExprTypes = typed.ExprTypes
-          CalleeTypes = typed.CalleeTypes
-          DefinitionTypes = typed.Types
-          ContextParameters = Map.empty
-          ContextArguments = fun _ _ _ -> Ok []
-          BuiltInHoles = Set.empty
-          RecordConstructors = Set.empty
-          NominalWrappers = Set.empty
-          Lifted = Map.empty
-          TopLevel = []
-          NamedTypes = Map.empty }
+    let input = lowerInput (typedModule "def f = { x, y -> (x + 1) * (y - 2) }\n")
     let lowered = CoreIrLower.lowerModule input id
     let func, _ = lowered.Roots.["f"]
     let printed = CoreIr.Print.func func
@@ -373,3 +375,13 @@ let ``Every intermediate value in the core IR is named`` () =
         "  let __t4: int = y - 2\n" +
         "  __t3 * __t4"
     Assert.Equal(expected, printed)
+
+[<Fact>]
+let ``A broken invariant in the emitter says Internal error once`` () =
+    let input = lowerInput (typedModule "def f = { x -> x + 1 }\n")
+    // An emitter that finds the core IR broken, as `CoreIrEmit` does when a temporary is never used.
+    let lowered = CoreIrLower.lowerModule input (fun _ -> CoreIr.internalError "a temporary in the core IR is never used")
+    match lowered.Failures with
+    | [ "f", failure, _ ] ->
+        Assert.Equal("Internal error: a temporary in the core IR is never used", lowerFailureMessage failure)
+    | failures -> failwith $"Expected one failure in f, got %A{failures}"

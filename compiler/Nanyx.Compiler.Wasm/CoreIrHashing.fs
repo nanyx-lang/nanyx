@@ -152,7 +152,7 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
           yield! hashPayload
           "local.get $h" ]
     | IrFunction _
-    | IrError -> failwith $"Internal error: a hash function for {IrType.show ty}, which has no hash"
+    | IrError -> internalError $"a hash function for {IrType.show ty}, which has no hash"
 
 /// The runtime helpers the hash functions of `types` call.
 let helpersUsed (types: IrType list) : string list =

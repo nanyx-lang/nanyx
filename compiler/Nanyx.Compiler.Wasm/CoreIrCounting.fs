@@ -274,7 +274,7 @@ type private Counter(ownership: Ownership, func: Function) =
             let value =
                 match counted.TryGetValue var.Id with
                 | true, value -> value
-                | _ -> failwith "Internal error: a temporary in the core IR is never used"
+                | _ -> internalError "a temporary in the core IR is never used"
             mk (Let(var, value, body)) e.Type
         | Let(var, value, body) ->
             let afterValue = Set.union (this.Free body) after
@@ -312,7 +312,7 @@ type private Counter(ownership: Ownership, func: Function) =
         | Drop _
         | DropAfter _
         | Release _
-        | Reuse _ -> failwith "Internal error: the core IR is counted twice"
+        | Reuse _ -> internalError "the core IR is counted twice"
         | _ ->
             let dups, drops = this.Operands owned after (operands ownership e)
             this.Wrap dups drops e
