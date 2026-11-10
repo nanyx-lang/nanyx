@@ -47,7 +47,7 @@ scoop install nanyx
 
 Nanyx has editor plugins available for:
 
-- **VS Code** — install the `nanyx-lang` extension
+- **VS Code** — install the **Nanyx** extension (`nanyx.nanyx`); see [VS Code extension](../standard-tools/vs-code-extension) for its settings
 - **Neovim** — via `nvim-lspconfig` with the Nanyx LSP
 - **Zed** — built-in Nanyx support
 

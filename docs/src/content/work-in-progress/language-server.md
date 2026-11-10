@@ -147,7 +147,9 @@ what the compiler keeps: exact spans, resolved names and types.
   another file is not offered.
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
-  *Download the compiler* and *Restart the language server*.
+  *Download the compiler* and *Restart the language server*. Its settings are described for users on the
+  [VS Code extension](../standard-tools/vs-code-extension) page, which a change to the extension's settings or
+  commands updates in the same PR.
 
 ## How the server is built
 
