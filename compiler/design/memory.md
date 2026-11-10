@@ -3,7 +3,7 @@
 > **Status: implemented** in the WebAssembly backend. This page designs how compiled Nanyx programs free memory. It
 > is part of the [compilation](compilation.md) workstream, and its issues carry the `compilation` and `wasm backend`
 > labels. Tracked in [#296](https://github.com/nanyx-lang/nanyx/issues/296). The user-facing account is
-> [Reference counting](../../docs/src/content/advanced/reference-counting.md) on the docs site.
+> [Reference counting](../../docs/src/content/foundations/reference-counting.md) on the docs site.
 
 ## Summary
 

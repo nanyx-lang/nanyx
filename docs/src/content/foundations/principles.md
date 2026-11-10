@@ -103,7 +103,7 @@ Don't make the user write things they don't care about.
 
 Defaults should be efficient and predictable. When performance matters, the language should give you clear paths to control it.
 
-This is why Nanyx frees memory by [reference counting](../advanced/reference-counting) rather than with a garbage collector: a value is freed at a point the program determines, as soon as nothing refers to it, and there are no collector pauses.
+This is why Nanyx frees memory by [reference counting](../foundations/reference-counting) rather than with a garbage collector: a value is freed at a point the program determines, as soon as nothing refers to it, and there are no collector pauses.
 
 Nanyx is cautious about implementing compiler optimizations that can make program performance less predictable (and that the user can't control). We don't want developers to accidentally tank the performance of their code by making an innocuous change that causes an object in a tight loop to be allocated on the heap instead of the stack.
 

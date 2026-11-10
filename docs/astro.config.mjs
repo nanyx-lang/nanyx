@@ -14,7 +14,11 @@ export default defineConfig({
   build: {
     format: "file",
   },
-  redirects: sectionRedirects(),
+  redirects: {
+    ...sectionRedirects(),
+    // Pages that have moved to another section.
+    "/docs/advanced/reference-counting": "/docs/foundations/reference-counting",
+  },
   integrations: [react(), sitemap()],
   markdown: {
     processor: unified({

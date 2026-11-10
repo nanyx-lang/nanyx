@@ -1,7 +1,7 @@
 ---
 title: "Reference counting (Perceus)"
 description: "How Nanyx frees memory without a garbage collector, and reuses it in place"
-order: 14
+order: 12
 ---
 
 Nanyx has no garbage collector. A compiled program counts the references to each value it keeps on the heap (a
