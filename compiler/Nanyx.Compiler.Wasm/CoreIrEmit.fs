@@ -253,7 +253,9 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
         | Prim(FloatBinary op, [ left; right ]) ->
             // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves.
-            match wasmFloatInstruction op with
+            let instruction =
+                if op = "%" then Some $"call ${helper Helpers.floatRem}" else wasmFloatInstruction op
+            match instruction with
             | Some instruction ->
                 let compute = join "\n    " [ atoms [ left ]; "f64.load"; atomsAfter true [ right ]; "f64.load"; instruction ]
                 if [ "eq"; "ne"; "lt"; "le"; "gt"; "ge" ] |> List.exists instruction.EndsWith then compute

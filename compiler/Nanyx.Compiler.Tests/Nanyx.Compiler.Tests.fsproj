@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="TestSupport.fs" />
+    <Compile Include="Features\Arithmetic\ArithmeticTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attributes\AttributeTests.fs" />
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />

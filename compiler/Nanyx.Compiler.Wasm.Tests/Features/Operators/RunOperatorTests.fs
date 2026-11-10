@@ -26,6 +26,20 @@ let ``Run - float arithmetic and printing`` () =
     runSource source |> assertRan "6.28\n4.0 -1.5 0.333333 2.5 1234567.25\ncmp ok\ndbg: 3.75\n"
 
 [<Fact>]
+let ``Run - the remainder of floats is truncated, with the sign of the left operand`` () =
+    // #607: `%` on floats type-checked and then had no instruction in the backend. It is C's `fmod`.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def neg = 0.0 - 7.5\n" +
+        "  println(\"{7.5 % 2.0} {neg % 2.0} {7.5 % (0.0 - 2.0)} {6.0 % 2.0} {1.5 % 4.0}\")\n" +
+        "  println(\"{7 % 3} {(0 - 7) % 3}\")\n" +
+        "}\n"
+    runSource source |> assertRan "1.5 -1.5 1.5 0.0 1.5\n1 -1\n"
+
+[<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
     // #39: the docs make boolean operations keywords; `not` had no spelling at all.
     let source =
