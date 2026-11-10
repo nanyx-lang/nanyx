@@ -593,6 +593,12 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     this.Complex { scope with InterpolationDepth = scope.InterpolationDepth + 1 } value (fun lowered ->
                         let body = k (mk (Dbg(AVar hole, DbgTagValue(hole, holeType, scratch))) ty)
                         mk (Let(hole, lowered, body)) body.Type)
+                | IrFunction _ ->
+                    // A function has nothing to show but that it is one, so that is printed, and then the value is
+                    // the function's own.
+                    let printed = mk (Dbg(AString "<function>", DbgString(scratch, None))) IrString
+                    let rest = this.Complex scope value k
+                    mk (Do(printed, rest)) rest.Type
                 | other -> cannot $"`dbg` of a value of type {IrType.show other}"
         | FunctionCall("__with", _, [ record; Kind (RecordExpr updates) ]) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.

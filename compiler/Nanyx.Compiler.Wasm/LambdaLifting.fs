@@ -55,7 +55,7 @@ and private referencedNamesPattern (pattern: Pattern) : string list =
     | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesPattern
     | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesPattern
     | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesPattern
-    | RecordMemberPattern members -> members |> List.collect (snd >> referencedNamesPattern)
+    | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencedNamesPattern)
     | TagPattern(_, None)
     | LiteralPattern _
     | IdentifierPattern _
@@ -74,7 +74,7 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
         (patterns |> List.collect boundNamesPattern) @ (rest |> Option.map boundNamesPattern |> Option.defaultValue [])
     | ListSplatMiddle(before, after) -> (before @ after) |> List.collect boundNamesPattern
     | RecordPattern(_, patterns) -> patterns |> List.collect boundNamesPattern
-    | RecordMemberPattern members -> members |> List.collect (fun (name, p) -> name :: boundNamesPattern p)
+    | RecordMemberPattern(members, _) -> members |> List.collect (fun (name, p) -> name :: boundNamesPattern p)
     // A guard's predicate is inlined where the arm is tested, so what it binds is bound there.
     | GuardPattern predicate -> boundNames predicate
     | TagPattern(_, None)

@@ -143,6 +143,14 @@ An editor writes an inferred record's fields in alphabetical order, and its othe
 
 An annotation is taken exactly as written, so annotate with `...` when you mean "at least these fields".
 
+[Record patterns](./pattern-matching#records) follow the same rule. A pattern names every field of the record, or ends in `...` to leave the others out:
+
+```nanyx
+match person
+  | (name = "Alice", ...) -> "Found Alice"
+  | (name = n, age = a) -> "{n} is {a}"
+```
+
 # Records vs tuples
 
 In Nanyx, tuples and records are one unified structure. A tuple is just a record whose fields are all positional.

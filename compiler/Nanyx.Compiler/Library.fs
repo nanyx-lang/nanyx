@@ -229,7 +229,9 @@ module Compiler =
                 | other, _ -> other)
 
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
-    /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``.
+    /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``. `x != y` calls what `==` is
+    /// bound to, and becomes `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are
+    /// recorded by.
     let private callOperators (calls: Set<NodeId>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
@@ -237,6 +239,8 @@ module Compiler =
             expr
             |> mapExpressionKinds (fun current kind ->
                 match kind with
+                | BinaryOp(op, left, right) when calls.Contains current.Id && op = EqualityOperators.notEquals ->
+                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(EqualityOperators.equals, None, [ left; right ]) } ])
                 | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(op, None, [ left; right ])
                 | other -> other)
 
@@ -341,7 +345,7 @@ module Compiler =
         | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesInPattern
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesInPattern
         | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesInPattern
-        | RecordMemberPattern members -> members |> List.collect (snd >> referencedNamesInPattern)
+        | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencedNamesInPattern)
         | TagPattern(_, None)
         | LiteralPattern _
         | IdentifierPattern _
@@ -1016,7 +1020,11 @@ module Compiler =
         let resolvedTypes = types |> Map.map (fun _ ty -> Unifier.apply subst ty |> closeOutputRests)
         let resolvedTypeDefs =
             typeDefs
-            |> Map.map (fun _ info -> { info with Underlying = Unifier.apply subst info.Underlying })
+            |> Map.map (fun _ info ->
+                // A definition's parameters stand for the types it is applied to, whatever the module found for a
+                // variable of the same id: an imported definition's are numbered by the module it came from.
+                let ownSubst = info.Parameters |> List.fold (fun acc parameter -> acc |> Map.remove parameter.Id) subst
+                { info with Underlying = Unifier.apply ownSubst info.Underlying })
         let rec applyTypedExpr (typedExpr: TypedExpr) =
             { typedExpr with
                 Type = Unifier.apply subst typedExpr.Type

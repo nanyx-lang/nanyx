@@ -26,13 +26,23 @@ let ``Unifier rejects occurs check`` () =
     | Error (message, _) -> Assert.Contains("Occurs", message)
 
 [<Fact>]
-let ``Unifier allows record width subtyping`` () =
+let ``Unifier rejects closed records with different fields, either way round`` () =
     let narrow = TyRecord (Map.ofList [ ("a", TyPrimitive "int") ])
     let wide = TyRecord (Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ])
-    let result = Unifier.unify [ (narrow, wide, Equal, SourceSpan.none) ]
-    match result with
-    | Ok _ -> Assert.True(true)
-    | Error (message, _) -> Assert.True(false, message)
+    for kind in [ Equal; Assignable ] do
+        for given, expected in [ narrow, wide; wide, narrow ] do
+            match Unifier.unify [ (given, expected, kind, SourceSpan.none) ] with
+            | Ok _ -> Assert.Fail($"{kind}: {given} should not unify with {expected}")
+            | Error (message, _) -> Assert.StartsWith("Record field mismatch:", message)
+
+[<Fact>]
+let ``Unifier gives an open record's row the other fields of a closed one`` () =
+    let row = { Id = 9; Name = None }
+    let opened = TyOpenRecord (Map.ofList [ ("a", TyPrimitive "int") ], row)
+    let wide = TyRecord (Map.ofList [ ("a", TyPrimitive "int"); ("b", TyPrimitive "string") ])
+    match Unifier.unify [ (wide, opened, Assignable, SourceSpan.none) ] with
+    | Ok subst -> Assert.Equal(Some (TyRecord (Map.ofList [ ("b", TyPrimitive "string") ])), subst |> Map.tryFind row.Id)
+    | Error (message, _) -> Assert.Fail(message)
 
 [<Fact>]
 let ``A lone tag equal to an open union that names it leaves the union's rest empty`` () =
@@ -95,3 +105,22 @@ let ``Solving constraints that agree gives what unify gives`` () =
     let subst, failures = Unifier.solve constraints
     Assert.Empty(failures)
     Assert.Equal(Unifier.unify constraints, Ok subst)
+
+[<Fact>]
+let ``A union's member that fits is not blamed for a failure in a later constraint`` () =
+    // `#none` fits `#none | #some(int)`; the conflict is `int` and `string`, solved after it. Trying `#some(int)` as
+    // well, which does not fit, must not make the union the one reported.
+    let atTag = { SourceSpan.none with Start = 10; StartLine = 1 }
+    let atConflict = { SourceSpan.none with Start = 20; StartLine = 2 }
+    let union = TyUnion [ TyTag("none", None); TyTag("some", Some (TyPrimitive "int")) ]
+    let conflict = (TyPrimitive "int", TyPrimitive "string", Equal, atConflict)
+    for tagConstraint in [ (TyTag("none", None), union, Assignable, atTag); (union, TyTag("none", None), Equal, atTag) ] do
+        match Unifier.unify [ tagConstraint; conflict ] with
+        | Ok _ -> Assert.Fail "Expected the conflict to fail"
+        | Error (message, span) ->
+            Assert.Equal("Type mismatch: int vs string.", message)
+            Assert.Equal(atConflict, span)
+    // With every member failing at the union itself, the union is still what is reported.
+    match Unifier.unify [ (TyTag("other", None), union, Assignable, atTag) ] with
+    | Ok _ -> Assert.Fail "Expected the tag not to fit"
+    | Error (_, span) -> Assert.Equal(atTag, span)

@@ -219,7 +219,7 @@ and private expressionsOfPattern (pattern: Pattern) =
     | TuplePattern patterns
     | AndPattern patterns
     | RecordPattern (_, patterns) -> patterns |> List.collect expressionsOfPattern
-    | RecordMemberPattern members -> members |> List.collect (snd >> expressionsOfPattern)
+    | RecordMemberPattern(members, _) -> members |> List.collect (snd >> expressionsOfPattern)
     | ListPattern (patterns, rest) -> (patterns @ Option.toList rest) |> List.collect expressionsOfPattern
     | ListSplatMiddle (before, after) -> (before @ after) |> List.collect expressionsOfPattern
     | RangePattern (low, high) -> expressions low @ expressions high
@@ -269,7 +269,7 @@ let rec private patternsWithin (pattern: Pattern) : Pattern list =
         | TuplePattern patterns
         | AndPattern patterns
         | RecordPattern (_, patterns) -> patterns |> List.collect patternsWithin
-        | RecordMemberPattern members -> members |> List.collect (snd >> patternsWithin)
+        | RecordMemberPattern(members, _) -> members |> List.collect (snd >> patternsWithin)
         | ListPattern (patterns, rest) -> (patterns @ Option.toList rest) |> List.collect patternsWithin
         | ListSplatMiddle (before, after) -> (before @ after) |> List.collect patternsWithin
         | TagPattern (_, payload) -> payload |> Option.toList |> List.collect patternsWithin
@@ -530,7 +530,7 @@ let ``each pattern spans its text, and nested patterns span theirs`` () =
             textOf source py.Span |> should equal "py"
         | other -> failwith $"Expected a record pattern, got %A{other}"
         match members.Kind with
-        | RecordMemberPattern [ ("name", n) ] -> textOf source n.Span |> should equal "n"
+        | RecordMemberPattern([ ("name", n) ], false) -> textOf source n.Span |> should equal "n"
         | other -> failwith $"Expected a record member pattern, got %A{other}"
     | other -> failwith $"Unexpected arms: %A{other}"
 

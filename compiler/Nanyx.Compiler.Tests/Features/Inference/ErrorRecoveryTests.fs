@@ -124,3 +124,21 @@ let ``The uses of a def that fails to check are not errors too`` () =
     let result = Compiler.compile "def broken = { x -> missing(x) }\ndef a = broken(1)\ndef b = broken(\"s\")"
     let diag = Assert.Single(result.Diagnostics)
     Assert.Contains("Unknown function 'missing'", diag.Message)
+
+[<Fact>]
+let ``A type error in one def does not make a later match on tags an error too`` () =
+    // Each union a later def gives a tag to tried its members against the rest of the module's constraints, and so
+    // blamed itself for the earlier def's error.
+    let source =
+        "def f = { s -> s + \"x\" }\n" +
+        "def g = { t -> match t\n" +
+        "  | #some(x) -> x\n" +
+        "  | #none -> 0\n" +
+        "}\n" +
+        "def h: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }\n"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+        Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
+        Assert.Equal(0, diagnostic.Span.Value.StartLine)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"

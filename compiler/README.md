@@ -66,8 +66,12 @@ What each command does is in [The nanyx command](https://nanyx.dev/docs/work-in-
 ## Continuous integration and releases
 
 The `Compiler` workflow (`.github/workflows/compiler.yml`) builds and tests the solution on
-Linux and Windows for every pull request and push to `main` that touches `compiler/`, and
+Linux and Windows for every push to `main` that touches `compiler/` or `stdlib/`, and
 publishes a self-contained `nanyx` executable for each supported platform as a workflow artifact.
+On a pull request it does only the work the change can affect: everything when the pull request
+touches the compiler, the standard library, the examples or any other `.nyx` file; the tests
+without the Wasm tests when it touches only the docs' content (a formatter test reads the docs'
+code blocks); and nothing otherwise.
 
 To cut a release, bump `<Version>` in `Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj` and merge.
 When the workflow on `main` finds no `compiler/<version>` tag for that version, it creates the tag

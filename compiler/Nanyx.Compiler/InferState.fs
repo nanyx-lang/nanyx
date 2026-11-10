@@ -76,7 +76,8 @@ type InferState =
             PendingContextInstances: PendingContextInstance list;
             /// Where each interpolation hole among `PendingContextInstances` is, by the hole's node: the environment
             /// there, whose instances it finds its `ToString` among once its type is known, and the def that writes
-            /// its type it is in, if it is in one.
+            /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
+            /// (see `EqualityOperators`).
             HoleScopes: Map<NodeId, TypeEnv * Identifier option>;
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
@@ -220,6 +221,12 @@ let emptyState =
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
     TyVar var, { state with NextId = state.NextId + 1 }
+
+/// A record with at least `fields`, its others a fresh row variable: what reading a field, or matching a pattern that
+/// names some fields, tells of a value. A closed record would say it has no others.
+let internal openRecordWith (fields: Map<string, Ty>) (state: InferState) =
+    let row = { Id = state.NextId; Name = None }
+    TyOpenRecord(fields, row), { state with NextId = state.NextId + 1 }
 
 /// The symbol for `name` as `holder` declares it, made the first time it is asked for. `None` when the parser
 /// saw no such declaration: the compiler made the name up (a destructured tuple, a `for` loop's element).

@@ -414,7 +414,16 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
             | Some info ->
                 match Unifier.unalias info.Underlying with
                 | TyRecord fields ->
-                    fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, ty, None) |> withSymbols, state
+                    // The context's parameters are the types it is applied to here: an imported context's own
+                    // variables are another module's, and mean nothing in this one.
+                    let argTys, state =
+                        match ctxExpr.Kind with
+                        | TypeApply(_, args) when args.Length = info.Parameters.Length -> args |> List.mapFold typeExprToTy state
+                        | _ -> [], state
+                    let substitution =
+                        List.zip (List.truncate argTys.Length info.Parameters) argTys
+                        |> List.fold (fun acc (param, argTy) -> acc |> Map.add param.Id argTy) Map.empty
+                    fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.apply substitution ty, None) |> withSymbols, state
                 | _ -> [], state
             | None -> [], state
     | _ -> [], state
@@ -903,6 +912,16 @@ let private useInstance (env: TypeEnv) (state: InferState) (value: Expression) (
         | None -> env, state
     | _ -> bindInstances env state (contextsOfValue state valueTy)
 
+/// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is `Eq`
+/// (see `EqualityOperators.atCall`). `hasInstance` says whether an `Eq` of a type variable is in scope.
+let private equalityInstanceAtCall (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) (hasInstance: Ty -> bool) : EqualityOperators.CallInstance option =
+    match argTys with
+    // Without the prelude there is no instance of the compiler's own to pass.
+    | [ ty ] when ctxName = EqualityOperators.context && (TypeEnv.tryFind EqualityOperators.builtInFunction env).IsSome ->
+        let hasAttached = (tryResolveAttachedFunction env ty EqualityOperators.equals).IsSome
+        Some (EqualityOperators.atCall hasAttached hasInstance ty)
+    | _ -> None
+
 /// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
 /// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
 /// for a type inference has not worked out yet is left to be found by its members' names, as one that is not
@@ -919,19 +938,24 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
                     let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
                     let argTys, current = contextArgTysAtCall current signature scheme.Type calleeTy args
-                    match instanceInScope env current ctxName argTys with
-                    | Some written -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    // `Eq` of a type with no `==` attached is the compiler's own (see `EqualityOperators.resolveCall`).
+                    let equality =
+                        equalityInstanceAtCall env current ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
+                        |> Option.bind (EqualityOperators.resolveCall env current call name calleeSpan found contexts.Length argTys.Head)
+                    match instanceInScope env current ctxName argTys, equality with
+                    | Some written, _ -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    | None, Some resolved -> resolved
                     // A hole of a built-in type is written by the backend, not by the prelude's `Int.toString` and the
                     // others, which are written with one.
-                    | None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
+                    | None, None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
                         Ok (found @ [ Some InstanceBuiltIn ], current)
                     // A type with a name definitions can be attached to: not a variable, or a record written out.
-                    | None when argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) ->
+                    | None, None when argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
-                    | None when InterpolationHoles.isHole name ->
+                    | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
-                    | None ->
+                    | None, None ->
                         match ensureContextAvailable true env current name [ ctx ] calleeSpan, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
                         // In an unannotated def, a type the call leaves open may be settled by the rest of the body,
@@ -951,15 +975,34 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
 /// type it is for, as a call does. A hole finds its instance as `InterpolationHoles.resolvePending` says.
 let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) : Result<TypeExpr option * InferState, Diagnostic list> =
+    let comparisons = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && EqualityOperators.isPending pending)
     ContextInference.resolvePending state name symbol scheme (fun pending argTys current ->
         let synthesize env =
             if argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) then
                 Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
             else None
+        let defScheme def = TypeEnv.tryFind def env
         if InterpolationHoles.isHole pending.Callee then
-            Some (InterpolationHoles.resolvePending (fun env -> instanceInScope env current) synthesize (fun def -> TypeEnv.tryFind def env) current pending argTys)
+            Some (InterpolationHoles.resolvePending (fun env -> instanceInScope env current) synthesize defScheme current pending argTys)
+        elif EqualityOperators.isPending pending then
+            Some (EqualityOperators.resolvePending (fun env ty -> (instanceInScope env current pending.Context [ ty ]).IsSome) defScheme current pending argTys)
         else
-            synthesize env |> Option.map (Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)))
+            // The def now requires `Eq` of each of its variables the call compares values of. A call left to the end of
+            // the module needs an instance for each variable of the type the def around it writes.
+            let scopeEnv, annotatedDef = current.HoleScopes |> Map.tryFind pending.Call |> Option.defaultValue (env, None)
+            let declaredVars = annotatedDef |> Option.bind defScheme |> Option.map _.Quantified |> Option.defaultValue Set.empty
+            let hasInstance (ty: Ty) =
+                match ty with
+                | TyVar v when declaredVars.Contains v.Id -> (instanceInScope scopeEnv current pending.Context [ ty ]).IsSome
+                | _ -> true
+            match equalityInstanceAtCall env current pending.Context argTys hasInstance with
+            | Some (EqualityOperators.Open _) -> Some (Error pending.Errors)
+            | Some (EqualityOperators.NoInstance reason) ->
+                Some (Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (EqualityOperators.noInstanceAtCall pending.Callee (List.head argTys) reason) ])
+            | Some EqualityOperators.BuiltIn -> Some (Ok (Some (InstanceSynthesized EqualityOperators.builtInMembers), current))
+            | _ -> synthesize env |> Option.map (Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)))
+    |> Result.map (fun (annotation, resolved) ->
+        annotation, EqualityOperators.callMembers (fun ty -> inputTypeFromArgs [ ty; ty ]) comparisons resolved)
 
 /// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
 /// value of no known type yet is taken to be a record with at least that field, and an open record without it
@@ -968,10 +1011,8 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
 let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty * InferState) option =
     let openWith (row: Ty) (next: InferState) =
         let fieldTy, next = freshVar next
-        let rest, next = freshVar next
-        match rest with
-        | TyVar restVar -> Some (fieldTy, addConstraint row (TyOpenRecord(Map.ofList [ fieldName, fieldTy ], restVar)) next)
-        | _ -> None
+        let record, next = openRecordWith (Map.ofList [ fieldName, fieldTy ]) next
+        Some (fieldTy, addConstraint row record next)
     let resolved = resolveSoFar state ty
     match recordFieldsOf resolved with
     | Some fields -> fields |> Map.tryFind fieldName |> Option.map (fun fieldTy -> fieldTy, state)
@@ -1341,6 +1382,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                     if errors.IsEmpty then
                         let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                        let positionalForNamed =
+                            match Unifier.unalias (resolveSoFar current funcTy) with
+                            | TyFunc(input, _) -> NamedArguments.check current expr name input args typedArgs
+                            | _ -> None
+                        match positionalForNamed with
+                        | Some diagnostic -> Error [ diagnostic ]
+                        | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         // When the callee's type is already a function (an annotated or already-inferred
                         // def), its return type is the call's type directly, so a member access or match on
@@ -1393,9 +1441,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             | Error err -> Error err)
                     let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                     if errors.IsEmpty then
-                        let argTys =
-                            argResults
-                            |> List.choose (function Ok typedExpr -> Some typedExpr.Type | _ -> None)
+                        let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                        match NamedArguments.check current expr name info.Underlying args typedArgs with
+                        | Some diagnostic -> Error [ diagnostic ]
+                        | None ->
+                        let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         let inputTy = inputTypeFromArgs argTys
                         let constrained = addAssignableConstraint inputTy info.Underlying current
                         Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
@@ -1427,9 +1477,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Error err -> Error err
             | Ok (rightExpr, nextState) ->
                 let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
-                match OperatorCalls.definition env nextState expr leftExpr.Type with
+                let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
+                match OperatorCalls.definition env nextState expr leftExpr.Type input with
                 | Some scheme ->
-                    let resultTy, called = OperatorCalls.infer nextState expr scheme (inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ])
+                    let resultTy, called = OperatorCalls.infer nextState expr scheme input
                     Ok (mkTypedExpr expr resultTy None None None, called)
                 | None ->
                 match expr.Kind with
@@ -1455,8 +1506,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         constrained
                         |> addConstraint leftExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
                     Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, numericConstrained)
-                | BinaryOp(op, _, _) when ["=="; "!="] |> List.contains op ->
-                    Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, constrained)
+                | BinaryOp(op, _, _) when EqualityOperators.isOperator op ->
+                    EqualityOperators.require env constrained expr op leftExpr.Type
+                    |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
                 | BinaryOp(op, _, _) when ["and"; "or"] |> List.contains op ->
                     // Both operands are already unified with each other; pin them to bool.
                     let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
@@ -1841,7 +1893,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             currentState <- next
                             ty)
                         |> fun tys -> tys, currentState
-                    let constrained = addConstraint scrutineeTy (TyRecord (Map.empty)) nextState
+                    let anyRecord, nextState = openRecordWith Map.empty nextState
+                    let constrained = addConstraint scrutineeTy anyRecord nextState
                     let mutable innerEnv = env'
                     let mutable innerState = constrained
                     let mutable innerErrors: Diagnostic list = []
@@ -1855,16 +1908,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors
-                | RecordMemberPattern members ->
+                | RecordMemberPattern(members, hasRest) ->
                     let mutable innerEnv = env'
                     let mutable innerState = state'
                     let mutable innerErrors: Diagnostic list = []
-                    let fieldHints = tryRecordFields scrutineeTy |> Option.defaultValue Map.empty
+                    let knownFields = tryRecordFields scrutineeTy
+                    let fieldHints = knownFields |> Option.defaultValue Map.empty
                     let mutable fieldMap = Map.empty
                     for (name, pat) in members do
-                        let hintTy = fieldHints |> Map.tryFind name
                         let memberTy, nextState =
-                            match hintTy with
+                            match fieldHints |> Map.tryFind name with
                             | Some ty -> ty, innerState
                             | None -> freshVar innerState
                         innerState <- nextState
@@ -1872,13 +1925,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (nextEnv, nextState, _) ->
                             innerEnv <- nextEnv
                             innerState <- nextState
-                            if hintTy.IsNone then
-                                fieldMap <- fieldMap.Add(name, memberTy)
+                            fieldMap <- fieldMap.Add(name, memberTy)
                         | Error err -> innerErrors <- err
                     if innerErrors.IsEmpty then
-                        let constrained =
-                            if fieldMap.IsEmpty then innerState else addConstraint scrutineeTy (TyRecord fieldMap) innerState
-                        Ok (innerEnv, constrained, mkTypedPattern pattern scrutineeTy)
+                        // A record type is closed, so the pattern names every field, unless it ends in `...`. Where
+                        // the fields are known, they are checked rather than the value's type, which may be nominal.
+                        let patternRecord, next =
+                            if hasRest then openRecordWith fieldMap innerState else TyRecord fieldMap, innerState
+                        let matched = knownFields |> Option.map TyRecord |> Option.defaultValue scrutineeTy
+                        Ok (innerEnv, addConstraint matched patternRecord next, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors
 

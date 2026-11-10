@@ -26,8 +26,10 @@
     <Compile Include="TypeHoles.fs" />
     <Compile Include="ArmUnion.fs" />
     <Compile Include="InterpolationHoles.fs" />
+    <Compile Include="EqualityOperators.fs" />
     <Compile Include="ContextInference.fs" />
     <Compile Include="OperatorCalls.fs" />
+    <Compile Include="NamedArguments.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />
