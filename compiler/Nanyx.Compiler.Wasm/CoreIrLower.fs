@@ -863,8 +863,6 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> k (mk (Atom(AVar memberVar)) memberVar.Type)
             | None -> cannot $"the context member {key}, which is not in scope"
-        // A lambda of no parameters that is not a function's own runs where it is written, as the old path runs it.
-        | Lambda([], body) -> this.Complex scope body k
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
         // A hole the compiler writes itself holds its value, not a call to convert it.

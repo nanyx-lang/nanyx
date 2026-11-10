@@ -241,8 +241,9 @@ function be passed as a value is lowered for each type it is passed at. Lifting 
 A function that requires contexts takes each of their members as a closure, in a parameter of its own after its
 others, typed from the context's definition. A call finds each member the callee requires where the type checker
 found its context (a `use`, the caller's own members, an instance built from attached definitions, or the ambient
-`Console`). A lambda of no parameters that is not a function's own runs where it is written, which is what workflow
-blocks lower to.
+`Console`). A lambda of no parameters is lifted like any other, so `def block = { ... }` and `use x in { ... }` are
+functions to call. A workflow block that uses a keyword is not a lambda by then: desugaring leaves its body where it
+is written.
 
 The module's top-level expressions are lowered as one more function, the start function, which evaluates each in
 turn and drops its value. A module with type or name errors is compiled all the same in a debug build: what failed to

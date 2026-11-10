@@ -11,9 +11,8 @@ module TailPosition =
     /// last expression of a block and the body of a `use ... in` are in tail position when the expression they belong
     /// to is; nothing else is.
     ///
-    /// A lambda with no parameters is a value, so its body is not in tail position of the function it is written
-    /// in, unless `thunksRunInPlace`: the backend runs such a lambda's body where it is written.
-    let callsIn (thunksRunInPlace: bool) (body: Expression) : Set<NodeId> =
+    /// A lambda with no parameters is a value, so its body is not in tail position of the function it is written in.
+    let callsIn (body: Expression) : Set<NodeId> =
         let rec walk (calls: Set<NodeId>) (expr: Expression) =
             match expr.Kind with
             | FunctionCall _
@@ -27,6 +26,5 @@ module TailPosition =
                 | Some (Kind (ExprStatement last)) -> walk calls last
                 | _ -> calls
             | UseIn(_, inner) -> walk calls inner
-            | Lambda([], inner) when thunksRunInPlace -> walk calls inner
             | _ -> calls
         walk Set.empty body

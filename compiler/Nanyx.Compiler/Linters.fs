@@ -316,7 +316,7 @@ module NonTailRecursion =
         |> List.collect (fun (declaration, lambda) ->
             match lambda.Kind with
             | Lambda(_, body) ->
-                let tailCalls = TailPosition.callsIn false body
+                let tailCalls = TailPosition.callsIn body
                 // A call to the function itself: one to the symbol declared by the def, and not by anything within
                 // the lambda (a local def that hides its name).
                 let isSelf (symbol: Symbol) =

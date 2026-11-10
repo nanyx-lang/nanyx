@@ -94,8 +94,8 @@ When the backend lowers a call in tail position, it emits `return_call $f` inste
 `return_call_indirect` instead of `call_indirect` for closures and context members. Before lowering a function,
 it finds the calls in tail position in its body by the rules above (`TailPosition.callsIn`, in the compiler, which
 the linter below shares), and lowering a call looks itself up there. A call to a function that needs contexts
-passes them as extra arguments, which changes nothing. The backend runs a lambda with no parameters where it is
-written, so its body is in tail position when the lambda is.
+passes them as extra arguments, which changes nothing. A lambda with no parameters is lifted into a function of its
+own, like any lambda, so its body's tail calls are that function's.
 
 Every function the backend emits returns an `i32`, so a tail call always returns what its caller returns. The
 module's start function, which runs top-level expressions and returns nothing, makes no tail calls. Calls to
