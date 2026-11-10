@@ -203,3 +203,75 @@ let ``** binds tighter than * and groups to the right`` () =
         Assert.Equal(NegateSyntax.builtIn, name)
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+// A block's statements and a match arm's body are parsed by the expression parser that stops at the end of a line.
+// It has the keyword operators too (#617, #628).
+
+/// The expression of the one statement of the block that is the body of `source`'s one def.
+let private blockStatementOf (source: string) =
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Block [ Kind (ExprStatement expr) ])))) ]
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement expr) ])))))) ] -> expr.Kind
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+/// The body of each arm of the match that is the body of `source`'s one def, a lambda.
+let private armBodiesOf (source: string) =
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms))))))) ]
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ])))))) ] ->
+        arms |> List.map (fun (_, body) -> body.Kind)
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``and after a call at the start of a block statement is the operator`` () =
+    match blockStatementOf "def b = {\n  f(1) and f(2)\n}\n" with
+    | BinaryOp ("and", Kind (FunctionCall ("f", _, _)), Kind (FunctionCall ("f", _, _))) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``or after a call at the start of a block statement is the operator`` () =
+    match blockStatementOf "def b = {\n  f(1) or f(2)\n}\n" with
+    | BinaryOp ("or", Kind (FunctionCall ("f", _, _)), Kind (FunctionCall ("f", _, _))) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``and binds tighter than or and looser than comparison in a block statement`` () =
+    match blockStatementOf "def b = { x ->\n  x == 1 and f(x) or g(x) && not h(x) || x % 2 == 0\n}\n" with
+    | BinaryOp ("or",
+                Kind (BinaryOp ("or",
+                                Kind (BinaryOp ("and", Kind (BinaryOp ("==", _, _)), Kind (FunctionCall ("f", _, _)))),
+                                Kind (BinaryOp ("and", Kind (FunctionCall ("g", _, _)), Kind (FunctionCall ("not", _, [ Kind (FunctionCall ("h", _, _)) ])))))),
+                Kind (BinaryOp ("==", Kind (BinaryOp ("%", _, _)), _))) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``A keyword operator in a block statement does not swallow an identifier that starts with it`` () =
+    match blockStatementOf "def b = {\n  order and android or nothing\n}\n" with
+    | BinaryOp ("or", Kind (BinaryOp ("and", Kind (IdentifierExpr "order"), Kind (IdentifierExpr "android"))), Kind (IdentifierExpr "nothing")) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``and and or are operators in the body of a match arm`` () =
+    let source = "def g = { x, y ->\n  match x\n    | 1 -> y and true\n    | 2 -> y or false\n    | _ -> false\n}\n"
+    match armBodiesOf source with
+    | [ BinaryOp ("and", Kind (IdentifierExpr "y"), Kind (LiteralExpr (BoolLit true)))
+        BinaryOp ("or", Kind (IdentifierExpr "y"), Kind (LiteralExpr (BoolLit false)))
+        LiteralExpr (BoolLit false) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``and and or are operators in a match arm's body on a line of its own`` () =
+    let source = "def g = { x, y ->\n  match x\n    | 1 ->\n      y and true\n    | _ ->\n      y or false\n}\n"
+    match armBodiesOf source with
+    | [ Block [ Kind (ExprStatement (Kind (BinaryOp ("and", _, _)))) ]; Block [ Kind (ExprStatement (Kind (BinaryOp ("or", _, _)))) ] ]
+    | [ BinaryOp ("and", _, _); BinaryOp ("or", _, _) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``and after a comparison is the operator in the body of a list pattern's arm`` () =
+    let source = "def g = { xs ->\n  match xs\n    | [] -> true\n    | [x, ...more] -> x == 1 and g(more)\n}\n"
+    match armBodiesOf source with
+    | [ LiteralExpr (BoolLit true); BinaryOp ("and", Kind (BinaryOp ("==", _, _)), Kind (FunctionCall ("g", _, _))) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
