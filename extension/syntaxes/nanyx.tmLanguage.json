@@ -214,7 +214,7 @@
         },
         {
           "name": "keyword.control.nanyx",
-          "match": "\\b(if|then|else|match|except|for|while|with)\\b"
+          "match": "\\b(if|then|else|match|except|for|while|with|do)\\b"
         },
         {
           "comment": "Workflow keywords provided by builders such as proc, async and seq",

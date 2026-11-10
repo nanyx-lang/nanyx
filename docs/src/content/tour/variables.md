@@ -46,3 +46,26 @@ def result =
 
 -- result is 30
 ```
+
+The defs in a block are only in scope inside it.
+
+# `do` blocks
+
+To start a block of your own in the middle of another, write `do` and put the block's statements on the lines after it, indented. The defs in it are gone once the block ends, so a `do` block keeps names that are only needed for a moment out of the code after it. A def in it can also reuse a name from outside, without changing what that name means after the block:
+
+```nanyx
+def main = {
+  def total = 10
+
+  do
+    def total = 20
+    println("inside: {total}")
+
+  println("outside: {total}")
+}
+
+-- inside: 20
+-- outside: 10
+```
+
+Like any block, a `do` block's value is the value of its last statement, so it can be a def's value too. `do` is not a loop: the block runs once, where it is written. It is the same as `do` in F#, and has nothing to do with `do ... while` in C or Java.

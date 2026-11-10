@@ -419,3 +419,8 @@ let ``Names that are sentences keep their backticks, and an identifier loses the
     unchanged "def n = r.`first name`\n"
     Assert.Equal("def plain = 1\n", format "def `plain` = 1")
     unchanged "def x = t.0\n"
+[<Fact>]
+let ``A do block keeps its do, and its statements are indented under it`` () =
+    unchanged (lines [ "def main = {"; "  def x = 1"; ""; "  do"; "    def x = 2"; "    println(x)"; ""; "  println(x)"; "}" ])
+    unchanged (lines [ "def y ="; "  do"; "    def z = 10"; "    z + 1" ])
+    Assert.Equal(lines [ "def main = {"; "  do"; "    f(1)"; ""; "  g()"; "}" ], format (lines [ "def main = {"; "  do"; "        f( 1 )"; "  g()"; "}" ]))
