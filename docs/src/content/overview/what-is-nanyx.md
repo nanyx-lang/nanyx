@@ -51,7 +51,7 @@ Full Hindley-Milner type inference means you rarely need to write type annotatio
 - **Type-safe by default**: Catch errors at compile time, not at runtime.
 - **Pattern matching**: Elegant control flow with exhaustive checking.
 - **Immutable values**: Predictable code that's easy to reason about.
-- **No garbage collector**: Memory is freed by [reference counting](/docs/advanced/reference-counting) as soon as nothing refers to it, and reused in place where it can be.
+- **No garbage collector**: Memory is freed by [reference counting](/docs/foundations/reference-counting) as soon as nothing refers to it, and reused in place where it can be.
 - **Modules**: First-class module system for organizing your code.
 - **Fast compilation**: Incremental builds that keep you in the flow.
 - **Friendly errors**: Helpful compiler messages that guide you to a fix.

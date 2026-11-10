@@ -8,7 +8,7 @@ The `collections` module provides functions for working with lists, maps, sets, 
 
 # List
 
-Since lists are immutable, all transform operations on lists return new lists. When nothing else refers to the list you transform, the new list may be built in the old one's memory: `List.map` rewrites its cells in place (see [Reference counting](../advanced/reference-counting#reuse-in-place)).
+Since lists are immutable, all transform operations on lists return new lists. When nothing else refers to the list you transform, the new list may be built in the old one's memory: `List.map` rewrites its cells in place (see [Reference counting](../foundations/reference-counting#reuse-in-place)).
 
 These functions are [attached definitions](../advanced/attached-definitions) on `List`, so `xs \map(f)` resolves to `List.map` without qualification when `xs` is a list. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed (all but `groupBy`, `select` and `selectOne`, which are not there yet).
 

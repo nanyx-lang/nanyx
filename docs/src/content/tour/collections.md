@@ -29,7 +29,7 @@ def addItems = {
 
 Use immutable collections by default. Reach for mutable variants when profiling shows a hot path that benefits from in-place updates.
 
-An immutable list can be updated in place too, when nothing else can see the change: transforming a list you hold the only reference to, with `List.map` or a function of your own that takes it apart and rebuilds it, reuses its cells. See [Reference counting](../advanced/reference-counting#reuse-in-place).
+An immutable list can be updated in place too, when nothing else can see the change: transforming a list you hold the only reference to, with `List.map` or a function of your own that takes it apart and rebuilds it, reuses its cells. See [Reference counting](../foundations/reference-counting#reuse-in-place).
 
 # Common collection abstractions
 
