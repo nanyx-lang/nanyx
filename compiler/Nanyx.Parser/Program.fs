@@ -1180,6 +1180,7 @@ let private rewriteTypeExprInModule (typeMap: Map<string, string>) (rewriteValue
             | Some qualified -> TypeName qualified
             | None -> TypeName name
         | TypeVar _
+        | TypeHole
         | TypeUnit -> kind
         | TypeTuple items -> TypeTuple (items |> List.map rewrite)
         | TypeRecord fields ->

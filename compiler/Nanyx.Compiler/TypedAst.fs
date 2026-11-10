@@ -130,7 +130,8 @@ type ContextInstance =
     /// definition it is (`+`, `Point.+`).
     | InstanceSynthesized of (string * string) list
 
-/// `ExprTypes` holds the resolved type of every expression inference typed, by node; `CalleeTypes` the type of
+/// `ExprTypes` holds the resolved type of every expression inference typed, and of every `_` written in a type that
+/// it read, by node; `CalleeTypes` the type of
 /// the function at each call or pipe, by the call's node; `SymbolTypes` the type of each declaration the module
 /// makes itself, by its symbol. Type variables left in them are generalised ones. All three are filled in for the
 /// root module of a compile only.

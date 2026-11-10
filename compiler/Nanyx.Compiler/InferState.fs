@@ -58,7 +58,8 @@ type InferState =
             DeferredContextUses: DeferredContextUse list;
             LocalNominals: Set<string>;
             LocalPrivateNominals: Set<string>;
-            /// The type of every expression inferred so far, by node. These are the types as inference first saw
+            /// The type of every expression inferred so far, and of every `_` written in a type, by node. These are
+            /// the types as inference first saw
             /// them; the substitution unification finds turns them into resolved types.
             ExprTypes: Map<NodeId, Ty>;
             /// The callee's type at each call (and pipe), by the call's node: the function's type instantiated

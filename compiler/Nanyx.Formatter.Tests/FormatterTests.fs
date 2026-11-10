@@ -311,3 +311,10 @@ let ``Imports in a row in a module block go in one bracketed import too`` () =
     Assert.Equal(
         lines [ "module m ="; "  import ("; "    nanyx/math"; "    nanyx/text"; "  )"; ""; "  def a = 1" ],
         format (lines [ "module m ="; "  import nanyx/math"; "  import nanyx/text"; "  def a = 1" ]))
+
+[<Fact>]
+let ``A hole in a type is printed as written`` () =
+    unchanged "def xs: list(_) = [1, 2]\n"
+    unchanged (lines [ "def f: int, _ -> _ = { a, b ->"; "  a + b"; "}" ])
+    unchanged "def g = { (x: _), y -> x + y }\n"
+    Assert.Equal("def m: map(string, _) = m\n", format "def m:map(string,_)=m")

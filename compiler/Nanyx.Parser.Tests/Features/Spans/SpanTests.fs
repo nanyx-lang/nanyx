@@ -235,6 +235,7 @@ and private expressionsOfType (typeExpr: TypeExpr) =
     match typeExpr.Kind with
     | TypeName _
     | TypeVar _
+    | TypeHole
     | TypeUnit -> []
     | TypeTuple types
     | TypeUnion types
@@ -340,6 +341,7 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         match typeExpr.Kind with
         | TypeName _
         | TypeVar _
+        | TypeHole
         | TypeUnit
         | TypeOf _ -> []
         | TypeTuple types

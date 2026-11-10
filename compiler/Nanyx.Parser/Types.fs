@@ -20,7 +20,8 @@ let internal fillTypeRefs () =
     let typeIdentifier =
         spannedType (
             qualifiedTypeName |>> fun name ->
-                if name.Length = 1 && Char.IsLower name.[0] then TypeVar name
+                if name = "_" then TypeHole
+                elif name.Length = 1 && Char.IsLower name.[0] then TypeVar name
                 else TypeName name)
 
     let typeParam =

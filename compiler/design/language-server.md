@@ -44,6 +44,9 @@ what the compiler keeps: exact spans, resolved names and types.
   module's own, an imported one or the prelude's, printed from its `TypeDefInfo` with the type printer hover uses.
   A type's parameters keep the names they are written with (`type Box(a) = (item: a)`). On a type's name this
   takes precedence over the type of an expression around it, such as the block a local def's annotation is in.
+- **Hover on a `_` in a type shows what it was inferred to be**: `int` on the `_` of `def xs: list(_) = [1, 2]`.
+  Inference records each hole's type in `ExprTypes` under the type expression's node, and `Hover.typeAt` looks for
+  holes among the type expressions at the position (`Hover.typeExprsAt`).
 - **A text with type or name errors is typed all the same.** The type checker recovers from them (see
   [deferred errors](deferred-errors.md)): what checks has its type, and what does not has the error type, shown as
   `???`. So hover, lenses, inlay hints and completion read the current text whenever it parses

@@ -30,6 +30,7 @@
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />    <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
+    <Compile Include="Features\Types\TypeHoleTests.fs" />
     <Compile Include="Features\Types\TypeOfTests.fs" />
     <Compile Include="Features\Types\UnionsTests.fs" />
     <Compile Include="Features\Workflows\WorkflowTests.fs" />

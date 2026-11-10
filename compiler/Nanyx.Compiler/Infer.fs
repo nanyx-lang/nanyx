@@ -205,6 +205,11 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
             // The variable keeps the annotation's name, so types are shown with the names the user wrote.
             let var = { Id = state.NextId; Name = Some name }
             TyVar var, { state with NextId = state.NextId + 1; TypeVars = state.TypeVars |> Map.add name var }
+    // Each `_` is a variable of its own, with no name to share (see `TypeHoles`). It is recorded by node, as an
+    // expression's type is, so an editor can show what it was inferred to be.
+    | TypeHole ->
+        let ty, next = freshVar state
+        ty, { next with ExprTypes = next.ExprTypes |> Map.add typeExpr.Id ty }
     | TypeUnit -> TyPrimitive "unit", state
     | TypeTuple items ->
         let mutable current = state
@@ -321,7 +326,7 @@ let rec private typeOfValues (typeExpr: TypeExpr) : Expression list =
     let ofList items = items |> List.collect typeOfValues
     match typeExpr.Kind with
     | TypeOf value -> [ value ]
-    | TypeName _ | TypeVar _ | TypeUnit -> []
+    | TypeName _ | TypeVar _ | TypeHole | TypeUnit -> []
     | TypeTuple items | TypeUnion items | TypeIntersection items | TypeContext items -> ofList items
     | TypeRecord fields ->
         fields
@@ -2114,7 +2119,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | Some declaredExpr ->
                                 let ty, st = typeExprToTy nextState declaredExpr
                                 match Unifier.unalias ty with
-                                | TyFunc(inputTy, returnTy) -> Some inputTy, Some returnTy, Some ty, st
+                                | TyFunc(inputTy, returnTy) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
                                 | _ -> None, None, Some ty, st
                             | None -> None, None, None, nextState
                         let effectiveExpectedInputOpt =
@@ -2152,7 +2157,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 match expectedDeclaredOpt with
                                 | Some declaredTy ->
                                     match expr.Kind with
-                                    | Lambda _ -> declaredTy, next
+                                    | Lambda _ -> declaredTy, TypeHoles.constrainLambda expr.Span declaredTypeExprOpt declaredTy typedExpr.Type next
                                     | _ ->
                                         let updatedState =
                                             match Unifier.unalias declaredTy with
@@ -2185,7 +2190,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             | ImportStatement items ->
                 typedStatements <- typedStatements @ [ TypedImportStatement items ]
             | TypeDefStatement(name, modifiers, parameters, body) ->
-                if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters
+                if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters
                 current <- registerTypeDef current name modifiers parameters body
                 // Checked once the type is registered, so it can name itself.
                 if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters
@@ -2219,7 +2224,7 @@ let rec private annotationVarNames (typeExpr: TypeExpr) : string list =
     let names =
         match typeExpr.Kind with
         | TypeVar name -> [ name ]
-        | TypeName _ | TypeUnit | TypeContext _ -> []
+        | TypeName _ | TypeHole | TypeUnit | TypeContext _ -> []
         | TypeTuple items | TypeUnion items | TypeIntersection items -> ofList items
         | TypeRecord fields ->
             fields
@@ -2350,8 +2355,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             let _, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
             match declaredTypeExprOpt with
             // An annotation with a `typeof` can only be read once the values it names are in scope, so the def is
-            // pre-bound as an unannotated one is, and its annotation is unified with that once it has been read.
-            | Some declaredExpr when (typeOfValues declaredExpr).IsEmpty ->
+            // pre-bound as an unannotated one is, and its annotation is unified with that once it has been read. So is
+            // one with a `_`, which generalised here would stand for any type, as a named variable does.
+            | Some declaredExpr when (typeOfValues declaredExpr).IsEmpty && not (TypeHoles.hasHoles declaredExpr) ->
                 let ty, st = typeExprToTy state declaredExpr
                 state <- st
                 env <- declareTopLevel name symbol (TypeEnv.generalize env ty) env
@@ -2416,7 +2422,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some declaredExpr ->
                         let ty, st = typeExprToTy nextState declaredExpr
                         match Unifier.unalias ty with
-                        | TyFunc(inputTy, returnTy) -> Some inputTy, Some returnTy, Some ty, st
+                        | TyFunc(inputTy, returnTy) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
                         | _ -> None, None, Some ty, st
                     | None -> None, None, None, nextState
                 let effectiveExpectedInputOpt =
@@ -2455,7 +2461,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         match expectedDeclaredOpt with
                         | Some declaredTy ->
                             match expr.Kind with
-                            | Lambda _ -> declaredTy, next
+                            | Lambda _ -> declaredTy, TypeHoles.constrainLambda expr.Span declaredTypeExprOpt declaredTy typedExpr.Type next
                             | _ ->
                                 let updatedState =
                                     match Unifier.unalias declaredTy with
@@ -2516,7 +2522,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Attribute _ -> ()
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
-            match typeOfInTypeDef name body parameters with
+            match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
             | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters
             | typeOfErrors -> errors <- errors @ typeOfErrors
             items <- items @ [ TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ]

@@ -100,6 +100,34 @@ def magnitude3: (x: int, y: int) -> float
     }
 ```
 
+# Partial annotations
+
+An annotation does not have to spell out the whole type. Write `_` for any part of it and the compiler infers that part, as it would with no annotation at all:
+
+```nanyx
+def xs: list(_) = [1, 2]
+-- inferred as list(int)
+
+def add: (int, _) -> _ = { a, b -> a + b }
+-- inferred as (int, int) -> int
+
+def answer: #ok(_) | #error(string) = #ok(42)
+-- the payload of #ok is inferred as int
+```
+
+This is useful when one part of a type is worth stating, such as a function's input, and the rest is obvious from the code. The parts you do write are still checked, so `def xs: list(_) = "hello"` is a type error.
+
+Each `_` is a type of its own, and is filled in by inference rather than standing for any type. A named type variable is different: `a -> a` promises that the function works for every `a`, while `_ -> _` only says that it takes something and returns something, and leaves the rest to inference. So `def inc: _ -> _ = { x -> x + 1 }` is `int -> int`, where `def inc: a -> a = ...` is an error. A def whose annotation has holes is generalised just as an unannotated one is, so `def id: _ -> _ = { x -> x }` is still `a -> a`.
+
+In an editor, hovering over a `_` shows the type it was inferred to be.
+
+`_` can be used wherever the type of a value is written: a def's annotation, a local def's or a lambda parameter's. It cannot be used in a `type` definition, which says what a type is and so has nothing to infer it from:
+
+```nanyx
+type Names = list(_)
+-- error NYX0216: '_' cannot be used in the definition of the type 'Names', only in the type of a value
+```
+
 # Exported values
 
 By convention, exported values should be annotated:

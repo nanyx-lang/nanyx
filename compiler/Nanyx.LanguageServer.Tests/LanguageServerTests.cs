@@ -305,6 +305,22 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Hover_shows_what_a_hole_in_a_type_was_inferred_to_be()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-hole.nyx"));
+
+        Open(uri, "def xs: list(_) = [1, 2]\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var name = await HoverAt(uri, 0, 5);
+        Assert.Equal("```nanyx\nlist(int)\n```", name?.Contents.MarkupContent?.Value);
+
+        var hole = await HoverAt(uri, 0, 13);
+        Assert.Equal("```nanyx\nint\n```", hole?.Contents.MarkupContent?.Value);
+        Assert.Equal(new Range(0, 13, 0, 14), hole?.Range);
+    }
+
+    [Fact]
     public async Task Hover_outside_any_expression_returns_nothing()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-nothing.nyx"));
