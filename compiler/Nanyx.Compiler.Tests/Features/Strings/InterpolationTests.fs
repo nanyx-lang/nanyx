@@ -111,6 +111,21 @@ let ``A hole of a type with no ToString is an error at the hole`` () =
         Assert.Equal(expectedAt, at)
 
 [<Fact>]
+let ``A function that requires ToString is passed the compiler's own for a tag`` () =
+    let typed = compileClean "def angled = { v -> \"<{v}>\" }\ndef color: #red | #green = #green\ndef s = angled(#red) ++ angled(color)\n"
+    Assert.Equal<ContextInstance list>(
+        [ InstanceSynthesized [ "toString", "__toString" ]; InstanceSynthesized [ "toString", "__toString" ] ],
+        instancesOf typed |> List.filter (function InstanceSynthesized _ -> true | _ -> false))
+
+[<Fact>]
+let ``Passing a tag with a payload to a function that requires ToString says why it has none`` () =
+    let message, at = missingContext "def angled = { v -> \"<{v}>\" }\ndef s = angled(#some(1))\n"
+    Assert.Equal(
+        "'angled' requires the context 'ToString(#some(int))', but only a tag without a payload has a toString: match on it, or turn it into a string first",
+        message)
+    Assert.Equal("angled", at)
+
+[<Fact>]
 let ``An attached toString of the wrong type is reported at the hole`` () =
     let message, _ =
         missingContext "type Point = (x: int)\ndef Point.toString: Point -> int = { p -> p.x }\ndef s = \"{Point(x = 1)}\"\n"

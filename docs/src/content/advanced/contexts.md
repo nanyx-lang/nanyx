@@ -226,6 +226,8 @@ def label: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {valu
 def angled = { value -> "<{value}>" }   // [ToString(α)] α -> string
 ```
 
+Such a function can be called with any type that has a `ToString`, the compiler's own included: `angled(3)` is `"<3>"`, and `angled(#red)` is `"<#red>"`. A tag with a payload has none, so `angled(#some(1))` is an error.
+
 A `use` changes how its block writes a type, generic code called from the block included:
 
 ```nanyx
