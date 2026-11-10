@@ -39,6 +39,15 @@ let ``Prefix minus is written against its operand`` () =
     unchanged (lines [ "def f = { x ->"; "  def y = x * 2"; "  -y"; "}" ])
 
 [<Fact>]
+let ``** groups to the right, and its brackets are kept where they say otherwise`` () =
+    unchanged "def a = 2 ** 3 ** 2\n"
+    unchanged "def a = (2 ** 3) ** 2\n"
+    unchanged "def a = 2 * 3 ** 2\n"
+    unchanged "def a = (2 * 3) ** 2\n"
+    unchanged "def a = 2 ** -x\n"
+    Assert.Equal("def a = (-x) ** 2\n", format "def a = -x ** 2")
+
+[<Fact>]
 let ``Operators a statement cannot take without parentheses keep them`` () =
     unchanged (lines [ "def f = { x ->"; "  (x % 2)"; "}" ])
     unchanged (lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> (x and y)"; "    | _ -> x + 1"; "}" ])

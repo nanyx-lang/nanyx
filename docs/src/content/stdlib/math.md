@@ -6,7 +6,7 @@ order: 7
 
 The `math` module provides common numeric and floating-point operations.
 
-Functions that work on any numeric type are to be generic over the `Num(a)` [context](../advanced/contexts) (with `Ord(a)` to compare); `int` and `float` are its built-in instances, so these functions will accept either without conversion. For now `abs`, `min`, `max`, `clamp` and `pow` take `int` only: making them generic waits on `Ord` ([#186](https://github.com/nanyx-lang/nanyx/issues/186), [#476](https://github.com/nanyx-lang/nanyx/issues/476)). Functions that only make sense for floating-point values take `float` directly.
+Functions that work on any numeric type are to be generic over the `Num(a)` [context](../advanced/contexts) (with `Ord(a)` to compare); `int` and `float` are its built-in instances, so these functions will accept either without conversion. `pow` is; for now `abs`, `min`, `max` and `clamp` take `int` only: making them generic waits on `Ord` ([#186](https://github.com/nanyx-lang/nanyx/issues/186), [#476](https://github.com/nanyx-lang/nanyx/issues/476)). Functions that only make sense for floating-point values take `float` directly.
 
 `floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `Int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 
@@ -83,10 +83,28 @@ math.sqrt(81.0)
 math.pow: [Num(a)] (a, int) -> a
 ```
 
+`base ** exponent`, which is how it is usually written: `base` multiplied by itself `exponent` times. It is the prelude's `pow`, and works on any number type. A negative exponent is `1 / base ** -exponent`, so on an `int` it truncates towards zero.
+
 ```nanyx
 math.pow(2, 8)
 -- 256
+
+1.5 ** 2
+-- 2.25
 ```
+
+For an exponent that is not a whole number, `Float.pow`, in the prelude, takes a `float`:
+
+```nanyx
+Float.pow: (float, float) -> float
+```
+
+```nanyx
+Float.pow(2.0, 0.5)
+-- 1.414214
+```
+
+A whole exponent gives exactly what `**` does; any other is computed as `e ** (y * ln(x))`, so a negative base gives NaN.
 
 ---
 

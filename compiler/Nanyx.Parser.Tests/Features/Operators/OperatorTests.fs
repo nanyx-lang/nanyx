@@ -193,3 +193,13 @@ let ``A shorthand lambda that starts with minus still subtracts from its argumen
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ _ ], Kind (BinaryOp ("-", _, Kind (IdentifierExpr "x"))))))))] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``** binds tighter than * and groups to the right`` () =
+    match parseModule "def a = 2 ** 3 ** 2\ndef b = 2 * 3 ** 2\ndef c = -x ** 2\n" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (BinaryOp ("**", Kind (LiteralExpr (IntLit 2)), Kind (BinaryOp ("**", _, _)))))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (BinaryOp ("*", _, Kind (BinaryOp ("**", _, _)))))))
+                  Kind (Def (ValueDef (_, "c", _, Kind (BinaryOp ("**", Kind (FunctionCall (name, _, _)), _))))) ] ->
+        Assert.Equal(NegateSyntax.builtIn, name)
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"

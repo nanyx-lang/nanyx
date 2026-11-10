@@ -723,6 +723,9 @@ let private operand : Parser<Operand, ParseState> = prefixed (notKeyword <|> min
 opp.TermParser <- operand
 
 // Define operators with precedence
+// Powers bind tighter than every other infix operator and group to the right: `2 ** 3 ** 2` is `2 ** (3 ** 2)`.
+opp.AddOperator(InfixOperator("**", ws, 8, Associativity.Right, binary "**"))
+
 // Multiplicative operators (higher precedence)
 opp.AddOperator(InfixOperator("*", ws, 7, Associativity.Left, binary "*"))
 opp.AddOperator(InfixOperator("/", ws, 7, Associativity.Left, binary "/"))
@@ -783,6 +786,7 @@ let pipeTarget =
 let oppInline = new OperatorPrecedenceParser<Operand, unit, ParseState>()
 oppInline.TermParser <- prefixed minus
 
+oppInline.AddOperator(InfixOperator("**", wsInline, 8, Associativity.Right, binary "**"))
 oppInline.AddOperator(InfixOperator("*", wsInline, 7, Associativity.Left, binary "*"))
 oppInline.AddOperator(InfixOperator("/", wsInline, 7, Associativity.Left, binary "/"))
 
@@ -926,7 +930,7 @@ do
 
     // The infix operators written with operator characters (see the operators page of the docs), longer ones before
     // the shorter ones they start with.
-    let shorthandOperators = [ "++"; "+"; "-"; "*"; "/"; "%"; "<="; ">="; "<"; ">"; "=="; "!=" ]
+    let shorthandOperators = [ "++"; "+"; "-"; "**"; "*"; "/"; "%"; "<="; ">="; "<"; ">"; "=="; "!=" ]
     let shorthandOperator =
         notFollowedBy (pstring "->" <|> pstring "--")
         >>. choice (shorthandOperators |> List.map pstring)

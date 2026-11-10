@@ -112,12 +112,14 @@ let private showContext =
     "def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }\n"
 
 /// Where each call in `source` that requires a parameterised context finds its instances, in the order written. The
-/// interpolation holes of built-in types, here and in the prelude, are left out.
+/// calls of the prelude, and the interpolation holes of built-in types, are left out.
 let private instancesIn (source: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value.ContextInstances
+    let typed = result.Typed.Value
+    typed.ContextInstances
     |> Map.toList
+    |> List.filter (fun (call, _) -> typed.ExprTypes.ContainsKey call)
     |> List.sortBy fst
     |> List.map snd
     |> List.filter ((<>) [ Some InstanceBuiltIn ])

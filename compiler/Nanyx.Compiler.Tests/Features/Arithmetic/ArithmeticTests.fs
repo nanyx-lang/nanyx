@@ -85,3 +85,17 @@ let ``A function that requires Num multiplies, takes literals and calls one that
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal("float", Unifier.tyToString result.Typed.Value.Types.["total"])
+
+[<Fact>]
+let ``A power is a call to the prelude's __pow, of the base's type`` () =
+    let source =
+        "def i = 2 ** 10\n" +
+        "def f = 1.5 ** 2\n" +
+        "def cube: [Num(a)] a -> a = { x -> x ** 3 }\n" +
+        "def g = Float.pow(2.0, 0.5)\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let types = result.Typed.Value.Types
+    Assert.Equal("int", Unifier.tyToString types.["i"])
+    Assert.Equal("float", Unifier.tyToString types.["f"])
+    Assert.Equal("float", Unifier.tyToString types.["g"])

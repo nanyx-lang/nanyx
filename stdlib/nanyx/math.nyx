@@ -3,7 +3,8 @@ module math
 -- nanyx/math: numeric utilities.
 --
 -- The language docs make `abs`, `min`, `max`, `clamp` and `pow` generic over the `Num(a)` context, so that
--- they take an `int` or a `float`; for now they take `int` only. `sqrt`, `floor`, `ceil`, `round` and `truncate`
+-- they take an `int` or a `float`. `pow` is; the others take `int` only until `Ord` exists to compare
+-- with (#476). `sqrt`, `floor`, `ceil`, `round` and `truncate`
 -- take a `float`, and are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
 -- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`.
 --
@@ -30,15 +31,11 @@ export def clamp: (int, min: int, max: int) -> int = { n, min, max ->
   if n < min then min else if n > max then max else n
 }
 
--- `acc` multiplied by `base` `exponent` times.
-def powOnto: int, int, int -> int = { base, exponent, acc ->
-  if exponent <= 0 then acc else powOnto(base, exponent - 1, acc * base)
-}
-
--- `base` multiplied by itself `exponent` times (1 when `exponent` is zero or negative). Stack-safe: it
--- works for any `exponent`.
-export def pow: int, int -> int = { base, exponent ->
-  powOnto(base, exponent, 1)
+-- `base ** exponent`: `base` multiplied by itself `exponent` times, for any number type. A negative
+-- exponent is `1 / base ** -exponent`, so on an `int` it truncates towards zero. For an exponent
+-- that is not a whole number, see `Float.pow`.
+export def pow: [Num(a)] a, int -> a = { base, exponent ->
+  base ** exponent
 }
 
 -- The square root of `x` (NaN when `x` is negative).
