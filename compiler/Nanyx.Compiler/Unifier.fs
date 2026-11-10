@@ -189,10 +189,16 @@ module Unifier =
     let private tagUnionLengthMessage leftCount rightCount left right =
         $"Tag union length mismatch: {leftCount} vs {rightCount}. {mismatchMessage left right}"
 
+    /// Says which fields only one of two records has: `{a, x} vs {x, y}: only the first has a; only the second has y.`
     let private recordKeyMessage leftKeys rightKeys left right =
-        let leftKeyList = leftKeys |> Set.toList |> List.sort |> String.concat ", "
-        let rightKeyList = rightKeys |> Set.toList |> List.sort |> String.concat ", "
-        $"Record field mismatch: {{{leftKeyList}}} vs {{{rightKeyList}}}. {mismatchMessage left right}"
+        let keyList keys = keys |> Set.toList |> List.sort |> String.concat ", "
+        let onlyIn which keys =
+            if Set.isEmpty keys then None else Some $"only the {which} has {keyList keys}"
+        let differences =
+            [ onlyIn "first" (Set.difference leftKeys rightKeys); onlyIn "second" (Set.difference rightKeys leftKeys) ]
+            |> List.choose id
+            |> String.concat "; "
+        $"Record field mismatch: {{{keyList leftKeys}}} vs {{{keyList rightKeys}}}: {differences}. {mismatchMessage left right}"
 
     let private keySet (fields: Map<string, Ty>) =
         fields |> Map.keys |> Set.ofSeq
@@ -489,16 +495,14 @@ module Unifier =
             |> List.tryFind (fun (_, span) -> span <> origin)
             |> Option.orElse (List.tryLast failures)
         let rec loop (subst: Subst) (remaining: ConstraintSet) =
+            // A closed record has exactly its fields, so two closed records agree only when they have the same ones:
+            // a record with a field more or a field fewer is a different type.
             let unifyRecordFields origin (lFields: Map<string, Ty>) (rFields: Map<string, Ty>) rest left right =
                 let lKeys = keySet lFields
                 let rKeys = keySet rFields
-                if Set.isSubset lKeys rKeys || Set.isSubset rKeys lKeys then
-                    let commonKeys = Set.intersect lKeys rKeys
-                    let pairs =
-                        commonKeys
-                        |> Seq.map (fun key -> (lFields.[key], rFields.[key]))
-                        |> Seq.toList
-                    let pairConstraints = pairs |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
+                if lKeys = rKeys then
+                    let pairConstraints =
+                        lKeys |> Seq.map (fun key -> (lFields.[key], rFields.[key], Equal, origin)) |> Seq.toList
                     loop subst (pairConstraints @ rest)
                 else
                     Error (recordKeyMessage lKeys rKeys left right, origin)

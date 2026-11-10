@@ -66,16 +66,37 @@ let ``Typecheck reports mismatch for missing tuple args`` () =
     Assert.Contains("(", message)
     Assert.Contains("int vs (", message)
 
+// A record type is closed: it has exactly the fields it names (#470).
 [<Fact>]
-let ``Typecheck allows record width subtyping`` () =
+let ``A closed record parameter rejects a record with a field more`` () =
     let source =
-        "def f: (a: int) -> int = { r -> 1 }\n" +
-        "def args = (a = 1, b = 2)\n" +
-        "def result = f(args)"
+        "def f: (x: int, y: int) -> int = { x, y -> x + y }\n" +
+        "def data = (x = 1, y = 2, z = 3)\n" +
+        "def result = f(data)"
+    let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
+    Assert.StartsWith("Record field mismatch: {x, y, z} vs {x, y}: only the first has z.", diagnostic.Message)
+
+[<Fact>]
+let ``A closed record parameter rejects a record with a field fewer`` () =
+    let source =
+        "def f: (x: int, y: int) -> int = { x, y -> x + y }\n" +
+        "def result = f((x = 1))"
+    let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
+    Assert.StartsWith("Record field mismatch: {x} vs {x, y}: only the second has y.", diagnostic.Message)
+
+[<Fact>]
+let ``A closed record annotation rejects a record with a field more`` () =
+    let diagnostic = Assert.Single (Compiler.compile "type Point = (x: int, y: int)\ndef p: Point = (x = 1, y = 2, z = 3)").Diagnostics
+    Assert.StartsWith("Record field mismatch: {x, y, z} vs {x, y}: only the first has z.", diagnostic.Message)
+
+[<Fact>]
+let ``A function that only reads some fields takes a record with more`` () =
+    let source =
+        "def area = { r -> r.width * r.height }\n" +
+        "def result = area((width = 2, height = 3, colour = \"red\"))"
     let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty)
-    let typed = result.Typed.Value
-    Assert.Equal(TyPrimitive "int", typed.Types.["result"])
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["result"])
 
 [<Fact>]
 let ``Typecheck gives a record update the record's type and checks the updated fields`` () =

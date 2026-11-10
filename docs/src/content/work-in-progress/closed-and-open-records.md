@@ -4,9 +4,9 @@ description: "Whether a record type allows fields it does not name"
 order: 23
 ---
 
-> **Status: decided, not built.** This page decides whether a record type allows fields it does not name. Today
-> the type checker answers neither way consistently (see [where we are today](#where-we-are-today)). It is part of
-> the [compilation](./compilation) workstream, and its issues carry the `compilation` and `type checker` labels.
+> **Status: in progress.** This page decides whether a record type allows fields it does not name. Built: closed
+> records have exactly their fields (stage 1 of the [plan](#plan)). Not built: writing `...` in a type. It is part
+> of the [compilation](./compilation) workstream, and its issues carry the `compilation` and `type checker` labels.
 
 # Summary
 
@@ -106,18 +106,22 @@ offsets, so open records cost code size, not speed.
 
 # Where we are today
 
-- **Closed records accept too much.** `unifyRecordFields` ([Unifier.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Unifier.fs), in `unify`)
-  accepts two closed records when either's fields are a subset of the other's. So both of these type-check, and both
-  produce WebAssembly that Wasmtime rejects (`type mismatch: expected i32 but nothing on stack`):
+- **Closed records are closed.** `unifyRecordFields` ([Unifier.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Unifier.fs), in `unify`)
+  accepts two closed records only when they have the same fields, in `Equal` and `Assignable` constraints alike.
+  The error names the fields only one of them has:
 
-  ```nanyx
-  def f: (x: int, y: int) -> int = { x, y -> x + y }
-
-  f((a = 100, x = 1, y = 2))   -- an extra field
-  f((x = 1))                   -- a missing field
+  ```text
+  Record field mismatch: {a, x, y} vs {x, y}: only the first has a. Type mismatch: (a: int, x: int, y: int) vs (x: int, y: int).
   ```
 
-  The second is unsound regardless of this decision.
+  Until [#470](https://github.com/nanyx-lang/nanyx/issues/470), it accepted them when either's fields were a subset
+  of the other's, so a call with a field more or a field fewer type-checked and then produced WebAssembly that
+  Wasmtime rejected.
+- **A record pattern names some fields.** A pattern by member name, `(status = #some(n))`, tells inference the value
+  is an open record with those fields (`openRecordWith` in
+  [InferState.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/InferState.fs)), so it
+  matches a record with more, as if it ended in `...`. The parser does not accept that `...` yet
+  ([#459](https://github.com/nanyx-lang/nanyx/issues/459)).
 - **Open records exist in inference only.** `TyOpenRecord` ([TypedAst.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/TypedAst.fs)) is what
   reading a field of an unknown value gives, and is printed `(x: int, ...a)`. Unification solves its row as the
   table above says. There is no syntax for it: the parser's `typeRecord` ([Types.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Parser/Types.fs))
@@ -128,9 +132,8 @@ offsets, so open records cost code size, not speed.
 
 # Plan
 
-1. **Closed means closed.** Require two closed records to have the same fields, in `Equal` and `Assignable`
-   constraints alike, with an error that names the extra or missing fields. Fix anything in `stdlib/`, `examples/`
-   and the tests that relied on the old rule. ([#470](https://github.com/nanyx-lang/nanyx/issues/470))
+1. **Closed means closed.** _Done._ Two closed records agree only when they have the same fields, with an error
+   that names the extra or missing ones. ([#470](https://github.com/nanyx-lang/nanyx/issues/470))
 2. **`...` and `...r` in record types.** Parse them, lower them to `TyOpenRecord`, and have the formatter, hover
    and completion show them. ([#471](https://github.com/nanyx-lang/nanyx/issues/471))
 3. **Docs.** The [records tour](../tour/records#closed-and-open-records) describes the
@@ -140,6 +143,8 @@ offsets, so open records cost code size, not speed.
 
 - **Record patterns.** Does a pattern that names some of a record's fields, `(x = a)` against `(x: int, y: int)`,
   need a `...` to ignore the rest, as Rust's `..` does? Reading fewer fields cannot go wrong, but writing `...` says
-  that leaving fields out was on purpose.
+  that leaving fields out was on purpose. The [pattern matching tour](../tour/pattern-matching) writes the `...`;
+  the compiler does not require it today, and cannot until [#459](https://github.com/nanyx-lang/nanyx/issues/459)
+  lets it be written.
 - **Spread of an open record.** `(...p, z = 1)` where `p` is `(x: int, ...r)` is `(x: int, z: int, ...r)`, unless
   `r` has a `z`. Whether a spread may override a field that is only in a row needs deciding with the spread rules.

@@ -968,10 +968,8 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
 let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty * InferState) option =
     let openWith (row: Ty) (next: InferState) =
         let fieldTy, next = freshVar next
-        let rest, next = freshVar next
-        match rest with
-        | TyVar restVar -> Some (fieldTy, addConstraint row (TyOpenRecord(Map.ofList [ fieldName, fieldTy ], restVar)) next)
-        | _ -> None
+        let record, next = openRecordWith (Map.ofList [ fieldName, fieldTy ]) next
+        Some (fieldTy, addConstraint row record next)
     let resolved = resolveSoFar state ty
     match recordFieldsOf resolved with
     | Some fields -> fields |> Map.tryFind fieldName |> Option.map (fun fieldTy -> fieldTy, state)
@@ -1841,7 +1839,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             currentState <- next
                             ty)
                         |> fun tys -> tys, currentState
-                    let constrained = addConstraint scrutineeTy (TyRecord (Map.empty)) nextState
+                    let anyRecord, nextState = openRecordWith Map.empty nextState
+                    let constrained = addConstraint scrutineeTy anyRecord nextState
                     let mutable innerEnv = env'
                     let mutable innerState = constrained
                     let mutable innerErrors: Diagnostic list = []
@@ -1876,8 +1875,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 fieldMap <- fieldMap.Add(name, memberTy)
                         | Error err -> innerErrors <- err
                     if innerErrors.IsEmpty then
+                        // The pattern names some of the record's fields, not all of them.
                         let constrained =
-                            if fieldMap.IsEmpty then innerState else addConstraint scrutineeTy (TyRecord fieldMap) innerState
+                            if fieldMap.IsEmpty then innerState
+                            else
+                                let record, next = openRecordWith fieldMap innerState
+                                addConstraint scrutineeTy record next
                         Ok (innerEnv, constrained, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors

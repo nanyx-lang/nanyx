@@ -184,7 +184,7 @@ let ``nanyx/text rejects a labelled argument passed by position`` () =
     let result = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", \",\")"
     let diagnostic = List.exactlyOne result.Diagnostics
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.StartsWith("Record field mismatch: {0, 1} vs {0, on}.", diagnostic.Message)
+    Assert.StartsWith("Record field mismatch: {0, 1} vs {0, on}: only the first has 1; only the second has on.", diagnostic.Message)
     let named = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", on = \",\")"
     Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")
 
@@ -201,5 +201,5 @@ let ``nanyx/text reports a labelled argument passed by position once, not in the
         "}\n"
     let diagnostic = List.exactlyOne (Compiler.compile source).Diagnostics
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.StartsWith("Record field mismatch: {0, 1, 2} vs {0, fill, width}.", diagnostic.Message)
+    Assert.StartsWith("Record field mismatch: {0, 1, 2} vs {0, fill, width}: only the first has 1, 2; only the second has fill, width.", diagnostic.Message)
     Assert.Equal(2, diagnostic.Span.Value.StartLine)

@@ -221,6 +221,12 @@ let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
     TyVar var, { state with NextId = state.NextId + 1 }
 
+/// A record with at least `fields`, its others a fresh row variable: what reading a field, or matching a pattern that
+/// names some fields, tells of a value. A closed record would say it has no others.
+let internal openRecordWith (fields: Map<string, Ty>) (state: InferState) =
+    let row = { Id = state.NextId; Name = None }
+    TyOpenRecord(fields, row), { state with NextId = state.NextId + 1 }
+
 /// The symbol for `name` as `holder` declares it, made the first time it is asked for. `None` when the parser
 /// saw no such declaration: the compiler made the name up (a destructured tuple, a `for` loop's element).
 /// `scopeEnd` is where the name stops being visible (see `Scope.until`), or `None` for the whole module.
