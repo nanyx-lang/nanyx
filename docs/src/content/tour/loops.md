@@ -29,16 +29,38 @@ def data = [1, 2, 3]
 for data | item -> println(item)
 ```
 
+# Looping over several collections at once
+
+A `for` loop can walk several collections in step. List them separated by commas, and each arm takes one pattern per collection, in the same order:
+
+```nanyx
+def names = ["Alex", "Sam", "Jo"]
+def ages = [34, 27, 41]
+
+for names, ages | name, age -> println("{name} is {age}")
+```
+
+The loop stops as soon as the shortest collection runs out, so nothing is left over and nothing is read past the end. Arms match the elements together, as a `match` on several values does:
+
+```nanyx
+for names, ages | "Sam", _   -> println("Found Sam")
+                | name, age -> println("{name}, {age}")
+```
+
 # Enumerating with indexes
 
-Zip a collection with a range to keep a counter:
+There is no `enumerate` function, because zipping already does the job. Walk a collection in step with a range that has no end to keep a counter:
 
 ```nanyx
 def data = ["one", "two", "three"]
 
 for data, 0.. | item, i ->
-  print("Item number {i} is {item}")
+  println("Item number {i} is {item}")
 ```
+
+This prints `Item number 0 is one`, `Item number 1 is two` and `Item number 2 is three`. Two things are clear from the loop head: `i` is a counter that starts wherever you choose (`1..` counts from one), not the item's position in some collection, and which name is the counter and which the item, even when looping over a list of ints.
+
+A range with no end never runs out on its own, so a loop over one alone is an error (NYX0217). It needs at least one collection or bounded range beside it to say when to stop.
 
 # Dictionaries
 

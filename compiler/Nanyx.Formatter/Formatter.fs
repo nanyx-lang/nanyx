@@ -316,7 +316,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     and needsParentheses (position: Position) (e: Expression) =
         match e.Kind with
         | BinaryOp(op, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
-        | FunctionCall("__range", _, [ _; _ ]) -> 4 < position.Prec || position.Inline
+        | RangeSyntax.Call _ -> 4 < position.Prec || position.Inline
         | FunctionCall("not", _, [ _ ]) -> 8 < position.Prec || position.Inline
         | Pipe _ -> 0 < position.Prec
         | _ when isOpenEnded e -> not position.Tail || position.Prec > 8
@@ -331,7 +331,8 @@ let format (options: Options) (parsed: SourceModule) : string =
         | UseIn _
         | WorkflowBindExpr _
         | WorkflowReturnExpr _ -> true
-        | FunctionCall(("__for" | "__with"), _, [ _; _ ]) -> true
+        | FunctionCall("__with", _, [ _; _ ]) -> true
+        | ForSyntax.Call _ -> true
         | _ -> false
 
     and exprBare (position: Position) (e: Expression) : Doc =
@@ -345,8 +346,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             | Some segments -> listDoc e.Span segments
             | None -> binary position op l r
         | FunctionCall("not", _, [ operand ]) -> cat [ text "not "; expr operandPosition operand ]
-        | FunctionCall("__range", _, [ a; b ]) ->
+        | RangeSyntax.Call(a, Some b) ->
             cat [ expr { position with Tail = false; Prec = 4 } a; text ".."; expr { position with Prec = 5 } b ]
+        | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = 4 } a; text ".." ]
         | FunctionCall("__with", _, [ record; updates ]) when (match updates.Kind with RecordExpr fields -> fields |> List.forall (function NamedField _ -> true | _ -> false) | _ -> false) ->
             let fields = match updates.Kind with RecordExpr fields -> fields | _ -> []
             let count = fields.Length
@@ -355,8 +357,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expr { full with Tail = (index = count - 1) } value ]
                 | PositionalField value -> expr full value
             cat [ expr operandPosition record; text " with "; commaJoin (List.mapi update fields) ]
-        | FunctionCall("__for", _, [ iterable; loop ]) when (match loop.Kind with Lambda([ ("__for_element", None) ], _) -> true | _ -> false) ->
-            forDoc iterable loop
+        | ForSyntax.Call(iterables, loop, parameters, _) when parameters = List.init iterables.Length (fun index -> (ForSyntax.element (index + 1), None)) ->
+            forDoc iterables loop
         | FunctionCall(n, nameSpan, args) ->
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
@@ -750,13 +752,13 @@ let format (options: Options) (parsed: SourceModule) : string =
                         else cat [ keyword; text " "; expr full elseBranch ]
                 cat [ text "if "; ifHead head; thenDoc; elseDoc ]
 
-    /// `for xs | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the element.
-    and forDoc (iterable: Expression) (loop: Expression) : Doc =
-        let head = cat [ text "for "; expr { full with Tail = false } iterable ]
+    /// `for xs, ys | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the elements.
+    and forDoc (iterables: Expression list) (loop: Expression) : Doc =
+        let head = cat [ text "for "; commaJoin (iterables |> List.map (expr { full with Tail = false })) ]
         match loop.Kind with
-        | Lambda(_, body) ->
+        | Lambda(parameters, body) ->
             match body.Kind with
-            | Match([ element ], arms) when element.Kind = IdentifierExpr "__for_element" && body.Span = loop.Span ->
+            | Match(elements, arms) when elements |> List.map _.Kind = (parameters |> List.map (fst >> IdentifierExpr)) && body.Span = loop.Span ->
                 cat [ head; nest (cat [ hard; armsInSequence loop.Span.Start loop.Span.End arms ]) ]
             | _ -> cat [ head; armBody true body ]
         | _ -> head

@@ -325,9 +325,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         let rebuild kind = { expr with Kind = kind }
         match expr.Kind with
         // A `for` loop's lambda is inlined as the loop body by the backend, never lifted; lift inside it.
-        | FunctionCall("__for", range, [ iterable; Kind (Lambda(args, body)) as lambda ]) ->
+        | ForSyntax.Call(iterables, lambda, args, body) ->
             let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
-            rebuild (FunctionCall("__for", range, [ recur iterable; { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) } ]))
+            rebuild (FunctionCall(ForSyntax.builtIn, None, List.map recur iterables @ [ { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) } ]))
         | Lambda(args, body) when not args.IsEmpty -> liftLambda scope expr args body
         | Lambda(args, body) -> rebuild (Lambda(args, recur body))
         // A top-level function used as a value: a closure over a wrapper that takes an environment.

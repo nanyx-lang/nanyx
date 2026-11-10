@@ -182,19 +182,26 @@ and Released =
       /// The local that gets the object's block to reuse, or 0 when the arm did not hold the only reference.
       Token: Var option }
 
-/// A `for` loop over a list or a range, at a depth (how many loops enclose it) that names its locals.
+/// A `for` loop over lists and ranges in step, at a depth (how many loops enclose it) that names its locals. It ends
+/// when the first of its streams does.
 and ForLoop =
-    { Source: ForSource
+    { Streams: ForStream list
       Depth: int
+      Body: Expr }
+
+/// One of the sequences a `for` loop walks, and the locals that walk it.
+and ForStream =
+    { Source: ForSource
       Cursor: Var
       End: Var
-      Element: Var
-      Body: Expr }
+      Element: Var }
 
 and ForSource =
     | OverList of Atom
     /// The ints from the first to the second, both included.
     | OverRange of Atom * Atom
+    /// The ints from the atom on, without end: only walked in step with a source that ends.
+    | OverRangeFrom of Atom
 
 and Arm =
     { Patterns: Pattern list
@@ -286,6 +293,19 @@ let atomType (atom: Atom) =
     | AString _ -> IrString
     | ATag name -> IrTags [ name, None ]
 
+module ForLoop =
+    /// The atoms a loop's streams start from, in the order its code reads them.
+    let sourceAtoms (loop: ForLoop) =
+        loop.Streams |> List.collect (fun stream ->
+            match stream.Source with
+            | OverList list -> [ list ]
+            | OverRange(first, last) -> [ first; last ]
+            | OverRangeFrom first -> [ first ])
+
+    /// The locals a loop walks its streams in, which its body does not see from outside.
+    let locals (loop: ForLoop) =
+        loop.Streams |> List.collect (fun stream -> [ stream.Cursor; stream.End; stream.Element ])
+
 /// The IR as text, for reading and for tests.
 module Print =
     let private atom (a: Atom) =
@@ -351,11 +371,14 @@ module Print =
         | Panic messages -> $"""panic({messages |> String.concat ""})"""
         | ForEach loop ->
             let inner = indent + "  "
-            let source =
-                match loop.Source with
+            let source (stream: ForStream) =
+                match stream.Source with
                 | OverList list -> atom list
                 | OverRange(first, last) -> $"{atom first}..{atom last}"
-            $"for {loop.Element.Name} in {source} do\n{inner}{expr inner loop.Body}"
+                | OverRangeFrom first -> $"{atom first}.."
+            let elements = loop.Streams |> List.map _.Element.Name |> String.concat ", "
+            let sources = loop.Streams |> List.map source |> String.concat ", "
+            $"for {elements} in {sources} do\n{inner}{expr inner loop.Body}"
         | Let(v, value, body) -> $"let {v.Name}: {IrType.show v.Type} = {expr indent value}\n{indent}{expr indent body}"
         | Do(first, rest) -> $"do {expr indent first}\n{indent}{expr indent rest}"
         | If(cond, ifTrue, ifFalse) ->

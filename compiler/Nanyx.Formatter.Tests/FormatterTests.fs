@@ -83,6 +83,14 @@ let ``Loops, ranges and with are printed as written`` () =
     unchanged "def h = { r -> r with a = 1, b = 2 }\n"
 
 [<Fact>]
+let ``Loops over several iterables and ranges without an end are printed as written`` () =
+    unchanged (lines [ "def f = { xs ->"; "  for xs, 0.."; "    | 0, i -> println(\"zero at {i}\")"; "    | _, _ -> println(\"other\")"; "}" ])
+    unchanged (lines [ "def g = {"; "  for 1..3, xs -> println(\"again\")"; "}" ])
+    unchanged "def naturals = 0..\n"
+    unchanged "def later = n + 1.. \\take(3)\n"
+    Assert.Equal("def later = n + 1..\n", format "def later = (n + 1)..")
+
+[<Fact>]
 let ``List spreads are printed as written`` () =
     unchanged "def a = [1, ...xs, 2, ...ys]\n"
     unchanged "def b = [1] ++ xs\n"

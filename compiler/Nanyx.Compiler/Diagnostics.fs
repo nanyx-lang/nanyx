@@ -98,6 +98,7 @@ module DiagnosticCodes =
     let GuardNotAPredicate = code 214 "Guard pattern is not a predicate" Severity.Error
     let NameBoundTwiceInPattern = code 215 "Name bound twice in a pattern" Severity.Error
     let MisplacedTypeHole = code 216 "Misplaced type hole" Severity.Error
+    let EndlessForLoop = code 217 "Endless for loop" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -112,7 +113,7 @@ module DiagnosticCodes =
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
-          GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole
+          GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop
           UnsupportedByBackend ]
 
 module Diagnostics =

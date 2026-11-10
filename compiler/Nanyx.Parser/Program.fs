@@ -238,24 +238,25 @@ let private withExcept (leadingWs: Parser<unit, ParseState>) (valueParser: Parse
 
 // `for iterable | arms` runs the arms' bodies for each element (the element is matched against the arms, as
 // the loops page shows with `| { < 5 } -> ... | _ -> ...`), and `for iterable -> body` ignores the element.
-// Both are represented as a call to the built-in "__for" with the iterable and a one-parameter lambda,
-// which the type checker and backend handle as a loop.
+// `for xs, 0.. | x, i -> ...` zips: each arm matches one element of each iterable. All are represented as a call
+// to the built-in "__for" with the iterables and a lambda of one element of each (see `ForSyntax`), which the type
+// checker and backend handle as a loop.
 let forExpr : Parser<Expression, ParseState> =
     let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
-    let elementName = "__for_element"
+    let elements count = List.init count (fun index -> (ForSyntax.element (index + 1), None))
     // The whitespace before the first arm is skipped outside the span, which starts at its `|`.
-    let withArms =
+    let withArms count =
         ws >>. withSpan matchArms |>> fun (arms, span) ->
-            let element = Expression.at span (IdentifierExpr elementName)
-            Expression.at span (Lambda([ (elementName, None) ], Expression.at span (Match([ element ], arms))))
-    let withoutElement =
+            let scrutinees = elements count |> List.map (fun (name, _) -> Expression.at span (IdentifierExpr name))
+            Expression.at span (Lambda(elements count, Expression.at span (Match(scrutinees, arms))))
+    let withoutElement count =
         ws >>. withSpan (pstring "->" >>. matchArmBody) |>> fun (body, span) ->
-            Expression.at span (Lambda([ (elementName, None) ], body))
+            Expression.at span (Lambda(elements count, body))
+    let iterables = sepBy1 expression (attempt (ws >>. pchar ',' >>. ws))
     spanned (
-        pipe2
-            (pstring "for" >>. keywordEnd >>. ws >>. expression)
-            (attempt withArms <|> withoutElement)
-            (fun iterable body -> FunctionCall("__for", None, [ iterable; body ])))
+        (pstring "for" >>. keywordEnd >>. ws >>. iterables) >>= fun iterables ->
+            (attempt (withArms iterables.Length) <|> withoutElement iterables.Length)
+            |>> fun body -> FunctionCall(ForSyntax.builtIn, None, iterables @ [ body ]))
     <?> "for loop"
 
 /// The column (counted from 1, as FParsec does) of the first character on the current line that is not a space
@@ -729,10 +730,13 @@ opp.AddOperator(InfixOperator(">=", ws, 4, Associativity.Left, binary ">="))
 
 // Equality operators
 // A bounded range `a..b` (see the ranges page) is represented as a call to the built-in "__range". It binds
-// looser than arithmetic, so `n - 1..n + 1` is `(n - 1)..(n + 1)`. `...` is list spread, not a range.
-opp.AddOperator(InfixOperator("..", notFollowedBy (pchar '.') >>. ws, 4, Associativity.Left, fun (x, xText) (y, yText) ->
+// looser than arithmetic, so `n - 1..n + 1` is `(n - 1)..(n + 1)`. `...` is list spread, not a range. A `..` with
+// nothing after it on its line but the rest of an enclosing construct is the unbounded `a..` (see `withOpenRange`).
+let private rangeHasEnd =
+    notFollowedBy (wsInline >>. (skipNewline <|> eof <|> skipAnyOf "|)]},\\" <|> skipString "->" <|> skipString "--"))
+opp.AddOperator(InfixOperator("..", notFollowedBy (pchar '.') >>. rangeHasEnd >>. ws, 4, Associativity.Left, fun (x, xText) (y, yText) ->
     let span = SourceSpan.between xText yText
-    Expression.at span (FunctionCall("__range", None, [ x; y ])), span))
+    Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ x; y ])), span))
 opp.AddOperator(InfixOperator("==", ws, 3, Associativity.Left, binary "=="))
 opp.AddOperator(InfixOperator("!=", ws, 3, Associativity.Left, binary "!="))
 
@@ -791,10 +795,19 @@ let private pipeLeadingWs =
     skipMany (skipAnyOf " \t") >>.
     skipMany (attempt (newline >>. skipMany (skipAnyOf " \t")))
 
+/// `a..`, a range without an end: the start, taking in every operator before it as `a..b` does, and then `..`.
+let private withOpenRange (valueParser: Parser<Operand, ParseState>) : Parser<Operand, ParseState> =
+    valueParser .>>. opt (attempt (withSpan (pstring ".." .>> notFollowedBy (pchar '.'))) .>> wsInline)
+    |>> function
+        | (first, firstText), Some (_, dotsSpan) ->
+            let span = SourceSpan.between firstText dotsSpan
+            Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ first ])), span
+        | operand, None -> operand
+
 let pipeExpr =
     let pipeOp = pipeLeadingWs >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
     pipe2
-        opp.ExpressionParser
+        (withOpenRange opp.ExpressionParser)
         (many (attempt (pipeOp .>> wsInline)))
         applyPipes
     |> withExcept pipeLeadingWs

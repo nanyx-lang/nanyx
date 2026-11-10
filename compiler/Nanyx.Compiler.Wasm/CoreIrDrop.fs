@@ -117,7 +117,7 @@ let collect (functions: Function list) : Drops =
                 arm.Patterns |> List.iter pattern
                 expr arm.Body
         | ForEach loop ->
-            variable loop.Element
+            loop.Streams |> List.iter (fun stream -> variable stream.Element)
             expr loop.Body
         | CallRuntime(name, [ first; _ ], _) when name = Helpers.listConcat ->
             match atomType first with
