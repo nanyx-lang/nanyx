@@ -392,7 +392,7 @@ The language server's code action for the third adds the requirement to the sign
 
 - Generic functions that use `==` without a signature are unaffected: the requirement is inferred.
 - Generic functions with a signature that use `==` on a type variable need `[Eq(a)]` added. In the prelude that is
-  `List.distinct` and any future `contains`/`indexOf` ([#474](https://github.com/nanyx-lang/nanyx/issues/474)).
+  `List.distinct`, `List.contains` and `List.indexOf`.
 - `==` on records, tuples and lists starts working; on functions it moves from a backend error to a type error.
 - The docs' contexts page keeps its `Eq(a)` example, but as the prelude's context rather than one the user declares.
 
