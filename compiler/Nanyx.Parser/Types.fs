@@ -40,7 +40,7 @@ let internal fillTypeRefs () =
     let typeField =
         pipe5
             (opt (pstring "mut" >>. ws))
-            (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% name)
+            (getPosition .>>. nameNoWs >>= fun (start, name) -> noteName start name >>% name)
             (opt (pstring "?" >>% true))
             (wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
@@ -237,7 +237,7 @@ let typedIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
 /// annotation is a `typeSignature`.
 let typedDefIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
     pipe2
-        identifierNoWs
+        nameNoWs
         (opt (attempt (wsInline >>. pstring ":" >>. ws >>. typeSignature)))
         (fun name typeOpt -> (name, typeOpt))
 

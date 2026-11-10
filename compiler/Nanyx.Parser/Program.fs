@@ -335,7 +335,7 @@ let private binary op ((left, leftText): Operand) ((right, rightText): Operand) 
 let recordField =
     (attempt (
         pipe2
-            (identifierNoWs .>> ws .>> pstring "=" .>> ws)
+            (nameNoWs .>> ws .>> pstring "=" .>> ws)
             expression
             (fun name expr -> NamedField(name, expr))
     ) <|> (expression |>> PositionalField))
@@ -585,7 +585,7 @@ let contextMemberAccess =
     spanned (
         pipe3
             (contextTypeApply .>> pstring ".")
-            identifierNoWs
+            nameNoWs
             (opt callArgs)
             (fun ctxType field argsOpt ->
                 match argsOpt with
@@ -642,7 +642,7 @@ let primaryExprNoWs =
         tupleOrParenExpr
         workflowKeywordApplication
         notImplementedExpr
-        spanned (identifierNoWs |>> IdentifierExpr)
+        spanned (nameNoWs |>> IdentifierExpr)
     ]
 
 do simpleExpressionRef := primaryExprNoWs
@@ -650,7 +650,7 @@ do simpleExpressionRef := primaryExprNoWs
 // Member access: parse base expression, then chain .field.field.field... or .0.1.2...
 let memberAccessChain =
     let tupleIndex = many1Satisfy isDigit
-    let fieldOrIndex = identifierNoWs <|> tupleIndex
+    let fieldOrIndex = nameNoWs <|> tupleIndex
     // `record with field = value, ...` copies a record with some fields replaced. The parser represents it
     // as a call to "__with" with the record and a record of the updated fields, which the type checker and
     // backend handle as a built-in (the same way `not` is a call to "not"). The record of updates spans from the
@@ -658,7 +658,7 @@ let memberAccessChain =
     let withClause =
         let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         let update =
-            (identifierNoWs .>> wsInline .>> pstring "=" .>> ws) .>>. expression
+            (nameNoWs .>> wsInline .>> pstring "=" .>> ws) .>>. expression
             |>> fun (field, value) -> NamedField(field, value)
         attempt (wsInline >>. pstring "with" >>. keywordEnd >>. ws >>. withSpan (sepBy1 update (pstring "," .>> ws)))
     // `..` is the range operator, not a member access.

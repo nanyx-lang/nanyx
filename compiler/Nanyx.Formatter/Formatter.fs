@@ -339,7 +339,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | LiteralExpr literal -> literalDoc e.Span literal
         | UnitExpr -> text "()"
         | IdentifierExpr n when n = implicitArgument -> Doc.empty
-        | IdentifierExpr n -> text n
+        | IdentifierExpr n -> text (Names.written n)
         | BinaryOp(op, l, r) ->
             match spreadSegments e with
             | Some segments -> listDoc e.Span segments
@@ -352,12 +352,14 @@ let format (options: Options) (parsed: SourceModule) : string =
             let count = fields.Length
             let update index field =
                 match field with
-                | NamedField(n, value) -> cat [ text n; text " = "; expr { full with Tail = (index = count - 1) } value ]
+                | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expr { full with Tail = (index = count - 1) } value ]
                 | PositionalField value -> expr full value
             cat [ expr operandPosition record; text " with "; commaJoin (List.mapi update fields) ]
         | FunctionCall("__for", _, [ iterable; loop ]) when (match loop.Kind with Lambda([ ("__for_element", None) ], _) -> true | _ -> false) ->
             forDoc iterable loop
-        | FunctionCall(n, nameSpan, args) -> cat [ text n; callArguments e (nameEnd nameSpan (e.Span.Start + n.Length)) args ]
+        | FunctionCall(n, nameSpan, args) ->
+            let written = Names.written n
+            cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
         | Lambda(parameters, body) -> lambdaDoc e parameters body false
         | Pipe(value, n, nameSpan, args) ->
             cat [ expr { position with Tail = false; Prec = 0 } value; text " \\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
@@ -374,12 +376,12 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TagExpr(n, None) -> text ("#" + n)
         | TagExpr(n, Some (Kind UnitExpr)) -> text $"#{n}()"
         | TagExpr(n, Some payload) -> cat [ text ("#" + n); parenFields payload (e.Span.Start + 1 + n.Length) e.Span.End ]
-        | MemberAccess(target, field, _) -> cat [ expr operandPosition target; text "."; text field ]
-        | ContextMemberAccess(context, field) -> cat [ contextHead context; text "."; text field ]
+        | MemberAccess(target, field, _) -> cat [ expr operandPosition target; text "."; text (Names.written field) ]
+        | ContextMemberAccess(context, field) -> cat [ contextHead context; text "."; text (Names.written field) ]
         | ContextMemberCall(context, field, args) ->
             let count = args.Length
             let argument index arg = expr { full with Tail = (index = count - 1) } arg
-            cat [ contextHead context; text "."; text field; text "("; commaJoin (List.mapi argument args); text ")" ]
+            cat [ contextHead context; text "."; text (Names.written field); text "("; commaJoin (List.mapi argument args); text ")" ]
         | UseIn(binding, body) -> cat [ text "use "; useBinding { full with Tail = false } binding; text " in "; expr full body ]
         | WorkflowBindExpr(n, value) ->
             let keyword = if n = "try" && not (startsWith e.Span "try!") then "try " else n + "! "
@@ -525,7 +527,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let fieldDoc index field =
             let position = { full with Tail = (index = count - 1) }
             match field with
-            | NamedField(n, value) -> cat [ text n; text " = "; expr position value ]
+            | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expr position value ]
             | PositionalField value -> expr position value
         let valueOf field =
             match field with
@@ -804,7 +806,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ExprStatement value -> expr statementPosition value
 
     and defDoc (isExport: bool) (keyword: string) (name: string) (typeOpt: TypeExpr option) (value: Expression) : Doc =
-        defDocNamed isExport keyword (text name) typeOpt value
+        defDocNamed isExport keyword (text (Names.written name)) typeOpt value
 
     /// A def whose name (or destructuring pattern) is already laid out.
     and defDocNamed (isExport: bool) (keyword: string) (nameDoc: Doc) (typeOpt: TypeExpr option) (value: Expression) : Doc =
@@ -1019,7 +1021,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeRecord fields when fields |> List.forall (function TypeField(n, false, _, Some _, None) -> not (isPosition n) | _ -> false) ->
             fields
             |> List.map (function
-                | TypeField(n, _, isOptional, Some t, _) -> cat [ text n; (if isOptional then text "?" else Doc.empty); text ": "; typeExpr t ]
+                | TypeField(n, _, isOptional, Some t, _) -> cat [ text (Names.written n); (if isOptional then text "?" else Doc.empty); text ": "; typeExpr t ]
                 | _ -> Doc.empty)
             |> commaJoin
         | TypeWithContext _ -> parenType payload
@@ -1031,7 +1033,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeField(n, isMutable, isOptional, typeOpt, defaultValue) ->
             cat [
                 (if isMutable then text "mut " else Doc.empty)
-                text n
+                text (Names.written n)
                 (if isOptional then text "?" else Doc.empty)
                 (match typeOpt with
                  | Some t -> cat [ text ": "; typeExpr t ]

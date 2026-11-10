@@ -7,6 +7,26 @@ open FParsec
 type Identifier = string
 type ModuleName = string
 
+/// Names that are operators, such as `==` in `` def Point.`==` = ... `` (see the operators page of the docs).
+module Names =
+    /// The characters an operator's name is made of.
+    let isOperatorChar (c: char) = "+-*/%^~<>=!".IndexOf c >= 0
+
+    /// Spellings made of operator characters that are syntax, not operators: `=`, `->`, `=>`, and anything
+    /// starting `--`, which is a comment.
+    let isReservedOperatorSpelling (name: string) =
+        name = "=" || name = "->" || name = "=>" || name.StartsWith "--"
+
+    /// Whether `name` is an operator's name, which is written in backticks where a name goes.
+    let isOperator (name: string) = name <> "" && String.forall isOperatorChar name
+
+    /// `name` as it is written where a name goes: an operator in backticks, anything else as it is. Each part of a
+    /// qualified name is written on its own: `` Point.`+` ``.
+    let written (name: string) =
+        name.Split '.'
+        |> Array.map (fun part -> if isOperator part then $"`{part}`" else part)
+        |> String.concat "."
+
 /// Where a syntax node came from: character offsets into its file's source (`End` is one past the last
 /// character, and trailing whitespace is not included), plus the zero-based line and column of `Start`.
 type SourceSpan =

@@ -169,3 +169,25 @@ let ``Run - contexts through the core IR, with arguments that store on the way``
         "\n" +
         "main()\n"
     runSource source |> assertRan "n = 42!\nn = 23!\n"
+
+[<Fact>]
+let ``Run - a context member named by an operator is synthesized from an attached operator`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Eq(a) = (`==`: (a, a) -> bool)\n" +
+        "\n" +
+        "type $Point = (x: int, y: int)\n" +
+        "def $Point.`==`: $Point, $Point -> bool = { p, q -> p.x == q.x }\n" +
+        "def same: [Eq(a)] a, a -> bool = { x, y -> Eq(a).`==`(x, y) }\n" +
+        "def `<+>`: int, int -> int = { a, b -> a * 10 + b }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(Int.toString(`<+>`(1, 2)))\n" +
+        "  def combine = `<+>`\n" +
+        "  println(Int.toString(combine(3, 4)))\n" +
+        "  println(if same($Point(x = 1, y = 2), $Point(x = 1, y = 9)) then \"same\" else \"different\")\n" +
+        "  println(if $Point.`==`($Point(x = 1, y = 2), $Point(x = 2, y = 2)) then \"same\" else \"different\")\n" +
+        "}\n"
+    runSource source |> assertRan "12\n34\nsame\ndifferent\n"
