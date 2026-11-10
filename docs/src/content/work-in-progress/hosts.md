@@ -93,6 +93,7 @@ A host provides the contexts the program's entry may require, and only those. Th
 | --- | --- | --- |
 | `ConsoleHost` | `() -> ()` or `list(string) -> int` | `Console & FileSystem & Env & Clock` |
 | HTTP host | `Request -> Response` | `Log & Clock & Env` |
+| Browser host | a record of `init`, `update` and `view` | `Dom & Fetch & Clock & Log` |
 | Plugin / sandbox host | host-defined | only what the embedder grants |
 | Test host | test functions | fakes or recorders of the above |
 
@@ -129,6 +130,40 @@ export def run
 The compiler accepts either form of entry for `ConsoleHost` (`() -> ()` and `list(string) -> int`), so a host needs a way to accept more than one entry shape. One option is a [tag union](../tour/tags) of the accepted shapes. Another is to let a host export more than one `run` overload.
 
 On the WASM backend, a host maps directly onto a set of imports and exports: the "world" the module is instantiated in. The WASI `wasi:cli` and `wasi:http` worlds are natural targets for `ConsoleHost` and an HTTP host.
+
+# Running in a browser
+
+A browser can be the embedder for two different hosts. Neither works today.
+
+## `ConsoleHost` in a page
+
+A console program can run in a page unchanged, with the page standing in for the terminal. This is what a playground on the docs site needs. The host is still `ConsoleHost`; only the embedder differs. The module the backend emits is close to runnable there: it uses linear memory with its own allocator, and it imports only `fd_write`, `fd_read` and `proc_exit` from `wasi_snapshot_preview1`, plus `env.dbg_tag_*` for `dbg` of a tag. A page can provide all of those in a few lines of JavaScript. Four things stand in the way:
+
+- **The toolchain writes WebAssembly text.** `nanyx wasm` and `nanyx build` produce `.wat`, and a browser loads only the binary format. The toolchain needs to write `.wasm`.
+- **The program runs in the module's start function.** A browser runs the start function while it instantiates the module, before the page can reach the exported memory, so the page's `fd_write` can't read the bytes it is asked to print. For a browser the module has to export its entry for the page to call, or import its memory.
+- **`proc_exit` has to unwind.** The page's `proc_exit` throws, and the code that called the entry catches it and reads the exit code.
+- **Reading stdin blocks.** `fd_read` returns its bytes before the program carries on, and a page can't wait for input on its main thread. The program would have to run in a worker, or `Console` input would have to be unavailable.
+
+The backend also emits `return_call` for [tail calls](./tail-calls), which needs Safari 18.2 or later; Chrome and Firefox have had it for longer.
+
+## A browser host
+
+A browser app is a different host, because the browser owns the main loop. The entry can't run to completion and exit: it returns, and the browser calls back into the module for each event. So the entry shape is a description of the app rather than a procedure, as in Elm:
+
+```nanyx
+module main
+
+@entry
+def main = (
+  init = Model(count = 0)
+  update = { model, message -> ... }
+  view = { model -> ... }
+)
+```
+
+The host provides contexts for what a page can do (`Dom`, `Fetch`, `Clock`, `Log`) and none for what it can't (`FileSystem`, `Env`). A library that requires `[FileSystem]` is then a compile error under the browser host, by the same check as for any other host.
+
+Unlike the WASI worlds, this host's imports have no standard on the other side. The host package has to ship the JavaScript that implements them, and `nanyx build` has to write that file out beside the module.
 
 # Hosts are not frameworks
 
@@ -172,4 +207,6 @@ The composite host runs each part under the right sub-host and coordinates start
 - **Host configuration typing.** The `[host]` table in the manifest should be checked against a record type the host exports, so that misspelt keys are errors.
 - **Async and workflows.** Can a host change how the entry runs, for example by running it as a [workflow](../advanced/workflows) or on an event loop, without changing the entry's written type?
 - **Libraries that require a host.** Should a library be able to say "I only make sense under an HTTP host", or is requiring the right contexts always enough?
+- **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry it, and how does the build write it out?
+- **Calls that can't block.** A browser's `fetch` returns a promise, and a page can't wait on it. Does the browser host's entry only ever return descriptions of effects, as Elm's does, or do its contexts suspend the program (see the async question above)?
 - **Running scripts under another host.** Should a loose script be able to pick a non-default host, for example with a directive at the top of the file?
