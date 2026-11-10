@@ -101,6 +101,7 @@ module DiagnosticCodes =
     let EndlessForLoop = code 217 "Endless for loop" Severity.Error
     let PositionalForNamedArgument = code 218 "Named parameter passed by position" Severity.Error
     let UnattachableDefinition = code 219 "Definition cannot be attached" Severity.Error
+    let BlockWithoutResult = code 220 "Block without a result" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -116,7 +117,7 @@ module DiagnosticCodes =
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
-          UnattachableDefinition
+          UnattachableDefinition; BlockWithoutResult
           UnsupportedByBackend ]
 
 module Diagnostics =

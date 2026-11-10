@@ -2581,6 +2581,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         typedStatements <- typedStatements @ [ TypedExprStatement typedExpr ]
                         lastExpr <- typedExpr
                     | Error err -> errors <- err
+        if errors.IsEmpty then errors <- BlockResult.check statements
         if errors.IsEmpty then
             let blockExpr = mkTypedExpr block lastExpr.Type (Some lastExpr) (Some typedStatements) None
             Ok (blockExpr, current)
