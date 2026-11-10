@@ -144,7 +144,6 @@ let ``Run - List.distinct keeps the first of each value`` () =
 
 [<Fact>]
 let ``Run - List.sortBy sorts by an int key and keeps equal keys in order`` () =
-    // `{ s -> String.length(s) }` rather than the docs' `{ .length }` (#479).
     let source =
         showInts +
         "type Person = (name: string, age: int)\n" +
@@ -152,7 +151,7 @@ let ``Run - List.sortBy sorts by an int key and keeps equal keys in order`` () =
         "  Person(name = \"Ann\", age = 40), Person(name = \"Bob\", age = 30),\n" +
         "  Person(name = \"Cy\", age = 40), Person(name = \"Di\", age = 20)]\n" +
         "println(show(List.sortBy([5, 3, 9, 1, 3, 0, 7], { x -> x })))\n" +
-        "println(String.join(List.sortBy([\"bbb\", \"a\", \"cc\"], { s -> String.length(s) }), \",\"))\n" +
+        "println(String.join(List.sortBy([\"bbb\", \"a\", \"cc\"], { .length }), \",\"))\n" +
         "println(String.join(List.map(people \\ sortBy({ .age }), { p -> p.name }), \",\"))\n" +
         "println(show(List.sortBy([], { x -> x })))\n"
     runSource source |> assertRan "0 1 3 3 5 7 9 []\na,cc,bbb\nDi,Bob,Ann,Cy\n[]\n"

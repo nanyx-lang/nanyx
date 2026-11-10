@@ -1565,34 +1565,35 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
                             | _ -> None
                         | _ -> None
-                    let expectedLambdaInput index lambdaArgs =
-                        let unannotated = lambdaArgs |> List.forall (fun (_, typeOpt: TypeExpr option) -> typeOpt.IsNone)
-                        match paramTys |> Option.bind (List.tryItem index) |> Option.map Unifier.unalias with
-                        | Some (TyFunc(lambdaInput, _)) when unannotated && not (List.isEmpty lambdaArgs) ->
-                            match Unifier.unify current.Constraints with
-                            | Ok subst ->
-                                match Unifier.apply subst lambdaInput with
-                                // A rest that widening made up is only room for tags no argument has given yet,
-                                // not tags the lambda must handle: the lambda takes its input from its own
-                                // patterns, as it does when the arguments come as one tuple (#452).
-                                | resolved when
-                                    (match Unifier.unalias resolved with
-                                     | TyUnion items -> items |> List.exists (function TyVar v -> Unifier.isMadeUpRest v | _ -> false)
-                                     | _ -> false) -> None
-                                // A lambda of several parameters needs the input's fields to split between them.
-                                | resolved when (match Unifier.unalias resolved with TyRecord _ -> true | _ -> false) -> Some resolved
-                                | resolved when lambdaArgs.Length = 1 -> Some resolved
-                                | _ -> None
-                            | Error _ -> None
+                    // `f(a, b)` passes its arguments as one tuple, whose items take the callee's parameters' types
+                    // the same way.
+                    let tupleParamTys (items: Expression list) =
+                        match paramTys with
+                        | Some [ declaredInput ] ->
+                            match Unifier.unalias declaredInput with
+                            | TyRecord fields when fields.Count = items.Length ->
+                                let tys = items |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
+                                if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
+                            | _ -> None
                         | _ -> None
+                    let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
+                        inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
                     let argResults =
                         args
                         |> List.mapi (fun index arg ->
                             let inferred =
                                 match arg with
                                 | Kind (Lambda(lambdaArgs, lambdaBody)) ->
-                                    match expectedLambdaInput index lambdaArgs with
-                                    | Some expectedInput -> inferLambdaWithExpected env current arg lambdaArgs lambdaBody (Some expectedInput) None
+                                    match LambdaArguments.expectedInput current (paramTys |> Option.bind (List.tryItem index)) lambdaArgs with
+                                    | Some expectedInput -> inferLambda current arg lambdaArgs lambdaBody expectedInput
+                                    | None -> inferExpr env current arg
+                                | Kind (TupleExpr items) ->
+                                    match tupleParamTys items with
+                                    | Some itemParamTys ->
+                                        LambdaArguments.inferTupleItems (inferExpr env) inferLambda current items itemParamTys
+                                        |> Result.map (fun (typedItems, next) ->
+                                            mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
+                                        |> recordExprType
                                     | None -> inferExpr env current arg
                                 | _ -> inferExpr env current arg
                             match inferred with
@@ -2352,7 +2353,8 @@ and private inferMapLookup (env: TypeEnv) (state: InferState) (expr: Expression)
 /// `baseExpr.memberName`, where `expr` is that member access and `receiver` the base as written if it is a name: a
 /// record's field, or else a built-in property of the base's type as far as the code before it settles that type,
 /// as for a pipe. A value of no known type yet is taken to be a record with that field (see `fieldTySoFar`), so
-/// `{ s -> s.length }` reads a field, not a string's length.
+/// `{ s -> s.length }` on its own reads a field, not a string's length. Passed to a function that takes it as a
+/// `string -> b`, its parameter is a string already (see `LambdaArguments`).
 and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (baseExpr: Expression) (receiver: string option) (memberName: string) (memberSpan: SourceSpan) =
     match inferExpr env state baseExpr with
     | Error err -> Error err
