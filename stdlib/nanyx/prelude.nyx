@@ -244,7 +244,7 @@ export def Option.values: list(#some(a) | r) -> list(a) = { options ->
 --
 -- Every function here that walks a list is stack-safe: it calls itself only in tail position, so it
 -- works on a list of any length. Those that build a list build it in reverse and reverse it at the
--- end, until tail recursion modulo cons exists (see compiler/design/tail-calls.md).
+-- end, until tail recursion modulo cons exists (see docs/src/content/work-in-progress/tail-calls.md).
 
 -- `step` applied to `initial` and the first element, then to that result and the second, and so on.
 export def List.fold: list(a), b, (b, a -> b) -> b = {

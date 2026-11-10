@@ -1,5 +1,5 @@
 /// The core IR: the program between the typed AST and WebAssembly text (see "Core IR" in
-/// `compiler/design/memory.md`). It is in A-normal form, so every intermediate value has a name and a place, and every
+/// `docs/src/content/work-in-progress/memory-management.md`). It is in A-normal form, so every intermediate value has a name and a place, and every
 /// node has a concrete type: generic functions are specialised for each set of type arguments they are used at as the
 /// IR is built (`CoreIrLower.fs`), and code is generated from it (`CoreIrEmit.fs`).
 module Transpiler.Wasm.CoreIr

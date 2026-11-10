@@ -59,7 +59,7 @@ That is enough to recognise Nanyx code. The docs cover the rest, including [reco
 
 ## Writing Nanyx programs
 
-Nanyx is young: the compiler runs a small subset of the language the docs describe, and there is no standard library yet beyond a built-in `println`. The docs' [Hello, World!][hello] works today; `compiler/README.md` lists what else does.
+Nanyx is young: the compiler runs a small subset of the language the docs describe, and there is no standard library yet beyond a built-in `println`. The docs' [Hello, World!][hello] works today; the [Work in progress][wip] section of the docs says what else does, and what is being designed.
 
 ### 1. Get the `nanyx` tool
 
@@ -137,7 +137,7 @@ dotnet test Nyx.Compiler.slnx
 dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- run hello.nyx
 ```
 
-The CLI has `run`, `wasm`, `check` and `parse` targets; `parse` prints the AST and is the quickest way to see what the parser makes of a file. The pipeline is parser (`Nanyx.Parser`) → type checker (`Nanyx.Compiler`) → WAT backend (`Nanyx.Compiler.Wasm`) → Wasmtime (`Nanyx.Compiler.Runtime`), and each stage has its own test project. The backend tests are snapshot fixtures (`.nyx` next to the expected `.wat`) plus execution tests that run the built CLI and check its output. See [`compiler/README.md`](compiler/README.md) for the layout and the current state of what compiles.
+The CLI has `run`, `wasm`, `check` and `parse` targets; `parse` prints the AST and is the quickest way to see what the parser makes of a file. The pipeline is parser (`Nanyx.Parser`) → type checker (`Nanyx.Compiler`) → WAT backend (`Nanyx.Compiler.Wasm`) → Wasmtime (`Nanyx.Compiler.Runtime`), and each stage has its own test project. The backend tests are snapshot fixtures (`.nyx` next to the expected `.wat`) plus execution tests that run the built CLI and check its output. See [`compiler/README.md`](compiler/README.md) for the layout and how to build, and [Compilation][compilation] in the docs for the current state of what compiles.
 
 ### The docs site
 
@@ -185,3 +185,5 @@ Nanyx aims to feel small: few rules, few exceptions, and features that compose r
 [overloading]: https://nanyx.dev/docs/coming-from-other-languages/overloading
 [currying]: https://nanyx.dev/docs/coming-from-other-languages/currying
 [unions]: https://nanyx.dev/docs/coming-from-other-languages/arbitrary-unions
+[wip]: https://nanyx.dev/docs/work-in-progress/workstreams
+[compilation]: https://nanyx.dev/docs/work-in-progress/compilation

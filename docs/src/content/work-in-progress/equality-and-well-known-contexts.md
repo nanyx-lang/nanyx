@@ -1,4 +1,8 @@
-# Equality and well-known contexts
+---
+title: "Equality and well-known contexts"
+description: "What equality is, and which contexts the compiler knows about"
+order: 8
+---
 
 > **Status: agreed, not implemented.** The decisions are listed under [Open questions](#open-questions); one small
 > question remains. Code references are at commit `b84acc0`.
@@ -9,9 +13,9 @@ for equality and applies the same pattern to ordering, hashing and printing.
 
 # What exists today
 
-## Contexts: designed and implemented
+# Contexts: designed and implemented
 
-Contexts are implicit parameters ([docs: Contexts](../../docs/src/content/advanced/contexts.md)). Implemented:
+Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Implemented:
 
 - **Declaring** a context as a record type: `context Show(a) = (show: a -> string)`.
 - **Requiring** one in a signature: `def describe: [Show(a)] a -> string`. A function that does not write its type
@@ -26,10 +30,10 @@ Contexts are implicit parameters ([docs: Contexts](../../docs/src/content/advanc
      ill-typed definition is reported as `MissingContextMembers`, naming it.
 
 Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is
-built from a type's structure ([type arguments and reflection](../../docs/src/content/work-in-progress/type-members-and-reflection.md),
+built from a type's structure ([type arguments and reflection](./type-members-and-reflection),
 lines 38 and 153-155).
 
-## Equality: implemented as an untyped intrinsic
+# Equality: implemented as an untyped intrinsic
 
 - **Type checking.** `==` and `!=` unify their two operands and return `bool`; nothing else is checked
   (`Infer.fs:1381-1382`). In effect `==` has the type `a, a -> bool` for *every* `a`, functions included, and adds
@@ -46,35 +50,35 @@ lines 38 and 153-155).
 - **Open unions.** Because `==` *unifies* its operands, `def isNone = { o -> o == #none }` infers `o: #none`, and
   `isNone(#some(3))` is a type error.
 
-## Ordering: numbers only
+# Ordering: numbers only
 
 `<`, `<=`, `>` and `>=` constrain both operands to a numeric type (`Infer.fs:1376-1380`). Strings, tuples and type
 variables cannot be ordered ([#476](https://github.com/nanyx-lang/nanyx/issues/476)), which is why `List.sortBy`
 takes `(a -> int)` keys (`prelude.nyx:301-302`) and there is no `List.sort`
 ([#475](https://github.com/nanyx-lang/nanyx/issues/475), [#191](https://github.com/nanyx-lang/nanyx/issues/191)).
 
-## Hashing, maps and sets: nothing
+# Hashing, maps and sets: nothing
 
 There is no `Hash` context, no map or set type, and no map literal (#191, `groupBy`).
 
-## Printing: designed, partly implemented
+# Printing: designed, partly implemented
 
-[Printing values](../../docs/src/content/work-in-progress/printing-values.md) proposes a `ToString(a)` context
+[Printing values](./printing-values) proposes a `ToString(a)` context
 behind interpolation holes, synthesized from an attached `toString`, with `dbg` separate and printing anything. The
 attached `toString` on the built-in types exists ([#329](https://github.com/nanyx-lang/nanyx/issues/329)); checking
 holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/issues/330),
 [#331](https://github.com/nanyx-lang/nanyx/issues/331)).
 
-## Where the docs and the compiler disagree
+# Where the docs and the compiler disagree
 
 | The docs say | The compiler does |
 |---|---|
-| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../../docs/src/content/tour/operators.md)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. |
+| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. |
 | A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks does not parse, attached or not, and neither does an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). So the docs' `Eq(a)` and `Sum(a)`, whose members are `` `==` `` and `` `+` ``, cannot be declared. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
-| `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../../docs/src/content/advanced/memory.md)). | No `Ord`, no `sort`. |
-| `List.sortBy: (list(a), (a -> b))` ([collections.md:251](../../docs/src/content/stdlib/collections.md)). | `(a -> int)` keys only. |
-| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-52](../../docs/src/content/work-in-progress/printing-values.md) has `use ToString(int)` changing a concrete `"{total}"`. The two pages disagree with each other. |
+| `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
+| `List.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
+| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-52](./printing-values) has `use ToString(int)` changing a concrete `"{total}"`. The two pages disagree with each other. |
 
 Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and
 [#528](https://github.com/nanyx-lang/nanyx/issues/528), where a lambda inside a generic function cannot call a member
@@ -82,7 +86,7 @@ of the context the function requires.
 
 # Proposal
 
-## Well-known contexts
+# Well-known contexts
 
 A **well-known context** is a context declared in the prelude that the compiler knows by name. It differs from a user
 context in exactly two ways:
@@ -102,13 +106,13 @@ The proposed set is small and closed:
 | `Eq(a)` | `` `==`: (a, a) -> bool `` | `==`, `!=` | numbers, bool, unit, string, tuples, records, lists, tags and unions |
 | `Ord(a)` | `compare: (a, a) -> #less \| #equal \| #greater` | `<`, `<=`, `>`, `>=` | numbers, bool, string, tuples, lists (see [Q3](#open-questions)) |
 | `Hash(a)` | `hash: a -> int` | none | the same types as `Eq` |
-| `ToString(a)` | `toString: a -> string` | interpolation holes | the built-in types only, as [printing values](../../docs/src/content/work-in-progress/printing-values.md) proposes |
+| `ToString(a)` | `toString: a -> string` | interpolation holes | the built-in types only, as [printing values](./printing-values) proposes |
 
 Libraries cannot add to this list. A library that wants structure-driven behaviour for its own context, such as JSON
-encoding, uses [type arguments](../../docs/src/content/work-in-progress/type-members-and-reflection.md) when they
+encoding, uses [type arguments](./type-members-and-reflection) when they
 exist. Numeric operators are discussed [separately below](#numeric-operators).
 
-## Equality
+# Equality
 
 **Recommendation.**
 
@@ -138,13 +142,13 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
 - *Implicit equality on every non-function type* (OCaml, F#, Elm): `==` stays `a, a -> bool`, generic code needs no
   annotation, and the compiler rejects functions when it instantiates. This is today's behaviour plus a
   check, and it is lighter to write. But errors appear at the instantiation, in library code the user did not write,
-  which the [reflection page](../../docs/src/content/work-in-progress/type-members-and-reflection.md) rules out for
+  which the [reflection page](./type-members-and-reflection) rules out for
   generic code ("checked once"). F# hides the same rule behind an inferred `equality` constraint, which is the
   recommendation with the constraint left unwritten.
 - *`==` is a fixed structural intrinsic, and `Eq` is a separate, optional context* for custom equivalences. Simpler to
   implement, but then `==` and `Eq(a)` can disagree, and a type such as `$Email` has no way to say what equal means.
 
-## How instances are found
+# How instances are found
 
 The lookup at each use of `==`, or call that requires `Eq(T)`, gains a last step:
 
@@ -164,7 +168,7 @@ With monomorphisation every instance is known when code is generated, so the bac
 per concrete type (fixing [#424](https://github.com/nanyx-lang/nanyx/issues/424) and
 [#526](https://github.com/nanyx-lang/nanyx/issues/526)) and no instance is passed at run time.
 
-## Open tag unions
+# Open tag unions
 
 **Recommendation.** `a == b` joins its operands instead of unifying them: each is assignable to a fresh type `t`, and
 the comparison requires `Eq(t)`. So `{ o -> o == #none }` infers `o: #none | r`, and `isNone(#some(3))` checks,
@@ -177,7 +181,7 @@ inferred.
 
 Comparing two closed types with no tag in common, `#red == #some(1)`, is always false; the compiler warns.
 
-## Ordering
+# Ordering
 
 `Ord(a)` has one member, `compare`, returning `#less | #equal | #greater`. The four operators are derived from it, so
 they cannot disagree with each other. `<` on a type variable requires `[Ord(a)]`.
@@ -197,7 +201,7 @@ consistent, and the docs say so.
 This closes [#476](https://github.com/nanyx-lang/nanyx/issues/476) and unblocks `List.sort`, `min`, `max`
 ([#475](https://github.com/nanyx-lang/nanyx/issues/475)) and a `sortBy` with `(a -> b)` keys.
 
-## Hashing
+# Hashing
 
 `Hash(a)` has `hash: a -> int`, derived for every type `Eq` is derived for. A map or set keyed by `k` requires
 `[Eq(k) & Hash(k)]`, so records and tags can be keys without an order.
@@ -208,14 +212,14 @@ equality. Asking for `Hash($Email)` is then an error that says to attach `$Email
 Whether maps are hash-based (needing `Hash`) or ordered trees (needing `Ord`) is a standard library decision; this
 design makes hashing the natural choice, since more types have it.
 
-## Printing
+# Printing
 
-Unchanged from [printing values](../../docs/src/content/work-in-progress/printing-values.md): `ToString(a)` is a
+Unchanged from [printing values](./printing-values): `ToString(a)` is a
 well-known context for interpolation holes, synthesized from an attached `toString`. Whether compound types get a
 derived `ToString` stays that page's open question. As with `==`, a `use ToString(T)` changes concrete holes in its
 block, which is what that page already proposes.
 
-## Numeric operators
+# Numeric operators
 
 `+`, `-`, `*`, `/`, `%` and `**` stay as they are for now: typed directly, on numbers only, with `++` on strings and
 lists. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
@@ -223,7 +227,7 @@ operator or one `Num`, how literals like `0` are typed, and how units and dimens
 document. The principle this design sets, that a built-in operator is sugar for a well-known context's member, is
 meant to hold for them too.
 
-## Diagnostics
+# Diagnostics
 
 Each is reported by the type checker, with a span; none reaches the backend.
 
@@ -241,7 +245,7 @@ Each is reported by the type checker, with a span; none reaches the backend.
 
 The language server's code action for the third adds the requirement to the signature.
 
-## What changes for existing code
+# What changes for existing code
 
 - Generic functions that use `==` without a signature are unaffected: the requirement is inferred.
 - Generic functions with a signature that use `==` on a type variable need `[Eq(a)]` added. In the prelude that is
@@ -249,7 +253,7 @@ The language server's code action for the third adds the requirement to the sign
 - `==` on records, tuples and lists starts working; on functions it moves from a backend error to a type error.
 - The docs' contexts page keeps its `Eq(a)` example, but as the prelude's context rather than one the user declares.
 
-## Order of work
+# Order of work
 
 1. Parse backtick-named definitions and context members ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 2. `Eq` in the prelude; `==` and `!=` read through it; structural derivation; per-type equality functions in the
@@ -260,7 +264,7 @@ The language server's code action for the third adds the requirement to the sign
 
 # Open questions
 
-## Decided
+# Decided
 
 1. **Generic code says it compares.** `==` on a type variable requires `[Eq(a)]`, inferred when the type is not
    written. (Rejected: every non-function type has equality implicitly, checked at instantiation.)
@@ -280,7 +284,7 @@ The language server's code action for the third adds the requirement to the sign
    type.)
 7. **Mutable `MArray` and `MRef` have no `Eq`**; convert to a list first. (Rejected: identity, contents.)
 
-## Still open
+# Still open
 
 - Should a protected type's module be able to withhold equality from other modules? [Recommended: no, not until
   someone needs it.]

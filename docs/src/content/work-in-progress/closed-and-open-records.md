@@ -1,10 +1,14 @@
-# Closed and open records
+---
+title: "Closed and open records"
+description: "Whether a record type allows fields it does not name"
+order: 23
+---
 
 > **Status: decided, not built.** This page decides whether a record type allows fields it does not name. Today
 > the type checker answers neither way consistently (see [where we are today](#where-we-are-today)). It is part of
-> the [compilation](compilation.md) workstream, and its issues carry the `compilation` and `type checker` labels.
+> the [compilation](./compilation) workstream, and its issues carry the `compilation` and `type checker` labels.
 
-## Summary
+# Summary
 
 A record type is **closed**: `(x: int, y: int)` is a record with exactly the fields `x` and `y`, no more and no
 fewer. A type opts in to more fields with `...`: `(x: int, y: int, ...)` is any record with *at least* `x` and `y`.
@@ -23,13 +27,13 @@ Inference gives open types where it learns only some of a record's fields. A fun
 from an unannotated parameter takes any record with those fields, so most code that is not annotated never needs
 `...`. What you write is what you get: `...` only has to be written in a type annotation.
 
-## Why closed
+# Why closed
 
 - **Records are argument lists.** A function's parameters are one record, so a call's arguments are a record
   literal. If record types were open, `f(x = 1, y = 2, verbos = true)` would compile, and the misspelled argument
   would be dropped without a word. Named arguments are only safe if an argument the function does not take is an
   error.
-- **A closed record has one layout.** A record's fields are stored in a fixed order ([memory.md](memory.md)), so
+- **A closed record has one layout.** A record's fields are stored in a fixed order ([Memory management](./memory-management)), so
   reading a field of a closed record is a load from an offset known at compile time. A function over an open
   record has to be specialised for each record it is given, or be passed the offsets at run time. Making records
   closed by default means paying that only where `...` asks for it.
@@ -43,9 +47,9 @@ from an unannotated parameter takes any record with those fields, so most code t
 The alternative TypeScript takes, checking for extra fields only on a record literal written at the call, was
 rejected: `f((x = 1, y = 2, z = 3))` and `f(data)` would then mean different things, though `data` is that literal.
 
-## Design
+# Design
 
-### Writing an open record type
+## Writing an open record type
 
 `...` at the end of a record type's named fields stands for the record's other fields:
 
@@ -66,13 +70,13 @@ def moved = moveRight((x = 1, y = 2, label = "a"))   -- (x: int, y: int, label: 
 
 A type variable named in a row is generic like any other type variable in an annotation.
 
-### Positional fields stay exact
+## Positional fields stay exact
 
 `...` stands for named fields only. A record's positional fields are its arguments when it is passed to a
 function, so `(int, int, ...)` would let a two-argument function be called with three. A record's positional
 fields are always exactly the ones its type lists.
 
-### Inference
+## Inference
 
 - **Reading a field** of a value whose type is not otherwise known gives it an open record type: `{ p -> p.x }` is
   `(x: a, ...r) -> a`. This is what the type checker does today (`TyOpenRecord`).
@@ -80,7 +84,7 @@ fields are always exactly the ones its type lists.
 - **An annotation** is taken as written: `(x: int, y: int)` is closed, however the value it annotates was
   inferred.
 
-### Checking
+## Checking
 
 Where a record of type `A` is given and type `B` is expected:
 
@@ -94,15 +98,15 @@ Where a record of type `A` is given and type `B` is expected:
 There is no width subtyping between closed records: a `(x: int, y: int, z: int)` is not a `(x: int, y: int)`. To
 pass a record with more fields, either the function says `...` or the caller builds the record it takes.
 
-### Code generation
+## Code generation
 
 A function whose parameter is an open record is generic in its row, and the backend specialises it for each record
 type it is called with, as it does for any other generic function. Each specialisation reads fields at fixed
 offsets, so open records cost code size, not speed.
 
-## Where we are today
+# Where we are today
 
-- **Closed records accept too much.** `unifyRecordFields` ([Unifier.fs](../Nanyx.Compiler/Unifier.fs), in `unify`)
+- **Closed records accept too much.** `unifyRecordFields` ([Unifier.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Unifier.fs), in `unify`)
   accepts two closed records when either's fields are a subset of the other's. So both of these type-check, and both
   produce WebAssembly that Wasmtime rejects (`type mismatch: expected i32 but nothing on stack`):
 
@@ -114,25 +118,25 @@ offsets, so open records cost code size, not speed.
   ```
 
   The second is unsound regardless of this decision.
-- **Open records exist in inference only.** `TyOpenRecord` ([TypedAst.fs](../Nanyx.Compiler/TypedAst.fs)) is what
+- **Open records exist in inference only.** `TyOpenRecord` ([TypedAst.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/TypedAst.fs)) is what
   reading a field of an unknown value gives, and is printed `(x: int, ...a)`. Unification solves its row as the
-  table above says. There is no syntax for it: the parser's `typeRecord` ([Types.fs](../Nanyx.Parser/Types.fs))
+  table above says. There is no syntax for it: the parser's `typeRecord` ([Types.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Parser/Types.fs))
   does not accept `...`.
-- **The backend specialises open records.** `bindScheme` in [CoreIrLower.fs](../Nanyx.Compiler.Wasm/CoreIrLower.fs)
+- **The backend specialises open records.** `bindScheme` in [CoreIrLower.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler.Wasm/CoreIrLower.fs)
   binds an open record's row to the fields of the record it is used at. An open record still open at code generation
   is reported as not supported.
 
-## Plan
+# Plan
 
 1. **Closed means closed.** Require two closed records to have the same fields, in `Equal` and `Assignable`
    constraints alike, with an error that names the extra or missing fields. Fix anything in `stdlib/`, `examples/`
    and the tests that relied on the old rule. ([#470](https://github.com/nanyx-lang/nanyx/issues/470))
 2. **`...` and `...r` in record types.** Parse them, lower them to `TyOpenRecord`, and have the formatter, hover
    and completion show them. ([#471](https://github.com/nanyx-lang/nanyx/issues/471))
-3. **Docs.** The [records tour](../../docs/src/content/tour/records.md#closed-and-open-records) describes the
+3. **Docs.** The [records tour](../tour/records#closed-and-open-records) describes the
    design; once stages 1 and 2 land, its examples get tests.
 
-## Open questions
+# Open questions
 
 - **Record patterns.** Does a pattern that names some of a record's fields, `(x = a)` against `(x: int, y: int)`,
   need a `...` to ignore the rest, as Rust's `..` does? Reading fewer fields cannot go wrong, but writing `...` says
