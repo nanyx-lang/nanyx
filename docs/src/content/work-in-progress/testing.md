@@ -18,7 +18,7 @@ This page fills in the rest: how a test is written, how it fails, and how the ru
 
 # Writing a test
 
-A test is a definition marked with the `@test` [attribute](../tour/attributes). Its name is the definition's name, and the module it is in groups it with the module's other tests:
+A test is a definition marked with the `@test` [attribute](../tour/attributes). Its name is the definition's name, usually a sentence in backticks, and the module it is in groups it with the module's other tests:
 
 ```nanyx
 module geometry
@@ -30,12 +30,14 @@ def add: (Point, Point) -> Point = { a, b ->
 }
 
 @test
-def addsPoints = {
+def `adds points` = {
   def p = add(Point(x = 1, y = 2), Point(x = 3, y = 4))
   assert(p.x == 4)
   assert(p == Point(x = 4, y = 6))
 }
 ```
+
+A [name in backticks](../tour/naming-conventions#names-in-backticks) can be any text but a backtick, a line break or a dot, so a test reads as what it checks, and the runner reports it as `` geometry.`adds points` ``. A plain name, `def addsPoints`, works too.
 
 A test takes no arguments and returns `()`. It passes if it finishes, and fails if it panics: an `assert` that does not hold, a [deferred error](#deferred-errors), a non-exhaustive match or any other panic.
 
@@ -43,7 +45,7 @@ Tests are only compiled into a test build. `nanyx run` and `nanyx build` leave t
 
 ## Tests beside the code
 
-A test can sit in the module it tests, as `addsPoints` does above. There it can see the module's private definitions, so a helper can be tested without exporting it. Rust's `#[cfg(test)]` modules and Zig's `test` blocks take the same approach.
+A test can sit in the module it tests, as `` `adds points` `` does above. There it can see the module's private definitions, so a helper can be tested without exporting it. Rust's `#[cfg(test)]` modules and Zig's `test` blocks take the same approach.
 
 ## Tests in their own files
 
@@ -69,14 +71,14 @@ Each test file declares a named module, as every file in a package does. It is p
 
 ```nanyx
 @test
-def scalesPoints = {
+def `scales points` = {
   def p = Point(x = 1, y = 2)
   assert(scale(p, 2) == Point(x = 2, y = 4))
 }
 ```
 
 ```text
-FAIL geometry.scalesPoints  src/geometry.nyx:18:3
+FAIL geometry.`scales points`  src/geometry.nyx:18:3
   assert(scale(p, 2) == Point(x = 2, y = 4))
     scale(p, 2) = Point(x = 2, y = 5)
     p = Point(x = 1, y = 2)
@@ -96,7 +98,7 @@ The code under test often needs more, such as `FileSystem` or `Clock`. A test pr
 
 ```nanyx
 @test
-def loadsDefaultsWhenMissing = {
+def `loads the defaults when there is no config file` = {
   use FileSystem(read = { _ -> #error(#notFound) })
   assert(config.load("app.toml") == Config.default)
 }
@@ -105,7 +107,7 @@ def loadsDefaultsWhenMissing = {
 A test that needs a context it does not load is a compile-time error, as an entry is that needs a context its host doesn't provide:
 
 ```text
-error: the test `loadsDefaults` requires context `FileSystem`, which the test host does not provide
+error: the test `loads the defaults when there is no config file` requires context `FileSystem`, which the test host does not provide
   load a fake with `use FileSystem(...)`, or mark the test `@test(#io)` to use the real one
 ```
 
@@ -117,7 +119,7 @@ A test marked `@test(#io)` runs with the console host's contexts (`Console & Fil
 
 ```nanyx
 @test(#io)
-def readsTheSampleConfig = {
+def `reads the sample config` = {
   assert(config.load("tests/sample.toml") == #some(Config(port = 8080)))
 }
 ```
@@ -130,17 +132,17 @@ Its output is still captured.
 nanyx test [path] [--filter text] [--release]
 ```
 
-`nanyx test` takes a package's directory or manifest, or a script, as `nanyx run` does. It runs every test whose full name (`geometry.addsPoints`) contains the filter, and reports each one:
+`nanyx test` takes a package's directory or manifest, or a script, as `nanyx run` does. It runs every test whose full name (`` geometry.`adds points` ``) contains the filter, and reports each one:
 
 ```text
 Running 3 tests in geometry, with 1 deferred error
 
-PASS geometry.addsPoints
-FAIL geometry.scalesPoints  src/geometry.nyx:18:3
+PASS geometry.`adds points`
+FAIL geometry.`scales points`  src/geometry.nyx:18:3
   assert(scale(p, 2) == Point(x = 2, y = 4))
     scale(p, 2) = Point(x = 2, y = 5)
     p = Point(x = 1, y = 2)
-FAIL geometry.parsesPoint  src/geometry.nyx:24:14
+FAIL geometry.`parses a point`  src/geometry.nyx:24:14
   error E001: Type mismatch (deferred from compile time)
     Expected type `int` but found type `string` in the expression `x + 1`
 
@@ -157,7 +159,7 @@ A test that runs for longer than a time limit fails, with a message that says so
 
 ## Deferred errors
 
-`nanyx test` is a debug build, as `nanyx run` is. A type or name error is reported, and the test that reaches it fails with that error's message, as `parsesPoint` does above. The others run as usual, so a change can be tested while other code is still broken. `nanyx test --release` refuses to run if there is any error.
+`nanyx test` is a debug build, as `nanyx run` is. A type or name error is reported, and the test that reaches it fails with that error's message, as `` `parses a point` `` does above. The others run as usual, so a change can be tested while other code is still broken. `nanyx test --release` refuses to run if there is any error.
 
 ## Editors
 
@@ -180,10 +182,11 @@ These fit the design but are not part of the first version:
 - **Go**: `go test`, with tests in `_test.go` files in the same package.
 - **pytest** and **Elixir's ExUnit**: a plain `assert` whose failure message shows the values in the expression, so no family of `assertEqual` functions is needed. Groovy and Kotlin call this "power assert".
 - **Roc**: `expect`, built into the language, and `roc test`.
+- **F#** and **Kotlin**: tests named with sentences in backticks, ``` ``adds two points`` ``` and `` `adds two points` ``.
 
 # Open questions
 
 - **`assert` in release builds.** Should a release build keep every `assert`, as Rust's `assert!` does, or should there also be a debug-only form, like Rust's `debug_assert!`?
 - **A message.** Should `assert` take an optional message, `assert(ok, "the cache was warm")`, or are the printed values always enough?
-- **Names that are sentences.** A test's name is a definition's name, so `addsPoints`, not "adds two points". Is that enough, or does `@test` want a description, such as `@test("adds two points")`?
+- **Dots in test names.** A name in backticks cannot hold a dot, because dots separate the parts of a qualified name, so a test cannot be called `` `parses 1.5` ``. Is that worth lifting for tests?
 - **Private definitions in test files.** Should a file selected by `tests` be able to reach the private definitions of a module it names, as Go's tests in the same package can?
