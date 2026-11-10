@@ -4,10 +4,10 @@ description: "Add, Num, the arithmetic operators and number literals in generic 
 order: 9
 ---
 
-> **Status: proposal.** Nothing here is implemented. It answers the questions in
+> **Status: agreed, not implemented.** It answers the questions in
 > [#606](https://github.com/nanyx-lang/nanyx/issues/606) and picks up where
 > [Equality and well-known contexts](./equality-and-well-known-contexts#numeric-operators) stops. The decisions are
-> listed under [Open questions](#open-questions). The code references under [What exists today](#what-exists-today)
+> listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work). The code references under [What exists today](#what-exists-today)
 > are at commit `af48c0a`.
 
 # What exists today
@@ -258,32 +258,33 @@ The language server's code action for the second and fourth adds the requirement
    rest ([#607](https://github.com/nanyx-lang/nanyx/issues/607)).
 2. Attached operator definitions ([#527](https://github.com/nanyx-lang/nanyx/issues/527)), shared with `Eq`.
 3. `Add` in the prelude; `+` and `-` read through it; the compiler's own instances for `int` and `float`; prefix `-`;
-   `0` as `zero` in annotated generic code. Adds `List.sum` (#475).
-4. `Num`; `*`, `/` and `%` read through it; `fromInt` literals. Makes `math.abs` and `math.pow` generic (#186);
-   `min`, `max` and `clamp` wait on `Ord` ([#476](https://github.com/nanyx-lang/nanyx/issues/476)).
-5. `**` and the prelude's `pow`.
+   `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
+   ([#609](https://github.com/nanyx-lang/nanyx/issues/609)).
+4. `Num`; `*`, `/` and `%` read through it; `fromInt` literals. Makes `math.abs` generic (#186); `min`, `max` and
+   `clamp` wait on `Ord` ([#476](https://github.com/nanyx-lang/nanyx/issues/476))
+   ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
+5. `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 6. Instances for the sized numbers as they land ([#343](https://github.com/nanyx-lang/nanyx/issues/343)), and the
    dimension rules for `*` and `/` with units.
 
-# Open questions
-
-Each is for the maintainer to decide.
+# Decided
 
 1. **Two contexts, `Add` and `Num`.** `Add` has `zero`, `+`, `-` and `negate`; `Num` has those and `*`, `/`, `%` and
-   `fromInt`; a `Num` satisfies an `Add`. [Recommended. Rejected: one `Num`, which measured types cannot have; one
-   context per operator, which needs multi-parameter contexts.]
-2. **The names.** [Recommended: `Add` and `Num`. Alternatives: `Sum`, the docs' current example, which reads like
-   the result of `List.sum`; `Additive` and `Numeric`, as Swift.]
-3. **`/` and `%` are in `Num`**, truncating on integers and IEEE 754 on floats. [Recommended. Rejected: separate
-   integer and fractional division, which either breaks `7 / 2` or makes `/` mean two things.]
-4. **Negation is a member of `Add`**; on unsigned types it stops the program for anything but zero.
-   [Recommended. Alternative: a separate `Negate` context that unsigned types lack.]
+   `fromInt`; a `Num` satisfies an `Add`. (Rejected: one `Num`, which measured types cannot have; one context per
+   operator, which needs multi-parameter contexts.)
+2. **The names are `Add` and `Num`.** (Rejected: `Sum`, the docs' earlier example, which reads like the result of
+   `List.sum`; `Additive` and `Numeric`, as Swift.)
+3. **`/` and `%` are in `Num`**, truncating on integers and IEEE 754 on floats. (Rejected: separate integer and
+   fractional division, which either breaks `7 / 2` or makes `/` mean two things.)
+4. **Negation is a member of `Add`**; on unsigned types it stops the program for anything but zero. (Rejected: a
+   separate `Negate` context that unsigned types lack.)
 5. **Literals are generic only where the signature is written**: `0` is `zero`, other integers `fromInt(n)`, and a
-   decimal literal at a type variable is an error. [Recommended. Rejected: literal polymorphism everywhere; no
-   literals in generic code.]
-6. **`use` changes concrete arithmetic**, as it does `==`. [Recommended, for one rule across well-known contexts.
-   Alternative: `use` reaches only generic code, as operators.md says today, which makes arithmetic the exception.]
-7. **`**` takes an `int` exponent** and is the prelude's `pow`, not a member. [Recommended.]
-8. **Measured types have `Add` but not `Num`**, and `*` and `/` on them are typed by the dimension rules.
-   [Recommended. Alternative: contexts with output types.]
-9. **No structural derivation** of `Add` or `Num` for records and tuples. [Recommended.]
+   decimal literal at a type variable is an error. (Rejected: literal polymorphism everywhere; no literals in
+   generic code.)
+6. **`use` changes concrete arithmetic**, as it does `==`, so there is one rule across well-known contexts.
+   operators.md is updated when the work lands. (Rejected: `use` reaches only generic code, which makes arithmetic
+   the exception.)
+7. **`**` takes an `int` exponent** and is the prelude's `pow`, not a member.
+8. **Measured types have `Add` but not `Num`**, and `*` and `/` on them are typed by the dimension rules. (Rejected:
+   contexts with output types.)
+9. **No structural derivation** of `Add` or `Num` for records and tuples.
