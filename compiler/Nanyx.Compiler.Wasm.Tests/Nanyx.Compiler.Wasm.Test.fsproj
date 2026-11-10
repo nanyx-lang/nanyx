@@ -23,6 +23,7 @@
     <Compile Include="Features\Loops\RunLoopTests.fs" />
     <Compile Include="Features\Matching\RunMatchingTests.fs" />
     <Compile Include="Features\Matching\RunAndPatternTests.fs" />
+    <Compile Include="Features\Matching\RunNestedTagPatternTests.fs" />
     <Compile Include="Features\Memory\DropFunctionTests.fs" />
     <Compile Include="Features\Memory\ReferenceCountingTests.fs" />
     <Compile Include="Features\Memory\ExampleMemoryTests.fs" />
