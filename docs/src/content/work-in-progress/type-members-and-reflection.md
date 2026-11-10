@@ -47,7 +47,7 @@ def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 - **Linters.** [Linters](../advanced/linters) are planned as Nanyx packages compiled to WebAssembly and run at compile time on the engine the compiler already embeds. That infrastructure could later run code generators too.
 - **Monomorphisation.** Generic code is compiled once for each set of concrete types it is used at, so every type is known at every use site when code is generated.
 - **Parameters are a record.** A function's parameters are a [record](../tour/records), which may mix positional and named fields. This is how named arguments work.
-- **Type variable names.** [Type variables](../tour/types) are a single lowercase letter. Longer lowercase names are reserved for associated types. The built-in type names `int`, `string`, `bool` and `list` are reserved by the language.
+- **Type names.** A [type's name](../tour/types#type-names) starts with a capital letter, and a type variable is a single lowercase letter. Longer lowercase names are reserved for associated types, except for the built-in types such as `int`, `string`, `bool` and `list`, whose names are reserved by the language.
 
 ## Constraints
 
@@ -145,7 +145,7 @@ def p = deserialise('{"x": 1, "y": 2}', into = type Point)
 
 The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `(elem = string)` fixes a context's. Because positional and named fields mix, `deserialise(text, type Point)` works too. One concept covers both features: a record member of kind `type`.
 
-A type member's name can't clash with a built-in type. `int`, `string`, `bool` and `list` are reserved by the language, so `(string, list: type) -> list` is an error, just as naming any other binding `list` is.
+A type member's name can't clash with a built-in type. [Built-in type names](../tour/types#type-names) such as `int`, `string`, `bool` and `list` are reserved by the language, so `(string, list: type) -> list` is an error.
 
 ## `x: type` is a value of type `Type(x)`
 
