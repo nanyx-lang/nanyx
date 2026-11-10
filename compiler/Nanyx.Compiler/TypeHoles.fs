@@ -34,3 +34,13 @@ module internal TypeHoles =
         | Some (Kind TypeHole), _, _ -> addConstraintAt span declaredTy lambdaTy state
         | Some (Kind (TypeFunc(Kind TypeHole, _))), TyFunc(input, _), TyFunc(lambdaInput, _) -> addConstraintAt span input lambdaInput state
         | _ -> state
+
+    /// `state` with `expr`, a def's value of type `actualTy`, checked against `declaredTy`, the type its annotation
+    /// `declared` gives it. A lambda written for a function type was checked against it as it was inferred, so only
+    /// what `constrainLambda` covers is left; anything else, a lambda written for some other type among them, must be
+    /// assignable to it.
+    let constrainToAnnotation (expr: Expression) (declared: TypeExpr option) (declaredTy: Ty) (actualTy: Ty) (state: InferState) =
+        match expr.Kind, declared, Unifier.unalias declaredTy with
+        | Lambda _, Some (Kind TypeHole), _
+        | Lambda _, _, TyFunc _ -> constrainLambda expr.Span declared declaredTy actualTy state
+        | _ -> Visibility.addDeclaredConstraintAt expr.Span actualTy declaredTy state

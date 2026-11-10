@@ -74,6 +74,16 @@ let internal inNominalHome (state: InferState) (name: string) (span: SourceSpan)
             blockAround state.ModuleBlocks symbol.Declaration = blockAround state.ModuleBlocks span
         | _ -> true)
 
+/// `state` with `actualTy`, the type of the value at `span`, made assignable to `declaredTy`, the type written for it.
+/// In the home module of a nominal type, a value of its underlying type is one of it.
+let internal addDeclaredConstraintAt (span: SourceSpan) (actualTy: Ty) (declaredTy: Ty) (state: InferState) =
+    match Unifier.unalias declaredTy with
+    | TyNominal(name, underlying, _) when inNominalHome state name span ->
+        match Unifier.unalias actualTy with
+        | TyNominal _ -> addAssignableConstraintAt span actualTy declaredTy state
+        | _ -> addAssignableConstraintAt span actualTy underlying state
+    | _ -> addAssignableConstraintAt span actualTy declaredTy state
+
 /// The error for naming `name` at `span`, where it means the definition or type `symbolId`, if that reaches out of the
 /// `module name =` block `span` is in, or into one: a block sees only its own definitions and types, the blocks nested
 /// in it, the blocks it imports and what it imports itself, and its imports are its own.
