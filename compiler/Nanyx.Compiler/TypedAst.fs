@@ -94,7 +94,7 @@ and TypedStatement =
     | TypedExprStatement of TypedExpr
     | TypedImportStatement of ImportItem list
     | TypedTypeDefStatement of Identifier * TypeDefModifier list * (Identifier * TypeExpr option) list * TypeExpr
-    | TypedUseStatement of UseBinding * TypedExpr option
+    | TypedUseStatement of TypedExpr
 
 type TypedDefinition =
     | TypedValueDef of bool * Identifier * TypeExpr option * TypedExpr
@@ -160,6 +160,10 @@ type ContextInstance =
 /// where the call finds each context the callee's type declares, in the order it declares them: `None` for one that is
 /// not parameterised, or whose instance is left to be found by its members' names.
 ///
+/// `UseContexts` holds the instance of a parameterised context each `use` loads, by the node of the value it loads:
+/// `Sum(int)` for `use addInt`, where `def addInt: Sum(int) = (...)`. It is written as `InstanceInScope` writes it, so
+/// that the backend knows the members the `use` loads by the same names a call finds them by.
+///
 /// `InferredContextTypes` holds the parameterised contexts each top-level def that does not write its type was
 /// inferred to require, by the def's symbol, as types over the variables of its type in `SymbolTypes`: `Show(a)` is
 /// `TyApply("Show", [a])`. Resolved for the root module only, as `SymbolTypes` is.
@@ -179,6 +183,7 @@ type TypedModule =
       ModuleNames: Map<string, SymbolId>
       ImportedTypes: Map<SymbolId, Ty>
       ContextInstances: Map<NodeId, ContextInstance option list>
+      UseContexts: Map<NodeId, TypeExpr>
       InferredContextTypes: Map<SymbolId, Ty list>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }

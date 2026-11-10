@@ -35,8 +35,8 @@ let ``A context member and a record field can be named by an operator`` () =
     match parsed "context Eq(a) = (`==`: (a, a) -> bool)" with
     | [ Def (TypeDef ("Eq", _, _, Kind (TypeRecord [ TypeField ("==", false, false, Some _, None) ]))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
-    match parsed "def main = {\n  use Eq(int) = (`==` = { a, b -> true })\n  1\n}" with
-    | [ Def (ValueDef (_, "main", _, Kind (Lambda ([], Kind (Block [ Kind (UseStatement (UseContextInstance (_, Kind (RecordExpr [ NamedField ("==", _) ])))); _ ]))))) ] -> ()
+    match parsed "def main = {\n  def eqInt: Eq(int) = (`==` = { a, b -> true })\n  1\n}" with
+    | [ Def (ValueDef (_, "main", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "eqInt", Some _, Kind (RecordExpr [ NamedField ("==", _) ]))); _ ]))))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

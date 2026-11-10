@@ -952,7 +952,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Complex scope first (fun value ->
                 let body = this.Block scope rest k
                 mk (Do(value, body)) body.Type)
-        | UseStatement(UseValue(Kind (RecordExpr fields))) :: rest ->
+        | UseStatement(Kind (RecordExpr fields)) :: rest ->
             // Lambda lifting has evaluated each binding into a local; the members are those locals.
             let members =
                 fields

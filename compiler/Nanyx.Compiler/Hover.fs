@@ -33,7 +33,7 @@ let rec private children (expr: Expression) : Expression list =
     | TagExpr(_, payload) -> Option.toList payload
     | IfExpr(cond, thenExpr, elseExpr) -> [ cond; thenExpr; elseExpr ]
     | MemberAccess(target, _, _) -> [ target ]
-    | UseIn(binding, body) -> [ bindingExpression binding; body ]
+    | UseIn(value, body) -> [ value; body ]
     | WorkflowBindExpr(_, value)
     | WorkflowReturnExpr value -> [ value ]
     | InterpolatedString parts -> parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None)
@@ -41,15 +41,10 @@ let rec private children (expr: Expression) : Expression list =
 and private statementExpressions (statement: Statement) : Expression list =
     match statement.Kind with
     | DefStatement(_, _, _, value)
-    | ExprStatement value -> [ value ]
-    | UseStatement binding -> [ bindingExpression binding ]
+    | ExprStatement value
+    | UseStatement value -> [ value ]
     | TypeDefStatement _
     | ImportStatement _ -> []
-
-and private bindingExpression (binding: UseBinding) =
-    match binding with
-    | UseValue value
-    | UseContextInstance(_, value) -> value
 
 let rec private topLevelExpressions (item: TopLevelItem) : Expression list =
     match item.Kind with
@@ -93,13 +88,11 @@ let expressionTypes (expr: Expression) : TypeExpr list =
             match statement.Kind with
             | DefStatement(_, _, typeOpt, _) -> Option.toList typeOpt
             | TypeDefStatement(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
-            | UseStatement (UseContextInstance(context, _)) -> [ context ]
-            | UseStatement (UseValue _)
+            | UseStatement _
             | ExprStatement _
             | ImportStatement _ -> [])
     | ContextMemberAccess(context, _)
-    | ContextMemberCall(context, _, _)
-    | UseIn(UseContextInstance(context, _), _) -> [ context ]
+    | ContextMemberCall(context, _, _) -> [ context ]
     | _ -> []
 
 let rec topLevelTypes (item: TopLevelItem) : TypeExpr list =

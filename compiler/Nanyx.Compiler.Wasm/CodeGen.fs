@@ -329,7 +329,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
         contextMemberKeys defs (fst (extractTypeLayouts module')) |> Map.map (fun _ keys -> keys |> List.map contextMemberParameter)
-    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures module'
+    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures typed.UseContexts module'
     let defs =
         module'
         |> List.choose (function

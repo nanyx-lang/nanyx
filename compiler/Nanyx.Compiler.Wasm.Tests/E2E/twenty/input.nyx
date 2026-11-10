@@ -1,11 +1,9 @@
 -- Test 20: Parameterized context instances
 -- Tests that [ToString(a) + ToString(b)] works with qualified access ToString(a).f
 
-context ToString(a) = (
-  toString: a -> String
-)
+context ToString(a) = (toString: a -> String)
 
-def compareStrings: [ToString(a) + ToString(b)] (a, b) -> bool = { x, y ->
+def compareStrings: [ToString(a) + ToString(b)] a, b -> bool = { x, y ->
   def xString = ToString(a).toString(x)
   def yString = ToString(b).toString(y)
   dbg("xString: " ++ xString ++ ", yString: " ++ yString)
@@ -13,8 +11,10 @@ def compareStrings: [ToString(a) + ToString(b)] (a, b) -> bool = { x, y ->
 }
 
 def main = {
-  use ToString(int) = ( toString = { i -> "fake" } )
-  use ToString(string) = ( toString = { s -> s } )
+  def fakeInt: ToString(int) = (toString = { i -> "fake" })
+  use fakeInt
+  def plainString: ToString(string) = (toString = { s -> s })
+  use plainString
 
   compareStrings(42, "fake")
 }

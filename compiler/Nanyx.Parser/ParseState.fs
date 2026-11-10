@@ -20,9 +20,10 @@ type ParseState =
       ImplicitArgumentNext: SourceSpan option
       /// The text of each `module name =` block parsed so far, with the block's name.
       ModuleBlocks: (ModuleName * SourceSpan) list
-      /// The furthest workflow keyword applied to a value, where it is and what to say about it. It is a cell
-      /// shared by every copy of the state, so backtracking does not forget it (see `workflowKeywordApplication`).
-      WorkflowKeyword: (Position * string) option ref
+      /// The furthest mistake the parser recognised (a workflow keyword applied to a value, or `use C(T) = ...`),
+      /// where it is and what to say about it. It is a cell shared by every copy of the state, so backtracking does
+      /// not forget it (see `reportFocused`).
+      FocusedError: (Position * string) option ref
       /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
       /// line break), most recent first. For the formatter, which puts them back: see `parseModuleWithTrivia`.
       Comments: (int * int) list
@@ -37,7 +38,7 @@ module ParseState =
           LambdaDepth = 0
           ImplicitArgumentNext = None
           ModuleBlocks = []
-          WorkflowKeyword = ref None
+          FocusedError = ref None
           Comments = []
           StringTexts = [] }
 

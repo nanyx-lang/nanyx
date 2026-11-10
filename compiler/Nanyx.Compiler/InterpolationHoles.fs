@@ -49,7 +49,7 @@ module InterpolationHoles =
         let tyText = display ty
         match ty, Unifier.unalias ty with
         | (TyAlias(name, _, _) | TyNominal(name, _, _)), _ ->
-            $"'{tyText}' cannot be interpolated because it has no toString: attach '{name}.toString', or load an instance with `use ToString({tyText})`"
+            $"'{tyText}' cannot be interpolated because it has no toString: attach '{name}.toString', or load an instance of `ToString({tyText})` with `use`"
         | _, TyFunc _ -> $"'{tyText}' cannot be interpolated: it is a function, and functions have no toString"
         | _, (TyTag(_, Some _) | TyUnion _) ->
             $"'{tyText}' cannot be interpolated: only a tag without a payload has a toString. Match on it, or print it with `dbg`"
