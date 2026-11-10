@@ -1813,8 +1813,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let mutable armExprs: TypedExpr list = []
             let mutable typedArms: TypedMatchArm list = []
             let mutable errors: Diagnostic list = []
-            // What patterns match is worked out in `PatternSpace`, which the `unreachableArms` linter rule uses too.
-            let isCatchAllPattern = PatternSpace.isCatchAll
             let patternsForIndex index =
                 arms
                 |> List.choose (fun (patterns, _) ->
@@ -1826,43 +1824,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let resolvedScrutineeTypes = scrutineeTypes |> List.map (resolveSoFar current >> Unifier.unalias)
             let mutable scrutineeOverrides: Map<int, Ty> = Map.empty
             for (index, scrutineeTy) in scrutineeTypes |> List.indexed do
-                let patternsAtPos = patternsForIndex index
-                let hasCatchAll = patternsAtPos |> List.exists isCatchAllPattern
-                let nonCatchAll = patternsAtPos |> List.filter (fun pat -> not (isCatchAllPattern pat))
-                let allTagPatterns =
-                    not nonCatchAll.IsEmpty
-                    && (nonCatchAll |> List.forall (function Kind (TagPattern _) -> true | _ -> false))
-                if allTagPatterns then
-                    let tagInfos =
-                        nonCatchAll
-                        |> List.choose (function Kind (TagPattern(tagName, payloadOpt)) -> Some (tagName, payloadOpt) | _ -> None)
-                        |> List.groupBy fst
-                        |> List.sortBy fst
-                    // The arms describe the scrutinee's union. With a catch-all arm they need not name every
-                    // tag, so the union is left open with a rest variable for the tags the arms do not name
-                    // (`if #some(v) = get(n) then ...` must accept a `#some(int) | #none`).
-                    if tagInfos.Length > 1 || hasCatchAll then
-                        let mutable stateForUnion = current
-                        let unionItems =
-                            tagInfos
-                            |> List.map (fun (tagName, entries) ->
-                                let hasPayload = entries |> List.exists (fun (_, payloadOpt) -> payloadOpt.IsSome)
-                                if hasPayload then
-                                    let payloadTy, nextState = freshVar stateForUnion
-                                    stateForUnion <- nextState
-                                    TyTag(tagName, Some payloadTy)
-                                else
-                                    TyTag(tagName, None))
-                        let unionItems =
-                            if hasCatchAll then
-                                let restTy, nextState = freshVar stateForUnion
-                                stateForUnion <- nextState
-                                unionItems @ [ restTy ]
-                            else
-                                unionItems
-                        let unionTy = TyUnion unionItems
-                        scrutineeOverrides <- scrutineeOverrides |> Map.add index unionTy
-                        current <- addConstraint scrutineeTy unionTy stateForUnion
+                // The arms describe the scrutinee's union, payloads included (`ArmUnion`). With a catch-all arm they
+                // need not name every tag, so the union is left open with a rest variable for the tags the arms do not
+                // name (`if #some(v) = get(n) then ...` must accept a `#some(int) | #none`).
+                match ArmUnion.describe false (patternsForIndex index) current with
+                | Some (unionTy, stateForUnion) ->
+                    scrutineeOverrides <- scrutineeOverrides |> Map.add index unionTy
+                    current <- addConstraint scrutineeTy unionTy stateForUnion
+                | None -> ()
             // What is wrong with the match as a whole is reported at its head (`match a`), not over its arms.
             let headSpan = MatchHead.span expr scrutinees arms
             // A value no arm matches (`PatternSpace.missingCase`) is described as the one value that makes it so, or

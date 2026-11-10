@@ -24,6 +24,7 @@
     <Compile Include="PatternSpace.fs" />
     <Compile Include="Except.fs" />
     <Compile Include="TypeHoles.fs" />
+    <Compile Include="ArmUnion.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />
