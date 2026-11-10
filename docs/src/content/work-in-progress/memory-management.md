@@ -160,8 +160,9 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
 - **Classes.** Each size from 4 to 32 bytes (8 words) has its own list, so a freed block goes back to exactly the
   size Perceus will next ask for. Larger blocks share one list, searched first-fit; a block found there is not
   split and keeps its own size.
-- **Lists.** The heads are a table of 9 words at the start of the heap (address 4096), and `$heap_ptr` starts
-  after it. A free block keeps the next block of its list in its first word. `free` pushes onto the front of the
+- **Lists.** The heads are a table of 9 words at the start of the heap, and `$heap_ptr` starts after it. The
+  string literals run from address 256, and the table goes at 4096 or, when they end past that, after them,
+  8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. `free` pushes onto the front of the
   list and `alloc` takes from the front, so the most recently freed block is reused first.
 
 Nothing coalesces adjacent free blocks or returns memory to the host; neither matters for the small,
