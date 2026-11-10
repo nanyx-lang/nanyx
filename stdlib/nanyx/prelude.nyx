@@ -264,6 +264,73 @@ export def Float.pow: float, float -> float = { x, y ->
     else floatExp(y * floatLn(x))
 }
 
+-- Ordering --------------------------------------------------------------------------------------
+
+-- How two values of type `a` are put in order. `x < y`, `x <= y`, `x > y` and `x >= y` are read
+-- through it, so the four cannot disagree. The compiler has its own for numbers, `bool` (`false`
+-- first), `string` (by bytes, which is the order of code points), and tuples and lists of them
+-- (position by position, and a list that is a prefix of another first). Records and tags have no
+-- order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
+-- with `List.sortBy`. A function that orders values of one of its type variables requires it:
+-- `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
+-- should keep them consistent.
+export context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
+
+-- The `compare` of the compiler's own `Ord`: what a function that requires `Ord(a)` is passed when
+-- it is called with a type that has no `compare` of its own. On floats it is a total order, with
+-- NaN after every other float, while `<` and the others on floats follow IEEE 754.
+export def __compare: a, a -> #less | #equal | #greater = { x, y ->
+  def order = __nanyx_compare(x, y)
+
+  if order < 0 then #less else if order > 0 then #greater else #equal
+}
+
+-- What `x < y` calls when it reads an `Ord` other than the compiler's own: one a function
+-- requires, one loaded with `use`, or one built from an attached `compare`. `<=`, `>` and `>=`
+-- call the three after it.
+export def __less: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #less -> true
+    | _ -> false
+}
+
+export def __lessOrEqual: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #greater -> false
+    | _ -> true
+}
+
+export def __greater: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #greater -> true
+    | _ -> false
+}
+
+export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #less -> false
+    | _ -> true
+}
+
+-- Each built-in type with an order has its order attached as `compare`, so it can be called and
+-- passed around: `Float.compare` puts NaN after every other float. A built-in type's order is
+-- always the compiler's own: `<` and `Ord` do not read these.
+export def Int.compare: int, int -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def Float.compare: float, float -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def Bool.compare: bool, bool -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def String.compare: string, string -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
 -- Text ------------------------------------------------------------------------------------------
 
 -- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
@@ -604,7 +671,7 @@ export def List.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
 -- `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
 -- elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
 -- same key, the one from `xs` comes first.
-def mergeBy: list(a), list(a), (a -> int), list(a) -> list(a) = {
+def mergeBy: [Ord(b)] list(a), list(a), (a -> b), list(a) -> list(a) = {
   | [], ys, _, acc -> reverseOnto(acc, ys)
   | xs, [], _, acc -> reverseOnto(acc, xs)
   | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
@@ -613,23 +680,52 @@ def mergeBy: list(a), list(a), (a -> int), list(a) -> list(a) = {
 }
 
 -- `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
-def mergePairs: list(list(a)), (a -> int), list(list(a)) -> list(list(a)) = {
+def mergePairs: [Ord(b)] list(list(a)), (a -> b), list(list(a)) -> list(list(a)) = {
   | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
   | rest, _, acc -> reverseOnto(acc, rest)
 }
 
 -- The elements of `runs`, each run already in order of `key`, merged into one list in that order.
-def mergeRuns: list(list(a)), (a -> int) -> list(a) = {
+def mergeRuns: [Ord(b)] list(list(a)), (a -> b) -> list(a) = {
   | [], _ -> []
   | [run], _ -> run
   | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
 }
 
 -- The elements in ascending order of `key`. The sort is stable: elements with the same key keep
--- their order. Keys are ints for now, since `<` only orders ints (#476). Stack-safe: it works on a
--- list of any length.
-export def List.sortBy: list(a), (a -> int) -> list(a) = { xs, key ->
+-- their order. A key can be of any type with an order: `List.sortBy(people, { p -> p.name })`.
+-- Stack-safe: it works on a list of any length.
+export def List.sortBy: [Ord(b)] list(a), (a -> b) -> list(a) = { xs, key ->
   mergeRuns(List.map(xs, { x -> [x] }), key)
+}
+
+-- The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
+export def List.sort: [Ord(a)] list(a) -> list(a) = { xs ->
+  List.sortBy(xs, { x -> x })
+}
+
+-- The least of `least` and the elements of `xs`, the first of them when several are least.
+def leastOf: [Ord(a)] list(a), a -> a = {
+  | [], least -> least
+  | [x, ...rest], least -> leastOf(rest, if x < least then x else least)
+}
+
+-- The greatest of `greatest` and the elements of `xs`, the first of them when several are greatest.
+def greatestOf: [Ord(a)] list(a), a -> a = {
+  | [], greatest -> greatest
+  | [x, ...rest], greatest -> greatestOf(rest, if x > greatest then x else greatest)
+}
+
+-- The least element, or `#emptyList`. Of several least elements, the first.
+export def List.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ...rest] -> #some(leastOf(rest, x))
+}
+
+-- The greatest element, or `#emptyList`. Of several greatest elements, the first.
+export def List.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ...rest] -> #some(greatestOf(rest, x))
 }
 
 -- The elements `step` gives from `state` on, last first, in front of `acc`.

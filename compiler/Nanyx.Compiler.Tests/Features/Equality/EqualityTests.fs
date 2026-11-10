@@ -3,37 +3,13 @@ module Nanyx.Compiler.Tests.Features.Equality
 open Xunit
 open NyxCompiler
 open Parser.Program
-
-/// `source` compiled, with no diagnostics.
-let private compileClean (source: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value
-
-/// The one diagnostic `source` has, which must be a missing context: its message, and the text it is reported at.
-let private missingContext (source: string) =
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] ->
-        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        let span = diagnostic.Span.Value
-        diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
+open Nanyx.Compiler.Tests.TestSupport
 
 /// The contexts the one def of `typed` that requires any was inferred to require.
 let private inferredContexts (typed: TypedModule) =
     match typed.InferredContextTypes |> Map.values |> List.ofSeq with
     | [ contexts ] -> contexts
     | other -> failwith $"Expected one def with inferred contexts, got %A{other}"
-
-/// Every instance the module's own calls found.
-let private instancesOf (typed: TypedModule) =
-    typed.ContextInstances
-    |> Map.toList
-    |> List.filter (fun (call, _) -> typed.ExprTypes.ContainsKey call)
-    |> List.sortBy fst
-    |> List.map snd
-    |> List.concat
-    |> List.choose id
 
 [<Fact>]
 let ``A def that does not write its type requires Eq of a type variable it compares`` () =

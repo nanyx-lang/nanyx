@@ -506,6 +506,14 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 let equal = mk (CallRuntime(helper, atoms, true)) IrBool
                 if op = "==" then k equal
                 else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
+        | BinaryOp(("<" | "<=" | ">" | ">=") as op, left, right) when (match tyOf left with
+                                                                      | IrString | IrRecord _ | IrList _ -> true
+                                                                      | _ -> false) ->
+            // A string, a tuple and a list are ordered by their structure (see `CoreIrOrdering`): their order, a
+            // number, is compared with 0.
+            this.Atoms scope [ left; right ] (fun atoms ->
+                let order = mk (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
+                bindTemp order (fun result -> k (mk (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
         | BinaryOp(op, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).

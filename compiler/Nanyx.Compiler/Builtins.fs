@@ -55,6 +55,10 @@ module Intrinsics =
     let floatToInt = prefix + "float_to_int"
     /// An int as a float. Every `int` has an exact `float`, so this never fails.
     let intToFloat = prefix + "int_to_float"
+    /// Two values of a type the compiler orders (see `WellKnownContexts.ordering`) put in order by their structure:
+    /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
+    /// total order, with NaN after every other float.
+    let compare = prefix + "compare"
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
@@ -71,7 +75,8 @@ module Intrinsics =
           floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy))
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy))
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy))
-          listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None } ]
+          listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None }
+          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy); Symbol = None } ]
 
     let names : Set<string> = all |> List.map fst |> Set.ofList
 

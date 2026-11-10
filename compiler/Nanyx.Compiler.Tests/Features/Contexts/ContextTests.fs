@@ -116,10 +116,8 @@ let private showContext =
 let private instancesIn (source: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let typed = result.Typed.Value
-    typed.ContextInstances
+    ownContextInstances result.Typed.Value
     |> Map.toList
-    |> List.filter (fun (call, _) -> typed.ExprTypes.ContainsKey call)
     |> List.sortBy fst
     |> List.map snd
     |> List.filter ((<>) [ Some InstanceBuiltIn ])

@@ -37,7 +37,7 @@ module internal OperatorCalls =
     /// known, the operator is the built-in one. Otherwise it is the definition attached under the operator's name to
     /// that type, when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is the binding of the
     /// operator's name in `env`. `!=` calls what `==` does, and `-x` what `negate` is. `and` and `or` are keywords, so
-    /// their names are never bound.
+    /// their names are never bound. The ordering operators are always read through `Ord` (see `OrderingOperators`).
     ///
     /// `==` is a lookup of `Eq` at its operands' type, whose order puts an instance in scope before the type's own: a
     /// binding of `==` that takes the operands comes first, on a built-in type too, so after `use ignoringCase`, an
@@ -53,6 +53,7 @@ module internal OperatorCalls =
         let bound (name: Identifier) = TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme)
         let name =
             match expr.Kind with
+            | BinaryOp(op, _, _) when OrderingOperators.isOperator op -> None
             | BinaryOp(op, _, _) when EqualityOperators.isOperator op -> Some EqualityOperators.equals
             | BinaryOp(op, _, _) -> Some op
             | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> Some ArithmeticOperators.negate

@@ -162,6 +162,32 @@ def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
 
 Only a nominal or protected type can: a structural type, such as `type Point = (x: int, y: int)`, and a built-in type always compare by their structure, so attaching `==` to one is an error. `!=` cannot be attached to any type, because it is always `not (a == b)`.
 
+## Ord(a)
+
+`Ord(a)` is the standard library's context for ordering. `x < y`, `x <= y`, `x > y` and `x >= y` are all read through its one member, so they cannot disagree with each other.
+
+```nanyx
+context Ord(a) = (
+  compare: (a, a) -> #less | #equal | #greater
+)
+```
+
+The compiler has an `Ord` for numbers, `bool` (`false` first), strings (by their bytes, which is the order of their code points), and tuples and lists of them, compared position by position, with a list that is a prefix of another first. On floats the operators follow IEEE 754, so every comparison with `NaN` is false, while `Float.compare` is a total order with `NaN` after every other float; that is what `List.sort` uses.
+
+Records and tags have no order: a record's fields and a union's tags have no order of their own in its type, so `<` on them is a type error. Sort a list of them by a key with `List.sortBy`, or make the type nominal and attach a `compare`:
+
+```nanyx
+type $Version = (major: int, minor: int)
+
+def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b ->
+  if a.major != b.major then Int.compare(a.major, b.major) else Int.compare(a.minor, b.minor)
+}
+```
+
+As with `==`, only a nominal or protected type can attach `compare`. The built-in types have theirs attached as functions, `Int.compare` and `Float.compare` among them, but their order is always the compiler's own.
+
+A function that orders values of one of its type variables requires `Ord` of it, `def largest: [Ord(a)] list(a) -> #some(a) | #emptyList`, and one that does not write its type has it inferred: `def larger = { x, y -> if x > y then x else y }` is `[Ord(a)] a, a -> a`. `Ord` does not require `Eq`; a type that attaches both should keep them consistent.
+
 ## Default(a)
 
 Use `Default(a)` when a function needs a fallback value for a type.

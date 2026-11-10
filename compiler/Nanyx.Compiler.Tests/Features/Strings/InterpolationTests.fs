@@ -3,31 +3,7 @@ module Nanyx.Compiler.Tests.Features.Strings.Interpolation
 open Xunit
 open NyxCompiler
 open Parser.Program
-
-/// `source` compiled, with no diagnostics.
-let private compileClean (source: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    result.Typed.Value
-
-/// The one diagnostic `source` has, which must be a missing context: its message, and the text it is reported at.
-let private missingContext (source: string) =
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] ->
-        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        let span = diagnostic.Span.Value
-        diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
-
-/// Every instance the module's own calls and holes found, the prelude's left out.
-let private instancesOf (typed: TypedModule) =
-    typed.ContextInstances
-    |> Map.toList
-    |> List.filter (fun (call, _) -> typed.ExprTypes.ContainsKey call)
-    |> List.sortBy fst
-    |> List.map snd
-    |> List.concat
-    |> List.choose id
+open Nanyx.Compiler.Tests.TestSupport
 
 [<Fact>]
 let ``A hole of a built-in type uses the compiler's own ToString`` () =

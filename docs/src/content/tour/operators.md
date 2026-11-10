@@ -42,7 +42,7 @@ Also, lambda syntax supports an [operator-based shorthand](../tour/functions#sho
 
 # Arithmetic and comparison
 
-Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` and `x - y` read through [`Add`](../advanced/contexts#adda), and `x == y` through [`Eq`](../advanced/contexts#eqa). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
+Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` and `x - y` read through [`Add`](../advanced/contexts#adda), `x == y` through [`Eq`](../advanced/contexts#eqa), and `x < y` through [`Ord`](../advanced/contexts#orda). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
 
 ```nanyx
 def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
@@ -57,6 +57,8 @@ The operator is found by the type of its left operand, exactly as any other atta
 `x ** n` is `x` to the power `n`: it binds tighter than every other infix operator and groups to the right, so `2 * 3 ** 2` is `2 * 9` and `2 ** 3 ** 2` is `2 ** 9`, 512. As prefix `-` binds tighter still, `-x ** 2` is `(-x) ** 2`. It is not a member of a context: `x ** n` is the prelude's `pow(x, n)`, `[Num(a)] (a, int) -> a`, so it works on any number type, and the exponent is an `int`. A negative exponent is `1 / x ** -n`, which truncates on an `int`. For a fractional exponent, use `Float.pow(x, y)`.
 
 Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Add(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading an `Add` with `use` changes the instance that such generic code sees for that type; making it change a concrete `1 + 2` too, as it will, is [not done yet](../work-in-progress/numeric-contexts#what-is-implemented). Equality already works that way: `a == b` is always a lookup of `Eq` at the operands' type, so after `use ignoringCase`, an `Eq(string)`, a plain `a == b` on strings in that block calls its `==`.
+
+Comparison is read through the standard library's contexts instead: `==` and `!=` through [`Eq(a)`](../advanced/contexts#eqa), and `<`, `<=`, `>` and `>=` through [`Ord(a)`](../advanced/contexts#orda), whose one member is `compare`. Numbers, strings, tuples and lists are ordered already; a nominal type is ordered by attaching a `compare`, and records and tags have no order. A function that orders values of one of its type variables requires `[Ord(a)]`, and an `Ord` loaded with `use` changes what `<` means in its block, on built-in types too.
 
 # Pipe and composition
 
