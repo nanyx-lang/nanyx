@@ -70,6 +70,11 @@ those files workable. The reasoning behind them, and the current state of the co
 
 ## Tests
 
+- **Run the tests before you merge.** CI runs nothing on pull requests, only on `main` after a merge, so a broken
+  PR merges unless you catch it. From `compiler/`, run `dotnet test Nyx.Compiler.slnx` and
+  `dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format --check ../stdlib`; for a change to
+  `extension/`, run `npm run compile` there. To run CI itself on your branch, use
+  `gh workflow run Compiler --ref <branch>` or `gh workflow run "VS Code extension" --ref <branch>`.
 - **One file per feature.** A test goes in the `Features/<Area>/` file for the feature it covers. If no such
   file exists, create one. Don't append to a catch-all file. Keep each project's `<Compile Include>` list
   in order.

@@ -7,8 +7,8 @@ on:
       - "extension/**"
       - "!extension/**/*.md"
       - ".github/workflows/extension.yml"
-  # No path filter: "Build and package" is a required check on main, so every PR must run it.
-  pull_request:
+  # Pull requests run nothing. Run the build on your branch before you merge, locally or with
+  # `gh workflow run "VS Code extension" --ref <branch>`.
   workflow_dispatch:
 
 permissions:
@@ -60,7 +60,7 @@ jobs:
   publish:
     name: Publish
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Queue rather than race, so a second push of the same version sees the first one's tag.
     concurrency:

@@ -7,10 +7,12 @@ on:
       - "compiler/**"
       - "!compiler/**/*.md"
       - "stdlib/**"
+      - "examples/**"
+      # One of the tests formats the docs' code blocks.
+      - "docs/src/content/**/*.md"
       - ".github/workflows/compiler.yml"
-  # No path filter: the tests are required checks on main, so every PR must report them. The `changes` job
-  # decides how much of the work a PR needs.
-  pull_request:
+  # Pull requests run nothing: the tests take too long. Run them on your branch before you merge, locally or with
+  # `gh workflow run Compiler --ref <branch>`.
   workflow_dispatch:
 
 permissions:
@@ -26,92 +28,39 @@ defaults:
     working-directory: compiler
 
 jobs:
-  # What a pull request changes, so that the jobs below do only the work it can affect:
-  #   - the compiler, the standard library, the examples or any other Nanyx file: everything;
-  #   - the docs' content only: the tests, one of which formats the docs' code blocks;
-  #   - anything else: nothing.
-  # The test jobs skip their steps rather than the whole job, because a skipped matrix job reports no check
-  # under its operating system's name, and the required checks would wait for ever.
-  changes:
-    name: Changes
-    runs-on: ubuntu-latest
-    outputs:
-      compiler: ${{ steps.filter.outputs.compiler }}
-      tests: ${{ steps.filter.outputs.tests }}
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Find what the pull request changes
-        id: filter
-        run: |
-          compiler=true
-          docs=false
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            # The checkout is the merge of the pull request into its base, so its first parent is the base.
-            files="$(git diff --name-only HEAD^1 HEAD)"
-            echo "$files"
-            relevant="$(grep -vE '^compiler/.*\.md$' <<< "$files" || true)"
-            if ! grep -qE '^(compiler/|stdlib/|examples/|\.github/workflows/compiler\.yml$)|\.nyx$' <<< "$relevant"; then
-              compiler=false
-            fi
-            if grep -qE '^docs/src/content/.*\.md$' <<< "$files"; then
-              docs=true
-            fi
-          fi
-          tests=$compiler
-          if [ "$docs" = true ]; then
-            tests=true
-          fi
-          echo "compiler=$compiler" | tee -a "$GITHUB_OUTPUT"
-          echo "tests=$tests" | tee -a "$GITHUB_OUTPUT"
-
   test:
     name: Test (${{ matrix.os }})
-    needs: changes
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    env:
-      RUN: ${{ needs.changes.outputs.tests }}
     steps:
       - uses: actions/checkout@v4
-        if: env.RUN == 'true'
 
       - uses: actions/setup-dotnet@v4
-        if: env.RUN == 'true'
         with:
           dotnet-version: 10.0.x
 
       - name: Restore
-        if: env.RUN == 'true'
         run: dotnet restore Nyx.Compiler.slnx
 
       - name: Build
-        if: env.RUN == 'true'
         run: dotnet build Nyx.Compiler.slnx --no-restore --configuration Release
 
       # Once is enough, and Linux checkouts keep the repository's line endings as they are.
       - name: Check the standard library is formatted
-        if: env.RUN == 'true' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest'
         run: dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj --no-build --configuration Release -- format --check ../stdlib
 
       # The Wasm tests run in the job below.
       - name: Test
-        if: env.RUN == 'true'
         run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true
 
   # The Wasm tests take the longest by far (most of them start the CLI in a child process), so they get a
   # runner to themselves rather than share its cores with the other test projects.
   wasm-test:
     name: Wasm tests (${{ matrix.os }})
-    needs: changes
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -119,33 +68,25 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     env:
       PROJECT: Nanyx.Compiler.Wasm.Tests/Nanyx.Compiler.Wasm.Test.fsproj
-      RUN: ${{ needs.changes.outputs.compiler }}
     steps:
       - uses: actions/checkout@v4
-        if: env.RUN == 'true'
 
       - uses: actions/setup-dotnet@v4
-        if: env.RUN == 'true'
         with:
           dotnet-version: 10.0.x
 
       - name: Restore
-        if: env.RUN == 'true'
         run: dotnet restore ${{ env.PROJECT }}
 
       - name: Build
-        if: env.RUN == 'true'
         run: dotnet build ${{ env.PROJECT }} --no-restore --configuration Release
 
       - name: Test
-        if: env.RUN == 'true'
         run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release
 
   # Runs alongside the tests, not after them: only a release has to wait for both.
   publish:
     name: Publish (${{ matrix.rid }})
-    needs: changes
-    if: needs.changes.outputs.compiler == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -219,7 +160,7 @@ jobs:
   release:
     name: Release
     needs: [test, wasm-test, publish]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
