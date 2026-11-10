@@ -508,7 +508,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
         | BinaryOp(op, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
-            if (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
+            // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
+            if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(FloatBinary op, atoms)) ty))
         | BinaryOp(op, left, right) ->

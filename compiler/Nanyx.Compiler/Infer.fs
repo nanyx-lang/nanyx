@@ -1496,11 +1496,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             | _ -> None)
                     let resultTy = concatenable |> Option.defaultValue leftExpr.Type
                     Ok (mkTypedExpr expr resultTy None None None, constrained)
-                | BinaryOp(op, _, _) when ["+"; "-"; "*"; "/"] |> List.contains op ->
-                    let numericConstrained =
-                        constrained
-                        |> addConstraint leftExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
-                    Ok (mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
+                | BinaryOp(op, _, _) when ArithmeticOperators.isOperator op ->
+                    ArithmeticOperators.check nextState expr op leftExpr.Type rightExpr.Type
+                    |> Result.map (fun () ->
+                        let numericConstrained =
+                            constrained
+                            |> addConstraint leftExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
+                        mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
                 | BinaryOp(op, _, _) when ["<"; ">"; "<="; ">="] |> List.contains op ->
                     let numericConstrained =
                         constrained
