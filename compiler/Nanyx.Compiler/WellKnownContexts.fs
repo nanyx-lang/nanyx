@@ -306,3 +306,49 @@ module internal WellKnownContexts =
         | Open v, _, scope ->
             let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope -> None
             later (pendingIn InterpolationHoles.moduleEnd v annotatedDef) { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }
+
+    // Local functions.
+    //
+    // A local function requires no contexts: the backend compiles it again at each type it is called with, so its
+    // operators are the compiler's own at that type. A call to one that compares or orders values of a type variable
+    // it is generic in still needs the well-known context of the type that variable is at the call, or the backend
+    // would be left to compare functions, or order records.
+
+    /// The type variables among `quantified`, those a local function was just generalised in, that the operators and
+    /// calls requiring `wellKnown` in `state` work on. Each is still pending, as none of its types was known.
+    let usedByLocal (wellKnown: WellKnownContext) (state: InferState) (quantified: Set<int>) : Set<int> =
+        state.PendingContextInstances
+        |> List.filter (fun pending -> pending.Context = wellKnown.Context)
+        |> List.collect (fun pending -> pending.ArgTys |> List.collect (resolveSoFar state >> comparedVars))
+        |> List.map _.Id
+        |> List.filter quantified.Contains
+        |> Set.ofList
+
+    /// Checks `call`, at `span` in `env`, to the local function `calleeName`, which needs `wellKnown` of the type `ty`
+    /// there, and finds it as `instance`. A type with none is an error at the call. A type with a variable left in it is
+    /// checked as a call to a top-level function would be, once the def around it is inferred (see `resolveCall`), but
+    /// the call is passed nothing (`ChecksOnly`).
+    let checkLocalCall
+        (wellKnown: WellKnownContext)
+        (env: TypeEnv)
+        (state: InferState)
+        (call: Expression)
+        (calleeName: Identifier)
+        (span: SourceSpan)
+        (ty: Ty)
+        (instance: CallInstance)
+        : Result<InferState, Diagnostic list> =
+        let pendingIn (def: Identifier) (v: TyVar) (annotatedDef: Identifier option) (state: InferState) =
+            let pending =
+                { Def = def; Call = call.Id; Callee = calleeName; Index = 0; Count = 1
+                  Context = wellKnown.Context; ArgTys = [ ty ]; Span = span
+                  Errors = error span (openAtCall wellKnown calleeName ty v annotatedDef); ChecksOnly = true }
+            Ok { state with PendingContextInstances = pending :: state.PendingContextInstances }
+        match instance, state.ContextScope with
+        | NoInstance reason, _ -> Error (error span (noInstanceAtCall wellKnown calleeName ty reason))
+        | BuiltIn, _
+        | Attached, _ -> Ok state
+        | Open v, DefScope(defName, true) -> pendingIn defName v None state
+        | Open v, scope ->
+            let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope -> None
+            pendingIn InterpolationHoles.moduleEnd v annotatedDef { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }

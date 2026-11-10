@@ -126,3 +126,24 @@ let ``Only a nominal type may attach compare, and a built-in type's attached com
     // The prelude attaches `Int.compare`, but `List.sort` of ints uses the compiler's own.
     let typed = compileClean "def sorted = List.sort([2, 1])\n"
     Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "compare", "__compare" ] ], instancesOf typed)
+
+[<Fact>]
+let ``Calling a local function that orders with records is an error at the call`` () =
+    let cases =
+        [ "def b = {\n  def lt = { x, y -> x < y }\n  lt((a = 1), (a = 2))\n}\n",
+          "'lt' orders values of type '(a: int)', which cannot be ordered: records have no order",
+          "lt"
+          "def g: a -> bool = { v ->\n  def lt = { x, y -> x < y }\n  lt(v, v)\n}\n",
+          "'lt' requires the context 'Ord(a)', which is not available here: add [Ord(a)] to the type of 'g'",
+          "lt" ]
+    for source, expectedMessage, expectedAt in cases do
+        let message, at = missingContext source
+        Assert.Equal(expectedMessage, message)
+        Assert.Equal(expectedAt, at)
+
+[<Fact>]
+let ``A def that calls a local function ordering its own type variable requires Ord of it`` () =
+    let typed = compileClean "def g = { v, w ->\n  def lt = { x, y -> x < y }\n  lt(v, w)\n}\ndef b = g(1, 2)\n"
+    match inferredContexts typed with
+    | [ TyApply("Ord", [ TyVar _ ]) ] -> ()
+    | other -> failwith $"Unexpected inferred contexts: %A{other}"

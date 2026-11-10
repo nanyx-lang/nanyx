@@ -39,7 +39,7 @@ operators call.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
-  of its own type variables requires `Eq` of it (`EqualityOperators.checkLocalCall`). Only a call by name is
+  of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). Only a call by name is
   checked, not a local function passed as a value. A local generic function compares strings and lists wrongly in
   the backend ([#616](https://github.com/nanyx-lang/nanyx/issues/616)).
 - **The operands are joined when one is a tag.** `{ o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))`
@@ -85,6 +85,8 @@ Not done yet:
   as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
 - **Lists.** `List.sort` and `List.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `List.min` and
   `List.max`, which give `#emptyList` for an empty list, as `List.head` does.
+- **Local functions are checked at each call**, as for `Eq`: a call to a local `def lt = { x, y -> x < y }` with
+  records is `NYX0205` at the call, and a def that calls it with one of its own type variables requires `Ord` of it.
 
 Not done yet, as for `Eq`:
 
@@ -92,9 +94,6 @@ Not done yet, as for `Eq`:
   inside, though it attaches `compare`; `List.sort` of one works, through the instance. Inside a function that
   requires `[Ord(a)]`, `<` on a `list(a)` orders the elements by their structure, not through the instance: a record
   there is ordered field by field, and a tag is reported by the backend, as `NYX0301`.
-- **Calls to local functions are not checked for `Ord`** as they are for `Eq`: a local generic function that orders
-  its parameters is ordered by the backend at each type it is called with, and calling it with records is reported
-  there, as `NYX0301`.
 
 # What existed before
 
