@@ -105,11 +105,13 @@ let newlineIndentedContinuation (refCol: int64) : Parser<unit, ParseState> =
 let defEqualsContinuation (refCol: int64) : Parser<unit, ParseState> =
     attempt (wsNoNl() >>. followedBy (pstring "=")) <|> newlineIndentedContinuation refCol
 
+/// A character that can continue an identifier. A word such as `true` is only that word when none follows it.
+let isIdentifierChar c = isLetter c || isDigit c || c = '_'
+
 // Parser for identifiers
 let identifierNoWs: Parser<Identifier, ParseState> =
     let isIdentStart c = isLetter c || c = '_'
-    let isIdentContinue c = isLetter c || isDigit c || c = '_'
-    many1Satisfy2 isIdentStart isIdentContinue
+    many1Satisfy2 isIdentStart isIdentifierChar
     <?> "identifier"
 
 let identifier: Parser<Identifier, ParseState> = identifierNoWs .>> wsInline

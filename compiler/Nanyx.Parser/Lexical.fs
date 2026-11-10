@@ -28,14 +28,22 @@ let intLiteralNoWs: Parser<Literal, ParseState> =
 
 let intLiteral: Parser<Literal, ParseState> = intLiteralNoWs  // Don't consume ws - let caller decide
 
+// Only decimal floats: digits, an optional fraction and an optional exponent. FParsec's `pfloat` also reads `NaN`,
+// `Inf`, `Infinity` and hexadecimal floats, which would take names such as `nan` and `inf` as numbers.
 let floatLiteralNoWs: Parser<Literal, ParseState> =
-    pfloat |>> FloatLit
-    <?> "float literal"
+    let options =
+        NumberLiteralOptions.AllowMinusSign
+        ||| NumberLiteralOptions.AllowPlusSign
+        ||| NumberLiteralOptions.AllowFraction
+        ||| NumberLiteralOptions.AllowExponent
+    numberLiteral options "float literal"
+    |>> fun n -> FloatLit (Double.Parse(n.String, Globalization.CultureInfo.InvariantCulture))
 
 let floatLiteral: Parser<Literal, ParseState> = floatLiteralNoWs  // Don't consume ws - let caller decide
 
 let boolLiteralNoWs: Parser<Literal, ParseState> =
-    (stringReturn "true" (BoolLit true) <|> stringReturn "false" (BoolLit false))
+    let word text value = attempt (stringReturn text value .>> notFollowedBy (satisfy isIdentifierChar))
+    (word "true" (BoolLit true) <|> word "false" (BoolLit false))
     <?> "boolean literal"
 
 let boolLiteral: Parser<Literal, ParseState> = boolLiteralNoWs  // Don't consume ws - let caller decide
