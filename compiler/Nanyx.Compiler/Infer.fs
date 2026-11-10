@@ -977,10 +977,15 @@ let private numericOperandType (state: InferState) (leftTy: Ty) (rightTy: Ty) =
         | TyPrimitive "float" -> true
         | _ -> false
     if isFloat leftTy || isFloat rightTy then TyPrimitive "float" else numericType
-let private argTypesFromExpected (state: InferState) (args: (Identifier * TypeExpr option) list) (expectedInput: Ty) =
+
+/// The types of a lambda's parameters when its input is expected to be `expectedInput`. Several parameters take a
+/// record's fields, by name or by position. Against an input known not to be a record they are a tuple of fresh
+/// variables that must be that input, so `{ x, y -> ... }` where a tag or `string` is expected is a type error
+/// reported at `span`, not two parameters of no known type.
+let private argTypesFromExpected (state: InferState) (span: SourceSpan) (args: (Identifier * TypeExpr option) list) (expectedInput: Ty) =
     let mutable current = state
     let argTys =
-        match Unifier.unalias expectedInput with
+        match Unifier.unalias (resolveSoFar state expectedInput) with
         | TyRecord _ when args.Length = 1 -> [ expectedInput ]
         | TyRecord fields ->
             args
@@ -996,12 +1001,19 @@ let private argTypesFromExpected (state: InferState) (args: (Identifier * TypeEx
                         current <- next
                         ty)
         | _ when args.Length = 1 -> [ expectedInput ]
-        | _ ->
-            args
-            |> List.map (fun _ ->
-                let ty, next = freshVar current
-                current <- next
-                ty)
+        | resolved ->
+            let tys =
+                args
+                |> List.map (fun _ ->
+                    let ty, next = freshVar current
+                    current <- next
+                    ty)
+            match resolved with
+            | _ when args.IsEmpty -> ()
+            | TyVar _
+            | TyOpenRecord _ -> ()
+            | _ -> current <- addConstraintAt span expectedInput (tupleRecordType tys) current
+            tys
     argTys, current
 
 
@@ -2030,7 +2042,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
     let argTys =
         match expectedInputOpt with
         | Some expectedInput ->
-            let tys, next = argTypesFromExpected current args expectedInput
+            let tys, next = argTypesFromExpected current lambda.Span args expectedInput
             current <- next
             tys
         | None ->

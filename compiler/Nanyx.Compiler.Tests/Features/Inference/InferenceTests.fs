@@ -116,6 +116,20 @@ let ``Typecheck gives a lambda argument's parameter its type from the callee`` (
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["n"])
 
 [<Fact>]
+let ``Typecheck rejects a lambda of several parameters whose signature's input is not a record`` () =
+    let messages source = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Message)
+    Assert.Equal<string list>(
+        [ "Type mismatch: #some(x: string, y: string) vs (t0, t1)." ],
+        messages "def g: #some(x: string, y: string) -> string = { x, y -> \"{x}{y}\" }\n")
+    Assert.Equal<string list>(
+        [ "Type mismatch: #some(x: string, y: string) vs (t1, t2)." ],
+        messages (
+            "def a: #some(x: string, y: string) = #some(x = \"\", y = \"\")\n" +
+            "def g: typeof a -> string = { x, y -> \"{x}{y}\" }\n"))
+    Assert.Equal<string list>(
+        [ "Type mismatch: string vs (string, t1)." ], messages "def g: string -> string = { x, y -> x }\n")
+
+[<Fact>]
 let ``Typecheck gives a lambda argument's parameter a type solved from the arguments before it`` () =
     // `a` in `mapOption`'s signature is only known from the first argument, a `#some(Customer)`.
     let source =
