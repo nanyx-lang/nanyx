@@ -231,10 +231,9 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
   // Each switch is passed only when it is on, so the defaults still work with compilers that predate it.
   const config = vscode.workspace.getConfiguration("nanyx");
   const args = ["lsp"];
-  // `--latin-type-vars` is the older name for `--ascii`, so it works with every compiler the extension supports.
   // A `nanyx.greekTypeVariables: false` from before `nanyx.asciiTypes` replaced it still counts.
   if (config.get<boolean>("asciiTypes", false) || config.get<boolean>("greekTypeVariables") === false) {
-    args.push("--latin-type-vars");
+    args.push("--ascii");
   }
   const topLevel = config.get<string>("topLevelTypeHints", "codeLens");
   if (topLevel === "inlayHint") {

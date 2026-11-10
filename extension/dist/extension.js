@@ -69,8 +69,10 @@ async function activate(context) {
             event.affectsConfiguration("nanyx.developmentMode") ||
             event.affectsConfiguration("nanyx.compilerVersion") ||
             event.affectsConfiguration("nanyx.downloadUrl") ||
+            event.affectsConfiguration("nanyx.asciiTypes") ||
             event.affectsConfiguration("nanyx.greekTypeVariables") ||
-            event.affectsConfiguration("nanyx.topLevelTypeHints")) {
+            event.affectsConfiguration("nanyx.topLevelTypeHints") ||
+            event.affectsConfiguration("nanyx.inlayHints")) {
             void startOrRestart(context);
         }
     }));
@@ -207,8 +209,9 @@ async function restartClient(context, executable) {
     // Each switch is passed only when it is on, so the defaults still work with compilers that predate it.
     const config = vscode.workspace.getConfiguration("nanyx");
     const args = ["lsp"];
-    if (!config.get("greekTypeVariables", true)) {
-        args.push("--latin-type-vars");
+    // A `nanyx.greekTypeVariables: false` from before `nanyx.asciiTypes` replaced it still counts.
+    if (config.get("asciiTypes", false) || config.get("greekTypeVariables") === false) {
+        args.push("--ascii");
     }
     const topLevel = config.get("topLevelTypeHints", "codeLens");
     if (topLevel === "inlayHint") {
@@ -216,6 +219,15 @@ async function restartClient(context, executable) {
     }
     else if (topLevel === "off") {
         args.push("--top-level-type-hints", "off");
+    }
+    if (!config.get("inlayHints.localDefinitions", true)) {
+        args.push("--no-local-type-hints");
+    }
+    if (!config.get("inlayHints.parameters", true)) {
+        args.push("--no-parameter-type-hints");
+    }
+    if (!config.get("inlayHints.patternVariables", true)) {
+        args.push("--no-pattern-variable-type-hints");
     }
     // No `transport`: stdio is the default, and naming it makes the client append `--stdio` to the args.
     const serverOptions = {

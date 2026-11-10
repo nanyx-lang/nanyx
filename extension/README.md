@@ -63,7 +63,7 @@ the extension says so and you can run **Nanyx: Download the compiler** later or 
 - `nanyx.asciiTypes`: off by default, so hovers, lenses, inlay hints and completions write types with Unicode:
   inferred type variables are `α`, `β`, `γ`, … and the rest of an open record is `…`, as in
   `list(name: α, …) -> list(α)`. Turn it on for ASCII only: `a`, `b`, `c`, ... and `...`. This starts the server
-  with `nanyx lsp --latin-type-vars` (the older name for `--ascii`). It replaces `nanyx.greekTypeVariables`;
+  with `nanyx lsp --ascii`, which needs compiler 0.20.0 or later. It replaces `nanyx.greekTypeVariables`;
   turning that off still turns ASCII types on.
 - `nanyx.topLevelTypeHints`: where a top-level definition's inferred type is shown: `codeLens` (the
   default: a lens above it), `inlayHint` (after its name, like `def id: α -> α = { x -> x }`) or
