@@ -669,10 +669,10 @@
   )
   (export "main" (func $main))
 
-  (func $__lambda_0 (param $__env i32) (param $_arg_ i32) (result i32)
+  (func $__lambda_0 (param $__env i32) (param $-3C-arg-3E- i32) (result i32)
     local.get $__env
     call $__nanyx_drop_rec_0_int
-    local.get $_arg_
+    local.get $-3C-arg-3E-
     i32.const 2
     i32.rem_s
     i32.const 0

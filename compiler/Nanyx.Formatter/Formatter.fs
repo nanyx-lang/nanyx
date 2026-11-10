@@ -340,6 +340,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | LiteralExpr literal -> literalDoc e.Span literal
         | UnitExpr -> text "()"
         | IdentifierExpr n when n = implicitArgument -> Doc.empty
+        | IdentifierExpr n when n = notImplemented -> text n
         | IdentifierExpr n -> text (Names.written n)
         | BinaryOp(op, l, r) ->
             match spreadSegments e with
@@ -378,7 +379,10 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TagExpr(n, None) -> text ("#" + n)
         | TagExpr(n, Some (Kind UnitExpr)) -> text $"#{n}()"
         | TagExpr(n, Some payload) -> cat [ text ("#" + n); parenFields payload (e.Span.Start + 1 + n.Length) e.Span.End ]
-        | MemberAccess(target, field, _) -> cat [ expr operandPosition target; text "."; text (Names.written field) ]
+        | MemberAccess(target, field, _) ->
+            // A tuple's index, `.0`, is written as it is, not in backticks.
+            let isIndex = field <> "" && String.forall Char.IsDigit field
+            cat [ expr operandPosition target; text "."; text (if isIndex then field else Names.written field) ]
         | ContextMemberAccess(context, field) -> cat [ contextHead context; text "."; text (Names.written field) ]
         | ContextMemberCall(context, field, args) ->
             let count = args.Length
@@ -853,7 +857,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Match([ scrutinee ], [ [ p ], _ ]) -> defDocNamed isExport "def" (pattern p) None scrutinee
         | _ ->
             let patternText = writtenPattern span |> Option.defaultWith (fun () -> rebuiltPattern bindings)
-            defDoc isExport "def" patternText None value
+            defDocNamed isExport "def" (text patternText) None value
 
     and pattern (p: Pattern) : Doc =
         match p.Kind with
