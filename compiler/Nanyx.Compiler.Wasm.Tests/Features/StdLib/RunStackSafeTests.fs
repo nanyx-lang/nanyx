@@ -3,7 +3,7 @@ module TranspilerWasmTests.Features.StdLib.RunStackSafe
 open Xunit
 open TranspilerWasmTestHelpers
 
-// The standard library's walks are stack-safe (compiler/design/tail-calls.md): each of these ran out of stack when
+// The standard library's walks are stack-safe (docs/src/content/work-in-progress/tail-calls.md): each of these ran out of stack when
 // the function recursed once per element other than in tail position, as every one of them traps on 20,000 elements
 // written that way. The lists are 20,000 long, not more, only to keep the suite quick: matching a list pattern counts
 // the whole list for now, so a walk takes time in the square of the list's length (#557).
@@ -87,9 +87,9 @@ let ``Run - String.repeat works 100,000 times`` () =
 let ``Run - String.split and String.replace work on 20,000 pieces`` () =
     let body =
         "def s = String.repeat(\"a,\", 20000)\n" +
-        "def pieces = String.split(s, \",\")\n" +
+        "def pieces = String.split(s, on = \",\")\n" +
         "println(\"{List.length(pieces)} {String.join(pieces, \",\") == s}\")\n" +
-        "def replaced = String.replace(s, \",\", \";\")\n" +
+        "def replaced = String.replace(s, pattern = \",\", replacement = \";\")\n" +
         "println(\"{String.length(replaced)} {String.count(replaced, \";\")} {String.count(replaced, \",\")}\")\n"
     runSource (withList body) |> assertRan "20001 true\n40000 20000 0\n"
 

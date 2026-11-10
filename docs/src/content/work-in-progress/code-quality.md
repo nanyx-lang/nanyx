@@ -1,13 +1,17 @@
-# Code quality
+---
+title: "Code quality"
+description: "How the compiler's code is structured, and why the contributor rules exist"
+order: 33
+---
 
 This workstream is about how the compiler and its tools are structured: file and function size, duplicated
 code, dead code, and how the tests are laid out. It does not cover what the compiler does. The rules for
-day-to-day changes are in [AGENTS.md](../../AGENTS.md); this document explains why they exist and records
+day-to-day changes are in [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md); this document explains why they exist and records
 where the code stands. Issues carry the
 [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label and are tracked in
 [#379](https://github.com/nanyx-lang/nanyx/issues/379).
 
-## Why
+# Why
 
 Feature work lands dozens of commits a day, and most of them touch the same few files. When a file runs to
 thousands of lines, several things go wrong:
@@ -27,7 +31,7 @@ The first review, on 2026-11-09, found evidence of all three:
   [#375](https://github.com/nanyx-lang/nanyx/issues/375) and
   [#376](https://github.com/nanyx-lang/nanyx/issues/376).
 
-## How refactoring lands
+# How refactoring lands
 
 These files change too fast for a long-lived refactor branch to ever merge, so every refactor follows the
 same rules:
@@ -41,7 +45,7 @@ same rules:
 a split moves everything around the chain into earlier or later files, and leaves the chain itself where
 it is. The chain can then be shortened by turning its long match arms into separate `and` functions.
 
-## Where it stands
+# Where it stands
 
 **2026-11-09, at a19d2de.** The first review measured these files:
 
@@ -67,7 +71,7 @@ The large test files are now split into `Features/<Area>/` files.
 
 [#379](https://github.com/nanyx-lang/nanyx/issues/379) has the current list. The daily review refreshes it.
 
-## The daily review
+# The daily review
 
 A scheduled review runs once a day. It does five things:
 

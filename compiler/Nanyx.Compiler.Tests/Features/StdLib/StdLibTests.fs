@@ -61,14 +61,14 @@ let ``nanyx/text exports string functions with their types`` () =
         "import nanyx/text\n" +
         "def shout = String.uppercase(\"hi\")\n" +
         "def n = String.length(\"hi\")\n" +
-        "def parts = String.split(\"a,b\", \",\")\n" +
+        "def parts = String.split(\"a,b\", on = \",\")\n" +
         "def joined = String.join(parts, \"-\")\n" +
         "def yes = String.startsWith(\"nanyx\", \"nan\")\n" +
         "def found = String.indexOf(\"nanyx\", \"yx\")\n" +
         "def lastFound = String.lastIndexOf(\"nanyx\", \"n\")\n" +
         "def times = String.count(\"nanyx\", \"n\")\n" +
-        "def replaced = String.replace(\"nanyx\", \"n\", \"N\")\n" +
-        "def padded = String.padStart(\"7\", 3, \"0\")\n" +
+        "def replaced = String.replace(\"nanyx\", pattern = \"n\", replacement = \"N\")\n" +
+        "def padded = String.padStart(\"7\", width = 3, fill = \"0\")\n" +
         "def blank = String.isBlank(\" \")\n" +
         "def allLines = String.lines(\"a\")\n" +
         "def allWords = String.words(\"a b\")"
@@ -158,7 +158,7 @@ let ``nanyx/math exports int functions with their types`` () =
             "def a = math.abs(-3)\n" +
             "def b = math.min(1, 2)\n" +
             "def c = math.max(1, 2)\n" +
-            "def d = math.clamp(5, 0, 3)\n" +
+            "def d = math.clamp(5, min = 0, max = 3)\n" +
             "def e = math.pow(2, 3)")
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     for name in [ "a"; "b"; "c"; "d"; "e" ] do
@@ -178,3 +178,12 @@ let ``nanyx/math exports float functions with their types`` () =
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["s"])
     for name in [ "f"; "c"; "r"; "t" ] do
         Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])
+
+[<Fact>]
+let ``nanyx/text rejects a labelled argument passed by position`` () =
+    let result = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", \",\")"
+    let diagnostic = List.exactlyOne result.Diagnostics
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.StartsWith("Record field mismatch: {0, 1} vs {0, on}.", diagnostic.Message)
+    let named = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", on = \",\")"
+    Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")

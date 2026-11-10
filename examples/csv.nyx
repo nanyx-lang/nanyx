@@ -21,7 +21,7 @@ def toCsvLine: Stock -> string = { s ->
 }
 
 def fromCsvLine: string -> #some(Stock) | #error(#malformed | #notANumber) = { line ->
-  match line \split(",")
+  match line \split(on = ",")
     | [ticker, name, price, change, pct] -> proc {
         return Stock(
           ticker = ticker

@@ -125,7 +125,7 @@ Give the other fields a name, as in `...r`, when a type needs to say that two re
 def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
 
 def moved = moveRight((x = 1, y = 2, label = "a"))
--- moved: (x: int, y: int, label: string)
+-- moved: (label: string, x: int, y: int)
 ```
 
 `...` only covers named fields. A record's positional fields are always exactly the ones its type lists, so a function of two positional parameters can't be called with three.
@@ -134,10 +134,12 @@ You rarely need to write `...` yourself. When the compiler infers a function's t
 
 ```nanyx
 def area = { r -> r.width * r.height }
--- inferred as `(width: int, height: int, ...a) -> int`
+-- inferred as `(height: int, width: int, …) -> int`
 
 area((width = 2, height = 3, colour = "red")) -- fine
 ```
+
+An editor writes an inferred record's fields in alphabetical order, and its other fields as an ellipsis, `…`, where you would write `...`. The other fields get a name, such as `…ω`, only where the type uses them twice.
 
 An annotation is taken exactly as written, so annotate with `...` when you mean "at least these fields".
 

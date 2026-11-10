@@ -1,21 +1,25 @@
-# Formatter: workstream
+---
+title: "Formatter"
+description: "How nanyx format is built, and the style it enforces"
+order: 31
+---
 
 > **Status: proposal, partly decided.** This page frames the formatter workstream and proposes how `nanyx format` is
 > built. The user's side is already described in the docs. Configuration, blank lines, import sorting and
 > unparseable files were decided on 2026-11-07 (see [Decided](#decided)); the style rules are still open. Work is
 > tracked under the `formatting` label.
 
-## Summary
+# Summary
 
 Nanyx should ship with one official formatter, `nanyx format`, so that there is one layout for Nanyx code and nobody
-argues about it. The [Formatter](../../docs/src/content/standard-tools/formatter.md) page already describes what
+argues about it. The [Formatter](../standard-tools/formatter) page already describes what
 users see: a write mode (the default) and a `--check` mode, files or directories as arguments, a line width of 100
 and an indent of 2, and a `[formatter]` table in `.nyxp` with those two settings and nothing else.
 
 This page is about what that page leaves out: how the formatter keeps comments the parser throws away, how it
 decides where lines break, and how it guarantees it never changes what a program means.
 
-## Scope
+# Scope
 
 | Area | Where |
 |------|-------|
@@ -29,12 +33,12 @@ decides where lines break, and how it guarantees it never changes what a program
 Out of scope here:
 
 - Style diagnostics (naming, unused code, preferring one construct to another): the
-  [official linter](../../docs/src/content/standard-tools/official-linter.md), in the linters workstream. The
+  [official linter](../standard-tools/official-linter), in the linters workstream. The
   formatter only moves whitespace and comments, adds or removes parentheses and blank lines, and sorts imports. It
   never renames anything or reorders anything else.
 - Reading the rest of `.nyxp`: the packaging workstream. The formatter reads only its `[formatter]` table.
 
-## Where the compiler is today
+# Where the compiler is today
 
 - **Comments are discarded.** The parser (FParsec, `compiler/Nanyx.Parser/Program.fs`) skips `--` comments as
   whitespace (`ws`, `comment`, `inlineCommentNoNl`). Nothing records where they were. Blank lines are skipped the
@@ -49,9 +53,9 @@ Out of scope here:
   There is no `format`.
 - **The language server** does not offer formatting.
 
-## Proposal
+# Proposal
 
-### Keeping comments
+## Keeping comments
 
 The parser records every comment and every run of blank lines it skips, with its span, in a side list returned with
 the syntax tree. The tree itself does not change, so the type checker and code generator are untouched. The formatter
@@ -66,7 +70,7 @@ attaches each comment to a node:
 
 Blank lines are covered under [Blank lines](#blank-lines) below.
 
-### Printing
+## Printing
 
 The formatter is a document printer in the style of Wadler's "prettier printer" (as in Prettier, `ocamlformat` and
 Elm's formatter): each construct is turned into a document of text, possible line breaks, nesting and groups, and the
@@ -77,7 +81,7 @@ construct are written once, as documents, and the printer decides where to break
 - Literals are printed from their source text, through their spans, so `0xFF`, `1_000` and escapes survive.
 - Identifiers, operators and keywords are printed as written; the formatter never renames.
 
-### Never changing meaning
+## Never changing meaning
 
 `nanyx format` refuses a file that does not parse, and says where the parse error is.
 
@@ -90,7 +94,7 @@ than none.
 Formatting is idempotent: formatting formatted code changes nothing. Both properties are tested over every `.nyx`
 file in the repository and every Nanyx code block in the docs.
 
-### The style
+## The style
 
 The docs' examples are the starting point. Proposed rules, each to be confirmed by the maintainer (see the tracking
 issue):
@@ -174,7 +178,7 @@ issue):
   )
   ```
 
-### Blank lines
+## Blank lines
 
 A construct that spans more than one line, once laid out, gets a blank line before and after it, at every level: top
 level, module blocks, and the statements of a lambda or of an indented block (a def's value written on the lines
@@ -214,7 +218,7 @@ Whether a construct spans more than one line depends on its layout, which depend
 decides it (`Doc.Stack`): a construct is multi-line if it always breaks, or if it does not fit flat in the width left at
 its indent.
 
-### Sorting imports
+## Sorting imports
 
 The imports in each run of consecutive `import` statements are sorted, and the names within one `import (...)` are
 sorted. A blank line or an own-line comment ends a run, so authors can group imports and keep the groups apart.
@@ -226,7 +230,7 @@ group alphabetical by its source as written, ignoring case, with ties broken by 
 Reordering imports is safe because an import only brings names into scope, and a name exported by two imports is an
 error whatever their order (#155). If imports ever gain effects, this rule changes with them.
 
-### Configuration
+## Configuration
 
 The `[formatter]` table of the package's `.nyxp` (TOML), as the docs describe, with two settings:
 
@@ -241,7 +245,7 @@ does not wait for the packaging workstream to read whole manifests. With no `.ny
 apply. An unknown key or a value that is not a positive integer is an error naming the file and key. The language
 server uses the same settings for the document it formats.
 
-### The command
+## The command
 
 ```bash
 nanyx format [--check | --write] [paths...]
@@ -251,13 +255,13 @@ With no path it formats every `.nyx` file under the current directory; a directo
 it. `--write` is the default. `--check` writes nothing, lists each file that would change, and exits 1 if any would.
 Exit code 2 means a file could not be formatted (it does not parse, or the safety check failed).
 
-### The editor
+## The editor
 
 The language server answers `textDocument/formatting` with one edit replacing the document, or no edits if it does
 not parse. The VS Code extension registers Nanyx as formattable, so "Format Document" and `editor.formatOnSave` work.
 Range formatting comes later: formatting the smallest enclosing top-level items is enough.
 
-## Plan
+# Plan
 
 Tracked in [#215](https://github.com/nanyx-lang/nanyx/issues/215). Items in order. Each produces something usable on
 its own:
@@ -285,7 +289,7 @@ its own:
 
 Later: range formatting, formatting standard input for other editors (`nanyx format -`).
 
-## Decided
+# Decided
 
 On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
 
@@ -297,7 +301,7 @@ On 2026-11-07, in [#215](https://github.com/nanyx-lang/nanyx/issues/215):
 - **Imports.** Sorted, within each run of consecutive imports.
 - **Unparseable files.** Refused.
 
-## Open questions
+# Open questions
 
 - **The style rules** in [The style](#the-style), starting from the docs' examples.
 - **Alignment.** Aligning `=` or `->` across consecutive lines looks tidy but makes one edit change many lines in a

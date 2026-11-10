@@ -3,7 +3,7 @@ module Nanyx.Compiler.Tests.Features.StdLib.StackSafety
 open Xunit
 open NyxCompiler
 
-// Each standard-library function that walks a collection is stack-safe (compiler/design/tail-calls.md): it calls
+// Each standard-library function that walks a collection is stack-safe (docs/src/content/work-in-progress/tail-calls.md): it calls
 // itself only in tail position. The runs that show it working on long input are in the Wasm tests
 // (Features/StdLib/RunStackSafeTests.fs).
 

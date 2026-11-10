@@ -1393,6 +1393,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Error err -> Error err
             | Ok (rightExpr, nextState) ->
                 let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
+                match OperatorCalls.definition env nextState expr leftExpr.Type with
+                | Some scheme ->
+                    let resultTy, called = OperatorCalls.infer nextState expr scheme (inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ])
+                    Ok (mkTypedExpr expr resultTy None None None, called)
+                | None ->
                 match expr.Kind with
                 | BinaryOp("++", _, _) ->
                     // `++` concatenates two strings or two lists; both sides have the same type, which is the result.

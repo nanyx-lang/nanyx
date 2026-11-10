@@ -1,13 +1,17 @@
-# Deferred errors
+---
+title: "Deferred errors"
+description: "How a debug build keeps running in the face of name and type errors"
+order: 22
+---
 
 > **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
-> the [principles](../../docs/src/content/foundations/principles.md#gradual-feedback-not-blocked-flow) promise.
+> the [principles](../foundations/principles#gradual-feedback-not-blocked-flow) promise.
 > Built: the type checker recovers from errors, they are compiled to traps, and `nanyx run`, `build` and `wasm`
 > are debug builds with `--release` to refuse errors (stages 1 to 3 of the [plan](#plan)). Wider deferral is
-> left for when it is wanted. It is part of the [compilation](compilation.md) workstream, and
+> left for when it is wanted. It is part of the [compilation](./compilation) workstream, and
 > its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
-## Summary
+# Summary
 
 A name or type error does not stop a debug build. The compiler reports it as usual, and compiles the expression
 where it was found to a trap that reports the same diagnostic if it is ever reached. Everything around the error
@@ -19,7 +23,7 @@ A release build still refuses to compile a program with any error.
 The approach is the one GHC takes with `-fdefer-type-errors`, and a pragmatic cousin of Hazel's marked holes: the
 error becomes a node in the typed program, with a type that fits anywhere, and evaluating it fails.
 
-## Where we are today
+# Where we are today
 
 Any error stops the build, at three points:
 
@@ -27,10 +31,10 @@ Any error stops the build, at three points:
   diagnostics, never both. Inside it, an item or expression with an error is not checked further (the many
   `if errors.IsEmpty then` in `Infer.fs`).
 - **Unification stops at the first failure.** `Unifier.unify` solves the module's constraints together and returns
-  one `Error (message, span)` ([Library.fs](../Nanyx.Compiler/Library.fs), in `typecheckModule`). The editor sees
+  one `Error (message, span)` ([Library.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Library.fs), in `typecheckModule`). The editor sees
   one type error per module, and nothing typed after it.
 - **The CLI stops on errors.** `nanyx run` and `nanyx build` print the diagnostics and exit with 1 if any is an
-  error ([Program.cs](../Nanyx.Compiler.Cli/Program.cs)). There is no debug or release mode.
+  error ([Program.cs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler.Cli/Program.cs)). There is no debug or release mode.
 
 (This section is how things were when the design was written; the rest of the page says what changed.)
 
@@ -43,9 +47,9 @@ depends on its operand types (`+` on strings calls the concatenation helper). Ba
 first, for code that is about to be fixed; this design does not do it. (Every value is the same size, an `i32`,
 which [makes traps easy](#errors-become-traps).)
 
-## Design
+# Design
 
-### Every expression gets a type
+## Every expression gets a type
 
 The type checker recovers from errors instead of stopping:
 
@@ -60,7 +64,7 @@ The type checker recovers from errors instead of stopping:
 
 How it is built:
 
-- **The error type** is `Unifier.errorType`, a primitive no source can name (printed `???`, as the [placeholder for unwritten code](../../docs/src/content/getting-started/basics.md#unimplemented-code) is written), so the passes that
+- **The error type** is `Unifier.errorType`, a primitive no source can name (printed `???`, as the [placeholder for unwritten code](../getting-started/basics#unimplemented-code) is written), so the passes that
   handle types need no case of their own for it. Unifying it with a type variable binds the variable to it, as with
   any type; unifying it with anything else succeeds without binding anything. A variable bound to it therefore
   agrees with everything from then on, which is what stops one error cascading through the uses of a name.
@@ -87,16 +91,16 @@ How it is built:
   an import with errors fails its importer with them.
 - **The editor** reads the current text's partly typed module for hover, completion and type hints, with `???` where
   an error left a type unknown; only while the text does not parse does it read the last text that was typed
-  (`OpenDocument.LastGood`). See [the language server](language-server.md).
+  (`OpenDocument.LastGood`). See [the language server](./language-server).
 
 This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
 editor, which sees every error in a module, and hover types and completions past the first one. It is also where
 almost all of the work is.
 
-### Errors become traps
+## Errors become traps
 
 A pass between the typed AST and code generation (or a step of the core IR, once
-[memory management](memory.md) introduces one) rewrites each marked expression to `Panic(diagnostic)`. At run
+[memory management](./memory-management) introduces one) rewrites each marked expression to `Panic(diagnostic)`. At run
 time `Panic` writes the diagnostic to stderr, as the compiler printed it, and traps:
 
 ```
@@ -119,7 +123,7 @@ How it is built:
 - **The values are uniform,** which makes the first rule above unnecessary. Every Nanyx value is an `i32` in the
   backend: an immediate or a pointer (a float is boxed), so a trap's `unreachable` stands in for any expression and
   the code after it still validates. Nothing is cut off after a trap.
-- **The deferral pass** is `Compiler.deferErrors` in [Library.fs](../Nanyx.Compiler/Library.fs), run as the typed
+- **The deferral pass** is `Compiler.deferErrors` in [Library.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Library.fs), run as the typed
   module's items are lowered for the backend. Each node in `FailedExprs` becomes `__panic("<message>")`. A conflict
   among the constraints is only known by where it was found, so it replaces the outermost expression at that span.
   A match in `UnhandledMatches` gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message
@@ -137,7 +141,7 @@ How it is built:
   (`PackageBuild.ErrorsDeferred`) when each file's are: a file with a linter rule configured as an error, or an
   error in a directive, is not.
 
-### Broken definitions
+## Broken definitions
 
 The unit of deferral above is an expression. A definition whose own type cannot be settled (its signature
 mismatches its body, or its inferred type contains `TyError`) is deferred whole: its body is not compiled, and
@@ -146,7 +150,7 @@ definition whose signature is sound (written down, or inferred without error) co
 where its body has errors. This keeps a broken helper from poisoning the types of the functions that call it, and
 a call to it fails at the call, with a message that says why.
 
-### What is deferred
+## What is deferred
 
 | Error | Deferred? |
 |-------|-----------|
@@ -154,11 +158,11 @@ a call to it fails at the call, with a message that says why.
 | Unsatisfied context | Yes, as an expression (the call that needs the context traps) |
 | Non-exhaustive match | Yes: the match traps on a case no arm handles |
 | An error in a definition's type | Yes, as a definition |
-| Syntax error | No, as the principles say; see [parser error recovery](compilation.md#plan) |
+| Syntax error | No, as the principles say; see [parser error recovery](./compilation#plan) |
 | Error in a type definition, such as a field of an unknown type | No, at first. A later version could make the type `TyError` |
 | Import not found, import cycle, error inside an imported module | No, at first. A later version could defer the names the import brings in |
 
-### Debug and release
+## Debug and release
 
 | Command | Errors |
 |---------|--------|
@@ -183,9 +187,9 @@ which exits with 1 on any error.
 When there is a test runner, it should run every test in a debug build: a test that reaches a deferred error fails
 with that error's message, and the others pass or fail on their own merits. This is what makes the feature useful
 for red-green iteration. The proposed runner, `nanyx test`, does this; see
-[Testing](../../docs/src/content/work-in-progress/testing.md#deferred-errors).
+[Testing](./testing#deferred-errors).
 
-## Plan
+# Plan
 
 1. **Type checker recovery.** Add `TyError`; make unknown names and failed constraints recorded diagnostics rather
    than early returns; let the unifier carry on past a failure; return a typed module with its diagnostics. Tests:
@@ -206,7 +210,7 @@ for red-green iteration. The proposed runner, `nanyx test`, does this; see
 4. **Wider deferral,** if it is wanted: type definitions and imports, then (with parser recovery) a top-level
    definition that does not parse.
 
-## Open questions
+# Open questions
 
 - **Blame.** With constraints solved together, the error is reported at whichever constraint fails, which is not
   always the expression the programmer got wrong. The trap is at the same place as the diagnostic, so it is

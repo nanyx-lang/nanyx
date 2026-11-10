@@ -6,7 +6,7 @@ open System.IO
 open Xunit
 open TranspilerWasmTestHelpers
 
-// Tail calls use no stack (compiler/design/tail-calls.md). Each of these recurses a million calls deep, far past
+// Tail calls use no stack (docs/src/content/work-in-progress/tail-calls.md). Each of these recurses a million calls deep, far past
 // what the stack holds when every call keeps a frame.
 
 [<Fact>]

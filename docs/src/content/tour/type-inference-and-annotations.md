@@ -18,15 +18,19 @@ def message: string = "Hello world" -- explicitly annotated
 
 ```nanyx
 def add = { a, b -> a + b }
--- inferred as (int, int) -> int from the usage of `+` on `a` and `b`
+-- inferred as `int, int -> int` from the usage of `+` on `a` and `b`
 ```
+
+The inferred types on this page are written as an editor shows them, in hovers and in the lens above a definition. A function's parameters are written bare, as `int, int -> int`, which is the same type as `(int, int) -> int`.
 
 Since functions conceptually have exactly one parameter, the parameter types are inferred from how the function is used. If the function is never called, or if the parameter types cannot be inferred from the body of the function, then the parameter types will be inferred as generic type variables, and the function will be inferred as a generic function:
 
 ```nanyx
 def identity = { x -> x }
--- inferred as `a -> a`, meaning it can take any type `a` and returns the same type `a`
+-- inferred as `α -> α`, meaning it can take any type `α` and returns the same type `α`
 ```
+
+A type variable the compiler made up is named with a Greek letter, `α`, `β`, `γ` and so on, so it is easy to tell from one written in an annotation, which keeps its own name. In the source you write type variables in plain letters, as in `def identity: a -> a`. If you would rather see ASCII in the editor too, turn on [`nanyx.asciiTypes`](../standard-tools/vs-code-extension#how-types-are-shown).
 
 ## Inferring tag unions
 
@@ -68,7 +72,7 @@ def getMessage: () -> #some(string) | #noMessage | #error(string) = {
 When functions are unannotated, Nanyx assumes that any deconstructed arguments are positional. If you want to use named parameters, annotate the function type:
 
 ```nanyx
--- Inferred as `(int, int) -> int` with positional parameters
+-- Inferred as `int, int -> int` with positional parameters
 def magnitude = { x, y -> math.sqrt(x * x + y * y) }
 ```
 
@@ -109,7 +113,7 @@ def xs: list(_) = [1, 2]
 -- inferred as list(int)
 
 def add: (int, _) -> _ = { a, b -> a + b }
--- inferred as (int, int) -> int
+-- inferred as int, int -> int
 
 def answer: #ok(_) | #error(string) = #ok(42)
 -- the payload of #ok is inferred as int
@@ -117,7 +121,7 @@ def answer: #ok(_) | #error(string) = #ok(42)
 
 This is useful when one part of a type is worth stating, such as a function's input, and the rest is obvious from the code. The parts you do write are still checked, so `def xs: list(_) = "hello"` is a type error.
 
-Each `_` is a type of its own, and is filled in by inference rather than standing for any type. A named type variable is different: `a -> a` promises that the function works for every `a`, while `_ -> _` only says that it takes something and returns something, and leaves the rest to inference. So `def inc: _ -> _ = { x -> x + 1 }` is `int -> int`, where `def inc: a -> a = ...` is an error. A def whose annotation has holes is generalised just as an unannotated one is, so `def id: _ -> _ = { x -> x }` is still `a -> a`.
+Each `_` is a type of its own, and is filled in by inference rather than standing for any type. A named type variable is different: `a -> a` promises that the function works for every `a`, while `_ -> _` only says that it takes something and returns something, and leaves the rest to inference. So `def inc: _ -> _ = { x -> x + 1 }` is `int -> int`, where `def inc: a -> a = ...` is an error. A def whose annotation has holes is generalised just as an unannotated one is, so `def id: _ -> _ = { x -> x }` is still `α -> α`.
 
 In an editor, hovering over a `_` shows the type it was inferred to be.
 

@@ -66,7 +66,7 @@ The same goes for a parameterised context. A function that does not write its ty
 
 ```nanyx
 def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
-def twice = { v -> describe(v) ++ describe(v) }   // [Show(a)] a -> string
+def twice = { v -> describe(v) ++ describe(v) }   // [Show(α)] α -> string
 ```
 
 Each call to `twice` then finds a `Show` for the type it is called with, as a call to `describe` does. A generic local `def` cannot have one inferred yet: write its type.
@@ -104,6 +104,16 @@ context Sum(a) = (
 
 export def sum: [Sum(a)] list(a) -> a
   = { items -> items \fold(`0`) { + } }
+```
+
+Inside `sum`, the operator `+` calls the context's `` `+` ``, so `sum` adds whatever type it is given an instance for. An operator calls whatever its name is bound to where it is written, such as a member of a context the function requires, whenever its left operand is not of a built-in type: on an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, so a counter's `n + 1` in the same function still adds ints.
+
+```nanyx
+context Add(a) = (
+  `+`: (a, a) -> a
+)
+
+def add: [Add(a)] a, a -> a = { x, y -> x + y }
 ```
 
 Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
@@ -181,7 +191,7 @@ A function that interpolates a value of one of its type variables requires `ToSt
 
 ```nanyx
 def label: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {value}" }
-def angled = { value -> "<{value}>" }   // [ToString(a)] a -> string
+def angled = { value -> "<{value}>" }   // [ToString(α)] α -> string
 ```
 
 A `use` changes how its block writes a type, generic code called from the block included:

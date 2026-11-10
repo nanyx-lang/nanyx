@@ -260,3 +260,28 @@ let ``Run - an inferred parameterised context passes through two functions and i
         "  println(Int.toString(lengths([Size(w = 8), Size(w = 9)])))\n" +
         "}\n"
     runSource source |> assertRan "(1, 2)(1, 2)(1, 2)\n3px3px\n(4, 5) 6px\n7px\n2\n"
+
+[<Fact>]
+let ``Run - an operator in a generic function calls the member of the context the function requires`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Add(a) = (`+`: (a, a) -> a)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + q.y) }\n" +
+        "\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" +
+        "def addCounting: [Add(a)] a, a, int -> (a, int) = { x, y, n -> (x + y, n + 1) }\n" +
+        "def sum: [Add(a)] a, list(a) -> a = { start, items -> items \\fold(start) { + } }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def p = add(Point(x = 1, y = 2), Point(x = 3, y = 4))\n" +
+        "  println(\"{p.x} {p.y}\")\n" +
+        "  def (q, n) = addCounting(p, Point(x = 10, y = 20), 41)\n" +
+        "  println(\"{q.x} {q.y} {n}\")\n" +
+        "  def total = sum(Point(x = 0, y = 0), [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)])\n" +
+        "  println(\"{total.x} {total.y}\")\n" +
+        "}\n"
+    runSource source |> assertRan "4 6\n14 26 42\n9 12\n"

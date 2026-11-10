@@ -1,22 +1,26 @@
-# Packaging: workstream
+---
+title: "Packaging"
+description: "How packages are named, resolved, hosted and published"
+order: 32
+---
 
 > **Status: proposal.** This page frames the packaging workstream and proposes how packages are named, resolved,
 > hosted and published. The manifest format is already described in the docs; the rest is open for discussion
 > until the questions at the end are settled. Work is tracked under the `packaging` label.
 
-## Summary
+# Summary
 
 Nanyx should launch with a working package system: a program can depend on a published package by name and
 version, `nanyx` fetches and builds it reproducibly, and anyone can publish one. Ecosystems that bolt this on
 later (Python, early Go, C and C++) never fully recover from the years without it, so it is designed now, before
 the first release, and built alongside the compiler.
 
-The [Packages and projects](../../docs/src/content/tour/packages.md) page already describes the user's side:
+The [Packages and projects](../tour/packages) page already describes the user's side:
 `.nyxp` and `.nyxproj` TOML manifests, imports of the form `acme.web/http`, `public-modules`, project
 references and script mode. This page is about what that page leaves out: who owns a package name, how versions
 are chosen, what a published package is, and where it lives.
 
-## Scope
+# Scope
 
 | Area | Where |
 |------|-------|
@@ -34,10 +38,10 @@ Out of scope here:
 - Distributing the compiler and the VS Code extension themselves (GitHub releases, Scoop, the Marketplace).
 - The standard library's contents: [Standard library](https://github.com/nanyx-lang/nanyx/issues/174). How it is
   *packaged* is in scope.
-- Hosts and the contexts they provide: [Hosts](../../docs/src/content/work-in-progress/hosts.md). Packaging has to
+- Hosts and the contexts they provide: [Hosts](./hosts). Packaging has to
   carry a package's `[host]` table, but what a host is belongs to that design.
 
-## Where the compiler is today
+# Where the compiler is today
 
 A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issues/279)); the rest is only in the docs.
 
@@ -58,10 +62,11 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 - **A program compiles to one WebAssembly module.** Imported modules are type-checked separately and their items
   inlined into the root (`inlinedItemsForImport`), so there is no linking step and no compiled artifact per
   module or package.
-- **The standard library is versioned with the compiler.** It is embedded as resources and is described in the
-  compiler README as "an ordinary package named `nanyx`", which is the model this page keeps.
+- **The standard library is versioned with the compiler.** It is embedded as resources and is described in
+  [Standard library implementation](./standard-library-implementation) as "an ordinary package named `nanyx`", which
+  is the model this page keeps.
 
-## Goals
+# Goals
 
 - `nanyx add acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every
   machine that has the same lockfile.
@@ -75,9 +80,9 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 - Running the package system costs close to nothing until the ecosystem is large, and can move to bigger
   infrastructure later without changing the client or invalidating existing lockfiles.
 
-## Proposal
+# Proposal
 
-### Names and ownership
+## Names and ownership
 
 A package name is dotted, as in the docs: `acme.web`, `nanyx.http`. The first segment is the package's
 **namespace**, and a namespace has an owner. Owners are GitHub accounts at launch (decided in
@@ -94,11 +99,11 @@ A package name is dotted, as in the docs: `acme.web`, `nanyx.http`. The first se
 Every published package has at least two segments (`namespace.name`), so a bare name like `json` can never be
 claimed by whoever gets there first.
 
-[Package ownership and locking](../../docs/src/content/work-in-progress/package-ownership-and-locking.md) proposes
+[Package ownership and locking](./package-ownership-and-locking) proposes
 how a claim survives a GitHub rename (it is kept by account ID), how organisations grant publishers, what
 `nanyx.lock` records, and dependencies on a single file or a git repository.
 
-### Versions and resolution
+## Versions and resolution
 
 - Versions are semantic versions. In a manifest, `acme.core = "2.1"` means "2.1 or later, before 3.0", the
   caret range used by Cargo; an exact or wider range can be written explicitly.
@@ -113,7 +118,7 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
   `add` and `build`, is committed, and is the only input a build needs from the network.
 - Only direct dependencies can be imported, as the docs say. The resolver still sees the whole graph.
 
-### Enforced semantic versioning
+## Enforced semantic versioning
 
 Publishing compares the new version's public API with the previous version's: the exported definitions of every
 module in `public-modules`, with their types. Removing or changing a definition requires a major version;
@@ -123,7 +128,7 @@ This needs the type of every exported definition, which inference already has, a
 linter rule that asks for annotations on exported definitions
 ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an inferred type can change by accident.
 
-### What a package is
+## What a package is
 
 A published package is a `.nyxpkg` file: a gzipped tar holding the `.nyxp` manifest, the source files the
 manifest selects, the readme and licence, and a generated `api.json` describing the public API.
@@ -135,7 +140,7 @@ manifest selects, the readme and licence, and a generated `api.json` describing 
   `repository`, which the index requires.
 - `api.json` is what the API comparison and the package website read, so neither has to compile the package.
 
-### Where packages live
+## Where packages live
 
 The client speaks one small protocol: **a static index served over HTTPS**, like Cargo's sparse index. For each
 package there is one JSON file listing its versions, each with the artifact URL, its SHA-256, its dependencies,
@@ -179,26 +184,26 @@ Alternatives considered:
 - **An existing package manager** (npm, NuGet). Its naming, versioning and tooling would leak into Nanyx, and the
   API check could not run at publish.
 
-### The standard library
+## The standard library
 
 The standard library stays the package `nanyx`, embedded in the compiler and versioned with it. A manifest does
 not list it, and its version is the compiler's. Official packages that should not be tied to the compiler's
 release cycle (`nanyx.http`, `nanyx.json`) are ordinary packages in the `nanyx` namespace.
 
-### The cache and offline builds
+## The cache and offline builds
 
 Downloaded packages are verified against the lockfile and unpacked into a per-user cache
 (`~/.nanyx/packages/<name>/<version>/`), shared by every project. A package in the cache is never modified.
 `nanyx build --offline` uses only the cache, and a build with a complete lockfile and a warm cache never touches
 the network.
 
-### The editor
+## The editor
 
 The language server resolves imports exactly as the CLI does, from the manifest, lockfile and cache. When the
 manifest changes, the extension offers to run `nanyx restore`. Go-to-definition into a dependency opens the
 cached source read-only.
 
-## Plan
+# Plan
 
 _To do._ Candidate items, not yet filed, roughly in order. Each produces something usable on its own:
 
@@ -219,7 +224,7 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.
 
-## Open questions
+# Open questions
 
 - **Index address and artifact storage.** The static index on GitHub is decided. Is `packages.nanyx.dev` the
   address, and who holds the domain? Are artifacts kept in object storage (Cloudflare R2) or as release assets on
@@ -232,7 +237,7 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
   exhaustive matches in dependants)? Elm says yes.
 - **Hosts and capabilities.** Should a package declare the contexts it requires in its manifest, so the index can
   show "this package needs `FileSystem`" before anyone installs it?
-- **Linters as packages.** [linters.md](linters.md) wants linters distributed as packages. Are they
+- **Linters as packages.** [Linters](./linters) wants linters distributed as packages. Are they
   ordinary dependencies, or a separate `[linters]` table resolved the same way?
 - **Private packages.** Should the client support more than one index (a company's own) from the start? The
   static protocol makes it cheap: a list of index URLs in user configuration.

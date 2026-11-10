@@ -1,5 +1,5 @@
 /// Inserts reference counting into the core IR, as Perceus does (see "Inserting counts" in
-/// `compiler/design/memory.md`): a `Dup` where a value is used again after something takes it over, and a `Drop` (or
+/// `docs/src/content/work-in-progress/memory-management.md`): a `Dup` where a value is used again after something takes it over, and a `Drop` (or
 /// `DropAfter`) where a variable dies, on every branch.
 ///
 /// Every variable holds a reference of its own (an owned one), except a parameter its function only borrows, a name
@@ -134,7 +134,7 @@ let rec private nodes (e: Expr) : Expr seq =
         | _ -> ()
     }
 
-/// The calls `e` makes in tail position, by the rules of `compiler/design/tail-calls.md`.
+/// The calls `e` makes in tail position, by the rules of `docs/src/content/work-in-progress/tail-calls.md`.
 let rec private tailCalls (e: Expr) : (string * Atom list) list =
     match e.Kind with
     | Let(_, _, body)
@@ -149,7 +149,7 @@ let rec private tailCalls (e: Expr) : (string * Atom list) list =
 /// Another function owns a parameter on the heap when it takes it over somewhere (passes it on owned, stores it,
 /// returns it, matches on it), and borrows it when it only reads it. A parameter that a tail call passes something
 /// the caller owns to is owned as well: the caller could otherwise only drop it after the call, which would then not
-/// be a tail call (see "Reference counting" in `compiler/design/tail-calls.md`).
+/// be a tail call (see "Reference counting" in `docs/src/content/work-in-progress/tail-calls.md`).
 let inferOwnership (functions: Function list) : Ownership =
     let indirect =
         functions
