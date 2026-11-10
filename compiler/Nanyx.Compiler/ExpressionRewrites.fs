@@ -81,8 +81,8 @@ module internal ExpressionRewrites =
 
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node, with
     /// the name it calls) written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``, or
-    /// `` $Vector.`+`(x, y) ``. `x != y` calls what `==` does, and becomes `` not `==`(x, y) ``; the call keeps the
-    /// operator's node, which is what its types are recorded by.
+    /// `` $Vector.`+`(x, y) ``, and `-x` becomes `negate(x)`. `x != y` calls what `==` does, and becomes
+    /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by.
     let callOperators (calls: Map<NodeId, Identifier>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
@@ -93,7 +93,16 @@ module internal ExpressionRewrites =
                 | BinaryOp(op, left, right), Some callee when op = EqualityOperators.notEquals ->
                     FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(callee, None, [ left; right ]) } ])
                 | BinaryOp(_, left, right), Some callee -> FunctionCall(callee, None, [ left; right ])
+                | FunctionCall(_, _, [ operand ]), Some callee -> FunctionCall(callee, None, [ operand ])
                 | other, _ -> other)
+
+    /// Every literal in an expression that inference read as a context's member (`members`, by the literal's node)
+    /// written as it: `0` in `x + 0` becomes `zero` (see `ArithmeticOperators`).
+    let readLiteralMembers (members: Map<NodeId, Expression>) (expr: Expression) : Expression =
+        if members.IsEmpty then
+            expr
+        else
+            expr |> mapExpressionKinds (fun current kind -> members |> Map.tryFind current.Id |> Option.map _.Kind |> Option.defaultValue kind)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
     /// prelude's `List.length`, which every module imports.

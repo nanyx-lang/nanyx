@@ -113,24 +113,18 @@ The entry function (the one marked `@entry`, see [Attributes](../tour/attributes
 Contexts can also express typeclass-style constraints. Define a context with the required operations and use it as a constraint:
 
 ```nanyx
-context Sum(a) = (
-  `0`: a
-  `+`: (a, a) -> a
+context Combine(a) = (
+  empty: a
+  combine: (a, a) -> a
 )
 
-export def sum: [Sum(a)] list(a) -> a
-  = { items -> items \fold(`0`) { + } }
+export def combineAll: [Combine(a)] list(a) -> a
+  = { items -> items \fold(empty, combine) }
 ```
 
-Inside `sum`, the operator `+` calls the context's `` `+` ``, so `sum` adds whatever type it is given an instance for. An operator calls whatever its name is bound to where it is written, such as a member of a context the function requires, whenever its left operand is not of a built-in type: on an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, so a counter's `n + 1` in the same function still adds ints.
+Inside `combineAll`, `empty` and `combine` are the members of the instance it is given, so it combines whatever type it is called with, as long as that type has a `Combine`.
 
-```nanyx
-context Add(a) = (
-  `+`: (a, a) -> a
-)
-
-def add: [Add(a)] a, a -> a = { x, y -> x + y }
-```
+The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, so a counter's `n + 1` in a generic function still adds ints.
 
 Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
@@ -183,19 +177,28 @@ def valueOrDefault: [Default(a)] #some(a) | #none -> a = {
 }
 ```
 
-## Sum(a)
+## Add(a)
 
-`Sum(a)` is a common algebraic context for additive combination.
+`Add(a)` is the standard library's context for values that add and subtract. `x + y` and `x - y` are read through it, and so is `-x`, which is its `negate`.
 
 ```nanyx
-context Sum(a) = (
-  `0`: a
+context Add(a) = (
+  zero: a
   `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
 )
-
-def sum: [Sum(a)] list(a) -> a
-  = { items -> items \fold(`0`) { + } }
 ```
+
+The compiler has its own for `int` and `float`. A function that adds values of one of its type variables requires `Add` of it, and in such a function a `0` added to one of those values is `zero`:
+
+```nanyx
+def total: [Add(a)] list(a) -> a = { items -> items \fold(zero) { + } }
+
+def orZero: [Add(a)] a -> a = { x -> x + 0 }
+```
+
+`List.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. Outside generic code nothing changes: `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
 
 These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
 
@@ -246,12 +249,14 @@ A value whose type has no `ToString`, such as a list, a record, a function or a 
 
 When a function requires a context, you don't always have to load or create one manually. If the type in question has [attached definitions](./attached-definitions) that match the context's members, the compiler can **synthesize** the context automatically.
 
-For example, given a `Sum` context:
+For example, given the prelude's `Add` context:
 
 ```nanyx
-context Sum(a) = (
-  `0`: a
+context Add(a) = (
+  zero: a
   `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
 )
 ```
 
@@ -260,25 +265,27 @@ And a type with matching attached definitions:
 ```nanyx
 type Point = (x: int, y: int)
 
-def Point.`0` = Point(x = 0, y = 0)
+def Point.zero = Point(x = 0, y = 0)
 
-def Point.`+` = { a, b ->
-  Point(x = a.x + b.x, y = a.y + b.y)
-}
+def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
+
+def Point.`-` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
+
+def Point.negate = { a -> Point(x = -a.x, y = -a.y) }
 ```
 
-You can call `sum` on a `list(Point)` without explicitly loading a `Sum(Point)` context -- the compiler sees that `Point.``0``` and `Point.``+``` satisfy the context and synthesizes it:
+You can call `List.sum` on a `list(Point)` without explicitly loading an `Add(Point)` context -- the compiler sees that `Point.zero`, ``Point.`+` ``, ``Point.`-` `` and `Point.negate` satisfy the context and synthesizes it. The attached `+` is also what `p + q` on two points calls:
 
 ```nanyx
 def points = [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)]
 
-def total = sum(points)
+def total = points \List.sum
 -- total = Point(x = 9, y = 12)
 ```
 
 This is analogous to how Haskell derives typeclass instances or how Rust resolves trait implementations. The key difference is that in Nanyx the "instance" is just a collection of attached definitions -- there is no separate declaration required.
 
-This is also how arithmetic on the built-in types works. The operators on `int`, `float` and friends are ordinary attached definitions (see [Operators](../tour/operators)), so a concrete expression like `1 + 2` involves no context at all, and generic contexts such as `Sum(a)` or `Num(a)` are synthesized from those same definitions whenever a generic function is called at a concrete type.
+This is also where the compiler's own `Add(int)` and `Add(float)` come from: the prelude attaches `zero`, `` `+` ``, `` `-` `` and `negate` to `Int` and `Float`, and a generic function called at `int` is passed those. A concrete expression like `1 + 2` is the built-in operator, not a call.
 
 ## When synthesis applies
 
@@ -295,12 +302,12 @@ A context with more than one parameter is synthesized from the definitions attac
 Each call looks for its instance in this order, and takes the first it finds:
 
 1. An instance for that type loaded with `use` around the call, the nearest first.
-2. An instance the type of the function around the call declares: a generic `def total: [Sum(a)] list(a) -> a` passes its own `Sum(a)` on to the functions it calls.
+2. An instance the type of the function around the call declares: a generic `def total: [Add(a)] list(a) -> a` passes its own `Add(a)` on to the functions it calls.
 3. An instance synthesized from the type's attached definitions.
 
-An instance is for one type: a `Sum(int)` loaded with `use` does not stand in for a `Sum(Point)`.
+An instance is for one type: an `Add(int)` loaded with `use` does not stand in for an `Add(Point)`.
 
-Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle. With `def sumInt: Sum(int) = (...)`, `use sumInt` loads a `Sum(int)`, as `use Sum(int)(...)` would.
+Since contexts are structural, a `use` of a record value loads it as an instance of each context it has the shape of, at the types its members settle. With `def addInt: Add(int) = (...)`, `use addInt` loads an `Add(int)`, as `use Add(int)(...)` would.
 
 ## Explicit loading takes priority
 
@@ -308,14 +315,18 @@ If you manually load a context with `use`, that instance is always used, even if
 
 ```nanyx
 def reverseSum = {
-  use Sum(Point)(
-    `0` = Point(x = 0, y = 0)
+  use Add(Point)(
+    zero = Point(x = 0, y = 0)
     `+` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
+    `-` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
+    negate = { a -> a }
   )
 
-  sum(points)
+  points \List.sum
 }
 ```
+
+A `use` of an `Add` reaches generic code called from its block, such as `List.sum`; it does not change a concrete `p + q` there yet ([numeric contexts](../work-in-progress/numeric-contexts#what-is-implemented)).
 
 # Why contexts matter
 
