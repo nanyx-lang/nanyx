@@ -72,18 +72,9 @@ let ``A local function generic in the type it interpolates is not an error`` () 
 [<Fact>]
 let ``A hole of a type with no ToString is an error at the hole`` () =
     let cases =
-        [ "def s = \"{[1, 2]}\"\n",
-          "'list(int)' cannot be interpolated because it has no toString: turn it into a string first, or print it with `dbg`",
-          "[1, 2]"
-          "def s = \"{(a = 1)}\"\n",
-          "'(a: int)' cannot be interpolated because it has no toString: turn it into a string first, or print it with `dbg`",
-          "(a = 1)"
-          "def f = { n -> n }\ndef s = \"{f}\"\n",
+        [ "def f = { n -> n }\ndef s = \"{f}\"\n",
           "'a -> a' cannot be interpolated: it is a function, and functions have no toString",
           "f"
-          "def s = \"{#some(1)}\"\n",
-          "'#some(int)' cannot be interpolated: only a tag without a payload has a toString. Match on it, or print it with `dbg`",
-          "#some(1)"
           "type $Money = private int\ndef m = $Money(5)\ndef s = \"{m}\"\n",
           "'$Money' cannot be interpolated because it has no toString: attach '$Money.toString', or load an instance of `ToString($Money)` with `use`",
           "m" ]
@@ -98,14 +89,6 @@ let ``A function that requires ToString is passed the compiler's own for a tag``
     Assert.Equal<ContextInstance list>(
         [ InstanceSynthesized [ "toString", "__toString" ]; InstanceSynthesized [ "toString", "__toString" ] ],
         instancesOf typed |> List.filter (function InstanceSynthesized _ -> true | _ -> false))
-
-[<Fact>]
-let ``Passing a tag with a payload to a function that requires ToString says why it has none`` () =
-    let message, at = missingContext "def angled = { v -> \"<{v}>\" }\ndef s = angled(#some(1))\n"
-    Assert.Equal(
-        "'angled' requires the context 'ToString(#some(int))', but only a tag without a payload has a toString: match on it, or turn it into a string first",
-        message)
-    Assert.Equal("angled", at)
 
 [<Fact>]
 let ``An attached toString of the wrong type is reported at the hole`` () =

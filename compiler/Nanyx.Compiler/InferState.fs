@@ -178,7 +178,17 @@ type InferState =
             WorkflowZeros: Map<NodeId, SourceSpan>;
             /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
             /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
-            JoinRests: Set<int> }
+            JoinRests: Set<int>;
+            /// The definitions the compiler has written as derived instances (see `StructuralInstances`), by the
+            /// context and the type each is an instance for, as an annotation writes it: the definition's name.
+            DerivedInstances: Map<Identifier * TypeExpr, Identifier>;
+            /// The derived instances' definitions written and not yet inferred, the earliest first.
+            DerivedDefs: TopLevelItem list;
+            /// The holes that call a derived instance's definition in place of the hole function, and the comparisons
+            /// that call a derived `==` or the `==` attached to their type in place of the compiler's own, by the
+            /// node of the hole or the comparison: the definition's name, and where the call finds each context
+            /// that definition requires.
+            DerivedCalls: Map<NodeId, Identifier * ContextInstance option list> }
 
 let emptyState =
         { NextId = 0;
@@ -230,7 +240,10 @@ let emptyState =
             UnhandledMatches = [];
             UnknownTypeUses = [];
             WorkflowZeros = Map.empty;
-            JoinRests = Set.empty }
+            JoinRests = Set.empty;
+            DerivedInstances = Map.empty;
+            DerivedDefs = [];
+            DerivedCalls = Map.empty }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

@@ -34,6 +34,7 @@
     <Compile Include="ArithmeticOperators.fs" />
     <Compile Include="ContextShapes.fs" />
     <Compile Include="ContextInference.fs" />
+    <Compile Include="StructuralInstances.fs" />
     <Compile Include="OperatorCalls.fs" />
     <Compile Include="NamedArguments.fs" />
     <Compile Include="Infer.fs" />

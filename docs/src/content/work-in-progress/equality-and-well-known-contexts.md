@@ -52,19 +52,29 @@ operators call, and `Hash(a)` and `__hash`.
   as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other; else, on
   a type with a `==` attached, it calls that, as any operator on a type that attaches it does (`OperatorCalls.fs`,
   [#527](https://github.com/nanyx-lang/nanyx/issues/527)). Inside the attached `==` itself, `==` on its own type is
-  the built-in comparison. Only the type of the operands as written is looked up, not their parts: see the next item.
+  the built-in comparison.
 
 - **A list is compared through its elements' `Eq`.** `==` and `!=` on two lists whose elements have an `Eq` other
   than the compiler's own (one in scope, or an attached `==`) call the prelude's `__listEquals` with it
   (`WellKnownContexts.throughElements`): `[$Email("a")] == [$Email("b")]` uses `` $Email.`==` ``, and so does `==` on a
   `list(a)` in a function that requires `[Eq(a)]` with the `Eq(a)` it is passed. `Ord` does the same for `<`.
 
+- **Structural derivation that looks up each part** ([#631](https://github.com/nanyx-lang/nanyx/issues/631)). A tag
+  with a payload, a tuple, a record or a list of them with a part that has an `==` of its own, one attached to the
+  part's type or the `Eq` a function requires of a type variable, is compared by a definition the compiler derives
+  (`Nanyx.Compiler/StructuralInstances.fs`), which compares each part with `==`. So a record that holds an `$Email`
+  compares it with `` $Email.`==` ``, and inside a function that requires `[Eq(a)]`, `==` on a `#some(a)` compares
+  through the instance, also where the operands' type is only known later. A structure with no such part is still
+  compared by the compiler's own. `ToString` is derived the same way (see
+  [printing values](./printing-values#structures)).
+
 Not done yet:
 
-- **Structural derivation that looks up each part, beyond one list.** A record, tuple or tag that holds an `$Email`,
-  and a list of lists of them, still compare the `$Email` by its structure, and so does `==` on a `list(a)` where the
-  operator's type is only known later (in a def that does not write its type)
-  ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
+- **A derived `==` reads only what the top of the module can see**
+  ([#630](https://github.com/nanyx-lang/nanyx/issues/630)). It uses a part's attached `==`, and the `Eq` of
+  a type variable, but not an `Eq` of a concrete part loaded by `use` in a block. A call that requires `Eq` of a
+  structure with a type variable in it, `same(#some(x), #some(y))` inside a function that requires `[Eq(a)]`, is
+  passed the compiler's own instance, not one built from `Eq(a)`: compare with `==` there.
 - **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
   function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
 
@@ -235,7 +245,7 @@ The proposed set is small and closed:
 | `Eq(a)` | `` `==`: (a, a) -> bool `` | `==`, `!=` | numbers, bool, unit, string, tuples, records, lists, tags and unions |
 | `Ord(a)` | `compare: (a, a) -> #less \| #equal \| #greater` | `<`, `<=`, `>`, `>=` | numbers, bool, string, tuples, lists (see [Q3](#open-questions)) |
 | `Hash(a)` | `hash: a -> int` | none | the same types as `Eq` |
-| `ToString(a)` | `toString: a -> string` | interpolation holes | the built-in types only, as [printing values](./printing-values) proposes |
+| `ToString(a)` | `toString: a -> string` | interpolation holes | tags, tuples, records and lists, as [printing values](./printing-values#structures) describes |
 
 Not every context in the prelude is well-known. `FromString(a, e)`, which an attached `fromString` gives a type as
 `toString` gives it a `ToString`, is an ordinary prelude context: no syntax reads through it and it is never derived
@@ -349,8 +359,8 @@ design makes hashing the natural choice, since more types have it.
 # Printing
 
 Unchanged from [printing values](./printing-values): `ToString(a)` is a
-well-known context for interpolation holes, synthesized from an attached `toString`. Whether compound types get a
-derived `ToString` stays that page's open question. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
+well-known context for interpolation holes, synthesized from an attached `toString`, and derived part by part for
+tags with a payload, tuples, records and lists. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
 block, which is what that page already proposes.
 
 # Numeric operators

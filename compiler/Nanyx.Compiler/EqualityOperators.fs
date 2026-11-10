@@ -9,7 +9,8 @@ open NyxCompiler.WellKnownContexts
 /// two things are checked: a function is never compared, and a function that compares values of one of its own type
 /// variables requires `Eq` of it. One that does not write its type has the requirement inferred, as it is for a call
 /// to a function that requires a context (see `ContextInference`), and its `==` then calls the member of the instance
-/// it is passed.
+/// it is passed. A structure with a part that has an `==` of its own is compared by a definition derived from its
+/// parts (see `StructuralInstances`).
 module internal EqualityOperators =
     /// The prelude's context.
     let context = equality.Context
@@ -22,6 +23,9 @@ module internal EqualityOperators =
     /// The prelude function that compares two values by their structure: the member of the compiler's own instance,
     /// where one is passed to a function that requires `Eq`.
     let builtInFunction = equality.BuiltInFunction
+
+    /// The prelude function the derived `==` of a list calls, with the two lists and what compares two elements.
+    let listFunction = "__listEqualsBy"
 
     /// Whether `op` is `==` or `!=`.
     let isOperator (op: string) = equality.Operators |> List.contains op
@@ -43,8 +47,14 @@ module internal EqualityOperators =
     /// `WellKnownContexts.throughElements`). A function is an error. A type with a variable left in it is checked once
     /// it is known (see `WellKnownContexts.pendingOperator`). The prelude's `builtInFunction` is the comparison itself,
     /// of any type.
+    ///
+    /// Any other structure with a part that has an `==` of its own (`comparesParts`) is compared by a derived
+    /// definition (see `StructuralInstances`), which `derive` makes the comparison call once nothing of the type is
+    /// left open.
     let require
         (instanceOf: InstanceOf)
+        (comparesParts: Ty -> bool)
+        (derive: Ty -> InferState -> InferState option)
         (env: TypeEnv)
         (state: InferState)
         (expr: Expression)
@@ -60,22 +70,29 @@ module internal EqualityOperators =
             match equality.Lacks ty, state.ContextScope with
             | Some reason, _ -> Error (error expr.Span (cannotUse equality op ty reason))
             | None, DefScope(name, false) when name = builtInFunction -> Ok state
-            | None, _ when (comparedVars ty).IsEmpty || not (isDeclared equality state) -> Ok state
+            | None, _ when not (isDeclared equality state) -> Ok state
+            | None, _ when (TypeEnv.freeTyVars ty).IsEmpty -> Ok (derive ty state |> Option.defaultValue state)
+            | None, _ when (comparedVars ty).IsEmpty && not (comparesParts ty) -> Ok state
             | None, _ -> Ok (pendingOperator equality env state expr op ty)
 
     /// Whether `pending` is a comparison `require` left to be checked, rather than a call.
     let isPending (pending: PendingContextInstance) = pending.Context = context && isOperator pending.Callee
 
     /// Checks the comparison `pending` now that it compares values of the type `argTys` (see
-    /// `WellKnownContexts.checkPending`).
+    /// `WellKnownContexts.checkPending`). One that passes is the compiler's own, unless `derive` makes it call a
+    /// derived definition (see `require`).
     let resolvePending
         (hasInstance: TypeEnv -> Ty -> bool)
+        (derive: Ty -> InferState option)
         (defScheme: Identifier -> TypeScheme option)
         (state: InferState)
         (pending: PendingContextInstance)
         (argTys: Ty list)
         : Result<ContextInstance option * InferState, Diagnostic list> =
-        checkPending equality hasInstance defScheme state pending argTys
+        match checkPending equality hasInstance defScheme state pending argTys with
+        | Ok (None, checkedState) when checkedState.FailedExprs.Length = state.FailedExprs.Length ->
+            Ok (None, derive (List.head argTys) |> Option.defaultValue checkedState)
+        | result -> result
 
     /// `state` with each comparison among `pendings` that found the instance its def requires (see `ContextInference`)
     /// calling that instance's `==`, as an operator whose name is bound does (see `OperatorCalls`). `inputOf` is the

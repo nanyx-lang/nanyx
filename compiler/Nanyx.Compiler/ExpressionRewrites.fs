@@ -68,7 +68,8 @@ module internal ExpressionRewrites =
         mapExpr expr
 
     /// Every pipe in an expression that inference resolved to an attached definition (`targets`, by the pipe's
-    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \String.trim`.
+    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \String.trim`. A
+    /// hole that calls a derived definition (see `StructuralInstances.callTargets`) is written as a call to it.
     let retargetPipes (targets: Map<NodeId, Identifier>) (expr: Expression) : Expression =
         if targets.IsEmpty then
             expr
@@ -77,6 +78,7 @@ module internal ExpressionRewrites =
             |> mapExpressionKinds (fun current kind ->
                 match kind, targets |> Map.tryFind current.Id with
                 | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
+                | FunctionCall(_, rangeOpt, args), Some target -> FunctionCall(target, rangeOpt, args)
                 | other, _ -> other)
 
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node, with

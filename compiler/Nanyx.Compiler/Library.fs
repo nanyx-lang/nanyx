@@ -1008,7 +1008,7 @@ module Compiler =
             | _ -> kind)
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
+    /// attached function, and each hole that calls a derived definition, written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
     /// that call (`operatorCalls`), each expression inference read as another as that one (`readAs`),
     /// each read of a built-in property as a call (`properties`), each builder block that uses no keyword as its block
     /// (`workflowBlocks`), and without import statements. `defer` compiles the module's errors to traps first, for a
@@ -1292,7 +1292,7 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)

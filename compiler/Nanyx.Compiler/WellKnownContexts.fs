@@ -271,7 +271,8 @@ module internal WellKnownContexts =
         let pending =
             { Def = def; Call = expr.Id; Callee = op; Index = 0; Count = 1
               Context = wellKnown.Context; ArgTys = [ ty ]; Span = expr.Span
-              Errors = error expr.Span (undeclared wellKnown op (List.head (comparedVars ty)) annotatedDef); ChecksOnly = false }
+              Errors = comparedVars ty |> List.tryHead |> Option.map (fun v -> error expr.Span (undeclared wellKnown op v annotatedDef)) |> Option.defaultValue []
+              ChecksOnly = false }
         { state with
             PendingContextInstances = pending :: state.PendingContextInstances
             HoleScopes = state.HoleScopes |> Map.add expr.Id (env, annotatedDef) }
