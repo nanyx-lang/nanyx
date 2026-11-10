@@ -32,10 +32,10 @@ def Pixel.hsv: Pixel -> (h: float, s: float, v: float) = { p ->
 -- direction of the luminance in every other band so the result looks smoother
 def stepKey: (Pixel, int) -> (int, float, int) = { p, repetitions ->
   def (h = h, v = v) = p.hsv
-  def band = Math.floor(h * repetitions.toFloat)
-  def value = Math.floor(v * repetitions.toFloat)
+  def band = Math.floor(h * Int.toFloat(repetitions))
+  def value = Math.floor(v * Int.toFloat(repetitions))
 
-  if band % 2 == 1 then (band, repetitions.toFloat - p.luminance, repetitions - value)
+  if band % 2 == 1 then (band, Int.toFloat(repetitions) - p.luminance, repetitions - value)
   else (band, p.luminance, value)
 }
 

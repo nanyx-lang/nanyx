@@ -45,6 +45,13 @@ let ``Int.parse is in the prelude`` () =
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
+let ``Int.toFloat is in the prelude`` () =
+    let result = Compiler.compile "def x = Int.toFloat(3) * 1.5\ndef piped = 7 \\toFloat"
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["x"])
+    Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["piped"])
+
+[<Fact>]
 let ``Bool.parse is in the prelude`` () =
     let result = Compiler.compile "def b = Bool.parse(\"true\")\ndef piped = \"false\" \\ Bool.parse"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)

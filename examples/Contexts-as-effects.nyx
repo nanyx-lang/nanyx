@@ -26,7 +26,7 @@ def english = [
   6.7, 7.5, 1.9, 0.1, 6.0, 6.3, 9.1, 2.8, 1.0, 2.4, 0.2, 2.0, 0.1
 ]
 
-def percent: (int, int) -> float = { n, m -> 100.0 * n.toFloat / m.toFloat }
+def percent: (int, int) -> float = { n, m -> 100.0 * Int.toFloat(n) / Int.toFloat(m) }
 
 def rotateList: (list(a), int) -> list(a) = { xs, n -> xs \drop(n) ++ xs \take(n) }
 

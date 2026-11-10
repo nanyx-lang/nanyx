@@ -8,7 +8,7 @@ The `math` module provides common numeric and floating-point operations.
 
 Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts); `int` and `float` are its built-in instances, so these functions accept either without conversion. Functions that only make sense for floating-point values take `float` directly.
 
-`floor`, `ceil` and `round` turn a `float` into an `int`. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
+`floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `Int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 
 # abs
 
@@ -138,5 +138,22 @@ math.round(3.5)
 math.round(2.5)
 -- 3
 math.round(-2.5)
+-- -3
+```
+
+---
+
+# truncate
+
+```nanyx
+math.truncate: float -> int
+```
+
+The value with its fraction dropped, so a number goes towards zero whatever its sign.
+
+```nanyx
+math.truncate(3.9)
+-- 3
+math.truncate(-3.9)
 -- -3
 ```
