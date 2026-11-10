@@ -49,3 +49,48 @@ let ``Typecheck lets an annotation name a type declared later`` () =
         "type Color = #red | #green | #blue"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``Typecheck rejects a lambda annotated with a non-function type`` () =
+    let source = "def h: int = { x -> x }\ndef n = h + 1"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+        let span = diagnostic.Span.Value
+        Assert.Equal("{ x -> x }", source.Substring(span.Start, span.End - span.Start))
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``Typecheck rejects a local lambda annotated with a non-function type`` () =
+    let source = "def main = {\n  def h: int = { x -> x }\n  h + 1\n}"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+        let span = diagnostic.Span.Value
+        Assert.Equal("{ x -> x }", source.Substring(span.Start, span.End - span.Start))
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``Typecheck rejects a lambda annotated with a type variable alone`` () =
+    match (Compiler.compile "def h: a = { x -> x }").Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.AnnotationTooGeneral.Code, diagnostic.Code)
+        Assert.Contains("more general than the inferred type", diagnostic.Message)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``Typecheck checks a lambda against the function a nominal type wraps`` () =
+    let source = "type $Handler = int -> int\ndef h: $Handler = { x -> x ++ \"a\" }"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``Typecheck accepts a lambda that matches its annotation`` () =
+    let typed =
+        compileClean (
+            "type $Handler = int -> int\n" +
+            "def h: $Handler = { x -> x + 1 }\n" +
+            "def g: int -> int = { x -> x + 1 }\n" +
+            "def n = g(2)")
+    Assert.Equal(TyPrimitive "int", typed.Types.["n"])

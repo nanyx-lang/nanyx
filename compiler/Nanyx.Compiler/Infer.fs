@@ -2418,13 +2418,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
     | Ok (bodyExpr, next) ->
         let withReturnConstraint =
             match expectedReturnOpt with
-            | Some expectedReturn ->
-                match Unifier.unalias expectedReturn with
-                | TyNominal(name, underlying, _) when inNominalHome state name body.Span ->
-                    match Unifier.unalias bodyExpr.Type with
-                    | TyNominal _ -> addAssignableConstraintAt body.Span bodyExpr.Type expectedReturn next
-                    | _ -> addAssignableConstraintAt body.Span bodyExpr.Type underlying next
-                | _ -> addAssignableConstraintAt body.Span bodyExpr.Type expectedReturn next
+            | Some expectedReturn -> addDeclaredConstraintAt body.Span bodyExpr.Type expectedReturn next
             | None -> next
         let inputTy =
             match expectedInputOpt with
@@ -2507,17 +2501,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let declaredTy, finalState =
                                 match expectedDeclaredOpt with
                                 | Some declaredTy ->
-                                    match expr.Kind with
-                                    | Lambda _ -> declaredTy, TypeHoles.constrainLambda expr.Span declaredTypeExprOpt declaredTy typedExpr.Type next
-                                    | _ ->
-                                        let updatedState =
-                                            match Unifier.unalias declaredTy with
-                                            | TyNominal(name, underlying, _) when inNominalHome current name expr.Span ->
-                                                match Unifier.unalias typedExpr.Type with
-                                                | TyNominal _ -> addAssignableConstraintAt expr.Span typedExpr.Type declaredTy next
-                                                | _ -> addAssignableConstraintAt expr.Span typedExpr.Type underlying next
-                                            | _ -> addAssignableConstraintAt expr.Span typedExpr.Type declaredTy next
-                                        declaredTy, updatedState
+                                    declaredTy, TypeHoles.constrainToAnnotation expr declaredTypeExprOpt declaredTy typedExpr.Type next
                                 | None ->
                                     let updatedState =
                                         if preboundFresh then addConstraintAt expr.Span preboundTy typedExpr.Type next else next
@@ -2823,17 +2807,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     let declaredTy, finalState =
                         match expectedDeclaredOpt with
                         | Some declaredTy ->
-                            match expr.Kind with
-                            | Lambda _ -> declaredTy, TypeHoles.constrainLambda expr.Span declaredTypeExprOpt declaredTy typedExpr.Type next
-                            | _ ->
-                                let updatedState =
-                                    match Unifier.unalias declaredTy with
-                                    | TyNominal(name, underlying, _) when inNominalHome state name expr.Span ->
-                                        match Unifier.unalias typedExpr.Type with
-                                        | TyNominal _ -> addAssignableConstraintAt expr.Span typedExpr.Type declaredTy next
-                                        | _ -> addAssignableConstraintAt expr.Span typedExpr.Type underlying next
-                                    | _ -> addAssignableConstraintAt expr.Span typedExpr.Type declaredTy next
-                                declaredTy, updatedState
+                            declaredTy, TypeHoles.constrainToAnnotation expr declaredTypeExprOpt declaredTy typedExpr.Type next
                         | None ->
                             let updatedState =
                                 match preboundFreshVars |> Map.tryFind name with
