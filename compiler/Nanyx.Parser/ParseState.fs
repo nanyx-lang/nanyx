@@ -113,15 +113,29 @@ let identifierNoWs: Parser<Identifier, ParseState> =
 
 let identifier: Parser<Identifier, ParseState> = identifierNoWs .>> wsInline
 
+/// An operator's name in backticks, as a definition, a context member or a record field is named when it is an
+/// operator: `` def Point.`==` = ... ``. The name is the operator without its backticks. Spellings made of
+/// operator characters that are syntax (`=`, `->`, `=>`, and `--`, which starts a comment) cannot be names.
+let operatorNameNoWs: Parser<Identifier, ParseState> =
+    let quoted = between (pchar '`') (pchar '`') (many1Satisfy Names.isOperatorChar) <?> "operator name in backticks"
+    quoted >>= fun name ->
+        // Fatal, so the error is this one and not whatever an enclosing alternative fails with after backtracking.
+        if Names.isReservedOperatorSpelling name then failFatally $"'{name}' is syntax, not an operator, so it cannot be a name"
+        else preturn name
+
+/// A name that may be an identifier or an operator's name in backticks.
+let nameNoWs: Parser<Identifier, ParseState> = identifierNoWs <|> operatorNameNoWs
+
 let typeNameIdentifier: Parser<Identifier, ParseState> =
     (pchar '$' >>. identifierNoWs |>> fun name -> "$" + name)
     <|> identifierNoWs
 
-/// A name qualified with dots, any part of which may be a nominal type's: `m.$Email.parse`.
+/// A name qualified with dots, any part of which may be a nominal type's, and whose parts may be operators in
+/// backticks: `m.$Email.parse`, `` Point.`+` ``.
 let qualifiedIdentifier: Parser<Identifier, ParseState> =
     pipe2
-        typeNameIdentifier
-        (many (pchar '.' >>. typeNameIdentifier))
+        (typeNameIdentifier <|> operatorNameNoWs)
+        (many (pchar '.' >>. (typeNameIdentifier <|> operatorNameNoWs)))
         (fun head tail -> String.concat "." (head :: tail))
 
 let internal spanOf (start: Position) (endIndex: int) : SourceSpan =
@@ -147,8 +161,8 @@ let private trimmedEnd: Parser<int, ParseState> =
 let withSpan (p: Parser<'a, ParseState>) : Parser<'a * SourceSpan, ParseState> =
     pipe3 getPosition p trimmedEnd (fun start value endIndex -> value, spanOf start endIndex)
 
-/// The span of `name`, written from `start` on one line.
-let internal nameSpan (start: Position) (name: Identifier) = spanOf start (int start.Index + name.Length)
+/// The span of `name`, written from `start` on one line, with the backticks of an operator's name.
+let internal nameSpan (start: Position) (name: Identifier) = spanOf start (int start.Index + (Names.written name).Length)
 
 /// Notes `name`, written at `start`, as declared by the construct being parsed: see `collectingNames`.
 let internal noteName (start: Position) (name: Identifier) : Parser<unit, ParseState> =

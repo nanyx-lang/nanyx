@@ -318,3 +318,14 @@ let ``A hole in a type is printed as written`` () =
     unchanged (lines [ "def f: int, _ -> _ = { a, b ->"; "  a + b"; "}" ])
     unchanged "def g = { (x: _), y -> x + y }\n"
     Assert.Equal("def m: map(string, _) = m\n", format "def m:map(string,_)=m")
+
+[<Fact>]
+let ``Names that are operators keep their backticks`` () =
+    unchanged "def `<+>` = { a, b -> a + b }\n"
+    unchanged "def Point.`==` = { p, q -> p.x == q.x }\n"
+    unchanged (lines [ "def Point.`==`: Point, Point -> bool = { p, q ->"; "  p.x == q.x"; "}" ])
+    unchanged "context Eq(a) = (`==`: (a, a) -> bool)\n"
+    unchanged "def i = Eq(int).`==`(1, 2)\n"
+    unchanged "def f = `+`\n"
+    unchanged "def g = `+`(1, 2)\n"
+    unchanged (lines [ "def main = {"; "  use Eq(int) = (`==` = { a, b -> true })"; "  1"; "}" ])
