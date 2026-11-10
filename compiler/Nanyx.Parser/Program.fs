@@ -781,20 +781,29 @@ opp.AddOperator(InfixOperator("||", ws, 1, Associativity.Left, binary "or"))
 // Commas are handled explicitly in tuple/record literals and function calls
 // For bare tuple expressions (def x = 1, 2), we handle it in defStatement
 
-// Pipe parser - handles expr \func or expr \func(args)
-let pipeTarget =
-    pipe3
-        qualifiedIdentifierWithSpan
-        (opt parenArguments)
-        (opt (attempt (wsInline >>. lambda)))
-        (fun (funcName, funcRange) argOpt trailingLambdaOpt ->
-            let baseArgs = match argOpt with Some arg -> [arg] | None -> []
-            let args =
-                match trailingLambdaOpt with
-                | Some lambdaExpr -> baseArgs @ [lambdaExpr]
-                | None -> baseArgs
-            (funcName, funcRange, args)
-        )
+/// What a `\` applies the value before it to.
+type private PipeStep =
+    /// `\f`, `\f(args)` or `\f(args) { ... }`: a call of `f` with the value as its first argument.
+    | PipeCall of Identifier * SourceSpan option * Expression list
+    /// `\match` and then arms, as a match has them: a match on the value.
+    | PipeMatch of MatchArm list
+
+let private pipeTarget =
+    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
+    let matchStep = pstring "match" >>. keywordEnd >>. matchArms |>> PipeMatch
+    let callStep =
+        pipe3
+            qualifiedIdentifierWithSpan
+            (opt parenArguments)
+            (opt (attempt (wsInline >>. lambda)))
+            (fun (funcName, funcRange) argOpt trailingLambdaOpt ->
+                let baseArgs = match argOpt with Some arg -> [arg] | None -> []
+                let args =
+                    match trailingLambdaOpt with
+                    | Some lambdaExpr -> baseArgs @ [lambdaExpr]
+                    | None -> baseArgs
+                PipeCall(funcName, funcRange, args))
+    attempt matchStep <|> callStep
 
 // Inline operator precedence parser (no newlines in operator whitespace)
 let oppInline = new OperatorPrecedenceParser<Operand, unit, ParseState>()
@@ -819,14 +828,27 @@ oppInline.AddOperator(InfixOperator("!=", wsInline, 3, Associativity.Left, binar
 /// `expr \f \g(a)`: each pipe spans from the start of `expr`'s text to the end of its own target.
 let private applyPipes (value: Operand) pipes =
     pipes
-    |> List.fold (fun ((acc: Expression), accText) ((funcName, nameSpan, args), targetSpan) ->
+    |> List.fold (fun ((acc: Expression), accText) (step, targetSpan) ->
         let span = SourceSpan.between accText targetSpan
-        Expression.at span (Pipe(acc, funcName, nameSpan, args)), span) value
+        let kind =
+            match step with
+            | PipeCall(funcName, nameSpan, args) -> Pipe(acc, funcName, nameSpan, args)
+            | PipeMatch arms -> Match([ acc ], arms)
+        Expression.at span kind, span) value
     |> fst
 
 let private pipeLeadingWs =
     skipMany (skipAnyOf " \t") >>.
     skipMany (attempt (newline >>. skipMany (skipAnyOf " \t")))
+
+/// The space before a pipe or an `except` that continues an expression statement: spaces on the same line, or line
+/// breaks (and blank or comment lines) up to a line indented more than `lineIndent`, the indent of the line the
+/// statement starts on. A line indented no more than that starts something else.
+let private continuationWs (lineIndent: int64) =
+    wsInline
+    >>. optional (attempt (
+        skipMany1 (attempt (blockLineEnd () >>. wsInline)) >>. getPosition >>= fun position ->
+            if position.Column > lineIndent then preturn () else pzero))
 
 /// `a..`, a range without an end: the start, taking in every operator before it as `a..b` does, and then `..`.
 let private withOpenRange (valueParser: Parser<Operand, ParseState>) : Parser<Operand, ParseState> =
@@ -845,13 +867,16 @@ let pipeExpr =
         applyPipes
     |> withExcept pipeLeadingWs
 
+/// An expression that stops at the end of its line, except that a pipe or an `except` may continue it on the lines
+/// after, indented more than the line it starts on (see `continuationWs`).
 let inlinePipeExpr =
-    let pipeOp = pstring "\\" >>. wsInline >>. withSpan pipeTarget
-    pipe2
-        oppInline.ExpressionParser
-        (many (attempt (pipeOp .>> wsInline)))
-        applyPipes
-    |> withExcept wsInline
+    currentLineIndent >>= fun lineIndent ->
+        let pipeOp = continuationWs lineIndent >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
+        pipe2
+            oppInline.ExpressionParser
+            (many (attempt (pipeOp .>> wsInline)))
+            applyPipes
+        |> withExcept (continuationWs lineIndent)
 
 do inlineExpressionRef := inlinePipeExpr
 

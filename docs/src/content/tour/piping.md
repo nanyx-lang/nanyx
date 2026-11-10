@@ -39,6 +39,20 @@ def result = 1
   \add(3)
 ```
 
+## Pipes on the lines after
+
+A pipe chain can go on over several lines, one pipe to a line. A line that starts with `\` continues the expression above it when it is indented more than the line that expression starts on. This works anywhere an expression is written, including the last line of a lambda body and the body of a match arm:
+
+```nanyx
+def total = { items ->
+  items
+    \map { .price }
+    \sum
+}
+```
+
+A `\` at the same indent as the line the expression starts on, or less, does not continue it.
+
 ## Piping with trailing lambdas
 
 If the last argument of a function is a lambda, you can write it after the piped value without parentheses:
@@ -59,6 +73,23 @@ This is a relatively simply syntax transformation, which becomes
 ```nanyx
 def result = fold([1, 2, 3], 0, { + })
 ```
+
+# Piping into a match
+
+`\match`, followed by arms, matches on the piped value: `x \match | ...` is `match x | ...`. It lets a pipe chain end in, or go on after, a match:
+
+```nanyx
+def describe = { words ->
+  words
+    \String.join(" ")
+    \match
+      | "" -> "nothing"
+      | s -> s
+    \println
+}
+```
+
+A pipe after the arms, indented as the `\match` is, applies to the result of the whole match.
 
 # Qualified piping
 

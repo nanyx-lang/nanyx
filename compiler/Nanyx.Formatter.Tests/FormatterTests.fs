@@ -83,6 +83,11 @@ let ``A match that is not the last arm's body is bracketed`` () =
     unchanged (lines [ "def f = { x, y ->"; "  match x"; "    | 0 -> (match y"; "      | 0 -> 1"; "      | _ -> 2)"; "    | _ -> 3"; "}" ])
 
 [<Fact>]
+let ``A piped match stays piped, and a pipe after its arms goes on a line of its own`` () =
+    unchanged (lines [ "def r = s \\trim \\match"; "  | \"\" -> 0"; "  | _ -> 1" ])
+    unchanged (lines [ "def f = { n ->"; "  n \\match"; "    | 0 -> \"zero\""; "    | _ -> \"other\""; "    \\println"; "}" ])
+
+[<Fact>]
 let ``An except keeps one arm on its line and puts several on the lines after it`` () =
     unchanged "def v = Int.fromString(s) except #invalidInt -> #invalidVersionNumber\n"
     unchanged "def v = xs \\find(p) except #notFound | #empty -> #none\n"

@@ -32,7 +32,7 @@ In Nanyx, these evaluate to the same result:
 String.concat("Hello, ", "World!")
 
 "Hello, "
-\String.concat("World!")
+  \String.concat("World!")
 ```
 
 That is what most people expect after learning `\`. In curried languages, the second line usually produces a different result, because the piped value is used as the last argument rather than the first. This makes the operator feel less predictable, even for experienced users.

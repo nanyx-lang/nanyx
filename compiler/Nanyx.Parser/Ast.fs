@@ -515,7 +515,8 @@ module MatchHead =
     ///   all. Their head is the first character, the `{` or the first `|`.
     /// - A lambda's pattern parameters (`{ #some(n) -> n }`) match on values made up where the patterns are
     ///   written, so they are the head, from the first to the last.
-    /// - A match made up over its value (`def #some(x) = value`, `value except | ...`) has the value as its head.
+    /// - A match made up over its value (`def #some(x) = value`, `value except | ...`), or written after it
+    ///   (`value \match | ...`), has the value as its head.
     let span (matchExpr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : SourceSpan =
         let firstPatterns = arms |> List.tryHead |> Option.map fst |> Option.defaultValue []
         match scrutinees with
