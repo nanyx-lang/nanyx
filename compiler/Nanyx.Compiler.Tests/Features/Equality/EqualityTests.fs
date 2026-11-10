@@ -178,6 +178,8 @@ let ``Comparing with a tag joins the operands, leaving the other open to more ta
 let ``Comparing tags with payloads of different types is still an error`` () =
     let diagnostic = Assert.Single((Compiler.compile "def b = #some(1) == #some(\"a\")\n").Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+
+[<Fact>]
 let ``A concrete comparison calls the == attached to its type, except in that definition`` () =
     let typed =
         compileClean (

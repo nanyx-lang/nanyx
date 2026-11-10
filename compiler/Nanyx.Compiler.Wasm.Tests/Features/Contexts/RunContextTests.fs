@@ -274,6 +274,7 @@ let ``Run - a context member named by an operator is synthesized from an attache
         "}\n"
     runSource source |> assertRan "12\n34\nsame\ndifferent\n"
 
+[<Fact>]
 let ``Run - a lambda in a generic function calls the members of the context the function requires, and passes it on`` () =
     let source =
         "import nanyx/console\n" +
