@@ -1,7 +1,7 @@
 {
   "name": "nanyx",
   "displayName": "Nanyx",
-  "description": "Nanyx language support: syntax highlighting and diagnostics",
+  "description": "Nanyx language support: syntax highlighting, diagnostics and running files",
   "publisher": "nanyx",
   "repository": {
     "type": "git",
@@ -53,8 +53,23 @@
       {
         "command": "nanyx.restartServer",
         "title": "Nanyx: Restart the language server"
+      },
+      {
+        "command": "nanyx.runFile",
+        "title": "Nanyx: Run the current file",
+        "icon": "$(play)",
+        "enablement": "editorLangId == nanyx || resourceLangId == nanyx"
       }
     ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "nanyx.runFile",
+          "when": "resourceLangId == nanyx && !isInDiffEditor",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Nanyx",
       "properties": {

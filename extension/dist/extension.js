@@ -39,12 +39,16 @@ const vscode = __importStar(require("vscode"));
 const node_1 = require("vscode-languageclient/node");
 const compiler_1 = require("./compiler");
 const developmentMode_1 = require("./developmentMode");
+const run_1 = require("./run");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
+const COMMAND_RUN = "nanyx.runFile";
 /** When the extension last asked GitHub for a newer compiler release (milliseconds since the epoch). */
 const LAST_UPDATE_CHECK = "nanyx.lastUpdateCheck";
 const UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000;
 let client;
+/** The `nanyx` the language server was last started with, which is also the one that runs files. */
+let compiler;
 /** In development mode, watches the `nanyx.path` build for changes. */
 let buildWatcher;
 let outputChannel;
@@ -64,7 +68,7 @@ async function activate(context) {
                 (0, compiler_1.removeDownloadedExcept)(context, version);
             }
         }
-    }), vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)), vscode.workspace.onDidChangeConfiguration((event) => {
+    }), vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)), vscode.commands.registerCommand(COMMAND_RUN, (uri) => runCurrentFile(context, uri)), vscode.workspace.onDidChangeConfiguration((event) => {
         if (event.affectsConfiguration("nanyx.path") ||
             event.affectsConfiguration("nanyx.developmentMode") ||
             event.affectsConfiguration("nanyx.compilerVersion") ||
@@ -113,6 +117,34 @@ async function startOrRestart(context) {
     if (located?.downloadedVersion && (0, compiler_1.tracksNewestRelease)(settings)) {
         void checkForUpdate(context, settings, located.downloadedVersion);
     }
+}
+/**
+ * Runs a `.nyx` file with `nanyx run`: the one the editor title's button was pressed on, or else the
+ * active editor's. It is saved first, since the compiler reads it from disk.
+ */
+async function runCurrentFile(context, uri) {
+    const document = uri ? await vscode.workspace.openTextDocument(uri) : vscode.window.activeTextEditor?.document;
+    if (!document || document.languageId !== "nanyx") {
+        void vscode.window.showWarningMessage("Nanyx: open a .nyx file to run it.");
+        return;
+    }
+    if (document.isUntitled || document.uri.scheme !== "file") {
+        void vscode.window.showWarningMessage("Nanyx: save the file to disk before running it.");
+        return;
+    }
+    if (document.isDirty && !(await document.save())) {
+        void vscode.window.showErrorMessage(`Nanyx: could not save ${document.fileName}, so it was not run.`);
+        return;
+    }
+    if (!compiler) {
+        // Asking to run is asking for a compiler, so offer the download again even if it was declined earlier.
+        declinedDownload = false;
+        await startOrRestart(context);
+        if (!compiler) {
+            return;
+        }
+    }
+    await (0, run_1.runFile)(compiler, document.uri);
 }
 /**
  * Development mode: runs the language server from a copy of `build`, so `dotnet build` can overwrite
@@ -206,6 +238,7 @@ async function download(context, settings, version) {
 }
 async function restartClient(context, executable) {
     await stopClient();
+    compiler = executable;
     // Each switch is passed only when it is on, so the defaults still work with compilers that predate it.
     const config = vscode.workspace.getConfiguration("nanyx");
     const args = ["lsp"];
