@@ -4,9 +4,9 @@ open Parser.Program
 open NyxCompiler.InferState
 
 /// The well-known contexts: the prelude's contexts the compiler knows by name (see "Equality and well-known contexts"
-/// in the docs' work in progress). Each has operators that are read through it, and an instance of the compiler's
-/// own for the types whose structure gives one: `Eq`, for `==` and `!=`, and `Ord`, for `<`, `<=`, `>` and `>=`. The
-/// set is closed. What is particular to each context's operators is in `EqualityOperators` and `OrderingOperators`;
+/// in the docs' work in progress). Each has an instance of the compiler's own for the types whose structure gives one,
+/// and most have operators that are read through it: `Eq`, for `==` and `!=`, `Ord`, for `<`, `<=`, `>` and `>=`,
+/// and `Hash`, which has none. The set is closed. What is particular to each context's operators is in `EqualityOperators` and `OrderingOperators`;
 /// what they share is here: how a call that requires one finds it, and how an operator on a type with a variable in
 /// it is checked once the type is known.
 ///
@@ -29,6 +29,10 @@ module internal WellKnownContexts =
           /// The prelude function each operator calls on two lists whose elements have an instance other than the
           /// compiler's own, which it is passed: `__listEquals` for `==` (and `!=`, which is `not` of it).
           ListHelpers: Map<string, Identifier>
+          /// The member of another well-known context this one's must agree with, if any: a type that attaches that
+          /// member but not this one has no instance, since the compiler's own would disagree with it. `hash` must
+          /// agree with `==`.
+          AgreesWith: Identifier option
           /// What the context does with two values, as messages say it: `compares`, `Comparing` and `compared`.
           Verb: string
           Gerund: string
@@ -92,6 +96,7 @@ module internal WellKnownContexts =
                 | Maps.MapType _ -> Some ("a map", "maps")
                 | _ -> None)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
+          AgreesWith = None
           Verb = "compares"
           Gerund = "Comparing"
           Participle = "compared" }
@@ -115,13 +120,33 @@ module internal WellKnownContexts =
                 | _ -> None)
           ListHelpers =
             Map.ofList [ "<", "__listLess"; "<=", "__listLessOrEqual"; ">", "__listGreater"; ">=", "__listGreaterOrEqual" ]
+          AgreesWith = None
           Verb = "orders"
           Gerund = "Ordering"
           Participle = "ordered" }
 
+    /// `Hash`: every type that has the compiler's own `Eq` has the compiler's own `Hash`, which hashes by structure, so
+    /// that values equal by their structure have the same hash. It has no operators. A type that attaches its own `==`
+    /// must attach `hash` too.
+    let hashing =
+        { Context = "Hash"
+          Member = "hash"
+          Operators = []
+          BuiltInFunction = "__hash"
+          Lacks =
+            lacking "hash" (function
+                | TyFunc _ -> Some ("a function", "functions")
+                | Maps.MapType _ -> Some ("a map", "maps")
+                | _ -> None)
+          ListHelpers = Map.empty
+          AgreesWith = Some equality.Member
+          Verb = "hashes"
+          Gerund = "Hashing"
+          Participle = "hashed" }
+
     /// The well-known context named `ctxName`, if it is one.
     let tryFind (ctxName: Identifier) =
-        [ equality; ordering ] |> List.tryFind (fun wellKnown -> wellKnown.Context = ctxName)
+        [ equality; ordering; hashing ] |> List.tryFind (fun wellKnown -> wellKnown.Context = ctxName)
 
     /// The members of the compiler's own instance of `wellKnown`, as `InstanceSynthesized` has them.
     let builtInMembers (wellKnown: WellKnownContext) = [ wellKnown.Member, wellKnown.BuiltInFunction ]
@@ -135,6 +160,37 @@ module internal WellKnownContexts =
 
     let error (span: SourceSpan) (message: string) = [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
 
+    /// For a context whose member must agree with another's (see `AgreesWith`), why the compiler's own cannot be used
+    /// for `ty` because of a type in it (`attaches` says whether a type attaches a member), if it cannot: a type that
+    /// attaches that other member but not this one, as a `$Email` that attaches `==` and no `hash` has no `Hash`, and
+    /// nor has a list of them. A type that attaches both is hashed by its own `hash`, but only as the whole: the
+    /// compiler's own hash of a type that holds one hashes it by its structure, so it has none until a structure is
+    /// hashed through its parts' instances (#641).
+    let disagreeing (wellKnown: WellKnownContext) (attaches: Ty -> Identifier -> bool) (ty: Ty) : string option =
+        match wellKnown.AgreesWith with
+        | None -> None
+        | Some other ->
+            let mustAgree (part: Ty) =
+                $"'{display part}' defines its own {other}, so its {wellKnown.Member} must agree with it: attach '{display part}.{wellKnown.Member}'"
+            let rec find (outermost: bool) (ty: Ty) =
+                if attaches ty wellKnown.Member then
+                    if outermost then None
+                    else Some $"its part '{display ty}' has its own {wellKnown.Member}, which the compiler's own {wellKnown.Member} of the whole does not read yet"
+                elif attaches ty other then Some (mustAgree ty)
+                else
+                    let inPart = find false
+                    match ty with
+                    | TyAlias(_, _, underlying)
+                    | TyNominal(_, underlying, _) -> find outermost underlying
+                    | TyRecord fields
+                    | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> inPart)
+                    | TyTag(_, payload) -> payload |> Option.bind inPart
+                    | TyApply(_, args) -> args |> List.tryPick inPart
+                    | TyUnion items -> items |> List.tryPick (find outermost)
+                    | TyFunc _
+                    | TyVar _
+                    | TyPrimitive _ -> None
+            find true ty
     /// The error for using `op` on values of the type `ty`, which have no instance of `wellKnown` for `reason`.
     let cannotUse (wellKnown: WellKnownContext) (op: string) (ty: Ty) (reason: string) =
         $"'{display ty}' cannot be {wellKnown.Participle} with {op}: {reason}"

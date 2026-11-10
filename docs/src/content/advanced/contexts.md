@@ -188,6 +188,28 @@ As with `==`, only a nominal or protected type can attach `compare`. The built-i
 
 A function that orders values of one of its type variables requires `Ord` of it, `def largest: [Ord(a)] list(a) -> #some(a) | #emptyList`, and one that does not write its type has it inferred: `def larger = { x, y -> if x > y then x else y }` is `[Ord(a)] a, a -> a`. `Ord` does not require `Eq`; a type that attaches both should keep them consistent.
 
+## Hash(a)
+
+`Hash(a)` is the standard library's context for hashing: an `int` for each value, the same for any two values `==` finds equal, so that a map or a set can find a key by its hash. It has no operator; a function that needs it requires it and calls `hash`.
+
+```nanyx
+context Hash(a) = (
+  hash: a -> int
+)
+```
+
+The compiler has a `Hash` for every type it has an `Eq` for, which hashes by structure: a value's hash is made from its parts' hashes. Functions have no hash. A nominal type that attaches its own `==` must attach a `hash` that agrees with it, since the compiler's own would not; without one, asking for `Hash` of it is a type error that says so:
+
+```nanyx
+type $Email = string
+
+def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
+
+def $Email.hash: $Email -> int = { e -> String.hash(lower(e)) }
+```
+
+As with `==`, only a nominal or protected type can attach `hash`. The built-in types have theirs attached as functions, `Int.hash` and `String.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `$Email`s, has no `Hash` yet ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
+
 ## Default(a)
 
 Use `Default(a)` when a function needs a fallback value for a type.

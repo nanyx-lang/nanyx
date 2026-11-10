@@ -59,6 +59,9 @@ module Intrinsics =
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
     /// total order, with NaN after every other float.
     let compare = prefix + "compare"
+    /// The hash of a value of a type the compiler hashes (see `WellKnownContexts.hashing`), by its structure: values
+    /// that `==` compares equal by their structure have the same hash.
+    let hash = prefix + "hash"
     /// A map holding a list's entries, each a key and its value. The list is what the map holds, as it is: the prelude
     /// keeps each key in it once.
     let mapOfEntries = prefix + "map_of_entries"
@@ -92,7 +95,8 @@ module Intrinsics =
           mapOfEntries, overEntries (TyFunc(entries, map))
           mapEntries, overEntries (TyFunc(map, entries))
           listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None }
-          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy); Symbol = None } ]
+          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy); Symbol = None }
+          hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy); Symbol = None } ]
 
     let names : Set<string> = all |> List.map fst |> Set.ofList
 

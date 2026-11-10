@@ -21,6 +21,8 @@ module Helpers =
     /// Not a helper: the ordering intrinsic, and `<` on a string, a tuple or a list, which call the ordering function
     /// of their operands' type (see `CoreIrOrdering`).
     let valueCompare = NyxCompiler.Intrinsics.compare
+    /// Not a helper: the hash intrinsic, which calls the hash function of its operand's type (see `CoreIrHashing`).
+    let valueHash = NyxCompiler.Intrinsics.hash
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
     /// `%` on floats, which WebAssembly has no instruction for.

@@ -656,6 +656,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     for helper in CoreIrOrdering.helpersUsed orderingTypes do
         usedHelpers.Add helper |> ignore
 
+    // A hash function for each type the hash intrinsic hashes, and for each of its parts.
+    let hashingTypes = CoreIrHashing.collect (definitionFunctions @ Option.toList startFunction)
+    let renderedHashes = CoreIrHashing.render (fun name -> tagIdMap |> Map.tryFind name) hashingTypes |> String.concat "\n\n"
+    for helper in CoreIrHashing.helpersUsed hashingTypes do
+        usedHelpers.Add helper |> ignore
+
     let report =
         { Functions = [ yield! definitionFunctions |> List.map _.Name; yield! startFunction |> Option.map _.Name |> Option.toList ]
           Specialisations =
@@ -807,6 +813,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               if not (String.IsNullOrWhiteSpace renderedDrops) then renderedDrops
               if not (String.IsNullOrWhiteSpace renderedEqualities) then renderedEqualities
               if not (String.IsNullOrWhiteSpace renderedOrderings) then renderedOrderings
+              if not (String.IsNullOrWhiteSpace renderedHashes) then renderedHashes
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
         let body = String.concat "\n\n" parts

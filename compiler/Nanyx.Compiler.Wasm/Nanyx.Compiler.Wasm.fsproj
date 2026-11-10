@@ -18,6 +18,7 @@
     <Compile Include="CoreIrDrop.fs" />
     <Compile Include="CoreIrEquality.fs" />
     <Compile Include="CoreIrOrdering.fs" />
+    <Compile Include="CoreIrHashing.fs" />
     <Compile Include="CoreIrCounting.fs" />
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrEmit.fs" />

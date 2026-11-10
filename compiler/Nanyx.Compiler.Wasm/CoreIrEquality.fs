@@ -28,7 +28,7 @@ let private needsFunction (ty: IrType) =
     | IrFunction _
     | IrError -> false
 
-/// The types of the operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
+/// The types of the (first) operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
 /// (`parts` gives a type's own), each once, in the order they are first needed, where `needsFunction` holds: the types
 /// a module needs a function of its own of, each written by its operands' structure.
 let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -> IrType list) (functions: Function list) : IrType list =
@@ -42,7 +42,7 @@ let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -
 
     let rec expr (e: Expr) =
         match e.Kind with
-        | CallRuntime(name, [ first; _ ], _) when name = helper -> add (atomType first)
+        | CallRuntime(name, first :: _, _) when name = helper -> add (atomType first)
         | Let(_, value, body) ->
             expr value
             expr body
