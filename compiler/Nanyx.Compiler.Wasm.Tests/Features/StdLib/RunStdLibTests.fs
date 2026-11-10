@@ -29,8 +29,8 @@ let ``Run - text length, lowercase, trim, repeat and substring`` () =
         "println(\"[\" ++ String.trim(\"   \") ++ \"]\")\n" +
         "println(String.repeat(\"ab\", 3))\n" +
         "println(\"[\" ++ String.repeat(\"ab\", 0) ++ \"]\")\n" +
-        "println(String.substring(\"nanyx\", 1, 3))\n" +
-        "println(String.substring(\"nanyx\", 3, 10))\n"
+        "println(String.substring(\"nanyx\", start = 1, length = 3))\n" +
+        "println(String.substring(\"nanyx\", start = 3, length = 10))\n"
     runSource source |> assertRan "dbg: 0\ndbg: 5\nhello, nanyx!\n[padded]\n[]\nababab\n[]\nany\nyx\n"
 
 [<Fact>]
@@ -88,15 +88,15 @@ let ``Run - text replace, removePrefix, removeSuffix, padStart and padEnd`` () =
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "println(String.replace(\"hello world\", \"o\", \"0\"))\n" +
-        "println(String.replace(\"a-b-c\", \"-\", \" - \"))\n" +
-        "println(String.replace(\"abc\", \"\", \"x\"))\n" +
+        "println(String.replace(\"hello world\", pattern = \"o\", replacement = \"0\"))\n" +
+        "println(String.replace(\"a-b-c\", pattern = \"-\", replacement = \" - \"))\n" +
+        "println(String.replace(\"abc\", pattern = \"\", replacement = \"x\"))\n" +
         "println(String.removePrefix(\"nanyx\", \"nan\"))\n" +
         "println(String.removePrefix(\"nanyx\", \"nyx\"))\n" +
         "println(String.removeSuffix(\"nanyx\", \"nyx\"))\n" +
-        "println(String.padStart(\"7\", 3, \"0\"))\n" +
-        "println(String.padEnd(\"ab\", 5, \"xy\"))\n" +
-        "println(String.padStart(\"long\", 2, \"0\"))\n"
+        "println(String.padStart(\"7\", width = 3, fill = \"0\"))\n" +
+        "println(String.padEnd(\"ab\", width = 5, fill = \"xy\"))\n" +
+        "println(String.padStart(\"long\", width = 2, fill = \"0\"))\n"
     runSource source |> assertRan "hell0 w0rld\na - b - c\nabc\nyx\nnanyx\nna\n007\nabxyx\nlong\n"
 
 [<Fact>]
@@ -133,14 +133,27 @@ let ``Run - text split, join and concat`` () =
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "def parts = String.split(\"a,b,,c\", \",\")\n" +
+        "def parts = String.split(\"a,b,,c\", on = \",\")\n" +
         "println(String.join(parts, \" | \"))\n" +
-        "println(String.join(String.split(\"no separators\", \"-\"), \"+\"))\n" +
-        "println(String.join(String.split(\"a--b\", \"--\"), \"/\"))\n" +
+        "println(String.join(String.split(\"no separators\", on = \"-\"), \"+\"))\n" +
+        "println(String.join(String.split(\"a--b\", on = \"--\"), \"/\"))\n" +
         "println(\"[\" ++ String.join([], \", \") ++ \"]\")\n" +
         "println(String.concat([\"Hello\", \", \", \"World\"]))\n" +
-        "println(String.join(String.split(\"x\", \"\"), \"?\"))\n"
+        "println(String.join(String.split(\"x\", on = \"\"), \"?\"))\n"
     runSource source |> assertRan "a | b |  | c\nno separators\na/b\n[]\nHello, World\nx\n"
+
+[<Fact>]
+let ``Run - text split, substring, padStart, padEnd and replace take their named arguments when piped`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/text\n" +
+        "\n" +
+        "println(String.join(\"a,b\" \\split(on = \",\"), \"|\"))\n" +
+        "println(\"nanyx\" \\substring(start = 1, length = 3))\n" +
+        "println(\"7\" \\padStart(width = 3, fill = \"0\"))\n" +
+        "println((\"ab\" \\padEnd(width = 5, fill = \"xy\")) ++ \"]\")\n" +
+        "println(\"hello world\" \\replace(pattern = \"o\", replacement = \"0\"))\n"
+    runSource source |> assertRan "a|b\nany\n007\nabxyx]\nhell0 w0rld\n"
 
 [<Fact>]
 let ``Run - a string's and a list's built-in length`` () =
@@ -267,12 +280,22 @@ let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
         "def a = math.abs(-42)\n" +
         "def b = math.min(3, 7)\n" +
         "def c = math.max(3, 7)\n" +
-        "def d = math.clamp(120, 0, 100)\n" +
-        "def e = math.clamp(-5, 0, 100)\n" +
+        "def d = math.clamp(120, min = 0, max = 100)\n" +
+        "def e = math.clamp(-5, min = 0, max = 100)\n" +
         "def f = math.pow(2, 8)\n" +
         "def g = math.pow(5, 0)\n" +
         "println(\"{a} {b} {c} {d} {e} {f} {g}\")\n"
     runSource source |> assertRan "42 3 7 100 0 256 1\n"
+
+[<Fact>]
+let ``Run - nanyx/math clamp takes its named arguments when piped`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "def x = 50\n" +
+        "println(\"{x \\math.clamp(min = 0, max = 10)} {x \\math.clamp(min = 60, max = 70)} {x \\math.clamp(min = 0, max = 99)}\")\n"
+    runSource source |> assertRan "10 60 50\n"
 
 [<Fact>]
 let ``Run - nanyx/math sqrt, floor, ceil and round`` () =

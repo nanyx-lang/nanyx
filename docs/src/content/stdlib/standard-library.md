@@ -17,6 +17,24 @@ This page gives a high-level overview of core standard library abstractions.
 - [sequence](./sequence) — lazy/iterable sequence helpers
 - [iter](./iter) — generic `Iter(a)`-based helpers
 
+# Named parameters
+
+A [named parameter](../tour/functions#named-parameters) must be passed by name. The standard library names a parameter only when a call can't show what it is without the name: usually when two or more parameters after the receiver have the same type, or when a bare literal would leave you guessing its role. It never names the receiver (the value you pipe in), a lambda argument, or a single extra argument that the function's name already explains.
+
+```nanyx
+-- Named: a bare literal or two arguments of the same type
+"a,b" \split(on = ",")
+"7" \padStart(width = 3, fill = "0")
+"hello world" \replace(pattern = "o", replacement = "0")
+x \math.clamp(min = 0, max = 10)
+
+-- Positional: one extra argument that the name explains
+["a", "b"] \String.join("-")
+"nanyx" \startsWith("nan")
+```
+
+The functions with named parameters are `String.split`, `String.substring`, `String.padStart`, `String.padEnd`, `String.replace` and `math.clamp`. Everything else takes its arguments by position.
+
 # Core abstractions
 
 - `seq(a)` for finite sequences

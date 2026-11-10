@@ -32,12 +32,12 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "def pad: string, int -> string = { text, width -> String.padStart(text, width, \" \") }\n" +
+        "def pad: string, int -> string = { text, width -> String.padStart(text, width = width, fill = \" \") }\n" +
         "\n" +
         "def money: int -> string = { pence ->\n" +
         "  def pounds = pence / 100\n" +
         "  def rest = pence % 100\n" +
-        "  \"£{pounds}.{String.padStart(\"{rest}\", 2, \"0\")}\"\n" +
+        "  \"£{pounds}.{String.padStart(\"{rest}\", width = 2, fill = \"0\")}\"\n" +
         "}\n" +
         "\n" +
         "def show: [Console] string, int -> () = { name, qty ->\n" +

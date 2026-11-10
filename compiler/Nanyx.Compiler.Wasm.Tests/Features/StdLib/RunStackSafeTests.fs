@@ -87,9 +87,9 @@ let ``Run - String.repeat works 100,000 times`` () =
 let ``Run - String.split and String.replace work on 20,000 pieces`` () =
     let body =
         "def s = String.repeat(\"a,\", 20000)\n" +
-        "def pieces = String.split(s, \",\")\n" +
+        "def pieces = String.split(s, on = \",\")\n" +
         "println(\"{List.length(pieces)} {String.join(pieces, \",\") == s}\")\n" +
-        "def replaced = String.replace(s, \",\", \";\")\n" +
+        "def replaced = String.replace(s, pattern = \",\", replacement = \";\")\n" +
         "println(\"{String.length(replaced)} {String.count(replaced, \";\")} {String.count(replaced, \",\")}\")\n"
     runSource (withList body) |> assertRan "20001 true\n40000 20000 0\n"
 

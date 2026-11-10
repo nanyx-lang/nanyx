@@ -101,16 +101,16 @@ Option.toResult(#none, "missing user")
 # mapOr
 
 ```nanyx
-Option.mapOr: ((#some(a) | r), default: b, (a -> b)) -> b
+Option.mapOr: ((#some(a) | r), b, (a -> b)) -> b
 ```
 
 Maps the contained value or returns a default.
 
 ```nanyx
-Option.mapOr(#some("abc"), default = 0) { .length }
+Option.mapOr(#some("abc"), 0) { .length }
 -- 3
 
-Option.mapOr(#none, default = 0) { .length }
+Option.mapOr(#none, 0) { .length }
 -- 0
 ```
 
@@ -153,13 +153,13 @@ The values of the `#some`s in a list, in order. The other tags are dropped.
 # mapOrElse
 
 ```nanyx
-Option.mapOrElse: ((#some(a) | r), defaultFactory: () -> b, (a -> b)) -> b
+Option.mapOrElse: ((#some(a) | r), () -> b, (a -> b)) -> b
 ```
 
 Maps the contained value or computes a fallback lazily.
 
 ```nanyx
-Option.mapOrElse(#none, defaultFactory = { expensiveFallback() }) { .length }
+Option.mapOrElse(#none, { expensiveFallback() }) { .length }
 ```
 
 For deeper background on option-like unions, see [Option-like types](../advanced/option-like-types).

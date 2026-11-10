@@ -204,15 +204,20 @@ module Compiler =
 
     /// Renames every reference to a name in `renames` throughout an expression. Used when a module is
     /// inlined into its importer, so that its definitions keep pointing at each other under their new names.
-    /// (Lambda parameters and local definitions that shadow a renamed name are not accounted for.)
-    let private renameReferencesInExpr (renames: Map<string, string>) (expr: Expression) : Expression =
-        let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name
+    /// A name that inference resolved to a parameter, a local definition or a pattern variable of the module
+    /// (`typed`) shadows the top-level definition, so it keeps its name.
+    let private renameReferencesInExpr (typed: TypedModule) (renames: Map<string, string>) (expr: Expression) : Expression =
+        let isShadowed (node: Expression) =
+            typed.References |> Map.tryFind node.Id |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
+            |> Option.exists (fun symbol -> symbol.Kind = Parameter || symbol.Kind = LocalValue || symbol.Kind = PatternVariable)
+        let rename (node: Expression) (name: string) =
+            if isShadowed node then name else renames |> Map.tryFind name |> Option.defaultValue name
         expr
-        |> mapExpressionKinds (fun _ kind ->
+        |> mapExpressionKinds (fun current kind ->
             match kind with
-            | IdentifierExpr name -> IdentifierExpr(rename name)
-            | FunctionCall(name, rangeOpt, args) -> FunctionCall(rename name, rangeOpt, args)
-            | Pipe(value, name, rangeOpt, args) -> Pipe(value, rename name, rangeOpt, args)
+            | IdentifierExpr name -> IdentifierExpr(rename current name)
+            | FunctionCall(name, rangeOpt, args) -> FunctionCall(rename current name, rangeOpt, args)
+            | Pipe(value, name, rangeOpt, args) -> Pipe(value, rename current name, rangeOpt, args)
             | other -> other)
 
     /// Every pipe in an expression that inference resolved to an attached definition (`targets`, by the pipe's
@@ -409,7 +414,7 @@ module Compiler =
             checkedModule.Own
             |> List.choose (function
                 | Kind (Def (ValueDef(_, name, typeOpt, expr))) as item ->
-                    Some { item with Kind = Def (ValueDef(false, rename name, typeOpt, renameReferencesInExpr renames expr)) }
+                    Some { item with Kind = Def (ValueDef(false, rename name, typeOpt, renameReferencesInExpr checkedModule.Typed renames expr)) }
                 | Kind (Def (TypeDef _)) as typeDef -> Some typeDef
                 | _ -> None)
         checkedModule.Inlined @ ownItems
