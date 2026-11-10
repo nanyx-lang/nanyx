@@ -13,9 +13,12 @@ module text
 -- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character.
 --
 -- Everything here is written over four compiler intrinsics: `__nanyx_string_length`,
--- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split`, `lines`
--- and `words` also build their results with `__nanyx_list_cons`. `++` (concatenation) and `==` on
--- strings are language operators.
+-- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split` and
+-- `words` also build their results with `__nanyx_list_cons`, last first, and reverse them with the
+-- prelude's `List.reverse`. `++` (concatenation) and `==` on strings are language operators.
+--
+-- Every function here is stack-safe: each one that walks a string calls itself only in tail position,
+-- so it works on a string of any length.
 
 -- The number of bytes in `s`.
 export def String.length: string -> int = { s ->
@@ -196,9 +199,20 @@ export def String.isBlank: string -> bool = { s ->
   skipWhitespace(s, 0) == String.length(s)
 }
 
--- `s` repeated `times` times (the empty string when `times` is zero or negative).
+-- `acc` followed by `s` repeated `times` times. `s` doubles at each step, so this takes as many steps
+-- as `times` has bits; since every copy is the same, the order they are added to `acc` in doesn't matter.
+def repeatOnto: string, int, string -> string = { s, times, acc ->
+  if times <= 0
+    then acc
+    else if times % 2 == 1
+      then repeatOnto(s ++ s, times / 2, acc ++ s)
+      else repeatOnto(s ++ s, times / 2, acc)
+}
+
+-- `s` repeated `times` times (the empty string when `times` is zero or negative). Stack-safe: it works
+-- for any `times`.
 export def String.repeat: string, int -> string = { s, times ->
-  if times <= 0 then "" else s ++ String.repeat(s, times - 1)
+  repeatOnto(s, times, "")
 }
 
 -- The bytes needed in front of or behind `s` to make it `width` bytes long, cut from repeats of `fill`.
@@ -220,20 +234,25 @@ export def String.padEnd: string, int, string -> string = { s, width, fill ->
   s ++ padding(s, width, fill)
 }
 
-def splitFrom: string, string, int -> list(string) = { s, separator, from ->
+-- The pieces of `s` from byte `from` on between occurrences of `separator`, last first, in front of
+-- `acc`.
+def splitFrom: string, string, int, list(string) -> list(string) = { s, separator, from, acc ->
   def index = indexFrom(s, separator, from)
 
   if index < 0
-    then [String.substring(s, from, String.length(s) - from)]
-    else __nanyx_list_cons(
-      String.substring(s, from, index - from)
-      splitFrom(s, separator, index + String.length(separator))
+    then __nanyx_list_cons(String.substring(s, from, String.length(s) - from), acc)
+    else splitFrom(
+      s
+      separator
+      index + String.length(separator)
+      __nanyx_list_cons(String.substring(s, from, index - from), acc)
     )
 }
 
--- The pieces of `s` between occurrences of `separator`. An empty separator yields `[s]`.
+-- The pieces of `s` between occurrences of `separator`. An empty separator yields `[s]`. Stack-safe:
+-- it works however many pieces there are.
 export def String.split: string, string -> list(string) = { s, separator ->
-  if String.length(separator) == 0 then [s] else splitFrom(s, separator, 0)
+  if String.length(separator) == 0 then [s] else List.reverse(splitFrom(s, separator, 0, []))
 }
 
 def joinRest: list(string), string, string -> string = { pieces, separator, acc ->
@@ -263,35 +282,28 @@ def withoutCarriageReturn: string -> string = { line ->
   String.removeSuffix(line, __nanyx_string_from_byte(13))
 }
 
-def withoutCarriageReturns: list(string) -> list(string) = { lines ->
-  match lines
-    | [] -> []
-    | [line, ...rest] -> __nanyx_list_cons(
-      withoutCarriageReturn(line)
-      withoutCarriageReturns(rest)
-    )
-}
-
 -- The lines of `s`, split on line feeds, with any carriage return before a line feed dropped. A final
--- line break doesn't start another line, so "a\nb\n" has two lines and "" has none.
+-- line break doesn't start another line, so "a\nb\n" has two lines and "" has none. Stack-safe: it
+-- works however many lines there are.
 export def String.lines: string -> list(string) = { s ->
   def lineFeed = __nanyx_string_from_byte(10)
 
   if String.length(s) == 0
     then []
-    else withoutCarriageReturns(String.split(String.removeSuffix(s, lineFeed), lineFeed))
+    else List.map(String.split(String.removeSuffix(s, lineFeed), lineFeed), withoutCarriageReturn)
 }
 
-def wordsFrom: string, int -> list(string) = { s, from ->
+-- The runs of non-whitespace in `s` from byte `from` on, last first, in front of `acc`.
+def wordsFrom: string, int, list(string) -> list(string) = { s, from, acc ->
   def start = skipWhitespace(s, from)
   def stop = skipToWhitespace(s, start)
 
   if start >= String.length(s)
-    then []
-    else __nanyx_list_cons(String.substring(s, start, stop - start), wordsFrom(s, stop))
+    then acc
+    else wordsFrom(s, stop, __nanyx_list_cons(String.substring(s, start, stop - start), acc))
 }
 
--- The runs of non-whitespace in `s`, in order.
+-- The runs of non-whitespace in `s`, in order. Stack-safe: it works however many words there are.
 export def String.words: string -> list(string) = { s ->
-  wordsFrom(s, 0)
+  List.reverse(wordsFrom(s, 0, []))
 }

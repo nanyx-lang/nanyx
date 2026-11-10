@@ -30,7 +30,7 @@ type CompileResult =
       Syntax: Module option }
 
 /// Where a module's source came from, which decides how its imports are resolved and what is in scope.
-type private ModuleOrigin =
+type ModuleOrigin =
     /// A file on disk: imports by path are relative to its directory.
     | SourceFile of fullPath: string
     /// A module of the embedded standard library, checkedModule with the compiler intrinsics in scope.
@@ -1498,8 +1498,8 @@ module Compiler =
     /// Checks the module from `origin`, then runs the linters `options` names over it if it type-checked. A module
     /// with type or name errors is typed all the same, with what did check, beside its errors. Only
     /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
-    /// diagnostics are not repeated in every module that imports it, and the standard library never is.
-    let private compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+    /// diagnostics are not repeated in every module that imports it, and the standard library never is (but by tests).
+    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
         let checkedModules = CheckedModules()
         match typecheckModule checkedModules origin source Set.empty with
         | Result.Error (phase, diagnostics) ->

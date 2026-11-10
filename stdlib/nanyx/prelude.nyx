@@ -229,6 +229,10 @@ export def Option.values: list(#some(a) | r) -> list(a) = { options ->
 --
 -- Attached to `List`, so they are called as `List.map(xs, f)`, or as `xs \map(f)` when `xs` is
 -- known to be a list. Lists are immutable: every function gives back a new list.
+--
+-- Every function here that walks a list is stack-safe: it calls itself only in tail position, so it
+-- works on a list of any length. Those that build a list build it in reverse and reverse it at the
+-- end, until tail recursion modulo cons exists (see compiler/design/tail-calls.md).
 
 -- `step` applied to `initial` and the first element, then to that result and the second, and so on.
 export def List.fold: list(a), b, (b, a -> b) -> b = {
@@ -252,18 +256,31 @@ export def List.head: list(a) -> #some(a) | #emptyList = {
   | [x, ..._] -> #some(x)
 }
 
--- `f` applied to each element, in order.
-export def List.map: list(a), (a -> b) -> list(b) = {
-  | [], _ -> []
-  | [x, ...rest], f -> [f(x), ...List.map(rest, f)]
+-- `xs` reversed, in front of `tail`.
+def reverseOnto: list(a), list(a) -> list(a) = { xs, tail ->
+  List.fold(xs, tail, { rest, x -> [x, ...rest] })
 }
 
--- The elements `keep` holds for, in order.
-export def List.filter: list(a), (a -> bool) -> list(a) = {
-  | [], _ -> []
-  | [x, ...rest], keep -> if keep(x)
-    then [x, ...List.filter(rest, keep)]
-    else List.filter(rest, keep)
+-- `f` applied to each element of `xs`, last first, in front of `acc`.
+def mapReversed: list(a), (a -> b), list(b) -> list(b) = {
+  | [], _, acc -> acc
+  | [x, ...rest], f, acc -> mapReversed(rest, f, [f(x), ...acc])
+}
+
+-- `f` applied to each element, in order. Stack-safe: it works on a list of any length.
+export def List.map: list(a), (a -> b) -> list(b) = { xs, f ->
+  List.reverse(mapReversed(xs, f, []))
+}
+
+-- The elements of `xs` that `keep` holds for, last first, in front of `acc`.
+def filterReversed: list(a), (a -> bool), list(a) -> list(a) = {
+  | [], _, acc -> acc
+  | [x, ...rest], keep, acc -> filterReversed(rest, keep, if keep(x) then [x, ...acc] else acc)
+}
+
+-- The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
+export def List.filter: list(a), (a -> bool) -> list(a) = { xs, keep ->
+  List.reverse(filterReversed(xs, keep, []))
 }
 
 -- The first element `matches` holds for, or `#notFound`.
@@ -294,16 +311,21 @@ export def List.append: list(a), a -> list(a) = { xs, x ->
   xs ++ [x]
 }
 
--- The lists of `xss` joined end to end.
-export def List.flatten: list(list(a)) -> list(a) = {
-  | [] -> []
-  | [xs, ...rest] -> xs ++ List.flatten(rest)
+-- The lists of `xss` joined end to end. Stack-safe: it works however long the lists are.
+export def List.flatten: list(list(a)) -> list(a) = { xss ->
+  List.reverse(List.fold(xss, [], { acc, xs -> reverseOnto(xs, acc) }))
 }
 
--- The first `count` elements (all of them when there are fewer).
-export def List.take: list(a), int -> list(a) = {
-  | [], _ -> []
-  | [x, ...rest], count -> if count <= 0 then [] else [x, ...List.take(rest, count - 1)]
+-- The first `count` elements of `xs`, last first, in front of `acc`.
+def takeReversed: list(a), int, list(a) -> list(a) = {
+  | [], _, acc -> acc
+  | [x, ...rest], count, acc -> if count <= 0 then acc else takeReversed(rest, count - 1, [x, ...acc])
+}
+
+-- The first `count` elements (all of them when there are fewer). Stack-safe: it works on a list of
+-- any length.
+export def List.take: list(a), int -> list(a) = { xs, count ->
+  List.reverse(takeReversed(xs, count, []))
 }
 
 -- The elements after the first `count`.
@@ -312,10 +334,16 @@ export def List.skip: list(a), int -> list(a) = {
   | [x, ...rest], count -> if count <= 0 then [x, ...rest] else List.skip(rest, count - 1)
 }
 
--- Pairs of the elements at the same position, as long as the shorter list.
-export def List.zip: list(a), list(b) -> list((a, b)) = {
-  | [x, ...xs], [y, ...ys] -> [(x, y), ...List.zip(xs, ys)]
-  | _, _ -> []
+-- Pairs of the elements of `xs` and `ys` at the same position, last first, in front of `acc`.
+def zipReversed: list(a), list(b), list((a, b)) -> list((a, b)) = {
+  | [x, ...xs], [y, ...ys], acc -> zipReversed(xs, ys, [(x, y), ...acc])
+  | _, _, acc -> acc
+}
+
+-- Pairs of the elements at the same position, as long as the shorter list. Stack-safe: it works on
+-- lists of any length.
+export def List.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
+  List.reverse(zipReversed(xs, ys, []))
 }
 
 -- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
@@ -326,30 +354,46 @@ export def List.distinct: list(a) -> list(a) = { xs ->
   )
 }
 
--- `xs` and `ys`, each already in order of `key`, merged into one list in that order. Of two
--- elements with the same key, the one from `xs` comes first.
-def mergeBy: list(a), list(a), (a -> int) -> list(a) = {
-  | [], ys, _ -> ys
-  | xs, [], _ -> xs
-  | [x, ...xs], [y, ...ys], key -> if key(y) < key(x)
-    then [y, ...mergeBy([x, ...xs], ys, key)]
-    else [x, ...mergeBy(xs, [y, ...ys], key)]
+-- `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
+-- elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
+-- same key, the one from `xs` comes first.
+def mergeBy: list(a), list(a), (a -> int), list(a) -> list(a) = {
+  | [], ys, _, acc -> reverseOnto(acc, ys)
+  | xs, [], _, acc -> reverseOnto(acc, xs)
+  | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
+    then mergeBy([x, ...xs], ys, key, [y, ...acc])
+    else mergeBy(xs, [y, ...ys], key, [x, ...acc])
+}
+
+-- `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
+def mergePairs: list(list(a)), (a -> int), list(list(a)) -> list(list(a)) = {
+  | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
+  | rest, _, acc -> reverseOnto(acc, rest)
+}
+
+-- The elements of `runs`, each run already in order of `key`, merged into one list in that order.
+def mergeRuns: list(list(a)), (a -> int) -> list(a) = {
+  | [], _ -> []
+  | [run], _ -> run
+  | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
 }
 
 -- The elements in ascending order of `key`. The sort is stable: elements with the same key keep
--- their order. Keys are ints for now, since `<` only orders ints (#476).
+-- their order. Keys are ints for now, since `<` only orders ints (#476). Stack-safe: it works on a
+-- list of any length.
 export def List.sortBy: list(a), (a -> int) -> list(a) = { xs, key ->
-  def half = List.length(xs) / 2
+  mergeRuns(List.map(xs, { x -> [x] }), key)
+}
 
-  if half == 0
-    then xs
-    else mergeBy(List.sortBy(List.take(xs, half), key), List.sortBy(List.skip(xs, half), key), key)
+-- The elements `step` gives from `state` on, last first, in front of `acc`.
+def unfoldReversed: b, (b -> #some(a, b) | #done), list(a) -> list(a) = { state, step, acc ->
+  match step(state)
+    | #some(x, next) -> unfoldReversed(next, step, [x, ...acc])
+    | #done -> acc
 }
 
 -- The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
--- `next`, and `#done` ends the list.
+-- `next`, and `#done` ends the list. Stack-safe: it works however many elements `step` gives.
 export def List.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
-  match step(state)
-    | #some(x, next) -> [x, ...List.unfold(next, step)]
-    | #done -> []
+  List.reverse(unfoldReversed(state, step, []))
 }
