@@ -15,7 +15,7 @@ This is the same split as Rust's `Display` and `Debug`, or Python's `__str__` an
 
 # How it works today
 
-Each interpolation hole is checked through `ToString`, as the rest of this page describes. `dbg` still prints only what the backend can print from a value's type: integers, floats, strings, booleans and tags whose payload is one of those.
+Each interpolation hole is checked through `ToString`, as the rest of this page describes. `dbg` still prints only what the backend can print from a value's type: integers, floats, strings, booleans and tags whose payload is one of those. A function prints as `<function>`.
 
 # Interpolation through a context
 

@@ -59,3 +59,12 @@ let ``Run - dbg of a float or a tag in a program with no other strings`` () =
 [<Fact>]
 let ``Run - dbg prints a string in a tag's payload as the string`` () =
     runSource "dbg(#some(\"hi\"))\n" |> assertRan "dbg: #some(\"hi\")\n"
+
+[<Fact>]
+let ``Run - dbg of a function says that it is one, and gives the function`` () =
+    let source =
+        "def increment = { n -> n + 1 }\n" +
+        "dbg(increment)\n" +
+        "def again = dbg({ n -> n * 2 })\n" +
+        "dbg(again(4))\n"
+    runSource source |> assertRan "dbg: <function>\ndbg: <function>\ndbg: 8\n"

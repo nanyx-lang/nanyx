@@ -51,6 +51,21 @@ export def Bool.parse: string -> #some(bool) | #invalidBool = { s ->
   if s == "true" then #some(true) else if s == "false" then #some(false) else #invalidBool
 }
 
+-- Equality --------------------------------------------------------------------------------------
+
+-- How two values of type `a` are compared. `x == y` is read through it, and `x != y` is
+-- `not (x == y)`. The compiler has its own for every type that holds no function, which compares
+-- by structure: records field by field, lists element by element, tags by name and then payload.
+-- Functions have no equality. A function that compares values of one of its type variables
+-- requires it: `def same: [Eq(a)] a, a -> bool`.
+export context Eq(a) = (`==`: (a, a) -> bool)
+
+-- The `==` of the compiler's own `Eq`: what a function that requires `Eq(a)` is passed when it is
+-- called with a type that has no `==` of its own.
+export def __equals: a, a -> bool = { x, y ->
+  x == y
+}
+
 -- Text ------------------------------------------------------------------------------------------
 
 -- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
@@ -365,7 +380,7 @@ export def List.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
 
 -- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
 -- by their structure, so this works for lists of anything but functions.
-export def List.distinct: list(a) -> list(a) = { xs ->
+export def List.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
   List.reverse(
     List.fold(xs, [], { seen, x -> if List.any(seen, { y -> y == x }) then seen else [x, ...seen] })
   )
