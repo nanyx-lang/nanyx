@@ -272,13 +272,10 @@ block, which is what that page already proposes.
 
 # Numeric operators
 
-`+`, `-`, `*`, `/`, `%` and `**` stay as they are for now: typed directly, on numbers only, with `++` on strings and
-lists. The one exception is generic code: where an operator's name is bound, as `` `+` `` is in a function that
-requires `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
-(`OperatorCalls.fs`), so `{ x, y -> x + y }` can be `[Sum(a)] a, a -> a`. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
-operator or one `Num`, how literals like `0` are typed, and how units and dimensions fit. They are answered in
+Making the arithmetic operators well-known contexts raises separate questions: one context per operator or one
+`Num`, how literals like `0` are typed, and how units and dimensions fit. They are answered in
 [Numeric contexts](./numeric-contexts), which keeps the principle this design sets: a built-in operator is sugar for
-a well-known context's member.
+a well-known context's member. `+`, `-` and prefix `-` now read through the prelude's `Add(a)`.
 
 # Diagnostics
 

@@ -264,6 +264,24 @@ For now the prelude's `List.sortBy` takes `(a -> int)`: the key must be an `int`
 
 ---
 
+## sum
+
+```nanyx
+List.sum: [Add(a)] list(a) -> a
+```
+
+Adds the elements together with `+`. The sum of an empty list is `zero`. It works on any type with an [`Add`](../advanced/contexts#adda): ints, floats, and a type that attaches `zero`, `+`, `-` and `negate`.
+
+```nanyx
+[1, 2, 3] \List.sum
+-- 6
+
+[1.5, 2.5] \List.sum
+-- 4.0
+```
+
+---
+
 ## take
 
 ```nanyx

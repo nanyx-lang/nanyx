@@ -133,6 +133,10 @@ type InferState =
             /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
             /// `` $Vector.`+` `` when that is attached.
             OperatorCalls: Map<NodeId, Identifier>;
+            /// The literals that read as a context's member, by the literal's node, each with what it is written as:
+            /// `0` in `x + 0`, where `x` is of a type variable `a` of a function that requires `Add(a)`, is `zero`
+            /// (see `ArithmeticOperators`).
+            LiteralMembers: Map<NodeId, Expression>;
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
@@ -212,6 +216,7 @@ let emptyState =
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
             OperatorCalls = Map.empty;
+            LiteralMembers = Map.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;

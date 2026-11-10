@@ -66,6 +66,59 @@ export def __equals: a, a -> bool = { x, y ->
   x == y
 }
 
+-- Arithmetic ------------------------------------------------------------------------------------
+
+-- The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
+-- so is `0` beside a value of type `a` in a function whose type requires it:
+-- `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
+-- `def $Money.zero = ...`, `` def $Money.`+` = ... ``, and so on.
+export context Add(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+)
+
+-- The compiler's own `Add(int)` and `Add(float)`: the members attached to `Int` and `Float`, which
+-- are what a function that requires `Add` is passed. `+` on an `int` or a `float` is the built-in
+-- operator, not a call.
+
+-- The `int` that adds nothing.
+export def Int.zero: int = 0
+
+-- `x` plus `y`.
+export def Int.`+`: int, int -> int = { x, y ->
+  x + y
+}
+
+-- `x` minus `y`.
+export def Int.`-`: int, int -> int = { x, y ->
+  x - y
+}
+
+-- `n` with its sign changed.
+export def Int.negate: int -> int = { n ->
+  -n
+}
+
+-- The `float` that adds nothing.
+export def Float.zero: float = 0.0
+
+-- `x` plus `y`.
+export def Float.`+`: float, float -> float = { x, y ->
+  x + y
+}
+
+-- `x` minus `y`.
+export def Float.`-`: float, float -> float = { x, y ->
+  x - y
+}
+
+-- `x` with its sign changed: `Float.negate(0.0)` is negative zero.
+export def Float.negate: float -> float = { x ->
+  -x
+}
+
 -- Text ------------------------------------------------------------------------------------------
 
 -- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
@@ -287,6 +340,11 @@ export def List.reverse: list(a) -> list(a) = { xs ->
 -- The number of elements.
 export def List.length: list(a) -> int = { xs ->
   List.fold(xs, 0, { count, _ -> count + 1 })
+}
+
+-- The elements added together: `[1, 2, 3] \List.sum` is 6, and the sum of no elements is `zero`.
+export def List.sum: [Add(a)] list(a) -> a = { xs ->
+  List.fold(xs, zero, { total, x -> total + x })
 }
 
 -- The first element, or `#emptyList`.

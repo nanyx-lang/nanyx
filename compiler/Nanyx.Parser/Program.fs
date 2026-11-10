@@ -700,12 +700,25 @@ let private keywordOperatorEnd = keywordEnd >>. ws
 // `not` binds tighter than every infix operator, so `not a == b` is `(not a) == b`, as `!` does elsewhere. That
 // makes it part of the operand it applies to, so it is parsed here rather than by the operator precedence parser,
 // and spans from the keyword.
-let private operand : Parser<Operand, ParseState> =
-    let notKeyword = attempt (withSpan (pstring "not" .>> keywordEnd)) .>> ws
-    pipe2 (many notKeyword) (withSpan primaryExpr) (fun nots term ->
-        List.foldBack (fun (_, notSpan) ((inner: Expression), innerText) ->
-            let span = SourceSpan.between notSpan innerText
-            Expression.at span (FunctionCall("not", None, [ inner ])), span) nots term)
+//
+// Prefix `-` negates in the same way: `-x * y` is `(-x) * y`. It is written against its operand, so `- x` is not a
+// negation, and `-5` stays one literal. In a shorthand lambda's body the operator is the infix one, so `{ -x }` is
+// still `{ it -> it - x }`.
+let private notKeyword = attempt (withSpan (pstring "not" .>> keywordEnd)) .>> ws |>> fun (_, span) -> NotSyntax.builtIn, span
+
+let private minus =
+    userStateSatisfies (fun state -> state.ImplicitArgumentNext.IsNone)
+    >>. attempt (withSpan (pchar '-' .>> notFollowedBy (satisfy (fun c -> c = '>' || c = '-' || Char.IsDigit c || Char.IsWhiteSpace c))))
+    |>> fun (_, span) -> NegateSyntax.builtIn, span
+
+/// A primary expression after any number of `prefix`es, each a call to the built-in it names.
+let private prefixed (prefix: Parser<Identifier * SourceSpan, ParseState>) : Parser<Operand, ParseState> =
+    pipe2 (many prefix) (withSpan primaryExpr) (fun prefixes term ->
+        List.foldBack (fun (builtIn, prefixSpan) ((inner: Expression), innerText) ->
+            let span = SourceSpan.between prefixSpan innerText
+            Expression.at span (FunctionCall(builtIn, None, [ inner ])), span) prefixes term)
+
+let private operand : Parser<Operand, ParseState> = prefixed (notKeyword <|> minus)
 
 opp.TermParser <- operand
 
@@ -768,7 +781,7 @@ let pipeTarget =
 
 // Inline operator precedence parser (no newlines in operator whitespace)
 let oppInline = new OperatorPrecedenceParser<Operand, unit, ParseState>()
-oppInline.TermParser <- withSpan primaryExpr
+oppInline.TermParser <- prefixed minus
 
 oppInline.AddOperator(InfixOperator("*", wsInline, 7, Associativity.Left, binary "*"))
 oppInline.AddOperator(InfixOperator("/", wsInline, 7, Associativity.Left, binary "/"))

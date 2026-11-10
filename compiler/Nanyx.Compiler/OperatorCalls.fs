@@ -32,11 +32,12 @@ module internal OperatorCalls =
             let resultTy, next = freshVar next
             Unifier.unify ((funcTy, TyFunc(input, resultTy), Equal, SourceSpan.none) :: next.Constraints) |> Result.isOk
 
-    /// The definition the binary operator `expr` calls with its operands (`input`, as a call's arguments are typed),
-    /// if it calls one, and the name it calls it by. That is the definition attached under the operator's name to the
-    /// type of its left operand (`leftTy`), when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is
-    /// the binding of the operator's name in `env`, unless the left operand is already known to be of a built-in
-    /// type. `!=` calls what `==` does. `and` and `or` are keywords, so their names are never bound.
+    /// The definition the operator `expr` calls with its operands (`input`, as a call's arguments are typed), if it
+    /// calls one, and the name it calls it by. On a built-in type, that of its left operand (`leftTy`) as far as it is
+    /// known, the operator is the built-in one. Otherwise it is the definition attached under the operator's name to
+    /// that type, when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is the binding of the
+    /// operator's name in `env`. `!=` calls what `==` does, and `-x` what `negate` is. `and` and `or` are keywords, so
+    /// their names are never bound.
     let definition
         (attached: Identifier -> Identifier option)
         (env: TypeEnv)
@@ -46,20 +47,42 @@ module internal OperatorCalls =
         (input: Ty)
         : (Identifier * TypeScheme) option =
         let bound (name: Identifier) = TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme)
-        match expr.Kind with
-        | BinaryOp(op, _, _) ->
-            let name = if EqualityOperators.isOperator op then EqualityOperators.equals else op
-            match attached name, Unifier.unalias (resolveSoFar state leftTy) with
-            | Some attachedName, _ -> bound attachedName
-            | None, TyPrimitive _ -> None
-            | None, operandTy when EqualityOperators.isOperator op -> bound name |> Option.filter (snd >> compares state operandTy input)
-            | None, _ -> bound name
-        | _ -> None
+        let name =
+            match expr.Kind with
+            | BinaryOp(op, _, _) when EqualityOperators.isOperator op -> Some EqualityOperators.equals
+            | BinaryOp(op, _, _) -> Some op
+            | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> Some ArithmeticOperators.negate
+            | _ -> None
+        match name, Unifier.unalias (resolveSoFar state leftTy) with
+        | None, _
+        | Some _, TyPrimitive _ -> None
+        | Some name, operandTy ->
+            match attached name with
+            | Some attachedName -> bound attachedName
+            | None when name = EqualityOperators.equals -> bound name |> Option.filter (snd >> compares state operandTy input)
+            | None -> bound name
 
-    /// `expr`, a binary operator that calls `scheme` by the name `callee`, typed as that call: the definition takes its
+    /// `expr`, an operator that calls `scheme` by the name `callee`, typed as that call: the definition takes its
     /// operands (`input`) and the operator's value is what it returns.
     let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (input: Ty) : Ty * InferState =
         let funcTy, next = instantiate (recordReference expr scheme state) scheme
         let resultTy, next = freshVar next
         let next = addConstraint funcTy (TyFunc(input, resultTy)) next
         resultTy, { next with CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy; OperatorCalls = next.OperatorCalls |> Map.add expr.Id callee }
+
+    /// `expr`, `-x` on an operand of the type `operandTy`: a call to the `negate` of that type or of the function's
+    /// `Add` (see `definition`), or else the negation of a built-in number. `numberTy` is the number that negation is
+    /// of, `float` or `int`, as far as the operand's type is known.
+    let inferNegation
+        (attached: Identifier -> Identifier option)
+        (env: TypeEnv)
+        (state: InferState)
+        (expr: Expression)
+        (operandTy: Ty)
+        (numberTy: Ty)
+        : Result<Ty * InferState, Diagnostic list> =
+        match definition attached env state expr operandTy operandTy with
+        | Some (callee, scheme) -> Ok (infer state expr callee scheme operandTy)
+        | None ->
+            ArithmeticOperators.check state expr NegateSyntax.builtIn operandTy operandTy numberTy
+            |> Result.map (fun negated -> operandTy, negated)
