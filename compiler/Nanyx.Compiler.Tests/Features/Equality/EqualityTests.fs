@@ -27,7 +27,13 @@ let private inferredContexts (typed: TypedModule) =
 
 /// Every instance the module's own calls found.
 let private instancesOf (typed: TypedModule) =
-    typed.ContextInstances |> Map.toList |> List.sortBy fst |> List.map snd |> List.concat |> List.choose id
+    typed.ContextInstances
+    |> Map.toList
+    |> List.filter (fun (call, _) -> typed.ExprTypes.ContainsKey call)
+    |> List.sortBy fst
+    |> List.map snd
+    |> List.concat
+    |> List.choose id
 
 [<Fact>]
 let ``A def that does not write its type requires Eq of a type variable it compares`` () =

@@ -1542,6 +1542,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | _ -> Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" ]
     | Lambda(args, body) ->
         inferLambdaWithExpected env state expr args body None None
+    | BinaryOp(op, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
     | BinaryOp(_, left, right) ->
         match inferExpr env state left with
         | Error err -> Error err

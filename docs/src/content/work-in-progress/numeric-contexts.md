@@ -4,7 +4,7 @@ description: "Add, Num, the arithmetic operators and number literals in generic 
 order: 9
 ---
 
-> **Status: agreed, steps 1 to 3 of the [order of work](#order-of-work) done, and step 4 but for `math`.** It answers the questions in
+> **Status: agreed, steps 1 to 5 of the [order of work](#order-of-work) done, but for `math.abs`, `min`, `max` and `clamp`, which wait on `Ord`.** It answers the questions in
 > [#606](https://github.com/nanyx-lang/nanyx/issues/606) and picks up where
 > [Equality and well-known contexts](./equality-and-well-known-contexts#numeric-operators) stops. The decisions are
 > listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work).
@@ -47,9 +47,19 @@ prelude declares `Add(a)` and `Num(a)`.
   to a constant.
 - **A `Num` serves as an `Add`.** An instance in scope of a context that has every member of the one a call needs,
   at the same types, is found for it (`ContextShapes.wider`), so a `[Num(a)]` function can call `List.sum`.
+- **`**` parses**, binding tighter than `*` and grouping to the right, and `x ** n` is read as a call to the
+  prelude's reserved `__pow` (`ArithmeticOperators.inferPower`, `InferState.ReadAs`), which no module's own `pow`
+  can shadow. The prelude's `pow` and `math.pow` are `{ b, n -> b ** n }`. `__pow` squares repeatedly, so it takes
+  as many steps as the exponent has bits ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
+- **`Float.pow(x, y)`** takes any `y`: a whole one is `x ** y`, and any other `e ** (y * ln(x))`, with `exp` and `ln`
+  written in the prelude from their series, since WebAssembly has neither.
+- **An instance built for a call in the prelude is only compiled when that call is**: the definitions it is made of
+  are reached from the definition the call is in, not from every module (`Library.reachedItems`).
 
 Not done yet:
 
+- **A negative exponent on an integer type** is `1 / x ** -n`, which truncates, rather than stopping the program as
+  the design says: `__pow` is generic, and cannot tell an integer type from a float without a member to ask.
 - **`math` is still `int` only.** `abs` needs `Ord(a)` to compare with `zero`, and `min`, `max` and `clamp` need only
   `Ord(a)`, so they wait on [#476](https://github.com/nanyx-lang/nanyx/issues/476) (the rest of
   [#186](https://github.com/nanyx-lang/nanyx/issues/186)).
@@ -322,7 +332,7 @@ The language server's code action for the second and fourth adds the requirement
 4. **Done**, but for `math`, which waits on `Ord`. `Num`; `*`, `/` and `%` read through it; `fromInt` literals.
    Makes `math.abs` generic (#186); `min`, `max` and `clamp` wait on `Ord`
    ([#476](https://github.com/nanyx-lang/nanyx/issues/476)) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
-5. `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
+5. **Done.** `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 6. Instances for the sized numbers as they land ([#343](https://github.com/nanyx-lang/nanyx/issues/343)), and the
    dimension rules for `*` and `/` with units.
 

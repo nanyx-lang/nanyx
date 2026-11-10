@@ -21,7 +21,13 @@ let private missingContext (source: string) =
 
 /// Every instance the module's own calls and holes found, the prelude's left out.
 let private instancesOf (typed: TypedModule) =
-    typed.ContextInstances |> Map.toList |> List.sortBy fst |> List.map snd |> List.concat |> List.choose id
+    typed.ContextInstances
+    |> Map.toList
+    |> List.filter (fun (call, _) -> typed.ExprTypes.ContainsKey call)
+    |> List.sortBy fst
+    |> List.map snd
+    |> List.concat
+    |> List.choose id
 
 [<Fact>]
 let ``A hole of a built-in type uses the compiler's own ToString`` () =

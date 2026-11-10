@@ -25,6 +25,13 @@ module internal ArithmeticOperators =
     /// `Add`'s member that prefix `-` reads.
     let negate = "negate"
 
+    /// The operator for powers. It is not a member: `x ** n` is a call to the prelude's `powerFunction`.
+    let power = "**"
+
+    /// The prelude function that `x ** n` calls, `[Num(a)] (a, int) -> a`. Its name is reserved, so that no `pow` a
+    /// module defines, `math.pow` among them, changes what `**` means.
+    let powerFunction = "__pow"
+
     /// The arithmetic operators.
     let operators = [ "+"; "-"; "*"; "/"; "%" ]
 
@@ -126,7 +133,7 @@ module internal ArithmeticOperators =
 
     /// The operands `left` and `right` of `expr`, an arithmetic operator, with a literal among them that is not the
     /// literal it would be elsewhere (see `literalReading`) inferred again as the member it is written as, by `infer`,
-    /// and recorded in `LiteralMembers` to be written as it. A literal that cannot be of the type it is used at fails to
+    /// and recorded in `ReadAs` to be written as it. A literal that cannot be of the type it is used at fails to
     /// check, and is taken to be of that type, so that the operator is not also reported.
     let readLiterals
         (infer: InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
@@ -140,10 +147,21 @@ module internal ArithmeticOperators =
             match expr.Kind, literalReading env state operand.Expr other.Type with
             | BinaryOp(op, _, _), Some (AsMember asMember) when isOperator op ->
                 infer state asMember
-                |> Result.map (fun (typed, next) -> typed, { next with LiteralMembers = next.LiteralMembers |> Map.add asMember.Id asMember })
+                |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add asMember.Id asMember })
             | BinaryOp(op, _, _), Some (Wrong(code, message)) when isOperator op ->
                 let error = Diagnostics.at code operand.Expr.Span message
                 Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)
         reread left right state
         |> Result.bind (fun (left, next) -> reread right left next |> Result.map (fun (right, next) -> left, right, next))
+    /// `expr`, `left ** right`, inferred by `infer` as the call `__pow(left, right)` that it is, and recorded in
+    /// `ReadAs` to be written as it.
+    let inferPower
+        (infer: InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
+        (state: InferState)
+        (expr: Expression)
+        (left: Expression)
+        (right: Expression)
+        : Result<TypedExpr * InferState, Diagnostic list> =
+        let call = { expr with Kind = FunctionCall(powerFunction, None, [ left; right ]) }
+        infer state call |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add call.Id call })

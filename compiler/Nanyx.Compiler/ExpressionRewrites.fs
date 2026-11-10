@@ -96,13 +96,19 @@ module internal ExpressionRewrites =
                 | FunctionCall(_, _, [ operand ]), Some callee -> FunctionCall(callee, None, [ operand ])
                 | other, _ -> other)
 
-    /// Every literal in an expression that inference read as a context's member (`members`, by the literal's node)
-    /// written as it: `0` in `x + 0` becomes `zero` (see `ArithmeticOperators`).
-    let readLiteralMembers (members: Map<NodeId, Expression>) (expr: Expression) : Expression =
-        if members.IsEmpty then
+    /// Every expression that inference read as another (`readAs`, by the node of the one written) written as that
+    /// one: `0` in `x + 0` becomes `zero`, and `x ** n` becomes `__pow(x, n)` (see `ArithmeticOperators`). A call an
+    /// operator is read as takes the operands as they are rewritten, since one may be read as another too.
+    let writeAsRead (readAs: Map<NodeId, Expression>) (expr: Expression) : Expression =
+        if readAs.IsEmpty then
             expr
         else
-            expr |> mapExpressionKinds (fun current kind -> members |> Map.tryFind current.Id |> Option.map _.Kind |> Option.defaultValue kind)
+            expr
+            |> mapExpressionKinds (fun current kind ->
+                match kind, readAs |> Map.tryFind current.Id with
+                | BinaryOp(_, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
+                | _, Some read -> read.Kind
+                | _, None -> kind)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
     /// prelude's `List.length`, which every module imports.
@@ -123,3 +129,17 @@ module internal ExpressionRewrites =
                 match kind, properties |> Map.tryFind current.Id with
                 | MemberAccess(target, _, rangeOpt), Some property -> FunctionCall(builtInPropertyFunction property, rangeOpt, [ target ])
                 | other, _ -> other)
+
+    /// The definitions that the instances synthesized for the calls in `expr` are made of (`instances`, by the call's
+    /// node): `Float.zero`, `` Float.`+` ``, ... for a call in it that is passed a `Num(float)`.
+    let synthesizedMembersIn (instances: Map<NodeId, ContextInstance option list>) (expr: Expression) : string list =
+        let found = ResizeArray<string>()
+        expr
+        |> mapExpressionKinds (fun current kind ->
+            for instance in instances |> Map.tryFind current.Id |> Option.defaultValue [] do
+                match instance with
+                | Some (InstanceSynthesized members) -> found.AddRange(List.map snd members)
+                | _ -> ()
+            kind)
+        |> ignore
+        List.ofSeq found

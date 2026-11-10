@@ -113,6 +113,22 @@ let ``Run - generic code multiplies and divides through Num, with integer litera
     runSource source |> assertRan "9 2.25 4 4.5 1 1.5\n2 2.5 3.0 42\n"
 
 [<Fact>]
+let ``Run - ** is the prelude's pow, and Float.pow takes any exponent`` () =
+    // #611: `**` did not parse. It groups to the right, so `2 ** 3 ** 2` is 2 ** 9.
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "def cube: [Num(a)] a -> a = { x -> x ** 3 }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(\"{2 ** 10} {1.5 ** 2} {2 ** 3 ** 2} {(2 ** 3) ** 2} {2 * 3 ** 2} {2 ** -1} {2.0 ** -2}\")\n" +
+        "  println(\"{Float.pow(2.0, 0.5)} {Float.pow(2.0, 10.0)} {Float.pow(10.0, -1.5)} {Float.pow(0.0, 0.5)}\")\n" +
+        "  println(\"{math.pow(2, 8)} {math.pow(1.5, 3)} {pow(3, 4)} {cube(2)} {cube(0.5)}\")\n" +
+        "}\n"
+    runSource source |> assertRan "1024 2.25 512 64 18 0 0.25\n1.414214 1024.0 0.031623 0.0\n256 3.375 81 8 0.125\n"
+
+[<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
     // #39: the docs make boolean operations keywords; `not` had no spelling at all.
     let source =

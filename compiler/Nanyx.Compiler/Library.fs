@@ -247,10 +247,10 @@ module Compiler =
     /// The inlined items `own` uses: the value definitions it reaches, directly or through other inlined
     /// definitions, and every type definition, in their original order. A definition named like a member of a
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the
-    /// runtime's `Console`, say) without anything naming it. So is each of `synthesized`, the attached definitions
-    /// an instance the type checker built is made of (`Int.toString` for a `ToString(int)`), which the backend
-    /// passes where the instance is required, again without anything naming it.
-    let private reachedItems (synthesized: string list) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
+    /// runtime's `Console`, say) without anything naming it. So is each attached definition an instance the type
+    /// checker built for a call in `own`, or in a definition kept, is made of (`instances`, by the call's node), as
+    /// `Int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed.
+    let private reachedItems (instances: Map<NodeId, ContextInstance option list>) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
         let bodies =
             inlined
             |> List.choose (function
@@ -266,8 +266,7 @@ module Compiler =
         let rootNames =
             own
             |> List.collect (function
-                | Kind (Def (ValueDef(_, _, _, value))) -> referencedNames value
-                | Kind (Expr value) -> referencedNames value
+                | Kind (Def (ValueDef(_, _, _, value))) | Kind (Expr value) -> referencedNames value @ synthesizedMembersIn instances value
                 | _ -> [])
         let isReferenced (referenced: Set<string>) (name: string) =
             referenced.Contains name
@@ -279,9 +278,9 @@ module Compiler =
             if newlyReached.IsEmpty then
                 reached
             else
-                let referenced = newlyReached |> List.collect (snd >> referencedNames) |> List.fold (fun acc name -> Set.add name acc) referenced
+                let referenced = newlyReached |> List.collect (fun (_, value) -> referencedNames value @ synthesizedMembersIn instances value) |> List.fold (fun acc name -> Set.add name acc) referenced
                 reach referenced (newlyReached |> List.fold (fun acc (name, _) -> Set.add name acc) reached)
-        let reached = reach (Set.ofList (rootNames @ synthesized)) Set.empty
+        let reached = reach (Set.ofList rootNames) Set.empty
         inlined
         |> List.filter (function
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name
@@ -1010,13 +1009,13 @@ module Compiler =
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
     /// attached function written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
-    /// that call (`operatorCalls`), each literal that reads as a context's member as that member (`literalMembers`),
+    /// that call (`operatorCalls`), each expression inference read as another as that one (`readAs`),
     /// each read of a built-in property as a call (`properties`), each builder block that uses no keyword as its block
     /// (`workflowBlocks`), and without import statements. `defer` compiles the module's errors to traps first, for a
     /// debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (literalMembers: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (readAs: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> readLiteralMembers literalMembers |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> writeAsRead readAs |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1293,22 +1292,18 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.LiteralMembers state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
-                let synthesizedMembers =
-                    Seq.append (Map.values state.ContextInstances) (Map.values inlinedInstances)
-                    |> Seq.concat
-                    |> Seq.collect (function Some (InstanceSynthesized members) -> members |> List.map snd | _ -> [])
-                    |> List.ofSeq
+                let instances = inlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     inlined @ preludeInlined
                     |> List.filter (function
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> distinctDefinitions
-                    |> reachedItems synthesizedMembers own
+                    |> reachedItems instances own
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.
