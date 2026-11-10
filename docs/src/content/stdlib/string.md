@@ -248,7 +248,7 @@ String.padEnd: (string, width: int, fill: string) -> string
 Repeat `fill` in front of (or after) the string until it is `width` long. A longer string is unchanged.
 
 ```nanyx
-String.padStart("7", 3, "0")
+String.padStart("7", width = 3, fill = "0")
 -- "007"
 ```
 
@@ -286,10 +286,10 @@ String.concat(["Hello", ", ", "World"])
 # join
 
 ```nanyx
-String.join: (list(string), sep: string) -> string
+String.join: (list(string), string) -> string
 ```
 
 ```nanyx
-String.join(["a", "b", "c"], sep = "-")
+String.join(["a", "b", "c"], "-")
 -- "a-b-c"
 ```

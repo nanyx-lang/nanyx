@@ -13,12 +13,12 @@ import nanyx/math as math
 def money: int -> string = { pence ->
   def pounds = pence / 100
   def rest = pence % 100
-  "£{pounds}." ++ String.padStart("{rest}", 2, "0")
+  "£{pounds}." ++ String.padStart("{rest}", width = 2, fill = "0")
 }
 
 -- `text` in a column `width` bytes wide, on the left or the right.
-def left: (string, int) -> string = { text, width -> String.padEnd(text, width, " ") }
-def right: (string, int) -> string = { text, width -> String.padStart(text, width, " ") }
+def left: (string, int) -> string = { text, width -> String.padEnd(text, width = width, fill = " ") }
+def right: (string, int) -> string = { text, width -> String.padStart(text, width = width, fill = " ") }
 
 def rule: int -> string = { width -> String.repeat("-", width) }
 

@@ -25,9 +25,9 @@ export def max: int, int -> int = { a, b ->
   if a >= b then a else b
 }
 
--- `n` moved into the range from `low` to `high`: `low` if it is below, `high` if it is above.
-export def clamp: int, int, int -> int = { n, low, high ->
-  if n < low then low else if n > high then high else n
+-- `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.
+export def clamp: (int, min: int, max: int) -> int = { n, min, max ->
+  if n < min then min else if n > max then max else n
 }
 
 -- `acc` multiplied by `base` `exponent` times.

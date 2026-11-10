@@ -28,7 +28,7 @@ export def parse: string -> #some(SemanticVersion) | #error(#invalidVersionNumbe
   def (core, buildMetadata) = splitOnce(value, "+")
   def (numbers, tag) = splitOnce(core, "-")
 
-  match numbers \split(".")
+  match numbers \split(on = ".")
     | [major, minor, patch] -> proc {
         return SemanticVersion(
           major = try parseNumber(major)
