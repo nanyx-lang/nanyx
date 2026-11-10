@@ -225,6 +225,30 @@ let ``A string's and a list's length are built-in properties, read with a dot`` 
     // A record's own field of that name is still the field.
     Assert.Equal(TyPrimitive "string", types.["f"])
 
+[<Fact>]
+let ``A lambda argument's parameter typed by the call reads a string's length`` () =
+    // The lambda is one of several arguments, so its parameter's type comes from the callee's signature and from
+    // the arguments before it, not from an annotation of its own (#479).
+    let result =
+        Compiler.compile (
+            "def ap: string, (string -> int) -> int = { x, f -> f(x) }\n" +
+            "def a = ap(\"bbb\", { s -> s.length })\n" +
+            "def lengths = List.map([\"bbb\"], { s -> s.length })\n" +
+            "def sorted = List.sortBy([\"bbb\", \"a\", \"cc\"], { .length })\n" +
+            "def counts = List.map([[1], [2, 3]], { xs -> xs.length })\n")
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let types = result.Typed.Value.Types
+    Assert.Equal(TyPrimitive "int", types.["a"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "int" ]), types.["lengths"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), types.["sorted"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "int" ]), types.["counts"])
+
+[<Fact>]
+let ``A lambda argument still reads a record's field when the arguments before it make it a record`` () =
+    let result = Compiler.compile "def names = List.map([(length = \"x\")], { r -> r.length })\n"
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    Assert.Equal(TyApply("list", [ TyPrimitive "string" ]), result.Typed.Value.Types.["names"])
+
 /// The one diagnostic compiling `source` gives, as its code and message.
 let private onlyDiagnostic (source: string) =
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)

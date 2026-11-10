@@ -173,6 +173,23 @@ let ``Run - a string's and a list's built-in length`` () =
     runSource source |> assertRan "5 3 0 0\nfield\n"
 
 [<Fact>]
+let ``Run - a string's length on a lambda parameter typed by the call`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/text\n" +
+        "\n" +
+        "def ap: string, (string -> int) -> int = { x, f -> f(x) }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def n = ap(\"bbb\", { s -> s.length })\n" +
+        "  println(\"{n}\")\n" +
+        "  def lengths = List.map([\"bbb\", \"a\"], { s -> s.length })\n" +
+        "  println(\"{lengths}\")\n" +
+        "  println(String.join(List.sortBy([\"bbb\", \"a\", \"cc\"], { .length }), \",\"))\n" +
+        "}\n"
+    runSource source |> assertRan "3\n[3, 1]\na,cc,bbb\n"
+
+[<Fact>]
 let ``Run - Int.fromString reads decimal integers and rejects anything else`` () =
     let source =
         "import nanyx/console\n" +
