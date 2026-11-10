@@ -50,7 +50,7 @@ def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
 def c = a + b   -- resolves to Vector.`+` because `a` is a Vector
 ```
 
-Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Sum(a)]` or `[Num(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading a context with `use` only overrides the instance that such generic code sees for that particular type; it never changes what `1 + 2` means.
+Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Sum(a)]` or `[Num(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). Loading a context with `use` only overrides the instance that such generic code sees for that particular type; it never changes what `1 + 2` means. Equality is the exception: `a == b` is always a lookup of `Eq` at the operands' type, so after `use ignoringCase`, an `Eq(string)`, a plain `a == b` on strings in that block calls its `==` too, and `a == b` on a nominal type with an attached `==` calls that.
 
 # Pipe and composition
 

@@ -1015,7 +1015,7 @@ module Compiler =
     /// errors to traps first, for a debug build.
     let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callOperators pipeTargets operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)

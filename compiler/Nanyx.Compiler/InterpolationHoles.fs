@@ -11,8 +11,7 @@ open NyxCompiler.InferState
 ///
 /// The built-in types have the compiler's own instance (`InstanceBuiltIn`), which the backend writes itself: int,
 /// float, bool, string, and tags without a payload. The prelude's `Int.toString` and the others are written with a
-/// hole, which is how they avoid calling themselves. A function that requires `ToString` of a tag is passed the
-/// prelude's `__toString` (`builtInFunction`), which writes it the same way.
+/// hole, which is how they avoid calling themselves.
 module InterpolationHoles =
     /// The prelude function each hole calls.
     let holeFunction = "__interpolate"
@@ -35,42 +34,8 @@ module InterpolationHoles =
         | TyUnion items -> items |> List.forall isPlainTag
         | _ -> false
 
-    /// The prelude's context.
-    let context = "ToString"
-
-    /// The prelude function that writes a value with the compiler's own `ToString`, through a hole on its type
-    /// variable: the member of the compiler's own instance, where one is passed to a function that requires
-    /// `ToString` of a tag. The backend writes the hole at each type the function is specialised at.
-    let builtInFunction = "__toString"
-
-    /// The members of the compiler's own instance, as `InstanceSynthesized` has them.
-    let builtInMembers = [ "toString", builtInFunction ]
-
-    /// Whether `ty` is a tag, or a union of tags. Tags have no name a `toString` can be attached to.
-    let private isTags (ty: Ty) =
-        match Unifier.unalias ty with
-        | TyTag _
-        | TyUnion _ -> true
-        | _ -> false
-
-    /// Whether a call that requires `ctxName` at `argTys`, with no instance in scope, is passed the compiler's own
-    /// `ToString`, whose member is `builtInFunction`: a tag without a payload, or a union of them, when `env` has the
-    /// prelude. Every other type the compiler has its own for has an attached `toString` to synthesize one from.
-    let passesBuiltIn (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list) =
-        match argTys with
-        | [ ty ] -> ctxName = context && isTags ty && hasBuiltInInstance ty && (TypeEnv.tryFind builtInFunction env).IsSome
-        | _ -> false
-
     /// `ty` as a diagnostic writes it, with the variables the compiler made up named `a`, `b`, ...
     let private display (ty: Ty) = Unifier.tyToDisplayString Ascii ty
-
-    /// The error for a call to `calleeName`, which requires `ctxName` at `argTys`, when that is `ToString` of tags that
-    /// are known and have a payload, which have no `ToString`; `None` for any other.
-    let tagsWithPayloadAtCall (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) : string option =
-        match argTys with
-        | [ ty ] when ctxName = context && isTags ty && not (hasBuiltInInstance ty) && (TypeEnv.freeTyVars ty).IsEmpty ->
-            Some $"'{calleeName}' requires the context 'ToString({display ty})', but only a tag without a payload has a toString: match on it, or turn it into a string first"
-        | _ -> None
 
     /// Who requires the context, as a diagnostic about a call to `calleeName` with the context's arguments `argTys`
     /// names it: the function, or the hole.
@@ -165,8 +130,7 @@ module InterpolationHoles =
             | None ->
                 match synthesize env with
                 | Some synthesized -> synthesized |> Result.map (fun (members, next) -> InstanceSynthesized members, next)
-                // The prelude's `builtInFunction` writes a value of its type variable with the compiler's own.
-                | None when not (Set.intersect openVars declaredVars).IsEmpty && annotatedDef <> Some builtInFunction -> Error pending.Errors
+                | None when not (Set.intersect openVars declaredVars).IsEmpty -> Error pending.Errors
                 | None when argTys |> List.forall (Unifier.unalias >> function TyVar _ -> true | _ -> false) -> Ok (InstanceBuiltIn, state)
                 | None -> Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (noInstance (List.head argTys)) ]
         match found with

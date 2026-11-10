@@ -957,16 +957,11 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                     // others, which are written with one.
                     | None, None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
                         Ok (found @ [ Some InstanceBuiltIn ], current)
-                    // A function is passed the compiler's own `ToString` of a tag as a function that writes it.
-                    | None, None when InterpolationHoles.passesBuiltIn env ctxName argTys ->
-                        Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
                     | None, None when canSynthesize argTys ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
                     | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
-                    | None, None when (InterpolationHoles.tagsWithPayloadAtCall name ctxName argTys).IsSome ->
-                        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.tagsWithPayloadAtCall name ctxName argTys).Value ]
                     | None, None ->
                         match ensureContextAvailable true env current name [ ctx ] calleeSpan, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
@@ -1012,8 +1007,6 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
             | Some (EqualityOperators.NoInstance reason) ->
                 Some (Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (EqualityOperators.noInstanceAtCall pending.Callee (List.head argTys) reason) ])
             | Some EqualityOperators.BuiltIn -> Some (Ok (Some (InstanceSynthesized EqualityOperators.builtInMembers), current))
-            | _ when InterpolationHoles.passesBuiltIn env pending.Context argTys ->
-                Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
             | _ -> synthesize env |> Option.map (Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)))
     |> Result.map (fun (annotation, resolved) ->
         annotation, EqualityOperators.callMembers (fun ty -> inputTypeFromArgs [ ty; ty ]) comparisons resolved)
@@ -1538,9 +1531,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Ok (rightExpr, nextState) ->
                 let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
                 let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
-                match OperatorCalls.definition env nextState expr leftExpr.Type input with
-                | Some scheme ->
-                    let resultTy, called = OperatorCalls.infer nextState expr scheme input
+                // The `==` attached to a type, except in that definition itself, which compares by structure.
+                let attachedEquals (ty: Ty) =
+                    tryResolveAttachedFunction env ty EqualityOperators.equals
+                    |> Option.filter (fun name -> nextState.ContextScope <> DefScope(name, false) && nextState.ContextScope <> DefScope(name, true))
+                    |> Option.bind (fun name -> TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme))
+                match OperatorCalls.definition env nextState expr leftExpr.Type input attachedEquals with
+                | Some (target, scheme) ->
+                    let resultTy, called = OperatorCalls.infer nextState expr target scheme input
                     Ok (mkTypedExpr expr resultTy None None None, called)
                 | None ->
                 match expr.Kind with

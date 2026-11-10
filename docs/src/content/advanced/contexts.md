@@ -160,7 +160,7 @@ def contains: [Eq(a)] (list(a), a) -> bool = { xs, target ->
 
 A function that does not write its type has the requirement inferred: `def same = { x, y -> x == y }` is `[Eq(a)] a, a -> bool`. Comparing a type built from a variable requires `Eq` of the variable, so `==` on two `list(a)` needs `Eq(a)`.
 
-A nominal type can attach its own `==`, which a function that requires `Eq` then uses for it:
+A nominal type can attach its own `==`, which `a == b` on it, and a function that requires `Eq`, then use for it:
 
 ```nanyx
 def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
@@ -225,8 +225,6 @@ A function that interpolates a value of one of its type variables requires `ToSt
 def label: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {value}" }
 def angled = { value -> "<{value}>" }   // [ToString(α)] α -> string
 ```
-
-Such a function can be called with any type that has a `ToString`, the compiler's own included: `angled(3)` is `"<3>"`, and `angled(#red)` is `"<#red>"`. A tag with a payload has none, so `angled(#some(1))` is an error.
 
 A `use` changes how its block writes a type, generic code called from the block included:
 

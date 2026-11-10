@@ -40,14 +40,18 @@ order: 8
   `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still
   names `Point`. The official linter's `noTagInCommon` rule warns about `#red == #some(1)`: closed types with no tag
   in common.
+- **A concrete `a == b` is a lookup too** (decision 2). Where `==` is bound to a definition that takes the operands,
+  as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other; else, on
+  a nominal type with a `==` attached, it calls that (`OperatorCalls.definition`, with the target recorded in
+  `PipeTargets`). Inside the attached `==` itself, `==` on its own type is the built-in comparison. Only the type of
+  the operands as written is looked up, not their parts: see the next item.
 
 Not done yet:
 
 - **Structural derivation that looks up each part.** The compiler's own instance compares a whole value by its
   structure, so a `list($Email)` does not compare its elements with `` $Email.`==` ``, and inside a function that
-  requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance.
-- **A concrete `a == b` is still the built-in comparison** for a type with an attached `==`, and for a built-in type
-  with an `Eq` loaded by `use` (decision 2 below).
+  requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance
+  ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
 - **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
   function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
 

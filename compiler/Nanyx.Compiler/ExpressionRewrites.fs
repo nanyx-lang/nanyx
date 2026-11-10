@@ -82,17 +82,18 @@ module internal ExpressionRewrites =
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
     /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``. `x != y` calls what `==` is
     /// bound to, and becomes `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are
-    /// recorded by.
-    let callOperators (calls: Set<NodeId>) (expr: Expression) : Expression =
+    /// recorded by. An operator that calls an attached definition (`targets`) is written with its name.
+    let callOperators (targets: Map<NodeId, Identifier>) (calls: Set<NodeId>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
         else
             expr
             |> mapExpressionKinds (fun current kind ->
+                let target name = targets |> Map.tryFind current.Id |> Option.defaultValue name
                 match kind with
                 | BinaryOp(op, left, right) when calls.Contains current.Id && op = EqualityOperators.notEquals ->
-                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(EqualityOperators.equals, None, [ left; right ]) } ])
-                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(op, None, [ left; right ])
+                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(target EqualityOperators.equals, None, [ left; right ]) } ])
+                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(target op, None, [ left; right ])
                 | other -> other)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the

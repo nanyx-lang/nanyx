@@ -72,24 +72,6 @@ let ``Run - a generic function that interpolates its parameter writes each type 
     runSource source |> assertRan "<1><s><(3, 4)>\nat: (5, 6)\n#1 #2\n"
 
 [<Fact>]
-let ``Run - a function that requires ToString writes a tag passed to it by its name`` () =
-    let source =
-        "import nanyx/console\n" +
-        "import nanyx/text\n" +
-        "\n" +
-        "def angled = { value -> \"<{value}>\" }\n" +
-        "def labelled: [ToString(a)] (string, a) -> string = { name, value -> \"{name}: {value}\" }\n" +
-        "def color: #red | #green = #green\n" +
-        "\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  println(angled(#red) ++ angled(color))\n" +
-        "  println(labelled(\"size\", #large))\n" +
-        "  println([1, 2] \\List.map({ n -> angled(if n == 1 then #one else #two) }) \\String.join(\" \"))\n" +
-        "}\n"
-    runSource source |> assertRan "<#red><#green>\nsize: #large\n<#one> <#two>\n"
-
-[<Fact>]
 let ``Run - a user's own ToString context and the prelude's agree`` () =
     // The program declares a `ToString` of its own, as code written before the prelude had one does.
     let source =

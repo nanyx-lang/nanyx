@@ -196,3 +196,23 @@ let ``Comparing with a tag joins the operands, leaving the other open to more ta
 let ``Comparing tags with payloads of different types is still an error`` () =
     let diagnostic = Assert.Single((Compiler.compile "def b = #some(1) == #some(\"a\")\n").Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+let ``A concrete comparison calls the == attached to its type, except in that definition`` () =
+    let typed =
+        compileClean (
+            "type $Point = (x: int, y: int)\n" +
+            "def $Point.`==`: $Point, $Point -> bool = { p, q -> p == q }\n" +
+            "def b = $Point(x = 1, y = 2) != $Point(x = 1, y = 3)\n")
+    let calls =
+        typed.Module
+        |> List.collect (function
+            | Kind (Def (ValueDef(_, name, _, value))) ->
+                let rec calledIn (expr: Expression) =
+                    match expr.Kind with
+                    | FunctionCall(callee, _, args) -> callee :: List.collect calledIn args
+                    | Lambda(_, body) -> calledIn body
+                    | BinaryOp(_, left, right) -> calledIn left @ calledIn right
+                    | _ -> []
+                calledIn value |> List.map (fun callee -> name, callee)
+            | _ -> [])
+        |> List.filter (fun (_, callee) -> callee = "$Point.==")
+    Assert.Equal<(string * string) list>([ "b", "$Point.==" ], calls)

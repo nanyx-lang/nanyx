@@ -127,7 +127,8 @@ type InferState =
             /// ambiguous; one to a definition of the module's own, or to a local, is not.
             AmbiguousImports: Map<string, SymbolId * string list>;
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
-            /// `x \trim` on a string calls `String.trim`.
+            /// `x \trim` on a string calls `String.trim`. An operator among `OperatorCalls` that calls an attached
+            /// definition has it here too: `a == b` on `$Email`s calls `` $Email.`==` ``.
             PipeTargets: Map<NodeId, Identifier>;
             /// The operators that call the definition their name is bound to, by the operator's node: `x + y` in a
             /// function that requires `[Sum(a)]` calls the context's `` `+` ``.
