@@ -1341,6 +1341,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                     if errors.IsEmpty then
                         let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                        let positionalForNamed =
+                            match Unifier.unalias (resolveSoFar current funcTy) with
+                            | TyFunc(input, _) -> NamedArguments.check current expr name input args typedArgs
+                            | _ -> None
+                        match positionalForNamed with
+                        | Some diagnostic -> Error [ diagnostic ]
+                        | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         // When the callee's type is already a function (an annotated or already-inferred
                         // def), its return type is the call's type directly, so a member access or match on
@@ -1393,9 +1400,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             | Error err -> Error err)
                     let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                     if errors.IsEmpty then
-                        let argTys =
-                            argResults
-                            |> List.choose (function Ok typedExpr -> Some typedExpr.Type | _ -> None)
+                        let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                        match NamedArguments.check current expr name info.Underlying args typedArgs with
+                        | Some diagnostic -> Error [ diagnostic ]
+                        | None ->
+                        let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         let inputTy = inputTypeFromArgs argTys
                         let constrained = addAssignableConstraint inputTy info.Underlying current
                         Ok (mkTypedExpr expr (namedType name info) None None None, constrained)

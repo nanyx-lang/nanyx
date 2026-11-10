@@ -155,6 +155,13 @@ def replace: (string, pattern: string, replacement: string) -> string
 replace("Hello world", pattern = "world", replacement = "Nanyx")
 ```
 
+Passing a named parameter by position is an error that says which names to write:
+
+```nanyx
+replace("Hello world", "world", "Nanyx")
+-- error NYX0218: 'replace' takes 'pattern' and 'replacement' by name, not by position: write 'pattern = ...' and 'replacement = ...'
+```
+
 This is one rule for every call and every record construction: a positional field is passed positionally, a named field is passed by name. See [Positional vs named inference](./type-inference-and-annotations#positional-vs-named-inference) for how this interacts with unannotated functions.
 
 ## Annotating lambda parameters
