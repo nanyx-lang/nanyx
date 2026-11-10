@@ -129,6 +129,9 @@ type ContextInstance =
     /// An instance the compiler builds from the definitions attached to the type: each member's name, and the
     /// definition it is (`+`, `Point.+`).
     | InstanceSynthesized of (string * string) list
+    /// The compiler's own `ToString` of a built-in type, at an interpolation hole (see `InterpolationHoles`): the
+    /// backend writes the value itself.
+    | InstanceBuiltIn
 
 /// `ExprTypes` holds the resolved type of every expression inference typed, and of every `_` written in a type that
 /// it read, by node; `CalleeTypes` the type of

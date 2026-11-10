@@ -52,10 +52,22 @@ export def Bool.parse: string -> #some(bool) | #invalidBool = { s ->
 }
 
 -- Text ------------------------------------------------------------------------------------------
---
+
+-- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
+-- through it, so a type can be interpolated when it has one: a type gets one by attaching a
+-- `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
+-- `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload.
+export context ToString(a) = (toString: a -> string)
+
+-- What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
+-- needs a `ToString` of its value's type, as a call to a function that requires one does.
+export def __interpolate: [ToString(a)] a -> string = { value ->
+  toString(value)
+}
+
 -- Each built-in type has an attached `toString`, so a value can be turned into text by a function
 -- that can be passed around, `scores \map(Int.toString)`, as well as by interpolation. Each one
--- writes the value as interpolation does.
+-- writes the value as interpolation does, with the compiler's own `ToString` for the type.
 
 -- `n` in decimal, with a leading `-` when it is negative.
 export def Int.toString: int -> string = { n ->

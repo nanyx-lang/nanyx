@@ -398,6 +398,24 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
                 items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
             | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
                 List.map2 matchAnnotation items items' |> List.concat
+            | TypeRecord written, TyRecord fields ->
+                written
+                |> List.collect (function
+                    | TypeField(fieldName, _, _, Some fieldType, _) ->
+                        fields |> Map.tryFind fieldName |> Option.map (matchAnnotation fieldType) |> Option.defaultValue []
+                    | _ -> [])
+            // A tag's payload, and each tag of a union by its name, as the union's tags need not be in the same order.
+            | TypeTag(tag, Some payload), TyTag(tag', Some payload') when tag = tag' -> matchAnnotation payload payload'
+            | TypeUnion written, TyUnion items ->
+                written
+                |> List.collect (fun item ->
+                    match item.Kind with
+                    | TypeTag(tag, Some _) ->
+                        items
+                        |> List.tryFind (function TyTag(tag', Some _) -> tag = tag' | _ -> false)
+                        |> Option.map (matchAnnotation item)
+                        |> Option.defaultValue []
+                    | _ -> [])
             | _ -> []
         let annotated =
             match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
@@ -486,6 +504,8 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
                                 functionContextRequirements functionContextTypes typeLayouts contextInstances functionWrappers
                                 ambientContextMembers scopeKeys name callId)
                     with Failure message -> Error message
+              BuiltInHoles =
+                contextInstances |> Map.filter (fun _ found -> found = [ Some InstanceBuiltIn ]) |> Map.keys |> Set.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
               NominalWrappers = nominalWrappers
               Lifted =

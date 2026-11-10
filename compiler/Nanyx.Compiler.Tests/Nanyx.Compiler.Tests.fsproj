@@ -27,6 +27,7 @@
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />
     <Compile Include="Features\StdLib\StackSafetyTests.fs" />
+    <Compile Include="Features\Strings\InterpolationTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />

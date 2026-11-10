@@ -36,6 +36,7 @@
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
+    <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />
     <Compile Include="Features\TailCalls\RunTailCallTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowTests.fs" />

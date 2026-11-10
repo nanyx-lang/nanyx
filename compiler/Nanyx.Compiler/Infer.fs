@@ -810,6 +810,7 @@ let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys
 /// must be the members' types. `calleeName` requires the context at `span`.
 let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<(string * string) list * InferState, Diagnostic list> =
     let ctxText = $"""{ctxName}({argTys |> List.map Unifier.tyToString |> String.concat ", "})"""
+    let requirer = InterpolationHoles.requirer calleeName argTys
     let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
     match argTys, contextMemberTypes state ctxName argTys with
     | [ forType ], Some members ->
@@ -827,15 +828,16 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
                     match Unifier.unify ((memberTy, definitionTy, Equal, span) :: next.Constraints) with
                     | Ok _ -> Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
                     | Error _ ->
-                        fail $"'{calleeName}' requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
+                        fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
+        | _ when InterpolationHoles.isHole calleeName -> fail (InterpolationHoles.noInstance forType)
         | missing ->
             let listed =
                 match missing with
                 | [ only ] -> only
                 | _ -> String.concat ", " (List.truncate (missing.Length - 1) missing) + " and " + List.last missing
             let notDefined = if missing.Length = 1 then "is not defined: define it" else "are not defined: define them"
-            fail $"'{calleeName}' requires the context '{ctxText}', which is not loaded here, and {listed} {notDefined}, or load an instance with `use`"
-    | _ -> fail $"'{calleeName}' requires the context '{ctxText}', which is not loaded here: load an instance with `use`"
+            fail $"{requirer} requires the context '{ctxText}', which is not loaded here, and {listed} {notDefined}, or load an instance with `use`"
+    | _ -> fail $"{requirer} requires the context '{ctxText}', which is not loaded here: load an instance with `use`"
 
 /// The type of each of `args`, the arguments of a parameterised context a function requires, at a call where the
 /// function has the type `calleeTy`. `signature` is the type the function declares, which `args` name its type
@@ -885,10 +887,16 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                     let argTys, current = contextArgTysAtCall current signature scheme.Type calleeTy args
                     match instanceInScope env current ctxName argTys with
                     | Some written -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    // A hole of a built-in type is written by the backend, not by the prelude's `Int.toString` and the
+                    // others, which are written with one.
+                    | None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
+                        Ok (found @ [ Some InstanceBuiltIn ], current)
                     // A type with a name definitions can be attached to: not a variable, or a record written out.
                     | None when argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) ->
                         synthesizeInstance env current name ctxName argTys calleeSpan
                         |> Result.map (fun (members, next) -> found @ [ Some (InstanceSynthesized members) ], next)
+                    | None when InterpolationHoles.isHole name ->
+                        InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
                     | None ->
                         match ensureContextAvailable true env current name [ ctx ] calleeSpan, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
@@ -907,12 +915,17 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
     | _ -> Ok state
 
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
-/// type it is for, as a call does.
+/// type it is for, as a call does. A hole finds its instance as `InterpolationHoles.resolvePending` says.
 let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) : Result<TypeExpr option * InferState, Diagnostic list> =
     ContextInference.resolvePending state name symbol scheme (fun pending argTys current ->
-        if argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) then
-            Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
-        else None)
+        let synthesize env =
+            if argTys |> List.forall (attachedTypeNames >> List.isEmpty >> not) then
+                Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
+            else None
+        if InterpolationHoles.isHole pending.Callee then
+            Some (InterpolationHoles.resolvePending (fun env -> instanceInScope env current) synthesize (fun def -> TypeEnv.tryFind def env) current pending argTys)
+        else
+            synthesize env |> Option.map (Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)))
 
 /// The type of the field `fieldName` of a value of type `ty`, as far as the constraints gathered so far tell. A
 /// value of no known type yet is taken to be a record with at least that field, and an open record without it
@@ -2022,9 +2035,18 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
 and inferUseBinding (env: TypeEnv) (state: InferState) (binding: UseBinding) : Result<TypedExpr * InferState, Diagnostic list> =
     match binding with
     | UseValue expr -> inferExpr env state expr
-    | UseContextInstance(ctxType, expr) -> 
-        // TODO: Validate that expr satisfies the context type
+    // The instance is the context's record at the types it is loaded for, so `use Show(int) = (show = { n -> ... })`
+    // types `n` as an int.
+    | UseContextInstance(ctxType, expr) ->
         inferExpr env state expr
+        |> Result.map (fun (typedExpr, next) ->
+            match ctxType.Kind with
+            | TypeApply(ctxName, args) when isParameterizedContext next ctxType ->
+                let argTys, next = args |> List.mapFold typeExprToTy next
+                match contextMemberTypes next ctxName argTys with
+                | Some members -> typedExpr, addConstraintAt expr.Span typedExpr.Type (TyRecord(Map.ofList members)) next
+                | None -> typedExpr, next
+            | _ -> typedExpr, next)
 
 /// Infers the value named by each `typeof` in `typeExpr`, so that reading the annotation finds their types.
 and private inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: TypeExpr) : Result<InferState, Diagnostic list> =
@@ -2534,6 +2556,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters
             | typeOfErrors -> errors <- errors @ typeOfErrors
             items <- items @ [ TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ]
+
+    // The holes left to the end of the module (see `InterpolationHoles.resolveLater`), now that every type is known.
+    match resolvePendingInstances env state InterpolationHoles.moduleEnd None (TypeEnv.mono (TyPrimitive "unit")) with
+    | Ok (_, resolved) -> state <- resolved
+    | Error err -> errors <- errors @ err
+    state <- { state with HoleScopes = Map.empty }
 
     do
         // The ambient contexts each unannotated function needs: those its body uses, and those the unannotated

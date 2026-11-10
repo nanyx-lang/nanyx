@@ -163,7 +163,7 @@ let ``Strings, lists and intrinsics go through the core IR`` () =
 [<Fact>]
 let ``Interpolated strings and dbg go through the core IR`` () =
     let source =
-        "def pick = { n -> if n > 0 then #some(\"yes\") else #none }\n" +
+        "def pick = { n -> if n > 0 then #yes else #no }\n" +
         "\n" +
         "def describe: int -> string = { n -> \"n is {n}, positive {n > 0}, pick {pick(n)}\" }\n" +
         "\n" +
@@ -358,6 +358,7 @@ let ``Every intermediate value in the core IR is named`` () =
           DefinitionTypes = typed.Types
           ContextParameters = Map.empty
           ContextArguments = fun _ _ _ -> Ok []
+          BuiltInHoles = Set.empty
           RecordConstructors = Set.empty
           NominalWrappers = Set.empty
           Lifted = Map.empty

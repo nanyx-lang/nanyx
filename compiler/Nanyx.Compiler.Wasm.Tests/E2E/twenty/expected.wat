@@ -585,37 +585,6 @@
     local.get $p
   )
 
-  (func $__nanyx_drop_fn_string_to_unit (param $p i32)
-    ;; (string -> unit)
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      local.get $p
-      i32.const 4
-      i32.sub
-      i32.load
-      call_indirect (type $ctx_fn_1)
-      drop
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_fn_string_to_unit (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
   (func $__nanyx_drop_rec_0_int (param $p i32)
     ;; (0: int)
     local.get $p

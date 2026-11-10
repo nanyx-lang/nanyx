@@ -157,6 +157,46 @@ def sum: [Sum(a)] list(a) -> a
 
 These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
 
+## ToString(a)
+
+`ToString(a)` says how a value of type `a` is written as text. Unlike the contexts above, you don't declare it: the prelude does, and the compiler knows it, because every [interpolation hole](../getting-started/basics#strings) goes through it. `"Total: {total}"` writes `total` with the `ToString` of its type.
+
+```nanyx
+context ToString(a) = (
+  toString: a -> string
+)
+```
+
+The compiler has its own `ToString` for `int`, `float`, `bool`, `string` and tags without a payload. Any other type gets one by attaching a `toString`, which is [synthesized](#context-synthesis) into the context:
+
+```nanyx
+type Point = (x: int, y: int)
+
+def Point.toString = { p -> "({p.x}, {p.y})" }
+
+def message = "Moved to {Point(x = 1, y = 2)}"   // "Moved to (1, 2)"
+```
+
+A function that interpolates a value of one of its type variables requires `ToString` of it, as it would by calling any function that does. A function that writes its type says so; one that does not has it inferred:
+
+```nanyx
+def label: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {value}" }
+def angled = { value -> "<{value}>" }   // [ToString(a)] a -> string
+```
+
+A `use` changes how its block writes a type, generic code called from the block included:
+
+```nanyx
+def receipt = {
+  use ToString(int) = ( toString = { pence -> "£{pence / 100}.{pence % 100}" } )
+  "Total: {250}"   // "Total: £2.50"
+}
+```
+
+The holes in the instance itself are checked before it is loaded, so they write their ints as usual.
+
+A value whose type has no `ToString`, such as a list, a record, a function or a tag with a payload, is an error at its hole. Turn it into a string first, or print it with [`dbg`](../stdlib/io#dbg).
+
 # Context synthesis
 
 When a function requires a context, you don't always have to load or create one manually. If the type in question has [attached definitions](./attached-definitions) that match the context's members, the compiler can **synthesize** the context automatically.

@@ -788,12 +788,13 @@ module Compiler =
                     reportUnreachable expr "return" builderName place
                     (desugarExpr value).Kind
                 | _ -> (workflowCall expr "return" [desugarExpr value]).Kind
+            // Each hole calls the prelude's hole function, which converts the value through `ToString`.
             | InterpolatedString parts ->
                 let mappedParts =
                     parts
                     |> List.map (function
                         | StringText text -> StringText text
-                        | StringExpr expr -> StringExpr (desugarExpr expr))
+                        | StringExpr hole -> StringExpr (Expression.from hole (FunctionCall(InterpolationHoles.holeFunction, None, [ desugarExpr hole ]))))
                 InterpolatedString mappedParts
             | UnitExpr
             | LiteralExpr _

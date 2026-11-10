@@ -52,7 +52,7 @@ Bool.toString: bool -> string
 String.toString: string -> string
 ```
 
-Each writes the value as string interpolation, `"{n}"`, does, and `String.toString` gives back the string itself. Because they are functions, they can be passed where interpolation cannot:
+Each writes the value as string interpolation, `"{n}"`, does, and `String.toString` gives back the string itself. Interpolation goes through the prelude's [`ToString(a)`](../advanced/contexts#tostringa) context, which a type of your own gets by attaching a `toString` of the same kind. Because they are functions, they can be passed where interpolation cannot:
 
 ```nanyx
 import nanyx/text
