@@ -259,9 +259,9 @@ block, which is what that page already proposes.
 lists. The one exception is generic code: where an operator's name is bound, as `` `+` `` is in a function that
 requires `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
 (`OperatorCalls.fs`), so `{ x, y -> x + y }` can be `[Sum(a)] a, a -> a`. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
-operator or one `Num`, how literals like `0` are typed, and how units and dimensions fit. That deserves its own
-document. The principle this design sets, that a built-in operator is sugar for a well-known context's member, is
-meant to hold for them too.
+operator or one `Num`, how literals like `0` are typed, and how units and dimensions fit. They are answered in
+[Numeric contexts](./numeric-contexts), which keeps the principle this design sets: a built-in operator is sugar for
+a well-known context's member.
 
 # Diagnostics
 
