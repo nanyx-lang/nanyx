@@ -8,7 +8,7 @@ let ``Run - except replaces the tag it names and passes the others through`` () 
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def parseNumber = { s -> Int.parse(s) except #invalidInt -> #invalidVersionNumber }\n" +
+        "def parseNumber = { s -> Int.fromString(s) except #invalidInt -> #invalidVersionNumber }\n" +
         "\n" +
         "def show = {\n" +
         "  | #some(n) -> \"number {n}\"\n" +

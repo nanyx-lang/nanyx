@@ -20,6 +20,8 @@ module Helpers =
     let valueEquals = "__nanyx_equals"
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
+    /// `%` on floats, which WebAssembly has no instruction for.
+    let floatRem = "__nanyx_float_rem"
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
     let readStdinByte = NyxCompiler.Intrinsics.readStdinByte
@@ -1046,6 +1048,34 @@ let private helpersWith (checks: bool) : Map<string, string> =
             "  f64.convert_i32_s"
             $"  call ${Helpers.floatBox}"
             ")" ]
+      // The truncated remainder, C's `fmod`, on unboxed floats: `a - trunc(a / b) * b`, with the sign of `a`. When `b`
+      // is infinite the quotient is zero and `0 * b` NaN, so the remainder is `a` itself (NaN when `a` is infinite).
+      Helpers.floatRem,
+      lines
+          [ $"(func ${Helpers.floatRem} (param $a f64) (param $b f64) (result f64)"
+            "  local.get $b"
+            "  f64.abs"
+            "  f64.const inf"
+            "  f64.eq"
+            "  if (result f64)"
+            "    local.get $a"
+            "    local.get $a"
+            "    local.get $a"
+            "    f64.sub"
+            "    f64.add"
+            "  else"
+            "    local.get $a"
+            "    local.get $a"
+            "    local.get $b"
+            "    f64.div"
+            "    f64.trunc"
+            "    local.get $b"
+            "    f64.mul"
+            "    f64.sub"
+            "  end"
+            "  local.get $a"
+            "  f64.copysign"
+            ")" ]
       Helpers.listCons,
       lines
           [ $"(func ${Helpers.listCons} (param $head i32) (param $tail i32) (result i32)"
@@ -1159,7 +1189,8 @@ let helperDependencies =
       Helpers.floatCeil, [ Helpers.floatBox ]
       Helpers.floatTrunc, [ Helpers.floatBox ]
       Helpers.floatToInt, []
-      Helpers.intToFloat, [ Helpers.floatBox ] ]
+      Helpers.intToFloat, [ Helpers.floatBox ]
+      Helpers.floatRem, [] ]
 let rec closeHelpers (acc: Set<string>) (pending: string list) =
     match pending with
     | [] -> acc

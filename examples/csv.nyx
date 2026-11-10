@@ -26,9 +26,9 @@ def fromCsvLine: string -> #some(Stock) | #error(#malformed | #notANumber) = { l
         return Stock(
           ticker = ticker
           name = name \trim('"')
-          price = try Float.parse(price)
-          change = try Float.parse(change)
-          pct = try Float.parse(pct)
+          price = try Float.fromString(price)
+          change = try Float.fromString(change)
+          pct = try Float.fromString(pct)
         )
       }
     | _ -> #error(#malformed)

@@ -147,6 +147,10 @@ The proposed set is small and closed:
 | `Hash(a)` | `hash: a -> int` | none | the same types as `Eq` |
 | `ToString(a)` | `toString: a -> string` | interpolation holes | the built-in types only, as [printing values](./printing-values) proposes |
 
+Not every context in the prelude is well-known. `FromString(a, e)`, which an attached `fromString` gives a type as
+`toString` gives it a `ToString`, is an ordinary prelude context: no syntax reads through it and it is never derived
+from structure, so it is found only by `use`, a signature, or synthesis by name.
+
 Libraries cannot add to this list. A library that wants structure-driven behaviour for its own context, such as JSON
 encoding, uses [type arguments](./type-members-and-reflection) when they
 exist. Numeric operators are discussed [separately below](#numeric-operators).

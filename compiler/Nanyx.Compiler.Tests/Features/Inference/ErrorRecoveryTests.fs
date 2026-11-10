@@ -139,6 +139,6 @@ let ``A type error in one def does not make a later match on tags an error too``
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-        Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
+        Assert.Equal("'string' cannot be used with +: it is not a number. Use ++ to join them", diagnostic.Message)
         Assert.Equal(0, diagnostic.Span.Value.StartLine)
     | other -> failwith $"Expected one diagnostic, got %A{other}"

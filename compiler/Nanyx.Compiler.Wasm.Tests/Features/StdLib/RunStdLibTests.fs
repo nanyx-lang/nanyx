@@ -173,7 +173,7 @@ let ``Run - a string's and a list's built-in length`` () =
     runSource source |> assertRan "5 3 0 0\nfield\n"
 
 [<Fact>]
-let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
+let ``Run - Int.fromString reads decimal integers and rejects anything else`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
@@ -182,21 +182,21 @@ let ``Run - Int.parse reads decimal integers and rejects anything else`` () =
         "  | #invalidInt -> println(\"#invalidInt\")\n" +
         "}\n" +
         "\n" +
-        "show(Int.parse(\"42\"))\n" +
-        "show(Int.parse(\"+5\"))\n" +
-        "show(Int.parse(\"007\"))\n" +
-        "show(Int.parse(\"0\"))\n" +
-        "show(Int.parse(\"-17\"))\n" +
-        "show(Int.parse(\"70000\"))\n" +
-        "show(Int.parse(\"\"))\n" +
-        "show(Int.parse(\"-\"))\n" +
-        "show(Int.parse(\"4x2\"))\n" +
-        "show(Int.parse(\" 1\"))\n" +
-        "show(\"12\" \\ Int.parse)\n"
+        "show(Int.fromString(\"42\"))\n" +
+        "show(Int.fromString(\"+5\"))\n" +
+        "show(Int.fromString(\"007\"))\n" +
+        "show(Int.fromString(\"0\"))\n" +
+        "show(Int.fromString(\"-17\"))\n" +
+        "show(Int.fromString(\"70000\"))\n" +
+        "show(Int.fromString(\"\"))\n" +
+        "show(Int.fromString(\"-\"))\n" +
+        "show(Int.fromString(\"4x2\"))\n" +
+        "show(Int.fromString(\" 1\"))\n" +
+        "show(\"12\" \\ Int.fromString)\n"
     runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#some(-17)\n#some(70000)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
 
 [<Fact>]
-let ``Run - Bool.parse reads true and false and rejects anything else`` () =
+let ``Run - Bool.fromString reads true and false and rejects anything else`` () =
     let source =
         "import nanyx/console\n" +
         "\n" +
@@ -205,14 +205,75 @@ let ``Run - Bool.parse reads true and false and rejects anything else`` () =
         "  | #invalidBool -> println(\"#invalidBool\")\n" +
         "}\n" +
         "\n" +
-        "show(Bool.parse(\"true\"))\n" +
-        "show(Bool.parse(\"false\"))\n" +
-        "show(Bool.parse(\"True\"))\n" +
-        "show(Bool.parse(\"\"))\n" +
-        "show(Bool.parse(\" true\"))\n" +
-        "show(Bool.parse(\"1\"))\n" +
-        "show(\"false\" \\ Bool.parse)\n"
+        "show(Bool.fromString(\"true\"))\n" +
+        "show(Bool.fromString(\"false\"))\n" +
+        "show(Bool.fromString(\"True\"))\n" +
+        "show(Bool.fromString(\"\"))\n" +
+        "show(Bool.fromString(\" true\"))\n" +
+        "show(Bool.fromString(\"1\"))\n" +
+        "show(\"false\" \\ Bool.fromString)\n"
     runSource source |> assertRan "#some(true)\n#some(false)\n#invalidBool\n#invalidBool\n#invalidBool\n#invalidBool\n#some(false)\n"
+
+/// `readAll`, generic in the prelude's `FromString`, and a function of each result type that sums or counts what was read.
+let private readAllSource =
+    "import nanyx/console\n" +
+    "\n" +
+    "def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \\List.map(fromString) }\n" +
+    "\n" +
+    "def total: list(#some(int) | #invalidInt) -> int = { results ->\n" +
+    "  results \\Option.values \\List.fold(0, { sum, n -> sum + n })\n" +
+    "}\n" +
+    "\n" +
+    "def countTrue: list(#some(bool) | #invalidBool) -> int = { results ->\n" +
+    "  results \\Option.values \\List.filter({ b -> b }) \\List.length\n" +
+    "}\n" +
+    "\n"
+
+[<Fact>]
+let ``Run - a function generic in FromString reads ints and bools with the attached fromString`` () =
+    let source =
+        readAllSource +
+        "def sumAll = { texts -> total(readAll(texts)) }\n" +
+        "def trueCount = { texts -> countTrue(readAll(texts)) }\n" +
+        "def firstOrZero = { texts ->\n" +
+        "  match readAll(texts)\n" +
+        "    | [#some(n), ..._] -> n\n" +
+        "    | [#invalidInt, ..._] -> -1\n" +
+        "    | [] -> 0\n" +
+        "}\n" +
+        "def ofInts: list(#some(int) | r) -> list(#some(int) | r) = { xs -> xs }\n" +
+        "def readInts = { texts -> ofInts(readAll(texts)) }\n" +
+        "\n" +
+        "println(\"{sumAll([\"1\", \"x\", \"30\"])}\")\n" +
+        "println(\"{trueCount([\"true\", \"no\", \"true\", \"false\"])}\")\n" +
+        "println(\"{firstOrZero([\"7\"])} {firstOrZero([\"seven\"])} {firstOrZero([])}\")\n" +
+        "def described = readInts([\"4\", \"four\"]) \\List.map({\n" +
+        "  | #some(n) -> \"#some({n})\"\n" +
+        "  | #invalidInt -> \"#invalidInt\"\n" +
+        "})\n" +
+        "println(List.fold(described, \"\", { acc, text -> acc ++ text ++ \" \" }))\n"
+    runSource source |> assertRan "31\n2\n7 -1 0\n#some(4) #invalidInt \n"
+
+[<Fact>]
+let ``Run - a function generic in FromString reads a type of your own with its attached fromString`` () =
+    let source =
+        readAllSource +
+        "type Point = (x: int, y: int)\n" +
+        "\n" +
+        "def Point.fromString: string -> #some(Point) | #invalidPoint = { s ->\n" +
+        "  match Int.fromString(s)\n" +
+        "    | #some(n) -> #some(Point(x = n, y = n * 2))\n" +
+        "    | #invalidInt -> #invalidPoint\n" +
+        "}\n" +
+        "\n" +
+        "def sumY: list(#some(Point) | #invalidPoint) -> int = { results ->\n" +
+        "  results \\Option.values \\List.fold(0, { sum, p -> sum + p.y })\n" +
+        "}\n" +
+        "\n" +
+        "def sumYs = { texts -> sumY(readAll(texts)) }\n" +
+        "\n" +
+        "println(\"{sumYs([\"4\", \"nope\", \"5\"])}\")\n"
+    runSource source |> assertRan "18\n"
 
 [<Fact>]
 let ``Run - Int.toFloat turns an int into a float, called and piped`` () =
