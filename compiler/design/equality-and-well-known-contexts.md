@@ -26,8 +26,7 @@ Contexts are implicit parameters ([docs: Contexts](../../docs/src/content/advanc
      ill-typed definition is reported as `MissingContextMembers`, naming it.
 
 Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is
-built from a type's structure ([type arguments and reflection](../../docs/src/content/work-in-progress/type-members-and-reflection.md),
-lines 38 and 153-155).
+built from a type's structure (see [structural context synthesis](../../docs/src/content/work-in-progress/type-members-and-reflection.md#structural-context-synthesis)).
 
 ## Equality: implemented as an untyped intrinsic
 
