@@ -144,7 +144,17 @@ def zip: (list(a), list(b)) -> list((a, b)) = { xs, ys ->
 }
 ```
 
-Type variables are automatically created when used in a function definition, and must be a single lowercase character such as `a`, `b`, or `c`. Type variables with multiple characters are reserved for [associated types](../work-in-progress/type-members-and-reflection#associated-types).
+Type variables are automatically created when used in a function definition.
+
+# Type names
+
+The first letter of a name in a type says what kind of name it is:
+
+- **A capital letter starts a type's name**, such as `Shape`, `UserId` or `Result(a, e)`. The compiler requires every type you define with `type` to start with a capital letter.
+- **A single lowercase letter**, such as `a`, `b` or `c`, is a type variable.
+- **Longer lowercase names** are reserved for [associated types](../work-in-progress/type-members-and-reflection#associated-types), which are not implemented yet.
+
+The exceptions are the built-in types whose names are lowercase keywords for convenience: `int`, `float`, `string`, `bool`, `list`, `map`, `any` and `undefined`. These names are reserved by the language, so none of them can be the name of a type variable, an associated type or a type you define.
 
 # Type aliases
 
