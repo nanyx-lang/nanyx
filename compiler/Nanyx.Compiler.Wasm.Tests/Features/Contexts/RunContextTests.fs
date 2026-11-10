@@ -191,3 +191,30 @@ let ``Run - a context member named by an operator is synthesized from an attache
         "  println(if $Point.`==`($Point(x = 1, y = 2), $Point(x = 2, y = 2)) then \"same\" else \"different\")\n" +
         "}\n"
     runSource source |> assertRan "12\n34\nsame\ndifferent\n"
+
+let ``Run - a lambda in a generic function calls the members of the context the function requires, and passes it on`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Show(a) = (show: a -> string)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
+        "\n" +
+        "def describe: [Show(a)] a -> string = { v -> \"<\" ++ Show(a).show(v) ++ \">\" }\n" +
+        "def qualified: [Show(a)] list(a) -> string = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ Show(a).show(x) }) }\n" +
+        "def plain: [Show(a)] list(a) -> string = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ show(x) }) }\n" +
+        "def passed: [Show(a)] list(a) -> string = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ describe(x) }) }\n" +
+        "def nested: [Show(a)] list(a) -> string = { xs ->\n" +
+        "  List.fold(xs, \"\", { acc, x -> acc ++ List.fold([1, 2], \"\", { inner, n -> inner ++ show(x) }) })\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def points = [Point(x = 1, y = 2), Point(x = 3, y = 4)]\n" +
+        "  println(qualified(points))\n" +
+        "  println(plain(points))\n" +
+        "  println(passed(points))\n" +
+        "  println(nested([Point(x = 5, y = 6)]))\n" +
+        "}\n"
+    runSource source |> assertRan "(1, 2)(3, 4)\n(1, 2)(3, 4)\n<(1, 2)><(3, 4)>\n(5, 6)(5, 6)\n"
