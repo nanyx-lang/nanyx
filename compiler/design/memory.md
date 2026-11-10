@@ -1,12 +1,13 @@
 # Memory management: Perceus reference counting
 
-> **Status: proposed.** This page designs how compiled Nanyx programs free memory. It is part of the
-> [compilation](compilation.md) workstream, and its issues carry the `compilation` and `wasm backend` labels.
-> Tracked in [#296](https://github.com/nanyx-lang/nanyx/issues/296).
+> **Status: implemented** in the WebAssembly backend. This page designs how compiled Nanyx programs free memory. It
+> is part of the [compilation](compilation.md) workstream, and its issues carry the `compilation` and `wasm backend`
+> labels. Tracked in [#296](https://github.com/nanyx-lang/nanyx/issues/296). The user-facing account is
+> [Reference counting](../../docs/src/content/advanced/reference-counting.md) on the docs site.
 
 ## Summary
 
-Compiled programs never free anything today. This proposes reference counting in the style of
+Compiled programs free memory by reference counting in the style of
 [Perceus](https://www.microsoft.com/en-us/research/publication/perceus-garbage-free-reference-counting-with-reuse/)
 (Reinking, Xie, de Moura and Leijen, PLDI 2021), the scheme Koka uses and close to what Lean 4 does
 ([Counting Immutable Beans](https://arxiv.org/abs/1908.05647), Ullrich and de Moura, 2019). The compiler inserts
@@ -366,4 +367,6 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
   should the boxing fallback kick in?
 - **Should reuse be visible?** Koka's `fip` annotation lets a function promise it runs fully in place, and the
   compiler checks it. That would suit Nanyx's stance on predictable performance, but is not needed to start.
-- **Measuring.** What benchmark shows the benefit: peak memory on the examples, a long-running loop, or both?
+- **Measuring.** Both, for now: the tests run long loops in constant memory, and the table above gives allocations
+  and peak memory on the examples. The examples are small and mostly build strings; a benchmark that transforms
+  large data structures would show what reuse is worth.
