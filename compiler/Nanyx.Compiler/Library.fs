@@ -228,21 +228,21 @@ module Compiler =
                 | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
                 | other, _ -> other)
 
-    /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
-    /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``. `x != y` calls what `==` is
-    /// bound to, and becomes `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are
-    /// recorded by.
-    let private callOperators (calls: Set<NodeId>) (expr: Expression) : Expression =
+    /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node, with
+    /// the name it calls) written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``, or
+    /// `` $Vector.`+`(x, y) ``. `x != y` calls what `==` does, and becomes `` not `==`(x, y) ``; the call keeps the
+    /// operator's node, which is what its types are recorded by.
+    let private callOperators (calls: Map<NodeId, Identifier>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
         else
             expr
             |> mapExpressionKinds (fun current kind ->
-                match kind with
-                | BinaryOp(op, left, right) when calls.Contains current.Id && op = EqualityOperators.notEquals ->
-                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(EqualityOperators.equals, None, [ left; right ]) } ])
-                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(op, None, [ left; right ])
-                | other -> other)
+                match kind, calls |> Map.tryFind current.Id with
+                | BinaryOp(op, left, right), Some callee when op = EqualityOperators.notEquals ->
+                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(callee, None, [ left; right ]) } ])
+                | BinaryOp(_, left, right), Some callee -> FunctionCall(callee, None, [ left; right ])
+                | other, _ -> other)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
     /// prelude's `List.length`, which every module imports.
@@ -1115,7 +1115,7 @@ module Compiler =
     /// that call (`operatorCalls`), each read of a built-in property as a call (`properties`), each builder block that
     /// uses no keyword as its block (`workflowBlocks`), and without import statements. `defer` compiles the module's
     /// errors to traps first, for a debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
             expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items

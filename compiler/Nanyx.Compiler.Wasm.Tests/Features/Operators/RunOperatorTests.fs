@@ -40,6 +40,24 @@ let ``Run - the remainder of floats is truncated, with the sign of the left oper
     runSource source |> assertRan "1.5 -1.5 1.5 0.0 1.5\n1 -1\n"
 
 [<Fact>]
+let ``Run - an operator on a type that attaches it calls the attached definition`` () =
+    // #527: `` def $V.`+` = ... `` parsed, but `a + b` on a `$V` was the built-in `+` and a type mismatch.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "type $V = (x: int, y: int)\n" +
+        "def $V.`+`: $V, $V -> $V = { p, q -> $V(x = p.x + q.x, y = p.y + q.y) }\n" +
+        "def $V.`==`: $V, $V -> bool = { p, q -> p.x == q.x }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def v = $V(x = 1, y = 2) + $V(x = 3, y = 4)\n" +
+        "  println(\"{v.x} {v.y}\")\n" +
+        "  println(if v == $V(x = 4, y = 0) then \"same x\" else \"different x\")\n" +
+        "  println(if v != $V(x = 4, y = 0) then \"different x\" else \"same x\")\n" +
+        "}\n"
+    runSource source |> assertRan "4 6\nsame x\nsame x\n"
+
+[<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
     // #39: the docs make boolean operations keywords; `not` had no spelling at all.
     let source =

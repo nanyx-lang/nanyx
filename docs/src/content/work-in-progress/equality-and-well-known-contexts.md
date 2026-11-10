@@ -41,8 +41,9 @@ Not done yet:
 - **Structural derivation that looks up each part.** The compiler's own instance compares a whole value by its
   structure, so a `list($Email)` does not compare its elements with `` $Email.`==` ``, and inside a function that
   requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance.
-- **A concrete `a == b` is still the built-in comparison** for a type with an attached `==`, and for a built-in type
-  with an `Eq` loaded by `use` (decision 2 below).
+- **A concrete `a == b` is still the built-in comparison** for a built-in type with an `Eq` loaded by `use` (decision
+  2 below). On a type with an attached `` `==` `` it calls that definition, as any operator on a type that attaches
+  it does (`OperatorCalls.fs`, [#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 - **Joining the operands** for open tag unions, and the warning for types with no tag in common.
 
 # What existed before
@@ -113,7 +114,7 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 | The docs say | The compiler does |
 |---|---|
 | Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. An operator on a value of a type variable calls the member of that name of a context the function requires. |
-| A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks does not parse, attached or not, and neither does an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). So the docs' `Eq(a)` and `Sum(a)`, whose members are `` `==` `` and `` `+` ``, cannot be declared. |
+| A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks did not parse, attached or not, and neither did an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). *Since fixed:* they parse, and `a + b` on a type that attaches `` `+` `` calls it. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
 | `List.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
@@ -297,7 +298,8 @@ The language server's code action for the third adds the requirement to the sign
 
 # Order of work
 
-1. Parse backtick-named definitions and context members ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
+1. **Done.** Parse backtick-named definitions and context members, and call an attached operator
+   ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 2. `Eq` in the prelude; `==` and `!=` read through it; structural derivation; per-type equality functions in the
    backend; the join for open unions. Closes #424 and #526.
 3. `Ord`, `compare` and the four operators; `List.sort`, `min`, `max`, generic `sortBy`. Closes #476.

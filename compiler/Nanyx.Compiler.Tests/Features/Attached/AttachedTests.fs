@@ -252,3 +252,25 @@ let ``nanyx/text imported with as is only reached qualified from a pipe`` () =
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
     let short = Compiler.compile "import nanyx/text as t\ndef x = \" a \" \\ trim"
     Assert.False(short.Diagnostics.IsEmpty)
+
+[<Fact>]
+let ``An operator on a type that attaches it calls the attached definition`` () =
+    let source =
+        "type $V = (x: int, y: int)\n" +
+        "def $V.`+`: $V, $V -> $V = { p, q -> $V(x = p.x + q.x, y = p.y + q.y) }\n" +
+        "def $V.`*`: $V, int -> $V = { p, k -> $V(x = p.x * k, y = p.y * k) }\n" +
+        "def $V.`==`: $V, $V -> bool = { p, q -> p.x == q.x }\n" +
+        "def a = $V(x = 1, y = 2)\n" +
+        "def sum = a + a\n" +
+        "def scaled = a * 3\n" +
+        "def same = a != a\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let types = result.Typed.Value.Types
+    Assert.Equal("$V", Unifier.tyToString types.["sum"])
+    Assert.Equal("$V", Unifier.tyToString types.["scaled"])
+    Assert.Equal("bool", Unifier.tyToString types.["same"])
+    // The right operand is checked against the attached definition's parameter.
+    let wrong = Compiler.compile (source + "def bad = a * \"three\"\n")
+    let diagnostic = Assert.Single(wrong.Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
