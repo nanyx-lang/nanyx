@@ -134,18 +134,20 @@ module internal ContextInference =
             result
             |> Result.bind (fun (current: InferState) ->
                 match ownVars argTys, written with
+                // A call to a local function is passed nothing: the def requiring the context is all it needs.
+                | Some _, Some _ when p.ChecksOnly -> Ok current
                 | Some vars, Some (contexts, _) ->
                     let context = contexts.[required |> List.findIndex (fun required -> key required = key (p.Context, vars))]
                     Ok { current with ContextInstances = withInstance p (InstanceInScope context) current.ContextInstances }
                 // A comparison in a def whose type cannot be written is the compiler's own, as it is in a local function.
-                | Some _, None when not (EqualityOperators.isPending p) -> Error p.Errors
+                | Some _, None when not (EqualityOperators.isPending p || p.ChecksOnly) -> Error p.Errors
                 | _ ->
                     match synthesize p argTys current with
                     | Some synthesized ->
                         synthesized
                         |> Result.map (function
-                            | Some instance, next -> { next with ContextInstances = withInstance p instance next.ContextInstances }
-                            | None, next -> next)
+                            | Some instance, next when not p.ChecksOnly -> { next with ContextInstances = withInstance p instance next.ContextInstances }
+                            | _, next -> next)
                     | None -> Error p.Errors)) (Ok state)
         |> Result.map (fun current ->
             match written with

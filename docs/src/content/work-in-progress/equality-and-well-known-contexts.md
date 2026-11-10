@@ -29,6 +29,12 @@ order: 8
 - **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers for `compare` and `hash` to join.
+- **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
+  at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
+  it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
+  of its own type variables requires `Eq` of it (`EqualityOperators.checkLocalCall`). Only a call by name is
+  checked, not a local function passed as a value. A local generic function compares strings and lists wrongly in
+  the backend ([#616](https://github.com/nanyx-lang/nanyx/issues/616)).
 
 Not done yet:
 
@@ -37,8 +43,6 @@ Not done yet:
   requires `[Eq(a)]`, `==` on a `list(a)` compares the elements by structure rather than through the instance.
 - **A concrete `a == b` is still the built-in comparison** for a type with an attached `==`, and for a built-in type
   with an `Eq` loaded by `use` (decision 2 below).
-- **Local functions require no contexts**, so a local `def same = { x, y -> x == y }` is not checked when it is
-  called with functions; the backend reports that, as `NYX0301`.
 - **Joining the operands** for open tag unions, and the warning for types with no tag in common.
 
 # What existed before

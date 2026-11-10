@@ -116,7 +116,7 @@ module internal EqualityOperators =
             let pending =
                 { Def = def; Call = expr.Id; Callee = op; Index = 0; Count = 1
                   Context = context; ArgTys = [ ty ]; Span = expr.Span
-                  Errors = error expr.Span (undeclared op (List.head (comparedVars ty)) annotatedDef) }
+                  Errors = error expr.Span (undeclared op (List.head (comparedVars ty)) annotatedDef); ChecksOnly = false }
             Ok { state with
                     PendingContextInstances = pending :: state.PendingContextInstances
                     HoleScopes = state.HoleScopes |> Map.add expr.Id (env, annotatedDef) }
@@ -222,7 +222,8 @@ module internal EqualityOperators =
         : Result<ContextInstance option list * InferState, Diagnostic list> option =
         let pendingIn (def: Identifier) (v: TyVar) (annotatedDef: Identifier option) =
             { Def = def; Call = call.Id; Callee = calleeName; Index = found.Length; Count = count
-              Context = context; ArgTys = [ ty ]; Span = span; Errors = error span (openAtCall calleeName ty v annotatedDef) }
+              Context = context; ArgTys = [ ty ]; Span = span; Errors = error span (openAtCall calleeName ty v annotatedDef)
+              ChecksOnly = false }
         let later (pending: PendingContextInstance) (state: InferState) =
             Some (Ok (found @ [ None ], { state with PendingContextInstances = pending :: state.PendingContextInstances }))
         match instance, ty, state.ContextScope with
@@ -234,4 +235,49 @@ module internal EqualityOperators =
         | Open v, _, scope ->
             let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope -> None
             later (pendingIn InterpolationHoles.moduleEnd v annotatedDef) { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }
+
+    // Local functions.
+    //
+    // A local function requires no contexts: the backend compiles it again at each type it is called with, so its
+    // comparisons are the compiler's own at that type. A call to one that compares values of a type variable it is
+    // generic in still needs an `Eq` of the type that variable is at the call, or the backend would be left to compare
+    // functions.
+
+    /// The type variables among `quantified`, those a local function was just generalised in, that the comparisons and
+    /// calls requiring `Eq` in `state` compare values of. Each is still pending, as none of its types was known.
+    let comparedByLocal (state: InferState) (quantified: Set<int>) : Set<int> =
+        state.PendingContextInstances
+        |> List.filter (fun pending -> pending.Context = context)
+        |> List.collect (fun pending -> pending.ArgTys |> List.collect (resolveSoFar state >> comparedVars))
+        |> List.map _.Id
+        |> List.filter quantified.Contains
+        |> Set.ofList
+
+    /// Checks `call`, at `span` in `env`, to the local function `calleeName`, which compares values of the type `ty`
+    /// there, and finds `Eq(ty)` as `instance`. A type with no equality is an error at the call. A type with a
+    /// variable left in it is checked as a call to a top-level function would be, once the def around it is inferred
+    /// (see `resolveCall`), but the call is passed nothing (`ChecksOnly`).
+    let checkLocalCall
+        (env: TypeEnv)
+        (state: InferState)
+        (call: Expression)
+        (calleeName: Identifier)
+        (span: SourceSpan)
+        (ty: Ty)
+        (instance: CallInstance)
+        : Result<InferState, Diagnostic list> =
+        let pendingIn (def: Identifier) (v: TyVar) (annotatedDef: Identifier option) (state: InferState) =
+            let pending =
+                { Def = def; Call = call.Id; Callee = calleeName; Index = 0; Count = 1
+                  Context = context; ArgTys = [ ty ]; Span = span; Errors = error span (openAtCall calleeName ty v annotatedDef)
+                  ChecksOnly = true }
+            Ok { state with PendingContextInstances = pending :: state.PendingContextInstances }
+        match instance, state.ContextScope with
+        | NoInstance reason, _ -> Error (error span (noInstanceAtCall calleeName ty reason))
+        | BuiltIn, _
+        | Attached, _ -> Ok state
+        | Open v, DefScope(defName, true) -> pendingIn defName v None state
+        | Open v, scope ->
+            let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope -> None
+            pendingIn InterpolationHoles.moduleEnd v annotatedDef { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }
 

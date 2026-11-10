@@ -96,7 +96,7 @@ module InterpolationHoles =
                 | AmbientScope -> moduleEnd, None
             let pending =
                 { Def = def; Call = call.Id; Callee = holeFunction; Index = found.Length; Count = count
-                  Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared ty annotatedDef) }
+                  Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared ty annotatedDef); ChecksOnly = false }
             Ok (found @ [ None ],
                 { state with
                     PendingContextInstances = pending :: state.PendingContextInstances
