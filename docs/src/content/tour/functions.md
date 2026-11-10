@@ -122,10 +122,10 @@ Suffix a parameter name with `?` to make it optional. If the parameter would oth
 ```nanyx
 def printMessage = { message? ->
   message
-  \match
-    | #none -> "You didn't say anything"
-    | #some(msg) -> "You said -> {msg}"
-  \println
+    \match
+      | #none -> "You didn't say anything"
+      | #some(msg) -> "You said -> {msg}"
+    \println
 }
 ```
 

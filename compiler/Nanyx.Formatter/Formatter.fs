@@ -107,6 +107,16 @@ let format (options: Options) (parsed: SourceModule) : string =
             i <- i - 1
         if i >= 0 && i < source.Length then source[i] else '\000'
 
+    /// Whether the match `e` on `value` was written `value \match | ...`, rather than `match value | ...`.
+    let isPipedMatch (e: Expression) (value: Expression) =
+        if not (valid e.Span && valid value.Span) || startsWith e.Span "match" then
+            false
+        else
+            let mutable i = value.Span.End
+            while i < e.Span.End && (Char.IsWhiteSpace source[i] || source[i] = ')') do
+                i <- i + 1
+            i + 6 <= source.Length && String.CompareOrdinal(source, i, "\\match", 0, 6) = 0
+
     // Comments are placed once each; whatever no construct places goes before the line it was in.
     let comments =
         parsed.Trivia
@@ -379,8 +389,14 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
         | Lambda(parameters, body) -> lambdaDoc e parameters body false
         | Pipe(value, n, nameSpan, args) ->
-            cat [ expr { position with Tail = false; Prec = 0 } value; text " \\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
+            let target = cat [ text "\\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
+            match value.Kind with
+            // The arms of a `\match` take the rest of their lines, so a pipe after them goes on a line of its own.
+            | Match([ scrutinee ], arms) when isPipedMatch value scrutinee ->
+                cat [ pipedMatchDoc value scrutinee arms; nest (cat [ hard; target ]) ]
+            | _ -> cat [ expr { position with Tail = false; Prec = 0 } value; text " "; target ]
         | Block _ -> block e
+        | Match([ scrutinee ], arms) when isPipedMatch e scrutinee -> pipedMatchDoc e scrutinee arms
         | Match(scrutinees, arms) ->
             match ifArm e with
             | Some _ -> ifDoc e
@@ -690,6 +706,10 @@ let format (options: Options) (parsed: SourceModule) : string =
         | [ scrutinee ] when (match scrutinee.Kind with Block _ -> true | _ -> false) ->
             cat [ text "match"; Doc.nest (2 * options.IndentSize) (cat [ hard; block scrutinee ]); armsDoc ]
         | _ -> cat [ text "match "; commaJoin (List.map (expr { full with Tail = false }) scrutinees); armsDoc ]
+
+    /// `value \match` with the arms on the lines after it.
+    and pipedMatchDoc (e: Expression) (value: Expression) (arms: MatchArm list) : Doc =
+        cat [ expr { full with Tail = false; Prec = 0 } value; text " \\match"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
 
     /// `value except pattern -> replacement` when there is one arm (perhaps with alternatives), and otherwise `value
     /// except` with the arms on the lines after it, as a match has them.

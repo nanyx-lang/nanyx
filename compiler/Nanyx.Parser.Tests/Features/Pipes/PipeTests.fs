@@ -55,6 +55,73 @@ let ``A piped value goes in front of named arguments, in the same record`` () =
                      NamedField ("y", Kind (IdentifierExpr "z")) ] ] -> ()
     | other -> failwith $"Expected one record of x, a, the lambda and y, got: {other}"
 
+/// The one expression statement of the lambda in `def f = { n -> <body> }`.
+let private lambdaStatementOf (body: string) =
+    match parseModule ("def f = { n ->\n" + body + "\n}") with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement expr) ])))))) ] -> expr.Kind
+    | other -> failwith $"Expected a lambda of one expression statement, got: %A{other}"
+
+[<Fact>]
+let ``A pipe chain in a lambda body continues on lines indented more than its first`` () =
+    match lambdaStatementOf "  n\n    \\add(2)\n    \\add(3)" with
+    | Pipe (Kind (Pipe (Kind (IdentifierExpr "n"), "add", _, _)), "add", _, _) -> ()
+    | other -> failwith $"Expected n \\add(2) \\add(3), got: %A{other}"
+
+[<Fact>]
+let ``A pipe chain may continue after a comment line`` () =
+    match lambdaStatementOf "  n\n    \\add(2) -- two\n    -- and three\n    \\add(3)" with
+    | Pipe (Kind (Pipe (Kind (IdentifierExpr "n"), "add", _, _)), "add", _, _) -> ()
+    | other -> failwith $"Expected n \\add(2) \\add(3), got: %A{other}"
+
+[<Fact>]
+let ``A pipe chain in a match arm's block continues on more indented lines`` () =
+    let body =
+        "  match n\n" +
+        "    | 0 ->\n" +
+        "      n\n" +
+        "        \\add(2)\n" +
+        "    | _ -> n"
+    match lambdaStatementOf body with
+    | Match (_, [ _, Kind (Block [ Kind (ExprStatement (Kind (Pipe (Kind (IdentifierExpr "n"), "add", _, _)))) ]); _ ]) -> ()
+    | other -> failwith $"Expected the first arm's block to be n \\add(2), got: %A{other}"
+
+[<Fact>]
+let ``A pipe at the indent of the statement's line does not continue it`` () =
+    match parseModule "def f = { n ->\n  n\n  \\add(2)\n}" with
+    | Result.Error err -> err |> should haveSubstring "Ln: 3"
+    | other -> failwith $"Expected a parse error, got: %A{other}"
+
+[<Fact>]
+let ``except may start a more indented line after a pipe chain in a lambda body`` () =
+    match lambdaStatementOf "  n\n    \\find\n    except #notFound -> #none" with
+    | Except (Kind (Pipe (_, "find", _, [])), [ _ ]) -> ()
+    | other -> failwith $"Expected n \\find except ..., got: %A{other}"
+
+[<Fact>]
+let ``\match matches on the value piped into it`` () =
+    match parseModule "def r = s \\trim \\match\n  | \"\" -> 0\n  | _ -> 1" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "r", _, Kind (Match ([ Kind (Pipe (Kind (IdentifierExpr "s"), "trim", _, [])) ], arms))))) ] ->
+        arms |> should haveLength 2
+    | other -> failwith $"Expected a match on s \\trim, got: %A{other}"
+
+[<Fact>]
+let ``\match continues a pipe chain in a lambda body, and the chain continues after its arms`` () =
+    let body =
+        "  n\n" +
+        "    \\match\n" +
+        "      | 0 -> \"zero\"\n" +
+        "      | _ -> \"other\"\n" +
+        "    \\println"
+    match lambdaStatementOf body with
+    | Pipe (Kind (Match ([ Kind (IdentifierExpr "n") ], [ _; _ ])), "println", _, []) -> ()
+    | other -> failwith $"Expected (n \\match ...) \\println, got: %A{other}"
+
+[<Fact>]
+let ``A name that starts with match is still a pipe target`` () =
+    match parseModule "def r = x \\matches(y)" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "r", _, Kind (Pipe (_, "matches", _, [ _ ]))))) ] -> ()
+    | other -> failwith $"Expected a pipe into matches, got: %A{other}"
+
 // Pipe Operator Tests
 [<Fact>]
 let ``Parse simple pipe`` () =
