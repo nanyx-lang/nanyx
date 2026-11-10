@@ -17,6 +17,16 @@ let ``Unifier binds type variables`` () =
     | Error (message, _) -> Assert.True(false, message)
 
 [<Fact>]
+let ``Applying a definition's parameters replaces each once, even by a variable with another parameter's id`` () =
+    // An imported context's parameters are numbered by its own module: here `e` is applied to this module's variable 1,
+    // which has the id of the parameter `a`. It must not then be replaced by what `a` is.
+    let a = { Id = 1; Name = Some "a" }
+    let e = { Id = 2; Name = Some "e" }
+    let local = TyVar { Id = 1; Name = None }
+    let applied = Unifier.applyToParameters [ a; e ] [ TyPrimitive "int"; local ] (TyFunc(TyVar a, TyVar e))
+    Assert.Equal(TyFunc(TyPrimitive "int", local), applied)
+
+[<Fact>]
 let ``Unifier rejects occurs check`` () =
     let tvar = TyVar { Id = 2; Name = None }
     let constraintSet: ConstraintSet = [ (tvar, TyFunc(tvar, TyPrimitive "int"), Equal, SourceSpan.none) ]

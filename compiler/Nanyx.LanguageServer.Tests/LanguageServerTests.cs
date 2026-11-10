@@ -643,12 +643,12 @@ public sealed class LanguageServerTests : IAsyncLifetime
             });
             var uri = DocumentUri.Parse("untitled:Untitled-2");
 
-            Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\ndef n = Int.parse(\"1\")\n");
+            Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\ndef n = Int.fromString(\"1\")\n");
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
             // A qualified import of nanyx/text, and a definition the prelude brings into scope.
             AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 1, 22), "text", "uppercase");
-            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 2, 13), "prelude", "parse");
+            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 2, 13), "prelude", "fromString");
         }
         finally
         {

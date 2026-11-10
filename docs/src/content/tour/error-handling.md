@@ -69,11 +69,11 @@ def findUser: int -> #some(User) | #none = { id ->
 
 ```nanyx
 def parseNumber = { s ->
-  Int.parse(s) except #invalidInt -> #invalidVersionNumber
+  Int.fromString(s) except #invalidInt -> #invalidVersionNumber
 }
 ```
 
-`Int.parse(s)` is `#some(int) | #invalidInt`. The handled tag leaves the union and the replacement's type joins it, so `parseNumber` returns `#some(int) | #invalidVersionNumber`.
+`Int.fromString(s)` is `#some(int) | #invalidInt`. The handled tag leaves the union and the replacement's type joins it, so `parseNumber` returns `#some(int) | #invalidVersionNumber`.
 
 To handle several cases, write the arms on the lines after `except`, as a `match` has them. An arm may bind the parts of what it matches, and may list alternatives:
 

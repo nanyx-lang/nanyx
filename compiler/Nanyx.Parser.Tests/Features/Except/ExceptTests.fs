@@ -17,8 +17,8 @@ let private armsOf (arms: MatchArm list) =
 
 [<Fact>]
 let ``except takes one arm on the line of its value`` () =
-    match valueOf "def v = Int.parse(s) except #invalidInt -> #invalidVersionNumber" with
-    | Kind (Except (Kind (FunctionCall ("Int.parse", _, _)), arms)) ->
+    match valueOf "def v = Int.fromString(s) except #invalidInt -> #invalidVersionNumber" with
+    | Kind (Except (Kind (FunctionCall ("Int.fromString", _, _)), arms)) ->
         Assert.Equal<(PatternKind list * ExpressionKind) list>(
             [ [ TagPattern ("invalidInt", None) ], TagExpr ("invalidVersionNumber", None) ],
             armsOf arms)
@@ -67,7 +67,7 @@ let ``except may start the line after its value, as a pipe may`` () =
 let ``except works as a statement and inside a lambda`` () =
     let source =
         "def parseNumber = { s ->\n" +
-        "  def n = Int.parse(s) except #invalidInt -> #some(0)\n" +
+        "  def n = Int.fromString(s) except #invalidInt -> #some(0)\n" +
         "  n\n" +
         "}\n"
     match valueOf source with

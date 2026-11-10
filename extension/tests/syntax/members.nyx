@@ -1,7 +1,7 @@
 -- SYNTAX TEST "source.nanyx" "a qualified call colours the whole name; a field is a member"
 
-def a = Int.parse(qty)
---          ^^^^^ entity.name.function.call.nanyx - variable.other.member.nanyx
+def a = Int.fromString(qty)
+--          ^^^^^^^^^^ entity.name.function.call.nanyx - variable.other.member.nanyx
 
 def b = String.uppercase(sku)
 --             ^^^^^^^^^ entity.name.function.call.nanyx - variable.other.member.nanyx
