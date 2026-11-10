@@ -126,6 +126,8 @@ def area: Shape -> float = { shape ->
 }
 ```
 
+A payload that is a record with named fields is taken apart by name, as any record is: with `#rectangle(width: float, height: float)`, the pattern `#rectangle(width, height)` binds each field to the local of the same name. This also works for a lambda's parameter, as in `{ #rectangle(width, height) -> width * height }`.
+
 A tag that carries the unit value is matched as it is written, with empty brackets, and `()` on its own matches the unit value:
 
 ```nanyx

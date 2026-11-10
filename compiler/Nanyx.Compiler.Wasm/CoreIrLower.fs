@@ -979,9 +979,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                         match valueTy with
                         | IrRecord fields when fields.Length = elements.Length -> fields
                         | other -> cannot $"a tuple pattern on a value of type {IrType.show other}"
-                    let slotOf index = fields |> List.findIndex (fst >> (=) (string index))
+                    let names = fields |> List.map fst |> Set.ofList
                     PFields(elements |> List.mapi (fun index element ->
-                        let slot = slotOf index
+                        let field = Pattern.tupleElementField names index element
+                        let slot = fields |> List.findIndex (fst >> (=) field)
                         slot, lowerPattern false scrutinee (snd fields.[slot]) element))
                 // `$Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
                 // local even at the top of an arm, as the old path gives it one.

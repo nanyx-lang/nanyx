@@ -60,6 +60,22 @@ let ``Run - tuple patterns in match arms`` () =
     runSource source |> assertRan "x zero y zero other\n2 1\nAda nobody\n"
 
 [<Fact>]
+let ``Run - a name alone in a pattern binds the record field of that name`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def a: #some(x: string, y: string) = #some(x = \"left\", y = \"right\")\n" +
+        "def g: typeof a -> string = { #some(y, x) -> \"x = {x}, y = {y}\" }\n" +
+        "def describe: (name: string, age: int) -> string = { r -> match r\n" +
+        "  | (age, name) -> \"{name} is {age}\" }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(g(a))\n" +
+        "  println(describe((name = \"Ada\", age = 36)))\n" +
+        "}\n"
+    runSource source |> assertRan "x = left, y = right\nAda is 36\n"
+
+[<Fact>]
 let ``Run - identifier patterns bind the scrutinee`` () =
     // Regression: `| n -> ...` and `| 0, y -> ...` failed with "Unsupported identifier" (#34).
     let source =
