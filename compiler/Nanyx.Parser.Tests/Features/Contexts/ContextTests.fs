@@ -16,6 +16,20 @@ let ``Parse context feature files`` () =
     )
 
 [<Fact>]
+let ``a name that starts with use or in is not the use keyword`` () =
+    let statementsOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements)))))) ] ->
+            statements |> List.map (fun (statement: Statement) -> statement.Kind)
+        | other -> failwith $"Unexpected parse: %A{other}"
+    match statementsOf "def main = {\n  def useful = 1\n  useful\n}" with
+    | [ DefStatement (_, "useful", None, _); ExprStatement (Kind (IdentifierExpr "useful")) ] -> ()
+    | other -> failwith $"Unexpected statements: %A{other}"
+    match statementsOf "def main = {\n  use ctx\n  index\n}" with
+    | [ UseStatement (Kind (IdentifierExpr "ctx")); ExprStatement (Kind (IdentifierExpr "index")) ] -> ()
+    | other -> failwith $"Unexpected statements: %A{other}"
+
+[<Fact>]
 let ``use C(T) = expr does not parse, and the error says to write use <expr> where the context is named`` () =
     for line, head in [ "  use Show(int) = (show = { n -> \"n\" })", "Show(int)"; "  use Console = (println = log)", "Console" ] do
         let source = $"def main = {{\n{line}\n  1\n}}"

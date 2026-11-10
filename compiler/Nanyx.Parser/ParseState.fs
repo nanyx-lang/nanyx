@@ -59,6 +59,9 @@ let wsInline = skipMany (skipAnyOf " \t")
 let wsNoNl() = skipMany (skipAnyOf " \t") // whitespace without newlines
 let wsWithComments () = ws
 
+/// After a keyword: the word ends there, so `typeName` is a name and not `type` then `Name`.
+let keywordEnd: Parser<unit, ParseState> = notFollowedBy (satisfy (fun c -> System.Char.IsLetterOrDigit c || c = '_'))
+
 /// The end of a line in an indentation-based block: an optional `-- comment`, then the newline.
 let blockLineEnd () : Parser<unit, ParseState> =
     wsNoNl() >>. optional (inlineCommentNoNl ()) >>. skipNewline
