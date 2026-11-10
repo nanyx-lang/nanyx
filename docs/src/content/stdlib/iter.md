@@ -17,7 +17,7 @@ context Iter(a) = (
 )
 ```
 
-The element type for the iterable is stored as an [associated type](../advanced/associated-types-and-constraints) on the `Iter(..)` context with the name `elem`; for an iterable argument, it is always available as `elem` in the function signature (or `Iter(a).elem`, if disambiguation is needed).
+Associated types are not implemented yet, so this module is a design rather than working code. The element type for the iterable is stored as an [associated type](../work-in-progress/type-members-and-reflection#associated-types) on the `Iter(..)` context with the name `elem`; for an iterable argument, it is always available as `elem` in the function signature (or `Iter(a).elem`, if disambiguation is needed).
 
 # Definitions
 

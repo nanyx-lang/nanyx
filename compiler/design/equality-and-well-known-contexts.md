@@ -26,7 +26,7 @@ Contexts are implicit parameters ([docs: Contexts](../../docs/src/content/advanc
      ill-typed definition is reported as `MissingContextMembers`, naming it.
 
 Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is
-built from a type's structure ([type arguments and reflection](../../docs/src/content/work-in-progress/type-arguments-and-reflection.md),
+built from a type's structure ([type arguments and reflection](../../docs/src/content/work-in-progress/type-members-and-reflection.md),
 lines 38 and 153-155).
 
 ## Equality: implemented as an untyped intrinsic
@@ -105,7 +105,7 @@ The proposed set is small and closed:
 | `ToString(a)` | `toString: a -> string` | interpolation holes | the built-in types only, as [printing values](../../docs/src/content/work-in-progress/printing-values.md) proposes |
 
 Libraries cannot add to this list. A library that wants structure-driven behaviour for its own context, such as JSON
-encoding, uses [type arguments](../../docs/src/content/work-in-progress/type-arguments-and-reflection.md) when they
+encoding, uses [type arguments](../../docs/src/content/work-in-progress/type-members-and-reflection.md) when they
 exist. Numeric operators are discussed [separately below](#numeric-operators).
 
 ## Equality
@@ -138,7 +138,7 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
 - *Implicit equality on every non-function type* (OCaml, F#, Elm): `==` stays `a, a -> bool`, generic code needs no
   annotation, and the compiler rejects functions when it instantiates. This is today's behaviour plus a
   check, and it is lighter to write. But errors appear at the instantiation, in library code the user did not write,
-  which the [reflection page](../../docs/src/content/work-in-progress/type-arguments-and-reflection.md) rules out for
+  which the [reflection page](../../docs/src/content/work-in-progress/type-members-and-reflection.md) rules out for
   generic code ("checked once"). F# hides the same rule behind an inferred `equality` constraint, which is the
   recommendation with the constraint left unwritten.
 - *`==` is a fixed structural intrinsic, and `Eq` is a separate, optional context* for custom equivalences. Simpler to
