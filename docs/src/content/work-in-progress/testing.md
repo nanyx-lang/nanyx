@@ -11,7 +11,7 @@ This page proposes how Nanyx code is tested: a test is a definition marked `@tes
 Other parts of the design already say what testing must do:
 
 - [Hosts](./hosts#the-test-runner-is-a-host) says `nanyx test` runs the program under a test host. That host finds test functions instead of an `@entry`, and provides fake or recording versions of the contexts the code needs.
-- [Deferred errors](https://github.com/nanyx-lang/nanyx/blob/main/compiler/design/deferred-errors.md) says every test runs in a debug build. A test that reaches a type error fails with that error, and the others pass or fail on their own.
+- [Deferred errors](./deferred-errors) says every test runs in a debug build. A test that reaches a type error fails with that error, and the others pass or fail on their own.
 - The [principles](../foundations/principles) say a developer is never blocked from running their tests because, say, a commented-out line left a variable unused.
 
 This page fills in the rest: how a test is written, how it fails, and how the runner reports it.
@@ -173,7 +173,7 @@ These fit the design but are not part of the first version:
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Expecting a panic.** A test cannot catch a panic, but the runner sees one, so an attribute such as `@test(#panics)` could pass a test only if it panics.
-- **Docs as tests.** Running the code blocks in these docs as tests, which [compilation](https://github.com/nanyx-lang/nanyx/blob/main/compiler/design/compilation.md) already wants.
+- **Docs as tests.** Running the code blocks in these docs as tests, which [compilation](./compilation) already wants.
 
 # Prior art
 

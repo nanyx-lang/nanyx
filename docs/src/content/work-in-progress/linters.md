@@ -1,11 +1,15 @@
-# Linters: compiler design
+---
+title: "Linters: compiler design"
+description: "What the compiler provides so that linters can be built on it"
+order: 29
+---
 
 > **Status: draft.** This is the compiler-side design for linters. The user-facing model is described in
-> [Linters](../../docs/src/content/advanced/linters.md) and
-> [Official style linter](../../docs/src/content/standard-tools/official-linter.md); this document is about
+> [Linters](../advanced/linters) and
+> [Official style linter](../standard-tools/official-linter); this document is about
 > what the compiler has to provide so that model can be built without reworking the front end later.
 
-## Summary
+# Summary
 
 Linters inspect a checked module and report diagnostics that are not compile errors: unused bindings,
 unreachable branches, style rules. The docs promise that they are written in Nanyx, configured per project, and
@@ -17,20 +21,20 @@ while the compiler is small and expensive to add later, because every phase and 
 plan is to build the substrate first, prove it with a handful of linters written in F# inside the compiler, and
 only then design the public contract that Nanyx-authored linters will be written against.
 
-## Goals
+# Goals
 
 - Linter diagnostics are positioned exactly (start and end), in the right file, and can carry fixes.
 - Every diagnostic, compiler or linter, has a stable code, so projects can configure, promote or suppress it.
 - Linters see the program as the user wrote it, with types and resolved names.
 - A linter can never break compilation: a crashing linter produces a diagnostic, not a failed build.
-- The compiler itself emits only errors (see [No warnings](../../docs/src/content/foundations/principles.md)).
+- The compiler itself emits only errors (see [No warnings](../foundations/principles)).
 
-## Non-goals (for now)
+# Non-goals (for now)
 
 - The public, versioned API for linters written in Nanyx. It is the last step, not the first.
 - Running linters on code that does not type-check (see [Code with errors](#code-with-errors)).
 
-## Where the compiler is today
+# Where the compiler is today
 
 - **Every syntax node has a span** ([#96](https://github.com/nanyx-lang/nanyx/issues/96)). Every top-level item,
   expression, pattern, statement, type expression and import has a `SourceSpan`, and all but imports have a
@@ -56,9 +60,9 @@ only then design the public contract that Nanyx-authored linters will be written
 - **The typed tree is a placeholder.** `TypedExpr` wraps the untyped `Expression` with a type and some optional
   children, and is turned back into syntax (`moduleFromTypedItems`) for the backend.
 
-## Design
+# Design
 
-### 1. Spans on every node
+## 1. Spans on every node
 
 Every syntax node carries a `SourceSpan`:
 
@@ -98,14 +102,14 @@ A diagnostic is created with the span of the node it is about (done in
 [#97](https://github.com/nanyx-lang/nanyx/issues/97), which removed the positioning of diagnostics after the fact).
 Once every node has a span, the diagnostics that are now reported at the nearest enclosing node move to their own.
 
-### 2. Structured diagnostics
+## 2. Structured diagnostics
 
 > **Done** in [#97](https://github.com/nanyx-lang/nanyx/issues/97), except that few compiler errors offer
 > suggestions or fixes yet: the first fix is the import an unknown name from the standard library needs
 > ([#497](https://github.com/nanyx-lang/nanyx/issues/497)). The language server offers fixes as quick fixes
 > ([#284](https://github.com/nanyx-lang/nanyx/issues/284)).
 
-The diagnostic follows the error anatomy in [Principles](../../docs/src/content/foundations/principles.md#human-readable-errors):
+The diagnostic follows the error anatomy in [Principles](../foundations/principles#human-readable-errors):
 a code, a short title, a detailed message, suggestions and fixes.
 
 ```fsharp
@@ -147,7 +151,7 @@ Rules:
 Introducing codes for existing errors can be incremental: give every current error a code when its constructor
 is changed to take a span.
 
-### 3. The semantic model
+## 3. The semantic model
 
 Linters, hover and go-to-definition all ask the same questions: what is the type of this node, and what does
 this name refer to. The semantic model answers them for one module:
@@ -195,12 +199,12 @@ How it is produced:
 Whether `TypedExpr` survives alongside the side tables, or is replaced by them, is an implementation choice for
 the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two trees in step.
 
-### 4. The linter host (internal)
+## 4. The linter host (internal)
 
 > **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Linters.fs`). The official `default`
 > linter's first rule is `unusedBindings` ([#101](https://github.com/nanyx-lang/nanyx/issues/101)), whose fixes are
 > the first any diagnostic offers; the language server shows them as quick fixes. Its second is `nonTailRecursion`
-> ([tail-calls.md](tail-calls.md#checking-tail-position)), and its third `unreachableArms`
+> ([Tail calls](./tail-calls#checking-tail-position)), and its third `unreachableArms`
 > ([#103](https://github.com/nanyx-lang/nanyx/issues/103)), which asks `PatternSpace` which earlier arms cover an arm:
 > the module the exhaustiveness check in `Infer.fs` uses too. Its fourth is `unusedImports`
 > ([#102](https://github.com/nanyx-lang/nanyx/issues/102)): an `ImportedModule` symbol that no entry of
@@ -269,7 +273,7 @@ different parts of the model:
 | Exported definition without an annotation | the surface tree (annotations as written) |
 | Unused return value | types of expression statements |
 
-### 5. The public contract (later)
+## 5. The public contract (later)
 
 Once the internal linters have shaken out the semantic model, the public contract can be designed with
 evidence rather than guesses. The direction so far:
@@ -281,7 +285,7 @@ evidence rather than guesses. The direction so far:
   representation free to change, and avoid copying large trees across the WASM boundary.
 - The contract is versioned from day one, and a linter declares the version it targets.
 
-## Code with errors
+# Code with errors
 
 Today any error stops compilation before a typed module exists, so linters can only run on modules with no
 errors. That is the right first step and keeps linters simple. Its cost is in the editor: linter diagnostics
@@ -291,7 +295,7 @@ Running linters on code with errors needs parser error recovery and an inference
 error, which the language server wants for its own reasons. It is out of scope here, but the semantic model
 should not assume every node has a type: `Types` is a map, and a missing entry means "unknown".
 
-## Plan
+# Plan
 
 1. **Foundations.** Spans on every node; structured diagnostics with codes; diagnostics carry their file.
 2. **Semantic model.** Record name resolution as symbols and references; keep desugaring provenance.
@@ -302,7 +306,7 @@ should not assume every node has a type: `Types` is a map, and a missing entry m
 Steps 1 and 2 are useful on their own: the language server needs exact ranges and symbols for hover and
 go-to-definition regardless of linters.
 
-## Open questions
+# Open questions
 
 - **Suppression in source.** An attribute (`@allow(default/unusedBindings)`) on a definition, a comment form, or
   only the convention that a `_`-prefixed name is intentionally unused? The docs already use `_` patterns.

@@ -3,7 +3,7 @@
 /// Each definition whose type is concrete is lowered as a root. A call to a generic definition asks for its
 /// specialisation at the call's type arguments, which is lowered in turn (and may ask for more). A definition the IR
 /// cannot lower yet is left to `CodeGen.fs`, which compiles it as it always has: see "Core IR" in
-/// `compiler/design/memory.md` for this fallback.
+/// `docs/src/content/work-in-progress/memory-management.md` for this fallback.
 module Transpiler.Wasm.CoreIrLower
 
 open NyxCompiler

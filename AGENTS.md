@@ -3,7 +3,7 @@
 These rules are for anyone changing the compiler and its tools, whether a person or an agent. The compiler
 moves fast, with dozens of commits a day, and most of them land in the same few files. These rules keep
 those files workable. The reasoning behind them, and the current state of the code, are in
-[compiler/design/code-quality.md](compiler/design/code-quality.md). Issue
+[Code quality](docs/src/content/work-in-progress/code-quality.md). Issue
 [#379](https://github.com/nanyx-lang/nanyx/issues/379) tracks the work.
 
 ## Where new code goes
@@ -31,8 +31,20 @@ those files workable. The reasoning behind them, and the current state of the co
   ([#377](https://github.com/nanyx-lang/nanyx/issues/377)).
 - **Delete dead code.** Don't comment it out, and don't leave a function nobody calls. Never commit
   placeholder markers such as `// ...existing code...`.
-- **Keep comments true.** When you change behaviour, update the doc comments, the design docs and
-  `compiler/README.md` that describe it.
+- **Keep comments true.** When you change behaviour, update the doc comments and the docs pages that
+  describe it.
+
+## Documentation
+
+- **All documentation lives on the docs site.** Design notes, proposals and descriptions of how the
+  compiler works today go in the Work in progress section,
+  [docs/src/content/work-in-progress](docs/src/content/work-in-progress). Don't add design docs or long
+  READMEs elsewhere in the repository; `compiler/README.md` only says how to build and test.
+- **Keep the Work in progress section up to date.** If your change touches something a page there
+  describes (a feature, a plan item, an open question, a file or function it names), update the page in
+  the same PR: mark plan items done, move settled questions into the design, and correct what the page
+  says about the code. If you start on something that has no page, add one. When a feature is finished
+  and described in the language docs, cut the page down to what is still open, or delete it.
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 

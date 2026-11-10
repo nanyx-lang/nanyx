@@ -1,5 +1,5 @@
 /// Drop specialisation and in-place reuse, on the counted core IR (steps 3 and 4 of "Inserting counts" in
-/// `compiler/design/memory.md`).
+/// `docs/src/content/work-in-progress/memory-management.md`).
 ///
 /// A `match` arm that takes an object apart and does not use it itself takes a reference to each name it binds, then
 /// drops the object (see `CoreIrCounting`). When the arm holds the only reference, both are wasted: the names can take

@@ -305,7 +305,7 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
     let fieldTypes = results |> List.map (fun (n, _, types) -> (n, types)) |> Map.ofList
     layouts, fieldTypes
 
-/// The functions a module was compiled into, from the core IR (see "Core IR" in `compiler/design/memory.md`).
+/// The functions a module was compiled into, from the core IR (see "Core IR" in `docs/src/content/work-in-progress/memory-management.md`).
 type BackendReport =
     { /// The functions, by their names in WebAssembly text, specialisations and the start function included.
       Functions: string list

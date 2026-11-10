@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 
 /// Which calls are in tail position. The language guarantees that a call in tail position uses no stack
-/// (`compiler/design/tail-calls.md`), so the backend lowers these calls to `return_call`, and the official linter
+/// (`docs/src/content/work-in-progress/tail-calls.md`), so the backend lowers these calls to `return_call`, and the official linter
 /// reports a recursive call that is not one of them.
 module TailPosition =
     /// The calls in tail position in `body`, the body of a function, by node: calls, pipes and context member calls

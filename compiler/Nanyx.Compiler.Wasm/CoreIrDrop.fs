@@ -1,6 +1,6 @@
 /// The drop and dup functions of a module: for each type of object on the heap that its functions use, one that gives
 /// up a reference to a value of that type and, when it was the last, drops the object's fields and frees it, and one
-/// that takes a reference (see "Object header" in `compiler/design/memory.md`). Every type is concrete, so each drop
+/// that takes a reference (see "Object header" in `docs/src/content/work-in-progress/memory-management.md`). Every type is concrete, so each drop
 /// function knows which of its object's fields are pointers.
 module Transpiler.Wasm.CoreIrDrop
 
