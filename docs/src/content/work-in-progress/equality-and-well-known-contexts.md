@@ -26,6 +26,9 @@ order: 8
 - **Instances at a call.** A call that requires `Eq(T)` finds: an instance in scope (a `use`, or the enclosing
   signature); then the `==` attached to `T`; then the compiler's own, whose member is the prelude's `__equals`, a
   generic function that compares by structure at the type it is specialised for.
+- **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
+  built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
+  the rule, with a list of the members it covers for `compare` and `hash` to join.
 
 Not done yet:
 
@@ -36,8 +39,7 @@ Not done yet:
   with an `Eq` loaded by `use` (decision 2 below).
 - **Local functions require no contexts**, so a local `def same = { x, y -> x == y }` is not checked when it is
   called with functions; the backend reports that, as `NYX0301`.
-- **Joining the operands** for open tag unions, the rules on which types may attach `==`, and the warning for
-  types with no tag in common.
+- **Joining the operands** for open tag unions, and the warning for types with no tag in common.
 
 # What existed before
 

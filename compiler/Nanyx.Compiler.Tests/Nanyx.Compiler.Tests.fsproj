@@ -13,6 +13,7 @@
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
+    <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
