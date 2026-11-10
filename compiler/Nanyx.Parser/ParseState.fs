@@ -113,29 +113,31 @@ let identifierNoWs: Parser<Identifier, ParseState> =
 
 let identifier: Parser<Identifier, ParseState> = identifierNoWs .>> wsInline
 
-/// An operator's name in backticks, as a definition, a context member or a record field is named when it is an
-/// operator: `` def Point.`==` = ... ``. The name is the operator without its backticks. Spellings made of
-/// operator characters that are syntax (`=`, `->`, `=>`, and `--`, which starts a comment) cannot be names.
-let operatorNameNoWs: Parser<Identifier, ParseState> =
-    let quoted = between (pchar '`') (pchar '`') (many1Satisfy Names.isOperatorChar) <?> "operator name in backticks"
+/// A name in backticks, for a name that is not an identifier: an operator, `` def Point.`==` = ... ``, or a sentence,
+/// `` def `adds points` = ... ``. The name is the text without its backticks, and is anything but a backtick, a line
+/// break or a dot (see `Names.isBacktickedChar`). Spellings made of operator characters that are syntax (`=`, `->`,
+/// `=>`, and `--`, which starts a comment) cannot be names, and nor can blank text.
+let backtickedNameNoWs: Parser<Identifier, ParseState> =
+    let quoted = between (pchar '`') (pchar '`') (many1Satisfy Names.isBacktickedChar) <?> "name in backticks"
     quoted >>= fun name ->
         // Fatal, so the error is this one and not whatever an enclosing alternative fails with after backtracking.
         if Names.isReservedOperatorSpelling name then failFatally $"'{name}' is syntax, not an operator, so it cannot be a name"
+        elif String.IsNullOrWhiteSpace name then failFatally "A name in backticks cannot be blank"
         else preturn name
 
-/// A name that may be an identifier or an operator's name in backticks.
-let nameNoWs: Parser<Identifier, ParseState> = identifierNoWs <|> operatorNameNoWs
+/// A name that may be an identifier or a name in backticks.
+let nameNoWs: Parser<Identifier, ParseState> = identifierNoWs <|> backtickedNameNoWs
 
 let typeNameIdentifier: Parser<Identifier, ParseState> =
     (pchar '$' >>. identifierNoWs |>> fun name -> "$" + name)
     <|> identifierNoWs
 
-/// A name qualified with dots, any part of which may be a nominal type's, and whose parts may be operators in
+/// A name qualified with dots, any part of which may be a nominal type's, and whose parts may be names in
 /// backticks: `m.$Email.parse`, `` Point.`+` ``.
 let qualifiedIdentifier: Parser<Identifier, ParseState> =
     pipe2
-        (typeNameIdentifier <|> operatorNameNoWs)
-        (many (pchar '.' >>. (typeNameIdentifier <|> operatorNameNoWs)))
+        (typeNameIdentifier <|> backtickedNameNoWs)
+        (many (pchar '.' >>. (typeNameIdentifier <|> backtickedNameNoWs)))
         (fun head tail -> String.concat "." (head :: tail))
 
 let internal spanOf (start: Position) (endIndex: int) : SourceSpan =
@@ -161,7 +163,7 @@ let private trimmedEnd: Parser<int, ParseState> =
 let withSpan (p: Parser<'a, ParseState>) : Parser<'a * SourceSpan, ParseState> =
     pipe3 getPosition p trimmedEnd (fun start value endIndex -> value, spanOf start endIndex)
 
-/// The span of `name`, written from `start` on one line, with the backticks of an operator's name.
+/// The span of `name`, written from `start` on one line, with its backticks if it has them.
 let internal nameSpan (start: Position) (name: Identifier) = spanOf start (int start.Index + (Names.written name).Length)
 
 /// Notes `name`, written at `start`, as declared by the construct being parsed: see `collectingNames`.

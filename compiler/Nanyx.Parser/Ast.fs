@@ -20,11 +20,30 @@ module Names =
     /// Whether `name` is an operator's name, which is written in backticks where a name goes.
     let isOperator (name: string) = name <> "" && String.forall isOperatorChar name
 
-    /// `name` as it is written where a name goes: an operator in backticks, anything else as it is. Each part of a
-    /// qualified name is written on its own: `` Point.`+` ``.
+    /// Whether `c` can be part of a name in backticks: anything but a backtick, a line break, or a dot, which
+    /// separates the parts of a qualified name.
+    let isBacktickedChar (c: char) = c <> '`' && c <> '\n' && c <> '\r' && c <> '.'
+
+    /// Whether `name` is an identifier, which is written without backticks.
+    let isIdentifier (name: string) =
+        name <> ""
+        && (System.Char.IsLetter name[0] || name[0] = '_')
+        && String.forall (fun c -> System.Char.IsLetterOrDigit c || c = '_') name
+
+    /// The words the language reserves, which a name that is one of them is written in backticks to avoid:
+    /// `` `match` ``.
+    let keywords =
+        set [ "and"; "as"; "context"; "def"; "else"; "except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
+              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
+
+    /// `name` as it is written where a name goes: an identifier or a nominal type's name (`$Email`) as it is, and
+    /// anything else, such as an operator, a sentence or a keyword, in backticks. Each part of a qualified name is
+    /// written on its own: `` Point.`+` ``.
     let written (name: string) =
+        let isBare (part: string) =
+            (isIdentifier part && not (keywords.Contains part)) || (part.StartsWith "$" && isIdentifier part[1..])
         name.Split '.'
-        |> Array.map (fun part -> if isOperator part then $"`{part}`" else part)
+        |> Array.map (fun part -> if isBare part then part else $"`{part}`")
         |> String.concat "."
 
 /// Where a syntax node came from: character offsets into its file's source (`End` is one past the last

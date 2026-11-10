@@ -21,12 +21,18 @@ let contextMemberKey (contextType: TypeExpr option) (memberName: string) =
     | Some ({ TypeExpr.Kind = TypeApply _ } as applied) -> $"{typeExprToKey applied}_{memberName}"
     | _ -> memberName
 
+/// `name` as a WebAssembly identifier. ASCII letters, digits, `_` and `-` are kept, and a `.` becomes `_`. Any other
+/// character becomes its code in hex between dashes, `-20-` for a space, so that names that differ only there, such
+/// as `` `add points` `` and `add_points`, or `` Point.`==` `` and `` Point.`!=` ``, stay apart. Some names are
+/// sanitized twice, so a sanitized name is left as it is.
 let sanitizeIdentifier (name: string) =
     let sanitized =
         name
-        |> Seq.map (fun c -> if Char.IsLetterOrDigit c || c = '_' then c else '_')
-        |> Seq.toArray
-        |> String
+        |> Seq.map (fun c ->
+            if Char.IsAsciiLetterOrDigit c || c = '_' || c = '-' then string c
+            elif c = '.' then "_"
+            else $"-%X{int c}-")
+        |> String.concat ""
     if String.IsNullOrWhiteSpace sanitized then "_"
     elif Char.IsDigit sanitized.[0] then "_" + sanitized
     else sanitized
