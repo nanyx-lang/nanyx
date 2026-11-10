@@ -699,8 +699,9 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
 // Instances of parameterised contexts.
 //
 // A function that requires `[Sum(a)]` is passed an instance of `Sum` for whatever `a` is at each call. The call finds
-// it, nearest first, among the instances in scope (each `use` of a `Sum(T)` around the call, and each context the type
-// of the function around the call declares), or else builds it from the definitions attached to the type, as
+// it, nearest first, among the instances in scope (each `use` of a `Sum(T)`, or of a value of `Sum`'s shape, around
+// the call, and each context the type of the function around the call declares), or else builds it from the
+// definitions attached to the type, as
 // `Point.0` and `Point.+` make a `Sum(Point)`. Where it was found is kept by the call's node, for the backend.
 
 /// What the names of the instances in scope start with, in the environment. No name written in the source can, so
@@ -864,9 +865,32 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
     let current = { current with TypeVars = state.TypeVars }
     argTys |> List.map (resolveSoFar current), current
 
-/// `env` with the instance `use value` loads in scope, when `value`, of the type `valueTy`, is an instance of a
-/// parameterised context: a value whose type is the context applied to types, as `def addInt: Sum(int) = (...)` makes
-/// `addInt`. The instance is recorded by the node of `value` (see `TypedModule.UseContexts`).
+/// Each parameterised context a value of the type `valueTy` is an instance of, applied to the types it is one for: a
+/// record with exactly the context's members, at types that settle each of its parameters. `use (`+` = ...)`, of a
+/// record whose type does not name a context, finds that it is an `Add(int)` by the record's shape.
+let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
+    match Unifier.unalias (resolveSoFar state valueTy) with
+    | TyRecord fields ->
+        [ for KeyValue(ctxName, info) in state.TypeDefs do
+            if info.IsContext && not info.Parameters.IsEmpty then
+                let paramTys, scratch = info.Parameters |> List.mapFold (fun current _ -> freshVar current) state
+                match contextMemberTypes scratch ctxName paramTys with
+                | Some members when Set.ofList (List.map fst members) = Set.ofSeq fields.Keys ->
+                    let scratch = members |> List.fold (fun current (name, memberTy) -> addConstraint memberTy fields.[name] current) scratch
+                    if Unifier.unify scratch.Constraints |> Result.isOk then
+                        let argTys = paramTys |> List.map (resolveSoFar scratch)
+                        if argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty) then
+                            match argTys |> List.map (ContextInference.typeExprOf Map.empty) with
+                            | args when args |> List.forall Option.isSome ->
+                                yield TypeExpr.synthetic (TypeApply(ctxName, args |> List.map Option.get))
+                            | _ -> ()
+                | _ -> () ]
+    | _ -> []
+
+/// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
+/// context: a value whose type is the context applied to types, as `def addInt: Sum(int) = (...)` makes `addInt`
+/// (recorded by the node of `value`, see `TypedModule.UseContexts`), or else a record of a context's shape (see
+/// `contextsOfValue`).
 let private useInstance (env: TypeEnv) (state: InferState) (value: Expression) (valueTy: Ty) : TypeEnv * InferState =
     match resolveSoFar state valueTy with
     | TyAlias(ctxName, (_ :: _ as argTys), _)
@@ -877,7 +901,7 @@ let private useInstance (env: TypeEnv) (state: InferState) (value: Expression) (
             let env, state = bindInstanceOf env state ctxName argTys written
             env, { state with UseContexts = state.UseContexts |> Map.add value.Id written }
         | None -> env, state
-    | _ -> env, state
+    | _ -> bindInstances env state (contextsOfValue state valueTy)
 
 /// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
 /// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
@@ -1403,6 +1427,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Error err -> Error err
             | Ok (rightExpr, nextState) ->
                 let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
+                match OperatorCalls.definition env nextState expr leftExpr.Type with
+                | Some scheme ->
+                    let resultTy, called = OperatorCalls.infer nextState expr scheme (inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ])
+                    Ok (mkTypedExpr expr resultTy None None None, called)
+                | None ->
                 match expr.Kind with
                 | BinaryOp("++", _, _) ->
                     // `++` concatenates two strings or two lists; both sides have the same type, which is the result.

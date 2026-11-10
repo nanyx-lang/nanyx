@@ -121,6 +121,9 @@ type InferState =
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
             /// `x \trim` on a string calls `String.trim`.
             PipeTargets: Map<NodeId, Identifier>;
+            /// The operators that call the definition their name is bound to, by the operator's node: `x + y` in a
+            /// function that requires `[Sum(a)]` calls the context's `` `+` ``.
+            OperatorCalls: Set<NodeId>;
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
@@ -198,6 +201,7 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
+            OperatorCalls = Set.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;

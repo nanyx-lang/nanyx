@@ -27,6 +27,7 @@
     <Compile Include="ArmUnion.fs" />
     <Compile Include="InterpolationHoles.fs" />
     <Compile Include="ContextInference.fs" />
+    <Compile Include="OperatorCalls.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />

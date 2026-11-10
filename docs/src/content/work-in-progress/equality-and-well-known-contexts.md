@@ -32,8 +32,7 @@ Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Imple
      ill-typed definition is reported as `MissingContextMembers`, naming it.
 
 Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is
-built from a type's structure ([type arguments and reflection](./type-members-and-reflection),
-lines 38 and 153-155).
+built from a type's structure (see [structural context synthesis](./type-members-and-reflection#structural-context-synthesis)).
 
 # Equality: implemented as an untyped intrinsic
 
@@ -75,7 +74,7 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 
 | The docs say | The compiler does |
 |---|---|
-| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. |
+| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. An operator on a value of a type variable calls the member of that name of a context the function requires. |
 | A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks does not parse, attached or not, and neither does an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). So the docs' `Eq(a)` and `Sum(a)`, whose members are `` `==` `` and `` `+` ``, cannot be declared. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
@@ -225,7 +224,9 @@ block, which is what that page already proposes.
 # Numeric operators
 
 `+`, `-`, `*`, `/`, `%` and `**` stay as they are for now: typed directly, on numbers only, with `++` on strings and
-lists. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
+lists. The one exception is generic code: where an operator's name is bound, as `` `+` `` is in a function that
+requires `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
+(`OperatorCalls.fs`), so `{ x, y -> x + y }` can be `[Sum(a)] a, a -> a`. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
 operator or one `Num`, how literals like `0` are typed, and how units and dimensions fit. That deserves its own
 document. The principle this design sets, that a built-in operator is sugar for a well-known context's member, is
 meant to hold for them too.
