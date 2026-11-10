@@ -22,6 +22,7 @@
     <Compile Include="Sets.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="BranchJoin.fs" />
+    <Compile Include="BlockResult.fs" />
     <Compile Include="Visibility.fs" />
     <Compile Include="PatternSpace.fs" />
     <Compile Include="Except.fs" />

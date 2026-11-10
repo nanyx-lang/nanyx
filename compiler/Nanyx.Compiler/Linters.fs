@@ -156,9 +156,8 @@ module UnusedBindings =
         @ (children |> List.collect blocksWithin)
         @ (statements |> List.collect SyntaxTree.ofStatement |> List.collect blocksWithin)
 
-    /// The fix for an unused `symbol`. A def is removed, unless removing it would change more than the def: when it is
-    /// one of the defs a destructuring def stands for (they share its span), or the last statement of its block (whose
-    /// value it is). Those, and any other name, become `_`.
+    /// The fix for an unused `symbol`. A def is removed, unless it is one of the defs a destructuring def stands for
+    /// (they share its span), where removing it would remove the others too. Those, and any other name, become `_`.
     let private fixFor (model: SemanticModel) (removableDefs: Map<SourceSpan, Statement list>) (symbol: Symbol) : Fix =
         let declaration = symbol.Declaration
         let rename = { Title = $"Rename `{symbol.Name}` to `_`"; Edits = [ { Span = declaration; NewText = "_" } ] }
@@ -187,13 +186,13 @@ module UnusedBindings =
 
     let lint (model: SemanticModel) : Report list =
         let referenced = model.References |> Map.values |> Set.ofSeq
-        // The local defs that are not the last statement of their block, by span: several share one when a
-        // destructuring def stands for them.
+        // The local defs, by span: several share one when a destructuring def stands for them. None ends its block,
+        // since a block that ends with a def is an error (NYX0220) and linters only run on a module without errors.
         let removableDefs =
             model.Syntax
             |> List.collect SyntaxTree.ofItem
             |> List.collect blocksWithin
-            |> List.collect (fun statements -> statements |> List.truncate (statements.Length - 1))
+            |> List.concat
             |> List.filter (function Kind (DefStatement _) -> true | _ -> false)
             |> List.groupBy (fun statement -> statement.Span)
             |> Map.ofList

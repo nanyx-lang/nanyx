@@ -249,13 +249,6 @@ let ``The fix for one unused name of a destructuring def renames it rather than 
     Assert.Equal("def f = { pair ->\n  def (_, b) = pair\n  b\n}", text)
     Assert.Empty((compileWithOfficial text).Diagnostics)
 
-[<Fact>]
-let ``The fix for an unused def that ends its block renames it, since the block's value is the def`` () =
-    let text, title = fixed' "def f = { x ->\n  def y = x\n}"
-    Assert.Equal("Rename `y` to `_`", title)
-    Assert.Equal("def f = { x ->\n  def _ = x\n}", text)
-    Assert.Empty((compileWithOfficial text).Diagnostics)
-
 // The official linter's `nonTailRecursion` rule.
 
 /// What `default/nonTailRecursion` reports for `source`: each message with the text it is reported at.

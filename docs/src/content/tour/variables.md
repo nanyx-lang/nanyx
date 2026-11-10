@@ -47,6 +47,8 @@ def result =
 -- result is 30
 ```
 
+So a block has to end with an expression. One that ends with a `def` has no value to give back, and is an error (NYX0220): write the name you defined on the last line, or `()` if the block gives back nothing. An empty block, `{ }`, gives back `()`.
+
 The defs in a block are only in scope inside it.
 
 # `do` blocks
