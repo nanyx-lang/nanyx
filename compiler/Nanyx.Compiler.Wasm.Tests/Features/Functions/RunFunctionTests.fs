@@ -95,6 +95,21 @@ let ``Run - shorthand lambdas filter, map and fold a list`` () =
     runSource source |> assertRan "2\n4\n6\n8\n10\n901\n1001\n55\n3\n"
 
 [<Fact>]
+let ``Run - a shorthand lambda compares a field of its argument`` () =
+    // `{ .age > 18 }` is `{ p -> p.age > 18 }`: the field access is the left operand of what follows it.
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "type P = (name: string, age: int)\n" +
+        "\n" +
+        "def ps: list(P) = [P(name = \"a\", age = 12), P(name = \"b\", age = 30), P(name = \"c\", age = 40)]\n" +
+        "\n" +
+        "println(\"{ps \\List.filter { .name == \"b\" } \\List.length}\")\n" +
+        "for ps \\List.filter { .age > 18 } | p -> println(p.name)\n" +
+        "println(\"{ps \\List.filter { .age * 2 >= 60 } \\List.length}\")\n"
+    runSource source |> assertRan "1\nb\nc\n2\n"
+
+[<Fact>]
 let ``Run - a function takes positional and named arguments together, called or piped into`` () =
     let source =
         "import nanyx/console\n" +
