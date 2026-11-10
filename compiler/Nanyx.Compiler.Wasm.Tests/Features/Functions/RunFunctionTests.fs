@@ -374,3 +374,21 @@ let ``Run - closures through the core IR`` () =
         "\n" +
         "main()\n"
     runSource source |> assertRan "11\n8\n12\nhi!\n10\n"
+
+[<Fact>]
+let ``Run - holes in annotations are filled in by inference`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def add: (int, _) -> _ = { a, b -> a + b }\n" +
+        "def names: list(_) = [\"ada\", \"grace\"]\n" +
+        "def id: _ -> _ = { x -> x }\n" +
+        "def greet = { (name: _) -> \"hi {name}\" }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def total: _ = add(40, 2)\n" +
+        "  println(\"{total} {id(7)} {id(\"same\")}\")\n" +
+        "  for names | n -> println(greet(n))\n" +
+        "}\n"
+    runSource source |> assertRan "42 7 same\nhi ada\nhi grace\n"

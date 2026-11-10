@@ -224,8 +224,8 @@ What it does today:
   annotation (`nanyx lsp --ascii` writes types in ASCII only: `a`, `b`,
   ... and `z`, and `...` for a spread), and a type alias by its
   name (`Customer`, not `(name: string)`: inference carries aliases as `TyAlias` and looks through them); on a call's function name it shows the function's type at that call (so `id` in `id(5)` is
-  `int -> int`), and on a declaration's own name (a def, a parameter, a pattern variable) the type of
-  what it declares. The types come from the typed module's `ExprTypes` and `CalleeTypes`, recorded by
+  `int -> int`), on a declaration's own name (a def, a parameter, a pattern variable) the type of
+  what it declares, and on a `_` in an annotation the type inference filled it in with. The types come from the typed module's `ExprTypes` and `CalleeTypes`, recorded by
   node during inference, and `SymbolTypes`, by symbol (see `NyxCompiler.Hover`). A file that does not type-check shows no hover.
   On a type's name, in an annotation or a type definition, hover shows the type's definition instead
   (`type Point = (x: int, y: int)`; see `Definition.typeDefinitionAt`).

@@ -411,3 +411,11 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     Assert.Equal("list((a, b))", Unifier.tyToString (TyApply("list", [ pair a b ])))
     // The unit type is written `()`.
     Assert.Equal("() -> ()", Unifier.tyToString (TyFunc(TyPrimitive "unit", TyPrimitive "unit")))
+
+[<Fact>]
+let ``A def annotated with holes shows its inferred type, and each hole what it was inferred to be`` () =
+    let source = "def xs: list(_) = [1, 2]\ndef add: (int, _) -> _ = { a, b -> a + b }\n"
+    Assert.Equal(Some "list(int)", hoverType source (offsetOf source "xs" 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "_" 0 0))
+    Assert.Equal(Some "int, int -> int", hoverType source (offsetOf source "add" 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "_" 2 0))

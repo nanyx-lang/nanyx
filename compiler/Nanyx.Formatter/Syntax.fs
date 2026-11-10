@@ -96,6 +96,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             match t.Kind with
             | TypeName _
             | TypeVar _
+            | TypeHole
             | TypeUnit -> t.Kind
             | TypeTuple items -> TypeTuple(List.map typeExpr items)
             | TypeRecord fields -> TypeRecord(List.map typeField fields)

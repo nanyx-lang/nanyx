@@ -76,6 +76,49 @@ let allExpressions (module': Module) : Expression list =
     let rec walk (expr: Expression) : Expression list = expr :: (children expr |> List.collect walk)
     module' |> List.collect topLevelExpressions |> List.collect walk
 
+/// The types written in a definition: its annotation, or a type definition's parameters' constraints and body.
+let private definitionTypes (definition: Definition) : TypeExpr list =
+    match definition with
+    | ValueDef(_, _, typeOpt, _) -> Option.toList typeOpt
+    | TypeDef(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
+
+/// The types written directly in `expr` (not in the expressions inside it): its lambda's parameters' annotations,
+/// its block's defs' annotations and type definitions, the context it names.
+let expressionTypes (expr: Expression) : TypeExpr list =
+    match expr.Kind with
+    | Lambda(parameters, _) -> parameters |> List.choose snd
+    | Block statements ->
+        statements
+        |> List.collect (fun statement ->
+            match statement.Kind with
+            | DefStatement(_, _, typeOpt, _) -> Option.toList typeOpt
+            | TypeDefStatement(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
+            | UseStatement (UseContextInstance(context, _)) -> [ context ]
+            | UseStatement (UseValue _)
+            | ExprStatement _
+            | ImportStatement _ -> [])
+    | ContextMemberAccess(context, _)
+    | ContextMemberCall(context, _, _)
+    | UseIn(UseContextInstance(context, _), _) -> [ context ]
+    | _ -> []
+
+let rec topLevelTypes (item: TopLevelItem) : TypeExpr list =
+    match item.Kind with
+    | Def definition -> definitionTypes definition
+    | ModuleBlock(_, items) -> items |> List.collect topLevelTypes
+    | Expr _
+    | ModuleDecl _
+    | Import _
+    | Attribute _ -> []
+
+/// The type expressions whose spans contain `offset`, innermost first.
+let typeExprsAt (offset: int) (module': Module) : TypeExpr list =
+    let rec search (found: TypeExpr list) (typeExpr: TypeExpr) : TypeExpr list =
+        if contains offset typeExpr.Span then TypeExpr.children typeExpr |> List.fold search (typeExpr :: found)
+        else found
+    let written = (module' |> List.collect topLevelTypes) @ (expressionsAt offset module' |> List.collect expressionTypes)
+    written |> List.fold search []
+
 /// The span of a call's or pipe's function name, when it has one.
 let private calleeSpan (expr: Expression) =
     match expr.Kind with
@@ -85,8 +128,9 @@ let private calleeSpan (expr: Expression) =
 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name, where it is instantiated at that
-/// call, or of what a declaration's own name declares (a def, a parameter, a pattern variable), with made-up
-/// type variables named by `names`. `None` when the module did not type-check or nothing typed is at `offset`.
+/// call, or of what a declaration's own name declares (a def, a parameter, a pattern variable), or of what a `_` in
+/// a type was inferred to be, with made-up type variables named by `names`. `None` when the module did not type-check
+/// or nothing typed is at `offset`.
 ///
 /// The narrowest span wins rather than the deepest node, because a made-up node can sit inside the syntax it
 /// stands for: a `for` loop's element is an identifier spanning all of the loop's arms. Of equal spans the
@@ -114,6 +158,12 @@ let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverIn
                 let own = typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, expr.Span, depth, 1)
                 Option.toList callee @ Option.toList own)
             |> List.concat)
+            // A `_` in a type shows what it was inferred to be.
+            @ (typeExprsAt offset syntax
+            |> List.choose (fun typeExpr ->
+                match typeExpr.Kind with
+                | TypeHole -> typed.ExprTypes |> Map.tryFind typeExpr.Id |> Option.map (fun ty -> ty, typeExpr.Span, 0, 0)
+                | _ -> None))
         match candidates with
         | [] -> None
         | _ ->

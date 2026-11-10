@@ -984,6 +984,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         match t.Kind with
         | TypeName n
         | TypeVar n -> text n
+        | TypeHole -> text "_"
         | TypeUnit -> text "()"
         | TypeTuple _ -> parenType t
         | TypeRecord fields -> cat [ text "("; commaJoin (List.map recordTypeField fields); text ")" ]

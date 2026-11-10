@@ -161,3 +161,17 @@ let ``typeof in a module block names the block's own value`` () =
                 | _ -> None)
         annotation |> should equal (ty (TypeOf (Expression.synthetic (IdentifierExpr "config.defaults"))))
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``an underscore in a type is a hole`` () =
+    let annotationOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
+        | other -> failwith $"Unexpected parse: %A{other}"
+    let hole = ty TypeHole
+    annotationOf "def xs: list(_) = [1, 2]" |> should equal (ty (TypeApply ("list", [ hole ])))
+    annotationOf "def f: (int, _) -> _ = { a, b -> a + b }" |> should equal (func (tuple [ named "int"; hole ]) hole)
+    annotationOf "def m: map(string, _) = m" |> should equal (ty (TypeApply ("map", [ named "string"; hole ])))
+    annotationOf "def x: _ = 1" |> should equal hole
+    // Only `_` alone: a name that starts with one is a type's name.
+    annotationOf "def x: _a = 1" |> should equal (named "_a")

@@ -85,6 +85,8 @@ type TypeExpr =
 and TypeExprKind =
     | TypeName of Identifier
     | TypeVar of Identifier
+    /// `_`: a part of the type left for inference to fill in, as `list(_)`. Each one is a type of its own.
+    | TypeHole
     | TypeUnit
     | TypeTuple of TypeExpr list
     | TypeRecord of TypeRecordField list
@@ -310,6 +312,34 @@ module TypeExpr =
 
     /// A type expression the compiler made up that has no source of its own.
     let synthetic (kind: TypeExprKind) = at SourceSpan.none kind
+
+    /// The type expressions directly inside `typeExpr`.
+    let children (typeExpr: TypeExpr) : TypeExpr list =
+        match typeExpr.Kind with
+        | TypeName _
+        | TypeVar _
+        | TypeHole
+        | TypeUnit
+        | TypeOf _ -> []
+        | TypeTuple items
+        | TypeUnion items
+        | TypeIntersection items
+        | TypeContext items
+        | TypeApply(_, items) -> items
+        | TypeRecord fields ->
+            fields |> List.choose (function TypeField(_, _, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt)
+        | TypeFunc(arg, ret) -> [ arg; ret ]
+        | TypeTag(_, payload) -> Option.toList payload
+        | TypeWithContext(contexts, inner) -> contexts @ [ inner ]
+        | TypeOptional inner
+        | TypeConstraint(_, inner, _)
+        | TypeWhere(inner, _) -> [ inner ]
+
+    /// Each `_` written in `typeExpr`, in order.
+    let rec holes (typeExpr: TypeExpr) : TypeExpr list =
+        match typeExpr.Kind with
+        | TypeHole -> [ typeExpr ]
+        | _ -> children typeExpr |> List.collect holes
 
 module Pattern =
     /// A pattern written at `span`.
