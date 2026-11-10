@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <WarningsAsErrors>0025</WarningsAsErrors>
+    <!-- CI runs these tests in a job of their own, and passes this to leave them out of the solution's test run. -->
+    <IsTestProject Condition="'$(SkipWasmTests)' == 'true'">false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>

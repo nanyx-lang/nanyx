@@ -35,6 +35,13 @@ x \math.clamp(min = 0, max = 10)
 
 The functions with named parameters are `String.split`, `String.substring`, `String.padStart`, `String.padEnd`, `String.replace` and `math.clamp`. Everything else takes its arguments by position.
 
+Passing one of these by position is an error that names the parameters to write:
+
+```nanyx
+"7" \padStart(3, "0")
+-- error NYX0218: 'String.padStart' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'
+```
+
 # Core abstractions
 
 - `seq(a)` for finite sequences

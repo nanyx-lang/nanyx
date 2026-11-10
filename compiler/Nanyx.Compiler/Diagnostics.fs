@@ -99,6 +99,7 @@ module DiagnosticCodes =
     let NameBoundTwiceInPattern = code 215 "Name bound twice in a pattern" Severity.Error
     let MisplacedTypeHole = code 216 "Misplaced type hole" Severity.Error
     let EndlessForLoop = code 217 "Endless for loop" Severity.Error
+    let PositionalForNamedArgument = code 218 "Named parameter passed by position" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -113,7 +114,7 @@ module DiagnosticCodes =
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
-          GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop
+          GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnsupportedByBackend ]
 
 module Diagnostics =
@@ -138,6 +139,13 @@ module Diagnostics =
     let withRelated (span: SourceSpan) (message: string) (diagnostic: Diagnostic) =
         if SourceSpan.isNone span then diagnostic
         else { diagnostic with Related = diagnostic.Related @ [ span, message ] }
+
+    /// `items` as a message lists them: "a", "a and b", "a, b and c".
+    let listed (items: string list) =
+        match items with
+        | [] -> ""
+        | [ only ] -> only
+        | _ -> String.concat ", " (List.truncate (items.Length - 1) items) + " and " + List.last items
 
     let isError (diagnostic: Diagnostic) =
         match diagnostic.Severity with
