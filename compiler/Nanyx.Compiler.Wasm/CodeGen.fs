@@ -251,9 +251,11 @@ let private contextArguments
     |> List.fold (fun (acc: CoreIrLower.ContextArgument list, used: Set<string>) (requiredKey, instance) ->
         match instance with
         // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
-        // declares.
+        // declares. A `use` of a record value, which the type checker found to be the instance by its shape, binds
+        // its members by their names alone.
         | Some (memberName, Some (InstanceInScope written)) ->
-            let key = contextMemberKey (Some written) memberName
+            let writtenKey = contextMemberKey (Some written) memberName
+            let key = if not (scopeKeys.Contains writtenKey) && scopeKeys.Contains memberName then memberName else writtenKey
             acc @ [ memberFor requiredKey key ], used.Add key
         // An instance built from the attached definitions: each member is one of them, a function passed as a closure
         // over its wrapper, or a value passed as it is.
@@ -330,7 +332,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
         contextMemberKeys defs (fst (extractTypeLayouts module')) |> Map.map (fun _ keys -> keys |> List.map contextMemberParameter)
-    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures module'
+    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures typed.UseContexts module'
     let defs =
         module'
         |> List.choose (function

@@ -262,7 +262,7 @@ besides its functions comes from the IR of exactly the functions it emits (`Core
 host imports and helpers `dbg` calls. The heap is set up when some function calls `$alloc`.
 
 **What cannot be compiled.** Every function is compiled from the IR; there is no other way. What the IR cannot lower
-(`use ... in`, a local function, `==` on records and lists, `dbg` of a record, and the like) is an error,
+(a local function, `==` on records and lists, `dbg` of a record, and the like) is an error,
 `UnsupportedByBackend`, reported where it is written: `tryTranspileTypedModuleToWat` gives the first one. `==` is built
 in only for numbers, strings and tags; comparing and printing records and lists structurally is
 [#424](https://github.com/nanyx-lang/nanyx/issues/424). Only a type-checked module is compiled.

@@ -139,7 +139,8 @@ let ``A loaded instance wins over synthesis, and a generic function passes its o
         "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
         "def twice: [Show(a)] a -> string = { v -> describe(v) ++ describe(v) }\n" +
         "def main = {\n" +
-        "  use Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  use showPoint\n" +
         "  describe(Point(x = 1, y = 2))\n" +
         "}\n"
     match instancesIn source with
@@ -149,25 +150,71 @@ let ``A loaded instance wins over synthesis, and a generic function passes its o
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
+let ``A call finds an instance loaded with use by name, from a def or a parameter (#581)`` () =
+    let source =
+        showContext +
+        "def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "def viaParameter: (Show(Point), Point) -> string = { instance, p ->\n" +
+        "  use instance\n" +
+        "  describe(p)\n" +
+        "}\n" +
+        "def main = {\n" +
+        "  use showPoint\n" +
+        "  describe(Point(x = 1, y = 2))\n" +
+        "}\n"
+    match instancesIn source with
+    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ]
+        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
+    | other -> failwith $"Unexpected instances: %A{other}"
+
+[<Fact>]
 let ``A loaded instance is only used for the type it is for`` () =
-    // `use Show(Point)` does not make a `Show($Money)`: that one is still synthesized.
+    // A `Show(Point)` loaded with `use` does not make a `Show($Money)`: that one is still synthesized.
     let source =
         showContext +
         "type $Money = private int\n" +
         "def $Money.show: $Money -> string = { m -> \"money\" }\n" +
         "def main = {\n" +
-        "  use Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
+        "  use showPoint\n" +
         "  describe($Money(5))\n" +
         "}\n"
     Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "$Money.show" ]) ] ], instancesIn source)
 
 [<Fact>]
-let ``A loaded instance is checked against the context's members at the type it is for`` () =
-    let source = showContext + "def s = {\n  use Show(int) = ( show = { n -> n } )\n  1\n}\n"
+let ``An instance is checked against the context's members at the type it is for`` () =
+    let source = showContext + "def s = {\n  def showInt: Show(int) = ( show = { n -> n } )\n  use showInt\n  1\n}\n"
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
         Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+/// `showContext` with a named instance of `Show(Point)`, and `Point.show` for synthesis to find if the instance is not.
+let private namedShowInstance =
+    showContext +
+    "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
+    "def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n"
+
+[<Fact>]
+let ``A use of a named value loads it as the instance of the context it has the shape of`` () =
+    let loaded = [ Some (InstanceInScope (TypeExpr.synthetic (TypeApply("Show", [ TypeExpr.synthetic (TypeName "Point") ])))) ]
+    let statement = namedShowInstance + "def main = {\n  use showPoint\n  describe(Point(x = 1, y = 2))\n}\n"
+    let expression = namedShowInstance + "def main = {\n  use showPoint in describe(Point(x = 1, y = 2))\n}\n"
+    for source in [ statement; expression ] do
+        match instancesIn source with
+        | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
+        | other -> failwith $"Expected %A{loaded}, got %A{other}"
+
+[<Fact>]
+let ``A use of a named value is only an instance for the type it has the shape of`` () =
+    let source = namedShowInstance + "def main = {\n  use showPoint\n  describe(5)\n}\n"
+    match (Compiler.compile source).Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+        Assert.Equal(
+            "'describe' requires the context 'Show(int)', which is not loaded here, and 'Int.show' is not defined: define it, or load an instance with `use`",
+            diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]
@@ -279,3 +326,35 @@ let ``Hover and the type lens show the parameterised contexts a def was inferred
     Assert.Equal(Some "[Show(α)] α -> string", hover |> Option.map _.Type)
     let lenses = TypeHints.typeLenses Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
     Assert.Equal<(string * string) list>([ "twice", "[Show(α)] α -> string" ], lenses)
+
+/// A context whose member is an operator, and a generic function that requires it.
+let private addContext =
+    "context Add(a) = (`+`: (a, a) -> a)\n"
+
+[<Fact>]
+let ``An operator in a generic function calls the member of that name of the context the function requires`` () =
+    let source =
+        addContext +
+        "context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(zero()) { + } }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``An operator on ints is the built-in one in a function that requires a context with that operator`` () =
+    let source =
+        addContext +
+        "def addCounting: [Add(a)] a, a, int -> (a, int) = { x, y, n -> (x + y, n + 1) }\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``An operator that calls a context member checks its operands against the member's type`` () =
+    let source =
+        addContext +
+        "def addOne: [Add(a)] a -> a = { x -> x + 1 }\n"
+    let result = Compiler.compile source
+    match result.Diagnostics with
+    | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.AnnotationTooGeneral.Code, diagnostic.Code)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"

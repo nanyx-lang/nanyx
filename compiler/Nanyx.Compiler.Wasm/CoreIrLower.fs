@@ -877,7 +877,6 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     else this.Complex insideHole hole store
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
-        | UseIn _ -> cannot "`use ... in`"
         | _ -> cannot "this kind of expression"
 
     /// A closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for a generic
@@ -980,7 +979,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             this.Complex scope first (fun value ->
                 let body = this.Block scope rest k
                 mk (Do(value, body)) body.Type)
-        | UseStatement(UseValue(Kind (RecordExpr fields))) :: rest ->
+        | UseStatement(Kind (RecordExpr fields)) :: rest ->
             // Lambda lifting has evaluated each binding into a local; the members are those locals.
             let members =
                 fields

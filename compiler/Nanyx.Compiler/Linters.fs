@@ -70,12 +70,6 @@ type LinterOptions =
 
 /// Walking the module as written, for the rules of the official linter.
 module private SyntaxTree =
-    /// The value a `use` loads.
-    let useValue (binding: UseBinding) =
-        match binding with
-        | UseValue value
-        | UseContextInstance(_, value) -> value
-
     /// The expressions directly within `expr`, and the statements of it if it is a block: a guard's predicate among
     /// them. What types hold is left out: they hold no blocks.
     let childrenOf (expr: Expression) : Expression list * Statement list =
@@ -98,7 +92,7 @@ module private SyntaxTree =
         | TagExpr(_, payload) -> Option.toList payload, []
         | IfExpr(condition, ifTrue, ifFalse) -> [ condition; ifTrue; ifFalse ], []
         | MemberAccess(target, _, _) -> [ target ], []
-        | UseIn(binding, body) -> [ useValue binding; body ], []
+        | UseIn(value, body) -> [ value; body ], []
         | WorkflowBindExpr(_, value)
         | WorkflowReturnExpr value -> [ value ], []
         | InterpolatedString parts -> parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None), []
@@ -107,8 +101,8 @@ module private SyntaxTree =
     let ofStatement (statement: Statement) : Expression list =
         match statement.Kind with
         | DefStatement(_, _, _, value)
-        | ExprStatement value -> [ value ]
-        | UseStatement binding -> [ useValue binding ]
+        | ExprStatement value
+        | UseStatement value -> [ value ]
         | TypeDefStatement _
         | ImportStatement _ -> []
 

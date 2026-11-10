@@ -121,6 +121,9 @@ type InferState =
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
             /// `x \trim` on a string calls `String.trim`.
             PipeTargets: Map<NodeId, Identifier>;
+            /// The operators that call the definition their name is bound to, by the operator's node: `x + y` in a
+            /// function that requires `[Sum(a)]` calls the context's `` `+` ``.
+            OperatorCalls: Set<NodeId>;
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
@@ -141,8 +144,11 @@ type InferState =
             /// node (see `TypedModule.ContextInstances`).
             ContextInstances: Map<NodeId, ContextInstance option list>;
             /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
-            /// as written there, by the name they are bound under in the environment (see `instanceBinding`).
+            /// as written there, by the name they are bound under in the environment (see `bindInstance`).
             InstanceContexts: Map<string, TypeExpr>;
+            /// The instance of a parameterised context each `use` loads, by the node of the value it loads (see
+            /// `TypedModule.UseContexts`).
+            UseContexts: Map<NodeId, TypeExpr>;
             /// The expressions that failed to check, each by its node with its diagnostics, the latest first. Each is
             /// typed as anything, and checking carries on around it.
             FailedExprs: (NodeId * Diagnostic list) list;
@@ -195,6 +201,7 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
+            OperatorCalls = Set.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;
@@ -203,6 +210,7 @@ let emptyState =
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
             InstanceContexts = Map.empty;
+            UseContexts = Map.empty;
             FailedExprs = [];
             UnhandledMatches = [];
             UnknownTypeUses = [];

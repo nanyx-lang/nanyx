@@ -174,8 +174,8 @@ module Compiler =
             | MemberAccess(baseExpr, fieldName, rangeOpt) -> MemberAccess(mapExpr baseExpr, fieldName, rangeOpt)
             | ContextMemberCall(ctxType, memberName, args) ->
                 ContextMemberCall(ctxType, memberName, args |> List.map mapExpr)
-            | UseIn(binding, body) ->
-                UseIn(mapBinding binding, mapExpr body)
+            | UseIn(value, body) ->
+                UseIn(mapExpr value, mapExpr body)
             | InterpolatedString parts ->
                 InterpolatedString(
                     parts
@@ -187,17 +187,13 @@ module Compiler =
             | ContextMemberAccess _
             | UnitExpr
             | LiteralExpr _ -> current.Kind
-        and mapBinding binding =
-            match binding with
-            | UseValue valueExpr -> UseValue(mapExpr valueExpr)
-            | UseContextInstance(ctxType, valueExpr) -> UseContextInstance(ctxType, mapExpr valueExpr)
         and mapStatement (statement: Statement) =
             { statement with Kind = mapStatementKind statement.Kind }
         and mapStatementKind kind =
             match kind with
             | DefStatement(isExport, name, typeOpt, value) -> DefStatement(isExport, name, typeOpt, mapExpr value)
             | ExprStatement value -> ExprStatement(mapExpr value)
-            | UseStatement binding -> UseStatement(mapBinding binding)
+            | UseStatement value -> UseStatement(mapExpr value)
             | ImportStatement _
             | TypeDefStatement _ -> kind
         mapExpr expr
@@ -231,6 +227,18 @@ module Compiler =
                 match kind, targets |> Map.tryFind current.Id with
                 | Pipe(value, _, rangeOpt, args), Some target -> Pipe(value, target, rangeOpt, args)
                 | other, _ -> other)
+
+    /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node)
+    /// written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``.
+    let private callOperators (calls: Set<NodeId>) (expr: Expression) : Expression =
+        if calls.IsEmpty then
+            expr
+        else
+            expr
+            |> mapExpressionKinds (fun current kind ->
+                match kind with
+                | BinaryOp(op, left, right) when calls.Contains current.Id -> FunctionCall(op, None, [ left; right ])
+                | other -> other)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
     /// prelude's `List.length`, which every module imports.
@@ -305,7 +313,7 @@ module Compiler =
         | TagExpr(_, payload) -> payload |> Option.map referencedNames |> Option.defaultValue []
         | MemberAccess(inner, memberName, _) ->
             $".{memberName}" :: (dottedName expr |> Option.toList) @ referencedNames inner
-        | UseIn(binding, body) -> referencedNamesInBinding binding @ referencedNames body
+        | UseIn(value, body) -> referencedNames value @ referencedNames body
         | WorkflowBindExpr(_, value)
         | WorkflowReturnExpr value -> referencedNames value
         | InterpolatedString parts ->
@@ -319,14 +327,9 @@ module Compiler =
         match statement.Kind with
         | DefStatement(_, _, _, value) -> referencedNames value
         | ExprStatement value -> referencedNames value
-        | UseStatement binding -> referencedNamesInBinding binding
+        | UseStatement value -> referencedNames value
         | ImportStatement _
         | TypeDefStatement _ -> []
-
-    and private referencedNamesInBinding (binding: UseBinding) : string list =
-        match binding with
-        | UseValue value
-        | UseContextInstance(_, value) -> referencedNames value
 
     and private referencedNamesInPattern (pattern: Pattern) : string list =
         match pattern.Kind with
@@ -665,8 +668,7 @@ module Compiler =
                 match statement.Kind with
                 | DefStatement(_, _, _, value)
                 | ExprStatement value
-                | UseStatement (UseValue value)
-                | UseStatement (UseContextInstance(_, value)) -> usesKeyword value
+                | UseStatement value -> usesKeyword value
                 | ImportStatement _
                 | TypeDefStatement _ -> false
             match expr.Kind with
@@ -776,9 +778,7 @@ module Compiler =
             | MemberAccess(baseExpr, field, rangeOpt) -> MemberAccess(desugarExpr baseExpr, field, rangeOpt)
             | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(ctxType, field)
             | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(ctxType, field, args |> List.map desugarExpr)
-            | UseIn(binding, body) ->
-                let binding' = desugarUseBinding binding
-                UseIn(binding', desugarExpr body)
+            | UseIn(value, body) -> UseIn(desugarExpr value, desugarExpr body)
             // A keyword the rest of its builder's block cannot follow is an error; the value stands in for it, as
             // nothing is checked once desugaring fails.
             | WorkflowBindExpr(keyword, value) ->
@@ -804,10 +804,6 @@ module Compiler =
             | UnitExpr
             | LiteralExpr _
             | IdentifierExpr _ -> expr.Kind
-        and desugarUseBinding binding =
-            match binding with
-            | UseValue expr -> UseValue (desugarExpr expr)
-            | UseContextInstance(ctxType, expr) -> UseContextInstance(ctxType, desugarExpr expr)
         and desugarStatement (stmt: Statement) =
             match stmt.Kind with
             | DefStatement(isExport, name, typeOpt, expr) ->
@@ -818,7 +814,7 @@ module Compiler =
                     | _ -> desugarExpr expr
                 { stmt with Kind = DefStatement(isExport, name, typeOpt, expr') }
             | ExprStatement expr -> { stmt with Kind = ExprStatement (desugarExpr expr) }
-            | UseStatement binding -> { stmt with Kind = UseStatement (desugarUseBinding binding) }
+            | UseStatement value -> { stmt with Kind = UseStatement (desugarExpr value) }
             | ImportStatement _
             | TypeDefStatement _ -> stmt
         // The statements of a block from its first workflow keyword on, as that keyword's call with the rest of the
@@ -1033,8 +1029,7 @@ module Compiler =
             | TypedDefStatement(isExport, name, typeOpt, expr) ->
                 TypedDefStatement(isExport, name, typeOpt, applyTypedExpr expr)
             | TypedExprStatement expr -> TypedExprStatement (applyTypedExpr expr)
-            | TypedUseStatement(binding, exprOpt) ->
-                TypedUseStatement(binding, exprOpt |> Option.map applyTypedExpr)
+            | TypedUseStatement expr -> TypedUseStatement (applyTypedExpr expr)
             | TypedImportStatement _
             | TypedTypeDefStatement _ -> statement
         and applyTypedMatchArm (patterns, expr) =
@@ -1108,12 +1103,13 @@ module Compiler =
             | _ -> kind)
 
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
-    /// attached function written with the name it resolved to (`pipeTargets`), each read of a built-in property as a
-    /// call (`properties`), each builder block that uses no keyword as its block (`workflowBlocks`), and without
-    /// import statements. `defer` compiles the module's errors to traps first, for a debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    /// attached function written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
+    /// that call (`operatorCalls`), each read of a built-in property as a call (`properties`), each builder block that
+    /// uses no keyword as its block (`workflowBlocks`), and without import statements. `defer` compiles the module's
+    /// errors to traps first, for a debug build.
+    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Set<NodeId>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
+            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
         items
         |> List.choose (function
             | TypedModuleDecl name -> Some (ModuleDecl name)
@@ -1184,6 +1180,8 @@ module Compiler =
             let mutable inlinedTypes: Map<string, Ty> = Map.empty
             // Where the calls in the imported modules' definitions, which are inlined, find their instances.
             let mutable inlinedInstances: Map<NodeId, ContextInstance option list> = Map.empty
+            // The instances the `use`s in the imported modules' definitions load.
+            let mutable inlinedUseContexts: Map<NodeId, TypeExpr> = Map.empty
             // The modules that bring each name in unqualified, by the module's key, with the name of the module.
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
             let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
@@ -1312,6 +1310,7 @@ module Compiler =
                     inlined <- inlined @ inlinedItemsForImport item imported
                 inlinedTypes <- inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
                 inlinedInstances <- imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                inlinedUseContexts <- imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
             for item in imports do
                 // An import of a module that is still being checked, because it imports this one, is a cycle.
                 let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
@@ -1387,7 +1386,7 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.TypeDefs items
-                let own = moduleFromTypedItems defer state.PipeTargets state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
+                let own = moduleFromTypedItems defer state.PipeTargets state.OperatorCalls state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
@@ -1451,6 +1450,7 @@ module Compiler =
                           ModuleNames = moduleNames
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                          UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
                           // Resolved for the root module only, by `compileWith`.
                           InferredContextTypes = state.InferredContextTypes
                           // Filled in for the root module only, by `compileWith`.

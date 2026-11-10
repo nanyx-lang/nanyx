@@ -538,28 +538,36 @@ let workflowKeywordExpr =
         |>> fun value -> WorkflowBindExpr("try", value))
     <?> "workflow keyword"
 
-// Use binding parser: `use expr` or `use C(T) = expr`
-let useBinding =
-    // First try context instance: C(T) = expr or C = expr
-    let contextInstance =
-        pipe2
-            (attempt (withSpan (identifierNoWs .>>. opt (between (pstring "(") (pstring ")") (sepBy1 (ws >>. typeExpr) (pstring "," .>> ws))))))
-            (ws >>. pstring "=" >>. ws >>. expression)
-            (fun ((name, typeArgsOpt), span) expr ->
-                let contextType =
-                    match typeArgsOpt with
-                    | Some args -> TypeApply(name, args)
-                    | None -> TypeName name
-                UseContextInstance(TypeExpr.at span contextType, expr))
-    attempt contextInstance <|> (expression |>> UseValue)
+// Fails fatally at `position` with `message`, and notes the failure in the state, which `parseModuleFileWithNames`
+// reports in place of FParsec's error when the parse fails: the failure is backtracked over, and FParsec would report
+// some enclosing construct instead (often the whole def). Of two such failures, the furthest is reported.
+let private reportFocused (position: Position) (message: string) : Parser<'a, ParseState> =
+    getUserState >>= fun state ->
+        match state.FocusedError.Value with
+        | Some (furthest, _) when furthest.Index >= position.Index -> ()
+        | _ -> state.FocusedError.Value <- Some (position, message)
+        failFatally message
+
+// The value a `use` loads: `use addInt`. `use C(T) = expr`, an older way to load an instance, fails at the context's
+// name, saying what to write instead.
+let useValue =
+    let typeArgs = between (pstring "(") (pstring ")") (sepBy1 (ws >>. typeExpr) (pstring "," .>> ws))
+    let instanceHead = withSkippedString (fun head _ -> head) (identifierNoWs .>> opt typeArgs)
+    let oldInstance =
+        getPosition .>>. lookAhead (instanceHead .>> ws .>> pstring "=" .>> notFollowedBy (anyOf "=>"))
+        >>= fun (position, head) ->
+            reportFocused position
+                ($"`use {head} = ...` is not a way to load an instance: write `use <expr>`. Define the instance "
+                 + $"with `def name: {head} = (...)`, then load it with `use name`.")
+    oldInstance <|> expression
 
 // Use-in expression: use X in expr
 let useInExpr =
     spanned (
         pipe2
-            (pstring "use" >>. ws >>. useBinding .>> ws .>> pstring "in" .>> ws)
+            (pstring "use" >>. ws >>. useValue .>> ws .>> pstring "in" .>> ws)
             expression
-            (fun binding body -> UseIn(binding, body)))
+            (fun value body -> UseIn(value, body)))
     <?> "use-in expression"
 
 // Primary expression (literals, identifiers, function calls, lambdas, parenthesized expressions)
@@ -596,8 +604,7 @@ let contextMemberAccess =
 
 // A name applied to a value without parentheses, as in `yield 1`, is how a workflow keyword is used (see the
 // workflows page of the docs). Only `try` is parsed that way so far, and without this any other name parses as
-// an identifier and the failure surfaces far from here. So it fails at the name, and notes the failure in the
-// state, which `parseModuleFileWithNames` reports in place of FParsec's error when the parse fails. Workflow
+// an identifier and the failure surfaces far from here. So it fails at the name (see `reportFocused`). Workflow
 // blocks are lambdas, so only a name inside a lambda is taken for a keyword: outside one, a line such as
 // `pattern string -> ...` is some other mistake.
 let private workflowKeywordApplication =
@@ -613,15 +620,10 @@ let private workflowKeywordApplication =
         if reservedWords.Contains word then preturn () else pzero)
     userStateSatisfies (fun state -> state.LambdaDepth > 0)
     >>. getPosition .>>. lookAhead (keyword .>> skipMany1 (anyOf " \t") .>> operand)
-    .>>. getUserState
-    >>= fun ((position, name), state) ->
-        let message =
-            $"`{name}` is applied to a value without parentheses, which is how a workflow keyword is used. The "
-            + $"only workflow keywords so far are `try` and `return`. To call a function, write `{name}(...)`."
-        match state.WorkflowKeyword.Value with
-        | Some (furthest, _) when furthest.Index >= position.Index -> ()
-        | _ -> state.WorkflowKeyword.Value <- Some (position, message)
-        failFatally message
+    >>= fun (position, name) ->
+        reportFocused position
+            ($"`{name}` is applied to a value without parentheses, which is how a workflow keyword is used. The "
+             + $"only workflow keywords so far are `try` and `return`. To call a function, write `{name}(...)`.")
 
 let primaryExprNoWs =
     choice [
@@ -1013,7 +1015,7 @@ do
         pstring "import" >>. wsNoNl() >>. importItems |>> ImportStatement
 
     let useStatement =
-        (pstring "use" >>. ws >>. useBinding .>> notFollowedBy (ws >>. pstring "in"))
+        (pstring "use" >>. ws >>. useValue .>> notFollowedBy (ws >>. pstring "in"))
         |>> UseStatement
 
     let typeDefStatement =
@@ -1265,12 +1267,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         | MemberAccess(baseExpr, field, range) -> MemberAccess(rewrite baseExpr, field, range)
         | ContextMemberAccess(ctxType, field) -> ContextMemberAccess(rewriteType ctxType, field)
         | ContextMemberCall(ctxType, field, args) -> ContextMemberCall(rewriteType ctxType, field, args |> List.map rewrite)
-        | UseIn(binding, body) ->
-            let mappedBinding =
-                match binding with
-                | UseValue value -> UseValue (rewrite value)
-                | UseContextInstance(ctxType, value) -> UseContextInstance(rewriteType ctxType, rewrite value)
-            UseIn(mappedBinding, rewrite body)
+        | UseIn(value, body) -> UseIn(rewrite value, rewrite body)
         | WorkflowBindExpr(name, value) -> WorkflowBindExpr(name, rewrite value)
         | WorkflowReturnExpr value -> WorkflowReturnExpr (rewrite value)
         | InterpolatedString parts -> InterpolatedString (parts |> List.map (function | StringText text -> StringText text | StringExpr value -> StringExpr (rewrite value)))
@@ -1283,12 +1280,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
             let mappedParams = typeParams |> List.map (fun (paramName, paramTypeOpt) -> paramName, paramTypeOpt |> Option.map rewriteType)
             TypeDefStatement(name, modifiers, mappedParams, rewriteType typeExpr)
         | ImportStatement items -> ImportStatement items
-        | UseStatement binding ->
-            let mapped =
-                match binding with
-                | UseValue boundExpr -> UseValue (rewrite boundExpr)
-                | UseContextInstance(ctxType, boundExpr) -> UseContextInstance(rewriteType ctxType, rewrite boundExpr)
-            UseStatement mapped
+        | UseStatement value -> UseStatement (rewrite value)
         | ExprStatement bodyExpr -> ExprStatement (rewrite bodyExpr)
     and rewriteType typeExpr = rewriteTypeExprInModule typeMap rewrite typeExpr
     rewrite expr
@@ -1493,9 +1485,9 @@ let private runModuleParser (filePath: string) (normalized: string) : Result<Top
     | ParserResult.Failure(_, error, _) when error.Position.Column = 1L && String.CompareOrdinal(normalized, int error.Position.Index, "::", 0, 2) = 0 ->
         Result.Error (errorAt error.Position "A directive (a `::` line) must come before the first line of code")
     | ParserResult.Failure(errorMsg, error, _) ->
-        // The failure of a workflow keyword is backtracked over, and FParsec reports some enclosing construct
-        // instead (often the whole def), so it is reported where it happened.
-        match initialState.WorkflowKeyword.Value with
+        // A mistake the parser recognised is backtracked over, and FParsec reports some enclosing construct
+        // instead (often the whole def), so it is reported where it happened (see `reportFocused`).
+        match initialState.FocusedError.Value with
         | Some (position, message) ->
             use stream = new CharStream<unit>(normalized, 0, normalized.Length)
             stream.Name <- filePath

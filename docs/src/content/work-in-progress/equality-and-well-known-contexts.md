@@ -20,18 +20,19 @@ Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Imple
 - **Declaring** a context as a record type: `context Show(a) = (show: a -> string)`.
 - **Requiring** one in a signature: `def describe: [Show(a)] a -> string`. A function that does not write its type
   has its requirements inferred.
-- **Loading** an instance: `use Show(Point) = ( show = ... )`. The call form `use Show(Point)(...)` that the docs use
+- **Loading** an instance: `use <expr>`, where the value's type is the context at a type, as
+  `def showPoint: Show(Point) = (show = ...)` then `use showPoint` (`Infer.fs:870-881`, `useInstance`). The older
+  `use Show(Point) = (...)` is a parse error that says so. The call form `use Show(Point)(...)` that the docs use
   does not parse yet ([#333](https://github.com/nanyx-lang/nanyx/issues/333)).
-- **Resolving** an instance at each call (`Infer.fs:877-902`, `resolveCallInstances`), first match wins:
-  1. an instance for that exact type loaded with `use` around the call, nearest first (`Infer.fs:787-799`);
+- **Resolving** an instance at each call (`Infer.fs:886-925`, `resolveCallInstances`), first match wins:
+  1. an instance for that exact type loaded with `use` around the call, nearest first (`Infer.fs:785-797`);
   2. the instance the enclosing function's own signature declares (a generic function passes its `[Show(a)]` on);
   3. an instance **synthesized** from the type's attached definitions, matched by member name: `Point.show` makes
-     a `Show(Point)` (`Infer.fs:814-841`, [#328](https://github.com/nanyx-lang/nanyx/issues/328)). A missing or
+     a `Show(Point)` (`Infer.fs:812-841`, [#328](https://github.com/nanyx-lang/nanyx/issues/328)). A missing or
      ill-typed definition is reported as `MissingContextMembers`, naming it.
 
 Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is
-built from a type's structure ([type arguments and reflection](./type-members-and-reflection),
-lines 38 and 153-155).
+built from a type's structure (see [structural context synthesis](./type-members-and-reflection#structural-context-synthesis)).
 
 # Equality: implemented as an untyped intrinsic
 
@@ -73,12 +74,12 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 
 | The docs say | The compiler does |
 |---|---|
-| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. |
+| Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. An operator on a value of a type variable calls the member of that name of a context the function requires. |
 | A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks does not parse, attached or not, and neither does an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). So the docs' `Eq(a)` and `Sum(a)`, whose members are `` `==` `` and `` `+` ``, cannot be declared. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
 | `List.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
-| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-52](./printing-values) has `use ToString(int)` changing a concrete `"{total}"`. The two pages disagree with each other. |
+| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-53](./printing-values) has a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two pages disagree with each other. |
 
 Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and
 [#528](https://github.com/nanyx-lang/nanyx/issues/528), where a lambda inside a generic function cannot call a member
@@ -132,7 +133,8 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
   the existing synthesis step, ahead of structural derivation. Only nominal and protected types may do this. A
   structural type built from one uses it: a
   `list($Email)` compares its elements with `` $Email.`==` ``. This needs [#527](https://github.com/nanyx-lang/nanyx/issues/527).
-- **A block overrides it with `use`.** `use Eq(string) = (`` `==` `` = caseInsensitive)` changes what a plain
+- **A block overrides it with `use`.** Loading `def ignoringCase: Eq(string) = (`` `==` `` = caseInsensitive)` with
+  `use ignoringCase` changes what a plain
   `a == b` in that block means, and what generic code called from it sees (`xs \List.contains(name)`).
 - **Nominal and protected types** get the structural equality of their underlying type unless they attach `==`.
   Comparing two `$UserId`s does not construct one, so it cannot break the type's invariants.
@@ -158,7 +160,7 @@ The lookup at each use of `==`, or call that requires `Eq(T)`, gains a last step
 4. **for a well-known context only**, an instance derived from `T`'s structure, each part found by this same lookup.
 
 Because step 4 looks up each part afresh, overrides compose: a record containing an `$Email` compares it with
-`` $Email.`==` ``, and inside `use Eq(string) = ...` a `list(string)` compares its elements with the loaded instance.
+`` $Email.`==` ``, and after `use ignoringCase` a `list(string)` compares its elements with the loaded instance.
 
 In generic code a requirement on a structured type **reduces** to requirements on its variables: `==` on a
 `list(a)` needs `Eq(a)`, and on `(name: string, value: a)` needs `Eq(a)`. So a signature writes `[Eq(a)]`, not
@@ -216,13 +218,15 @@ design makes hashing the natural choice, since more types have it.
 
 Unchanged from [printing values](./printing-values): `ToString(a)` is a
 well-known context for interpolation holes, synthesized from an attached `toString`. Whether compound types get a
-derived `ToString` stays that page's open question. As with `==`, a `use ToString(T)` changes concrete holes in its
+derived `ToString` stays that page's open question. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
 block, which is what that page already proposes.
 
 # Numeric operators
 
 `+`, `-`, `*`, `/`, `%` and `**` stay as they are for now: typed directly, on numbers only, with `++` on strings and
-lists. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
+lists. The one exception is generic code: where an operator's name is bound, as `` `+` `` is in a function that
+requires `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
+(`OperatorCalls.fs`), so `{ x, y -> x + y }` can be `[Sum(a)] a, a -> a`. Making them well-known contexts (the docs' `Sum(a)` and `Num(a)`) raises separate questions: one context per
 operator or one `Num`, how literals like `0` are typed, and how units and dimensions fit. That deserves its own
 document. The principle this design sets, that a built-in operator is sugar for a well-known context's member, is
 meant to hold for them too.
@@ -268,7 +272,7 @@ The language server's code action for the third adds the requirement to the sign
 
 1. **Generic code says it compares.** `==` on a type variable requires `[Eq(a)]`, inferred when the type is not
    written. (Rejected: every non-function type has equality implicitly, checked at instantiation.)
-2. **`use` changes a concrete `a == b` too.** `==` is always a lookup of `Eq(T)`, so a `use Eq(string)` changes plain
+2. **`use` changes a concrete `a == b` too.** `==` is always a lookup of `Eq(T)`, so an `Eq(string)` loaded with `use` changes plain
    `==` in its block as well as generic code called from it. This reverses operators.md:53, which is updated when
    the work lands, and agrees with printing-values.md. (Rejected: `use` reaches only generic code.)
 3. **Derived orders** are for numbers, bool, string, tuples and lists only; records and tags attach `compare` or

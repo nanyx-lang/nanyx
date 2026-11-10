@@ -99,14 +99,95 @@ let ``Run - use bindings of parameterised contexts and records`` () =
         "@entry\n" +
         "def main = {\n" +
         "  def unit = \"cm\"\n" +
-        "  use Show(int) = ( show = { n -> \"{n}{unit}\" } )\n" +
-        "  use Show(string) = ( show = { s -> s } )\n" +
+        "  def showInt: Show(int) = ( show = { n -> \"{n}{unit}\" } )\n" +
+        "  use showInt\n" +
+        "  def showString: Show(string) = ( show = { s -> s } )\n" +
+        "  use showString\n" +
         "  println(describe(3, \"three\"))\n" +
         "  def answers = (ask = { 21 })\n" +
         "  use answers\n" +
         "  println(\"{twice()}\")\n" +
         "}\n"
     runSource source |> assertRan "3cm & three\n42\n"
+
+[<Fact>]
+let ``Run - a use of a record value of a parameterised context's shape loads it as the instance`` () =
+    // `int` has its own `+`, which an instance found by the record's shape is nearer than (#581).
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Add(a) = (`+`: (a, a) -> a)\n" +
+        "\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }\n" +
+        "\n" +
+        "def named = {\n" +
+        "  def addInt: Add(int) = ( `+` = { x, y -> x * 10 + y } )\n" +
+        "  use addInt\n" +
+        "  add(1, 2)\n" +
+        "}\n" +
+        "\n" +
+        "def written = {\n" +
+        "  use ( `+` = { x, y -> x * 100 + y } )\n" +
+        "  add(3, 4)\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = { println(\"{named()} {written()}\") }\n"
+    runSource source |> assertRan "12 304\n"
+
+[<Fact>]
+let ``Run - use loads a named instance of a parameterised context: a def, a local, a parameter or a call's result (#581)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Combine(a) = (combine: (a, a) -> a)\n" +
+        "\n" +
+        "def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }\n" +
+        "def timesInt: Combine(int) = (combine = { a, b -> a * b })\n" +
+        "def plusAnd: int -> Combine(int) = { k -> (combine = { a, b -> a + b + k }) }\n" +
+        "def viaParameter: (Combine(int), int) -> int = { instance, x ->\n" +
+        "  use instance\n" +
+        "  double(x)\n" +
+        "}\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def plusInt: Combine(int) = (combine = { a, b -> a + b })\n" +
+        "  use plusInt\n" +
+        "  println(\"{double(5)}\")\n" +
+        "  use timesInt\n" +
+        "  println(\"{double(5)}\")\n" +
+        "  println(\"{viaParameter(plusInt, 4)}\")\n" +
+        "  use plusAnd(100)\n" +
+        "  println(\"{double(1)}\")\n" +
+        "}\n"
+    runSource source |> assertRan "10\n25\n8\n102\n"
+
+[<Fact>]
+let ``Run - use ... in loads an instance for its body only (#320)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Counter = (next: int -> int)\n" +
+        "context Combine(a) = (combine: (a, a) -> a)\n" +
+        "\n" +
+        "def counted: [Counter] int -> int = { n -> next(n) }\n" +
+        "def double: [Combine(a)] a -> a = { x -> Combine(a).combine(x, x) }\n" +
+        "def timesInt: Combine(int) = (combine = { a, b -> a * b })\n" +
+        "def plusInt: Combine(int) = (combine = { a, b -> a + b })\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def total = use Counter(next = { n -> n - 1 }) in counted(3)\n" +
+        "  println(\"{total}\")\n" +
+        "  use plusInt\n" +
+        "  println(\"{use timesInt in double(5)}\")\n" +
+        "  println(\"{double(5)}\")\n" +
+        "  def onTheNextLine = use timesInt in\n" +
+        "    double(2)\n" +
+        "  println(\"{onTheNextLine}\")\n" +
+        "}\n"
+    runSource source |> assertRan "2\n25\n10\n4\n"
 
 [<Fact>]
 let ``Run - a call synthesizes a context's instance from attached definitions, and a use wins over it`` () =
@@ -137,7 +218,8 @@ let ``Run - a call synthesizes a context's instance from attached definitions, a
         "  println(both($Money(5), p))\n" +
         "  println(twice(p))\n" +
         "  println(p \\describe)\n" +
-        "  use Show(Point) = ( show = { q -> \"nearer {q.y}\" } )\n" +
+        "  def nearer: Show(Point) = ( show = { q -> \"nearer {q.y}\" } )\n" +
+        "  use nearer\n" +
         "  println(describe(p))\n" +
         "  println(describe($Money(7)))\n" +
         "}\n"
@@ -277,7 +359,7 @@ let private sumPrelude =
 let ``Run - a context member that is a value is passed from a synthesized instance`` () =
     let source =
         sumPrelude +
-        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(`0`) { a, b -> `+`(a, b) } }\n" +
+        "def sum: [Sum(a)] list(a) -> a = { items -> items \\fold(`0`) { + } }\n" +
         "\n" +
         "@entry\n" +
         "def main = {\n" +
@@ -356,3 +438,28 @@ let ``Run - a function member is passed on as a value, by its name and through i
         "  println(qualified([Point(x = 5, y = 6)]))\n" +
         "}\n"
     runSource source |> assertRan "(1, 2)(3, 4)\n(5, 6)\n"
+
+[<Fact>]
+let ``Run - an operator in a generic function calls the member of the context the function requires`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Add(a) = (`+`: (a, a) -> a)\n" +
+        "\n" +
+        "type Point = (x: int, y: int)\n" +
+        "def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + q.y) }\n" +
+        "\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" +
+        "def addCounting: [Add(a)] a, a, int -> (a, int) = { x, y, n -> (x + y, n + 1) }\n" +
+        "def sum: [Add(a)] a, list(a) -> a = { start, items -> items \\fold(start) { + } }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def p = add(Point(x = 1, y = 2), Point(x = 3, y = 4))\n" +
+        "  println(\"{p.x} {p.y}\")\n" +
+        "  def (q, n) = addCounting(p, Point(x = 10, y = 20), 41)\n" +
+        "  println(\"{q.x} {q.y} {n}\")\n" +
+        "  def total = sum(Point(x = 0, y = 0), [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)])\n" +
+        "  println(\"{total.x} {total.y}\")\n" +
+        "}\n"
+    runSource source |> assertRan "4 6\n14 26 42\n9 12\n"

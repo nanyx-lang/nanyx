@@ -27,7 +27,7 @@ let rec private referencedNames (expr: Expression) : string list =
         fields |> List.collect (function NamedField(_, value) | PositionalField value -> referencedNames value)
     | TagExpr(_, payload) -> payload |> Option.map referencedNames |> Option.defaultValue []
     | MemberAccess(inner, _, _) -> referencedNames inner
-    | UseIn(binding, body) -> referencedNamesBinding binding @ referencedNames body
+    | UseIn(value, body) -> referencedNames value @ referencedNames body
     | WorkflowBindExpr(_, value)
     | WorkflowReturnExpr value -> referencedNames value
     | InterpolatedString parts ->
@@ -40,15 +40,10 @@ let rec private referencedNames (expr: Expression) : string list =
 and private referencedNamesStatement (statement: Statement) : string list =
     match statement.Kind with
     | DefStatement(_, _, _, rhs) -> referencedNames rhs
-    | ExprStatement value -> referencedNames value
-    | UseStatement binding -> referencedNamesBinding binding
+    | ExprStatement value
+    | UseStatement value -> referencedNames value
     | ImportStatement _
     | TypeDefStatement _ -> []
-
-and private referencedNamesBinding (binding: UseBinding) : string list =
-    match binding with
-    | UseValue value
-    | UseContextInstance(_, value) -> referencedNames value
 
 and private referencedNamesPattern (pattern: Pattern) : string list =
     match pattern.Kind with
@@ -230,7 +225,10 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// `memberCaptures` names, for each definition that requires contexts, the parameters its context members come in. A
 /// lambda lifted out of it captures all of them, as it captures a local, so that it can call the members and pass them
 /// on to what it calls.
-let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
+///
+/// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
+/// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one.
+let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (useContexts: Map<NodeId, TypeExpr>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
@@ -352,12 +350,14 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                     | Kind (DefStatement(_, name, _, Kind (RecordExpr fields))) -> Some (name, fields)
                     | _ -> None)
                 |> Map.ofList
+            // Each of them a `use` below loads, with the instance it is if it is one of a parameterised context.
             let usedRecords =
                 statements
                 |> List.choose (function
-                    | Kind (UseStatement(UseValue(Kind (IdentifierExpr name)))) when localRecords.ContainsKey name -> Some name
+                    | Kind (UseStatement(Kind (IdentifierExpr name) as value)) when localRecords.ContainsKey name ->
+                        Some (name, useContexts |> Map.tryFind value.Id)
                     | _ -> None)
-                |> Set.ofList
+                |> Map.ofList
             // A lambda bound to a context member is a function even with no parameters.
             let liftMember contextType memberName (value: Expression) =
                 match value.Kind with
@@ -387,28 +387,44 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 | DefStatement(isExport, name, typeOpt, Kind (FunctionCall("__rec", _, [ rhs ]))) ->
                     [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
                 // A record a `use` binds below: its fields are context members.
-                | DefStatement(isExport, name, typeOpt, (Kind (RecordExpr fields) as record)) when usedRecords.Contains name ->
+                | DefStatement(isExport, name, typeOpt, (Kind (RecordExpr fields) as record)) when usedRecords.ContainsKey name ->
                     let fields =
                         fields
                         |> List.map (function
-                            | NamedField(memberName, value) -> NamedField(memberName, liftMember None memberName value)
+                            | NamedField(memberName, value) -> NamedField(memberName, liftMember usedRecords.[name] memberName value)
                             | PositionalField value -> PositionalField(recur value))
                     [ keep (DefStatement(isExport, name, typeOpt, { record with Kind = RecordExpr fields })) ]
                 | DefStatement(isExport, name, typeOpt, rhs) -> [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
                 | ExprStatement value -> [ keep (ExprStatement(recur value)) ]
-                | UseStatement binding ->
+                | UseStatement value ->
                     let namedFields (fields: RecordField list) =
                         fields |> List.choose (function NamedField(name, value) -> Some (name, value) | PositionalField _ -> None)
-                    let contextType, bindings =
-                        match binding with
-                        | UseValue(Kind (RecordExpr fields)) -> None, namedFields fields
-                        | UseValue(Kind (FunctionCall(contextName, _, [ Kind (RecordExpr fields) ]))) -> Some (TypeExpr.synthetic (TypeName contextName)), namedFields fields
-                        | UseContextInstance(contextType, Kind (RecordExpr fields)) -> Some contextType, namedFields fields
-                        | UseValue(Kind (IdentifierExpr recordName) as recordRef) when localRecords.ContainsKey recordName ->
-                            None,
+                    let instance = useContexts |> Map.tryFind value.Id
+                    // Each member of `instance`, read from `instanceValue`.
+                    let membersOf (instanceValue: Expression) =
+                        match instance with
+                        | Some (Kind (TypeApply(contextName, _))) ->
+                            recordTypes
+                            |> Map.tryFind contextName
+                            |> Option.map (fun (_, members) -> members.Keys |> List.ofSeq)
+                            |> Option.defaultValue []
+                            |> List.map (fun name -> name, Expression.from value (MemberAccess(instanceValue, name, None)))
+                        | _ -> []
+                    let evaluated, contextType, bindings =
+                        match value.Kind with
+                        | RecordExpr fields -> [], None, namedFields fields
+                        | FunctionCall(contextName, _, [ Kind (RecordExpr fields) ]) -> [], Some (TypeExpr.synthetic (TypeName contextName)), namedFields fields
+                        | IdentifierExpr recordName when localRecords.ContainsKey recordName ->
+                            [], instance,
                             namedFields localRecords.[recordName]
-                            |> List.map (fun (name, _) -> name, Expression.from recordRef (MemberAccess(Expression.from recordRef (IdentifierExpr recordName), name, None)))
-                        | _ -> None, []
+                            |> List.map (fun (name, _) -> name, Expression.from value (MemberAccess(Expression.from value (IdentifierExpr recordName), name, None)))
+                        | IdentifierExpr _ -> [], instance, membersOf value
+                        // Any other instance is evaluated once, into a local its members are read from.
+                        | _ when instance.IsSome ->
+                            let local = $"__use_instance_{counter}"
+                            counter <- counter + 1
+                            [ Statement.from value (DefStatement(false, local, None, recur value)) ], instance, membersOf (Expression.from value (IdentifierExpr local))
+                        | _ -> [], None, []
                     if bindings.IsEmpty then [ statement ]
                     else
                         let locals =
@@ -418,8 +434,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                                 let local = $"__use_{sanitizeIdentifier key}_{counter}"
                                 counter <- counter + 1
                                 key, local, liftMember contextType memberName value)
-                        [ yield! locals |> List.map (fun (_, local, value) -> Statement.from value (DefStatement(false, local, None, value)))
-                          keep (UseStatement(UseValue(Expression.synthetic (RecordExpr(locals |> List.map (fun (key, local, _) -> NamedField(key, Expression.synthetic (IdentifierExpr local)))))))) ]
+                        [ yield! evaluated
+                          yield! locals |> List.map (fun (_, local, value) -> Statement.from value (DefStatement(false, local, None, value)))
+                          keep (UseStatement(Expression.synthetic (RecordExpr(locals |> List.map (fun (key, local, _) -> NamedField(key, Expression.synthetic (IdentifierExpr local))))))) ]
                 | ImportStatement _ | TypeDefStatement _ -> [ statement ])
             |> Block
             |> rebuild
@@ -450,7 +467,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             topLevelFunctions.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []
         | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
-        | UseIn(binding, body) -> rebuild (UseIn(binding, recur body))
+        // `use value in body` is the block `{ use value; body }`: what it loads is in scope for `body` only.
+        | UseIn(value, body) ->
+            recur { expr with Kind = Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ] }
         | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
         | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(recur value))
         | InterpolatedString parts ->

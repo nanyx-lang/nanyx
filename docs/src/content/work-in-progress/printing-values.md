@@ -46,7 +46,8 @@ A function that does not write its type gets the requirement inferred, as it wou
 
 ```nanyx
 def receipt = {
-  use ToString(int)(toString = { pence -> "£{pence / 100}.{pence % 100}" })
+  def pounds: ToString(int) = (toString = { pence -> "£{pence / 100}.{pence % 100}" })
+  use pounds
   "Total: {total}"
 }
 ```

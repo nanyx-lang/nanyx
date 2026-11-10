@@ -4,22 +4,13 @@ description: "Associated types on contexts, types passed as arguments, and inspe
 order: 4
 ---
 
-This page records an early design discussion about two related features, neither of which is implemented. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable. **Type arguments** let a function take a type as one of its parameters, `into = type Point`, and inspect it without becoming a template. The proposal is that both are the same thing: a record member whose value is a type. Little here is settled; the sections below separate what has been decided from the current direction and the open questions.
+This page records an early design for two related features, neither of which is implemented. **Associated types** let a context carry a type as one of its members, such as the element type of an iterable. **Type arguments** let a function take a type as a parameter and inspect its structure. The proposal is that both are the same thing: a record member whose value is a type. Little here is settled; the sections below separate what has been decided from the current direction and the open questions.
 
-# Background
+# The problems
 
-## The use cases
+## Code written once per type
 
-Most languages reach for reflection, macros or code generation to avoid writing the same code once per type. The cases that matter most for Nanyx are:
-
-- **Serialization**, such as JSON encoding and decoding.
-- **Equality and hashing** of records and unions.
-- **Printing and debugging** values.
-- **Mapping to storage**, such as SQL rows.
-- **Test frameworks**, which discover and describe tests.
-- **Dependency injection**, which [contexts](../advanced/contexts) already cover: a function declares what it needs and the caller loads it.
-
-Today, each of these is either written by hand or built into the compiler. The [JSON cookbook](../cookbook/json-parsing) writes every decoder and encoder field by field, so each field name appears twice:
+Serialization, equality, hashing, printing and mapping to storage all follow a type's structure. In Nanyx today each is either written by hand or built into the compiler. The [JSON cookbook](../cookbook/json-parsing) decodes field by field, so each field name appears twice:
 
 ```nanyx
 def decodeUser: string -> Result(User, DecodeError) = { data ->
@@ -31,57 +22,31 @@ def decodeUser: string -> Result(User, DecodeError) = { data ->
 }
 ```
 
-Printing and equality are compiler intrinsics: `dbg` and string interpolation print tags, and `==` compares any value but a function by its structure. Nothing in the language lets a library do the same for any record.
+`dbg`, string interpolation and `==` work on any record only because they are compiler intrinsics. Nothing lets a library do the same.
 
-Generic APIs over collections have a smaller problem. A constraint has to carry both the container type and the element type everywhere, even where the element type follows from the container:
+## Types only in output position
+
+Generics work well when a type appears in a function's inputs: in `list(a) -> int`, the argument says what `a` is. A decoder mentions its type only in its output:
+
+```nanyx
+def deserialise: [Decode(a)] string -> a
+```
+
+The context can supply the behaviour, as Haskell's `read` and Rust's `parse` do, but the call site has no good way to say which `a` it wants. The only way today is an annotation on the result, and where nothing fixes `a` the user gets an ambiguity error that is hard to read.
+
+## Element types in constraints
+
+A constraint over collections has to carry the element type everywhere, even though it follows from the container type:
 
 ```nanyx
 def iterStrings: [Iter(c, a)] c -> () = { items -> ... }
 ```
 
-## What Nanyx already has
-
-- **Context synthesis.** The compiler [builds a context](../advanced/contexts#context-synthesis) such as `Sum(Point)` from a type's attached definitions, and an explicit `use` overrides it. This is the closest thing Nanyx has to deriving, but it works by name, not by structure: nothing builds `Eq` of a record from the `Eq` of its fields.
-- **`typeof`.** [`typeof x`](../tour/types#typeof) is a type expression that names the type of a value. It only appears in annotations and gives no access to the type's structure.
-- **Attributes.** [Attributes](../tour/attributes) are compile-time metadata whose meaning the compiler defines. `@workflow` is documented as generating a helper, which is a small built-in form of code generation.
-- **Linters.** [Linters](../advanced/linters) are planned as Nanyx packages compiled to WebAssembly and run at compile time on the engine the compiler already embeds. That infrastructure could later run code generators too.
-- **Monomorphisation.** Generic code is compiled once for each set of concrete types it is used at, so every type is known at every use site when code is generated.
-- **Parameters are a record.** A function's parameters are a [record](../tour/records), which may mix positional and named fields. This is how named arguments work.
-- **Type names.** A [type's name](../tour/types#type-names) starts with a capital letter, and a type variable is a single lowercase letter. Longer lowercase names are reserved for associated types, except for the built-in types such as `int`, `string`, `bool` and `list`, whose names are reserved by the language.
-
-## Constraints
-
-Any design has to fit the language's [principles](../foundations/principles) and its target:
-
-- **One language.** There are no compiler plugins that change or extend the language's semantics, which rules out procedural macros and syntax extensions.
-- **Readable errors.** Errors must point at the user's code in terms the user wrote. Template and macro systems are notorious for errors that point inside library code.
-- **Minimal surface.** A feature should be general enough to cover several of the use cases above, not one.
-- **One WebAssembly module.** Runtime reflection needs a description of every type that might be inspected. In a single module whose unused code is removed, there is no way to know which types those are, so either everything is kept or reflection breaks.
-- **Structural and nominal types.** A structural record's field names and types are part of its type, so its structure is always known. A [nominal type](../advanced/nominal-and-protected-types) can only be created by its home module, and reflection must not give a way around that.
-
-# The problem: types only in output position
-
-Generics work well when a type appears in a function's inputs: in `list(a) -> int`, the argument says what `a` is. A function such as a decoder mentions its type only in its output:
-
-```nanyx
-def deserialise: string -> a
-```
-
-Contexts can already supply the behaviour, as `[Decode(a)] string -> a`, in the way Haskell's `read` and Rust's `parse` work. What is missing is a good way for the call site to say which `a` it wants. The only way today is an annotation on the result, and where nothing fixes `a` the user gets an ambiguity error that is hard to read.
-
 # Decisions
 
-## A type can be passed as an argument
-
-A function can take a type as an ordinary argument, and the caller writes the type at the call site. This combines generics with something like C#'s `typeof` in one feature: the type argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is part of the [current direction](#a-type-argument-is-a-type-member-of-the-parameters).
-
-## Generic code can inspect a type argument
-
-The body of a function can look at a type argument's structure: whether it is a record or a union, and what its fields or cases are.
-
-## Generic code is checked once, not per instantiation
-
-Nanyx does not adopt compile-time templates, at least for now. In Zig's `comptime` and in C++ templates, generic code is type-checked separately for each type it is used at, and errors appear at the instantiation, inside library code. Inspection in Nanyx must be type-checked once, when the generic function is defined, as all generic code is today.
+- **A type can be passed as an argument.** The caller writes the type at the call site. The argument fixes a type variable, and the function's body receives a value that stands for the type. The syntax is part of the [current direction](#a-type-argument-is-a-type-member-of-the-parameters).
+- **Generic code can inspect a type argument**: whether it is a record or a union, and what its fields or cases are.
+- **Generic code is checked once, not per instantiation.** Nanyx does not adopt compile-time templates, at least for now. In Zig's `comptime` and in C++ templates, generic code is type-checked separately for each type it is used at, and errors appear inside library code. Inspection in Nanyx is type-checked once, when the generic function is defined, as all generic code is today.
 
 # Current direction
 
@@ -116,26 +81,20 @@ def headOr: [Iter(c)] (c, Iter(c).elem) -> Iter(c).elem = { items, fallback ->
 }
 ```
 
-Contexts compose, so a function asks only for the capabilities it uses, and each associated type lives on the context that owns the operation:
+Each associated type lives on the context that owns the operation, so a function asks only for the capabilities it uses:
 
 ```nanyx
-context Sized(c) = (
-  length: c -> int
-)
-
 context Indexed(c) = (
   elem: type
   get: (c, int) -> elem
 )
-
-def countItems: [Sized(c)] c -> int = { items ->
-  length(items)
-}
 ```
+
+An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types.
 
 ## A type argument is a type member of the parameters
 
-Since a function's parameters are a record, a type argument is a parameter declared the way a context declares an associated type:
+Since a function's parameters are a [record](../tour/records), a type argument is a parameter declared the way a context declares an associated type:
 
 ```nanyx
 def deserialise: [Decode(into)] (string, into: type) -> into = { text, t -> ... }
@@ -143,13 +102,23 @@ def deserialise: [Decode(into)] (string, into: type) -> into = { text, t -> ... 
 def p = deserialise('{"x": 1, "y": 2}', into = type Point)
 ```
 
-The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `(elem = string)` fixes a context's. Because positional and named fields mix, `deserialise(text, type Point)` works too. One concept covers both features: a record member of kind `type`.
+The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `(elem = string)` fixes a context's. One concept covers both features: a record member of kind `type`.
+
+Like any named field, `into` is [passed by name](../tour/functions), so `deserialise(text, type Point)` is an error for this signature. A function whose callers should pass the type positionally declares a positional type parameter instead, written `type a`:
+
+```nanyx
+def deserialise: [Decode(a)] (string, type a) -> a = { text, t -> ... }
+
+def p = deserialise('{"x": 1, "y": 2}', type Point)
+```
+
+The two forms follow the record rule for every other field. A named field is `name: T` and a positional field is just `T`; likewise a named type member is `into: type` and a positional one is `type a`. A positional field has no name of its own, so the type variable `a` is the only name, and it is a single letter like any other type variable. The signature is written the way the call is: `type a` in the signature, `type Point` at the call site. As with any parameter, the function's author chooses one form, and the caller follows it.
 
 A type member's name can't clash with a built-in type. [Built-in type names](../tour/types#type-names) such as `int`, `string`, `bool` and `list` are reserved by the language, so `(string, list: type) -> list` is an error.
 
 ## `x: type` is a value of type `Type(x)`
 
-`into: type` is shorthand for a parameter `into: Type(into)`, where `into` is an ordinary type variable, quantified over the whole signature as `a` is today. The expression `type Point` has type `Type(Point)`. Type inference treats type arguments like any other: unifying `Type(Point)` with `Type(into)` solves `into = Point`. This is why `into` can be used in the result type and in the `[Decode(into)]` constraint to its left with no new scoping rule. No dependent types are needed, and partial application, pipes and passing the function around all keep working. Inside generic code, `type a` with a type variable `a` is allowed, and monomorphisation resolves it.
+`into: type` is shorthand for a parameter `into: Type(into)`, and the positional `type a` for a positional parameter of type `Type(a)`. In both, the name, `into` or `a`, is an ordinary type variable, quantified over the whole signature as `a` is today. The expression `type Point` has type `Type(Point)`. Type inference treats type arguments like any other: unifying `Type(Point)` with `Type(into)` solves `into = Point`. This is why `into` can be used in the result type and in the `[Decode(into)]` constraint to its left with no new scoping rule. No dependent types are needed, and partial application, pipes and passing the function around all keep working. Inside generic code, `type a` with a type variable `a` is allowed, and monomorphisation resolves it.
 
 This is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`.
 
@@ -157,9 +126,9 @@ The same reading would apply to associated types: a context's `elem: type` membe
 
 ## Type arguments are known at compile time
 
-A `Type` value must be known at compile time: it cannot be computed at runtime, stored in a list of different types, or chosen with `if`. Otherwise a function's return type would depend on a runtime value. This keeps reflection out of the runtime:
+A `Type` value must be known at compile time: it cannot be computed at runtime, stored in a list of different types, or chosen with `if`. Otherwise a function's return type would depend on a runtime value. This keeps reflection out of the runtime, which matters for a single WebAssembly module whose unused code is removed:
 
-- The module contains a description only of the types that are written as `type X` somewhere in the program, so nothing has to be kept just in case it is reflected over.
+- The module contains a description only of the types that are written as `type X` somewhere in the program, or that need a [`Typed` instance](#a-synthesised-typeda-context). Nothing has to be kept just in case it is reflected over.
 - Because every `Type` value is a constant after monomorphisation, the compiler can specialise code that walks a type's description. The output is close to what a template would produce, while the checking stays that of ordinary generic code. This is an optimisation, not part of the semantics.
 
 ## Inspection with typed type descriptions
@@ -167,13 +136,13 @@ A `Type` value must be known at compile time: it cannot be computed at runtime, 
 The leading design gives `Type(a)` a structure that can be matched. Each case tells the type checker more about the type:
 
 ```nanyx
-def encode: (value: item, item: type) -> Json = { value, t ->
+def encodeAt: (a, type a) -> Json = { value, t ->
   match t
-    | #int -> json.int(value)              -- here item = int
+    | #int -> json.int(value)              -- here a = int
     | #string -> json.string(value)
-    | #list(elem) -> value \map { x -> encode(x, elem) } \json.array
+    | #list(elem) -> value \map { x -> encodeAt(x, elem) } \json.array
     | #record(fields) ->
-        fields \map { f -> (f.name, encode(f.get(value), f.type)) } \json.object
+        fields \map { f -> (f.name, encodeAt(f.get(value), f.type)) } \json.object
     | #union(cases) -> ...
 }
 ```
@@ -188,21 +157,49 @@ Decoding builds a record instead of taking one apart. It needs a function that w
 
 The type system would need three additions:
 
-- **Narrowing on a `Type` match.** In the `#int` arm, `item` is known to be `int`. General GADTs provide this; a smaller feature would narrow only when matching on a `Type` value, much as TypeScript and Kotlin narrow on type tests.
+- **Narrowing on a `Type` match.** In the `#int` arm, `a` is known to be `int`. General GADTs provide this; a smaller feature would narrow only when matching on a `Type` value, much as TypeScript and Kotlin narrow on type tests.
 - **Packaged types** (existential types) for fields and union cases.
 - **Rank-2 functions** for `build`, because the function passed to it must work for every field type. Only decoding needs this.
 
 Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the "Scrap your boilerplate" approach (`Data`). Swift's `Mirror` and Go's `reflect` have a similar shape but are not typed.
 
+## A synthesised `Typed(a)` context
+
+When a function already takes a value of type `a`, the caller shouldn't have to pass `type a` as well. A context that the compiler [synthesises](../advanced/contexts#context-synthesis) for every type supplies it instead:
+
+```nanyx
+context Typed(a) = (
+  typeOf: Type(a)
+)
+
+def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }
+
+def body = encode(point)
+```
+
+This is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as Scala's `ClassTag` is usually an implicit parameter.
+
+- **It stays static.** The compiler builds the instance where `a` is concrete, so after monomorphisation `typeOf` is a constant, as an explicit `type Point` is.
+- **An explicit `use` can't make it lie.** An explicit `use` overrides a synthesised context as usual, but the only way to make a `Type(a)` is to write `type X` with `X` equal to `a`. An override can only supply the description the compiler would have built, so `Typed` needs no rule against overriding.
+- **It is a value, not a function.** Context members can be values, as `` `0`: a `` is in `Sum`. A function that takes `()` would add nothing, since its result can never change.
+- **It doesn't replace type arguments.** In `[Typed(a)] string -> a`, nothing at the call site fixes `a`, so the ambiguity in [types only in output position](#types-only-in-output-position) remains. `Typed` helps only where a value of type `a` is passed in.
+- **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it, as `encode` and `encodeAt` do above.
+
+Synthesis makes the [nominal types question](#open-questions) more pressing. With explicit arguments, a caller has to write `type Email` to hand over a description of `$Email`. With `Typed`, any generic function that asks for `Typed(a)` gets one without the caller writing anything. One answer is to synthesise `Typed` only for structural types, and let a nominal type's home module provide its instance.
+
 # Alternatives considered
 
-## A separate `type a` parameter form
+## Only the positional `type a` form
 
-An earlier draft wrote a type parameter as `type a`, as in `(string, type a) -> a`, a form of its own beside associated types. Writing it as a type member instead means one concept rather than two, gives the argument a name at the call site, and matches the constraint syntax.
+An earlier draft had only `type a`, as in `(string, type a) -> a`, as a form of its own beside associated types. Adding the named form `into: type` makes a type parameter the same kind of member as an associated type, gives the argument a name at the call site, and matches the constraint syntax. `type a` stays as the positional counterpart.
+
+## Passing a named type member positionally
+
+`deserialise(text, type Point)` could be allowed for `(string, into: type) -> into` by letting type arguments skip the rule that a named field is passed by name. That would make type arguments the one exception to a rule that holds for every call and every record construction. A function's author who wants positional calls declares `type a` instead.
 
 ## Runtime reflection
 
-C# and Java keep a description of every type at runtime and let any code inspect any value. In a single WebAssembly module this costs binary size, defeats removal of unused code, and needs a description format that the runtime and compiler agree on. It would also be an implicit capability; in Nanyx it would have to be a context. The static type arguments above give the useful parts without any of this.
+C# and Java keep a description of every type at runtime and let any code inspect any value. In a single WebAssembly module this costs binary size, defeats removal of unused code, and needs a description format that the runtime and compiler agree on. It would also be an implicit capability, which in Nanyx would have to be a context; `Typed(a)` is that context, resolved at compile time.
 
 ## Compile-time templates
 
@@ -214,22 +211,22 @@ The compiler could expose a record as a type-level list of field names and types
 
 ## Deriving clauses and macros
 
-Haskell's `deriving`, Rust's `#[derive]` and procedural macros, and OCaml's ppx all generate code from a type's definition. Procedural macros and ppx conflict with "one language". A built-in set of derivations would not let libraries add their own, such as JSON or SQL mapping.
+Haskell's `deriving`, Rust's `#[derive]` and procedural macros, and OCaml's ppx all generate code from a type's definition. Nanyx has no compiler plugins that extend the language, which rules out procedural macros and ppx. A built-in set of derivations would not let libraries add their own, such as JSON or SQL mapping.
 
 ## Structural context synthesis
 
-Context synthesis could be extended so that the compiler builds `Eq`, `Hash` or `Show` of a record or union from the instances of its fields. This needs no new syntax and covers equality, hashing and printing well. It cannot express library-specific behaviour such as JSON field names. It may still be worth doing alongside type arguments.
+Context synthesis works by name today: the compiler builds `Sum(Point)` from `Point`'s attached definitions, but nothing builds `Eq` of a record from the `Eq` of its fields. It could be extended to build `Eq`, `Hash` or `Show` of a record or union from the instances of its fields. This needs no new syntax and covers equality, hashing and printing well. It cannot express library-specific behaviour such as JSON field names. It may still be worth doing alongside type arguments.
 
 ## Source generators
 
-C#'s source generators run user code at compile time that emits more source. The linter infrastructure could host them, since linters will already run Nanyx code at compile time. Generated code would have to exist before type checking, while linters run after it, so generators would need their own phase and a narrower view of the program. They remain an option for cases that type arguments cannot reach.
+C#'s source generators run user code at compile time that emits more source. The [linter](../advanced/linters) infrastructure could host them, since linters will already run Nanyx code at compile time. Generated code would have to exist before type checking, while linters run after it, so generators would need their own phase and a narrower view of the program. They remain an option for cases that type arguments cannot reach.
 
 # Open questions
 
-- **One name in two namespaces.** In `(value: item, item: type)`, `item` is a type in the signature and a `Type(item)` value in the body. Is that pun clear enough, or should the value be reached some other way?
+- **Nominal types.** A [nominal type](../advanced/nominal-and-protected-types) such as `$Email` can only be created by its home module. Its description must not offer `build` elsewhere, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading? Is `Typed` synthesised for it at all?
+- **One name in two namespaces.** In `(string, into: type) -> into`, `into` is a type in the signature, and a field holding a `Type(into)` value at the call site. Is that pun clear enough?
 - **`type` at the call site.** A constraint writes `(elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
 - **Bare associated type names.** When can a signature write `elem` rather than `Iter(c).elem`? The [`iter` module](../stdlib/iter) assumes it can whenever only one constraint has an `elem`.
-- **Nominal types.** The description of a nominal type such as `$Email` must not offer `build` outside its home module, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading?
 - **Customisation.** How does a type change how it is encoded, for example to rename a field or use a different representation? This probably ties in with attached definitions and with explicit `use` taking priority over synthesis.
 - **Rank-2 types.** Are rank-2 functions acceptable for `build`, or should decoding be limited to an applicative-style `build` that the compiler provides?
 - **How much narrowing.** Is narrowing on `Type` matches enough, or would full GADTs be needed?
