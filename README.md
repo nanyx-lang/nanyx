@@ -187,3 +187,4 @@ Nanyx aims to feel small: few rules, few exceptions, and features that compose r
 [unions]: https://nanyx.dev/docs/coming-from-other-languages/arbitrary-unions
 [wip]: https://nanyx.dev/docs/work-in-progress/workstreams
 [compilation]: https://nanyx.dev/docs/work-in-progress/compilation
+
