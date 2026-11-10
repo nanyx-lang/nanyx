@@ -143,13 +143,23 @@ def deserialise: [Decode(into)] (string, into: type) -> into = { text, t -> ... 
 def p = deserialise('{"x": 1, "y": 2}', into = type Point)
 ```
 
-The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `(elem = string)` fixes a context's. Because positional and named fields mix, `deserialise(text, type Point)` works too. One concept covers both features: a record member of kind `type`.
+The call site matches the constraint syntax: `into = type Point` fixes a parameter's type member as `(elem = string)` fixes a context's. One concept covers both features: a record member of kind `type`.
+
+Like any named field, `into` is [passed by name](../tour/functions), so `deserialise(text, type Point)` is an error for this signature. A function whose callers should pass the type positionally declares a positional type parameter instead, written `type a`:
+
+```nanyx
+def deserialise: [Decode(a)] (string, type a) -> a = { text, t -> ... }
+
+def p = deserialise('{"x": 1, "y": 2}', type Point)
+```
+
+The two forms follow the record rule for every other field. A named field is `name: T` and a positional field is just `T`; likewise a named type member is `into: type` and a positional one is `type a`. A positional field has no name of its own, so the type variable `a` is the only name, and it is a single letter like any other type variable. The signature is written the way the call is: `type a` in the signature, `type Point` at the call site. As with any parameter, the function's author chooses one form, and the caller follows it.
 
 A type member's name can't clash with a built-in type. [Built-in type names](../tour/types#type-names) such as `int`, `string`, `bool` and `list` are reserved by the language, so `(string, list: type) -> list` is an error.
 
 ## `x: type` is a value of type `Type(x)`
 
-`into: type` is shorthand for a parameter `into: Type(into)`, where `into` is an ordinary type variable, quantified over the whole signature as `a` is today. The expression `type Point` has type `Type(Point)`. Type inference treats type arguments like any other: unifying `Type(Point)` with `Type(into)` solves `into = Point`. This is why `into` can be used in the result type and in the `[Decode(into)]` constraint to its left with no new scoping rule. No dependent types are needed, and partial application, pipes and passing the function around all keep working. Inside generic code, `type a` with a type variable `a` is allowed, and monomorphisation resolves it.
+`into: type` is shorthand for a parameter `into: Type(into)`, and the positional `type a` for a positional parameter of type `Type(a)`. In both, the name, `into` or `a`, is an ordinary type variable, quantified over the whole signature as `a` is today. The expression `type Point` has type `Type(Point)`. Type inference treats type arguments like any other: unifying `Type(Point)` with `Type(into)` solves `into = Point`. This is why `into` can be used in the result type and in the `[Decode(into)]` constraint to its left with no new scoping rule. No dependent types are needed, and partial application, pipes and passing the function around all keep working. Inside generic code, `type a` with a type variable `a` is allowed, and monomorphisation resolves it.
 
 This is the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`.
 
@@ -167,9 +177,9 @@ A `Type` value must be known at compile time: it cannot be computed at runtime, 
 The leading design gives `Type(a)` a structure that can be matched. Each case tells the type checker more about the type:
 
 ```nanyx
-def encode: (value: item, item: type) -> Json = { value, t ->
+def encode: (a, type a) -> Json = { value, t ->
   match t
-    | #int -> json.int(value)              -- here item = int
+    | #int -> json.int(value)              -- here a = int
     | #string -> json.string(value)
     | #list(elem) -> value \map { x -> encode(x, elem) } \json.array
     | #record(fields) ->
@@ -188,7 +198,7 @@ Decoding builds a record instead of taking one apart. It needs a function that w
 
 The type system would need three additions:
 
-- **Narrowing on a `Type` match.** In the `#int` arm, `item` is known to be `int`. General GADTs provide this; a smaller feature would narrow only when matching on a `Type` value, much as TypeScript and Kotlin narrow on type tests.
+- **Narrowing on a `Type` match.** In the `#int` arm, `a` is known to be `int`. General GADTs provide this; a smaller feature would narrow only when matching on a `Type` value, much as TypeScript and Kotlin narrow on type tests.
 - **Packaged types** (existential types) for fields and union cases.
 - **Rank-2 functions** for `build`, because the function passed to it must work for every field type. Only decoding needs this.
 
@@ -196,9 +206,13 @@ Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the 
 
 # Alternatives considered
 
-## A separate `type a` parameter form
+## Only the positional `type a` form
 
-An earlier draft wrote a type parameter as `type a`, as in `(string, type a) -> a`, a form of its own beside associated types. Writing it as a type member instead means one concept rather than two, gives the argument a name at the call site, and matches the constraint syntax.
+An earlier draft had only `type a`, as in `(string, type a) -> a`, as a form of its own beside associated types. Adding the named form `into: type` makes a type parameter the same kind of member as an associated type, gives the argument a name at the call site, and matches the constraint syntax. `type a` stays as the positional counterpart.
+
+## Passing a named type member positionally
+
+`deserialise(text, type Point)` could be allowed for `(string, into: type) -> into` by letting type arguments skip the rule that a named field is passed by name. That would make type arguments the one exception to a rule that holds for every call and every record construction. A function's author who wants positional calls declares `type a` instead.
 
 ## Runtime reflection
 
@@ -226,7 +240,7 @@ C#'s source generators run user code at compile time that emits more source. The
 
 # Open questions
 
-- **One name in two namespaces.** In `(value: item, item: type)`, `item` is a type in the signature and a `Type(item)` value in the body. Is that pun clear enough, or should the value be reached some other way?
+- **One name in two namespaces.** In `(string, into: type) -> into`, `into` is a type in the signature, and a field holding a `Type(into)` value at the call site. Is that pun clear enough?
 - **`type` at the call site.** A constraint writes `(elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
 - **Bare associated type names.** When can a signature write `elem` rather than `Iter(c).elem`? The [`iter` module](../stdlib/iter) assumes it can whenever only one constraint has an `elem`.
 - **Nominal types.** The description of a nominal type such as `$Email` must not offer `build` outside its home module, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading?
