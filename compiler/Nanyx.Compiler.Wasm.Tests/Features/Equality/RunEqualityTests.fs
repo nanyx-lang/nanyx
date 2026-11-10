@@ -1,0 +1,75 @@
+module TranspilerWasmTests.Features.Equality.Run
+
+open Xunit
+open TranspilerWasmTestHelpers
+
+/// A program that prints `T` or `F` for each of `comparisons`, one per line, after the definitions in `definitions`.
+let private comparing (definitions: string list) (comparisons: string list) =
+    [ "import nanyx/console"
+      ""
+      "def show = { b -> if b then \"T\" else \"F\" }"
+      yield! definitions
+      ""
+      "@entry"
+      "def main = {"
+      "  def s = \"a\" ++ \"a\""
+      yield! comparisons |> List.map (fun comparison -> $"  println(show({comparison}))")
+      "}" ]
+    |> String.concat "\n"
+
+[<Fact>]
+let ``Run - records and tuples compare field by field`` () =
+    comparing
+        [ "type Point = (x: int, y: int)" ]
+        [ "(x = 1, y = 2) == (x = 1, y = 2)"
+          "(x = 1, y = 2) == (x = 1, y = 3)"
+          "Point(x = 1, y = 2) != Point(x = 1, y = 3)"
+          "(1, s) == (1, \"aa\")"
+          "(1, s) == (1, \"ab\")"
+          "(f = 1.5, g = [2.0]) == (f = 1.5, g = [2.0])"
+          "(f = 1.5, g = [2.0]) == (f = 1.5, g = [2.5])" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\nF\nT\nF\n"
+
+[<Fact>]
+let ``Run - lists compare element by element`` () =
+    comparing
+        [ "def empty: list(int) = []" ]
+        [ "[1, 2, 3] == [1, 2, 3]"
+          "[1, 2] == [1, 2, 3]"
+          "[1, 2, 3] == [1, 2]"
+          "[[s], [\"b\"]] == [[\"aa\"], [\"b\"]]"
+          "empty == [1]"
+          "empty == []" ]
+    |> runSource
+    |> assertRan "T\nF\nF\nT\nF\nT\n"
+
+[<Fact>]
+let ``Run - tags compare by name, then payload by its type`` () =
+    // A payload on the heap is compared by what it holds, not where it is (#526).
+    comparing
+        [ "type Point = (x: int, y: int)"
+          "type Mixed = #i(int) | #s(string) | #p(Point) | #nothing"
+          "def eqMixed: Mixed, Mixed -> bool = { a, b -> a == b }"
+          "def eqResult: #ok(list(string)) | #error(string), #ok(list(string)) | #error(string) -> bool = { a, b -> a == b }" ]
+        [ "#some(s) == #some(\"aa\")"
+          "#some(s) == #some(\"ab\")"
+          "eqMixed(#s(s), #s(\"aa\"))"
+          "eqMixed(#p(Point(x = 1, y = 2)), #p(Point(x = 1, y = 2)))"
+          "eqMixed(#s(s), #p(Point(x = 1, y = 2)))"
+          "eqMixed(#nothing, #nothing)"
+          "eqMixed(#nothing, #i(1))"
+          "eqMixed(#i(2), #i(2))"
+          "eqResult(#ok([s]), #ok([\"aa\"]))"
+          "eqResult(#ok([s]), #error(\"aa\"))" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\nF\nT\nF\nT\nT\nF\n"
+
+[<Fact>]
+let ``Each type compared gets one equality function, and its parts their own`` () =
+    let wat =
+        transpileWat (
+            "def a: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p == q }\n" +
+            "def b: list((x: int, y: string)), list((x: int, y: string)) -> bool = { p, q -> p != q }\n")
+    Assert.Equal(1, countOccurrences "(func $__nanyx_equals_list_" wat)
+    Assert.Equal(1, countOccurrences "(func $__nanyx_equals_rec_" wat)

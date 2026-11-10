@@ -74,7 +74,7 @@ List.distinct([1, 2, 2, 3, 1])
 -- [1, 2, 3]
 ```
 
-Elements are compared with `==`, so for now the elements must be numbers, bools, strings or tags: the compiler does not compare records or lists yet ([#424](https://github.com/nanyx-lang/nanyx/issues/424)).
+Elements are compared with `==`, which compares records, tuples, lists and tags by their structure. A list of functions cannot be made distinct, since functions have no equality.
 
 ---
 

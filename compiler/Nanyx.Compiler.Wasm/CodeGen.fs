@@ -575,6 +575,13 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
     if drops.Types |> List.exists (function CoreIr.IrFunction _ -> true | _ -> false) then
         functionTable.IndirectArities.Add 1 |> ignore
 
+    // An equality function for each record, list and union of tags `==` compares, and for each of their parts that
+    // needs one.
+    let equalityTypes = CoreIrEquality.collect (definitionFunctions @ Option.toList startFunction)
+    let renderedEqualities = CoreIrEquality.render (fun name -> tagIdMap |> Map.tryFind name) equalityTypes |> String.concat "\n\n"
+    for helper in CoreIrEquality.helpersUsed equalityTypes do
+        usedHelpers.Add helper |> ignore
+
     let report =
         { Functions = [ yield! definitionFunctions |> List.map _.Name; yield! startFunction |> Option.map _.Name |> Option.toList ]
           Specialisations =
@@ -674,7 +681,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
 
     // Add memory if we have string literals, heap allocation or reads of tag cells, but no dbg helpers (dbgPrelude
     // already includes memory)
-    let readsTagCells = usedHelperSet.Contains Helpers.tagCode || usedHelperSet.Contains Helpers.tagEquals
+    let readsTagCells = usedHelperSet.Contains Helpers.tagCode || not equalityTypes.IsEmpty
     let freesObjects = usedHelperSet.Contains Helpers.free
     let needsMemory =
         (not (List.isEmpty stringLiteralData) || moduleUsesHeap || readsTagCells || freesObjects) && not moduleUsesIoHelpers
@@ -712,6 +719,7 @@ let transpileTypedModuleWithReport (typed: TypedModule) : string * BackendReport
               if not (String.IsNullOrWhiteSpace dataSegments) then dataSegments
               if not (String.IsNullOrWhiteSpace renderedFunctions) then renderedFunctions
               if not (String.IsNullOrWhiteSpace renderedDrops) then renderedDrops
+              if not (String.IsNullOrWhiteSpace renderedEqualities) then renderedEqualities
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
         let body = String.concat "\n\n" parts

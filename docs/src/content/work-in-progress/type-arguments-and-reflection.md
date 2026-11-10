@@ -31,7 +31,7 @@ def decodeUser: string -> Result(User, DecodeError) = { data ->
 }
 ```
 
-Printing and equality are compiler intrinsics: `dbg` and string interpolation print tags, and `==` is built in for numbers, strings and tags. Nothing in the language lets a library do the same for any record.
+Printing and equality are compiler intrinsics: `dbg` and string interpolation print tags, and `==` compares any value but a function by its structure. Nothing in the language lets a library do the same for any record.
 
 ## What Nanyx already has
 

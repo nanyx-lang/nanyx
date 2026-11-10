@@ -15,7 +15,9 @@ module Helpers =
     let recordCopy = "__nanyx_record_copy"
     let tagBox = "__nanyx_tag_box"
     let tagCode = "__nanyx_tag_code"
-    let tagEquals = "__nanyx_tag_equals"
+    /// Not a helper: `==` on a record, a list or tags, which calls the equality function of its operands' type (see
+    /// `CoreIrEquality`).
+    let valueEquals = "__nanyx_equals"
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
@@ -664,38 +666,6 @@ let runtimeHelpers : Map<string, string> =
             "    i32.load"
             "  end"
             ")" ]
-      // `==` on tags: the same code and, for tags with payloads, the same payload word.
-      Helpers.tagEquals,
-      lines
-          [ $"(func ${Helpers.tagEquals} (param $a i32) (param $b i32) (result i32)"
-            "  local.get $a"
-            "  local.get $b"
-            "  i32.eq"
-            "  if"
-            "    i32.const 1"
-            "    return"
-            "  end"
-            "  local.get $a"
-            "  local.get $b"
-            "  i32.or"
-            "  i32.const 1"
-            "  i32.and"
-            "  if"
-            "    i32.const 0"
-            "    return"
-            "  end"
-            "  local.get $a"
-            "  i32.load"
-            "  local.get $b"
-            "  i32.load"
-            "  i32.eq"
-            "  local.get $a"
-            "  i32.load offset=4"
-            "  local.get $b"
-            "  i32.load offset=4"
-            "  i32.eq"
-            "  i32.and"
-            ")" ]
       // A float is boxed: an 8-byte block holding the f64, passed around by pointer like every other
       // value, so locals, record slots and calls stay 32-bit.
       Helpers.floatBox,
@@ -1020,7 +990,6 @@ let helperDependencies =
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
       Helpers.tagBox, [ Helpers.newCell ]
       Helpers.tagCode, []
-      Helpers.tagEquals, []
       Helpers.floatBox, [ Helpers.newCell ]
       Helpers.floatToString, [ Helpers.newObject ]
       Helpers.listLength, []
