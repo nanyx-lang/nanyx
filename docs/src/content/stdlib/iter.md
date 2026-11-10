@@ -1,7 +1,7 @@
 ---
 title: "iter"
 description: "Generic iterable helpers via Iter(a) context"
-order: 9
+order: 11
 ---
 
 The `iter` module provides generic operations for any type `a` for which an `Iter(a)` context is provided.

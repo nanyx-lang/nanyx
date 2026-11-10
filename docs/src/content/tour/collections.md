@@ -38,7 +38,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | Collection type | Special alias | Characteristics |
 |-----------------|-------------------|---------|
 | `List(a)` | `list(a)` | Indexable collections |
-| `Set(a)` | - | Membership checks |
+| `Set(a)` | `set(a)` | Membership checks |
 | `Map(k, v)` | `map(k, v)` | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
 | `Collection(a)` | - | Any in-memory collection |
 | `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |

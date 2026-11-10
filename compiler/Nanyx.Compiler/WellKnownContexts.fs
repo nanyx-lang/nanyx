@@ -94,6 +94,7 @@ module internal WellKnownContexts =
                 | TyFunc _ -> Some ("a function", "functions")
                 // Comparing the lists of their entries would depend on the order the keys were added in (#618).
                 | Maps.MapType _ -> Some ("a map", "maps")
+                | Sets.SetType _ -> Some ("a set", "sets")
                 | _ -> None)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           AgreesWith = None
@@ -113,6 +114,7 @@ module internal WellKnownContexts =
             lacking "order" (function
                 | TyFunc _ -> Some ("a function", "functions")
                 | Maps.MapType _ -> Some ("a map", "maps")
+                | Sets.SetType _ -> Some ("a set", "sets")
                 | TyRecord fields when not (isTuple fields) -> Some ("a record", "records")
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
@@ -137,6 +139,7 @@ module internal WellKnownContexts =
             lacking "hash" (function
                 | TyFunc _ -> Some ("a function", "functions")
                 | Maps.MapType _ -> Some ("a map", "maps")
+                | Sets.SetType _ -> Some ("a set", "sets")
                 | _ -> None)
           ListHelpers = Map.empty
           AgreesWith = Some equality.Member

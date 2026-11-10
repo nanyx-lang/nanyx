@@ -140,7 +140,7 @@ Not done yet:
   a type that holds a part with its own `hash`, such as a `list($Email)` where `$Email` attaches `==` and `hash`, has
   no `Hash` for now, since `==` on it compares the elements through `` $Email.`==` ``
   ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
-- **Maps and sets keyed by `Hash`.** Maps are keyed by `Eq` alone so far; see [Maps and sets](./maps-and-sets).
+- **Maps and sets keyed by `Hash`** are done in the prelude, but do not use the hash yet; see [Maps and sets](./maps-and-sets).
 
 # What existed before
 

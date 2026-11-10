@@ -240,6 +240,8 @@ let rec private toIrType (ty: Ty) : IrType =
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
     | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ]) ]))
+    // A set is the list of its elements (see `Sets`).
+    | Sets.SetType element -> IrList(toIrType element)
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc(input, output) -> IrFunction(toIrType input, toIrType output)

@@ -1,7 +1,7 @@
 ---
 title: "result"
 description: "Composing success/error values"
-order: 6
+order: 8
 ---
 
 The `Result` helpers work on values represented as `#some(a) | #error(e)`, the `Result(a, e)` type. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.

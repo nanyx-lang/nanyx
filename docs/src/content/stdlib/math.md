@@ -1,7 +1,7 @@
 ---
 title: "math"
 description: "Numeric utility functions"
-order: 7
+order: 9
 ---
 
 The `math` module provides common numeric and floating-point operations.

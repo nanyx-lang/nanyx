@@ -1,7 +1,7 @@
 ---
 title: "string"
 description: "String manipulation functions"
-order: 4
+order: 6
 ---
 
 The `string` module provides functions for working with UTF-8 strings. Import it as `nanyx/text`.
