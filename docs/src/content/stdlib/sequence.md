@@ -4,6 +4,8 @@ description: "Helpers for sequence processing"
 order: 10
 ---
 
+> **Planned.** This module is not yet in the library: none of the functions on this page exists, and `seq(a)` is today only the type of a range in a `for` loop. The work is tracked in [#192](https://github.com/nanyx-lang/nanyx/issues/192). Until then, use the [list](./collections) functions.
+
 The `sequence` module provides operations on `seq(a)`, which is always finite. Potentially infinite sequences have the type `gen(a)` and their own attached definitions; `Gen.take` on a `gen` yields a `seq`, which is how an infinite generator is brought into the finite world where `fold` and `toList` are safe to call. Because the two are different types with their own attached definitions, `xs \take(10)` resolves to whichever applies to `xs`.
 
 # map

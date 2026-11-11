@@ -75,3 +75,56 @@ let ``Run - a for loop walks a set's elements`` () =
         [ "for set.fromList([2, 1, 2]) | n -> println(\"{n}\")" ]
     |> runSource
     |> assertRan "2\n1\n"
+
+[<Fact>]
+let ``Run - isEmpty says whether a set has no elements`` () =
+    program
+        []
+        [ """def none: set(int) = set.empty"""
+          """println(show(set.isEmpty(none)))"""
+          """println(show(set.fromList([1]) \set.isEmpty))"""
+          """println(show(set.isEmpty(set.remove(set.fromList([1]), 1))))""" ]
+    |> runSource
+    |> assertRan "T\nF\nT\n"
+
+[<Fact>]
+let ``Run - fold walks a set's elements in order`` () =
+    program
+        []
+        [ """def s = set.fromList([3, 1, 2])"""
+          """println("{s \set.fold(0, { total, n -> total + n })}")"""
+          """println(s \set.fold("", { acc, n -> acc ++ "{n}" }))""" ]
+    |> runSource
+    |> assertRan "6\n312\n"
+
+[<Fact>]
+let ``Run - map gives the set of what a function makes of each element`` () =
+    program
+        []
+        [ """def s = set.fromList([1, 2, 3])"""
+          """println("{s \set.map { % 2 } \set.count}")"""
+          """println(ints(s \set.map { % 2 }))"""
+          """println(ints(s \set.map { * 10 }))""" ]
+    |> runSource
+    |> assertRan "2\n10\n102030\n"
+
+[<Fact>]
+let ``Run - filter keeps the elements that pass the test`` () =
+    program
+        []
+        [ """def s = set.fromList([1, 2, 3, 4])"""
+          """println(ints(s \set.filter { n -> n % 2 == 0 }))"""
+          """println(show(s \set.filter({ n -> n > 9 }) \set.isEmpty))""" ]
+    |> runSource
+    |> assertRan "24\nT\n"
+
+[<Fact>]
+let ``Run - isSubset says whether another set holds every element`` () =
+    program
+        []
+        [ """println(show(set.isSubset(set.fromList([1]), set.fromList([1, 2]))))"""
+          """println(show(set.isSubset(set.fromList([1, 3]), set.fromList([1, 2]))))"""
+          """println(show(set.isSubset(set.empty, set.fromList([1]))))"""
+          """println(show(set.fromList([2, 1]) \set.isSubset(set.fromList([1, 2]))))""" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\n"

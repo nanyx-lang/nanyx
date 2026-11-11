@@ -92,6 +92,81 @@ The number of elements in a set.
 
 ---
 
+## isEmpty
+
+```nanyx
+set.isEmpty: set(a) -> bool
+```
+
+Whether a set has no elements.
+
+```nanyx
+set.isEmpty(set.empty)            -- true
+set.isEmpty(set.fromList([1]))    -- false
+```
+
+---
+
+## fold
+
+```nanyx
+set.fold: (set(a), b, ((b, a) -> b)) -> b
+```
+
+Combines a starting value with each element of a set in turn, in the order of `set.toList`.
+
+```nanyx
+set.fromList([3, 1, 2]) \set.fold(0, { total, n -> total + n })
+-- 6
+```
+
+---
+
+## map
+
+```nanyx
+set.map: [Eq(b) + Hash(b)] (set(a), (a -> b)) -> set(b)
+```
+
+The set of what a function makes of each element. Elements the function makes equal are kept once, where the first of them was.
+
+```nanyx
+set.fromList([1, 2, 3]) \set.map { % 2 } \set.toList
+-- [1, 0]
+```
+
+---
+
+## filter
+
+```nanyx
+set.filter: (set(a), (a -> bool)) -> set(a)
+```
+
+The elements of a set that pass a test, in the same order.
+
+```nanyx
+set.fromList([1, 2, 3, 4]) \set.filter { n -> n % 2 == 0 } \set.toList
+-- [2, 4]
+```
+
+---
+
+## isSubset
+
+```nanyx
+set.isSubset: [Eq(a) + Hash(a)] (set(a), set(a)) -> bool
+```
+
+Whether the second set holds every element of the first.
+
+```nanyx
+set.isSubset(set.fromList([1]), set.fromList([1, 2]))      -- true
+set.isSubset(set.fromList([1, 3]), set.fromList([1, 2]))   -- false
+```
+
+---
+
 ## union
 
 ```nanyx
