@@ -28,10 +28,14 @@ npm run check    # type-check .astro and .ts files
 - `src/components/` — layout pieces. `SearchDialog.tsx` is the only React
   island; everything else is static HTML with small inline scripts.
 - `src/styles/global.css` — Tailwind setup and site styles.
-- `vercel.json` — Vercel settings. `ignoreCommand` skips a deployment when a
-  commit changes nothing the site is built from: `docs/`,
+- `vercel.json` — Vercel settings. Vercel's own Git deployments are off.
+- `../.github/workflows/docs.yml` — deploys the site. It runs on a push to
+  `main` that changes something the site is built from: `docs/`,
   `extension/syntaxes/` and `examples/`. If the site starts reading files from
-  another directory outside `docs/`, add it there.
+  another directory outside `docs/`, add it to the workflow's `paths`.
+  `gh workflow run Docs --ref <branch>` deploys a branch as a preview. The
+  workflow needs the `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`
+  repository secrets.
 
 ## Machine-readable output
 
