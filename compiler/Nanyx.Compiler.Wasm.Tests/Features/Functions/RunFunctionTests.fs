@@ -407,3 +407,41 @@ let ``Run - holes in annotations are filled in by inference`` () =
         "  for names | n -> println(greet(n))\n" +
         "}\n"
     runSource source |> assertRan "42 7 same\nhi ada\nhi grace\n"
+
+[<Fact>]
+let ``Run - a local lambda of no parameters runs each time it is called (#589)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def x = 10\n" +
+        "  def block = {\n" +
+        "    def a = 3\n" +
+        "    println(\"ran\")\n" +
+        "    a + x\n" +
+        "  }\n" +
+        "  println(\"before\")\n" +
+        "  println(\"{block()}\")\n" +
+        "  println(\"{block()}\")\n" +
+        "  def nothing = {}\n" +
+        "  nothing()\n" +
+        "}\n"
+    runSource source |> assertRan "before\nran\n13\nran\n13\n"
+
+[<Fact>]
+let ``Run - a lambda of no parameters can be passed as a value (#589)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "def twice: (() -> int) -> int = { f -> f() + f() }\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  def x = 10\n" +
+        "  def next = { x + 1 }\n" +
+        "  println(\"{twice(next)} {twice({ x * 2 })}\")\n" +
+        "  def thunks = [{ x }, { x - 1 }]\n" +
+        "  for thunks | t -> println(\"{t()}\")\n" +
+        "}\n"
+    runSource source |> assertRan "22 40\n10\n9\n"

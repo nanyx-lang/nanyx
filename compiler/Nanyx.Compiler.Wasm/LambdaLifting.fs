@@ -1,4 +1,4 @@
-/// Lambda lifting. A lambda with parameters that appears as a value (a call or pipe argument, the right-hand
+/// Lambda lifting. A lambda that appears as a value, with parameters or none, (a call or pipe argument, the right-hand
 /// side of a local `def`, ...) becomes a top-level function `__lambda_N`, and the expression becomes a reference
 /// to that name, so the rest of the backend only ever meets lambdas as definitions. A lambda that captures
 /// variables of its enclosing function is lifted too: what it captures travels in its closure block (see `lift`).
@@ -341,8 +341,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         | ForSyntax.Call(iterables, lambda, args, body) ->
             let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
             rebuild (FunctionCall(ForSyntax.builtIn, None, List.map recur iterables @ [ { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) } ]))
-        | Lambda(args, body) when not args.IsEmpty -> liftLambda scope expr args body
-        | Lambda(args, body) -> rebuild (Lambda(args, recur body))
+        | Lambda(args, body) -> liftLambda scope expr args body
         // A top-level function used as a value: a closure over a wrapper that takes an environment.
         | IdentifierExpr name when topLevelFunctions.ContainsKey name && not (scope.Contains name) ->
             closureOf expr (wrapperOf name) []
@@ -366,7 +365,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                         Some (name, useContexts |> Map.tryFind value.Id)
                     | _ -> None)
                 |> Map.ofList
-            // A lambda bound to a context member is a function even with no parameters.
+            // A lambda bound to a context member takes the types of its parameters from the member's declared type.
             let liftMember contextType memberName (value: Expression) =
                 match value.Kind with
                 | Lambda(args, body) -> liftLambda scope value (annotateFromMemberType (memberType contextType memberName) args) body
