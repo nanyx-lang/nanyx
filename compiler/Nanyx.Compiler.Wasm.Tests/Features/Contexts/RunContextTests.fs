@@ -235,23 +235,24 @@ let ``Run - use ... in loads an instance for its body only (#320)`` () =
 [<Fact>]
 let ``Run - use ... in runs an indented block after in with the context loaded (#673)`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "context Counter = (next: int -> int)\n" +
-        "\n" +
-        "def counted: [Counter] int -> int = { n -> next(n) }\n" +
-        "\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  def offset = 10\n" +
-        "  def total = use Counter(next = { n -> n - 1 }) in\n" +
-        "    def a = counted(3)\n" +
-        "    a + offset\n" +
-        "  println(\"{total}\")\n" +
-        "  use Counter(next = { n -> n * 2 }) in\n" +
-        "    def b = counted(4)\n" +
-        "    println(\"{b}\")\n" +
-        "}\n"
+        """import nanyx/console
+
+context Counter = (next: int -> int)
+
+def counted: [Counter] int -> int = { n -> next(n) }
+
+@entry
+def main = {
+  def offset = 10
+  def total = use Counter(next = { n -> n - 1 }) in
+    def a = counted(3)
+    a + offset
+  println("{total}")
+  use Counter(next = { n -> n * 2 }) in
+    def b = counted(4)
+    println("{b}")
+}
+"""
     runSource source |> assertRan "12\n8\n"
 
 [<Fact>]
