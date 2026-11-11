@@ -38,11 +38,12 @@ operators call, and `Hash(a)` and `__hash`.
   built-in type such as `string`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
-  at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
+  at each type it is used at, a closure for each (`FunctionLowering.GenericLocal` in `CoreIrLower.fs`), so its `==`
+  compares and frees a string or a list as that type does. A use the backend cannot type, such as the local captured
+  by a lambda, reads the closure compiled with its type variables as unit, which compares them as words. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
   of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). Only a call by name is
-  checked, not a local function passed as a value. A local generic function compares strings and lists wrongly in
-  the backend ([#616](https://github.com/nanyx-lang/nanyx/issues/616)).
+  checked, not a local function passed as a value.
 - **The operands are joined when one is a tag.** `{ o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))`
   checks, as the join for `if` and `match` branches does (`BranchJoin.joinBranchTypes`, chosen by
   `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still

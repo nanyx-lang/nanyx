@@ -191,3 +191,20 @@ let ``Transpile interpolated dbg string from file`` () =
     finally
         if Directory.Exists(dir) then
             Directory.Delete(dir, true)
+
+[<Fact>]
+let ``Run - a local generic function frees what it is given, at each type it is used at`` () =
+    // A closure for each type it is used at: the string it is given and ignores is freed, the int left alone (#616).
+    """
+import nanyx/console
+
+@entry
+def main = {
+  def first = { x, y -> x }
+  println(first("a" ++ "b", "c" ++ "d"))
+  println(first("e", 1))
+  println(first(2, "f" ++ "g"))
+}
+"""
+    |> runSource
+    |> assertRan "ab\ne\n2\n"
