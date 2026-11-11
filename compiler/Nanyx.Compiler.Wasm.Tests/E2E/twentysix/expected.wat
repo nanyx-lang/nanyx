@@ -374,27 +374,6 @@
     i32.store
     local.get $base
   )
-  (func $__nanyx_list_length (param $list i32) (result i32)
-    (local $count i32)
-    block $done
-      loop $walk
-        local.get $list
-        i32.eqz
-        br_if $done
-        local.get $count
-        i32.const 1
-        i32.add
-        local.set $count
-        local.get $list
-        i32.const 4
-        i32.add
-        i32.load
-        local.set $list
-        br $walk
-      end
-    end
-    local.get $count
-  )
   (func $__nanyx_list_cons_at (param $block i32) (param $head i32) (param $tail i32) (result i32)
     (local $cell i32)
     local.get $block
@@ -428,9 +407,7 @@
     local.get $arg2
     local.set $__match_tmp_1
     local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 0
-      i32.eq
+      i32.eqz
       i32.const 1
       i32.and
     (if (result i32)
@@ -441,9 +418,8 @@
       )
       (else
         local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 1
-      i32.ge_s
+      i32.const 0
+      i32.ne
       i32.const 1
       i32.and
     (if (result i32)
@@ -502,9 +478,7 @@
     local.get $arg3
     local.set $__match_tmp_2
     local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 0
-      i32.eq
+      i32.eqz
       i32.const 1
       i32.const 1
       i32.and
@@ -519,9 +493,8 @@
       )
       (else
         local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 1
-      i32.ge_s
+      i32.const 0
+      i32.ne
       i32.const 1
       i32.const 1
       i32.and

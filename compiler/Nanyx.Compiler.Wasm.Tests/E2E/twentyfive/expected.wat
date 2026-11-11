@@ -350,35 +350,12 @@
     i32.store
     local.get $cell
   )
-  (func $__nanyx_list_length (param $list i32) (result i32)
-    (local $count i32)
-    block $done
-      loop $walk
-        local.get $list
-        i32.eqz
-        br_if $done
-        local.get $count
-        i32.const 1
-        i32.add
-        local.set $count
-        local.get $list
-        i32.const 4
-        i32.add
-        i32.load
-        local.set $list
-        br $walk
-      end
-    end
-    local.get $count
-  )
 
   (func $sum (param $xs i32) (result i32) (local $__match_tmp_0 i32) (local $__payload_x i32) (local $__payload_rest i32)
     local.get $xs
     local.set $__match_tmp_0
     local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 0
-      i32.eq
+      i32.eqz
     (if (result i32)
       (then
         local.get $__match_tmp_0
@@ -387,9 +364,8 @@
       )
       (else
         local.get $__match_tmp_0
-      call $__nanyx_list_length
-      i32.const 1
-      i32.ge_s
+      i32.const 0
+      i32.ne
     (if (result i32)
       (then
         local.get $__match_tmp_0
