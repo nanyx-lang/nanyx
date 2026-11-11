@@ -167,6 +167,10 @@ type ContextInstance =
 /// `InferredContextTypes` holds the parameterised contexts each top-level def that does not write its type was
 /// inferred to require, by the def's symbol, as types over the variables of its type in `SymbolTypes`: `Show(a)` is
 /// `TyApply("Show", [a])`. Resolved for the root module only, as `SymbolTypes` is.
+///
+/// `ContextTypes` holds the contexts each of the module's own top-level defs requires, written or inferred, by the
+/// def's symbol, as types over the variables of its type in `SymbolTypes`: those in `InferredContextTypes`, then the
+/// ones it writes or needs of the runtime (`Console`). Resolved for the root module only, as `SymbolTypes` is.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -185,5 +189,6 @@ type TypedModule =
       ContextInstances: Map<NodeId, ContextInstance option list>
       UseContexts: Map<NodeId, TypeExpr>
       InferredContextTypes: Map<SymbolId, Ty list>
+      ContextTypes: Map<SymbolId, Ty list>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }

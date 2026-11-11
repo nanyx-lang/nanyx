@@ -177,4 +177,4 @@ def f = memory {
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let hover = Hover.typeAt Unicode result (offsetOf source "total" 2 0)
-    Assert.Equal(Some "int", hover |> Option.map _.Type)
+    Assert.Equal(Some "total: int", hover |> Option.map _.Type)

@@ -193,7 +193,7 @@ let private isPrivateType modifiers =
     modifiers |> List.exists (fun modifier -> modifier = TypeDefModifier.Private)
 
 
-let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * InferState =
+let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * InferState =
     match typeExpr.Kind with
     | TypeName name ->
         match lookupPrimitive name with
