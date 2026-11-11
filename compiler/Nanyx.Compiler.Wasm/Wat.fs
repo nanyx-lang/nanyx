@@ -39,6 +39,13 @@ let wasmFloatInstruction op =
     | ">=" -> Some "f64.ge"
     | _ -> None
 
+let private memoryInstruction =
+    System.Text.RegularExpressions.Regex(@"\b(?:i32|i64|f32|f64)\.(?:load|store)|\bmemory\.(?:size|grow|copy|fill|init)\b")
+
+/// Whether WebAssembly text has an instruction that reads, writes or grows linear memory, so the module that holds it
+/// must declare one.
+let usesMemory (text: string) = memoryInstruction.IsMatch text
+
 let wasmFloatConst (value: float) =
     if System.Double.IsNaN value then "nan"
     elif System.Double.IsPositiveInfinity value then "inf"

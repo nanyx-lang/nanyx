@@ -788,12 +788,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let dataSegments = renderDataSegments stringLiteralData
 
-    // Add memory if we have string literals, heap allocation or reads of tag cells, but no dbg helpers (dbgPrelude
-    // already includes memory)
-    let readsTagCells = usedHelperSet.Contains Helpers.tagCode || not equalityTypes.IsEmpty
-    let freesObjects = usedHelperSet.Contains Helpers.free
+    // Add memory if we have string literals or any emitted function touches memory, but no dbg helpers (dbgPrelude
+    // already includes memory). Reading the rendered text keeps this true of whatever the helpers and functions do.
+    let functionsUseMemory =
+        [ renderedHelpers; renderedFunctions; renderedDrops; renderedEqualities; renderedOrderings; renderedHashes; renderedStartFunction ]
+        |> List.exists Wat.usesMemory
     let needsMemory =
-        (not (List.isEmpty stringLiteralData) || moduleUsesHeap || readsTagCells || freesObjects) && not moduleUsesIoHelpers
+        (not (List.isEmpty stringLiteralData) || functionsUseMemory) && not moduleUsesIoHelpers
     let memorySection =
         if needsMemory then
             memoryDirective + "\n  (export \"memory\" (memory 0))"
