@@ -75,3 +75,56 @@ let ``Run - a for loop walks a set's elements`` () =
         [ "for set.fromList([2, 1, 2]) | n -> println(\"{n}\")" ]
     |> runSource
     |> assertRan "2\n1\n"
+
+[<Fact>]
+let ``Run - isEmpty says whether a set has no elements`` () =
+    program
+        []
+        [ "def none: set(int) = Set.empty"
+          "println(show(Set.isEmpty(none)))"
+          "println(show(Set.fromList([1]) \\Set.isEmpty))"
+          "println(show(Set.isEmpty(Set.remove(Set.fromList([1]), 1))))" ]
+    |> runSource
+    |> assertRan "T\nF\nT\n"
+
+[<Fact>]
+let ``Run - fold walks a set's elements in order`` () =
+    program
+        []
+        [ "def s = Set.fromList([3, 1, 2])"
+          "println(\"{s \\Set.fold(0, { total, n -> total + n })}\")"
+          "println(s \\Set.fold(\"\", { acc, n -> acc ++ \"{n}\" }))" ]
+    |> runSource
+    |> assertRan "6\n312\n"
+
+[<Fact>]
+let ``Run - map gives the set of what a function makes of each element`` () =
+    program
+        []
+        [ "def s = Set.fromList([1, 2, 3])"
+          "println(\"{s \\Set.map { % 2 } \\Set.count}\")"
+          "println(ints(s \\Set.map { % 2 }))"
+          "println(ints(s \\Set.map { * 10 }))" ]
+    |> runSource
+    |> assertRan "2\n10\n102030\n"
+
+[<Fact>]
+let ``Run - filter keeps the elements that pass the test`` () =
+    program
+        []
+        [ "def s = Set.fromList([1, 2, 3, 4])"
+          "println(ints(s \\Set.filter { n -> n % 2 == 0 }))"
+          "println(show(s \\Set.filter({ n -> n > 9 }) \\Set.isEmpty))" ]
+    |> runSource
+    |> assertRan "24\nT\n"
+
+[<Fact>]
+let ``Run - isSubset says whether another set holds every element`` () =
+    program
+        []
+        [ "println(show(Set.isSubset(Set.fromList([1]), Set.fromList([1, 2]))))"
+          "println(show(Set.isSubset(Set.fromList([1, 3]), Set.fromList([1, 2]))))"
+          "println(show(Set.isSubset(Set.empty, Set.fromList([1]))))"
+          "println(show(Set.fromList([2, 1]) \\Set.isSubset(Set.fromList([1, 2]))))" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\n"

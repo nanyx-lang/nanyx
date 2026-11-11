@@ -131,3 +131,81 @@ map.count: map(k, v) -> int
 ```
 
 The number of keys in a map.
+
+---
+
+## isEmpty
+
+```nanyx
+Map.isEmpty: map(k, v) -> bool
+```
+
+Whether a map has no keys.
+
+```nanyx
+Map.isEmpty(Map.empty)      -- true
+Map.isEmpty(["a" => 1])     -- false
+```
+
+---
+
+## update
+
+```nanyx
+Map.update: [Eq(k) + Hash(k)] (map(k, v), k, ((#some(v) | #notFound) -> v)) -> map(k, v)
+```
+
+The map with a key holding what a function makes of the value the map held for it: `#some(v)`, or `#notFound` when the map does not have the key. A key the map does not have is added at the end.
+
+```nanyx
+def counts = ["tea" => 2]
+def bump = { | #some(n) -> n + 1 | #notFound -> 1 }
+
+counts \Map.update("tea", bump) \Map.update("cake", bump)
+-- ["tea" => 3, "cake" => 1]
+```
+
+---
+
+## fold
+
+```nanyx
+Map.fold: (map(k, v), b, ((b, k, v) -> b)) -> b
+```
+
+Combines a starting value with each key and value of a map in turn, in the order of `Map.toList`.
+
+```nanyx
+["a" => 1, "b" => 2] \Map.fold(0, { total, key, value -> total + value })
+-- 3
+```
+
+---
+
+## map
+
+```nanyx
+Map.map: (map(k, v), (v -> w)) -> map(k, w)
+```
+
+The map with a function applied to each value. The keys stay as they are, in the same order.
+
+```nanyx
+["a" => 1, "b" => 2] \Map.map { * 10 }
+-- ["a" => 10, "b" => 20]
+```
+
+---
+
+## filter
+
+```nanyx
+Map.filter: (map(k, v), ((k, v) -> bool)) -> map(k, v)
+```
+
+The entries of a map whose key and value pass a test, in the same order.
+
+```nanyx
+["a" => 1, "b" => 2] \Map.filter { key, value -> value > 1 } \Map.keys
+-- ["b"]
+```

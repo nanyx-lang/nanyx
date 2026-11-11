@@ -10,12 +10,14 @@ This page gives a high-level overview of core standard library abstractions.
 
 - [io](./io) — console and stream-style input/output helpers
 - [collections](./collections) — list and collection transforms
+- [map](./map) — maps from keys to values
+- [set](./set) — sets of values, each held once
 - [string](./string) — UTF-8 string utilities
 - [option](./option) — optional-value helpers
 - [result](./result) — success/error composition helpers
 - [math](./math) — numeric utilities
-- [sequence](./sequence) — lazy/iterable sequence helpers
-- [iter](./iter) — generic `Iter(a)`-based helpers
+- [sequence](./sequence) — lazy sequence helpers (planned, not yet in the library)
+- [iter](./iter) — generic `Iter(a)`-based helpers (planned, not yet in the library)
 
 # Named parameters
 
@@ -44,14 +46,21 @@ Passing one of these by position is an error that names the parameters to write:
 
 # Core abstractions
 
-- `seq(a)` for finite sequences
-- `gen(a)` for potentially infinite sequences
+These exist today:
+
 - `list(a)` for indexed lists
 - `set(a)` for membership checks
 - `map(k, v)` for key/value lookup
+
+These are planned, and not yet in the library:
+
+- `seq(a)` for finite sequences. Today `seq(a)` is only the type of a range in a `for` loop; sequences as values, and the [sequence](./sequence) functions on them, are tracked in [#192](https://github.com/nanyx-lang/nanyx/issues/192).
+- `gen(a)` for potentially infinite sequences
 - `lookup(k, v)` for multi-value lookups
 
 # Async collections
+
+Both are planned, and not yet in the library:
 
 - `stream(a)` for async streams
 - `async(a)` for async computations
