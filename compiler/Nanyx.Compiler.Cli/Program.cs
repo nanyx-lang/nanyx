@@ -142,7 +142,7 @@ internal static class CliCommands
             Console.Error.WriteLine($"Running with {DeferredErrors(build.Diagnostics)}");
         }
 
-        return RunProgram(entry.Value, deferred, checkMemory);
+        return RunProgram(entry.Value, Console.Error, ProgramIo.Inherited, deferred, checkMemory);
     }
 
     /// <summary>
@@ -245,7 +245,7 @@ internal static class CliCommands
     {
         var result = Compiler.compile(HelloWorldSource);
         PrintDiagnostics(result.Diagnostics, Console.Error);
-        return RunProgram(result);
+        return RunProgram(result, Console.Error, ProgramIo.Inherited);
     }
 
     /// <summary>
@@ -388,23 +388,13 @@ internal static class CliCommands
             return RunParse(inputFile);
         }
 
-        // Script mode: the file's :: directives say what a package's manifest would.
-        var result = Script.compileFile(inputFile);
-
-        // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
         if (target == Target.Run)
         {
-            PrintDiagnostics(WorthStoppingFor(result.Diagnostics), Console.Error);
-            // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
-            // program reaches it.
-            var deferred = ErrorsDeferred(result);
-            if (deferred)
-            {
-                Console.Error.WriteLine($"Running with {DeferredErrors(result.Diagnostics)}");
-            }
-
-            return RunProgram(result, deferred, checkMemory);
+            return RunScript(inputFile, checkMemory, Console.Error, ProgramIo.Inherited);
         }
+
+        // Script mode: the file's :: directives say what a package's manifest would.
+        var result = Script.compileFile(inputFile);
 
         Console.WriteLine($"Phase: {result.Phase}");
         PrintDiagnostics(result.Diagnostics, Console.Out);
@@ -415,6 +405,29 @@ internal static class CliCommands
             Target.Wasm => RunWasm(result, inputFile, outputPath, release),
             _ => UnsupportedTarget(target.ToString())
         };
+    }
+
+    /// <summary>
+    /// What <c>nanyx run</c> does with the script <paramref name="inputFile"/>, which exists: compiles and runs it, with
+    /// its standard streams <paramref name="io"/>, and gives the exit code. The compiler's diagnostics and the run's
+    /// own errors go to <paramref name="errors"/>. The Wasm tests call this to run programs in their own process.
+    /// </summary>
+    internal static int RunScript(string inputFile, bool checkMemory, TextWriter errors, ProgramIo io)
+    {
+        // Script mode: the file's :: directives say what a package's manifest would.
+        var result = Script.compileFile(inputFile);
+
+        // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
+        PrintDiagnostics(WorthStoppingFor(result.Diagnostics), errors);
+        // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
+        // program reaches it.
+        var deferred = ErrorsDeferred(result);
+        if (deferred)
+        {
+            errors.WriteLine($"Running with {DeferredErrors(result.Diagnostics)}");
+        }
+
+        return RunProgram(result, errors, io, deferred, checkMemory);
     }
 
     private static int RunParse(string inputFile)
@@ -533,27 +546,33 @@ internal static class CliCommands
         return 0;
     }
 
-    private static int RunProgram(CompileResult result, bool errorsDeferred = false, bool checkMemory = false)
+    /// <summary>
+    /// Runs a compiled program with its standard streams <paramref name="io"/>, reporting what stops it to
+    /// <paramref name="errors"/>, and gives the exit code.
+    /// </summary>
+    private static int RunProgram(
+        CompileResult result, TextWriter errors, ProgramIo io, bool errorsDeferred = false, bool checkMemory = false)
     {
         var options = new CodeGen.WasmOptions(checkMemory);
-        if (!TryEmitWat(result, Console.Error, out var wat, options, errorsDeferred))
+        if (!TryEmitWat(result, errors, out var wat, options, errorsDeferred))
         {
             return 1;
         }
 
         if (!checkMemory)
         {
-            var outcome = WasmRunner.run(wat);
-            return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue);
+            var outcome = WasmRunner.run(io, wat);
+            return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
         var counted = WasmRunner.runReading(
+            io,
             CodeGen.CheckedExports.start,
             new[] { CodeGen.CheckedExports.liveBlocks, CodeGen.CheckedExports.allocations },
             wat);
         if (counted.IsError)
         {
-            return ReportRunError(counted.ErrorValue);
+            return ReportRunError(counted.ErrorValue, errors);
         }
 
         var (live, allocated) = (counted.ResultValue[0], counted.ResultValue[1]);
@@ -562,26 +581,26 @@ internal static class CliCommands
             return 0;
         }
 
-        Console.Error.WriteLine(
+        errors.WriteLine(
             $"Memory check failed: {live} of the {allocated} blocks the program allocated were never freed.");
         return 1;
     }
 
-    private static int ReportRunError(RunError error)
+    private static int ReportRunError(RunError error, TextWriter errors)
     {
         switch (error)
         {
             case RunError.InvalidModule invalid:
-                Console.Error.WriteLine($"Internal compiler error: the generated WebAssembly is invalid: {invalid.Item}");
+                errors.WriteLine($"Internal compiler error: the generated WebAssembly is invalid: {invalid.Item}");
                 return 1;
             case RunError.Trapped trapped:
-                Console.Error.WriteLine($"Runtime error: {trapped.Item}");
+                errors.WriteLine($"Runtime error: {trapped.Item}");
                 return 1;
             // The program said why it stopped (a deferred error writes itself to stderr) before it exited.
             case RunError.Exited exited:
                 return exited.Item;
             default:
-                Console.Error.WriteLine($"Run failed: {error}");
+                errors.WriteLine($"Run failed: {error}");
                 return 1;
         }
     }

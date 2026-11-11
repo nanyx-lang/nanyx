@@ -345,12 +345,13 @@ and counts that check themselves (`checkedRuntimeHelpers` and `MemoryChecks` in 
 - `free` sets the low bit of a block's size word (sizes are multiples of 4), and `alloc` clears it when it hands
   the block out again. Freeing a marked block, or a `retain` or `release` of an object on the heap whose block is
   marked, writes what went wrong to stderr and exits with 70. A check uses WASI `proc_exit`, not a trap: a trap
-  raised inside the Wasm test host crashes it.
+  raised inside the Wasm test host used to crash it, until the test host was kept off the CET shadow stack as the
+  CLI is (`CetCompat` in both projects).
 - `free` fills a block after its free-list link with `0xDEADBEEF`, so a field read after the block was freed is a
   pointer far outside memory, and following it traps.
 
-Every Wasm test that runs a program through the CLI passes `--check-memory`, and the in-process tests compile with
-the checks to read the counters. So a leak, a double free or a use after free in any test program fails that test.
+Every Wasm test that runs a program runs it as `nanyx run --check-memory` does, through the CLI's own code in the
+test process (`runScriptWith` in `TestHelpers.fs`), and the tests that read the counters compile with the checks too. So a leak, a double free or a use after free in any test program fails that test.
 
 On the examples that compile (blocks allocated, and the heap's peak in bytes):
 

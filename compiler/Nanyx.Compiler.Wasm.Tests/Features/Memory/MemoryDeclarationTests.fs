@@ -1,18 +1,12 @@
 module TranspilerWasmTests.Features.Memory.MemoryDeclaration
 
-open System
-open System.IO
 open Xunit
 open TranspilerWasmTestHelpers
 
 // A module declares linear memory when any function in it reads or writes memory, not only when it allocates.
 
-/// Runs `source` with plain `nanyx run`, without the memory checks, whose helpers would pull memory in on their own.
-let private runUnchecked (source: string) =
-    let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}.nyx")
-    File.WriteAllText(inputPath, source)
-    try nanyxWithInput "" [ "run"; inputPath ]
-    finally File.Delete inputPath
+/// Runs `source` as plain `nanyx run` does, without the memory checks, whose helpers would pull memory in on their own.
+let private runUnchecked (source: string) = runSourceWith false "" source
 
 [<Theory>]
 [<InlineData("""

@@ -90,12 +90,31 @@ let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome
 let nanyxIn (directory: string) (arguments: string list) : RunOutcome =
     nanyxProcess (Some directory) "" arguments
 
+/// Does what `nanyx run <inputPath>` does, with `--check-memory` when `checkMemory` is set, through the same code
+/// (`CliCommands.RunScript`) but in this process, which saves starting the CLI for every program. `standardInput` is
+/// the program's stdin. Its stdout is captured, and so is its stderr, with the compiler's diagnostics and the run's own
+/// errors in it as the CLI prints them.
+let runScriptWith (checkMemory: bool) (standardInput: string) (inputPath: string) : RunOutcome =
+    let inputFile = Path.Combine(Path.GetTempPath(), $"nanyx-stdin-{Guid.NewGuid():N}.txt")
+    File.WriteAllText(inputFile, standardInput)
+    try
+        use output = new MemoryStream()
+        use error = new MemoryStream()
+        // Flushed at every write, so that the CLI's messages and the program's own stderr stay in the order written.
+        use errors = new StreamWriter(error, Text.UTF8Encoding(false), AutoFlush = true)
+        let exitCode =
+            CliCommands.RunScript(inputPath, checkMemory, errors, Nanyx.Runtime.ProgramIo.Redirected(inputFile, output, error))
+        { ExitCode = exitCode
+          StandardOutput = Text.Encoding.UTF8.GetString(output.ToArray())
+          StandardError = Text.Encoding.UTF8.GetString(error.ToArray()) }
+    finally
+        File.Delete inputFile
+
 /// Runs the program in `inputPath` with its memory checked, so that every program a test runs also fails it when it
 /// frees a block twice, uses an object after freeing it, or leaves anything on the heap.
-let nanyxRunWithInput (standardInput: string) (inputPath: string) : RunOutcome =
-    nanyxWithInput standardInput [ "run"; "--check-memory"; inputPath ]
+let runFileWithInput (standardInput: string) (inputPath: string) : RunOutcome = runScriptWith true standardInput inputPath
 
-let nanyxRun (inputPath: string) : RunOutcome = nanyxRunWithInput "" inputPath
+let runFile (inputPath: string) : RunOutcome = runFileWithInput "" inputPath
 
 /// A new, empty directory of its own, removed with everything in it when disposed.
 type TempDirectory() =
@@ -119,13 +138,16 @@ let nanyxOnPackage (files: (string * string) list) (arguments: string list) : Ru
     outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
 
 let runE2E testName =
-    nanyxRun (Path.Combine(__SOURCE_DIRECTORY__, "E2E", testName, "input.nyx"))
+    runFile (Path.Combine(__SOURCE_DIRECTORY__, "E2E", testName, "input.nyx"))
 
-let runSourceWithInput (standardInput: string) (source: string) : RunOutcome =
+/// `source`, saved as a script and run (see `runScriptWith`).
+let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
     let inputPath = Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}.nyx")
     File.WriteAllText(inputPath, source)
-    try nanyxRunWithInput standardInput inputPath
+    try runScriptWith checkMemory standardInput inputPath
     finally File.Delete inputPath
+
+let runSourceWithInput (standardInput: string) (source: string) : RunOutcome = runSourceWith true standardInput source
 
 let runSource (source: string) : RunOutcome = runSourceWithInput "" source
 

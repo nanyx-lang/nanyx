@@ -8,7 +8,7 @@ let private examplePath (example: string) =
     Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "examples", example))
 
 let private assertExamplePrints (expected: string) (example: string) =
-    let outcome = nanyxRun (examplePath example)
+    let outcome = runFile (examplePath example)
     Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
     Assert.Equal(expected.ReplaceLineEndings "\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal("", outcome.StandardError)
