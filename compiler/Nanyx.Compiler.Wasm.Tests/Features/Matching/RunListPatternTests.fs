@@ -15,7 +15,7 @@ let private describe =
     "  | [a] -> \"one {a}\"\n" +
     "  | [a, b] -> \"two {a} {b}\"\n" +
     "  | [a, b, c] -> \"three {a} {b} {c}\"\n" +
-    "  | [a, b, ...rest] -> \"more {a} {b} {List.length(rest)}\"\n" +
+    "  | [a, b, ...rest] -> \"more {a} {b} {list.length(rest)}\"\n" +
     "}\n"
 
 [<Fact>]
@@ -65,10 +65,10 @@ let ``Run - a rest pattern matches lists at least as long as its elements`` () =
         "import nanyx/console\n" +
         "\n" +
         "def check: list(int) -> string = {\n" +
-        "  | [...all] -> \"any {List.length(all)}\"\n" +
+        "  | [...all] -> \"any {list.length(all)}\"\n" +
         "}\n" +
         "def atLeastTwo: list(int) -> string = {\n" +
-        "  | [a, b, ...rest] -> \"{a} {b} then {List.length(rest)}\"\n" +
+        "  | [a, b, ...rest] -> \"{a} {b} then {list.length(rest)}\"\n" +
         "  | _ -> \"short\"\n" +
         "}\n" +
         "println(check([]))\n" +
@@ -80,12 +80,12 @@ let ``Run - a rest pattern matches lists at least as long as its elements`` () =
     runSource source |> assertRan "any 0\nany 2\nshort\nshort\n1 2 then 0\n1 2 then 2\n"
 
 [<Fact>]
-let ``Run - List.fold walks a list of 1,000,000 elements`` () =
+let ``Run - list.fold walks a list of 1,000,000 elements`` () =
     // Each step matches `[]` and `[x, ...rest]`; when a match counted the whole list this took hours.
     let source =
         "import nanyx/console\n" +
         "\n" +
         "def upTo: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else upTo(n - 1, [n, ...acc]) }\n" +
         "def xs = upTo(1000000, [])\n" +
-        "println(\"{List.length(xs)} {List.fold(xs, 0, { total, x -> total + x % 10 })}\")\n"
+        "println(\"{list.length(xs)} {list.fold(xs, 0, { total, x -> total + x % 10 })}\")\n"
     runSource source |> assertRan "1000000 4500000\n"
