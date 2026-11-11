@@ -141,6 +141,38 @@ let ``float literals with a fraction or an exponent still parse`` () =
         Assert.Equal(2500.0, b)
     | other -> failwith $"Unexpected: %A{other}"
 
+[<Fact>]
+let ``Digits may be grouped with underscores, which are dropped`` () =
+    match parseModule "def a = 1_000_000\ndef b = 3.141_592\ndef c = -1_000\ndef d = 1_000.5e1_0\ndef e = 0x1F" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (LiteralExpr (IntLit a)))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (LiteralExpr (FloatLit b)))))
+                  Kind (Def (ValueDef (_, "c", _, Kind (LiteralExpr (IntLit c)))))
+                  Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (FloatLit d)))))
+                  Kind (Def (ValueDef (_, "e", _, Kind (LiteralExpr (IntLit e))))) ] ->
+        Assert.Equal(1_000_000, a)
+        Assert.Equal(3.141592, b)
+        Assert.Equal(-1000, c)
+        Assert.Equal(1000.5e10, d)
+        Assert.Equal(31, e)
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Theory>]
+[<InlineData("1__0")>]
+[<InlineData("1_")>]
+[<InlineData("1_.5")>]
+[<InlineData("1._5")>]
+[<InlineData("1.5_")>]
+let ``A _ in a number that is not between two digits is an error`` (number: string) =
+    match parseModule $"def x = {number}" with
+    | Result.Error err -> Assert.Contains("A `_` in a number goes between two digits", err)
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
+let ``A name that starts with _ after a number is still a name`` () =
+    match parseModule "def _1 = 2\ndef x = [1, _1]" with
+    | Result.Ok [ _; Kind (Def (ValueDef (_, "x", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 1)); Kind (IdentifierExpr "_1") ])))) ] -> ()
+    | other -> failwith $"Unexpected: %A{other}"
+
 // Literal Tests
 [<Fact>]
 let ``Parse string literal`` () =

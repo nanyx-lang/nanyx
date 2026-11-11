@@ -561,16 +561,6 @@ let workflowKeywordExpr =
         |>> fun value -> WorkflowBindExpr("try", value))
     <?> "workflow keyword"
 
-// Fails fatally at `position` with `message`, and notes the failure in the state, which `parseModuleFileWithNames`
-// reports in place of FParsec's error when the parse fails: the failure is backtracked over, and FParsec would report
-// some enclosing construct instead (often the whole def). Of two such failures, the furthest is reported.
-let private reportFocused (position: Position) (message: string) : Parser<'a, ParseState> =
-    getUserState >>= fun state ->
-        match state.FocusedError.Value with
-        | Some (furthest, _) when furthest.Index >= position.Index -> ()
-        | _ -> state.FocusedError.Value <- Some (position, message)
-        failFatally message
-
 // The value a `use` loads: `use addInt`. `use C(T) = expr`, an older way to load an instance, fails at the context's
 // name, saying what to write instead.
 let useValue =
@@ -1458,10 +1448,11 @@ type ParseError = { Message: string; Span: SourceSpan }
 /// break.
 type Trivia =
     /// A `--` comment, its text starting with `--`, and spanning to the end of its line. `trailing` when code comes
-    /// before it on its line.
+    /// before it on its line. A block comment (`---` on a line of its own) is one too, whose text runs from its opening
+    /// line of dashes to the end of its closing one, line breaks included.
     | LineComment of text: string * trailing: bool * span: SourceSpan
-    /// A run of this many consecutive blank lines (nothing but spaces and tabs), outside string literals, spanning
-    /// from the start of the first to the end of the last.
+    /// A run of this many consecutive blank lines (nothing but spaces and tabs), outside string literals and block
+    /// comments, spanning from the start of the first to the end of the last.
     | BlankLines of count: int * span: SourceSpan
 
     member this.Span =
@@ -1607,9 +1598,10 @@ let private collectTrivia (filePath: string) (source: string) (comments: (int * 
         | notFound -> ~~~notFound - 1
     let isBlank line =
         source.AsSpan(lineStarts[line], lineEnd line - lineStarts[line]).Trim(" \t".AsSpan()).IsEmpty
-    // A line whose preceding line break is inside a string literal is part of that string.
-    let inString line =
-        line > 0 && stringTexts |> List.exists (fun (start, finish) -> start <= lineStarts[line] - 1 && lineStarts[line] - 1 < finish)
+    // A line whose preceding line break is inside a string literal or a block comment is part of it.
+    let inStringOrComment line =
+        line > 0
+        && stringTexts @ comments |> List.exists (fun (start, finish) -> start <= lineStarts[line] - 1 && lineStarts[line] - 1 < finish)
 
     let commentTrivia =
         comments
@@ -1622,7 +1614,7 @@ let private collectTrivia (filePath: string) (source: string) (comments: (int * 
 
     let blankTrivia =
         [ if source.Length > 0 then yield! [ 0 .. lineStarts.Length - 1 ] ]
-        |> List.filter (fun line -> isBlank line && not (inString line))
+        |> List.filter (fun line -> isBlank line && not (inStringOrComment line))
         // Consecutive blank lines make one run: each run is a list of its lines, last first.
         |> List.fold
             (fun runs line ->

@@ -791,7 +791,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                           placed[i] <- true
                           let commentText, span = comments[i]
                           if lineOf span.Start = lineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
-                          else cat [ hard; text commentText ] ]
+                          else cat [ hard; Doc.textOrVerbatim commentText ] ]
         if position.Tail && writtenOnLines then
             cat [ rootDoc; nest (cat [ for value, at, _, doc in steps -> cat [ commentsBefore value at; hard; doc ] ]) ]
         elif position.Tail && steps.Length > 1 && not (List.contains true isMatch)
