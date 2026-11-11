@@ -414,6 +414,55 @@ let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
     runSource source |> assertRan "42 3 7 100 0 256 1\n"
 
 [<Fact>]
+let ``Run - nanyx/math abs takes an int or a float`` () =
+    // #610: `abs` is `[Num(a) + Ord(a)] a -> a`; it took an `int` only.
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "println(\"{math.abs(-2.5)} {math.abs(2.5)} {math.abs(-42)} {math.abs(42)} {math.abs(0)} {math.abs(-0.0)}\")\n"
+    runSource source |> assertRan "2.5 2.5 42 42 0 0.0\n"
+
+[<Fact>]
+let ``Run - nanyx/math min and max take any type with an order`` () =
+    // #610: `min` and `max` are `[Ord(a)] a, a -> a`.
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "println(\"{math.max(1.5, 2.0)} {math.max(3, 7)} {math.max(\"pear\", \"apple\")}\")\n" +
+        "println(\"{math.min(1.5, 2.0)} {math.min(3, 7)} {math.min(\"pear\", \"apple\")}\")\n" +
+        "println(\"{math.min(-1.5, -2.0)} {math.max(7, 7)}\")\n"
+    runSource source |> assertRan "2.0 7 pear\n1.5 3 apple\n-2.0 7\n"
+
+[<Fact>]
+let ``Run - nanyx/math clamp takes an int or a float`` () =
+    // #610: `clamp` is `[Ord(a)] (a, min: a, max: a) -> a`.
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "println(\"{math.clamp(120, min = 0, max = 100)} {math.clamp(-5, min = 0, max = 100)} {math.clamp(5, min = 0, max = 100)}\")\n" +
+        "println(\"{math.clamp(1.5, min = 0.0, max = 1.0)} {math.clamp(-0.5, min = 0.0, max = 1.0)} {math.clamp(0.25, min = 0.0, max = 1.0)}\")\n" +
+        "println(\"{2.5 \\math.clamp(min = 0.0, max = 1.0)} {\"m\" \\math.clamp(min = \"a\", max = \"f\")}\")\n"
+    runSource source |> assertRan "100 0 5\n1.0 0.0 0.25\n1.0 f\n"
+
+[<Fact>]
+let ``Run - nanyx/math abs, min and max are called from generic functions`` () =
+    // #610: a function that requires `Num` and `Ord` passes them on, and `x * 2` runs at `int` and at `float`.
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/math as math\n" +
+        "\n" +
+        "def double: [Num(a)] a -> a = { x -> x * 2 }\n" +
+        "def distance: [Num(a) + Ord(a)] a, a -> a = { p, q -> math.abs(p - q) }\n" +
+        "def widest: [Ord(a)] a, a, a -> a = { p, q, r -> math.max(p, math.max(q, r)) }\n" +
+        "println(\"{double(21)} {double(1.5)}\")\n" +
+        "println(\"{distance(3, 10)} {distance(1.5, 0.25)}\")\n" +
+        "println(\"{widest(3, 9, 4)} {widest(0.5, 0.25, 0.75)} {widest(\"b\", \"c\", \"a\")}\")\n"
+    runSource source |> assertRan "42 3.0\n7 1.25\n9 0.75 c\n"
+
+[<Fact>]
 let ``Run - nanyx/math clamp takes its named arguments when piped`` () =
     let source =
         "import nanyx/console\n" +
