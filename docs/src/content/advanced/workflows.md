@@ -232,7 +232,7 @@ Each branch goes on to the rest of the block when it finishes, so a `def` of an 
 
 A keyword whose continuation cannot be the rest of the block is an error:
 
-- **Inside a lambda.** A lambda runs when it is called, not where it is written. This includes a lambda passed to a function, as in `List.map(xs, { x -> try f(x) })`. A builder block of its own inside the lambda, such as `{ x -> proc { ... } }`, is fine.
+- **Inside a lambda.** A lambda runs when it is called, not where it is written. This includes a lambda passed to a function, as in `list.map(xs, { x -> try f(x) })`. A builder block of its own inside the lambda, such as `{ x -> proc { ... } }`, is fine.
 - **In the body of a `for` loop.** The body runs once per element. Handle the value with a `match` in the body instead.
 - **In a part of an expression that may not run.** That means a branch of an `if` or an arm of a `match` that is part of a larger expression, as in `1 + (if c then try f() else 0)`, or the right of `and` or `or`. Make the `if` or `match` a statement of its own.
 

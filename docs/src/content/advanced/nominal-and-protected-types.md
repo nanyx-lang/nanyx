@@ -65,7 +65,7 @@ The smart constructor can return whatever is appropriate: a `Result` when there 
 
 Nominal types are not assignable to each other, even if their structures are identical. They are, however, assignable to their underlying shape for compatibility with existing code.
 
-So, given the definition of `$Email` above, `$Email` is assignable to `string` but `string` is not assignable to `$Email`. In practice this means an `$Email` can be used anywhere a `string` is expected, including with every attached definition on `String`:
+So, given the definition of `$Email` above, `$Email` is assignable to `string` but `string` is not assignable to `$Email`. In practice this means an `$Email` can be used anywhere a `string` is expected, including with every attached definition on `string`:
 
 ```nanyx
 def email: $Email = ...

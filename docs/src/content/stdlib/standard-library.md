@@ -29,17 +29,17 @@ A [named parameter](../tour/functions#named-parameters) must be passed by name. 
 x \math.clamp(min = 0, max = 10)
 
 -- Positional: one extra argument that the name explains
-["a", "b"] \String.join("-")
+["a", "b"] \string.join("-")
 "nanyx" \startsWith("nan")
 ```
 
-The functions with named parameters are `String.split`, `String.substring`, `String.padStart`, `String.padEnd`, `String.replace` and `math.clamp`. Everything else takes its arguments by position.
+The functions with named parameters are `string.split`, `string.substring`, `string.padStart`, `string.padEnd`, `string.replace` and `math.clamp`. Everything else takes its arguments by position.
 
 Passing one of these by position is an error that names the parameters to write:
 
 ```nanyx
 "7" \padStart(3, "0")
--- error NYX0218: 'String.padStart' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'
+-- error NYX0218: 'string.padStart' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'
 ```
 
 # Core abstractions
@@ -71,19 +71,19 @@ type Result(a, e) = #some(a) | #error(e)
 `int`, `float`, `bool` and `string` each have an attached `toString`. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
 
 ```nanyx
-Int.toString: int -> string
-Float.toString: float -> string
-Bool.toString: bool -> string
-String.toString: string -> string
+int.toString: int -> string
+float.toString: float -> string
+bool.toString: bool -> string
+string.toString: string -> string
 ```
 
-Each writes the value as string interpolation, `"{n}"`, does, and `String.toString` gives back the string itself. Interpolation goes through the prelude's [`ToString(a)`](../advanced/contexts#tostringa) context, which a type of your own gets by attaching a `toString` of the same kind. Because they are functions, they can be passed where interpolation cannot:
+Each writes the value as string interpolation, `"{n}"`, does, and `string.toString` gives back the string itself. Interpolation goes through the prelude's [`ToString(a)`](../advanced/contexts#tostringa) context, which a type of your own gets by attaching a `toString` of the same kind. Because they are functions, they can be passed where interpolation cannot:
 
 ```nanyx
 import nanyx/text
 
 def scores = [3, 14, 15]
-def text = scores \map(Int.toString) \String.join(", ")
+def text = scores \map(int.toString) \string.join(", ")
 -- "3, 14, 15"
 
 def answer = 42 \toString
@@ -122,21 +122,21 @@ label(true)  -- "<true>"
 `int`, `float` and `bool` each have an attached `fromString`, also in the prelude. Each gives back an [option-like](../advanced/option-like-types) union, with its own tag for text it cannot read:
 
 ```nanyx
-Int.fromString: string -> #some(int) | #invalidInt
-Float.fromString: string -> #some(float) | #invalidFloat
-Bool.fromString: string -> #some(bool) | #invalidBool
+int.fromString: string -> #some(int) | #invalidInt
+float.fromString: string -> #some(float) | #invalidFloat
+bool.fromString: string -> #some(bool) | #invalidBool
 ```
 
-`Int.fromString` reads a decimal integer with an optional leading `-` or `+`. `Float.fromString` reads an optional sign, digits with an optional `.` among them, and an optional exponent, `e` or `E` and an integer, so `"1.5"`, `"-0.25"`, `"42"`, `".5"`, `"5."` and `"1.0e-7"` are all read; it also reads `NaN`, `Infinity` and `-Infinity` as `Float.toString` writes them. `""`, `"-"`, `"abc"`, `"1.2.3"` and `" 1.5"` are `#invalidFloat`. `Bool.fromString` reads `true` or `false`, exactly as `Bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
+`int.fromString` reads a decimal integer with an optional leading `-` or `+`. `float.fromString` reads an optional sign, digits with an optional `.` among them, and an optional exponent, `e` or `E` and an integer, so `"1.5"`, `"-0.25"`, `"42"`, `".5"`, `"5."` and `"1.0e-7"` are all read; it also reads `NaN`, `Infinity` and `-Infinity` as `float.toString` writes them. `""`, `"-"`, `"abc"`, `"1.2.3"` and `" 1.5"` are `#invalidFloat`. `bool.fromString` reads `true` or `false`, exactly as `bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
 
 ```nanyx
-def n = Int.fromString("42")         -- #some(42)
-def x = Float.fromString("-0.25")    -- #some(-0.25)
-def b = "false" \Bool.fromString     -- #some(false)
-def bad = Bool.fromString("yes")     -- #invalidBool
+def n = int.fromString("42")         -- #some(42)
+def x = float.fromString("-0.25")    -- #some(-0.25)
+def b = "false" \bool.fromString     -- #some(false)
+def bad = bool.fromString("yes")     -- #invalidBool
 ```
 
-A float read from text is the nearest float to the decimal when the decimal has at most 15 significant digits and its exponent, with the point moved to the end of the digits, is between -22 and 22. That covers numbers written by hand, and every float `Float.toString` writes with 15 digits or fewer. Past that the result is not correctly rounded and can be a unit in the last place away from the nearest float, so a float written with 16 or 17 digits does not always read back as itself.
+A float read from text is the nearest float to the decimal when the decimal has at most 15 significant digits and its exponent, with the point moved to the end of the digits, is between -22 and 22. That covers numbers written by hand, and every float `float.toString` writes with 15 digits or fewer. Past that the result is not correctly rounded and can be a unit in the last place away from the nearest float, so a float written with 16 or 17 digits does not always read back as itself.
 
 Each is the mirror of the type's `toString`, and, as `toString` gives a type a `ToString`, an attached `fromString` gives it the prelude's `FromString` context. It has a second parameter, `e`, for what `fromString` gives back when the text holds no value, so that each type keeps its own tag:
 
@@ -147,9 +147,9 @@ context FromString(a, e) = (fromString: string -> #some(a) | e)
 A function that reads a value of any type from text requires it. A call finds the instance as it finds any other: [synthesized](../advanced/contexts#context-synthesis) from the attached `fromString` of the type it is called at, which also settles `e`. At `int` that is `FromString(int, #invalidInt)`:
 
 ```nanyx
-def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \List.map(fromString) }
+def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \list.map(fromString) }
 
-def total: list(#some(int) | #invalidInt) -> int = { results -> results \valuesOption \List.fold(0, { sum, n -> sum + n }) }
+def total: list(#some(int) | #invalidInt) -> int = { results -> results \valuesOption \list.fold(0, { sum, n -> sum + n }) }
 
 def sumAll = { texts -> total(readAll(texts)) }
 
@@ -168,15 +168,15 @@ The `e` parameter is expected to become an [associated type](../work-in-progress
 
 # Converting between numbers
 
-Arithmetic doesn't mix `int` and `float`: `n * 1.5` is a type error when `n` is an `int`. `Int.toFloat`, in the prelude, turns an `int` into a `float`. Every `int` has an exact `float`, so it never fails.
+Arithmetic doesn't mix `int` and `float`: `n * 1.5` is a type error when `n` is an `int`. `int.toFloat`, in the prelude, turns an `int` into a `float`. Every `int` has an exact `float`, so it never fails.
 
 ```nanyx
-Int.toFloat: int -> float
+int.toFloat: int -> float
 ```
 
 ```nanyx
 def n = 3
-def x = Int.toFloat(n) * 1.5     -- 4.5
+def x = int.toFloat(n) * 1.5     -- 4.5
 def half = (7 \toFloat) / 2.0    -- 3.5
 ```
 
@@ -194,6 +194,6 @@ myMap("hello")   -- #some("world")
 
 A literal whose items are all `key => value` is a `map(k, v)`; calling it looks a key up. The functions on maps are on the [map](map) page, and sets are on the [set](set) page.
 
-There is no set literal: a set is made from a list, `Set.fromList([1, 2, 3])`. Literals that build any collection type, through the target type's builder, are planned; see [Collections](../tour/collections#literal-types).
+There is no set literal: a set is made from a list, `set.fromList([1, 2, 3])`. Literals that build any collection type, through the target type's builder, are planned; see [Collections](../tour/collections#literal-types).
 
 If you want more detail, visit the specific module pages in this section.

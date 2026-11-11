@@ -62,7 +62,7 @@ but it gives up reuse and deterministic freeing, and ties the runtime to hosts w
 ## Monomorphisation
 
 `drop` has to recurse into the fields of an object it frees, so it has to know which fields are pointers. In
-generic code (a cons cell built by `List.map`, of type `List<a>`) nothing says whether a field is an integer or a
+generic code (a cons cell built by `list.map`, of type `List<a>`) nothing says whether a field is an integer or a
 pointer.
 
 **Decision: monomorphise.** The core IR compiles every generic function once for each set of concrete type
@@ -227,7 +227,7 @@ A definition that reads fields of any record that has them is specialised per re
 reads its fields from where they are stored. A generic definition exists only as its specialisations: it is neither
 compiled nor exported as it is.
 
-A definition inlined from an imported module (the prelude's `List.map`, say) is specialised the same way. Only the root
+A definition inlined from an imported module (the prelude's `list.map`, say) is specialised the same way. Only the root
 module's types by node are resolved for the editor's sake, so the types of the inlined definitions' nodes are resolved
 apart, each by the module it came from, and only the IR reads them (`TypedModule.InlinedExprTypes`).
 
@@ -303,7 +303,7 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   new reference to it if it is used again. Another function borrows a parameter on the heap it never takes over,
   and owns it otherwise; this is worked out over the whole module at once, until nothing changes.
 - **Runtime helpers borrow.** Every helper, the ones that write to stdout and stderr among them, borrows its
-  operands and returns a value of its own, except `List.cons` (which takes both over) and `++` on lists (which
+  operands and returns a value of its own, except `list.cons` (which takes both over) and `++` on lists (which
   takes the second over, and copies the first's cells with a reference to each element). Strings handed to the
   host are borrowed for the call.
 - **Tail calls.** An argument passed in a tail call that the caller owns makes the callee own that parameter, so

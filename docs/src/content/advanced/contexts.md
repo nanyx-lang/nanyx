@@ -181,19 +181,19 @@ context Ord(a) = (
 )
 ```
 
-The compiler has an `Ord` for numbers, `bool` (`false` first), strings (by their bytes, which is the order of their code points), and tuples and lists of them, compared position by position, with a list that is a prefix of another first. On floats the operators follow IEEE 754, so every comparison with `NaN` is false, while `Float.compare` is a total order with `NaN` after every other float; that is what `List.sort` uses.
+The compiler has an `Ord` for numbers, `bool` (`false` first), strings (by their bytes, which is the order of their code points), and tuples and lists of them, compared position by position, with a list that is a prefix of another first. On floats the operators follow IEEE 754, so every comparison with `NaN` is false, while `float.compare` is a total order with `NaN` after every other float; that is what `list.sort` uses.
 
-Records and tags have no order: a record's fields and a union's tags have no order of their own in its type, so `<` on them is a type error. Sort a list of them by a key with `List.sortBy`, or make the type nominal and attach a `compare`:
+Records and tags have no order: a record's fields and a union's tags have no order of their own in its type, so `<` on them is a type error. Sort a list of them by a key with `list.sortBy`, or make the type nominal and attach a `compare`:
 
 ```nanyx
 type $Version = (major: int, minor: int)
 
 def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b ->
-  if a.major != b.major then Int.compare(a.major, b.major) else Int.compare(a.minor, b.minor)
+  if a.major != b.major then int.compare(a.major, b.major) else int.compare(a.minor, b.minor)
 }
 ```
 
-As with `==`, only a nominal or protected type can attach `compare`. The built-in types have theirs attached as functions, `Int.compare` and `Float.compare` among them, but their order is always the compiler's own.
+As with `==`, only a nominal or protected type can attach `compare`. The built-in types have theirs attached as functions, `int.compare` and `float.compare` among them, but their order is always the compiler's own.
 
 A function that orders values of one of its type variables requires `Ord` of it, `def largest: [Ord(a)] list(a) -> #some(a) | #emptyList`, and one that does not write its type has it inferred: `def larger = { x, y -> if x > y then x else y }` is `[Ord(a)] a, a -> a`. `Ord` does not require `Eq`; a type that attaches both should keep them consistent.
 
@@ -214,10 +214,10 @@ type $Email = string
 
 def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
 
-def $Email.hash: $Email -> int = { e -> String.hash(lower(e)) }
+def $Email.hash: $Email -> int = { e -> string.hash(lower(e)) }
 ```
 
-As with `==`, only a nominal or protected type can attach `hash`. The built-in types have theirs attached as functions, `Int.hash` and `String.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `$Email`s, has no `Hash` yet ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
+As with `==`, only a nominal or protected type can attach `hash`. The built-in types have theirs attached as functions, `int.hash` and `string.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `$Email`s, has no `Hash` yet ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
 
 ## Default(a)
 
@@ -255,7 +255,7 @@ def total: [Add(a)] list(a) -> a = { items -> items \fold(zero) { + } }
 def orZero: [Add(a)] a -> a = { x -> x + 0 }
 ```
 
-`List.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. Outside generic code nothing changes: `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
+`list.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. Outside generic code nothing changes: `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
 
 ## Num(a)
 
@@ -279,10 +279,10 @@ In a function that requires `Num(a)`, an integer literal beside a value of type 
 ```nanyx
 def square: [Num(a)] a -> a = { x -> x * x }
 
-def mean: [Num(a)] list(a) -> a = { xs -> List.sum(xs) / fromInt(List.length(xs)) }
+def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
 ```
 
-`mean` calls `List.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
+`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
 
 These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
 
@@ -370,18 +370,18 @@ def Point.`-` = { a, b -> Point(x = a.x - b.x, y = a.y - b.y) }
 def Point.negate = { a -> Point(x = -a.x, y = -a.y) }
 ```
 
-You can call `List.sum` on a `list(Point)` without explicitly loading an `Add(Point)` context -- the compiler sees that `Point.zero`, ``Point.`+` ``, ``Point.`-` `` and `Point.negate` satisfy the context and synthesizes it. The attached `+` is also what `p + q` on two points calls:
+You can call `list.sum` on a `list(Point)` without explicitly loading an `Add(Point)` context -- the compiler sees that `Point.zero`, ``Point.`+` ``, ``Point.`-` `` and `Point.negate` satisfy the context and synthesizes it. The attached `+` is also what `p + q` on two points calls:
 
 ```nanyx
 def points = [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)]
 
-def total = points \List.sum
+def total = points \list.sum
 -- total = Point(x = 9, y = 12)
 ```
 
 This is analogous to how Haskell derives typeclass instances or how Rust resolves trait implementations. The key difference is that in Nanyx the "instance" is just a collection of attached definitions -- there is no separate declaration required.
 
-This is also where the compiler's own `Add(int)` and `Add(float)` come from: the prelude attaches `zero`, `` `+` ``, `` `-` `` and `negate` to `Int` and `Float`, and a generic function called at `int` is passed those. A concrete expression like `1 + 2` is the built-in operator, not a call.
+This is also where the compiler's own `Add(int)` and `Add(float)` come from: the prelude attaches `zero`, `` `+` ``, `` `-` `` and `negate` to `int` and `float`, and a generic function called at `int` is passed those. A concrete expression like `1 + 2` is the built-in operator, not a call.
 
 ## When synthesis applies
 
@@ -393,7 +393,7 @@ Context synthesis occurs when:
 
 If any member is missing or has an incompatible type, synthesis fails and the compiler requires you to load the context explicitly. The error names the definition that is missing, such as `Point.+`, or the one whose type does not fit.
 
-A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call: the definitions' types settle them. The prelude's [`FromString(a, e)`](../stdlib/standard-library#reading-from-text) is built for `int` from `Int.fromString`, whose type makes `e` the tag `#invalidInt`.
+A context with more than one parameter is synthesized from the definitions attached to its first parameter's type. Its other parameters need not be known at the call: the definitions' types settle them. The prelude's [`FromString(a, e)`](../stdlib/standard-library#reading-from-text) is built for `int` from `int.fromString`, whose type makes `e` the tag `#invalidInt`.
 
 Each call looks for its instance in this order, and takes the first it finds:
 
@@ -418,11 +418,11 @@ def reverseSum = {
     negate = { a -> a }
   )
 
-  points \List.sum
+  points \list.sum
 }
 ```
 
-A `use` of an `Add` reaches generic code called from its block, such as `List.sum`; it does not change a concrete `p + q` there yet ([numeric contexts](../work-in-progress/numeric-contexts#what-is-implemented)).
+A `use` of an `Add` reaches generic code called from its block, such as `list.sum`; it does not change a concrete `p + q` there yet ([numeric contexts](../work-in-progress/numeric-contexts#what-is-implemented)).
 
 # Why contexts matter
 

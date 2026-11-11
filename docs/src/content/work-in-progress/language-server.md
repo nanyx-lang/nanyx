@@ -98,7 +98,7 @@ what the compiler keeps: exact spans, resolved names and types.
   The names before the dot are read from the characters (`CompletionContext.MemberPath`). If the first is a value
   in scope, the fields of its record type are offered, followed through the rest of the path. Otherwise the names
   written under the path as a prefix are (`TypedModule.ModuleNames`, every name the module can write, dotted or
-  not): an import's exports under its alias, a dotted export a segment at a time (`t.` offers `String`), and the
+  not): an import's exports under its alias, a dotted export a segment at a time (`t.` offers `string`), and the
   definitions attached to a type (`Result.`). An imported definition's type is its module's (`ImportedTypes`). Only a
   name or a dotted name before the dot is understood, not a call's result. A dot on a value never reaches an
   attached definition, so none is offered there; a string's or a list's built-in `length` is
@@ -108,7 +108,7 @@ what the compiler keeps: exact spans, resolved names and types.
   it. The names just before the `\` are read from the characters (`CompletionContext.PipedPath`), across a line
   break for a pipe that starts a line; a call's result or a literal before it gives no name. If they name a value of
   known type, the definitions attached to that type come first, under each name a pipe resolves it by
-  (`Infer.attachedTypeNames`: `String` for a string, `List` for a list, a nominal or alias type's own name), from
+  (`Infer.attachedTypeNames`: `string` for a string, `list` for a list, a nominal or alias type's own name), from
   `ModuleNames`; then the functions in scope, which a pipe calls when no attached definition has the name
   (`Completion.pipeTargetsAt`). Only the names just before the `\` are read, though a pipe takes all of the
   expression before it, so in `a + b \f` the type is `b`'s.
@@ -140,7 +140,7 @@ what the compiler keeps: exact spans, resolved names and types.
   unused local or renames an unused name to `_`), and so does one compiler error so far
   ([#497](https://github.com/nanyx-lang/nanyx/issues/497)): an unknown name (`NYX0101`, `NYX0102`) that a
   standard-library module exports offers the import that brings it in, one fix per module that exports it.
-  `String.trim(s)` offers `import nanyx/text`; a name qualified by a module's name, as `math.abs(x)`, offers
+  `string.trim(s)` offers `import nanyx/text`; a name qualified by a module's name, as `math.abs(x)`, offers
   `import nanyx/math as math`. The import goes on the line after the file's last import, else after its `module`
   line, else after the `::` directives (which must come before any code), else at the top. `NyxCompiler.ImportFixes` attaches these fixes in the compiler, from an index of the
   library's exports built once; the prelude is left out, since its names are always in scope. A fix that edits

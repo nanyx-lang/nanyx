@@ -101,7 +101,7 @@ context FromString(a) = (
 def readAll: [FromString(a)] list(string) -> list(#some(a) | FromString(a).failure)
 ```
 
-and `Int.fromString` would fix `failure` as `#invalidInt`.
+and `int.fromString` would fix `failure` as `#invalidInt`.
 
 An associated type's name is lowercase and longer than one letter, which [type names](../tour/types#type-names) reserve for associated types.
 

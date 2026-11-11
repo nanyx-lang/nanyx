@@ -58,7 +58,7 @@ def double: list(int) -> list(int) = {
 ```
 
 Handed a list nothing else refers to, `double` allocates nothing: each cell of the list becomes a cell of the doubled
-list. The same goes for `List.map` from the standard library.
+list. The same goes for `list.map` from the standard library.
 
 Reuse never changes what a program means. When something else still refers to the value, the arm finds that out
 when it runs, leaves the value as it was, and the new value gets memory of its own:

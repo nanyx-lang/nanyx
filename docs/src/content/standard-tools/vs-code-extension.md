@@ -4,14 +4,14 @@ description: "Installing and configuring the Nanyx extension for Visual Studio C
 order: 3
 ---
 
-The Nanyx extension for Visual Studio Code highlights `.nyx` files and runs the compiler as a language server (`nanyx lsp`), which gives you:
+The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type
 - the inferred type of whatever is under the pointer, on hover
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition, find references and the outline view
 - completion of names, record fields, module members and import paths
-- quick fixes, such as adding the import for a standard-library name
+- quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
 - a run button, which runs the file as `nanyx run` does
 

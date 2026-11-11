@@ -27,7 +27,7 @@ prelude declares `Add(a)` and `Num(a)`.
   writes its type and adds, subtracts or negates values of one of its variables without `[Add(a)]` is `NYX0205`:
   `'total' adds values of type 'a' with +, so its type must require Add(a): add [Add(a)] to the type of 'total'`.
 - **The compiler's own `Add(int)` and `Add(float)`** are the members the prelude attaches to `Int` and `Float`
-  (`Int.zero`, `` Int.`+` ``, ...), found by the usual synthesis by name. A `+` on an `int` is still the built-in
+  (`int.zero`, `` int.`+` ``, ...), found by the usual synthesis by name. A `+` on an `int` is still the built-in
   operator, not a call; only generic code is passed the members.
 - **Prefix `-x`** parses, as a call to the reserved `__negate` (`NegateSyntax`). On `int` it is `0 - x`, and on
   `float` `-0.0 - x`, which is IEEE 754's negation. On any other type it calls that type's attached `negate`, or the
@@ -35,7 +35,7 @@ prelude declares `Add(a)` and `Num(a)`.
   so `{ -x }` is `{ n -> n - x }`.
 - **`0` reads as `zero`** where it is an operand of an arithmetic operator and the other operand is of a variable of
   the type the function writes, in a function that requires `Add` of it: `x + 0` (`InferState.LiteralMembers`).
-- **`List.sum: [Add(a)] list(a) -> a`** ([#475](https://github.com/nanyx-lang/nanyx/issues/475)).
+- **`list.sum: [Add(a)] list(a) -> a`** ([#475](https://github.com/nanyx-lang/nanyx/issues/475)).
 - **`Num(a)` is a prelude context**, with `Add`'s members and `` `*` ``, `` `/` ``, `` `%` `` and `fromInt`; `*`, `/`
   and `%` on a type variable call its members, and without `[Num(a)]` are `NYX0205`, as `+` is without `Add`. The
   compiler's own `Num(int)` and `Num(float)` are again the members the prelude attaches to `Int` and `Float`
@@ -46,12 +46,12 @@ prelude declares `Add(a)` and `Num(a)`.
   an 'a': 'a' may be an integer type. Take the value as a parameter`. A `fromInt` is a call at run time, not folded
   to a constant.
 - **A `Num` serves as an `Add`.** An instance in scope of a context that has every member of the one a call needs,
-  at the same types, is found for it (`ContextShapes.wider`), so a `[Num(a)]` function can call `List.sum`.
+  at the same types, is found for it (`ContextShapes.wider`), so a `[Num(a)]` function can call `list.sum`.
 - **`**` parses**, binding tighter than `*` and grouping to the right, and `x ** n` is read as a call to the
   prelude's reserved `__pow` (`ArithmeticOperators.inferPower`, `InferState.ReadAs`), which no module's own `pow`
   can shadow. The prelude's `pow` and `math.pow` are `{ b, n -> b ** n }`. `__pow` squares repeatedly, so it takes
   as many steps as the exponent has bits ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
-- **`Float.pow(x, y)`** takes any `y`: a whole one is `x ** y`, and any other `e ** (y * ln(x))`, with `exp` and `ln`
+- **`float.pow(x, y)`** takes any `y`: a whole one is `x ** y`, and any other `e ** (y * ln(x))`, with `exp` and `ln`
   written in the prelude from their series, since WebAssembly has neither.
 - **`math.abs: [Num(a) + Ord(a)] a -> a`**, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
   `int`, a `float` or any other type with an order ([#186](https://github.com/nanyx-lang/nanyx/issues/186)).
@@ -141,7 +141,7 @@ treats a record value; the proposal extends it to instances a signature declares
 ```nanyx
 def sum: [Add(a)] list(a) -> a = { xs -> xs \fold(0) { + } }
 
-def mean: [Num(a)] list(a) -> a = { xs -> sum(xs) / fromInt(List.length(xs)) }
+def mean: [Num(a)] list(a) -> a = { xs -> sum(xs) / fromInt(list.length(xs)) }
 
 def square: [Num(a)] a -> a = { x -> x * x }
 ```
@@ -153,7 +153,7 @@ numeric context, and work on strings too. `abs` needs both: `[Num(a) & Ord(a)] a
 
 `Add` is what a sum needs, and it is all a **measured** value has: `3m + 4m` is a length, but `3m * 4m` is an area,
 not a length, so a measured type cannot have a `` `*`: (a, a) -> a ``. Splitting the additive part off means
-`List.sum` works on a list of durations, and `Num` stays a context with one type in and the same type out.
+`list.sum` works on a list of durations, and `Num` stays a context with one type in and the same type out.
 
 **Alternatives.**
 
@@ -199,7 +199,7 @@ the gain is small, and `abs` would need a third context.
 
 `**` is not a member. `a ** n` is the prelude's `pow: [Num(a)] (a, int) -> a`, written once with repeated squaring
 over `*`. A negative exponent on an integer type stops the program; on a float it is `1.0 / (a ** -n)`. A
-fractional exponent is `Float.pow(x, y)`, a separate function on `float`.
+fractional exponent is `float.pow(x, y)`, a separate function on `float`.
 
 **Alternative.** *A `` `**` `` member*, so each type supplies its own. Every instance would then have to write it,
 including the user types that `Num` synthesis is meant to make cheap, for a function the prelude can write once.
@@ -292,7 +292,7 @@ Each is reported by the type checker, with a span.
 | Literal at a type variable without the requirement | `'1' is an 'a' here, which needs Num(a): write [Num(a)] in the type of 'inc'` |
 | Decimal literal at a type variable | `'0.5' cannot be an 'a': 'a' may be an integer type. Take the value as a parameter` |
 | A `[Num(a)]` function called with a measured type | `'square' requires Num(a), and 'float(Length)' has none: multiplying lengths gives an area. Write square over a dimension instead` |
-| Mixed numeric types | `cannot add 'int' and 'float': convert one side, for example Int.toFloat(n)` |
+| Mixed numeric types | `cannot add 'int' and 'float': convert one side, for example int.toFloat(n)` |
 | User type missing a member | the existing `MissingContextMembers` message, naming `Vector.negate` |
 | Literal that cannot fit, known at compile time | `'300' does not fit in U8 (0 to 255)` |
 
@@ -314,7 +314,7 @@ The language server's code action for the second and fourth adds the requirement
   does change `1 + 2`. It gains prefix `-` and `**`.
 - **[types.md](../tour/types)**, [contexts-vs-interfaces](../coming-from-other-languages/contexts-vs-interfaces) and
   [sized numbers](./sized-numbers#arithmetic) name `Add` and `Num` instead of a single `Num`.
-- **`List.sum: [Add(a)] list(a) -> a`** (#475).
+- **`list.sum: [Add(a)] list(a) -> a`** (#475).
 - **`OperatorCalls.fs`'s rule** (an operator calls whatever its name is bound to) is replaced by the lookup; a user
   context may no longer give `+` a meaning other than `Add`'s.
 
@@ -326,7 +326,7 @@ The language server's code action for the second and fourth adds the requirement
    `Eq`.
 3. **Done**, but for `0` outside an operand and `use` on concrete arithmetic (see [What is
    implemented](#what-is-implemented)). `Add` in the prelude; `+` and `-` read through it; the compiler's own
-   instances for `int` and `float`; prefix `-`; `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
+   instances for `int` and `float`; prefix `-`; `0` as `zero` in annotated generic code. Adds `list.sum` (#475)
    ([#609](https://github.com/nanyx-lang/nanyx/issues/609)).
 4. **Done.** `Num`; `*`, `/` and `%` read through it; `fromInt` literals. Makes `math.abs` generic, and `min`, `max`
    and `clamp` with `Ord` (#186) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
@@ -340,7 +340,7 @@ The language server's code action for the second and fourth adds the requirement
    `fromInt`; a `Num` satisfies an `Add`. (Rejected: one `Num`, which measured types cannot have; one context per
    operator, which needs multi-parameter contexts.)
 2. **The names are `Add` and `Num`.** (Rejected: `Sum`, the docs' earlier example, which reads like the result of
-   `List.sum`; `Additive` and `Numeric`, as Swift.)
+   `list.sum`; `Additive` and `Numeric`, as Swift.)
 3. **`/` and `%` are in `Num`**, truncating on integers and IEEE 754 on floats. (Rejected: separate integer and
    fractional division, which either breaks `7 / 2` or makes `/` mean two things.)
 4. **Negation is a member of `Add`**; on unsigned types it stops the program for anything but zero. (Rejected: a

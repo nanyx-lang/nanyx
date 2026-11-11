@@ -136,9 +136,9 @@ issue):
 
   ```nanyx
   def total = orders
-    \List.filter { o -> o.paid }
-    \List.map { o -> o.amount }
-    \List.sum
+    \list.filter { o -> o.paid }
+    \list.map { o -> o.amount }
+    \list.sum
   ```
 - A record, list, tuple or call's arguments that does not fit puts each element on its own line, separated by newlines
   instead of commas, as the docs write them, with the closing bracket on a line of its own; trailing commas therefore
@@ -167,7 +167,7 @@ issue):
 
   ```nanyx
   def heading: [Log] string -> () = { title ->
-    log("== " ++ String.uppercase(title) ++ " ==")
+    log("== " ++ string.uppercase(title) ++ " ==")
   }
 
   def id: a -> a = { x -> x }

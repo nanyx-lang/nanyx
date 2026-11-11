@@ -16,7 +16,7 @@ When an operation can fail, Nanyx conventions favor a result-like union with a s
 There is no `Option(a)` alias in the standard library; the standard library provides a `Result(a, e)` alias for `#some(a) | #error(e)`, but everything else follows a convention where any union type containing `#some(a)` can be treated as an [option-like type](../advanced/option-like-types), whatever its other tags are.
 
 ```nanyx
-def List.head = {
+def list.head = {
   | [] -> #emptyList
   | [x, ...] -> #some(x)
 }
