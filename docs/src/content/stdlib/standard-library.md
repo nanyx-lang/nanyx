@@ -149,7 +149,7 @@ A function that reads a value of any type from text requires it. A call finds th
 ```nanyx
 def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \List.map(fromString) }
 
-def total: list(#some(int) | #invalidInt) -> int = { results -> results \Option.values \List.fold(0, { sum, n -> sum + n }) }
+def total: list(#some(int) | #invalidInt) -> int = { results -> results \valuesOption \List.fold(0, { sum, n -> sum + n }) }
 
 def sumAll = { texts -> total(readAll(texts)) }
 

@@ -73,7 +73,7 @@ export def nearestSignificantLine: (TextDocument, int) -> TextLine = { document,
   else
     def #some(line) =
       iterLinesOutwards(document, lineNumber)
-        \flatMap { back, forward -> [back, forward] \Option.values }
+        \flatMap { back, forward -> [back, forward] \valuesOption }
         \find { .isSignificant }
         except #notFound -> #some(current)
     line

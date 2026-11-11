@@ -78,5 +78,5 @@ export def AttestationCache.refresh
   }
 
 export def AttestationCache.certificateChain: AttestationCache -> #some(list(string)) | #none = { cache ->
-  cache.current \Option.map { .certificateChain }
+  cache.current \mapOption { .certificateChain }
 }

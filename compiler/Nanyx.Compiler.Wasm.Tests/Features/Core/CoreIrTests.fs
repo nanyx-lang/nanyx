@@ -294,16 +294,16 @@ let ``A generic function imported from another module is specialised where it is
 
 [<Fact>]
 let ``A generic function over an open union, and a list's length, go through the core IR`` () =
-    // `Option.map` takes any union with `#some`: its rest is the tags of the union it is called with. `xs.length` is a
+    // `mapOption` takes any union with `#some`: its rest is the tags of the union it is called with. `xs.length` is a
     // call to `List.length` the type checker recorded as a property.
     let source =
-        "def bump: #some(int) | #none -> #some(int) | #none = { o -> Option.map(o, { v -> v + 1 }) }\n" +
+        "def bump: #some(int) | #none -> #some(int) | #none = { o -> mapOption(o, { v -> v + 1 }) }\n" +
         "\n" +
         "def count: list(int) -> int = { xs -> xs.length }\n"
     let _, report = compileWithReport source
     Assert.Contains("bump", report.Functions)
     Assert.Contains("count", report.Functions)
-    Assert.Contains("Option_map", report.Specialisations |> List.map snd)
+    Assert.Contains("mapOption", report.Specialisations |> List.map snd)
     Assert.Contains("List_length", report.Specialisations |> List.map snd)
 
 [<Fact>]

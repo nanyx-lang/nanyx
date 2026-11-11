@@ -18,11 +18,11 @@ def Element.subtag: (Element, string) -> #some(Element) | #notFound = { el, name
 }
 
 def Element.subtagText: (Element, string) -> #some(string) | #notFound = { el, name ->
-  el \subtag(name) \Option.map { .text }
+  el \subtag(name) \mapOption { .text }
 }
 
 def Element.subtagBinary: (Element, string) -> #some(Binary) | #notFound = { el, name ->
-  el \subtagText(name) \Option.map(Base64.decode)
+  el \subtagText(name) \mapOption(Base64.decode)
 }
 
 def Element.attr: (Element, string) -> #some(string) | #notFound = { el, name -> el.attrs(name) }
@@ -59,7 +59,7 @@ export type Payload =
 export type Context = #companionRegistration | #trustCircleOnboarding
 
 def keyIndexListTs: Element -> #some(int) | #notFound = { el ->
-  el \subtag("key_index_list") \Option.bind { .attr("ts") } \Option.bind(Int.fromString)
+  el \subtag("key_index_list") \bindOption { .attr("ts") } \bindOption(Int.fromString)
 }
 
 export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #error(#extractionFailed) = {
@@ -85,7 +85,7 @@ export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #err
 
   | el, #trustCircleOnboarding -> proc {
       return #trustCircle(TrustCircleOnboarding(
-        appId = try required(el \subtagText("app_id") \Option.bind(Int.fromString))
+        appId = try required(el \subtagText("app_id") \bindOption(Int.fromString))
         authKey = try required(el \subtagText("auth_key"))
         deviceIdentity = try required(el \subtagText("device_identity"))
         famDeviceId = try required(el \subtagBinary("fam_device_id"))
@@ -111,8 +111,8 @@ export def pairSuccessReply: (deviceId: string, Payload) -> Element = { deviceId
 
   def identity =
     match payload
-      | #companion(c) -> c.deviceIdentity \Option.map { id -> textElement("device_identity", id) }
+      | #companion(c) -> c.deviceIdentity \mapOption { id -> textElement("device_identity", id) }
       | #trustCircle(t) -> #some(textElement("device_identity", t.deviceIdentity))
 
-  element("pair_success", [device, ...(identity \Option.toList)])
+  element("pair_success", [device, ...(identity \toListOption)])
 }

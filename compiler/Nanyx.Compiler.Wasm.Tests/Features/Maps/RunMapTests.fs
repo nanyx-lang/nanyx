@@ -41,7 +41,7 @@ let ``Run - a map literal can be written one entry per line`` () =
           "  1 => \"one\""
           "  2 => \"two\""
           "]"
-          "println(Map.get(m, 2) \\Option.defaultValue(\"none\"))" ]
+          "println(Map.get(m, 2) \\defaultValueOption(\"none\"))" ]
     |> runSource
     |> assertRan "two\n"
 
@@ -124,8 +124,8 @@ let ``Run - List.groupBy groups elements by a key, in order`` () =
     program
         [ "def show = { xs -> xs \\List.map(Int.toString) \\List.fold(\"\", { acc, s -> acc ++ s }) }" ]
         [ "def groups = [1, 2, 3, 4, 5] \\List.groupBy { x -> x % 2 }"
-          "println(show(groups(1) \\Option.defaultValue([])))"
-          "println(show(groups(0) \\Option.defaultValue([])))"
+          "println(show(groups(1) \\defaultValueOption([])))"
+          "println(show(groups(0) \\defaultValueOption([])))"
           "println(show(Map.toList(groups) \\List.map({ group -> group.0 })))"
           "println(\"{Map.count(List.groupBy([], { (x: int) -> x }))}\")" ]
     |> runSource

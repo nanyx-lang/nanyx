@@ -168,12 +168,12 @@ let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
         "def fallback = Result.defaultValue(half(3), 0)\n" +
         "println(\"{fallback}\")\n" +
         "def name: #some(string) | #empty = #some(\"abc\")\n" +
-        "def shouted = name \\ Option.map({ s -> s ++ \"!\" })\n" +
+        "def shouted = name \\ mapOption({ s -> s ++ \"!\" })\n" +
         "match shouted\n" +
         "  | #some(s) -> println(s)\n" +
         "  | #empty -> println(\"empty\")\n" +
-        "def seven = Option.defaultValue(#none, 7)\n" +
-        "def three = Option.mapOr(name, 0, { _s -> 3 })\n" +
+        "def seven = defaultValueOption(#none, 7)\n" +
+        "def three = mapOrOption(name, 0, { _s -> 3 })\n" +
         "println(\"{seven} {three}\")\n"
     runSource source |> assertRan "some 2\nerror ERR: odd\nsome 20\n0\nabc!\n7 3\n"
 
