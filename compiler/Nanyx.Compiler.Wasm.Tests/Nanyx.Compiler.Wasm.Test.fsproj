@@ -42,6 +42,7 @@
     <Compile Include="Features\Memory\ExampleMemoryTests.fs" />
     <Compile Include="Features\Memory\MemoryCheckTests.fs" />
     <Compile Include="Features\Memory\ReuseTests.fs" />
+    <Compile Include="Features\Memory\MemoryDeclarationTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
     <Compile Include="Features\Operators\RunOperatorTests.fs" />
     <Compile Include="Features\Ordering\RunOrderingTests.fs" />
