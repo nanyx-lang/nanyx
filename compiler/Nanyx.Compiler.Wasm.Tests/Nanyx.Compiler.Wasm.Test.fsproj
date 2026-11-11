@@ -6,6 +6,11 @@
     <WarningsAsErrors>0025</WarningsAsErrors>
     <!-- CI runs these tests in a job of their own, and passes this to leave them out of the solution's test run. -->
     <IsTestProject Condition="'$(SkipWasmTests)' == 'true'">false</IsTestProject>
+    <!--
+      The tests run programs that trap in this process. As for the CLI, the shadow stack would turn Wasmtime's recovery
+      from a trap into a fail-fast (bytecodealliance/wasmtime-dotnet#374), so the test host is kept off it.
+    -->
+    <CetCompat>false</CetCompat>
   </PropertyGroup>
 
   <ItemGroup>
@@ -81,7 +86,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The execution tests (Features/*/Run*Tests.fs) run the built CLI (nanyx.dll) as a child process. -->
+    <!--
+      The execution tests (Features/*/Run*Tests.fs) run programs in this process through the CLI's own `run` code; the
+      tests of the CLI itself run the built nanyx.dll as a child process.
+    -->
     <ProjectReference Include="..\Nanyx.Compiler.Cli\NanyxCompiler.Cli.csproj" />
     <ProjectReference Include="..\Nanyx.Compiler.Wasm\Nanyx.Compiler.Wasm.fsproj" />
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />

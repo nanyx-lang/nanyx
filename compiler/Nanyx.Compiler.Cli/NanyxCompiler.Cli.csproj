@@ -34,4 +34,9 @@
     <PackageReference Include="Consolo" Version="0.34.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The Wasm tests run programs in their own process through what `nanyx run` calls (CliCommands.RunScript). -->
+    <InternalsVisibleTo Include="Nanyx.Compiler.Wasm.Test" />
+  </ItemGroup>
+
 </Project>
