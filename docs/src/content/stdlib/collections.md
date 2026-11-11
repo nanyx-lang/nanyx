@@ -230,6 +230,23 @@ Reduces a list to a single value. Runs through the list backwards (from right to
 
 ---
 
+## get
+
+```nanyx
+List.get: (list(a), int) -> #some(a) | #outOfRange
+```
+
+Returns the element at an index, counting from 0. A negative index, or one past the end, gives `#outOfRange`.
+
+```nanyx
+[10, 20, 30] \List.get(1)
+-- #some(20)
+
+[10, 20, 30] \List.get(3)
+-- #outOfRange
+```
+
+---
 ## groupBy
 
 ```nanyx
@@ -365,6 +382,20 @@ List.min(["pear", "apple", "fig"])
 
 ---
 
+## partition
+
+```nanyx
+List.partition: (list(a), (a -> bool)) -> (list(a), list(a))
+```
+
+Returns the elements that pass the predicate and the elements that fail it, each in their original order.
+
+```nanyx
+[1, 2, 3, 4] \List.partition { < 3 }
+-- ([1, 2], [3, 4])
+```
+
+---
 ## reverse
 
 ```nanyx
@@ -395,6 +426,20 @@ List.skip([1, 2, 3, 4], 2)
 
 ---
 
+## skipWhile
+
+```nanyx
+List.skipWhile: (list(a), (a -> bool)) -> list(a)
+```
+
+Returns the elements from the first one that fails the predicate, so `xs \takeWhile(f) ++ xs \skipWhile(f)` is `xs`.
+
+```nanyx
+[1, 2, 5, 1] \List.skipWhile { < 3 }
+-- [5, 1]
+```
+
+---
 ## sort
 
 ```nanyx
@@ -538,6 +583,20 @@ def fibonacci = List.unfold((0, 1)) { current, next ->
 
 ---
 
+## unzip
+
+```nanyx
+List.unzip: list((a, b)) -> (list(a), list(b))
+```
+
+Splits a list of pairs into the list of their first parts and the list of their second parts: the inverse of `zip` for lists of equal length.
+
+```nanyx
+List.unzip([(1, "a"), (2, "b")])
+-- ([1, 2], ["a", "b"])
+```
+
+---
 ## zip
 
 ```nanyx

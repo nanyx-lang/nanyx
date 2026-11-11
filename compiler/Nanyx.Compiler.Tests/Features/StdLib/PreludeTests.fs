@@ -170,6 +170,22 @@ let ``The prelude's distinct, sortBy and unfold have the docs' types`` () =
     Assert.Equal("list(string)", typeOf "counted")
 
 [<Fact>]
+let ``The prelude's skipWhile, partition, unzip and get have the docs' types`` () =
+    let source =
+        "def xs = [3, 1, 2]\n" +
+        "def rest = xs \\ skipWhile({ x -> x > 2 })\n" +
+        "def halves = xs \\ partition({ x -> x > 1 })\n" +
+        "def columns = List.unzip([(1, \"a\"), (2, \"b\")])\n" +
+        "def second = xs \\ List.get(1)"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
+    Assert.Equal("list(int)", typeOf "rest")
+    Assert.Equal("(list(int), list(int))", typeOf "halves")
+    Assert.Equal("(list(int), list(string))", typeOf "columns")
+    Assert.Equal("#some(int) | #outOfRange", typeOf "second")
+
+[<Fact>]
 let ``A module's own definition wins over the prelude's`` () =
     let result = Compiler.compile "def proc = 5\ndef x = proc + 1"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)

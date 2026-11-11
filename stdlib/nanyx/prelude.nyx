@@ -799,6 +799,15 @@ export def List.last: list(a) -> #some(a) | #emptyList = {
   | [_, ...rest] -> List.last(rest)
 }
 
+-- The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
+-- the end.
+export def List.get: list(a), int -> #some(a) | #outOfRange = {
+  | [], _ -> #outOfRange
+  | [x, ...rest], index -> if index < 0
+    then #outOfRange
+    else if index == 0 then #some(x) else List.get(rest, index - 1)
+}
+
 -- Whether any element is equal to `x`. Elements are compared with `==`, by their structure.
 export def List.contains: [Eq(a)] list(a), a -> bool = { xs, x ->
   List.any(xs, { y -> y == x })
@@ -862,6 +871,21 @@ def filterReversed: list(a), (a -> bool), list(a) -> list(a) = {
 -- The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
 export def List.filter: list(a), (a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(filterReversed(xs, keep, []), [])
+}
+
+-- The elements of `xs` that `test` holds for and those it fails for, `xs` taken last first: each in
+-- front of `passed` or `failed`.
+def partitionOnto: list(a), (a -> bool), list(a), list(a) -> (list(a), list(a)) = {
+  | [], _, passed, failed -> (passed, failed)
+  | [x, ...rest], test, passed, failed -> if test(x)
+    then partitionOnto(rest, test, [x, ...passed], failed)
+    else partitionOnto(rest, test, passed, [x, ...failed])
+}
+
+-- The elements `test` holds for and the elements it fails for, each in order. Stack-safe: it works on
+-- a list of any length.
+export def List.partition: list(a), (a -> bool) -> (list(a), list(a)) = { xs, test ->
+  partitionOnto(reverseOnto(xs, []), test, [], [])
 }
 
 -- The first element `matches` holds for, or `#notFound`.
@@ -937,6 +961,13 @@ export def List.skip: list(a), int -> list(a) = {
   | [x, ...rest], count -> if count <= 0 then [x, ...rest] else List.skip(rest, count - 1)
 }
 
+-- The elements from the first one `test` fails for, so `List.takeWhile(xs, f) ++ List.skipWhile(xs, f)`
+-- is `xs`.
+export def List.skipWhile: list(a), (a -> bool) -> list(a) = {
+  | [], _ -> []
+  | [x, ...rest], test -> if test(x) then List.skipWhile(rest, test) else [x, ...rest]
+}
+
 -- Pairs of the elements of `xs` and `ys` at the same position, last first, in front of `acc`.
 def zipReversed: list(a), list(b), list((a, b)) -> list((a, b)) = {
   | [x, ...xs], [y, ...ys], acc -> zipReversed(xs, ys, [(x, y), ...acc])
@@ -947,6 +978,18 @@ def zipReversed: list(a), list(b), list((a, b)) -> list((a, b)) = {
 -- lists of any length.
 export def List.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
   reverseOnto(zipReversed(xs, ys, []), [])
+}
+
+-- The first and second parts of `pairs`, taken last first: each in front of `xs` or `ys`.
+def unzipOnto: list((a, b)), list(a), list(b) -> (list(a), list(b)) = {
+  | [], xs, ys -> (xs, ys)
+  | [(x, y), ...rest], xs, ys -> unzipOnto(rest, [x, ...xs], [y, ...ys])
+}
+
+-- The first parts of the pairs and their second parts, each in order: the inverse of `List.zip` for
+-- lists of equal length. Stack-safe: it works on a list of any length.
+export def List.unzip: list((a, b)) -> (list(a), list(b)) = { pairs ->
+  unzipOnto(reverseOnto(pairs, []), [], [])
 }
 
 -- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
