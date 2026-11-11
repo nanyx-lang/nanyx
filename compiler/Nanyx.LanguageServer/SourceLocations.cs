@@ -37,4 +37,18 @@ internal static class SourceLocations
             Range = new Range(span.StartLine, span.StartColumn, span.StartLine, span.StartColumn + span.End - span.Start)
         };
     }
+
+    /// <summary>
+    /// A Markdown link target for <paramref name="span"/>, a name, as <see cref="Of"/> finds its location: the file's
+    /// URI with the line and column, which an editor opens at that place (<c>file:///a.nyx#L3,5</c>). Null when the
+    /// span is in no file the editor can open.
+    /// </summary>
+    public static string? LinkTo(
+        DocumentUri uri,
+        OpenDocument document,
+        Parser.Program.SourceSpan span,
+        StandardLibrarySource standardLibrary) =>
+        Of(uri, document, span, standardLibrary) is { } location
+            ? $"{location.Uri}#L{location.Range.Start.Line + 1},{location.Range.Start.Character + 1}"
+            : null;
 }

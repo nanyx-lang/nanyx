@@ -110,29 +110,25 @@ trees rather than strings. That is a later step; see [Open questions](#open-ques
 
 # 2. Doc comments
 
-**The rule.** A definition's doc comment is the run of `--` lines that ends on the line just above it, or above its
-attributes, with no blank line between. The standard library is already written this way:
+Settled in [#719](https://github.com/nanyx-lang/nanyx/issues/719) and done: a doc comment starts with `--|` and goes
+on for the lines indented further than its first (see [Basics](../getting-started/basics#doc-comments)). The lexer
+takes the continuation lines as part of the comment, and `DocComments.attach` (in `Nanyx.Parser/DocComments.fs`)
+attaches each doc comment, by position, to the declaration whose name starts the next line with code: a def, a type
+or context, a field or context member (by the span `DeclaredNames` has for it), a tag, or the module. The language
+server shows a symbol's doc comment on hover and in completion items, read with `Documentation.forSymbol`, which
+parses the file the symbol is declared in (the document, a file beside it, or a standard-library module) for its doc
+comments and keeps them by file. It turns each `` [`name`] `` into a link to the name's definition, looked up among
+the names in scope where the comment is, then the top-level names of the comment's own file.
 
-```nanyx
--- The `length` bytes of `s` starting at byte `start`. Out-of-range values are clamped, so the result
--- is never longer than what `s` actually holds.
-export def string.substring: (string, start: int, length: int) -> string = { s, start, length -> ... }
-```
+Still open:
 
-The comment that opens a module (`-- nanyx/text: functions on strings.`) and what follows it up to the first blank
-line is the module's doc. `trySummary` already reads the first line of it.
-
-**Markdown.** The text is read as Markdown, with the `--` prefixes taken off. Backticks already mark code in the
-library's comments. A name in backticks that resolves in the definition's module could become a link later.
-
-**Where it is recorded.** The parser keeps comments as trivia with spans, so attaching them needs no change to the
-grammar. One pass after parsing gives each declaration its comment, and name resolution then records it by symbol
-(a `Docs: Map<SymbolId, string>` in `TypedModule`, or a field on `Symbol`). An imported module's docs come with its
-symbols, as its types do. Hover, completion items (`documentation`), the info view and the browser all read it.
-
-`---` block comments ([#205](https://github.com/nanyx-lang/nanyx/issues/205)) should count as doc comments too,
-once they parse.
-
+- Converting the standard library's `--` comments to doc comments
+  ([#721](https://github.com/nanyx-lang/nanyx/issues/721)), and generating its docs pages from them
+  ([#722](https://github.com/nanyx-lang/nanyx/issues/722)). `trySummary` still reads a module's first `--` line.
+- Recording docs by symbol in `TypedModule`, so the info view and the browser read them as they read types, rather
+  than parsing the declaring file again.
+- A tag has no symbol, so its doc comment is attached but not shown anywhere yet; nor is a record field's on a
+  member completion.
 # 3. Library browser and search by type
 
 ## The browser

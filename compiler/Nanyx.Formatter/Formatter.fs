@@ -144,10 +144,13 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     let isPipedMatch (e: Expression) (value: Expression) = (pipedMatchAt e value).IsSome
 
-    // Comments are placed once each; whatever no construct places goes before the line it was in.
+    // Comments are placed once each; whatever no construct places goes before the line it was in. A doc comment's
+    // continuation lines are set one indent step past its first line.
     let comments =
         parsed.Trivia
         |> List.choose (function
+            | LineComment(commentText, _, span) when commentText.StartsWith "--|" ->
+                Some(DocComments.relaidOut options.IndentSize commentText, span)
             | LineComment(commentText, _, span) -> Some(commentText.TrimEnd(), span)
             | BlankLines _ -> None)
         |> Array.ofList
@@ -822,7 +825,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                           placed[i] <- true
                           let commentText, span = comments[i]
                           if lineOf span.Start = lineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
-                          else cat [ hard; Doc.textOrVerbatim commentText ] ]
+                          else cat [ hard; Doc.comment commentText ] ]
         if position.Tail && writtenOnLines then
             cat [ rootDoc; nest (cat [ for value, at, _, doc in steps -> cat [ commentsBefore value at; hard; doc ] ]) ]
         elif position.Tail && steps.Length > 1 && not (List.contains true isMatch)

@@ -4,13 +4,13 @@ description: "Installing and configuring the Nanyx extension for Visual Studio C
 order: 3
 ---
 
-The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, and the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes) and runs the compiler as a language server (`nanyx lsp`), which gives you:
+The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, and a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type
-- the inferred type of whatever is under the pointer, on hover
+- the inferred type of whatever is under the pointer, on hover, with the doc comment of the name there
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
-- go to definition, find references and the outline view
-- completion of names, record fields, module members and import paths
+- go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references and the outline view
+- completion of names, record fields, module members and import paths, each name with its doc comment
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
 - a run button, which runs the file as `nanyx run` does

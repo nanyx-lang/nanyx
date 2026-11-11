@@ -207,8 +207,9 @@ let ``After a pipe come the definitions attached to the piped value's type, then
     Assert.True(startsWith.IsFunction)
     // The functions in scope follow, and nothing attached comes after them.
     let rest = targets |> List.skip attached.Length
-    let double: Completion.PipeTarget = { Name = "double"; Type = Some "int -> int"; IsFunction = true; IsAttached = false }
-    Assert.Contains(double, rest)
+    Assert.Contains(
+        ("double", Some "int -> int", true, false),
+        rest |> List.map (fun target -> target.Name, target.Type, target.IsFunction, target.IsAttached))
     Assert.All(rest, fun target -> Assert.False target.IsAttached)
 
 [<Fact>]

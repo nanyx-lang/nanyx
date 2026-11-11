@@ -11,17 +11,20 @@ namespace Nanyx.LanguageServer.Handlers;
 /// typed: this one even with type or name errors, where what failed has the type <c>???</c>. On a call's function name it shows the function's type instantiated at that call, and on a
 /// declaration's own name (a def, a parameter, a pattern variable) the type of what it declares. On a type's name it
 /// shows the type's definition instead, even inside an expression. Nothing is shown in a top-level item edited since
-/// that compile, nor in a document that has never been typed (see <see cref="OpenDocument.LastGood"/>).
+/// that compile, nor in a document that has never been typed (see <see cref="OpenDocument.LastGood"/>). Below the
+/// type comes the doc comment of the name there, if it has one, as Markdown (see <see cref="NyxCompiler.Documentation.Reader"/>).
 /// </summary>
 public sealed class HoverHandler : HoverHandlerBase
 {
     private readonly DocumentStore _documents;
     private readonly ServerSettings _settings;
+    private readonly StandardLibrarySource _standardLibrary;
 
-    public HoverHandler(DocumentStore documents, ServerSettings settings)
+    public HoverHandler(DocumentStore documents, ServerSettings settings, StandardLibrarySource standardLibrary)
     {
         _documents = documents;
         _settings = settings;
+        _standardLibrary = standardLibrary;
     }
 
     public override Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken) =>
@@ -44,12 +47,16 @@ public sealed class HoverHandler : HoverHandlerBase
             return null;
         }
 
+        // The doc comment of the name there, if it has one.
+        var docs = Definition.symbolAt(lastGood.FileName, compiled, offset) is { } symbol
+            ? lastGood.DocReader(request.TextDocument.Uri, offset, _standardLibrary).ForSymbol(symbol.Value)?.Value
+            : null;
         return new Hover
         {
             Contents = new MarkedStringsOrMarkupContent(new MarkupContent
             {
                 Kind = MarkupKind.Markdown,
-                Value = $"```nanyx\n{info.Value.Type}\n```"
+                Value = $"```nanyx\n{info.Value.Type}\n```" + (docs is null ? "" : $"\n\n---\n\n{docs}")
             }),
             Range = document.Positions.ToRange(span.Start, span.End)
         };

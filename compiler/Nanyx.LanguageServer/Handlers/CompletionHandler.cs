@@ -1,5 +1,6 @@
 using Microsoft.FSharp.Collections;
 using NyxCompiler;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -14,7 +15,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// for while the user types, when the text often does not parse, so these come from the document's last compile that
 /// was typed, at the place there nearest the cursor (see <see cref="OpenDocument.NearestInLastGood"/>): a name
 /// declared since is not offered until the text parses again. Nothing is offered in a comment or a string, or where a
-/// <c>def</c> names something new.
+/// <c>def</c> names something new. A name declared with a doc comment has it as its documentation.
 /// </summary>
 public sealed class CompletionHandler : CompletionHandlerBase
 {
@@ -27,11 +28,13 @@ public sealed class CompletionHandler : CompletionHandlerBase
 
     private readonly DocumentStore _documents;
     private readonly ServerSettings _settings;
+    private readonly StandardLibrarySource _standardLibrary;
 
-    public CompletionHandler(DocumentStore documents, ServerSettings settings)
+    public CompletionHandler(DocumentStore documents, ServerSettings settings, StandardLibrarySource standardLibrary)
     {
         _documents = documents;
         _settings = settings;
+        _standardLibrary = standardLibrary;
     }
 
     public override Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken) =>
@@ -64,12 +67,12 @@ public sealed class CompletionHandler : CompletionHandlerBase
 
         if (CompletionContext.MemberPath(text, wordStart) is { } path)
         {
-            return Members(document, path, wordStart - 1 - string.Join('.', path).Length);
+            return Members(request.TextDocument.Uri, document, path, wordStart - 1 - string.Join('.', path).Length);
         }
 
         if (CompletionContext.PipedPath(text, wordStart) is { } piped)
         {
-            return PipeTargets(document, piped, wordStart);
+            return PipeTargets(request.TextDocument.Uri, document, piped, wordStart);
         }
 
         if (!CompletionContext.OffersNames(text, wordStart))
@@ -79,8 +82,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
 
         var names = document.LastGood is { Compiled: { } compiled } lastGood
             && document.NearestInLastGood(wordStart) is { } offset
-                ? Completion.typedNamesInScope(_settings.TypeNotation, compiled, offset)
-                    .Select(name => NameItem(name, lastGood.FileName))
+                ? NamesInScope(lastGood, compiled, offset, lastGood.DocReader(request.TextDocument.Uri, offset, _standardLibrary))
                 : [];
         var keywords = Keywords.Select(keyword => new CompletionItem
         {
@@ -164,15 +166,18 @@ public sealed class CompletionHandler : CompletionHandlerBase
     /// starts at <paramref name="pathStart"/>. A record whose fields were added since the last good compile offers
     /// the fields it had then.
     /// </summary>
-    private CompletionList Members(OpenDocument document, IReadOnlyList<string> path, int pathStart)
+    private CompletionList Members(DocumentUri uri, OpenDocument document, IReadOnlyList<string> path, int pathStart)
     {
-        if (document.LastGood?.Compiled is not { } compiled || document.NearestInLastGood(pathStart) is not { } offset)
+        if (document.LastGood is not { Compiled: { } compiled } lastGood
+            || document.NearestInLastGood(pathStart) is not { } offset)
         {
             return new CompletionList();
         }
 
+        var docs = lastGood.DocReader(uri, offset, _standardLibrary);
         return new CompletionList(
-            Completion.membersAt(_settings.TypeNotation, compiled, offset, ListModule.OfSeq(path)).Select(MemberItem));
+            Completion.membersAt(_settings.TypeNotation, compiled, offset, ListModule.OfSeq(path))
+                .Select(member => MemberItem(member, docs)));
     }
 
     /// <summary>
@@ -187,10 +192,11 @@ public sealed class CompletionHandler : CompletionHandlerBase
         }
 
         return new CompletionList(
-            Completion.implicitArgumentMembersAt(_settings.TypeNotation, compiled, offset).Select(MemberItem));
+            Completion.implicitArgumentMembersAt(_settings.TypeNotation, compiled, offset)
+                .Select(member => MemberItem(member, null)));
     }
 
-    private static CompletionItem MemberItem(Completion.Member member) => new()
+    private static CompletionItem MemberItem(Completion.Member member, Documentation.Reader? docs) => new()
     {
         Label = member.Name,
         Kind = member.Kind.IsField ? CompletionItemKind.Field
@@ -198,20 +204,23 @@ public sealed class CompletionHandler : CompletionHandlerBase
             : member.Kind.IsPrefix ? CompletionItemKind.Module
             : member.IsFunction ? CompletionItemKind.Function
             : CompletionItemKind.Variable,
-        Detail = member.Type?.Value
+        Detail = member.Type?.Value,
+        Documentation = member.Symbol is { } symbol ? DocumentationOf(docs, symbol.Value) : null
     };
 
     /// <summary>
     /// What a pipe can call (see <see cref="Completion.pipeTargetsAt"/>): the definitions attached to the type of
     /// the value <paramref name="piped"/> names, then the functions in scope.
     /// </summary>
-    private CompletionList PipeTargets(OpenDocument document, IReadOnlyList<string> piped, int wordStart)
+    private CompletionList PipeTargets(DocumentUri uri, OpenDocument document, IReadOnlyList<string> piped, int wordStart)
     {
-        if (document.LastGood?.Compiled is not { } compiled || document.NearestInLastGood(wordStart) is not { } offset)
+        if (document.LastGood is not { Compiled: { } compiled } lastGood
+            || document.NearestInLastGood(wordStart) is not { } offset)
         {
             return new CompletionList();
         }
 
+        var docs = lastGood.DocReader(uri, offset, _standardLibrary);
         return new CompletionList(
             Completion.pipeTargetsAt(_settings.TypeNotation, compiled, offset, ListModule.OfSeq(piped))
                 .Select(target => new CompletionItem
@@ -219,15 +228,20 @@ public sealed class CompletionHandler : CompletionHandlerBase
                     Label = target.Name,
                     Kind = target.IsFunction ? CompletionItemKind.Function : CompletionItemKind.Variable,
                     Detail = target.Type?.Value,
+                    Documentation = DocumentationOf(docs, target.Symbol),
                     SortText = $"{(target.IsAttached ? 0 : 1)}{target.Name}"
                 }));
     }
+
+    /// <summary>The items for the names in scope at <paramref name="offset"/> in <paramref name="lastGood"/>.</summary>
+    private IEnumerable<CompletionItem> NamesInScope(OpenDocument lastGood, CompileResult compiled, int offset, Documentation.Reader docs) =>
+        Completion.typedNamesInScope(_settings.TypeNotation, compiled, offset).Select(name => NameItem(name, lastGood.FileName, docs));
 
     /// <summary>
     /// The item for a name. Names sort nearest first: locals, parameters and pattern variables, then the file's
     /// top-level defs and import aliases, then what imports and the prelude bring in.
     /// </summary>
-    private static CompletionItem NameItem(Completion.NameInScope name, string fileName)
+    private static CompletionItem NameItem(Completion.NameInScope name, string fileName, Documentation.Reader docs)
     {
         var symbol = name.Symbol;
         var group =
@@ -241,10 +255,16 @@ public sealed class CompletionHandler : CompletionHandlerBase
                 : name.IsFunction ? CompletionItemKind.Function
                 : CompletionItemKind.Variable,
             Detail = name.Type?.Value,
+            Documentation = DocumentationOf(docs, symbol),
             SortText = $"{group}{symbol.Name}"
         };
     }
 
+    /// <summary>The doc comment of <paramref name="symbol"/>, as Markdown, or null if it has none.</summary>
+    private static StringOrMarkupContent? DocumentationOf(Documentation.Reader? docs, Symbol symbol) =>
+        docs?.ForSymbol(symbol)?.Value is { } markdown
+            ? new StringOrMarkupContent(new MarkupContent { Kind = MarkupKind.Markdown, Value = markdown })
+            : null;
     protected override CompletionRegistrationOptions CreateRegistrationOptions(
         CompletionCapability capability,
         ClientCapabilities clientCapabilities) =>
