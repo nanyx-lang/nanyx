@@ -593,19 +593,32 @@ let private checkContextUse (env: TypeEnv) (state: InferState) (name: Identifier
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
 /// is an error only when `reportMissing`.
 let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
-    // A function imported under an alias (`c.println`) finds the members of its contexts under the alias too
-    // (`c.write`), as the ambient instance has them, when they are not in scope by their own names.
-    let inScopeAs (memberName: Identifier) =
-        match name.LastIndexOf '.' with
-        | dot when dot > 0 && (TypeEnv.tryFind memberName env).IsNone ->
-            let qualified = $"{name.Substring(0, dot)}.{memberName}"
-            if (TypeEnv.tryFind qualified env).IsSome then qualified else memberName
-        | _ -> memberName
+    // A function imported under an alias (`c.println`), or a context named under one (`c.Console`), finds the
+    // context's members under the alias too (`c.write`), as the ambient instance has them, when they are not in
+    // scope by their own names.
+    let qualifier (qualifiedName: Identifier) =
+        match qualifiedName.LastIndexOf '.' with
+        | dot when dot > 0 -> Some (qualifiedName.Substring(0, dot))
+        | _ -> None
+    let inScopeAs (ctx: TypeExpr) (memberName: Identifier) =
+        let ctxQualifier =
+            match ctx.Kind with
+            | TypeName ctxName
+            | TypeApply(ctxName, _) -> qualifier ctxName
+            | _ -> None
+        if (TypeEnv.tryFind memberName env).IsSome then
+            memberName
+        else
+            [ qualifier name; ctxQualifier ]
+            |> List.choose id
+            |> List.map (fun prefix -> $"{prefix}.{memberName}")
+            |> List.tryFind (fun qualified -> (TypeEnv.tryFind qualified env).IsSome)
+            |> Option.defaultValue memberName
     let requiredMembers =
         contexts
         |> List.map (fun ctx ->
             let members, _ = collectContextMembers state ctx
-            ctx, members |> List.map (fun (memberName, _, _) -> inScopeAs memberName))
+            ctx, members |> List.map (fun (memberName, _, _) -> inScopeAs ctx memberName))
     let isCarried (ctx: TypeExpr) =
         match ctx.Kind with
         | TypeName ctxName

@@ -120,6 +120,28 @@ def main = {
     runSource source |> assertRan "hi\n[1, 2]\n"
 
 [<Fact>]
+let ``Run - a def that declares the Console of an aliased import writes through the runtime's Console`` () =
+    let source = """module main
+
+import nanyx/console as c
+
+def g: [c.Console] () -> () = { c.println("5") }
+
+def h: [c.Console + ToString(a)] a -> () = { value ->
+  g()
+  c.write("value: ")
+  c.println(value)
+}
+
+@entry
+def main = {
+  g()
+  h([1, 2])
+}
+"""
+    runSource source |> assertRan "5\n5\nvalue: [1, 2]\n"
+
+[<Fact>]
 let ``Run - eprint and eprintln write to stderr`` () =
     let source =
         "def warn: [Console] string -> () = { message -> eprintln(\"warning: \" ++ message) }\n" +
