@@ -4,8 +4,8 @@ description: "How an operator finds its context in the prelude, and how a functi
 order: 9
 ---
 
-> **Status: implemented for the arithmetic operators.** `Nanyx.Compiler/OperatorContexts.fs` finds an operator's
-> context, `ArithmeticInference.fs` infers the requirement for a function that does not write its type, and
+> **Status: implemented for the arithmetic operators and `++`.** `Nanyx.Compiler/OperatorContexts.fs` finds an
+> operator's context, `ArithmeticInference.fs` infers the requirement for a function that does not write its type, and
 > `InlineContexts.fs` reads a requirement written as a member. What is left is under [Not done yet](#not-done-yet).
 
 # The idea
@@ -18,10 +18,28 @@ prelude's context with the fewest members that has that member**.
 |---|---|
 | `a + b`, `a - b`, `a * b`, `a / b`, `a % b` | the member of the operator's name: `` `+` ``, `` `-` ``, ... |
 | `-a` | `negate` |
+| `a ++ b` | `` `++` `` |
 | `a == b`, `a != b` | `` `==` `` |
 
 `Add(a)` has four members and `Num(a)` eight, and both have a `` `+` ``, so `+` is read through `Add`. Only `Num` has
-a `` `*` ``, so `*` is read through `Num`.
+a `` `*` ``, so `*` is read through `Num`. `` `++` `` is the one member of `Append(a)`, so `++` is read through it.
+
+## `++` and `Append`
+
+`++` on a `string` or a `list` is the built-in operator, as `+` on an `int` is. The prelude attaches `` string.`++` ``
+and `` list.`++` ``, which are what a function that requires `Append` is passed, and a type gets an `Append` by
+attaching `` `++` ``, as `` def $Path.`++` = ... `` does.
+
+```nanyx
+def concat: [Append(a)] a, a -> a = { x, y -> x ++ y }   -- concat("a", "b"), concat([1], [2])
+def join = { x, y -> x ++ y }                             -- [Append(a)] a, a -> a
+```
+
+- `def concat: a, a -> a = { x, y -> x ++ y }` is `NYX0205`: its type must require `Append(a)`.
+- `concat(1, 2)` is `NYX0205` at the call: there is no `` int.`++` ``.
+- `1 ++ 2`, on a type known to have no `++`, is `NYX0201`.
+- Where an unannotated function cannot require `Append` (the two cases below), its `++` is left as it was: the
+  operands are not made ints, and a type the backend cannot join fails there with `NYX0301`, as before.
 
 Several operators on values of one type need the context of each, less any whose members another of them has:
 
@@ -83,7 +101,7 @@ This replaces the numeric contexts page's "unannotated arithmetic is unchanged":
 (`InferState.PendingArithmetic`) instead of making its operands ints. When the function around it is generalised
 (`ArithmeticInference.generalize`):
 
-- an operator on one of the function's own type variables stays, unless one of the three cases above applies, and
+- an operator on one of the function's own type variables stays, unless one of the two cases above applies, and
   `ArithmeticInference.require` turns it into a call that requires its context of that variable, which `ContextInference.resolvePending` makes the function
   require, as it does for a call to a function that requires a context. The operator then calls the member of
   that instance (see [Two instances of one context](#two-instances-of-one-context));

@@ -1790,18 +1790,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     Ok (mkTypedExpr expr resultTy None None None, called)
                 | None ->
                 match expr.Kind with
-                | BinaryOp("++", _, _) ->
-                    // `++` concatenates two strings or two lists; both sides have the same type, which is the result.
-                    // When neither side's type is known yet the result is simply that shared type.
-                    let concatenable =
-                        [ leftExpr.Type; rightExpr.Type ]
-                        |> List.tryPick (fun ty ->
-                            match Unifier.unalias ty with
-                            | TyPrimitive "string" -> Some ty
-                            | TyApply("list", _) -> Some ty
-                            | _ -> None)
-                    let resultTy = concatenable |> Option.defaultValue leftExpr.Type
-                    Ok (mkTypedExpr expr resultTy None None None, constrained)
+                | BinaryOp(op, _, _) when op = AppendOperator.operator ->
+                    AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
+                    |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
                 | BinaryOp(op, _, _) when ArithmeticOperators.isOperator op ->
                     ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
                     |> Result.map (fun numericConstrained -> mkTypedExpr expr leftExpr.Type None None None, numericConstrained)

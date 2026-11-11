@@ -139,7 +139,7 @@ export def combineAll: [Combine(a)] list(a) -> a
 
 Inside `combineAll`, `empty` and `combine` are the members of the instance it is given, so it combines whatever type it is called with, as long as that type has a `Combine`.
 
-The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, so a counter's `n + 1` in a generic function still adds ints.
+The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), `x ++ y` the `` `++` `` of [`Append`](#appenda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, as `++` is on a list, so a counter's `n + 1` in a generic function still adds ints.
 
 ## Operators find their context
 
@@ -322,6 +322,27 @@ def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)
 ```
 
 `mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
+
+## Append(a)
+
+`Append(a)` is the context for values that join end to end. `x ++ y` on values of a type variable is read through it.
+
+```nanyx
+context Append(a) = (
+  `++`: (a, a) -> a
+)
+```
+
+The compiler has its own for `string` and `list(a)`, where `++` is the built-in operator. Any other type gets one by attaching `` `++` ``:
+
+```nanyx
+def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }
+
+surround("*", "hi")      -- "*hi*"
+surround([0], [1, 2])    -- [0, 1, 2, 0]
+```
+
+A function that writes its type and joins values of a type variable without `[Append(a)]` is an error that says to add it, and `def join = { x, y -> x ++ y }` is `[Append(a)] a, a -> a`. So `join(1, 2)` is an error at the call: an `int` has no `++`.
 
 These contexts compose naturally. For example, a generic algorithm can require both `Eq(a)` and `Default(a)` by declaring `[Eq(a) & Default(a)]`.
 

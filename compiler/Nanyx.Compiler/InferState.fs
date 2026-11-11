@@ -39,11 +39,11 @@ type PendingContextInstance =
       Errors: Diagnostic list
       ChecksOnly: bool }
 
-/// An arithmetic operator, in the unannotated top-level def `InDef`, on operands of a type, `OperandTy`, that was
-/// still a variable where the operator is written, at `At`: `x + y` on two parameters. `MemberName` is the context
-/// member the operator reads: itself, or `negate` for prefix `-`. Once the def is inferred, a type that turned out
-/// to be one of the def's own variables is one the def requires the prelude's context with that member of, and any
-/// other is a number (see `ArithmeticInference`).
+/// An arithmetic operator or `++`, in the unannotated top-level def `InDef`, on operands of a type, `OperandTy`, that
+/// was still a variable where the operator is written, at `At`: `x + y` on two parameters. `MemberName` is the
+/// context member the operator reads: itself, or `negate` for prefix `-`. Once the def is inferred, a type that
+/// turned out to be one of the def's own variables is one the def requires the prelude's context with that member of,
+/// and any other is a number, or for `++` is left as it is (see `ArithmeticInference`).
 type PendingArithmetic =
     { InDef: Identifier
       Operator: NodeId
