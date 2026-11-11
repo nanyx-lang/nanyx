@@ -218,7 +218,10 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > carries `ContextInstances`, so that a def an instance built from attached definitions picks up counts as used; the
 > call to `@entry`'s def that `applyAttributes` adds is a reference like any other. Its seventh is `unreachableCode`
 > ([#498](https://github.com/nanyx-lang/nanyx/issues/498)): the statements of a block after one whose type in `Types`
-> is the [bottom type](./bottom-type), `undefined`. The rules for unused and
+> is the [bottom type](./bottom-type), `undefined`. Its eighth is `useInBraces`
+> ([#673](https://github.com/nanyx-lang/nanyx/issues/673)): `use X in { ... }`, whose body is a lambda of no
+> arguments rather than a block; it reads the module's text to leave alone a lambda written `{ () -> ... }`, which
+> the tree does not tell apart. The rules for unused and
 > unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:

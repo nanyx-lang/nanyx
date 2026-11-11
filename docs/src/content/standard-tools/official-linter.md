@@ -101,6 +101,14 @@ def isRed: #red | #green -> bool = { c ->
 
 The rule (`noTagInCommon`) reports `==` or `!=` on two values whose types are closed tag unions that share no tag. The comparison type-checks, since `==` accepts any two tags it can join into one union, but it can never be true (or, with `!=`, never false). A comparison with an open union, such as `o == #none` where `o` can be any tag, is not reported.
 
+## `use ... in` with a body in braces
+
+```nanyx
+def total = use down in { counted(3) } -- Linter warning: The braces make this a function of no arguments, not a block run with the context loaded
+```
+
+The rule (`useInBraces`) reports `use ... in` whose body is a lambda of no arguments written as `{ ... }`. Braces make a function, not a block, so the statements in them are not run: `total` is a function. Put the statements on the lines after `in`, indented, to run them with the context loaded (see [Contexts](../advanced/contexts#loading-a-context)). A lambda written with its argument, `{ () -> ... }` or `{ n -> ... }`, says it means a function, and is not reported.
+
 ## Unreachable code path
 
 ```nanyx

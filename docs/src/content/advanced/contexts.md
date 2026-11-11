@@ -49,6 +49,20 @@ def result = use Console(println = hostPrint) in
   println("Hello from a scoped context")
 ```
 
+After `in` there can also be a block of statements, on the lines after it and indented more than the line `use` is on. The block's value is the value of `use ... in`, and the context is loaded for the block only:
+
+```nanyx
+def main = {
+  def total = use Counter(next = { n -> n - 1 }) in
+    def a = counted(3)
+    a + 10
+
+  println("{total}")
+}
+```
+
+Don't put the block in braces: `{ ... }` is a function of no arguments, so `use Counter(...) in { ... }` makes a function instead of running the statements. The official linter's [`useInBraces`](../standard-tools/official-linter#use--in-with-a-body-in-braces) rule warns about it.
+
 `use` loads the value of any expression. An instance of a parameterised context is a value whose type is the context applied to a type, so define it with `def` and load it by name:
 
 ```nanyx
