@@ -694,8 +694,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         usedHelpers.Add Helpers.writeStderr |> ignore
         usedHelpers.Add Helpers.procExit |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
+    // Exiting is not a stream, but its WASI import is declared with theirs.
     let moduleUsesStandardStreams =
-        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte ] |> List.exists usedHelperSet.Contains
+        [ Helpers.writeStdout; Helpers.writeStderr; Helpers.readStdinByte; Helpers.procExit ] |> List.exists usedHelperSet.Contains
     let moduleReadsStdin = usedHelperSet.Contains Helpers.readStdinByte
     // Anything that writes to stdout or stderr, or reads stdin, shares the WASI import, the memory and the
     // newline byte.

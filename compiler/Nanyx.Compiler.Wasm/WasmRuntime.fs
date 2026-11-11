@@ -29,6 +29,7 @@ module Helpers =
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
     let readStdinByte = NyxCompiler.Intrinsics.readStdinByte
+    let exit = NyxCompiler.Intrinsics.exit
     let stringLength = NyxCompiler.Intrinsics.stringLength
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
@@ -872,6 +873,15 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  f64.load"
             "  i32.trunc_f64_s"
             ")" ]
+      // Ends the program through WASI's `proc_exit`, which never returns. Its result, `undefined`, is an i32 like every
+      // value, so a call stands wherever a value is expected; `unreachable` validates as one.
+      Helpers.exit,
+      lines
+          [ $"(func ${Helpers.exit} (param $code i32) (result i32)"
+            "  local.get $code"
+            $"  call ${Helpers.procExit}"
+            "  unreachable"
+            ")" ]
       // An int as a boxed float: `f64.convert_i32_s` is exact for every `int`.
       Helpers.intToFloat,
       lines
@@ -983,6 +993,7 @@ let helperDependencies =
       Helpers.writeStdout, [ Helpers.stringLength ]
       Helpers.writeStderr, [ Helpers.stringLength ]
       Helpers.readStdinByte, []
+      Helpers.exit, [ Helpers.procExit ]
       Helpers.listCons, [ Helpers.newCell ]
       Helpers.recordSet, []
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]

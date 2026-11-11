@@ -73,6 +73,9 @@ module Intrinsics =
     /// The elements a set holds, as the list it was made of.
     let setElements = prefix + "set_elements"
 
+    /// Ends the program with an exit code. It never returns, so its result is `undefined`.
+    let exit = prefix + "exit"
+
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
     let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
 
@@ -87,6 +90,7 @@ module Intrinsics =
         [ writeStdout, TypeEnv.mono (TyFunc(stringTy, unitTy))
           writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy))
           readStdinByte, TypeEnv.mono (TyFunc(unitTy, intTy))
+          exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType))
           stringLength, TypeEnv.mono (TyFunc(stringTy, intTy))
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy))
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy))
