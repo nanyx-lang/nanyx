@@ -61,6 +61,39 @@ let ``A record pattern on a value of no known type yet takes exactly its fields,
     let result = Compiler.compile (atLeast + wider)
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
 
+// A list pattern's elements match the list's element type, so a member pattern in one finds the record's fields (#461).
+[<Fact>]
+let ``Record patterns in two elements of a list pattern match different tags of a field's union`` () =
+    let source =
+        """
+type Result =
+  | #some(int)
+  | #error(string)
+
+type Request = (id: int, status: Result)
+
+def f: list(Request) -> string = { requests ->
+  match requests
+    | [(status = #error(msg), ...), (status = #some(v), ...), ...tail] -> "{msg} {v} {tail.length}"
+    | _ -> "other"
+}
+"""
+    Assert.Equal<(string * string) list>(
+        [ "requests", "list(Request)"; "msg", "string"; "v", "int"; "tail", "list(Request)" ], typesOf source)
+
+[<Fact>]
+let ``A record pattern in a list pattern's element binds the field's type`` () =
+    let source =
+        """
+def f: list((name: string, age: int)) -> int = { people ->
+  match people
+    | [(age = a, ...), (name = n, age = b)] -> a + b + n.length
+    | _ -> 0
+}
+"""
+    Assert.Equal<(string * string) list>(
+        [ "people", "list(age: int, name: string)"; "a", "int"; "n", "string"; "b", "int" ], typesOf source)
+
 [<Fact>]
 let ``A name that is not one of the record's fields is matched by position, and the record has none there`` () =
     let result = Compiler.compile "def f: (name: string, age: int) -> string = { r -> match r\n  | (name, years) -> name }\n"

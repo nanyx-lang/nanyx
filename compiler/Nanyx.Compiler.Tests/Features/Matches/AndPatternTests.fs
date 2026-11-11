@@ -37,7 +37,7 @@ let ``Every part of an and-pattern matches the value, and binds its names for th
 
 [<Fact>]
 let ``The nested patterns example checks, with an and-pattern on the whole list`` () =
-    // The pattern-matching page's "Nesting patterns" example, but for its arm of two requests (#461).
+    // The pattern-matching page's "Nesting patterns" example.
     assertCompiles (
         "type Result =\n" +
         "  | #some(int)\n" +
@@ -55,6 +55,8 @@ let ``The nested patterns example checks, with an and-pattern on the whole list`
         "      \"No requests\"\n" +
         "    | [(id = 1, status = #some(value), tags = [\"urgent\", ...rest]), ...more] ->\n" +
         "      \"Urgent request 1 with value {value}\"\n" +
+        "    | [(id = id, status = #error(msg), tags = []), (status = #some(val), ...), ...tail] ->\n" +
+        "      \"Error in request {id}: {msg}, followed by success\"\n" +
         "    | [(status = #some(n), ...), ...rest] & requests & { .length > 5 } ->\n" +
         "      \"Multiple requests with first one ok, total: {requests.length}\"\n" +
         "    | _ ->\n" +

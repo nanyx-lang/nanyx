@@ -2214,7 +2214,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let mutable innerEnv = env'
                     let mutable innerState = state'
                     let mutable innerErrors: Diagnostic list = []
-                    let knownFields = tryRecordFields scrutineeTy
+                    // A value whose type is still a variable, such as a list pattern's element, may already be known
+                    // to be a record from the constraints so far; its fields' types then say what each member matches,
+                    // so two elements' `(status = #error(msg))` and `(status = #some(v))` both match a `Result`.
+                    let knownFields =
+                        match scrutineeTy with
+                        | TyVar _ -> recordFieldsSoFar state' scrutineeTy
+                        | _ -> tryRecordFields scrutineeTy
                     let fieldHints = knownFields |> Option.defaultValue Map.empty
                     let mutable fieldMap = Map.empty
                     for (name, pat) in members do
