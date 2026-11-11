@@ -6,6 +6,9 @@ open Parser.Program
 
 let private lines (ls: string list) = String.concat "\n" ls
 
+/// `source` with `\n` line breaks, whatever the line endings of this file's checkout.
+let private normalized (source: string) = source.Replace("\r\n", "\n")
+
 let private trivia source =
     match parseModuleWithTrivia "" source with
     | Result.Ok parsed -> parsed.Trivia
@@ -115,33 +118,52 @@ let ``Module blocks are kept as written`` () =
 
 [<Fact>]
 let ``A line of three or more dashes opens a block comment, closed by a line of the same dashes`` () =
-    let source =
-        lines [ "---"; "This is a multi-line comment."; "---"; ""; "----------------------------------"
-                "This is also a multi-line comment."; "----------------------------------"; "def a = 1" ]
+    let first = normalized """---
+This is a multi-line comment.
+---"""
+    let second = normalized """----------------------------------
+This is also a multi-line comment.
+----------------------------------"""
+    let source = $"{first}\n\n{second}\ndef a = 1"
     Assert.Equal<_ list>(
-        [ "own-line", "---\nThis is a multi-line comment.\n---", 0, 0
-          "blank", "1", 3, 0
-          "own-line", "----------------------------------\nThis is also a multi-line comment.\n----------------------------------", 4, 0 ],
+        [ "own-line", first, 0, 0; "blank", "1", 3, 0; "own-line", second, 4, 0 ],
         describe (trivia source))
 
 [<Fact>]
 let ``A block comment opened with three dashes is not closed by four`` () =
-    let source = lines [ "---"; "def a = 1"; "----"; "  ---  "; "def b = 2" ]
-    Assert.Equal<_ list>([ "own-line", "---\ndef a = 1\n----\n  ---  ", 0, 0 ], describe (trivia source))
+    let comment = normalized """---
+def a = 1
+----
+  ---"""
+    Assert.Equal<_ list>([ "own-line", comment, 0, 0 ], describe (trivia $"{comment}\ndef b = 2"))
 
 [<Fact>]
 let ``A block comment may be indented, and its blank lines are part of it`` () =
-    let source = lines [ "def f = { x ->"; "  ---"; "  one"; ""; "  two"; "  ---"; "  x + 1"; "}" ]
+    let source = normalized """def f = { x ->
+  ---
+  one
+
+  two
+  ---
+  x + 1
+}"""
     Assert.Equal<_ list>([ "own-line", "---\n  one\n\n  two\n  ---", 1, 2 ], describe (trivia source))
 
 [<Fact>]
 let ``Dashes after code, or with text after them, are a -- comment`` () =
-    let source = lines [ "def a = 1 ---"; "--- not a block"; "def b = 2" ]
+    let source = normalized """def a = 1 ---
+--- not a block
+def b = 2"""
     Assert.Equal<_ list>([ "trailing", "---", 0, 10; "own-line", "--- not a block", 1, 0 ], describe (trivia source))
 
 [<Fact>]
 let ``A block comment that is never closed is an error at its opening line`` () =
-    match parseModuleWithTrivia "" (lines [ "def a = 1"; "---"; "never closed"; "----"; "def b = 2" ]) with
+    let source = normalized """def a = 1
+---
+never closed
+----
+def b = 2"""
+    match parseModuleWithTrivia "" source with
     | Result.Error error ->
         Assert.Contains("This block comment is never closed", error.Message)
         Assert.Equal(1, error.Span.StartLine)

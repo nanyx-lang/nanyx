@@ -143,7 +143,12 @@ let ``float literals with a fraction or an exponent still parse`` () =
 
 [<Fact>]
 let ``Digits may be grouped with underscores, which are dropped`` () =
-    match parseModule "def a = 1_000_000\ndef b = 3.141_592\ndef c = -1_000\ndef d = 1_000.5e1_0\ndef e = 0x1F" with
+    let source = """def a = 1_000_000
+def b = 3.141_592
+def c = -1_000
+def d = 1_000.5e1_0
+def e = 0x1F"""
+    match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (LiteralExpr (IntLit a)))))
                   Kind (Def (ValueDef (_, "b", _, Kind (LiteralExpr (FloatLit b)))))
                   Kind (Def (ValueDef (_, "c", _, Kind (LiteralExpr (IntLit c)))))
@@ -169,7 +174,9 @@ let ``A _ in a number that is not between two digits is an error`` (number: stri
 
 [<Fact>]
 let ``A name that starts with _ after a number is still a name`` () =
-    match parseModule "def _1 = 2\ndef x = [1, _1]" with
+    let source = """def _1 = 2
+def x = [1, _1]"""
+    match parseModule source with
     | Result.Ok [ _; Kind (Def (ValueDef (_, "x", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 1)); Kind (IdentifierExpr "_1") ])))) ] -> ()
     | other -> failwith $"Unexpected: %A{other}"
 
