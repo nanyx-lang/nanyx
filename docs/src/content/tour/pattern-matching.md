@@ -43,6 +43,21 @@ match someFunction()
   | n -> "something else: {n}"
 ```
 
+# Nested matches
+
+An arm's body may be another `match`. Its arms end at the first arm indented less than its own, so an arm lined up with the outer match's arms belongs to the outer match:
+
+```nanyx
+match xs
+  | [a] ->
+      match a
+        | 0 -> "zero"
+        | _ -> "one"
+  | _ -> "other"
+```
+
+A match written on one line takes every arm after it on that line, so a nested match in the middle of a one-line match needs brackets: `| [a] -> (match a | 0 -> "zero" | _ -> "one") | _ -> "other"`.
+
 # Destructuring
 
 Destructuring is a syntax that breaks a data structure into its components and binds them to variables. This is especially useful for working with tuples, lists, and custom data types.

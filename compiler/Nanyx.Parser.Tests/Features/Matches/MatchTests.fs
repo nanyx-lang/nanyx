@@ -190,3 +190,75 @@ let ``() matches the unit value, and #tag() a tag carrying it`` () =
         | other -> failwith $"Unexpected arms: %A{other}"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+/// How many arms the match in `def f = { xs -> <match> }` has, and how many the match in its first arm's body has.
+let private nestedArmCounts (source: string) =
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ])))))) ] ->
+        let rec innerArms (body: Expression) =
+            match body.Kind with
+            | Match (_, inner) -> inner.Length
+            | Block [ Kind (ExprStatement inner) ] -> innerArms inner
+            | other -> failwith $"Unexpected first arm body: %A{other}"
+        arms.Length, innerArms (snd arms.Head)
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``A nested match ends at an arm indented back to the outer match`` () =
+    let source = """
+def f = { xs ->
+  match xs
+    | [a] ->
+        match a
+          | 0 -> "zero"
+          | _ -> "one"
+    | _ -> "other"
+}
+"""
+    nestedArmCounts source |> should equal (2, 2)
+
+[<Fact>]
+let ``A nested match after an arm's arrow ends at an arm indented less than its own`` () =
+    let source = """
+def f = { xs ->
+  match xs
+    | [a] -> match a
+      | 0 -> "zero"
+      | _ -> "one"
+    | [] -> "empty"
+    | _ -> "other"
+}
+"""
+    nestedArmCounts source |> should equal (3, 2)
+
+[<Fact>]
+let ``Arms are measured from the line the first arm is on, not from its bar`` () =
+    // The first arm is on the match line, indented 2, so a later arm indented 4 still belongs to the match.
+    let source = """
+def f = { x -> match x | 0 -> "a"
+    | _ -> "b"
+}
+"""
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Match (_, arms))))))) ] -> arms.Length |> should equal 2
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``A nested multi-branch if ends at an arm indented back to the outer match`` () =
+    let source = """
+def f = { xs ->
+  match xs
+    | [a] ->
+        if
+          | a == 0 -> "zero"
+          | a == 1 -> "one"
+    | _ -> "other"
+}
+"""
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ])))))) ] ->
+        arms |> List.map (fst >> List.map (fun pattern -> pattern.Kind)) |> List.last |> should equal [ WildcardPattern ]
+        arms.Length |> should equal 2
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
