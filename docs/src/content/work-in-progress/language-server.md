@@ -161,7 +161,8 @@ The server lives in `Nanyx.LanguageServer` and calls the compiler as a library: 
 `Compiler.compileSource` (or `Compiler.compile` for an untitled buffer) on the editor's text, keeps the
 `CompileResult` in `DocumentStore`, and publishes the resulting diagnostics; hover, go-to-definition, lenses and
 inlay hints read the same result, so each change is compiled once. Standard-library imports resolve because the
-library is embedded in the compiler; imports by path resolve relative to the file as they do for `nanyx check`. A
+library is embedded in the compiler, and each of its modules is checked once for the life of the server, not on
+every change (see [Standard library implementation](./standard-library-implementation)); imports by path resolve relative to the file as they do for `nanyx check`. A
 compiler exception is reported as a diagnostic rather than taking the server down.
 
 Each feature is one handler class in `Nanyx.LanguageServer/Handlers/`, registered in

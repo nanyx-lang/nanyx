@@ -1047,6 +1047,14 @@ module Compiler =
     /// checked once and every importer sees the same symbols.
     type private CheckedModules = System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>
 
+    /// The standard-library modules this process has checked, by `originKey` and source, each with the modules it
+    /// imports, which a compilation that imports it needs too (`compileFrom` resolves inlined definitions' types by
+    /// them). A user's own modules are checked again in each compilation. A checked module is never changed, and
+    /// sharing one is safe: its type variables are numbered by the module itself, as they would be if it were checked
+    /// again, and its syntax nodes and symbols keep ids no other module has.
+    let private checkedStandardLibrary =
+        System.Collections.Concurrent.ConcurrentDictionary<string * string, Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list> * (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list>>()
+
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
     /// error says which phase it came from.
     let rec private typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
@@ -1408,13 +1416,29 @@ module Compiler =
                         |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
                         |> Map.ofSeq }
 
-    /// An imported module, checked the first time this compilation imports it; its source is only read then.
+    /// An imported module, checked the first time this compilation imports it; its source is only read then. A
+    /// standard-library module is checked once per process (see `checkedStandardLibrary`), and the modules it imports
+    /// come into this compilation with it.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         match checkedModules.TryGetValue key with
         | true, checkedModule -> checkedModule
         | false, _ ->
-            let checkedModule = typecheckModule checkedModules origin (readSource ()) visited
+            let checkedModule =
+                match origin with
+                | StandardLibraryModule _ ->
+                    let source = readSource ()
+                    let check _ =
+                        lazy
+                            (let own = CheckedModules()
+                             let checkedModule = typecheckModule own origin source visited
+                             checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
+                    let checkedModule, imports = checkedStandardLibrary.GetOrAdd((key, source), check).Value
+                    for importKey, imported in imports do
+                        checkedModules.TryAdd(importKey, imported) |> ignore
+                    checkedModule
+                | SourceFile _
+                | InMemory -> typecheckModule checkedModules origin (readSource ()) visited
             checkedModules.[key] <- checkedModule
             checkedModule
 
