@@ -585,13 +585,24 @@ let doExpr =
         <|> reportFocused position "`do` starts a block: put its statements on the lines after it, indented"
     <?> "do block"
 
-// Use-in expression: use X in expr
+// `use X in body` loads `X` for `body`: an expression, on the same line or the next, or a block of statements on the
+// lines after `in`, indented more than the line `use` is on. A block of one expression is just that expression.
 let useInExpr =
-    spanned (
-        pipe2
-            (pstring "use" >>. keywordEnd >>. ws >>. useValue .>> ws .>> pstring "in" .>> keywordEnd .>> ws)
-            expression
-            (fun value body -> UseIn(value, body)))
+    let indentedBlock useIndent =
+        lookAhead (wsNoNl() >>. newline >>. wsNoNl() >>. getPosition) >>= fun blockStart ->
+            if blockStart.Column <= useIndent then
+                fail "the block after `in` must be indented more than the line `use` is on"
+            else
+                blockExpr () |>> fun block ->
+                    match block.Kind with
+                    | Block [ Kind (ExprStatement expr) ] -> expr
+                    | _ -> block
+    currentLineIndent >>= fun useIndent ->
+        spanned (
+            pipe2
+                (pstring "use" >>. keywordEnd >>. ws >>. useValue .>> ws .>> pstring "in" .>> keywordEnd)
+                (attempt (indentedBlock useIndent) <|> (ws >>. expression))
+                (fun value body -> UseIn(value, body)))
     <?> "use-in expression"
 
 // Primary expression (literals, identifiers, function calls, lambdas, parenthesized expressions)

@@ -416,7 +416,11 @@ let format (options: Options) (parsed: SourceModule) : string =
             let count = args.Length
             let argument index arg = expr { full with Tail = (index = count - 1) } arg
             cat [ contextHead context; text "."; text (Names.written field); text "("; commaJoin (List.mapi argument args); text ")" ]
-        | UseIn(value, body) -> cat [ text "use "; expr { full with Tail = false } value; text " in "; expr full body ]
+        | UseIn(value, body) ->
+            let head = cat [ text "use "; expr { full with Tail = false } value; text " in" ]
+            match body.Kind with
+            | Block _ -> cat [ head; nest (cat [ hard; block body ]) ]
+            | _ -> cat [ head; text " "; expr full body ]
         | WorkflowBindExpr(n, value) ->
             let keyword = if n = "try" && not (startsWith e.Span "try!") then "try " else n + "! "
             cat [ text keyword; expr full value ]

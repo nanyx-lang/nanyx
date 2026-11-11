@@ -681,17 +681,48 @@ module UnreachableCode =
                   Fixes = fixes }))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `useInBraces` rule: `use X in { ... }`, where the body is a lambda of no arguments written
+/// with braces, as if they made a block. The context is loaded only to make the function, not when it is called, and
+/// the statements are not run. A lambda written with its `()` argument, `{ () -> ... }`, says it means a function.
+module UseInBraces =
+    let rule =
+        { Id = "useInBraces"
+          Title = "`use ... in` with a body in braces"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "`use X in { ... }`, whose body is a function of no arguments, not a block run with `X` loaded. Put the statements on the lines after `in`, indented." }
+
+    let private writtenWithUnitArgument (model: SemanticModel) (lambda: Expression) =
+        let text = model.Source.Substring(lambda.Span.Start, lambda.Span.End - lambda.Span.Start)
+        Text.RegularExpressions.Regex.IsMatch(text, @"^\{\s*\(\s*\)\s*->")
+
+    let lint (model: SemanticModel) : Report list =
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.expressionsWithin
+        |> List.choose (fun expr ->
+            match expr.Kind with
+            | UseIn(_, (Kind (Lambda([], _)) as body)) when not (writtenWithUnitArgument model body) ->
+                Some
+                    { Rule = rule.Id
+                      Span = body.Span
+                      Message =
+                        "The braces make this a function of no arguments, not a block run with the context loaded: put the statements on the lines after `in`, indented"
+                      Related = []
+                      Fixes = [] }
+            | _ -> None)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
-              UnusedPrivateDefinitions.rule; UnreachableCode.rule ]
+              UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
-                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model }
+                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

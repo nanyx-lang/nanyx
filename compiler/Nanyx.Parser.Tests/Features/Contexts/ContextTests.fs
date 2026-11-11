@@ -57,3 +57,63 @@ let ``An operator is required by the member it reads, among a def's contexts`` (
     Assert.Equal<TypeExprKind list>(
         [ required "+" (binary a); TypeApply ("Eq", [ a ]); required "==" (binary (TypeExpr.synthetic (TypeName "bool"))); TypeName "Console" ],
         contextsOf "def f: [`+`: a, a -> a + Eq(a) + `==`: a, a -> bool + Console] a -> a = { x -> x }")
+
+/// The statements of `def main = { ... }` in `source`, its line endings made `\n`.
+let private mainStatements (source: string) =
+    match parseModuleFile "t.nyx" (source.ReplaceLineEndings "\n") with
+    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements)))))) ] ->
+        statements |> List.map (fun (statement: Statement) -> statement.Kind)
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``use ... in takes a block indented on the lines after in, and the block ends where the indent does (#673)`` () =
+    let source =
+        """def main = {
+  def total = use counter in
+    def a = counted(3)
+    a + 1
+  total
+}"""
+    match mainStatements source with
+    | [ DefStatement (_, "total", None, Kind (UseIn (Kind (IdentifierExpr "counter"), (Kind (Block body) as block))))
+        ExprStatement (Kind (IdentifierExpr "total")) ] ->
+        match body |> List.map (fun (statement: Statement) -> statement.Kind) with
+        | [ DefStatement (_, "a", None, _); ExprStatement (Kind (BinaryOp ("+", _, _))) ] -> ()
+        | other -> failwith $"Unexpected block: %A{other}"
+        let text = (source.ReplaceLineEndings "\n").Substring(block.Span.Start, block.Span.End - block.Span.Start)
+        Assert.Equal("""def a = counted(3)
+    a + 1""".ReplaceLineEndings "\n", text)
+    | other -> failwith $"Unexpected statements: %A{other}"
+
+[<Fact>]
+let ``use ... in followed by one expression on the next line takes that expression, not a block`` () =
+    let source =
+        """def main = {
+  use counter in
+    counted(3)
+}"""
+    match mainStatements source with
+    | [ ExprStatement (Kind (UseIn (_, Kind (FunctionCall ("counted", _, _))))) ] -> ()
+    | other -> failwith $"Unexpected statements: %A{other}"
+
+[<Fact>]
+let ``use ... in with braces after in takes a lambda, not a block`` () =
+    let source =
+        """def main = {
+  use counter in { counted(3) }
+}"""
+    match mainStatements source with
+    | [ ExprStatement (Kind (UseIn (_, Kind (Lambda ([], _))))) ] -> ()
+    | other -> failwith $"Unexpected statements: %A{other}"
+
+[<Fact>]
+let ``A block after in must be indented more than the line use is on`` () =
+    let source =
+        """def main = {
+  def total = use counter in
+  def a = counted(3)
+  a
+}"""
+    match parseModuleFile "t.nyx" (source.ReplaceLineEndings "\n") with
+    | Result.Error _ -> ()
+    | Result.Ok parsed -> failwith $"Expected a parse error, got %A{parsed}"
