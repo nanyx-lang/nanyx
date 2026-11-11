@@ -42,7 +42,7 @@ let ``An unknown identifier is reported at the reference, not an earlier mention
 
 [<Fact>]
 let ``A type mismatch in an argument is reported at the argument`` () =
-    let source = "import nanyx/console\n\nprintln(42)"
+    let source = "import nanyx/console\n\nwrite(42)"
     let diagnostic = single (Compiler.compile source)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal("42", textAt source (spanOf diagnostic))
@@ -199,11 +199,11 @@ let private entryCalling (call: string) = $"\n@entry\ndef main = {{\n  {call}\n}
 
 [<Fact>]
 let ``A def whose type declares no context cannot call a member of the runtime's Console`` () =
-    let source = "def f: int -> int = { n ->\n  println(\"x\")\n  n\n}\n" + entryCalling "println(\"{f(1)}\")"
+    let source = "def f: int -> int = { n ->\n  write(\"x\")\n  n\n}\n" + entryCalling "println(f(1))"
     match undeclaredContexts source with
     | [ text, message ] ->
-        Assert.Equal("println", text)
-        Assert.Contains("'println' is a member of the context 'Console', which 'f' does not declare", message)
+        Assert.Equal("write", text)
+        Assert.Contains("'write' is a member of the context 'Console', which 'f' does not declare", message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]
@@ -257,7 +257,7 @@ let ``Code that declares or is given the Console context can use it`` () =
         "def g: [Console] int -> int = { n -> helper(n) }\n" +
         "def quiet: () -> () = {\n" +
         "  use Console(\n" +
-        "    print = { _ -> () }\n    println = { _ -> () }\n    eprint = { _ -> () }\n    eprintln = { _ -> () }\n" +
+        "    write = { _ -> () }\n    writeError = { _ -> () }\n" +
         "    readLine = { #error(#endOfInput) }\n    readToEnd = { #error(#endOfInput) }\n    flush = { () }\n" +
         "  ) in sayHello()\n" +
         "}\n" +
@@ -462,8 +462,8 @@ let ``An imported function requires its contexts in a module that does not have 
 
 [<Fact>]
 let ``A standard-library function imported under an alias still requires its context`` () =
-    let main = "module main\nimport nanyx/console as c\ndef g: () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
-    Assert.Equal<string list>([ "c.println" ], undeclaredContextsWithMod main)
+    let main = "module main\nimport nanyx/console as c\ndef g: () -> () = { c.write(\"hi\") }\n@entry\ndef main = { g() }\n"
+    Assert.Equal<string list>([ "c.write" ], undeclaredContextsWithMod main)
 [<Fact>]
 let ``An imported function's context needs nothing more where the module cannot name it, at the top level or in a def that infers it`` () =
     let main = "module main\nimport \"mod.nyx\"\ngreet()\ndef h = { greet() }\ndef k: () -> () = { h() }\n"

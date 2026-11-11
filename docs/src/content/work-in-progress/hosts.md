@@ -115,7 +115,7 @@ module nanyx/console/host
 export def run
   : [$HostRuntime] ([Console & FileSystem & Env & Clock] list(string) -> int) -> ()
   = { entry ->
-    use Console(println = { message -> runtime.writeStdout(message + "\n") })
+    use Console(write = runtime.writeStdout, writeError = runtime.writeStderr, ...)
     use FileSystem(...)
     use Env(...)
     use Clock(...)

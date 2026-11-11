@@ -83,6 +83,12 @@ Not done yet ([#630](https://github.com/nanyx-lang/nanyx/issues/630)):
 - **A derived `toString` reads only what the top of the module can see**, so a `ToString` of a concrete part loaded by `use` in a block is not used for the part.
 - **An empty list literal**, `"{[]}"`, is an error, since its element type is never settled.
 
+## Printing
+
+`print`, `println`, `eprint` and `eprintln` (in `stdlib/nanyx/console.nyx`) are ordinary functions of type `[Console + ToString(a)] a -> ()` ([#726](https://github.com/nanyx-lang/nanyx/issues/726)), so `println(42)` and `println(point)` need no hole. They write `toString(value)` through `Console`'s `write` and `writeError`, which take a string as it is. The printing functions aren't members of `Console` because a context member can't be generic with a requirement of its own: a member is passed to a function that requires the context as a closure, and a closure has no `ToString` to take. An instance of `Console` supplies `write` and `writeError`, and the four printing functions come with them.
+
+This has a cost the old `println: string -> ()` member didn't have. A call passes a closure for each of `Console`'s members and one for `toString`, even for a string, and the printing function calls them indirectly. Making a closure over a top-level function static data, and specialising a function on an instance known where it is called, would remove that cost. Neither is done yet.
+
 ## What changes in the backend
 
 Each hole is a call to a function the type checker has already chosen, so the backend no longer guesses a hole's type from its syntax. That fixes [#193](https://github.com/nanyx-lang/nanyx/issues/193) for interpolation.

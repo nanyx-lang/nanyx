@@ -66,6 +66,60 @@ let ``Run - console print and println write to stdout`` () =
     runSource source |> assertRan "ab\nc\n"
 
 [<Fact>]
+let ``Run - println writes an int, a string, a record and a list through their ToString`` () =
+    let source = """type Point = (x: int, y: int)
+
+def Point.toString = { p -> "<{p.x}, {p.y}>" }
+
+@entry
+def main = {
+  println(42)
+  println("text")
+  println((name = "Ada", age = 36))
+  println([1, 2, 3])
+  println(Point(x = 4, y = 5))
+  println(#some((1, "two")))
+  print(-7)
+  print(" ")
+  println(true)
+}
+"""
+    runSource source |> assertRan "42\ntext\n(age = 36, name = Ada)\n[1, 2, 3]\n<4, 5>\n#some(1, two)\n-7 true\n"
+
+[<Fact>]
+let ``Run - a function generic in what it prints passes its ToString to println`` () =
+    let source = """def labelled: [Console + ToString(a)] string, a -> () = { label, value ->
+  print(label ++ ": ")
+  println(value)
+}
+
+@entry
+def main = {
+  labelled("count", 3)
+  labelled("names", ["a", "b"])
+  eprintln(1.5)
+}
+"""
+    let outcome = runSource source
+    Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
+    Assert.Equal("count: 3\nnames: [a, b]\n", outcome.StandardOutput)
+    Assert.Equal("1.5\n", outcome.StandardError)
+
+[<Fact>]
+let ``Run - println imported under an alias writes through the runtime's Console`` () =
+    let source = """module main
+
+import nanyx/console as c
+
+@entry
+def main = {
+  c.println("hi")
+  c.println([1, 2])
+}
+"""
+    runSource source |> assertRan "hi\n[1, 2]\n"
+
+[<Fact>]
 let ``Run - eprint and eprintln write to stderr`` () =
     let source =
         "def warn: [Console] string -> () = { message -> eprintln(\"warning: \" ++ message) }\n" +

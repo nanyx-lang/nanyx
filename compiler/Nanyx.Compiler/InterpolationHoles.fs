@@ -87,6 +87,16 @@ module InterpolationHoles =
         | _, TyFunc _ -> $"'{tyText}' cannot be interpolated: it is a function, and functions have no toString"
         | _ -> $"'{tyText}' cannot be interpolated because it has no toString: turn it into a string first, or print it with `dbg`"
 
+    /// Why a call to `calleeName` that requires `ToString` at `argTys` has no instance: `held`, the value or a part of
+    /// it, is a function. A hole says the value cannot be interpolated; another call, such as `println(f)`, names itself.
+    let holdsFunction (calleeName: Identifier) (argTys: Ty list) (held: Ty) =
+        match argTys with
+        | [ ty ] when not (isHole calleeName) ->
+            let heldText = display held
+            let part = if Unifier.unalias ty = Unifier.unalias held then "" else " in it"
+            $"'{calleeName}' requires the context 'ToString({display ty})', and '{heldText}'{part} is a function: functions have no toString"
+        | _ -> noInstance held
+
     /// The error for a hole of the type `ty`, one of the type variables of the function `defName` (if it is in one),
     /// whose type does not require `ToString` of it.
     let undeclared (ty: Ty) (defName: Identifier option) =

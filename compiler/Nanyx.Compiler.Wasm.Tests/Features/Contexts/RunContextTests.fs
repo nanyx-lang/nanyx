@@ -24,13 +24,14 @@ let ``Run - a use binding overrides the runtime's Console`` () =
         "def greet: [Console] string -> () = { name -> println(name) }\n" +
         "\n" +
         "def main = {\n" +
-        "  use (println = { s -> print(\"[\" ++ s ++ \"]\") }, print = { s -> print(s) })\n" +
+        "  use (write = { s -> write(\"[\" ++ s ++ \"]\") })\n" +
         "  greet(\"quiet\")\n" +
         "}\n" +
         "\n" +
         "main()\n" +
         "greet(\"loud\")\n"
-    runSource source |> assertRan "[quiet]loud\n"
+    // `println` writes through whichever `write` is in scope, once for the value and once for the line break.
+    runSource source |> assertRan "[quiet][\n]loud\n"
 
 /// A context with one member, and a function that requires it, for the tests of what a `use` can bind (#88).
 let private myConsolePrelude =
@@ -48,11 +49,11 @@ let ``Run - a top-level function as a use binding`` () =
         "@entry\n" +
         "def main = {\n" +
         "  use MyConsole(\n" +
-        "    p = println\n" +
+        "    p = write\n" +
         "  )\n" +
         "  greet(\"Nanyx\")\n" +
         "}\n"
-    runSource source |> assertRan "Nanyx\n"
+    runSource source |> assertRan "Nanyx"
 
 [<Fact>]
 let ``Run - a use binding lambda that captures a local`` () =

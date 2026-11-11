@@ -12,7 +12,8 @@ A context definition looks like a record type, but uses the `context` keyword:
 
 ```nanyx
 context Console = (
-  println: string -> ()
+  write: string -> ()
+  writeError: string -> ()
 )
 ```
 
@@ -20,7 +21,7 @@ Contexts are structural by default: any record whose members match the declared 
 
 # Requiring a context
 
-A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`:
+A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, in `nanyx/console`, has a few more members, and `println` is a function written on top of its `write`:
 
 ```nanyx
 def sayHello: [Console] () -> () = {
@@ -35,7 +36,7 @@ Use the `use` keyword to load an instance of a context into scope. Once loaded, 
 ```nanyx
 def main = {
   use Console(
-    println = { message -> hostPrint(message) }
+    write = { text -> hostPrint(text) }
   )
 
   sayHello()
@@ -45,7 +46,7 @@ def main = {
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
 ```nanyx
-def result = use Console(println = hostPrint) in
+def result = use Console(write = hostPrint) in
   println("Hello from a scoped context")
 ```
 
@@ -120,7 +121,7 @@ def readAndPrintFile
 
 # Console by default
 
-The entry function (the one marked `@entry`, see [Attributes](../tour/attributes)) runs in `Console`, which is why `println` is available in `main` without extra setup.
+The entry function (the one marked `@entry`, see [Attributes](../tour/attributes)) runs in `Console`, which is why `println` is available in `main` without extra setup. `println`, `print`, `eprintln` and `eprint` take any value with a [`ToString`](#tostringa): `println(42)` prints `42`, and `println([1, 2])` prints `[1, 2]`.
 
 # Contexts as typeclasses
 
@@ -377,7 +378,9 @@ def wrapped: [ToString(a)] a -> string = { value -> "{#some(value)}" }
 
 A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code.
 
-A value whose type has no `ToString`, such as a function, or a structure that holds one, is an error at its hole.
+`println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
+
+A value whose type has no `ToString`, such as a function, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`.
 
 # Context synthesis
 

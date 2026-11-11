@@ -16,15 +16,51 @@ let ``Typecheck accepts the Console context from nanyx/console`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]
-let ``println comes from nanyx/console with type string -> unit`` () =
+let ``println comes from nanyx/console and gives unit`` () =
     let result = Compiler.compile "import nanyx/console\n\ndef result = println(\"hi\")"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "unit", result.Typed.Value.Types.["result"])
 
 [<Fact>]
-let ``println rejects a non-string argument`` () =
-    let result = Compiler.compile "import nanyx/console\n\nprintln(42)"
-    Assert.False(result.Diagnostics.IsEmpty)
+let ``println takes any value with a ToString`` () =
+    let source = """import nanyx/console
+
+type Point = (x: int, y: int)
+
+println(42)
+println(1.5)
+println(#some([1, 2]))
+println((1, "two"))
+println(Point(x = 1, y = 2))
+"""
+    compileClean source |> ignore
+
+[<Fact>]
+let ``println of a function says that functions have no toString`` () =
+    let source = """import nanyx/console
+
+def inc: int -> int = { n -> n + 1 }
+
+println(inc)
+"""
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Equal(
+        "'println' requires the context 'ToString(int -> int)', and 'int -> int' is a function: functions have no toString",
+        diagnostic.Message)
+
+[<Fact>]
+let ``println of a protected type without a toString names what to define`` () =
+    let source = """import nanyx/console
+
+type $Id = private int
+
+println($Id(3))
+"""
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Contains("'println' requires the context 'ToString($Id)'", diagnostic.Message)
+    Assert.Contains("'$Id.toString' is not defined", diagnostic.Message)
 
 [<Fact>]
 let ``println is not in scope without importing nanyx/console`` () =
