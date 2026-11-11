@@ -95,14 +95,14 @@ The number of elements in a set.
 ## isEmpty
 
 ```nanyx
-Set.isEmpty: set(a) -> bool
+set.isEmpty: set(a) -> bool
 ```
 
 Whether a set has no elements.
 
 ```nanyx
-Set.isEmpty(Set.empty)            -- true
-Set.isEmpty(Set.fromList([1]))    -- false
+set.isEmpty(set.empty)            -- true
+set.isEmpty(set.fromList([1]))    -- false
 ```
 
 ---
@@ -110,13 +110,13 @@ Set.isEmpty(Set.fromList([1]))    -- false
 ## fold
 
 ```nanyx
-Set.fold: (set(a), b, ((b, a) -> b)) -> b
+set.fold: (set(a), b, ((b, a) -> b)) -> b
 ```
 
-Combines a starting value with each element of a set in turn, in the order of `Set.toList`.
+Combines a starting value with each element of a set in turn, in the order of `set.toList`.
 
 ```nanyx
-Set.fromList([3, 1, 2]) \Set.fold(0, { total, n -> total + n })
+set.fromList([3, 1, 2]) \set.fold(0, { total, n -> total + n })
 -- 6
 ```
 
@@ -125,13 +125,13 @@ Set.fromList([3, 1, 2]) \Set.fold(0, { total, n -> total + n })
 ## map
 
 ```nanyx
-Set.map: [Eq(b) + Hash(b)] (set(a), (a -> b)) -> set(b)
+set.map: [Eq(b) + Hash(b)] (set(a), (a -> b)) -> set(b)
 ```
 
 The set of what a function makes of each element. Elements the function makes equal are kept once, where the first of them was.
 
 ```nanyx
-Set.fromList([1, 2, 3]) \Set.map { % 2 } \Set.toList
+set.fromList([1, 2, 3]) \set.map { % 2 } \set.toList
 -- [1, 0]
 ```
 
@@ -140,13 +140,13 @@ Set.fromList([1, 2, 3]) \Set.map { % 2 } \Set.toList
 ## filter
 
 ```nanyx
-Set.filter: (set(a), (a -> bool)) -> set(a)
+set.filter: (set(a), (a -> bool)) -> set(a)
 ```
 
 The elements of a set that pass a test, in the same order.
 
 ```nanyx
-Set.fromList([1, 2, 3, 4]) \Set.filter { n -> n % 2 == 0 } \Set.toList
+set.fromList([1, 2, 3, 4]) \set.filter { n -> n % 2 == 0 } \set.toList
 -- [2, 4]
 ```
 
@@ -155,14 +155,14 @@ Set.fromList([1, 2, 3, 4]) \Set.filter { n -> n % 2 == 0 } \Set.toList
 ## isSubset
 
 ```nanyx
-Set.isSubset: [Eq(a) + Hash(a)] (set(a), set(a)) -> bool
+set.isSubset: [Eq(a) + Hash(a)] (set(a), set(a)) -> bool
 ```
 
 Whether the second set holds every element of the first.
 
 ```nanyx
-Set.isSubset(Set.fromList([1]), Set.fromList([1, 2]))      -- true
-Set.isSubset(Set.fromList([1, 3]), Set.fromList([1, 2]))   -- false
+set.isSubset(set.fromList([1]), set.fromList([1, 2]))      -- true
+set.isSubset(set.fromList([1, 3]), set.fromList([1, 2]))   -- false
 ```
 
 ---

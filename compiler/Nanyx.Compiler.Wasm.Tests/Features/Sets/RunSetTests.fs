@@ -80,10 +80,10 @@ let ``Run - a for loop walks a set's elements`` () =
 let ``Run - isEmpty says whether a set has no elements`` () =
     program
         []
-        [ "def none: set(int) = Set.empty"
-          "println(show(Set.isEmpty(none)))"
-          "println(show(Set.fromList([1]) \\Set.isEmpty))"
-          "println(show(Set.isEmpty(Set.remove(Set.fromList([1]), 1))))" ]
+        [ """def none: set(int) = set.empty"""
+          """println(show(set.isEmpty(none)))"""
+          """println(show(set.fromList([1]) \set.isEmpty))"""
+          """println(show(set.isEmpty(set.remove(set.fromList([1]), 1))))""" ]
     |> runSource
     |> assertRan "T\nF\nT\n"
 
@@ -91,9 +91,9 @@ let ``Run - isEmpty says whether a set has no elements`` () =
 let ``Run - fold walks a set's elements in order`` () =
     program
         []
-        [ "def s = Set.fromList([3, 1, 2])"
-          "println(\"{s \\Set.fold(0, { total, n -> total + n })}\")"
-          "println(s \\Set.fold(\"\", { acc, n -> acc ++ \"{n}\" }))" ]
+        [ """def s = set.fromList([3, 1, 2])"""
+          """println("{s \set.fold(0, { total, n -> total + n })}")"""
+          """println(s \set.fold("", { acc, n -> acc ++ "{n}" }))""" ]
     |> runSource
     |> assertRan "6\n312\n"
 
@@ -101,10 +101,10 @@ let ``Run - fold walks a set's elements in order`` () =
 let ``Run - map gives the set of what a function makes of each element`` () =
     program
         []
-        [ "def s = Set.fromList([1, 2, 3])"
-          "println(\"{s \\Set.map { % 2 } \\Set.count}\")"
-          "println(ints(s \\Set.map { % 2 }))"
-          "println(ints(s \\Set.map { * 10 }))" ]
+        [ """def s = set.fromList([1, 2, 3])"""
+          """println("{s \set.map { % 2 } \set.count}")"""
+          """println(ints(s \set.map { % 2 }))"""
+          """println(ints(s \set.map { * 10 }))""" ]
     |> runSource
     |> assertRan "2\n10\n102030\n"
 
@@ -112,9 +112,9 @@ let ``Run - map gives the set of what a function makes of each element`` () =
 let ``Run - filter keeps the elements that pass the test`` () =
     program
         []
-        [ "def s = Set.fromList([1, 2, 3, 4])"
-          "println(ints(s \\Set.filter { n -> n % 2 == 0 }))"
-          "println(show(s \\Set.filter({ n -> n > 9 }) \\Set.isEmpty))" ]
+        [ """def s = set.fromList([1, 2, 3, 4])"""
+          """println(ints(s \set.filter { n -> n % 2 == 0 }))"""
+          """println(show(s \set.filter({ n -> n > 9 }) \set.isEmpty))""" ]
     |> runSource
     |> assertRan "24\nT\n"
 
@@ -122,9 +122,9 @@ let ``Run - filter keeps the elements that pass the test`` () =
 let ``Run - isSubset says whether another set holds every element`` () =
     program
         []
-        [ "println(show(Set.isSubset(Set.fromList([1]), Set.fromList([1, 2]))))"
-          "println(show(Set.isSubset(Set.fromList([1, 3]), Set.fromList([1, 2]))))"
-          "println(show(Set.isSubset(Set.empty, Set.fromList([1]))))"
-          "println(show(Set.fromList([2, 1]) \\Set.isSubset(Set.fromList([1, 2]))))" ]
+        [ """println(show(set.isSubset(set.fromList([1]), set.fromList([1, 2]))))"""
+          """println(show(set.isSubset(set.fromList([1, 3]), set.fromList([1, 2]))))"""
+          """println(show(set.isSubset(set.empty, set.fromList([1]))))"""
+          """println(show(set.fromList([2, 1]) \set.isSubset(set.fromList([1, 2]))))""" ]
     |> runSource
     |> assertRan "T\nF\nT\nT\n"

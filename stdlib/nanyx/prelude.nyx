@@ -1211,31 +1211,31 @@ export def map.values: map(k, v) -> list(v) = { m ->
 }
 
 -- Whether `m` has no keys.
-export def Map.isEmpty: map(k, v) -> bool = { m ->
-  List.isEmpty(__nanyx_map_entries(m))
+export def map.isEmpty: map(k, v) -> bool = { m ->
+  list.isEmpty(__nanyx_map_entries(m))
 }
 
--- `step` applied to `acc` and each key and value of `m` in turn, in the order of `Map.toList`.
-export def Map.fold: map(k, v), b, (b, k, v -> b) -> b = { m, acc, step ->
-  List.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
+-- `step` applied to `acc` and each key and value of `m` in turn, in the order of `map.toList`.
+export def map.fold: map(k, v), b, (b, k, v -> b) -> b = { m, acc, step ->
+  list.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
 }
 
 -- `m` with `f` applied to each value. The keys stay as they are, in the same order.
-export def Map.map: map(k, v), (v -> w) -> map(k, w) = { m, f ->
-  __nanyx_map_of_entries(List.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
+export def map.map: map(k, v), (v -> w) -> map(k, w) = { m, f ->
+  __nanyx_map_of_entries(list.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
 }
 
 -- The entries of `m` whose key and value pass `keep`, in the same order.
-export def Map.filter: map(k, v), (k, v -> bool) -> map(k, v) = { m, keep ->
-  __nanyx_map_of_entries(List.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
+export def map.filter: map(k, v), (k, v -> bool) -> map(k, v) = { m, keep ->
+  __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
 }
 
 -- `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
 -- does not have is added at the end.
-export def Map.update
+export def map.update
   : [Eq(k) + Hash(k)] map(k, v), k, ((#some(v) | #notFound) -> v) -> map(k, v)
   = { m, key, f ->
-    Map.insert(m, key, f(Map.get(m, key)))
+    map.insert(m, key, f(map.get(m, key)))
   }
 
 -- Sets ------------------------------------------------------------------------------------------
@@ -1282,29 +1282,29 @@ export def set.count: set(a) -> int = { s ->
 }
 
 -- Whether `s` has no elements.
-export def Set.isEmpty: set(a) -> bool = { s ->
-  List.isEmpty(__nanyx_set_elements(s))
+export def set.isEmpty: set(a) -> bool = { s ->
+  list.isEmpty(__nanyx_set_elements(s))
 }
 
--- `step` applied to `acc` and each element of `s` in turn, in the order of `Set.toList`.
-export def Set.fold: set(a), b, (b, a -> b) -> b = { s, acc, step ->
-  List.fold(__nanyx_set_elements(s), acc, step)
+-- `step` applied to `acc` and each element of `s` in turn, in the order of `set.toList`.
+export def set.fold: set(a), b, (b, a -> b) -> b = { s, acc, step ->
+  list.fold(__nanyx_set_elements(s), acc, step)
 }
 
 -- The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
 -- first of them was.
-export def Set.map: [Eq(b) + Hash(b)] set(a), (a -> b) -> set(b) = { s, f ->
-  Set.fromList(List.map(__nanyx_set_elements(s), f))
+export def set.map: [Eq(b) + Hash(b)] set(a), (a -> b) -> set(b) = { s, f ->
+  set.fromList(list.map(__nanyx_set_elements(s), f))
 }
 
 -- The elements of `s` that pass `keep`, in the same order.
-export def Set.filter: set(a), (a -> bool) -> set(a) = { s, keep ->
-  __nanyx_set_of_elements(List.filter(__nanyx_set_elements(s), keep))
+export def set.filter: set(a), (a -> bool) -> set(a) = { s, keep ->
+  __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), keep))
 }
 
 -- Whether `t` holds every element of `s`.
-export def Set.isSubset: [Eq(a) + Hash(a)] set(a), set(a) -> bool = { s, t ->
-  List.all(__nanyx_set_elements(s), { x -> Set.contains(t, x) })
+export def set.isSubset: [Eq(a) + Hash(a)] set(a), set(a) -> bool = { s, t ->
+  list.all(__nanyx_set_elements(s), { x -> set.contains(t, x) })
 }
 
 -- The elements of `s`, then those of `t` that `s` does not hold.

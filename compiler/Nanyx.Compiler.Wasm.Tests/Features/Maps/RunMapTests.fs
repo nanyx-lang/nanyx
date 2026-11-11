@@ -176,11 +176,11 @@ let ``Run - keys and values give a map's keys and values in order`` () =
 [<Fact>]
 let ``Run - isEmpty says whether a map has no keys`` () =
     program
-        [ "def show = { b -> if b then \"T\" else \"F\" }" ]
-        [ "def none: map(string, int) = Map.empty"
-          "println(show(Map.isEmpty(none)))"
-          "println(show([\"a\" => 1] \\Map.isEmpty))"
-          "println(show(Map.isEmpty(Map.remove([\"a\" => 1], \"a\"))))" ]
+        [ """def show = { b -> if b then "T" else "F" }""" ]
+        [ """def none: map(string, int) = map.empty"""
+          """println(show(map.isEmpty(none)))"""
+          """println(show(["a" => 1] \map.isEmpty))"""
+          """println(show(map.isEmpty(map.remove(["a" => 1], "a"))))""" ]
     |> runSource
     |> assertRan "T\nF\nT\n"
 
@@ -188,9 +188,9 @@ let ``Run - isEmpty says whether a map has no keys`` () =
 let ``Run - fold walks a map's keys and values in order`` () =
     program
         []
-        [ "def m = [\"a\" => 1, \"b\" => 2]"
-          "println(\"{m \\Map.fold(0, { total, key, value -> total + value })}\")"
-          "println(m \\Map.fold(\"\", { acc, key, value -> acc ++ key ++ \"{value}\" }))" ]
+        [ """def m = ["a" => 1, "b" => 2]"""
+          """println("{m \map.fold(0, { total, key, value -> total + value })}")"""
+          """println(m \map.fold("", { acc, key, value -> acc ++ key ++ "{value}" }))""" ]
     |> runSource
     |> assertRan "3\na1b2\n"
 
@@ -198,11 +198,11 @@ let ``Run - fold walks a map's keys and values in order`` () =
 let ``Run - map changes a map's values and keeps its keys`` () =
     program
         []
-        [ "def m = [\"a\" => 1, \"b\" => 2] \\Map.map { * 10 }"
-          "found(m \\Map.get(\"b\"))"
-          "println(Map.keys(m) \\List.fold(\"\", { acc, k -> acc ++ k }))"
-          "def named = m \\Map.map { n -> \"#{n}\" }"
-          "println(Map.get(named, \"a\") \\defaultValueOption(\"none\"))" ]
+        [ """def m = ["a" => 1, "b" => 2] \map.map { * 10 }"""
+          """found(m \map.get("b"))"""
+          """println(map.keys(m) \list.fold("", { acc, k -> acc ++ k }))"""
+          """def named = m \map.map { n -> "#{n}" }"""
+          """println(map.get(named, "a") \defaultValueOption("none"))""" ]
     |> runSource
     |> assertRan "20\nab\n#10\n"
 
@@ -210,21 +210,21 @@ let ``Run - map changes a map's values and keeps its keys`` () =
 let ``Run - filter keeps the entries that pass the test`` () =
     program
         []
-        [ "def m = [\"a\" => 1, \"b\" => 2, \"c\" => 3]"
-          "println(m \\Map.filter { key, value -> value > 1 } \\Map.keys \\List.fold(\"\", { acc, k -> acc ++ k }))"
-          "println(\"{m \\Map.filter({ key, value -> key == \"a\" }) \\Map.count}\")" ]
+        [ """def m = ["a" => 1, "b" => 2, "c" => 3]"""
+          """println(m \map.filter { key, value -> value > 1 } \map.keys \list.fold("", { acc, k -> acc ++ k }))"""
+          """println("{m \map.filter({ key, value -> key == "a" }) \map.count}")""" ]
     |> runSource
     |> assertRan "bc\n1\n"
 
 [<Fact>]
 let ``Run - update adds a missing key and changes a present one`` () =
     program
-        [ "def bump = { | #some(n) -> n + 1 | #notFound -> 1 }" ]
-        [ "def counts = [\"tea\" => 2]"
-          "def more = counts \\Map.update(\"tea\", bump) \\Map.update(\"cake\", bump)"
-          "found(more(\"tea\"))"
-          "found(more(\"cake\"))"
-          "found(counts(\"tea\"))"
-          "println(Map.keys(more) \\List.fold(\"\", { acc, k -> acc ++ k }))" ]
+        [ """def bump = { | #some(n) -> n + 1 | #notFound -> 1 }""" ]
+        [ """def counts = ["tea" => 2]"""
+          """def more = counts \map.update("tea", bump) \map.update("cake", bump)"""
+          """found(more("tea"))"""
+          """found(more("cake"))"""
+          """found(counts("tea"))"""
+          """println(map.keys(more) \list.fold("", { acc, k -> acc ++ k }))""" ]
     |> runSource
     |> assertRan "3\n1\n2\nteacake\n"
