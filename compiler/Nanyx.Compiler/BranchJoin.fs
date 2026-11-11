@@ -21,6 +21,8 @@ open NyxCompiler.InferState
 /// tags as a fresh rest, and is that union. So `| #some(x), _ -> #some(x) | other, f -> f(other)` is
 /// `#some(a) | s`, and `f` gives back a `#some(a) | s`: tags other than `#some` too, which it could not if it
 /// were made equal to the first branch.
+///
+/// A branch of type `undefined`, which never gives a value, is left out of the join.
 let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branchTypes: Ty list) : Ty * InferState =
     let isUnionItem ty =
         match Unifier.unalias ty with
@@ -40,8 +42,13 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
         | TyVar v as var when rowVars.Contains v.Id -> Some [ var ]
         | TyUnion items when items |> List.forall isUnionMember -> Some (items |> List.map Unifier.unalias)
         | _ -> None
+    // A branch that never gives a value (of type `undefined`) adds nothing to the whole's type, which is what the
+    // other branches give: `undefined` only when no branch gives one.
+    let giving = branchTypes |> List.filter (fun ty -> not (Unifier.isBottom (resolveSoFar state ty)))
     match branchTypes with
     | [] -> TyPrimitive "unit", state
+    | _ when giving.Length < branchTypes.Length ->
+        if giving.IsEmpty then Unifier.bottomType, state else joinBranchTypes rowVars state giving
     | head :: tail ->
         let branchTags = branchTypes |> List.map tagsOf
         let untagged = List.zip branchTypes branchTags |> List.filter (snd >> Option.isNone) |> List.map fst

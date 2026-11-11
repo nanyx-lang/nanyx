@@ -53,7 +53,15 @@ See [Records and tuples](./records) for the full guide.
 
 # Top and bottom types
 
-`any` is the top type (accepts any value), and `undefined` is the bottom type (no values). These appear when you build generic or unreachable code paths.
+`any` is the top type (accepts any value), and `undefined` is the bottom type (no values).
+
+`undefined` is the type of an expression that never gives a value, such as a call to a function that stops the program. Since there is no value of it, it can be given wherever a value of any type is expected (as an argument, or as what a function annotated to return some type returns), and an `if` or `match` with a branch of that type has the type of its other branches:
+
+```nanyx
+def stop: int -> undefined = { x -> stop(x) }
+
+def double = { n -> if n > 0 then n * 2 else stop(n) }   -- int -> int
+```
 
 # Tuple types
 

@@ -31,6 +31,16 @@ module Unifier =
     /// Whether `ty` is `errorType`.
     let isError (ty: Ty) = unalias ty = errorType
 
+    /// `undefined`, the bottom type: the union of no tags, which no value is. It is the type of an expression that
+    /// never gives a value, such as a call to a function that stops the program. It is assignable to every type, so
+    /// such an expression fits wherever a value is expected; nothing but itself is assignable to it, and an `Equal`
+    /// constraint treats it as the empty union it is. Given where a variable is expected, it binds nothing: the
+    /// variable takes what the other values given for it are.
+    let bottomType = TyUnion []
+
+    /// Whether `ty` is `bottomType`.
+    let isBottom (ty: Ty) = unalias ty = bottomType
+
     let private tryTupleLikeRecord (fields: Map<string, Ty>) : Ty list option * (string * Ty) list =
         let tupleFields, namedFields =
             fields
@@ -695,6 +705,9 @@ module Unifier =
                     match kind with
                     | Assignable ->
                         match l, r with
+                        // The bottom type is assignable to every type, and binds no variable (see `bottomType`).
+                        | TyUnion [], _ ->
+                            loop subst rest
                         | TyVar _, _
                         | _, TyVar _ ->
                             unifyEqual false origin l r rest

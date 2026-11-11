@@ -48,6 +48,7 @@ let private lookupPrimitive (name: string) =
     | "bool" | "Bool" -> Some (primitiveType "bool")
     | "string" | "String" -> Some (primitiveType "string")
     | "unit" | "Unit" -> Some (primitiveType "unit")
+    | "undefined" -> Some Unifier.bottomType
     | _ -> None
 
 /// Whether `name` is a type the compiler provides, such as `Int` or `List`, rather than one the program defines.
