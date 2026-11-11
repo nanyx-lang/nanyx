@@ -70,6 +70,24 @@
     "comments": {
       "patterns": [
         {
+          "comment": "Doc comment: --| at the start of a line, and every line after it indented further, blank lines between them included",
+          "name": "comment.block.documentation.nanyx",
+          "begin": "^([ \\t]*)(--\\|)",
+          "end": "^(?!\\1[ \\t])(?=[ \\t]*\\S)",
+          "beginCaptures": { "2": { "name": "punctuation.definition.comment.nanyx" } },
+          "patterns": [
+            {
+              "comment": "A link to a definition: [`name`]",
+              "name": "markup.underline.link.nanyx",
+              "match": "\\[`[^`\\n]+`\\](?![\\(\\[])"
+            },
+            {
+              "name": "markup.inline.raw.string.nanyx",
+              "match": "`[^`\\n]+`"
+            }
+          ]
+        },
+        {
           "comment": "Block comment: a line of three or more dashes, closed by a line with the same number of dashes",
           "name": "comment.block.nanyx",
           "begin": "^\\s*(-{3,})\\s*$",

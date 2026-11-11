@@ -25,7 +25,8 @@ type ParseState =
       /// not forget it (see `reportFocused`).
       FocusedError: (Position * string) option ref
       /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
-      /// line break, or to the end of a block comment's closing line), most recent first. For the formatter, which puts them back: see `parseModuleWithTrivia`.
+      /// line break, or to the end of a block comment's closing line or a doc comment's last line), most recent first.
+      /// For the formatter, which puts them back (see `parseModuleWithTrivia`), and for doc comments (see `DocComments`).
       Comments: (int * int) list
       /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
       /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
@@ -69,9 +70,37 @@ let private atLineStart: Parser<unit, ParseState> =
 /// A block comment's fence: a line holding only three or more dashes.
 let private isFence (line: string) = line.Length >= 3 && line |> Seq.forall ((=) '-')
 
+/// The rest of a doc comment after its first line: each line after it indented further than `indent` (the indent of
+/// the line the `--|` is on, from the start of the line), and the blank lines between them. It stops before the line
+/// break that ends the last such line, so blank lines after the comment are not part of it.
+let private docCommentRest (indent: int) : Parser<unit, ParseState> =
+    fun stream ->
+        let isSpace (offset: int) = stream.Peek(offset) = ' ' || stream.Peek(offset) = '\t'
+        let isLineEnd (offset: int) = stream.Peek(offset) = '\n' || stream.Peek(offset) = CharStream.EndOfStreamChar
+        // `offset` is at the line break before the line being looked at, and `taken` is where the comment ends so far.
+        let mutable offset = 0
+        let mutable taken = 0
+        while stream.Peek(offset) = '\n' do
+            let lineStart = offset + 1
+            let mutable text = lineStart
+            while isSpace text do
+                text <- text + 1
+            let mutable lineEnd = text
+            while not (isLineEnd lineEnd) do
+                lineEnd <- lineEnd + 1
+            if isLineEnd text then offset <- lineEnd
+            elif text - lineStart > indent then
+                taken <- lineEnd
+                offset <- lineEnd
+            else offset <- -1
+        stream.SkipCharsOrNewlines taken |> ignore
+        Reply(())
+
 // Helper: whitespace and comment handling
-/// A comment: `--` to the end of the line, or a block comment. A line holding only three or more dashes opens a block
-/// comment, which runs to the next line holding exactly the same dashes and ends with it. `--- text` is a `--` comment.
+/// A comment: `--` to the end of the line, a block comment or a doc comment. A line holding only three or more dashes
+/// opens a block comment, which runs to the next line holding exactly the same dashes and ends with it. `--- text` is a
+/// `--` comment. A line that starts with `--|` opens a doc comment, which goes on for the lines after it that are
+/// indented further (see `docCommentRest`); a `--|` after code on its line is a `--` comment.
 let private lineComment () =
     let blockRest (start: Position) (fence: string) =
         let closing = attempt (skipNewline >>. restOfLine false >>= fun line -> if line.Trim() = fence then preturn () else pzero)
@@ -79,7 +108,10 @@ let private lineComment () =
         <|> reportFocused start $"This block comment is never closed: end it with a line of exactly the same dashes, {fence}"
     let comment =
         pipe3 getPosition (opt atLineStart) (pstring "--" >>. restOfLine false) (fun start ownLine rest -> start, ownLine.IsSome, "--" + rest.TrimEnd())
-        >>= fun (start, ownLine, line) -> if ownLine && isFence line then blockRest start line else preturn ()
+        >>= fun (start, ownLine, line) ->
+            if ownLine && isFence line then blockRest start line
+            elif ownLine && line.StartsWith "--|" then docCommentRest (int start.Column - 1)
+            else preturn ()
     noting (fun range state -> { state with Comments = range :: state.Comments }) comment
 
 let comment () = lineComment () >>. optional skipNewline

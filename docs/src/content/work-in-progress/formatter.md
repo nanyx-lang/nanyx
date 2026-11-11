@@ -70,6 +70,8 @@ attaches each comment to a node:
   of that block.
 - A `---` block comment is always on lines of its own. Its opening line of dashes goes at the indent of the code
   around it; the rest of its lines, the closing one included, are printed exactly as written.
+- A `--|` doc comment is a leading comment too. Its text and line breaks are kept, without rewrapping, and each
+  of its continuation lines is set one indent step past its first line, keeping their indents relative to each other.
 
 Blank lines are covered under [Blank lines](#blank-lines) below.
 

@@ -321,6 +321,37 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Hover_and_completion_show_a_names_doc_comment_with_its_links()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "hover-doc.nyx");
+        var uri = DocumentUri.FromFileSystemPath(path);
+
+        Open(uri, """
+            --| One more than `n`.
+              See [`dec`], and [`nowhere`].
+            def inc = { n -> n + 1 }
+            def dec = { n -> n - 1 }
+            def two = inc(1)
+            """);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var expected = $"""
+            One more than `n`.
+            See [`dec`]({uri}#L4,5), and `nowhere`.
+            """.ReplaceLineEndings("\n");
+        var hover = await HoverAt(uri, 4, 11);
+        Assert.Equal($"```nanyx\nint -> int\n```\n\n---\n\n{expected}", hover?.Contents.MarkupContent?.Value);
+
+        var item = (await CompletionsAt(uri, 4, 10)).Single(completion => completion.Label == "inc");
+        Assert.Equal(expected, item.Documentation?.MarkupContent?.Value);
+        Assert.Null((await CompletionsAt(uri, 4, 10)).Single(completion => completion.Label == "dec").Documentation);
+
+        // A link goes to the declaration of the name it links to.
+        var definition = await SingleDefinitionAt(uri, 1, 9);
+        Assert.Equal(new Range(3, 4, 3, 7), definition?.Range);
+    }
+
+    [Fact]
     public async Task Hover_outside_any_expression_returns_nothing()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-nothing.nyx"));

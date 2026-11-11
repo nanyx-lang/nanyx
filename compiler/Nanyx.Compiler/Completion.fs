@@ -63,8 +63,8 @@ type MemberKind =
     /// A further prefix: `string` in `t.string.uppercase`.
     | Prefix
 
-/// What can follow a dot, with its type as hover writes it, if it has one.
-type Member = { Name: string; Kind: MemberKind; Type: string option; IsFunction: bool }
+/// What can follow a dot, with its type as hover writes it, if it has one, and the symbol of a definition.
+type Member = { Name: string; Kind: MemberKind; Type: string option; IsFunction: bool; Symbol: Symbol option }
 
 /// The fields of a record type, or of the record a named type stands for.
 let rec private recordFields (ty: Ty) : Map<string, Ty> option =
@@ -104,7 +104,7 @@ let private valueMembers (names: TypeNotation) (valueType: Ty option) : Member l
             fields
             |> Map.toList
             |> List.filter (fun (name, _) -> not (System.Char.IsDigit name.[0]))
-            |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty }))
+            |> List.map (fun (name, ty) -> { Name = name; Kind = Field; Type = typeOf ty; IsFunction = isFunction ty; Symbol = None }))
         |> Option.defaultValue []
     let properties =
         match valueType with
@@ -112,7 +112,7 @@ let private valueMembers (names: TypeNotation) (valueType: Ty option) : Member l
             Infer.builtInPropertyNames
             |> List.choose (fun name ->
                 Infer.builtInProperty ty name
-                |> Option.map (fun (_, propertyTy) -> { Name = name; Kind = Property; Type = typeOf propertyTy; IsFunction = false }))
+                |> Option.map (fun (_, propertyTy) -> { Name = name; Kind = Property; Type = typeOf propertyTy; IsFunction = false; Symbol = None }))
         | None -> []
     fields @ properties |> List.sortBy (fun item -> item.Name)
 
@@ -132,8 +132,9 @@ let membersAt (names: TypeNotation) (result: CompileResult) (offset: int) (path:
                 match after.IndexOf '.' with
                 | -1 ->
                     let ty = symbolType typed typed.Symbols.[id]
-                    { Name = after; Kind = Definition; Type = ty |> Option.bind typeOf; IsFunction = ty |> Option.exists isFunction }
-                | dot -> { Name = after.Substring(0, dot); Kind = Prefix; Type = None; IsFunction = false })
+                    { Name = after; Kind = Definition; Type = ty |> Option.bind typeOf; IsFunction = ty |> Option.exists isFunction
+                      Symbol = Some typed.Symbols.[id] }
+                | dot -> { Name = after.Substring(0, dot); Kind = Prefix; Type = None; IsFunction = false; Symbol = None })
             // A prefix shared by several names is offered once; a definition of the same name comes first.
             |> List.sortBy (fun item -> item.Name, item.Kind <> Definition)
             |> List.distinctBy (fun item -> item.Name)
@@ -158,9 +159,9 @@ let implicitArgumentMembersAt (names: TypeNotation) (result: CompileResult) (off
         |> Option.defaultValue []
     | _ -> []
 
-/// A function a pipe can call, with its type as hover writes it, if it has one. `IsAttached` when it is a definition
-/// attached to the piped value's type, written without the type's name.
-type PipeTarget = { Name: string; Type: string option; IsFunction: bool; IsAttached: bool }
+/// A function a pipe can call, with its symbol and its type as hover writes it, if it has one. `IsAttached` when it is
+/// a definition attached to the piped value's type, written without the type's name.
+type PipeTarget = { Name: string; Type: string option; IsFunction: bool; IsAttached: bool; Symbol: Symbol }
 
 /// What can follow `\` at `offset` in the compiled root module, where `path` names the value piped (`s`, or `p`,
 /// `inner` for `p.inner \`; empty when what is piped is not a name). First the definitions attached to the value's
@@ -185,11 +186,11 @@ let pipeTargetsAt (names: TypeNotation) (result: CompileResult) (offset: int) (p
                     if after.Length = 0 || after.Contains '.' then None
                     else
                         let ty, isFunction = describe (symbolType typed typed.Symbols.[id])
-                        Some { Name = after; Type = ty; IsFunction = isFunction; IsAttached = true }))
+                        Some { Name = after; Type = ty; IsFunction = isFunction; IsAttached = true; Symbol = typed.Symbols.[id] }))
             |> List.distinctBy (fun target -> target.Name)
         let functions =
             typedNamesInScope names result offset
             |> List.filter (fun name -> name.IsFunction)
-            |> List.map (fun name -> { Name = name.Symbol.Name; Type = name.Type; IsFunction = true; IsAttached = false })
+            |> List.map (fun name -> { Name = name.Symbol.Name; Type = name.Type; IsFunction = true; IsAttached = false; Symbol = name.Symbol })
         (attached |> List.sortBy (fun target -> target.Name)) @ functions
     | None -> []

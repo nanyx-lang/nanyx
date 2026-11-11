@@ -1,0 +1,16 @@
+-- SYNTAX TEST "source.nanyx" "a doc comment goes on for the lines indented further than its first"
+
+--| Adds one. See [`dec`].
+-- <--- comment.block.documentation.nanyx
+--                ^^^^^^^ markup.underline.link.nanyx
+  More, with `code`.
+--^^^^ comment.block.documentation.nanyx
+--           ^^^^^^ markup.inline.raw.string.nanyx
+
+      inc(1) == 2
+--    ^^^^^^ comment.block.documentation.nanyx
+def inc = { n -> n + 1 }
+-- <--- keyword.declaration.nanyx - comment.block.documentation.nanyx
+
+def a = 1 --| an ordinary comment
+--        ^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-dash.nanyx

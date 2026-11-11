@@ -13,6 +13,7 @@
     <Compile Include="LambdaBodyTests.fs" />
     <Compile Include="LineWidthTests.fs" />
     <Compile Include="LexicalTests.fs" />
+    <Compile Include="DocCommentTests.fs" />
     <Compile Include="ImportSortingTests.fs" />
     <Compile Include="StringEscapeTests.fs" />
     <Compile Include="CorpusTests.fs" />

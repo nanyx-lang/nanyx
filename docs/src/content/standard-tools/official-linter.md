@@ -109,6 +109,16 @@ def total = use down in { counted(3) } -- Linter warning: The braces make this a
 
 The rule (`useInBraces`) reports `use ... in` whose body is a lambda of no arguments written as `{ ... }`. Braces make a function, not a block, so the statements in them are not run: `total` is a function. Put the statements on the lines after `in`, indented, to run them with the context loaded (see [Contexts](../advanced/contexts#loading-a-context)). A lambda written with its argument, `{ () -> ... }` or `{ n -> ... }`, says it means a function, and is not reported.
 
+## Doc comment that documents nothing
+
+```nanyx
+def f = {
+  --| The total. -- Linter warning: This doc comment documents nothing
+  42
+}
+```
+
+The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#doc-comments) that isn't followed by something it can document: a definition, a type or context, a member of a context, a field, a tag, or the module itself at the top of the file. Its fix makes it an ordinary `--` comment.
 ## Unreachable code path
 
 ```nanyx

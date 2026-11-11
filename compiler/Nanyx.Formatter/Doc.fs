@@ -47,8 +47,8 @@ type Doc =
 
 and StackEntry =
     | StackItem of Doc * isImport: bool
-    /// A comment on a line of its own. A `leading` one belongs to the item after it. A block comment is written as it
-    /// is, its line breaks included.
+    /// A comment on a line of its own. A `leading` one belongs to the item after it. It is written as `Doc.comment`
+    /// writes it.
     | StackComment of string * leading: bool
     /// A blank line the author wrote.
     | StackBlank
@@ -79,6 +79,7 @@ module Doc =
 
     /// `s` as text, or verbatim when it contains line breaks.
     let textOrVerbatim (s: string) = if s.Contains '\n' then Verbatim s else Text s
+
 
     let lineSuffix (s: string) =
         if s.Contains '\n' then invalidArg "s" $"A line suffix cannot contain a line break: %A{s}"
@@ -115,6 +116,13 @@ module Doc =
         | [] -> empty
         | first :: rest -> Concat(first :: (rest |> List.collect (fun doc -> [ separator; doc ])))
 
+    /// A comment on a line of its own. A block comment is written as it is, its line breaks included. A doc comment's
+    /// lines are each written at the current indent, so that its continuation lines, which the formatter has set one
+    /// indent step past its first line, stay past it wherever the comment ends up.
+    let comment (s: string) =
+        if s.StartsWith "--|" && s.Contains '\n' then join HardLine (s.Split '\n' |> Array.map Text |> List.ofArray)
+        else textOrVerbatim s
+
     /// The stack's entries as documents with the line breaks and blank lines between them, given whether each item
     /// takes more than one line.
     let private stackLines (blankLines: bool) (entries: StackEntry list) (isMultiLine: Doc -> bool) : Doc list =
@@ -148,7 +156,7 @@ module Doc =
                     let next = seq { k + 1 .. entries.Length - 1 } |> Seq.tryFind isItem
                     if blankLines && emitted && separated previousItem next then blank <- true
                     separatedNext <- true
-                emit (textOrVerbatim text)
+                emit (comment text)
             | StackItem(doc, _) ->
                 if not separatedNext && blankLines && emitted && separated previousItem (Some k) then blank <- true
                 emit doc

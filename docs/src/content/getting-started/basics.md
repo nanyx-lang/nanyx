@@ -197,6 +197,56 @@ This is also a multi-line comment.
 Multi-line comments must be closed with the same number of dashes that they were opened with. A line of dashes with
 text after it, `--- like this`, is a single-line comment.
 
+## Doc comments
+
+A doc comment starts with `--|`. It documents what comes on the line after it, and goes on for every line indented
+further than the line the `--|` is on, so its other lines need no `--`:
+
+```nanyx
+--| The `length` bytes of `s` starting at byte `start`. Out-of-range values are clamped, so the result
+  is never longer than what `s` actually holds.
+export def string.substring: (string, start: int, length: int) -> string = { s, start, length -> ... }
+```
+
+The text is Markdown. A blank line stays in the comment while the text after it is still indented, so a doc comment
+can have paragraphs and code examples. A name in backticks and square brackets, like `` [`string.slice`] ``, links to that
+definition: the editor shows the link when you hover over the name the comment documents.
+
+```nanyx
+--| Adds one to `n`.
+
+  For example:
+
+      inc(1) == 2
+
+  See also [`dec`].
+def inc = { n -> n + 1 }
+```
+
+A doc comment can document a `def` (at the top level or inside a function), a `type` or `context`, a member of a
+context, a field of a record type and a tag of a union type:
+
+```nanyx
+--| A shape on the screen.
+type Shape =
+  --| A circle, by its radius.
+  | #circle(float)
+  --| A square, by the length of its side.
+  | #square(float)
+
+type Point = (
+  --| Pixels from the left.
+  x: int
+  --| Pixels from the top.
+  y: int
+)
+```
+
+A doc comment at the top of a file, before `module` or the first `import`, documents the module. Anywhere else, a
+doc comment that isn't followed by something it can document gets a warning from the
+[official linter](../standard-tools/official-linter#doc-comment-that-documents-nothing). A `---` block comment is
+always an ordinary comment, so commenting code out never turns it into documentation.
+
 ## Tags, ranges and records
 
 Nanyx also supports tags, ranges, and records as core value forms. See [Tags](../tour/tags), [Ranges](../tour/ranges), and [Records and tuples](../tour/records).

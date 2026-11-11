@@ -1495,7 +1495,7 @@ module Compiler =
             { Phase = Typed
               Diagnostics =
                 checkedModule.Warnings
-                @ if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
+                @ if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax typed)
                   else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty

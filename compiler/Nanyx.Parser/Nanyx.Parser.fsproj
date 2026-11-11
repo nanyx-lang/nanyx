@@ -15,6 +15,7 @@
     <Compile Include="Patterns.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Program.fs" />
+    <Compile Include="DocComments.fs" />
   </ItemGroup>
 
   <ItemGroup>

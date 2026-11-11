@@ -33,19 +33,25 @@ type SemanticModel =
       ImportReferences: Map<NodeId, SymbolId>
       /// Where each call to a function that requires a parameterised context finds each instance, by the call's node
       /// (as `TypedModule.ContextInstances` has it): an instance built from attached definitions names them.
-      ContextInstances: Map<NodeId, ContextInstance option list> }
+      ContextInstances: Map<NodeId, ContextInstance option list>
+      /// The module's doc comments, each with what it documents. Few modules have any, so the source is parsed
+      /// again for them only when a rule asks, and only when it has a `--|`.
+      DocComments: Lazy<DocComment list> }
 
 module SemanticModel =
-    /// The model of a type-checked module, from its text, the module as parsed, and what checking it found.
-    let ofTyped (source: string) (syntax: Module) (typed: TypedModule) =
+    /// The model of a type-checked module, from the file it was compiled as (empty for source compiled directly), its
+    /// text, the module as parsed, and what checking it found.
+    let ofTyped (file: string) (source: string) (syntax: Module) (typed: TypedModule) =
+        let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
         { Syntax = syntax
-          Source = source.Replace("\r\n", "\n").Replace("\r", "\n")
+          Source = source
           Types = typed.ExprTypes
           SymbolTypes = typed.SymbolTypes
           Symbols = typed.Symbols
           References = typed.References
           ImportReferences = typed.ImportReferences
-          ContextInstances = typed.ContextInstances }
+          ContextInstances = typed.ContextInstances
+          DocComments = lazy (if source.Contains "--|" then (DocComments.parse file source).Comments else []) }
 
 /// Something one of a linter's rules found. The host turns it into a diagnostic with the rule's code and
 /// configured severity.
@@ -712,17 +718,52 @@ module UseInBraces =
                       Fixes = [] }
             | _ -> None)
 
+/// The official linter's `strayDocComments` rule: a doc comment (`--|`) that documents nothing, because what follows
+/// it is not something a doc comment can document (see `DocTarget`). Its fix makes it an ordinary comment.
+module StrayDocComments =
+    let rule =
+        { Id = "strayDocComments"
+          Title = "Doc comment documents nothing"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "A doc comment (`--|`) documents the definition, type, context member, field or tag on the line after it, or the module at the top of the file. One followed by anything else documents nothing." }
+
+    /// The doc comment `written` as ordinary comments: its `--|` made `--`, and each of its continuation lines a `--`
+    /// comment at the indent it has.
+    let private asOrdinaryComment (written: string) =
+        written.Split '\n'
+        |> Array.mapi (fun index line ->
+            if index = 0 then "--" + line.Substring 3
+            elif String.IsNullOrWhiteSpace line then line
+            else
+                let text = line.TrimStart(' ', '\t')
+                line.Substring(0, line.Length - text.Length) + "-- " + text)
+        |> String.concat "\n"
+
+    let lint (model: SemanticModel) : Report list =
+        model.DocComments.Value
+        |> List.filter (fun comment -> comment.Target = DocumentsNothing)
+        |> List.map (fun comment ->
+            let written = model.Source.Substring(comment.Span.Start, comment.Span.End - comment.Span.Start)
+            { Rule = rule.Id
+              Span = comment.Span
+              Message =
+                "This doc comment documents nothing: put it on the line before a definition, a type, a field or a tag, or make it an ordinary comment with `--`"
+              Related = []
+              Fixes = [ { Title = "Make it an ordinary comment"; Edits = [ { Span = comment.Span; NewText = asOrdinaryComment written } ] } ] })
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
-              UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule ]
+              UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
-                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model }
+                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
+                @ StrayDocComments.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

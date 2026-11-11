@@ -9,7 +9,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <summary>
 /// Goes to where the name under the cursor is declared: a value, parameter, pattern variable or import, in this
 /// document, in a source file it imports, or in the standard library (see <see cref="StandardLibrarySource"/>). On
-/// a declaration's own name it goes to that declaration. Nothing is found in a document that does not parse.
+/// a declaration's own name it goes to that declaration, and on a link in a doc comment (<c>[`name`]</c>) to the
+/// declaration of the name it links to. Nothing is found in a document that does not parse.
 /// </summary>
 public sealed class DefinitionHandler : DefinitionHandlerBase
 {
@@ -33,13 +34,18 @@ public sealed class DefinitionHandler : DefinitionHandlerBase
             return null;
         }
 
-        var symbol = Definition.symbolAt(document.FileName, compiled, document.Positions.ToOffset(request.Position));
-        if (symbol is null)
+        var offset = document.Positions.ToOffset(request.Position);
+        // A link in a doc comment, `[`name`]`, goes to where the name is declared.
+        var declaration = document.Typed
+            ? document.DocReader(request.TextDocument.Uri, offset, _standardLibrary).LinkTargetAt(document.Text, offset)?.Value
+            : null;
+        declaration ??= Definition.symbolAt(document.FileName, compiled, offset)?.Value.Declaration;
+        if (declaration is null)
         {
             return null;
         }
 
-        var location = SourceLocations.Of(request.TextDocument.Uri, document, symbol.Value.Declaration, _standardLibrary);
+        var location = SourceLocations.Of(request.TextDocument.Uri, document, declaration, _standardLibrary);
         return location is null ? null : new LocationOrLocationLinks(location);
     }
 

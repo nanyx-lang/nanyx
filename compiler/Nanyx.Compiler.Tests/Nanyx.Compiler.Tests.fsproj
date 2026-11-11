@@ -34,6 +34,7 @@
     <Compile Include="Features\Linters\UnusedPrivateDefinitionsTests.fs" />
     <Compile Include="Features\Linters\UnreachableCodeTests.fs" />
     <Compile Include="Features\Linters\UseInBracesTests.fs" />
+    <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
     <Compile Include="Features\Maps\MapTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
@@ -49,6 +50,7 @@
     <Compile Include="Features\StdLib\StandardLibraryCacheTests.fs" />
     <Compile Include="Features\Strings\InterpolationTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />
+    <Compile Include="Features\Tooling\DocumentationTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />

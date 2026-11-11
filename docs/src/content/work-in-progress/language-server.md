@@ -51,6 +51,13 @@ what the compiler keeps: exact spans, resolved names and types.
 - **Hover on a `_` in a type shows what it was inferred to be**: `int` on the `_` of `def xs: list(_) = [1, 2]`.
   Inference records each hole's type in `ExprTypes` under the type expression's node, and `Hover.typeAt` looks for
   holes among the type expressions at the position (`Hover.typeExprsAt`).
+- **Hover and completion show doc comments** ([#719](https://github.com/nanyx-lang/nanyx/issues/719)). Below the
+  type, hover shows the doc comment of the symbol `Definition.symbolAt` finds there, and a completion item for a
+  name, an attached definition or a pipe target has it as its documentation. `Documentation.Reader` reads it from
+  the file the symbol is declared in (the document's own doc comments are parsed once per text, by
+  `OpenDocument.DocComments`; another file's, or a standard-library module's, are kept by file), and writes each
+  `` [`name`] `` as a link to where the name is declared (`SourceLocations.LinkTo`). Go-to-definition on such a link
+  goes there too.
 - **A text with type or name errors is typed all the same.** The type checker recovers from them (see
   [deferred errors](./deferred-errors)): what checks has its type, and what does not has the error type, shown as
   `???`. So hover, lenses, inlay hints and completion read the current text whenever it parses

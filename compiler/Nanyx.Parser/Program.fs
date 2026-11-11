@@ -1559,11 +1559,11 @@ module Directives =
                     chars[i] <- ' '
             String chars
 
-let private normalizeSource (input: string) =
+let internal normalizeSource (input: string) =
     input.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
 
 /// Parses normalised source, returning the top-level items as written and the final state.
-let private runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
+let internal runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
     let initialState = ParseState.empty ()
     // A parse fails at a point: its span is the character there, or nothing at the end of the input.
     let errorAt (position: Position) message =
