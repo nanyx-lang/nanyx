@@ -52,7 +52,7 @@ let ``A call that requires Append of a type with no ++ is an error at the call``
 def concat: [Append(a)] a, a -> a = { x, y -> x ++ y }
 def n = concat(1, 2)
 """
-    let message, at = missingContext source
+    let message, at = missingContext (source.ReplaceLineEndings "\n")
     Assert.Equal("concat", at)
     Assert.Contains("'Append(int)'", message)
 
