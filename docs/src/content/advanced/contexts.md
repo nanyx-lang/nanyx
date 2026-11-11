@@ -126,6 +126,30 @@ Inside `combineAll`, `empty` and `combine` are the members of the instance it is
 
 The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, so a counter's `n + 1` in a generic function still adds ints.
 
+## Operators find their context
+
+An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; only `Num` has a `` `*` ``.
+
+A function that does not write its type requires the contexts its operators need, of each of its own type variables they are used on:
+
+```nanyx
+def add = { x, y -> x + y }                 -- [Add(a)] a, a -> a
+def lerp = { a, b, t -> a + (b - a) * t }   -- [Num(a)] a, a, a -> a
+def inc = { x -> x + 1 }                    -- int -> int: `1` is an int
+```
+
+Adding and multiplying values of one type needs `Num` alone, which has every member of `Add`. A function inside another function requires no contexts, so its arithmetic is on ints or floats. For now the same goes for a function with operators on two different type variables, and for one the module passes as a value, as `add` in `xs \list.fold(0, add)`: see [Operator contexts](../work-in-progress/operator-contexts#functions-that-do-not-write-their-type).
+
+A function's type can also require an operator by its member instead of by the context's name. It means the same as naming the prelude's context that has the member:
+
+```nanyx
+def add: [`+`: a, a -> a] = { + }                           -- [Add(a)] a, a -> a
+def scale: [`+`: a, a -> a + `*`: a, a -> a] a, a -> a      -- [Num(a)] a, a -> a
+  = { x, k -> x * k + x }
+```
+
+Only an operator that is a member of one of the prelude's contexts can be required this way; any other member is required by naming its context, as `[ToString(a)]`.
+
 Contexts with associated types, members whose value is a type, are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Common contexts
@@ -255,7 +279,7 @@ def total: [Add(a)] list(a) -> a = { items -> items \fold(zero) { + } }
 def orZero: [Add(a)] a -> a = { x -> x + 0 }
 ```
 
-`list.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. Outside generic code nothing changes: `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
+`list.sum` is `total`. A function that writes its type and adds without `[Add(a)]` is an error that says to add it. One that does not write its type has the requirement [inferred](#operators-find-their-context): `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a`, while `def inc = { x -> x + 1 }` is still `int -> int`. Any other type gets an `Add` by attaching the four members (see [Context synthesis](#context-synthesis)).
 
 ## Num(a)
 

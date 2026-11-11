@@ -67,6 +67,13 @@ those files workable. The reasoning behind them, and the current state of the co
   out can leave `stdlib/` unformatted. Run
   `dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- format --check ../stdlib` from
   `compiler/` before you push.
+- **Keep the prelude's contexts unambiguous.** An operator on a value of a type variable is read through the
+  prelude's context with the fewest members that has the member it reads, so `+` is `Add`'s, though `Num` has
+  one too ([Operator contexts](docs/src/content/work-in-progress/operator-contexts.md)). Before you add a
+  context to `stdlib/nanyx/prelude.nyx`, or a member to one, check which operators it moves: a context that
+  repeats another's member must be larger or smaller than it, never the same size, and a smaller one takes the
+  operator over in every function whose type is inferred. The compiler reports a tie as `NYX0006` when it
+  checks the prelude.
 
 ## Tests
 

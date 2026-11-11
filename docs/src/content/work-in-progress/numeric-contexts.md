@@ -13,8 +13,8 @@ order: 9
 
 # What is implemented
 
-`Nanyx.Compiler/ArithmeticOperators.fs` holds the checks and the names; `OperatorCalls.fs` decides which operators
-call a definition; `ContextShapes.fs` lets an instance of one context serve another whose members it has; the
+`Nanyx.Compiler/ArithmeticOperators.fs` holds the checks and the names; `OperatorContexts.fs` finds the prelude's
+context an operator is read through; `OperatorCalls.fs` decides which operators call a definition; `ContextShapes.fs` lets an instance of one context serve another whose members it has; the
 prelude declares `Add(a)` and `Num(a)`.
 
 - **`%` is checked** with the other arithmetic operators, and an operand already known not to be a number is
@@ -55,6 +55,10 @@ prelude declares `Add(a)` and `Num(a)`.
   written in the prelude from their series, since WebAssembly has neither.
 - **`math.abs: [Num(a) + Ord(a)] a -> a`**, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
   `int`, a `float` or any other type with an order ([#186](https://github.com/nanyx-lang/nanyx/issues/186)).
+- **An operator finds its context in the prelude**, by the member it reads, rather than in a table the compiler
+  keeps, and **a function that does not write its type requires it**: `def add = { x, y -> x + y }` is
+  `[Add(a)] a, a -> a`. A type can also require an operator by its member, `` [`+`: a, a -> a] ``. See
+  [Operator contexts](./operator-contexts).
 - **An instance built for a call in the prelude is only compiled when that call is**: the definitions it is made of
   are reached from the definition the call is in, not from every module (`Library.reachedItems`).
 
@@ -213,7 +217,8 @@ A literal already takes the numeric type its context expects ([sized numbers](./
   `Add(a).zero` and any other integer literal `n` is `Num(a).fromInt(n)`. The literal adds that requirement, so the
   signature must have it.
 - **Elsewhere nothing changes.** In a function without a signature, a literal is `int` (or `float`), as today, so
-  `def inc = { x -> x + 1 }` stays `int -> int` and not `[Num(a)] a -> a`.
+  `def inc = { x -> x + 1 }` stays `int -> int` and not `[Num(a)] a -> a`. (An operator with no literal beside it
+  is another matter: see [Operator contexts](./operator-contexts#functions-that-do-not-write-their-type).)
 - **A decimal literal** at a type variable is an error: `a` may be an integer type. Generic code that needs one
   takes a value as a parameter, or is written for `float`.
 
@@ -301,7 +306,9 @@ The language server's code action for the second and fourth adds the requirement
 
 # What changes for existing code
 
-- **Unannotated arithmetic is unchanged**: it still infers `int` or `float`.
+- **Unannotated arithmetic with a literal is unchanged**: it still infers `int` or `float`. *Since changed for
+  arithmetic on parameters alone:* `{ x, y -> x + y }` now requires `Add` of its parameters' type
+  ([Operator contexts](./operator-contexts)).
 - **`%` is checked**, so `"a" % "b"` becomes a type error, and `%` on floats compiles.
 - **[math.md](../stdlib/math)**: `abs: [Num(a) & Ord(a)] a -> a`; `min`, `max` and `clamp` become `[Ord(a)]`;
   `pow: [Num(a)] (a, int) -> a`. `math.nyx` follows (#186).

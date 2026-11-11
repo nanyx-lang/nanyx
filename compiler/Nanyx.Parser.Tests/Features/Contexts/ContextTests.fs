@@ -41,3 +41,19 @@ let ``use C(T) = expr does not parse, and the error says to write use <expr> whe
             Assert.Contains($"Define the instance with `def name: {head} = (...)`, then load it with `use name`.", message)
             Assert.Equal(source.IndexOf head, err.Span.Start)
         | Result.Ok _ -> failwith $"Expected '{line.Trim()}' not to parse"
+
+[<Fact>]
+let ``An operator is required by the member it reads, among a def's contexts`` () =
+    let contextsOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext (contexts, _) }, _))) ]
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeContext contexts }, _))) ] -> contexts |> List.map _.Kind
+        | other -> failwith $"Unexpected parse: %A{other}"
+    let a = TypeExpr.synthetic (TypeVar "a")
+    let binary result = TypeExpr.synthetic (TypeFunc (TypeExpr.synthetic (TypeTuple [ a; a ]), result))
+    let required name memberType = TypeRecord [ TypeField (name, false, false, Some memberType, None) ]
+    Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: a, a -> a] = { + }")
+    Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: (a, a) -> a] a, a -> a = { + }")
+    Assert.Equal<TypeExprKind list>(
+        [ required "+" (binary a); TypeApply ("Eq", [ a ]); required "==" (binary (TypeExpr.synthetic (TypeName "bool"))); TypeName "Console" ],
+        contextsOf "def f: [`+`: a, a -> a + Eq(a) + `==`: a, a -> bool + Console] a -> a = { x -> x }")

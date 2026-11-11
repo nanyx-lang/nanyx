@@ -1160,6 +1160,8 @@ let format (options: Options) (parsed: SourceModule) : string =
         let item (t: TypeExpr) =
             match t.Kind with
             | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
+            // An operator required by the member it reads: `` `+`: a, a -> a ``.
+            | TypeRecord [ TypeField(n, false, false, Some memberType, None) ] -> cat [ text (Names.written n); text ": "; typeList memberType ]
             | _ -> typeExpr t
         cat [ text "["; Doc.join (text " + ") (List.map item items); text "]" ]
 

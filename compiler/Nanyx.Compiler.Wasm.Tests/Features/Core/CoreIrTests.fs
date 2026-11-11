@@ -27,7 +27,7 @@ let private backendError (source: string) =
 [<Fact>]
 let ``Every function goes through the core IR`` () =
     let source =
-        "def add = { x, y -> x + y }\n" +
+        "def add: int, int -> int = { x, y -> x + y }\n" +
         "\n" +
         "def classify = { n ->\n" +
         "  def doubled = add(n, n)\n" +

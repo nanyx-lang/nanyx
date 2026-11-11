@@ -11,8 +11,8 @@ Nanyx features a strong static type system with Hindley-Milner type inference. T
 Nanyx can infer most types automatically:
 
 ```nanyx
--- Type is inferred as: int, int -> int
-def add = { x, y -> x + y }
+-- Type is inferred as: int -> int
+def double = { x -> x * 2 }
 
 -- Type is inferred as: string -> int, from the call to string.length
 def length = { s -> string.length(s) }

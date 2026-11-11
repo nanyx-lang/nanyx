@@ -132,13 +132,22 @@ let internal fillTypeRefs () =
                 (between (pstring "(") (ws >>. pstring ")") (ws >>. (attempt recordArgument <|> typeArguments)))
                 (fun name args -> TypeApply(name, args)))
 
+    // An operator a function needs, required by the context member it reads rather than by a context's name:
+    // `` [`+`: a, a -> a] ``. It is a record type of that one member, and its type is a list of types, as a def's is.
+    let contextMember =
+        spannedType (
+            pipe2
+                (nameNoWs .>> wsNoNl() .>> pstring ":" .>> ws)
+                typeSignature
+                (fun name memberType -> TypeRecord [ TypeField(name, false, false, Some memberType, None) ]))
+
     let contextSet =
         spannedType (
             between
                 (pstring "[")
                 (wsNoNl() >>. pstring "]")
                 (sepBy1
-                    (wsNoNl() >>. (attempt typeApply <|> typeIdentifier))
+                    (wsNoNl() >>. (attempt contextMember <|> attempt typeApply <|> typeIdentifier))
                     (wsNoNl() >>. pstring "+" >>. wsNoNl()))
             |>> TypeContext)
 

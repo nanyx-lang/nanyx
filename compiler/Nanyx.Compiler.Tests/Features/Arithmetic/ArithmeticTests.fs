@@ -50,8 +50,8 @@ let ``Adding and negating values of a type variable calls the members of the Add
     Assert.Equal("float", Unifier.tyToString result.Typed.Value.Types.["total"])
 
 [<Fact>]
-let ``Negation without a written type is of an int or a float`` () =
-    for source, expected in [ "def r = { x -> -x }\n", "int -> int"; "def r = -2.5\n", "float"; "def r = { x: float -> -x }\n", "float -> float" ] do
+let ``Negation of a number is of an int or a float`` () =
+    for source, expected in [ "def r = { x -> -x + 1 }\n", "int -> int"; "def r = -2.5\n", "float"; "def r = { x: float -> -x }\n", "float -> float" ] do
         let result = Compiler.compile source
         Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
         Assert.Equal(expected, Unifier.tyToString result.Typed.Value.Types.["r"])
