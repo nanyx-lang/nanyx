@@ -415,7 +415,7 @@ let private withTrailingLambda (fields, span) (lambda: Expression) =
 
 // Arguments in parentheses after a name, as in a call, a tag payload or a pipe target: `(a, b)`, `(x = 1)`.
 let private parenArguments =
-    between (pstring "(") (pstring ")") (ws >>. withSpan recordFields |>> fieldsToExpr .>> ws)
+    noteFailureInside (between (pstring "(") (pstring ")") (ws >>. withSpan recordFields |>> fieldsToExpr .>> ws))
 
 /// `???`, the placeholder for code not written yet. It is read as a name no other code can write, so every pass that
 /// handles names handles it; the type checker reports it as not implemented.
@@ -432,10 +432,11 @@ let unitExpr =
 // Handles: (x), (x, y), (x = 1), (x = 1, y = 2), (x = 1, 2), etc.
 let tupleOrParenExpr =
     (withSpan (
-        between
-            (pstring "(")
-            (ws >>. pstring ")")
-            recordFields)
+        noteFailureInside (
+            between
+                (pstring "(")
+                (ws >>. pstring ")")
+                recordFields))
     |>> fieldsToExpr)
     <?> "tuple or record"
 
@@ -471,10 +472,11 @@ let listExpr =
         | [] -> Expression.at span (ListExpr [])
         | _ -> segments |> List.reduceBack (fun left right -> Expression.at span (BinaryOp("++", left, right)))
     withSpan (
-        between
-            (pstring "[")
-            (ws >>. pstring "]")
-            (ws >>. opt (byCommaOrLine item) |>> Option.defaultValue []))
+        noteFailureInside (
+            between
+                (pstring "[")
+                (ws >>. pstring "]")
+                (ws >>. opt (byCommaOrLine item) |>> Option.defaultValue [])))
     >>= fun (items, span) ->
         let entries = items |> List.choose (function Choice1Of2 (key, Some value) -> Some (key, value) | _ -> None)
         if entries.IsEmpty then
@@ -1102,8 +1104,9 @@ do
         spanned (
             pipe3
                 qualifiedIdentifierWithSpan
-                (between (pstring "(") (pstring ")")
-                    (opt (ws >>. withSpan recordFields .>> ws)))
+                (noteFailureInside (
+                    between (pstring "(") (pstring ")")
+                        (opt (ws >>. withSpan recordFields .>> ws))))
                 (opt (attempt (skipMany (skipAnyOf " \t") >>. lambda)))
                 (fun (name, nameSpan) fieldsOpt trailingLambdaOpt ->
                     match fieldsOpt, trailingLambdaOpt with
@@ -1432,14 +1435,16 @@ let internal runModuleParser (filePath: string) (normalized: string) : Result<To
         Result.Error (errorAt error.Position "A directive (a `::` line) must come before the first line of code")
     | ParserResult.Failure(errorMsg, error, _) ->
         // A mistake the parser recognised is backtracked over, and FParsec reports some enclosing construct
-        // instead (often the whole def), so it is reported where it happened (see `reportFocused`).
-        match initialState.FocusedError.Value with
-        | Some (position, message) ->
+        // instead (often the whole def), so it is reported where it happened (see `reportFocused`). So is a failure
+        // inside brackets that FParsec backtracked out of (see `noteFailureInside`).
+        let reportAt position messages =
             use stream = new CharStream<unit>(normalized, 0, normalized.Length)
             stream.Name <- filePath
-            let focused = ParserError(position, null, ErrorMessageList(ErrorMessage.Message message))
-            Result.Error (errorAt position (focused.ToString stream))
-        | None -> Result.Error (errorAt error.Position errorMsg)
+            Result.Error (errorAt position (ParserError(position, null, messages).ToString stream))
+        match initialState.FocusedError.Value, initialState.FailureInBrackets.Value with
+        | Some (position, message), _ -> reportAt position (ErrorMessageList(ErrorMessage.Message message))
+        | None, Some (position, messages) when position.Index > error.Position.Index -> reportAt position messages
+        | None, _ -> Result.Error (errorAt error.Position errorMsg)
 
 /// Parses the source of the file at `filePath`, as `parseModuleFile` does, together with the names its nodes
 /// declare and the text of each `module name =` block in it.

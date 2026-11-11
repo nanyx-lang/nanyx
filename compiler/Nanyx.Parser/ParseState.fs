@@ -24,6 +24,9 @@ type ParseState =
       /// where it is and what to say about it. It is a cell shared by every copy of the state, so backtracking does
       /// not forget it (see `reportFocused`).
       FocusedError: (Position * string) option ref
+      /// The furthest failure inside brackets, `[...]` or `(...)`, after the opening one: where it is and what FParsec
+      /// expected there. A cell shared by every copy of the state, as `FocusedError` is (see `noteFailureInside`).
+      FailureInBrackets: (Position * ErrorMessageList) option ref
       /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
       /// line break, or to the end of a block comment's closing line or a doc comment's last line), most recent first.
       /// For the formatter, which puts them back (see `parseModuleWithTrivia`), and for doc comments (see `DocComments`).
@@ -40,6 +43,7 @@ module ParseState =
           ImplicitArgumentNext = None
           ModuleBlocks = []
           FocusedError = ref None
+          FailureInBrackets = ref None
           Comments = []
           StringTexts = [] }
 
@@ -57,6 +61,21 @@ let internal reportFocused (position: Position) (message: string) : Parser<'a, P
         | Some (furthest, _) when furthest.Index >= position.Index -> ()
         | _ -> state.FocusedError.Value <- Some (position, message)
         failFatally message
+
+// Runs `p`, which parses something in brackets, and notes in the state where it failed if it failed after taking the
+// opening one, as `[1, 2` does. A block's statements are tried under `attempt`, so FParsec reports such a failure at
+// the block's start, not in the brackets; `parseModuleFileWithNames` reports the noted failure instead when it is
+// further on. Of two such failures, the furthest is noted, and of two at one place, the innermost.
+let internal noteFailureInside (p: Parser<'a, ParseState>) : Parser<'a, ParseState> =
+    fun stream ->
+        let start = stream.Index
+        let reply = p stream
+        if reply.Status <> Ok && stream.Index > start then
+            let failures = stream.UserState.FailureInBrackets
+            match failures.Value with
+            | Some (furthest, _) when furthest.Index >= stream.Index -> ()
+            | _ -> failures.Value <- Some (stream.Position, reply.Error)
+        reply
 
 /// Whether only spaces and tabs come before the current position on its line.
 let private atLineStart: Parser<unit, ParseState> =
