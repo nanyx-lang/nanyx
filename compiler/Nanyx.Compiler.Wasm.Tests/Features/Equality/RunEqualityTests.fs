@@ -129,6 +129,53 @@ def main = {
     |> assertRan "T\nF\nT\nT\nF\nT\nF\nF\nT\nT\nF\n"
 
 [<Fact>]
+let ``Run - a lambda compares through a local function it captures, at each type it uses it at`` () =
+    // The lambda captures a closure of `same` for each type it calls it at, each freeing what it is given (#751).
+    """
+import nanyx/console
+
+def show = { b -> if b then "T" else "F" }
+
+@entry
+def main = {
+  def same = { x, y -> x == y }
+  def check = { a -> same(a, "aa") }
+  println(show(check("a" ++ "a")))
+  println(show(check("a" ++ "b")))
+  def all = { s, xs, nested -> show(same(s, "aa")) ++ show(same(xs, ["b" ++ "c"])) ++ show(same(nested, [["d"], ["e" ++ "f"]])) }
+  println(all("a" ++ "a", ["b" ++ "c"], [["d"], ["ef"]]))
+  println(all("ab", ["c"], [["d"], ["e"]]))
+}
+"""
+    |> runSource
+    |> assertRan "T\nF\nTTT\nFFF\n"
+
+[<Fact>]
+let ``Run - a lambda in a lambda, or a local generic function, compares through a local function it captures`` () =
+    // Captured through two lambdas, by a generic lambda at each type it is used at, and by another local generic
+    // function, whose closure at each type makes the captured one's at that type (#751).
+    """
+import nanyx/console
+
+def show = { b -> if b then "T" else "F" }
+
+@entry
+def main = {
+  def eq = { x, y -> x == y }
+  def same = { x, y -> eq(x, y) }
+  def outer = { s -> { t -> same(s, t) } }
+  def inner = outer("x" ++ "y")
+  println(show(inner("xy")))
+  println(show(inner("yx")))
+  def twice = { v -> eq(v, v) }
+  println(show(twice("p" ++ "q")) ++ show(twice(["r" ++ "s"])) ++ show(twice([["t"]])))
+  println(show(same(["a" ++ "b"], ["ab"])) ++ show(same([["a"]], [["b"]])))
+}
+"""
+    |> runSource
+    |> assertRan "T\nF\nTTT\nTF\n"
+
+[<Fact>]
 let ``Run - a function that compares its type variable uses the == attached to a type`` () =
     comparing
         [ "type $Email = string"

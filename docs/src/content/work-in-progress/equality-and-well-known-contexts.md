@@ -39,8 +39,10 @@ operators call, and `Hash(a)` and `__hash`.
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is used at, a closure for each (`FunctionLowering.GenericLocal` in `CoreIrLower.fs`), so its `==`
-  compares and frees a string or a list as that type does. A use the backend cannot type, such as the local captured
-  by a lambda, reads the closure compiled with its type variables as unit, which compares them as words. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
+  compares and frees a string or a list as that type does. A lambda that captures the local captures a closure for
+  each type the lambda uses it at (`FunctionLowering.CapturedInstances`); where the lambda is itself generic, the
+  closure at each of its types is made where the lambda's is. A use the backend cannot type reads the closure compiled
+  with its type variables as unit, which compares them as words. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
   of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). Only a call by name is
   checked, not a local function passed as a value.
