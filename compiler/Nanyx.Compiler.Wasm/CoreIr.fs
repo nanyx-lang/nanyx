@@ -105,12 +105,6 @@ type DbgForm =
     /// A bool, or a value of a union of tags, printed as `"{value}"` would print it: the hole is already evaluated.
     | DbgTagValue of Var * HoleType * Var
 
-/// Where a function value that is called comes from. The old path evaluates it twice (once to pass it, once to read
-/// its slot), so it is something that can be: a variable, or a top-level value.
-type ClosureRef =
-    | ClosureVar of Var
-    | ClosureValue of string
-
 type Expr =
     { Kind: ExprKind
       Type: IrType }
@@ -137,8 +131,8 @@ and ExprKind =
     /// takes, the environment included) over the values it captures.
     | MakeClosure of string * arity: int * Atom list
     /// A call through a function value: the closure block is passed first, as the environment, and its first slot is
-    /// the function's table slot.
-    | CallClosure of ClosureRef * Atom list
+    /// the function's table slot. The closure is read twice, so it is a parameter or a local, never a temporary.
+    | CallClosure of Var * Atom list
     /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
     | Interpolate of InterpolationPart list
     /// `dbg(value)`: prints the value (the atom, unless the form says otherwise) and leaves it.
@@ -382,8 +376,7 @@ module Print =
         | MakeList items -> $"[{atoms items}]"
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
         | MakeClosure(name, _, captured) -> $"closure {name}({atoms captured})"
-        | CallClosure(ClosureVar v, args) -> $"{v.Name}({atoms args})"
-        | CallClosure(ClosureValue name, args) -> $"{name}()({atoms args})"
+        | CallClosure(v, args) -> $"{v.Name}({atoms args})"
         | Interpolate parts ->
             parts
             |> List.map (function

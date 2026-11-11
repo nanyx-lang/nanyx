@@ -343,18 +343,12 @@ type private FunctionEmitter(context: EmitContext) =
             let dropSlot = context.FunctionSlot (CoreIrDrop.environmentDropName (captured |> List.map atomType)) 1
             join "\n    " [ $"i32.const {values.Length * 4}\n    i32.const {dropSlot}\n    call ${helper Helpers.newObject}"; yield! stores ]
         | CallClosure(closure, args) ->
-            // The closure is passed first, as the environment, and read again for the table slot it holds. A top-level
-            // value is evaluated once, and kept in a local of its own for the second read.
-            let closureCode, slotCode =
-                match closure with
-                | ClosureVar var -> $"local.get ${var.Name}", $"local.get ${var.Name}"
-                | ClosureValue name ->
-                    let local = freshLocal "__closure"
-                    $"call ${name}\n    local.tee ${local}", $"local.get ${local}"
+            // The closure is passed first, as the environment, and read again for the table slot it holds.
+            let read = $"local.get ${closure.Name}"
             let arity = args.Length + 1
             context.IndirectCall arity
             let call = if tail then "return_call" else "call"
-            join "\n    " [ closureCode; atomsAfter true args; slotCode; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
+            join "\n    " [ read; atomsAfter true args; read; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
         | Interpolate parts -> this.Interpolation parts
         | Dbg(value, form) ->
             match form with

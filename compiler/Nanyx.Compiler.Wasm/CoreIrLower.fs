@@ -666,7 +666,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | FunctionCall(name, _, args) when scope.Members.ContainsKey name ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
-            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar scope.Members.[name], atoms)) ty))
+            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(scope.Members.[name], atoms)) ty))
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
@@ -711,17 +711,20 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             // A call through a function value in a parameter or local.
             let ty = tyOf expr
             match scope.Vars.[name] with
-            | { Type = IrFunction _ } as var -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar var, atoms)) ty))
+            | { Type = IrFunction _ } as var -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(var, atoms)) ty))
             | var -> cannot $"a call to '{name}', a value of type {IrType.show var.Type}"
         | FunctionCall(name, _, args) when definitions.ContainsKey name && not (isFunction name) && not (flattenCallArgs args).IsEmpty ->
-            // A call through a function value a top-level value holds.
+            // A call through a function value a top-level value holds. The value is evaluated once, into a local, which
+            // the call reads twice: as the environment, and for the table slot.
             let ty = tyOf expr
             let instanceTy =
                 match input.CalleeTypes |> Map.tryFind expr.Id with
                 | Some ty -> ty
                 | None -> cannot $"a call to '{name}' whose type is not known"
-            let target = callee name instanceTy
-            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureValue target, atoms)) ty))
+            let value = mk (Call(callee name instanceTy, [])) (toIrType instanceTy)
+            let closure = newVar (uniqueName name) Local value.Type
+            let body = this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(closure, atoms)) ty))
+            mk (Let(closure, value, body)) body.Type
         | FunctionCall(name, _, args) when input.Lifted.ContainsKey name ->
             // A `rec` local function calling itself, directly, with its environment passed on.
             if name <> fst self then cannot $"a call to the lifted function '{name}' from another function"
@@ -855,7 +858,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let key = contextMemberKey (Some contextType) memberName
             let ty = tyOf expr
             match scope.Members |> Map.tryFind key with
-            | Some memberVar -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(ClosureVar memberVar, atoms)) ty))
+            | Some memberVar -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(memberVar, atoms)) ty))
             | None -> cannot $"the context member {key}, which is not in scope"
         | ContextMemberAccess(contextType, memberName) ->
             // `C(T).m`: the member of that instance of the context as a value.

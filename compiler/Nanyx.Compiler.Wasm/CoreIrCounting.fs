@@ -47,8 +47,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | MakeClosure(_, _, captured) -> all Owned captured
     // The closure is the environment, which the function it holds owns. Its code reads the closure again for the
     // table slot after the arguments, so the closure counts as used last.
-    | CallClosure(ClosureVar closure, args) -> all Owned args @ [ AVar closure, Owned ]
-    | CallClosure(ClosureValue _, args) -> all Owned args
+    | CallClosure(closure, args) -> all Owned args @ [ AVar closure, Owned ]
     | Interpolate parts -> parts |> List.choose (function Hole(hole, _) -> Some(AVar hole, Borrowed) | Text _ -> None)
     // `dbg` leaves the value it prints, or puts it in the cell of the tag it prints.
     | Dbg(value, _) -> [ value, Owned ]

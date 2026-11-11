@@ -445,3 +445,11 @@ let ``Run - a lambda of no parameters can be passed as a value (#589)`` () =
         "  for thunks | t -> println(\"{t()}\")\n" +
         "}\n"
     runSource source |> assertRan "22 40\n10\n9\n"
+
+[<Fact>]
+let ``Run - calling the function a top-level value holds evaluates the value once`` () =
+    let source =
+        "def makeAdder = { n -> { m -> n + m } }\n" +
+        "def adder = makeAdder(dbg(1))\n" +
+        "dbg(adder(2))\n"
+    runSource source |> assertRan "dbg: 1\ndbg: 3\n"
