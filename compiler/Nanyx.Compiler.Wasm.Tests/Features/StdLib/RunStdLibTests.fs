@@ -128,6 +128,34 @@ let ``Run - text lines and words`` () =
     runSource source |> assertRan "a|b|c\na||b\ndbg: 0\none|two|three\ndbg: 0\n"
 
 [<Fact>]
+let ``Run - text chars takes a string apart by code point`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/text\n" +
+        "\n" +
+        "println(String.join(\"abc\" \\chars, \"|\"))\n" +
+        "println(String.join(String.chars(\"héllo\"), \"|\"))\n" +
+        "println(\"{List.length(String.chars(\"héllo\"))} {String.length(\"héllo\")}\")\n" +
+        "println(\"{List.length(String.chars(\"\"))}\")\n" +
+        "println(String.join(String.chars(\"a€b😀c\"), \"|\"))\n" +
+        "println(\"{String.concat(String.chars(\"a€b😀c\")) == \"a€b😀c\"}\")\n"
+    runSource source |> assertRan "a|b|c\nh|é|l|l|o\n5 6\n0\na|€|b|😀|c\ntrue\n"
+
+[<Fact>]
+let ``Run - text reverse turns a string around by code point`` () =
+    let source =
+        "import nanyx/console\n" +
+        "import nanyx/text\n" +
+        "\n" +
+        "println(String.reverse(\"abc\"))\n" +
+        "println(\"héllo\" \\reverse)\n" +
+        "println(String.reverse(\"a€b😀c\"))\n" +
+        "println(String.reverse(\"é€😀\"))\n" +
+        "println(\"[\" ++ String.reverse(\"\") ++ \"]\")\n" +
+        "println(String.reverse(\"x\"))\n"
+    runSource source |> assertRan "cba\nolléh\nc😀b€a\n😀€é\n[]\nx\n"
+
+[<Fact>]
 let ``Run - text split, join and concat`` () =
     let source =
         "import nanyx/console\n" +

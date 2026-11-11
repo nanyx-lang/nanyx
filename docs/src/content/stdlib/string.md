@@ -8,9 +8,11 @@ The `string` module provides functions for working with UTF-8 strings. Import it
 
 These functions are [attached definitions](../advanced/attached-definitions) on `string`, so when the receiver is known to be a string they can be piped into without qualification: `s \split(on = ",")`, `s \startsWith("nan")`. They are called as `string.length(s)` or `s \length`; a dot on a value never reaches an attached definition, so `s.length` is an error.
 
-For now these functions work byte by byte. `length` counts bytes, indices and widths are byte offsets, `uppercase` and `lowercase` change only ASCII letters, and the trimming functions and `words` treat only ASCII whitespace as whitespace. Characters outside ASCII pass through unchanged, except that `padStart` and `padEnd` cut their fill at a byte count, so a `fill` of such characters can be cut in the middle of one.
+For now most of these functions work byte by byte. `length` counts bytes, indices and widths are byte offsets, `uppercase` and `lowercase` change only ASCII letters, and the trimming functions and `words` treat only ASCII whitespace as whitespace. Characters outside ASCII pass through unchanged, except that `padStart` and `padEnd` cut their fill at a byte count, so a `fill` of such characters can be cut in the middle of one.
 
-Every one of them is stack-safe: `repeat`, `split`, `replace`, `lines`, `words` and the rest work on a string of any length, and give any number of pieces, without running out of stack. Each walks the string with [tail calls](../tour/functions#tail-recursion).
+[`chars`](#chars) and [`reverse`](#reverse) work by character instead. A character here is one Unicode code point, so `"é"` is one character even though it takes two bytes. A letter with a combining accent (a grapheme cluster of two code points) counts as two.
+
+Every one of them is stack-safe: `repeat`, `split`, `replace`, `lines`, `words`, `chars` and the rest work on a string of any length, and give any number of pieces, without running out of stack. Each walks the string with [tail calls](../tour/functions#tail-recursion), except `reverse`, which halves the string at each step and so recurses only about 17 deep for a string of 100,000 characters.
 
 `string.toString`, which gives back the string itself, is in the prelude rather than in this module, with the `toString` of the other built-in types: see [Converting to text](./standard-library#converting-to-text).
 
@@ -271,6 +273,42 @@ string.words: string -> list(string)
 ```nanyx
 string.words("  one two   three ")
 -- ["one", "two", "three"]
+```
+
+---
+
+# chars
+
+```nanyx
+String.chars: string -> list(string)
+```
+
+Each character of the string as a string of its own, in order. A character is one code point, so a string can have fewer characters than bytes, and `s \chars \String.concat` is `s` again.
+
+```nanyx
+"héllo" \chars
+-- ["h", "é", "l", "l", "o"]
+
+List.length(String.chars("héllo"))
+-- 5
+
+String.chars("")
+-- []
+```
+
+---
+
+# reverse
+
+```nanyx
+String.reverse: string -> string
+```
+
+The string with its characters, not its bytes, in reverse order, so a character outside ASCII is never cut in half.
+
+```nanyx
+String.reverse("héllo")
+-- "olléh"
 ```
 
 ---

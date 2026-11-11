@@ -6,11 +6,13 @@ module text
 -- `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
 -- `s.trim` is an error.
 --
--- Strings are UTF-8. This first slice works byte by byte: `length` counts bytes (not characters
+-- Strings are UTF-8. Most of this first slice works byte by byte: `length` counts bytes (not characters
 -- or grapheme clusters), indices and widths are byte offsets, `uppercase` and
 -- `lowercase` only change ASCII letters, and the trimming and `words` functions only treat ASCII
 -- whitespace as whitespace. Multi-byte characters pass through unchanged, except that `padStart` and
--- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character.
+-- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars` and
+-- `reverse` work by character, where a character is one Unicode code point: they read each UTF-8
+-- sequence's lead byte, so they never cut a character in half.
 --
 -- Everything here is written over four compiler intrinsics: `__nanyx_string_length`,
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split` and
@@ -18,7 +20,8 @@ module text
 -- prelude's `list.reverse`. `++` (concatenation) and `==` on strings are language operators.
 --
 -- Every function here is stack-safe: each one that walks a string calls itself only in tail position,
--- so it works on a string of any length.
+-- except `reverse`, which halves the string at each step and so recurses only as deep as the
+-- number of times its length can be halved. Each works on a string of any length.
 
 -- The number of bytes in `s`.
 export def string.length: string -> int = { s ->
@@ -322,4 +325,50 @@ def wordsFrom: string, int, list(string) -> list(string) = { s, from, acc ->
 -- The runs of non-whitespace in `s`, in order. Stack-safe: it works however many words there are.
 export def string.words: string -> list(string) = { s ->
   list.reverse(wordsFrom(s, 0, []))
+}
+
+-- Whether byte `b` continues a UTF-8 sequence rather than starting one.
+def isContinuationByte: int -> bool = { b -> b >= 128 and b < 192 }
+
+-- The index of the first byte of the character that byte `i` of `s` belongs to.
+def charStart: string, int -> int = { s, i ->
+  if i > 0 and isContinuationByte(__nanyx_string_byte_at(s, i)) then charStart(s, i - 1) else i
+}
+
+-- The index of the first byte at or after `i` that starts a character (or the length of `s`).
+def nextCharStart: string, int -> int = { s, i ->
+  if isContinuationByte(__nanyx_string_byte_at(s, i)) then nextCharStart(s, i + 1) else i
+}
+
+-- The characters of `s` before byte `stop`, in order, in front of `acc`.
+def charsBefore: string, int, list(string) -> list(string) = { s, stop, acc ->
+  def start = charStart(s, stop - 1)
+
+  if stop <= 0
+    then acc
+    else charsBefore(
+      s
+      start
+      __nanyx_list_cons(String.substring(s, start = start, length = stop - start), acc)
+    )
+}
+
+-- Each character of `s` as a string of its own, in order. A character is one Unicode code point, so
+-- "héllo" has five characters though it is six bytes long. Stack-safe: it works on a string of any
+-- length.
+export def String.chars: string -> list(string) = { s ->
+  charsBefore(s, String.length(s), [])
+}
+
+-- `s` with its characters (code points, not bytes) in reverse order. It cuts `s` at a character
+-- boundary near its middle and reverses each half, so it never cuts a character in half.
+export def String.reverse: string -> string = { s ->
+  def half = String.length(s) / 2
+  def after = nextCharStart(s, half)
+  def cut = if after < String.length(s) then after else charStart(s, half)
+
+  if cut == 0
+    then s
+    else String.reverse(String.substring(s, start = cut, length = String.length(s) - cut)) ++
+      String.reverse(String.substring(s, start = 0, length = cut))
 }
