@@ -1091,6 +1091,17 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                         let field = Pattern.tupleElementField names index element
                         let slot = fields |> List.findIndex (fst >> (=) field)
                         slot, lowerPattern false scrutinee (snd fields.[slot]) element))
+                // `(status = #some(v), ...)`: each member matches the field it names; the fields it leaves out are not
+                // looked at.
+                | RecordMemberPattern(members, _) ->
+                    let fields =
+                        match valueTy with
+                        | IrRecord fields -> fields
+                        | other -> cannot $"a record pattern on a value of type {IrType.show other}"
+                    PFields(members |> List.map (fun (name, member') ->
+                        match fields |> List.tryFindIndex (fst >> (=) name) with
+                        | Some slot -> slot, lowerPattern false scrutinee (snd fields.[slot]) member'
+                        | None -> cannot $"a record pattern on the field '{name}', which the value does not have"))
                 // `$Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
                 // local even at the top of an arm, as the old path gives it one.
                 | RecordPattern(typeName, [ inner ]) when (typeName.Split('.') |> Array.last).StartsWith "$" ->
