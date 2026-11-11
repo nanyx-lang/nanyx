@@ -131,8 +131,8 @@
     "declarations": {
       "patterns": [
         {
-          "comment": "def name, rec name, def Type.name, def Type.`op`",
-          "match": "\\b(def|rec)\\s+(?:(\\$?[A-Z][A-Za-z0-9_]*)(\\.))?(?:(`[^`]+`)|([a-z_][A-Za-z0-9_]*))(?![A-Za-z0-9_])",
+          "comment": "def name, rec name, def Type.name, def Type.`op`, def string.name",
+          "match": "\\b(def|rec)\\s+(?:(\\$?[A-Z][A-Za-z0-9_]*|int|float|bool|string|unit|list|seq|map|set)(\\.))?(?:(`[^`]+`)|([a-z_][A-Za-z0-9_]*))(?![A-Za-z0-9_])",
           "captures": {
             "1": { "name": "keyword.declaration.nanyx" },
             "2": { "name": "entity.name.type.nanyx" },
@@ -278,8 +278,8 @@
     "pipes": {
       "patterns": [
         {
-          "comment": "x \\Type.f  or  x \\f",
-          "match": "(\\\\)\\s*(?:(\\$?[A-Z][A-Za-z0-9_]*)(\\.))?([a-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_.])",
+          "comment": "x \\Type.f, x \\string.f  or  x \\f",
+          "match": "(\\\\)\\s*(?:(\\$?[A-Z][A-Za-z0-9_]*|int|float|bool|string|unit|list|seq|map|set)(\\.))?([a-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_.])",
           "captures": {
             "1": { "name": "keyword.operator.pipe.nanyx" },
             "2": { "name": "entity.name.type.nanyx" },
@@ -323,7 +323,7 @@
         {
           "comment": "Built-in lowercase types, not when used as a member (json.string) or piped into (\\map)",
           "name": "support.type.primitive.nanyx",
-          "match": "(?<![.\\\\A-Za-z0-9_])(int|float|string|bool|list|seq|gen|map|set|any|undefined)\\b"
+          "match": "(?<![.\\\\A-Za-z0-9_])(int|float|string|bool|unit|list|seq|gen|map|set|any|undefined)\\b"
         }
       ]
     },

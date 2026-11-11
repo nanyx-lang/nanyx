@@ -69,11 +69,11 @@ def findUser: int -> #some(User) | #none = { id ->
 
 ```nanyx
 def parseNumber = { s ->
-  Int.fromString(s) except #invalidInt -> #invalidVersionNumber
+  int.fromString(s) except #invalidInt -> #invalidVersionNumber
 }
 ```
 
-`Int.fromString(s)` is `#some(int) | #invalidInt`. The handled tag leaves the union and the replacement's type joins it, so `parseNumber` returns `#some(int) | #invalidVersionNumber`.
+`int.fromString(s)` is `#some(int) | #invalidInt`. The handled tag leaves the union and the replacement's type joins it, so `parseNumber` returns `#some(int) | #invalidVersionNumber`.
 
 To handle several cases, write the arms on the lines after `except`, as a `match` has them. An arm may bind the parts of what it matches, and may list alternatives:
 
@@ -117,12 +117,12 @@ The helpers in the prelude's `Option` and `Result` modules take the value first,
 ```nanyx
 def doubled: string -> int = { input ->
   input
-    \Int.fromString
+    \int.fromString
     \mapOption { * 2 }
     \defaultValueOption(0)
 }
 ```
 
-`Int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [option](../stdlib/option) and [result](../stdlib/result).
+`int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [option](../stdlib/option) and [result](../stdlib/result).
 
 > **Philosophy:** By making errors explicit in the type system, Nanyx ensures you always handle failure cases. No more unexpected crashes!

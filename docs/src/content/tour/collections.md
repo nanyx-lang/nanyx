@@ -4,7 +4,7 @@ description: Lists, maps, sets, and mutability
 order: 8
 ---
 
-Collections are typically immutable in Nanyx, although [it is possible to use and create mutable versions](../advanced/memory). Mutable versions live in `nanyx/collections.mutable` and, by convention, have an `M` prefix in their name (for example, `MList` vs `List`).
+Collections are typically immutable in Nanyx, although [it is possible to use and create mutable versions](../advanced/memory). Mutable versions live in `nanyx/collections.mutable` and, by convention, have an `M` prefix in their name (for example, `MList` vs `list`).
 
 # Immutable vs mutable
 
@@ -29,7 +29,7 @@ def addItems = {
 
 Use immutable collections by default. Reach for mutable variants when profiling shows a hot path that benefits from in-place updates.
 
-An immutable list can be updated in place too, when nothing else can see the change: transforming a list you hold the only reference to, with `List.map` or a function of your own that takes it apart and rebuilds it, reuses its cells. See [Reference counting](../foundations/reference-counting#reuse-in-place).
+An immutable list can be updated in place too, when nothing else can see the change: transforming a list you hold the only reference to, with `list.map` or a function of your own that takes it apart and rebuilds it, reuses its cells. See [Reference counting](../foundations/reference-counting#reuse-in-place).
 
 # Common collection abstractions
 
@@ -37,9 +37,9 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 
 | Collection type | Special alias | Characteristics |
 |-----------------|-------------------|---------|
-| `List(a)` | `list(a)` | Indexable collections |
-| `Set(a)` | `set(a)` | Membership checks |
-| `Map(k, v)` | `map(k, v)` | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
+| `list(a)` | - | Indexable collections |
+| `set(a)` | - | Membership checks |
+| `map(k, v)` | - | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
 | `Collection(a)` | - | Any in-memory collection |
 | `Sequence(a)` | `seq(a)` | Finite, deterministic sequences |
 | `Generator(a)` | `gen(a)` | Potentially infinite or non-deterministic sequences |
@@ -47,14 +47,14 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 ```nanyx
 def lookup = ["a" => 1, "b" => 2]
 
-def unique = Set.fromList([1, 2, 2, 3])
+def unique = set.fromList([1, 2, 2, 3])
 ```
 
 The functions on them are on the [collections](../stdlib/collections), [map](../stdlib/map) and [set](../stdlib/set) pages.
 
 ## Literal types
 
-Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal: a set is made from a list with `Set.fromList`. Literals that take their type from an annotation, such as `def unique: Set(int) = [1, 2, 2, 3]`, are planned, with the builders described under [Syntax](#syntax).
+Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal: a set is made from a list with `set.fromList`. Literals that take their type from an annotation, such as `def unique: set(int) = [1, 2, 2, 3]`, are planned, with the builders described under [Syntax](#syntax).
 
 Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 

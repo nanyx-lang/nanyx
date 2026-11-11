@@ -67,16 +67,22 @@ def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 def Point.`0` = Point(x = 0, y = 0)
 ```
 
-# Namespacing utilities
+# Attaching to a built-in type
 
-Attached definitions are also useful for namespacing helpers:
+The name before the dot must be a real type, spelled as the type is. A built-in type is spelled in lowercase, so a definition attached to strings is written and called with `string`:
 
 ```nanyx
-def Option.map
-  : ((#some(a) | r), (a -> b)) -> (#some(b) | r)
-  = { | #some(a), f -> #some(f(a))
-      | other, _ -> other }
+def string.shout = { (s: string) -> s ++ "!" }
+
+def a = string.shout("hi")
+def b = "hi" \shout
 ```
+
+The same goes for `int`, `float`, `bool`, `unit`, `list`, `seq`, `map` and `set`: the prelude's functions are `int.fromString`, `list.map`, `map.get` and so on.
+
+The capitalised spellings, `Int.fromString` or `List(int)`, are not types. For now they are still read as the type they stand for, with the warning `NYX0112` and a fix that writes the type's name; they will stop working in a later release.
+
+A name that is not a type cannot have definitions attached to it: `def Option.map` is an error, since there is no type `Option`. A helper that works on any option-like union is an ordinary function, such as the prelude's `mapOption`.
 
 # When to use attached definitions
 

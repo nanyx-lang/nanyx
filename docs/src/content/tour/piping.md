@@ -81,7 +81,7 @@ def result = fold([1, 2, 3], 0, { + })
 ```nanyx
 def describe = { words ->
   words
-    \String.join(" ")
+    \string.join(" ")
     \match
       | "" -> "nothing"
       | s -> s
@@ -97,7 +97,7 @@ If the function is [attached](../advanced/attached-definitions) to the type on t
 
 ```nanyx
 -- In regular function syntax we must qualify the function with the type name
-def parts = String.split("hello world", on = " ")
+def parts = string.split("hello world", on = " ")
 
 -- With piping, we can omit the type name because we know the type of the first argument before we need to identify the function
 def parts = "hello world" \split(on = " ")

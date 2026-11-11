@@ -1,9 +1,9 @@
 -- SYNTAX TEST "source.nanyx" "a qualified call colours the whole name; a field is a member"
 
-def a = Int.fromString(qty)
+def a = int.fromString(qty)
 --          ^^^^^^^^^^ entity.name.function.call.nanyx - variable.other.member.nanyx
 
-def b = String.uppercase(sku)
+def b = string.uppercase(sku)
 --             ^^^^^^^^^ entity.name.function.call.nanyx - variable.other.member.nanyx
 
 def c = order.lines
@@ -12,3 +12,11 @@ def c = order.lines
 
 def d = { .field }
 --         ^^^^^ variable.other.member.nanyx
+
+def int.double = { n -> n * 2 }
+--  ^^^ entity.name.type.nanyx
+--      ^^^^^^ entity.name.function.nanyx
+
+def e = 3 \int.double
+--         ^^^ entity.name.type.nanyx
+--             ^^^^^^ entity.name.function.nanyx

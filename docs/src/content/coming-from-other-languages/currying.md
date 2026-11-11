@@ -29,10 +29,10 @@ Those costs outweigh the conciseness upside for Nanyx. The sections below explai
 In Nanyx, these evaluate to the same result:
 
 ```nanyx
-String.concat("Hello, ", "World!")
+string.concat("Hello, ", "World!")
 
 "Hello, "
-  \String.concat("World!")
+  \string.concat("World!")
 ```
 
 That is what most people expect after learning `\`. In curried languages, the second line usually produces a different result, because the piped value is used as the last argument rather than the first. This makes the operator feel less predictable, even for experienced users.
@@ -50,7 +50,7 @@ In Nanyx, those mean divide by 2 and subtract 1. In curried languages, they typi
 Nanyx also benefits from `\` with higher-order functions. Consider:
 
 ```nanyx
-def answer = numbers \List.map { num ->
+def answer = numbers \list.map { num ->
     someFunction(
         "some argument"
         num
@@ -58,10 +58,10 @@ def answer = numbers \List.map { num ->
     )
 }
 
-numbers \List.map(Num.abs)
+numbers \list.map(Num.abs)
 ```
 
-Because `\` passes the value as the first argument, both examples work without extra parentheses. In a curried language, `\List.map Num.abs` usually only works if `List.map` takes the function first and the list second, which makes the first example more awkward and more parenthesized.
+Because `\` passes the value as the first argument, both examples work without extra parentheses. In a curried language, `\list.map Num.abs` usually only works if `list.map` takes the function first and the list second, which makes the first example more awkward and more parenthesized.
 
 Currying and `\` are in tension: the style that makes `\` feel natural works against currying's main advantage.
 
@@ -76,14 +76,14 @@ None of that is impossible to learn, but it is extra conceptual weight that does
 Currying makes pointfree composition effortless, but pointfree code is often harder to read. Compare:
 
 ```nanyx
-def reverseSort = compose(List.reverse, List.sort)
+def reverseSort = compose(list.reverse, list.sort)
 
 ```
 
 with:
 
 ```nanyx
-def reverseSort = { list -> List.reverse(List.sort(list)) }
+def reverseSort = { xs -> list.reverse(list.sort(xs)) }
 
 ```
 

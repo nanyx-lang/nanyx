@@ -29,13 +29,13 @@ operators call, and `Hash(a)` and `__hash`.
 - **Generic code says it compares.** `==` on a type variable of a def that writes its type needs `[Eq(a)]` in that
   type. A def that does not write its type has the requirement inferred, and its `==` then calls the member of the
   instance it is passed. A requirement on a type built from a variable reduces to the variable: `==` on a `list(a)`
-  needs `Eq(a)`. `List.distinct` is `[Eq(a)] list(a) -> list(a)`.
+  needs `Eq(a)`. `list.distinct` is `[Eq(a)] list(a) -> list(a)`.
 - **`!=` is not a member.** It is `not (a == b)`, and calls whatever `==` calls.
 - **Instances at a call.** A call that requires `Eq(T)` finds: an instance in scope (a `use`, or the enclosing
   signature); then the `==` attached to `T`; then the compiler's own, whose member is the prelude's `__equals`, a
   generic function that compares by structure at the type it is specialised for.
 - **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
-  built-in type such as `String`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
+  built-in type such as `string`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
   at each type it is called with. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
@@ -84,9 +84,9 @@ Not done yet:
   four operators read it, so they cannot disagree. `Ord` does not require `Eq`.
 - **The compiler's own orders** numbers, bools (`false` first), strings (by bytes), and tuples and lists of them,
   lexicographically. On floats the operators follow IEEE 754, while `__compare`, the member of the compiler's own
-  instance, and `Float.compare` are a total order with NaN last, so `List.sort` of floats is well defined. The
+  instance, and `float.compare` are a total order with NaN last, so `list.sort` of floats is well defined. The
   backend writes one ordering function per type (`CoreIrOrdering.fs`), reached through the intrinsic
-  `__nanyx_compare`. `Int`, `Float`, `Bool` and `String` each attach a `compare` that is the compiler's own, as a
+  `__nanyx_compare`. `int`, `float`, `bool` and `string` each attach a `compare` that is the compiler's own, as a
   function to call; a built-in type's `Ord` is always the compiler's own, so nothing reads an attached `compare` for one.
 - **Records, tags and functions have no order.** `<` on one, or on a tuple or list that holds one, is `NYX0205` at
   the operator, naming the part; so is passing one to a function that requires `Ord`. The message for a record or
@@ -99,8 +99,8 @@ Not done yet:
   (and `<=`, `>`, `>=` call `__lessOrEqual`, `__greater` and `__greaterOrEqual`), which is passed the instance.
 - **Only nominal and protected types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
   as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
-- **Lists.** `List.sort` and `List.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `List.min` and
-  `List.max`, which give `#emptyList` for an empty list, as `List.head` does.
+- **Lists.** `list.sort` and `list.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `list.min` and
+  `list.max`, which give `#emptyList` for an empty list, as `list.head` does.
 - **Local functions are checked at each call**, as for `Eq`: a call to a local `def lt = { x, y -> x < y }` with
   records is `NYX0205` at the call, and a def that calls it with one of its own type variables requires `Ord` of it.
 - **A list is ordered through its elements' `Ord`**, as for `Eq`: `[v(1), v(2)] < [v(3)]` on `list($Version)` calls
@@ -123,7 +123,7 @@ Not done yet, as for `Eq`:
   their structure have the same hash: ints, bools and unit are their own hash, a float is hashed by its bits with
   `-0.0` as `0.0`, a string by its bytes (FNV-1a), and records, tuples, lists and tags part by part. Its member is
   `__hash`, which calls the intrinsic `__nanyx_hash`; the backend writes one hash function per type
-  (`CoreIrHashing.fs`). `Int`, `Float`, `Bool` and `String` each attach a `hash` that is the compiler's own, to call
+  (`CoreIrHashing.fs`). `int`, `float`, `bool` and `string` each attach a `hash` that is the compiler's own, to call
   when writing a type's own `hash`.
 - **Functions have no hash**: passing a function, or anything that holds one, to a function that requires `Hash` is
   `NYX0205` at the call, naming the part.
@@ -173,7 +173,7 @@ built from a type's structure (see [structural context synthesis](./type-members
 
 - **Type checking.** `==` and `!=` unify their two operands and return `bool`; nothing else is checked
   (`Infer.fs:1381-1382`). In effect `==` has the type `a, a -> bool` for *every* `a`, functions included, and adds
-  no requirement to a generic function. `List.distinct: list(a) -> list(a)` relies on this
+  no requirement to a generic function. `list.distinct: list(a) -> list(a)` relies on this
   (`stdlib/nanyx/prelude.nyx:281-288`).
 - **Lowering.** After monomorphisation the backend picks an implementation from the operand's concrete type
   (`CoreIrLower.fs:479-504`): `i32.eq` for int, bool and unit; `f64.eq` for float; a byte comparison for strings;
@@ -189,14 +189,14 @@ built from a type's structure (see [structural context synthesis](./type-members
 # Ordering: numbers only
 
 `<`, `<=`, `>` and `>=` constrain both operands to a numeric type (`Infer.fs:1376-1380`). Strings, tuples and type
-variables cannot be ordered ([#476](https://github.com/nanyx-lang/nanyx/issues/476)), which is why `List.sortBy`
-takes `(a -> int)` keys (`prelude.nyx:301-302`) and there is no `List.sort`
+variables cannot be ordered ([#476](https://github.com/nanyx-lang/nanyx/issues/476)), which is why `list.sortBy`
+takes `(a -> int)` keys (`prelude.nyx:301-302`) and there is no `list.sort`
 ([#475](https://github.com/nanyx-lang/nanyx/issues/475), [#191](https://github.com/nanyx-lang/nanyx/issues/191)).
 
 # Hashing, maps and sets: nothing
 
 There was no `Hash` context, no map or set type, and no map literal (#191, `groupBy`). Since then `map(k, v)`, map
-literals and `List.groupBy` exist, keyed by `Eq` alone ([#477](https://github.com/nanyx-lang/nanyx/issues/477)); see
+literals and `list.groupBy` exist, keyed by `Eq` alone ([#477](https://github.com/nanyx-lang/nanyx/issues/477)); see
 [Maps and sets](./maps-and-sets). `Hash` and sets are still to come
 ([#533](https://github.com/nanyx-lang/nanyx/issues/533)).
 
@@ -216,7 +216,7 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 | A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks did not parse, attached or not, and neither did an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). *Since fixed:* they parse, and `a + b` on a type that attaches `` `+` `` calls it. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
-| `List.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
+| `list.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
 | `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-53](./printing-values) has a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two pages disagree with each other. |
 
 Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and
@@ -270,14 +270,14 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
   is therefore not quite an equivalence; the docs say so.
 - **Generic code says it compares.** `==` on a type variable `a` requires `Eq(a)`. A function that writes its type must
   write `[Eq(a)]`; one that does not has it inferred. Generic code is then checked once, where it is written, not at
-  each type it is used with. `List.distinct` becomes `[Eq(a)] list(a) -> list(a)`.
+  each type it is used with. `list.distinct` becomes `[Eq(a)] list(a) -> list(a)`.
 - **A type overrides equality by attaching `==`.** ``def $Email.`==` = { a, b -> lower(a) == lower(b) }`` is found by
   the existing synthesis step, ahead of structural derivation. Only nominal and protected types may do this. A
   structural type built from one uses it: a
   `list($Email)` compares its elements with `` $Email.`==` ``. This needs [#527](https://github.com/nanyx-lang/nanyx/issues/527).
 - **A block overrides it with `use`.** Loading `def ignoringCase: Eq(string) = (`` `==` `` = caseInsensitive)` with
   `use ignoringCase` changes what a plain
-  `a == b` in that block means, and what generic code called from it sees (`xs \List.contains(name)`).
+  `a == b` in that block means, and what generic code called from it sees (`xs \list.contains(name)`).
 - **Nominal and protected types** get the structural equality of their underlying type unless they attach `==`.
   Comparing two `$UserId`s does not construct one, so it cannot break the type's invariants.
 
@@ -332,7 +332,7 @@ they cannot disagree with each other. `<` on a type variable requires `[Ord(a)]`
 
 Derived orders: numbers numerically, `false < true`, strings by their bytes (the order of their Unicode code
 points), tuples and lists lexicographically. For floats the operators follow IEEE 754 (every comparison with `NaN`
-is false) while `Float.compare` is a total order (`NaN` after everything), so sorting a list of floats is well
+is false) while `float.compare` is a total order (`NaN` after everything), so sorting a list of floats is well
 defined; this is what Java and Rust do.
 
 **Records and tags get no derived order.** A record's fields have no order in its type (`(x: int, y: int)` is
@@ -342,7 +342,7 @@ that wants one is made nominal and attaches `compare`; otherwise use `sortBy` wi
 `Ord` does not require `Eq`; Nanyx contexts have no hierarchy. A type that attaches both should keep them
 consistent, and the docs say so.
 
-This closes [#476](https://github.com/nanyx-lang/nanyx/issues/476) and unblocks `List.sort`, `min`, `max`
+This closes [#476](https://github.com/nanyx-lang/nanyx/issues/476) and unblocks `list.sort`, `min`, `max`
 ([#475](https://github.com/nanyx-lang/nanyx/issues/475)) and a `sortBy` with `(a -> b)` keys.
 
 # Hashing
@@ -383,7 +383,7 @@ Each is reported by the type checker, with a span; none reaches the backend.
 | Attached `==` with the wrong type | the existing `MissingContextMembers` message |
 | `!=` attached to a type | `'!=' cannot be defined: it is always 'not (a == b)'. Attach '==' instead` |
 | `==`, `compare` or `hash` attached to a structural type | `'Point.==' cannot be defined: Point is a structural type, so it always compares by its fields. Make it nominal ($Point) to define its own equality` |
-| `Hash(T)` wanted where `T` has its own `==` | `'Map.insert' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'` (implemented) |
+| `Hash(T)` wanted where `T` has its own `==` | `'map.insert' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'` (implemented) |
 | Closed types with nothing in common | warning: `'#red' and '#some(int)' have no tag in common, so this is always false` |
 
 The language server's code action for the third adds the requirement to the signature.
@@ -392,7 +392,7 @@ The language server's code action for the third adds the requirement to the sign
 
 - Generic functions that use `==` without a signature are unaffected: the requirement is inferred.
 - Generic functions with a signature that use `==` on a type variable need `[Eq(a)]` added. In the prelude that is
-  `List.distinct`, `List.contains` and `List.indexOf`.
+  `list.distinct`, `list.contains` and `list.indexOf`.
 - `==` on records, tuples and lists starts working; on functions it moves from a backend error to a type error.
 - The docs' contexts page keeps its `Eq(a)` example, but as the prelude's context rather than one the user declares.
 
@@ -402,7 +402,7 @@ The language server's code action for the third adds the requirement to the sign
    ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 2. `Eq` in the prelude; `==` and `!=` read through it; structural derivation; per-type equality functions in the
    backend; the join for open unions. Closes #424 and #526.
-3. `Ord`, `compare` and the four operators; `List.sort`, `min`, `max`, generic `sortBy`. Closes #476.
+3. `Ord`, `compare` and the four operators; `list.sort`, `min`, `max`, generic `sortBy`. Closes #476.
 4. `Hash` (done, [#533](https://github.com/nanyx-lang/nanyx/issues/533)), then maps and sets keyed by it.
 5. `ToString` per printing values (#330).
 

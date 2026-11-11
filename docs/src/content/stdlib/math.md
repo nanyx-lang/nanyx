@@ -8,7 +8,7 @@ The `math` module provides common numeric and floating-point operations.
 
 Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs` and `pow` accept either without conversion. `min`, `max` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
 
-`floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `Int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
+`floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 
 # abs
 
@@ -105,14 +105,14 @@ math.pow(2, 8)
 -- 2.25
 ```
 
-For an exponent that is not a whole number, `Float.pow`, in the prelude, takes a `float`:
+For an exponent that is not a whole number, `float.pow`, in the prelude, takes a `float`:
 
 ```nanyx
-Float.pow: (float, float) -> float
+float.pow: (float, float) -> float
 ```
 
 ```nanyx
-Float.pow(2.0, 0.5)
+float.pow(2.0, 0.5)
 -- 1.414213562373095
 ```
 

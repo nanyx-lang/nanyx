@@ -39,8 +39,8 @@ Caused by:
 The embedded Wasmtime (48.0.2, `Nanyx.Compiler.Runtime`) already runs `return_call` with its default
 configuration: a hand-written self tail call ran 100,000,000 times without growing the stack.
 
-In the standard library, `List.fold` is tail-recursive, and `List.reverse` and `List.length` are written with it.
-`List.map` (`[f(x), ...List.map(rest, f)]`) is not.
+In the standard library, `list.fold` is tail-recursive, and `list.reverse` and `list.length` are written with it.
+`list.map` (`[f(x), ...list.map(rest, f)]`) is not.
 
 # Why a guarantee
 
@@ -129,7 +129,7 @@ operand of, the function it is passed to, the list it goes into, the name it is 
   deep as the tree, and it is the plainest way to write a function that builds a list. A project that
   wants every loop to be stack-safe raises it to a warning or an error in its `.nyxp`.
 - **Only a function's own calls count.** A call from a lambda written in the function (a workflow block, a `for`
-  loop's body, an argument to `List.map`) is a call from that lambda, and is not reported. Nor is mutual recursion:
+  loop's body, an argument to `list.map`) is a call from that lambda, and is not reported. Nor is mutual recursion:
   the rule looks at one function at a time.
 - **It uses the same rules as the backend** (`TailPosition.callsIn`), so a call it does not report is one the
   backend lowers to `return_call`.
@@ -142,7 +142,7 @@ documentation that the compiler checks, not a request to optimise: the guarantee
 
 Each standard-library function that walks a collection says whether it is stack-safe, and today every one of them
 is: `default/nonTailRecursion` reports nothing in `stdlib/nanyx`, which a test checks. Tail recursion modulo cons
-(writing a list cell's tail after the recursive call returns, as OCaml and Koka do) would let `List.map` and the
+(writing a list cell's tail after the recursive call returns, as OCaml and Koka do) would let `list.map` and the
 like be written as plainly as they read, but it is an optimisation and not part of the promise; until it exists,
 the functions that build a list build it in reverse with an accumulator and reverse the result. `++` on lists is
 not yet stack-safe (its runtime helper recurses once per element of its left operand,
@@ -162,9 +162,9 @@ not yet stack-safe (its runtime helper recurses once per element of its left ope
    million deep with counting in.
 5. **Stack overflow error.** Report running out of stack as a Nanyx error.
 6. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
-7. **Stack-safe `List.map` and `List.filter`.** **Done:** they and every other walk in the standard library
-   (`List.take`, `flatten`, `zip`, `unzip`, `partition`, `skipWhile`, `get`, `sortBy`, `unfold`, `append`;
-    `String.repeat`, `split`, `replace`, `lines`,
+7. **Stack-safe `list.map` and `list.filter`.** **Done:** they and every other walk in the standard library
+   (`list.take`, `flatten`, `zip`, `unzip`, `partition`, `skipWhile`, `get`, `sortBy`, `unfold`, `append`;
+    `string.repeat`, `split`, `replace`, `lines`,
    `words`; `math.pow`) call themselves only in tail position, with tests that run them on 20,000 elements.
 
 # Open questions

@@ -68,14 +68,14 @@ As with a [destructuring binding](./pattern-matching#destructuring-bindings), a 
 Higher-order functions can accept lambdas that require a context. This lets APIs parameterize the capability available inside the callback.
 
 ```nanyx
-List.select: (list(a), [Yield(b)] (a -> ())) -> list(b)
+list.select: (list(a), [Yield(b)] (a -> ())) -> list(b)
 ```
 
 In the type above, the callback `(a -> ())` runs with a `Yield(b)` context, so it can call `yield` while processing each element.
 
 ```nanyx
 def names: list(Person) -> list(string) = { people ->
-  people \List.select { person ->
+  people \list.select { person ->
     if person.isActive then yield(person.name)
   }
 }
@@ -87,30 +87,30 @@ This pattern is called a **contextual lambda**: the higher-order function decide
 
 Sometimes, a higher-order function wants to be flexible about what kinds of contexts.
 
-For example, what context does a `List.map` function run in? It could be a pure function, but it could also be a stateful computation or an effectful operation. To support all of these, `List.map` can be defined with a parametric context:
+For example, what context does a `list.map` function run in? It could be a pure function, but it could also be a stateful computation or an effectful operation. To support all of these, `list.map` can be defined with a parametric context:
 
 ```nanyx
-List.map: [c] (list(a), [c] a -> b) -> list(b)
+list.map: [c] (list(a), [c] a -> b) -> list(b)
 ```
 
-This function takes a context parameter, written as a single lowercase character (just like an automatically introduced type variable, which must also be one character). This means that the caller can choose any context `c` for the callback, and `List.map` will work with it. The callback can be a pure function, a stateful computation, or an effectful operation, depending on the caller's needs.
+This function takes a context parameter, written as a single lowercase character (just like an automatically introduced type variable, which must also be one character). This means that the caller can choose any context `c` for the callback, and `list.map` will work with it. The callback can be a pure function, a stateful computation, or an effectful operation, depending on the caller's needs.
 
 ```nanyx
 def f: list(int) -> list(int) = { numbers ->
-  -- Error: List.map inherits the [Console] context requirement from `println`, but `f` does not declare it
-  numbers \List.map { n ->
+  -- Error: list.map inherits the [Console] context requirement from `println`, but `f` does not declare it
+  numbers \list.map { n ->
     println(n)
     n + 1
   }
 }
 ```
 
-If we remove the context parameter and write `List.map` with a concrete context, like `[Console]`, then any lambda passed to `List.map` would require the `Console` context. This would make it impossible to use `List.map` with pure functions or functions that require different contexts, which is why parametric contexts are important for higher-order functions.
+If we remove the context parameter and write `list.map` with a concrete context, like `[Console]`, then any lambda passed to `list.map` would require the `Console` context. This would make it impossible to use `list.map` with pure functions or functions that require different contexts, which is why parametric contexts are important for higher-order functions.
 
 ```nanyx
 def f: list(int) -> list(int) = { numbers ->
-  -- Ok, because the lambda passed to `List.map` is pure (i.e. has no context requirements)
-  numbers \List.map { n ->
+  -- Ok, because the lambda passed to `list.map` is pure (i.e. has no context requirements)
+  numbers \list.map { n ->
     n + 1
   }
 }
@@ -118,8 +118,8 @@ def f: list(int) -> list(int) = { numbers ->
 
 ```nanyx
 def f: [Console] list(int) -> list(int) = { numbers ->
-  -- Also okay, because `f` declares the [Console] context requirement that `List.map` inherits from `println`
-  numbers \List.map { n ->
+  -- Also okay, because `f` declares the [Console] context requirement that `list.map` inherits from `println`
+  numbers \list.map { n ->
     println(n)
     n + 1
   }

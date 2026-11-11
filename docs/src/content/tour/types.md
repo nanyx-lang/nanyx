@@ -14,8 +14,8 @@ Nanyx can infer most types automatically:
 -- Type is inferred as: int, int -> int
 def add = { x, y -> x + y }
 
--- Type is inferred as: string -> int, from the call to String.length
-def length = { s -> String.length(s) }
+-- Type is inferred as: string -> int, from the call to string.length
+def length = { s -> string.length(s) }
 ```
 
 # Type annotations
