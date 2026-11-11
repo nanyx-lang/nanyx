@@ -380,6 +380,15 @@ let private fieldsToExpr (fields, span) =
         else
             Expression.at span (RecordExpr fields)
 
+// The arguments of a call `f(fields) { ... }`. The trailing lambda is the last positional argument, as it is in a pipe
+// (see `pipeCallArguments`): `f(a, b) { ... }` is `f(a, b, { ... })`, and `f(a, y = 1) { ... }` is
+// `f(a, { ... }, y = 1)`.
+let private withTrailingLambda (fields, span) (lambda: Expression) =
+    let positional, named = fields |> List.partition (function PositionalField _ -> true | NamedField _ -> false)
+    match named with
+    | [] -> (positional |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)) @ [ lambda ]
+    | _ -> [ Expression.at span (RecordExpr(positional @ [ PositionalField lambda ] @ named)) ]
+
 // Arguments in parentheses after a name, as in a call, a tag payload or a pipe target: `(a, b)`, `(x = 1)`.
 let private parenArguments =
     between (pstring "(") (pstring ")") (ws >>. withSpan recordFields |>> fieldsToExpr .>> ws)
@@ -1054,20 +1063,22 @@ do
 do 
     // Trailing lambda: function can be called with a lambda after parentheses
     // Examples: f(a, b) { x -> x + 1 } or f { x -> x + 1 } (no parens needed if only lambda arg)
-    // Note: f(a, b) creates single tuple argument: FunctionCall("f", None, [TupleExpr[a; b]])
+    // Note: f(a, b) creates single tuple argument: FunctionCall("f", None, [TupleExpr[a; b]]), and f(a, b) { ... }
+    // passes the lambda after them: FunctionCall("f", None, [a; b; lambda]) (see `withTrailingLambda`)
 
     let callWithParensAndTrailing =
         spanned (
             pipe3
                 qualifiedIdentifierWithSpan
                 (between (pstring "(") (pstring ")")
-                    (opt (ws >>. (withSpan recordFields |>> fieldsToExpr) .>> ws)))
+                    (opt (ws >>. withSpan recordFields .>> ws)))
                 (opt (attempt (skipMany (skipAnyOf " \t") >>. lambda)))
-                (fun (name, nameSpan) exprOpt trailingLambdaOpt ->
-                    let baseArgs = match exprOpt with Some e -> [e] | None -> []
-                    match trailingLambdaOpt with
-                    | Some lambdaExpr -> FunctionCall(name, nameSpan, baseArgs @ [lambdaExpr])
-                    | None -> FunctionCall(name, nameSpan, baseArgs)))
+                (fun (name, nameSpan) fieldsOpt trailingLambdaOpt ->
+                    match fieldsOpt, trailingLambdaOpt with
+                    | Some fields, Some lambdaExpr -> FunctionCall(name, nameSpan, withTrailingLambda fields lambdaExpr)
+                    | Some fields, None -> FunctionCall(name, nameSpan, [ fieldsToExpr fields ])
+                    | None, Some lambdaExpr -> FunctionCall(name, nameSpan, [ lambdaExpr ])
+                    | None, None -> FunctionCall(name, nameSpan, [])))
 
     let callWithOnlyTrailing =
         attempt (

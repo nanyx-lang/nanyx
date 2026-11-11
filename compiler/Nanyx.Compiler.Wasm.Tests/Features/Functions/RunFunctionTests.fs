@@ -453,3 +453,20 @@ let ``Run - calling the function a top-level value holds evaluates the value onc
         "def adder = makeAdder(dbg(1))\n" +
         "dbg(adder(2))\n"
     runSource source |> assertRan "dbg: 1\ndbg: 3\n"
+
+[<Fact>]
+let ``Run - a trailing lambda after several arguments is the call's last argument`` () =
+    let source = """import nanyx/console
+
+def combine: int, int, (int, int -> int) -> int = { a, b, g -> g(a, b) }
+def scaled: (int, (int -> int), scale: int) -> int = { a, g, scale -> g(a) * scale }
+
+@entry
+def main = {
+  println("{list.fold([1, 2, 3], 10) { acc, x -> acc + x }}")
+  println("{combine(3, 4) { a, b -> a * b }}")
+  println("{scaled(5, scale = 2) { x -> x + 1 }}")
+  println("{list.unfold((0, 1)) { a, b -> if a > 10 then #done else #some(a, (b, a + b)) } \sum}")
+}
+"""
+    runSource source |> assertRan "16\n12\n12\n20\n"
