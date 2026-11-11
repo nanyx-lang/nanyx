@@ -21,7 +21,11 @@ let ``An escaped brace in an interpolated string is text, not a hole`` () =
 
 [<Fact>]
 let ``An escaped quote does not end the string`` () =
-    match parse "def s = \"say \\\"hi\\\"\"\ndef t = 1\n" with
+    let source = """
+def s = "say \"hi\""
+def t = 1
+"""
+    match parse source with
     | Result.Ok [ Kind (Def (ValueDef (_, "s", _, Kind (LiteralExpr (StringLit "say \"hi\""))))); _ ] -> ()
     | other -> Assert.Fail $"Unexpected parse: %A{other}"
 
@@ -34,7 +38,14 @@ let ``A single-quoted string is raw: a backslash is a backslash`` () =
 
 [<Fact>]
 let ``A string pattern decodes its escapes`` () =
-    match parse "def f = { s ->\n  match s\n    | \"a\\tb\" -> 1\n    | _ -> 2\n}\n" with
+    let source = """
+def f = { s ->
+  match s
+    | "a\tb" -> 1
+    | _ -> 2
+}
+"""
+    match parse source with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, [ [ Kind (LiteralPattern (StringLit "a\tb")) ], _; _ ])))) ])))))) ] -> ()
     | other -> Assert.Fail $"Unexpected parse: %A{other}"
 
@@ -44,7 +55,8 @@ let ``A string pattern decodes its escapes`` () =
 [<InlineData("""def s = "\u{D800}" """, "`\\u{...}` is a code point in hex")>]
 [<InlineData("""def s = "\u{110000}" """, "`\\u{...}` is a code point in hex")>]
 [<InlineData("""def s = "\u{zz}" """, "`\\u{...}` is a code point in hex")>]
-[<InlineData("def s = \"a\\\nb\"", "A backslash on its own is not an escape")>]
+[<InlineData("""def s = "a\
+b" """, "A backslash on its own is not an escape")>]
 let ``An unknown escape is an error at its backslash`` (source: string, expected: string) =
     match parseModuleWithTrivia "t.nyx" source with
     | Result.Error error ->

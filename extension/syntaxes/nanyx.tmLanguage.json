@@ -87,15 +87,14 @@
     "strings": {
       "patterns": [
         {
-          "comment": "Double-quoted strings support escapes and {interpolation}; {{ and }} are literal braces",
+          "comment": "Double-quoted strings support backslash escapes and {interpolation}; \\{ is a literal brace",
           "name": "string.quoted.double.nanyx",
           "begin": "\"",
           "end": "\"",
           "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.nanyx" } },
           "endCaptures": { "0": { "name": "punctuation.definition.string.end.nanyx" } },
           "patterns": [
-            { "name": "constant.character.escape.nanyx", "match": "\\\\." },
-            { "name": "constant.character.escape.brace.nanyx", "match": "\\{\\{|\\}\\}" },
+            { "name": "constant.character.escape.nanyx", "match": "\\\\u\\{[0-9A-Fa-f]*\\}|\\\\." },
             {
               "name": "meta.embedded.interpolation.nanyx",
               "begin": "\\{",

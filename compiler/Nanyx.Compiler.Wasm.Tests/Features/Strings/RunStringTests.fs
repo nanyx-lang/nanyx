@@ -52,17 +52,23 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
 
 [<Fact>]
 let ``Run - escapes in double-quoted strings`` () =
-    // A line break, a tab, a quote, a backslash and a brace can be written in a double-quoted string (#247); a
-    // single-quoted string is raw.
-    let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def n = 5\n" +
-        "println(\"a\\nb\")\n" +
-        "println(\"say \\\"hi\\\"\")\n" +
-        "println(\"\\{n} = {n}\\t|\\\\|\\u{e9}\")\n" +
-        "println('raw\\n{n}')\n"
-    runSource source |> assertRan "a\nb\nsay \"hi\"\n{n} = 5\t|\\|é\nraw\\n{n}\n"
+    // A line break, a quote, a backslash, a brace and a code point can be written in a double-quoted string (#247);
+    // a single-quoted string is raw.
+    let source = """import nanyx/console
+
+def n = 5
+println("a\nb")
+println("say \"hi\"")
+println("\{n} = {n}|\\|\u{e9}")
+println('raw\n{n}')
+"""
+    let expected = """a
+b
+say "hi"
+{n} = 5|\|é
+raw\n{n}
+"""
+    runSource source |> assertRan (expected.Replace("\r\n", "\n"))
 
 [<Fact>]
 let ``Run - string literals larger than the space below the heap`` () =

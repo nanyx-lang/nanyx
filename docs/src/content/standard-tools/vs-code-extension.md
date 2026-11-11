@@ -4,7 +4,7 @@ description: "Installing and configuring the Nanyx extension for Visual Studio C
 order: 3
 ---
 
-The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type) and runs the compiler as a language server (`nanyx lsp`), which gives you:
+The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, and the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type
 - the inferred type of whatever is under the pointer, on hover
