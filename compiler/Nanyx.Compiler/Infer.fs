@@ -2201,12 +2201,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     if index < patterns.Length then Some patterns.[index] else None)
             // For the exhaustiveness check, the scrutinees' types are resolved before the arms add their constraints.
             let resolvedScrutineeTypes = ScrutineeRests.resolve env current scrutineeTypes
+            let missingWitnesses = PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some)
             let mutable scrutineeOverrides: Map<int, Ty> = Map.empty
             for (index, scrutineeTy) in scrutineeTypes |> List.indexed do
                 // The arms describe the scrutinee's union, payloads included (`ArmUnion`). With a catch-all arm they
                 // need not name every tag, so the union is left open with a rest variable for the tags the arms do not
-                // name (`if #some(v) = get(n) then ...` must accept a `#some(int) | #none`).
-                match ArmUnion.describe false (patternsForIndex index) current with
+                // name (`if #some(v) = get(n) then ...` must accept a `#some(int) | #none`). Where the arms leave out
+                // a value of the scrutinee, the match is reported as non-exhaustive, so the union is left open too:
+                // closed, it would narrow a call's result to the tags the arms name and report the call's argument
+                // as the mistake (#681).
+                let leavesValueOut =
+                    missingWitnesses
+                    |> Option.bind (List.tryItem index)
+                    |> Option.exists (fun witness -> witness <> PatternSpace.Anything)
+                match ArmUnion.describe leavesValueOut (patternsForIndex index) current with
                 | Some (unionTy, stateForUnion) ->
                     scrutineeOverrides <- scrutineeOverrides |> Map.add index unionTy
                     current <- addConstraint scrutineeTy unionTy stateForUnion
@@ -2216,7 +2224,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             // A value no arm matches (`PatternSpace.missingCase`) is described as the one value that makes it so, or
             // as the combination of values.
             let exhaustivenessDiagnostics () =
-                match PatternSpace.missingCase (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some) with
+                match missingWitnesses with
                 | None -> []
                 | Some witnesses ->
                     match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
