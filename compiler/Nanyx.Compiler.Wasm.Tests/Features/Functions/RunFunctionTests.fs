@@ -409,6 +409,24 @@ let ``Run - holes in annotations are filled in by inference`` () =
     runSource source |> assertRan "42 7 same\nhi ada\nhi grace\n"
 
 [<Fact>]
+let ``Run - an annotated lambda parameter before a body that starts with a name (#272)`` () =
+    let source =
+        """
+import nanyx/console
+
+type Point = (x: int, y: int)
+def f = { q: Point -> q }
+def apply = { g: (int -> int), n: int -> g(n) }
+
+@entry
+def main = {
+  def p = f((x = 1, y = 2))
+  println("{p.x + p.y} {apply({ n -> n * 10 }, 4)}")
+}
+"""
+    runSource source |> assertRan "3 40\n"
+
+[<Fact>]
 let ``Run - a local lambda of no parameters runs each time it is called (#589)`` () =
     let source =
         "import nanyx/console\n" +
