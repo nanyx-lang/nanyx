@@ -15,6 +15,7 @@
     <Compile Include="Features\Blocks\BlockTests.fs" />
     <Compile Include="Features\Blocks\DoBlockTests.fs" />
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />
+    <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\AliasedContextTests.fs" />
     <Compile Include="Features\Contexts\OperatorContextTests.fs" />

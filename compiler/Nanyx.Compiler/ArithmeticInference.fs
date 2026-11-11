@@ -9,6 +9,8 @@ open NyxCompiler.InferState
 /// function's own type variables makes it require the prelude's context the operator is read through (see
 /// `OperatorContexts`), as if its type said so, and the operator calls the context's member: `def add = { x, y ->
 /// x + y }` is `[Add(a)] a, a -> a`. Any other operator is on numbers, as it would have been where it is written.
+/// `++` is read the same way, through `Append`, except that where it requires no context its operands are left as
+/// they are.
 ///
 /// A local function requires no contexts, so an operator on a type one would be generic in is on numbers.
 module internal ArithmeticInference =
@@ -21,8 +23,10 @@ module internal ArithmeticInference =
         | TopLevelDef of Identifier
 
     /// `state` with the operands of `pending`, now of the type `ty`, numbers: `int`, unless they are already `float`.
+    /// The operands of `++` are left as they are: what they are joined as is up to whatever else settles their type.
     let private asNumbers (pending: PendingArithmetic) (ty: Ty) (state: InferState) : InferState =
         match Unifier.unalias ty with
+        | _ when pending.MemberName = AppendOperator.operator -> state
         | TyPrimitive("int" | "float") -> state
         | _ -> addConstraintAt pending.At pending.OperandTy (TyPrimitive "int") state
 

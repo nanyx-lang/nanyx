@@ -204,6 +204,27 @@ export def float.fromInt: int -> float = { n ->
   int.toFloat(n)
 }
 
+-- Joining ---------------------------------------------------------------------------------------
+
+--| The values of type `a` that join, end to end. `x ++ y` is read through it:
+  `def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }` works at `string` and
+  at any `list`. A type gets one by attaching `` def $Path.`++` = ... ``.
+export context Append(a) = (`++`: (a, a) -> a)
+
+-- The compiler's own `Append` of `string` and `list(a)`: the members attached to them, which are
+-- what a function that requires one is passed. `++` on a `string` or a `list` is the built-in
+-- operator, not a call.
+
+--| `x` followed by `y`.
+export def string.`++`: string, string -> string = { x, y ->
+  x ++ y
+}
+
+--| The elements of `xs` followed by those of `ys`.
+export def list.`++`: list(a), list(a) -> list(a) = { xs, ys ->
+  xs ++ ys
+}
+
 -- Powers ----------------------------------------------------------------------------------------
 
 --| `acc` times `base` to the power `exponent`, for an `exponent` of zero or more: by repeated

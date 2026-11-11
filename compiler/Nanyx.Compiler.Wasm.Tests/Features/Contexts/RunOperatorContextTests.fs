@@ -85,3 +85,23 @@ def main = {
 }
 """
     runSource source |> assertRan "3 -0.5 7 3.0 -1 -2.5 7 4.0\nT\n"
+
+[<Fact>]
+let ``Run - ++ on a type variable is read through Append, whose instances join strings, lists and types that attach ++`` () =
+    let source =
+        """
+import nanyx/console
+
+type $Path = (parts: list(string))
+def $Path.`++`: $Path, $Path -> $Path = { p, q -> $Path(parts = p.parts ++ q.parts) }
+
+def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }
+def join = { x, y -> x ++ y }
+@entry
+def main = {
+  println(surround("*", "hi"))
+  println("{surround([0], [1, 2])} {join("a", "b")} {join([1.5], [2.5])}")
+  println("{join($Path(parts = ["a"]), $Path(parts = ["b", "c"])).parts}")
+}
+"""
+    runSource source |> assertRan "*hi*\n[0, 1, 2, 0] ab [1.5, 2.5]\n[a, b, c]\n"
