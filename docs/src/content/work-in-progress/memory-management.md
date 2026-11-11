@@ -198,6 +198,8 @@ shape. A body is an expression with a type on every node:
 | `makeRecord(f1 = atom, ...)` | allocates a record, its fields in the order they are stored |
 | `field(atom, slot)` | reads the field stored in a slot of a record |
 | `updateRecord(atom, slot = atom, ...)` | copies a record with some fields replaced (`record with f = v`) |
+| `x := atom` | gives a local cell a new value, dropping the one it held (see [Memory](../advanced/memory)) |
+| `x[slot] := atom` | writes a field of a box a lambda shares, dropping the value it held: how a captured cell changes |
 | `makeList(atoms)` | builds a list |
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
 | `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures |

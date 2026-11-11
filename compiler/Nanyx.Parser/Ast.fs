@@ -416,6 +416,16 @@ module AssignSyntax =
         | FunctionCall(name, _, [ target; value ]) when name = builtIn -> Some (target, value)
         | _ -> None
 
+/// The cells of a `memory` block (see `MutSyntax`) as the backend is given them, once the type checker has found them:
+/// calls to built-ins no code can write. A cell no lambda captures is a local, still made with `__mut` and changed
+/// with `__assign`, and each read of it is a call to `read`. A cell a lambda captures is a box the lambdas share, made
+/// with `box`, read with `unbox` and changed with `setBox`. A `for` loop's body is not such a lambda: it runs where it is.
+module CellSyntax =
+    let read = "__cell_read"
+    let box = "__cell_box"
+    let unbox = "__cell_unbox"
+    let setBox = "__cell_set"
+
 module TypeExpr =
     /// A type expression written at `span`.
     let at (span: SourceSpan) (kind: TypeExprKind) : TypeExpr =

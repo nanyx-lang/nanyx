@@ -122,6 +122,11 @@ and ExprKind =
     | Field of Atom * int
     /// Copies a record of this many fields, and replaces the fields in these slots: `record with f = v`.
     | UpdateRecord of Atom * int * (int * Atom) list
+    /// Gives the cell this local is (see `CellSyntax`) the atom's value, dropping the value it held, and is unit.
+    | Assign of Var * Atom
+    /// Writes the atom's value into this slot of the record in the local, dropping the value it held, and is unit: how a
+    /// box a lambda shares is changed (see `CellSyntax`).
+    | SetField of Var * int * Atom
     /// Builds a list of these elements, in order.
     | MakeList of Atom list
     /// A call to a runtime helper (see `WasmRuntime.Helpers`): an intrinsic, or the helper an operator on strings, lists
@@ -397,6 +402,8 @@ module Print =
         | UpdateRecord(record, _, updates) ->
             let shown = updates |> List.map (fun (slot, value) -> $"[{slot}] = {atom value}") |> String.concat ", "
             $"{atom record} with {shown}"
+        | Assign(var, value) -> $"{var.Name} := {atom value}"
+        | SetField(record, slot, value) -> $"{record.Name}[{slot}] := {atom value}"
         | MakeList items -> $"[{atoms items}]"
         | CallRuntime(name, args, _) -> $"{name}({atoms args})"
         | MakeClosure(name, _, captured) -> $"closure {name}({atoms captured})"

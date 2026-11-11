@@ -385,6 +385,26 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 let bodyScope = { scope with Vars = vars; ForDepth = depth + 1 }
                 let forLoop: ForLoop = { Streams = List.map snd streams; Depth = depth; Body = this.Tail bodyScope body }
                 k (mk (ForEach forLoop) IrUnit))
+        // A cell (see `CellSyntax`) no lambda captures is the local its def binds, and one a lambda captures is a box of
+        // one field. A read is a copy of what the cell holds then, so that a later `:=` leaves the copy as it is.
+        | MutSyntax.Call value -> this.Complex scope value k
+        | FunctionCall(form, _, [ Kind (IdentifierExpr name) ]) when (form = CellSyntax.read || form = CellSyntax.unbox) && scope.Vars.ContainsKey name ->
+            let cell = scope.Vars.[name]
+            let value =
+                if form = CellSyntax.read then mk (Atom(AVar cell)) cell.Type
+                else
+                    match cell.Type with
+                    | IrRecord [ _, held ] -> mk (Field(AVar cell, 0)) held
+                    | other -> internalError $"a box of type {IrType.show other}"
+            let copy = newVar (uniqueName name) Local value.Type
+            let body = k (mk (Atom(AVar copy)) value.Type)
+            mk (Let(copy, value, body)) body.Type
+        | AssignSyntax.Call(Kind (IdentifierExpr name), value) when scope.Vars.ContainsKey name ->
+            this.Atoms scope [ value ] (fun atoms -> k (mk (Assign(scope.Vars.[name], atoms.Head)) IrUnit))
+        | FunctionCall(form, _, [ value ]) when form = CellSyntax.box ->
+            this.Atoms scope [ value ] (fun atoms -> k (mk (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
+        | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
+            this.Atoms scope [ value ] (fun atoms -> k (mk (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
         | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
