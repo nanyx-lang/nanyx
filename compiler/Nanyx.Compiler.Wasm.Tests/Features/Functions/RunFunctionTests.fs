@@ -447,6 +447,43 @@ let ``Run - a lambda of no parameters can be passed as a value (#589)`` () =
     runSource source |> assertRan "22 40\n10\n9\n"
 
 [<Fact>]
+let ``Run - a lambda of no parameters passed as an argument is called later, not run where it is written (#182)`` () =
+    let source = """import nanyx/console
+
+def mk: (() -> b) -> b = { f -> f() }
+def m = mk({ 7 })
+def lazy: bool, (() -> int) -> int = { run, f -> if run then f() else 0 }
+
+@entry
+def main = {
+  println("{m} {mk({ 8 })}")
+  println("{lazy(false, { dbg(1) })} {lazy(true, { dbg(2) })}")
+  println("{mapOrOption(#none, 7, { n -> n + 1 })}")
+}
+"""
+    runSource source |> assertRan "7 8\ndbg: 2\n0 2\n7\n"
+
+[<Fact>]
+let ``Run - a lambda of no parameters can be stored in a record field or returned from a function (#182)`` () =
+    let source = """import nanyx/console
+
+type Lazy = (get: () -> int)
+def constant: int -> (() -> int) = { n -> { n * 2 } }
+def lookup: () -> int = { 11 }
+
+@entry
+def main = {
+  def l = Lazy(get = { 5 })
+  def g = l.get
+  def c = constant(3)
+  def named = Lazy(get = lookup)
+  def h = named.get
+  println("{g()} {c()} {c()} {h()}")
+}
+"""
+    runSource source |> assertRan "5 6 6 11\n"
+
+[<Fact>]
 let ``Run - calling the function a top-level value holds evaluates the value once`` () =
     let source =
         "def makeAdder = { n -> { m -> n + m } }\n" +

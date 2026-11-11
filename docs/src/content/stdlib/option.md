@@ -163,10 +163,29 @@ The values of the `#some`s in a list, in order. The other tags are dropped.
 mapOrElseOption: ((#some(a) | r), () -> b, (a -> b)) -> b
 ```
 
-Maps the contained value or computes a fallback lazily.
+Maps the contained value or computes a fallback lazily: the fallback is called only when there is no `#some`.
 
 ```nanyx
 mapOrElseOption(#none, { expensiveFallback() }) { .length }
+```
+
+---
+
+# orElse
+
+```nanyx
+orElseOption: ((#some(a) | r), () -> (#some(a) | s)) -> #some(a) | s
+```
+
+Keeps a `#some` as it is; for any other tag, calls the fallback and gives back what it returns. The fallback is called only when it is needed, and the result has its tags, not the first option's.
+
+```nanyx
+def cached: #some(string) | #none = #none
+cached \orElseOption { lookup(key) }
+-- what lookup(key) gives
+
+#some("hit") \orElseOption { lookup(key) }
+-- #some("hit"), and lookup is not called
 ```
 
 For deeper background on option-like unions, see [Option-like types](../advanced/option-like-types).
