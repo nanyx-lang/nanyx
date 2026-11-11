@@ -215,9 +215,51 @@ let private armAlternativesAfter (leading: Parser<unit, ParseState>) : Parser<(P
 let matchArmAlternatives : Parser<(Pattern list * Expression) list, ParseState> =
     armAlternativesAfter (pstring "|" >>. ws)
 
-/// One or more arms, each possibly an or-pattern, flattened into plain arms.
+/// The column (counted from 1, as FParsec does) of the first character on the current line that is not a space
+/// or tab: how far the line the parser is on is indented.
+let private currentLineIndent: Parser<int64, ParseState> =
+    fun stream ->
+        let isOnLine (offset: int) =
+            let c = stream.Peek(offset)
+            c <> '\n' && c <> CharStream.EndOfStreamChar
+        let isIndent (offset: int) =
+            let c = stream.Peek(offset)
+            c = ' ' || c = '\t'
+        let mutable lineStart = 0
+        while isOnLine (lineStart - 1) do
+            lineStart <- lineStart - 1
+        let mutable indent = 0
+        while isIndent (lineStart + indent) do
+            indent <- indent + 1
+        Reply(int64 indent + 1L)
+
+/// The indentation of the line the first of a run of arms is on, read without consuming anything. It is what
+/// `armIndentedFrom` measures the later arms against.
+let private firstArmIndent: Parser<int64, ParseState> =
+    lookAhead (ws >>. currentLineIndent)
+
+/// `arm`, after the whitespace before it, unless its `|` starts a line indented less than `armsIndent`. Such an
+/// arm belongs to an enclosing match, so that a match (or a multi-branch if) nested in an arm's body ends at the
+/// arms indented back to the outer one:
+///
+///   match xs
+///     | [a] ->
+///         match a
+///           | 0 -> "zero"
+///           | _ -> "one"
+///     | _ -> "other"
+let private armIndentedFrom (armsIndent: int64) (arm: Parser<'a, ParseState>) : Parser<'a, ParseState> =
+    ws >>. getPosition .>>. currentLineIndent >>= fun (start, lineIndent) ->
+        if start.Column = lineIndent && lineIndent < armsIndent then
+            fail "an arm indented less than the first arm belongs to an enclosing match"
+        else
+            arm
+
+/// One or more arms, each possibly an or-pattern, flattened into plain arms. The arms end at a `|` that starts a
+/// line indented less than the line the first arm is on (see `armIndentedFrom`).
 let matchArms : Parser<(Pattern list * Expression) list, ParseState> =
-    many1 (attempt (ws >>. matchArmAlternatives)) |>> List.concat
+    firstArmIndent >>= fun armsIndent ->
+        many1 (attempt (armIndentedFrom armsIndent matchArmAlternatives)) |>> List.concat
 
 // `value except pattern -> replacement`, or `value except` followed by `| pattern -> replacement` arms as a match
 // has them, replaces the cases of `value` the arms match and passes every other case through. It binds looser
@@ -258,24 +300,6 @@ let forExpr : Parser<Expression, ParseState> =
             (attempt (withArms iterables.Length) <|> withoutElement iterables.Length)
             |>> fun body -> FunctionCall(ForSyntax.builtIn, None, iterables @ [ body ]))
     <?> "for loop"
-
-/// The column (counted from 1, as FParsec does) of the first character on the current line that is not a space
-/// or tab: how far the line the parser is on is indented.
-let private currentLineIndent: Parser<int64, ParseState> =
-    fun stream ->
-        let isOnLine (offset: int) =
-            let c = stream.Peek(offset)
-            c <> '\n' && c <> CharStream.EndOfStreamChar
-        let isIndent (offset: int) =
-            let c = stream.Peek(offset)
-            c = ' ' || c = '\t'
-        let mutable lineStart = 0
-        while isOnLine (lineStart - 1) do
-            lineStart <- lineStart - 1
-        let mutable indent = 0
-        while isIndent (lineStart + indent) do
-            indent <- indent + 1
-        Reply(int64 indent + 1L)
 
 // Match expression parser. The scrutinees are any expressions written on the `match` line (`match a, b`), or
 // a block on the lines after it. The block must be indented more than both the line `match` is on and the
@@ -482,7 +506,8 @@ let tagExpr =
 // The multi-branch form `if | cond1 -> a | value is pattern -> b | else -> c` tests each arm in order and is
 // desugared to nested ifs and if-matches, so `else` (or `()` when it is left out) ends up in the innermost
 // one. Nothing may follow the `else` arm, so a nested multi-branch if with an `else` cannot swallow the arms
-// of an enclosing match.
+// of an enclosing match, and one without an `else` ends at an arm indented less than its first (see
+// `armIndentedFrom`).
 let ifExpr =
     let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let branch = attempt (blockExpr()) <|> (ws >>. expression)
@@ -511,17 +536,18 @@ let ifExpr =
     // Each form builds the if given the span of the whole `if ...`. An if nested in place of a later arm spans
     // from that arm's `|` to the end of the last arm.
     let multiBranch =
-        pipe2
-            (many1 (attempt (ws >>. withSpan conditionArm)))
-            (opt (attempt (ws >>. withSpan elseArm)))
-            (fun arms elseOpt span ->
-                let lastText = match elseOpt with Some (_, text) -> text | None -> snd (List.last arms)
-                let outer, inner = List.head arms, List.tail arms
-                let rest =
-                    List.foldBack (fun ((head, body), armText) rest ->
-                        Some (desugar (SourceSpan.between armText lastText) head body rest)) inner (Option.map fst elseOpt)
-                let (head, body), _ = outer
-                desugar span head body rest)
+        firstArmIndent >>= fun armsIndent ->
+            pipe2
+                (many1 (attempt (armIndentedFrom armsIndent (withSpan conditionArm))))
+                (opt (attempt (armIndentedFrom armsIndent (withSpan elseArm))))
+                (fun arms elseOpt span ->
+                    let lastText = match elseOpt with Some (_, text) -> text | None -> snd (List.last arms)
+                    let outer, inner = List.head arms, List.tail arms
+                    let rest =
+                        List.foldBack (fun ((head, body), armText) rest ->
+                            Some (desugar (SourceSpan.between armText lastText) head body rest)) inner (Option.map fst elseOpt)
+                    let (head, body), _ = outer
+                    desugar span head body rest)
     let singleBranch =
         pipe2
             (headThen (ws >>. pstring "then" >>. keywordEnd >>. branch))

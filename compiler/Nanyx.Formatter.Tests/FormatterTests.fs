@@ -86,6 +86,55 @@ let ``A match that is not the last arm's body is bracketed`` () =
     unchanged (lines [ "def f = { x, y ->"; "  match x"; "    | 0 -> (match y"; "      | 0 -> 1"; "      | _ -> 2)"; "    | _ -> 3"; "}" ])
 
 [<Fact>]
+let ``A match on the lines after an arm ends at the arm indented back to the outer match`` () =
+    let source = """
+def f: list(int) -> string = { xs ->
+  match xs
+    | [a] ->
+        match a
+          | 0 -> "zero"
+          | _ -> "one"
+    | _ -> "other"
+}
+"""
+    let expected = """def f: list(int) -> string = { xs ->
+  match xs
+    | [a] ->
+      match a
+        | 0 -> "zero"
+        | _ -> "one"
+    | _ -> "other"
+}
+"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", (format source).ReplaceLineEndings "\n")
+    unchanged (expected.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``A list with its ] on a line of its own is joined onto one line when it fits`` () =
+    let source = """
+def xs = [
+  1,
+  2
+]
+
+def main = {
+  def ys = [
+    3,
+    4
+  ]
+  ys
+}
+"""
+    let expected = """def xs = [1, 2]
+
+def main = {
+  def ys = [3, 4]
+  ys
+}
+"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", (format source).ReplaceLineEndings "\n")
+
+[<Fact>]
 let ``A piped match stays piped, and a pipe after its arms goes on a line of its own`` () =
     unchanged (lines [ "def r = s \\trim \\match"; "  | \"\" -> 0"; "  | _ -> 1" ])
     unchanged (lines [ "def f = { n ->"; "  n \\match"; "    | 0 -> \"zero\""; "    | _ -> \"other\""; "    \\println"; "}" ])

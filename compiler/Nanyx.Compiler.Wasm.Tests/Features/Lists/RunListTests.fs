@@ -31,6 +31,30 @@ let ``Run - list literals and patterns`` () =
     runSource source |> assertRan "empty\none\none then another\nmany\ndbg: 10\n"
 
 [<Fact>]
+let ``Run - a list literal's ] may go on a line of its own`` () =
+    // #248: the `]` had to be on the same line as the last item.
+    let source = """
+import nanyx/console
+
+def xs = [
+  1,
+  2
+]
+
+def count = { n ->
+  def ys = [
+    n,
+    2,
+    3
+  ]
+  list.length(ys)
+}
+
+println("{list.length(xs)} {count(1)}")
+"""
+    runSource source |> assertRan "2 3\n"
+
+[<Fact>]
 let ``Run - an unnamed rest matches a longer list`` () =
     // `[x, ...]` binds the head and ignores the rest, whatever its length.
     let source =

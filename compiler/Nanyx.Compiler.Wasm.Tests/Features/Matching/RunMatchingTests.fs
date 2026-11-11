@@ -147,6 +147,37 @@ let ``Run - multi-branch if`` () =
     runSource source |> assertRan "negative\nzero\ndoubled 42\ntoo big\nno else\n"
 
 [<Fact>]
+let ``Run - a nested match ends at an arm indented back to the outer match`` () =
+    // #249: `| _ -> "other"` was read as a third arm of the inner match.
+    let source = """
+import nanyx/console
+
+def f: list(int) -> string = { xs ->
+  match xs
+    | [a] ->
+        match a
+          | 0 -> "zero"
+          | _ -> "one"
+    | _ -> "other"
+}
+
+def g: list(int) -> string = { xs ->
+  match xs
+    | [a] ->
+        if
+          | a == 0 -> "zero"
+          | else -> "one"
+    | _ -> "other"
+}
+
+println(f([1, 2]))
+println(f([0]))
+println(g([1, 2]))
+println(g([1]))
+"""
+    runSource source |> assertRan "other\nzero\nother\none\n"
+
+[<Fact>]
 let ``Run - guard patterns in the documented form`` () =
     // Regression: the docs write guards as `| { < 0 } -> ...`; the parser only knew `| < 0 ->` (#46).
     let source =

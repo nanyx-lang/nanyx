@@ -36,6 +36,30 @@ let ``list items may be written one per line, without commas, with the ] on a li
     | other -> failwith $"Unexpected: %A{other}"
 
 [<Fact>]
+let ``a list in a block may put its ] on a line of its own, at the indent of the line that opened it`` () =
+    let oneLine = parseModule """
+def main = {
+  def xs = [1, 2]
+  f([3, 4])
+}
+"""
+    let byLine = parseModule """
+def main = {
+  def xs = [
+    1,
+    2
+  ]
+  f([
+    3,
+    4
+  ])
+}
+"""
+    match oneLine, byLine with
+    | Result.Ok expected, Result.Ok actual -> actual |> should equal expected
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
 let ``an empty list may span lines`` () =
     match parseModule "def z = [\n]" with
     | Result.Ok [ Kind (Def (ValueDef (_, "z", _, Kind (ListExpr [])))) ] -> ()
