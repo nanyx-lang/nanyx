@@ -122,9 +122,11 @@ the names in scope where the comment is, then the top-level names of the comment
 
 Still open:
 
-- Converting the standard library's `--` comments to doc comments
-  ([#721](https://github.com/nanyx-lang/nanyx/issues/721)), and generating its docs pages from them
-  ([#722](https://github.com/nanyx-lang/nanyx/issues/722)). `trySummary` still reads a module's first `--` line.
+- Generating the standard library's docs pages from its doc comments
+  ([#722](https://github.com/nanyx-lang/nanyx/issues/722)). Its definitions, types, contexts and context members
+  have doc comments ([#721](https://github.com/nanyx-lang/nanyx/issues/721)), but each module's summary is still an
+  ordinary `-- nanyx/<name>: ...` comment after `module`, because `trySummary` reads that line. Making it a module doc
+  comment, before `module`, needs `trySummary` to read the doc comment instead.
 - Recording docs by symbol in `TypedModule`, so the info view and the browser read them as they read types, rather
   than parsing the declaring file again.
 - A tag has no symbol, so its doc comment is attached but not shown anywhere yet; nor is a record field's on a

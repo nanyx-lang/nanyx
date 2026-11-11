@@ -6,11 +6,9 @@ module prelude
 -- library included. A module's own definitions and its explicit imports take precedence over the
 -- names here, so a module can define its own `proc`.
 
--- Stopping --------------------------------------------------------------------------------------
-
--- Stops the program: writes `panic: ` and `message` on a line to standard error, and exits with
--- code 1. It never returns, so its result is `undefined` and a call fits wherever a value of any
--- type is expected: `if n > 0 then n else panic("n must be positive")` is an `int`.
+--| Stops the program: writes `panic: ` and `message` on a line to standard error, and exits with
+  code 1. It never returns, so its result is `undefined` and a call fits wherever a value of any
+  type is expected: `if n > 0 then n else panic("n must be positive")` is an `int`.
 export def panic: string -> undefined = { message ->
   __nanyx_write_stderr("panic: ")
   __nanyx_write_stderr(message)
@@ -20,13 +18,13 @@ export def panic: string -> undefined = { message ->
 
 -- Numbers ---------------------------------------------------------------------------------------
 
--- The value of the ASCII digit `b`, or -1 when `b` is not one.
+--| The value of the ASCII digit `b`, or -1 when `b` is not one.
 def digitValue: int -> int = { b ->
   if b >= 48 and b <= 57 then b - 48 else -1
 }
 
--- `acc` followed by the decimal digits of `s` from byte `i` on, or `#invalidInt` at the first byte
--- that is not a digit.
+--| `acc` followed by the decimal digits of `s` from byte `i` on, or `#invalidInt` at the first byte
+  that is not a digit.
 def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
   if i >= __nanyx_string_length(s)
     then #some(acc)
@@ -35,9 +33,9 @@ def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
       else parseDigits(s, i + 1, acc * 10 + digitValue(__nanyx_string_byte_at(s, i)))
 }
 
--- The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
--- anything else (an empty string, a sign alone, spaces, other characters). Overflow is not
--- detected.
+--| The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
+  anything else (an empty string, a sign alone, spaces, other characters). Overflow is not
+  detected.
 export def int.fromString: string -> #some(int) | #invalidInt = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
@@ -49,47 +47,47 @@ export def int.fromString: string -> #some(int) | #invalidInt = { s ->
       else parseDigits(s, start, 0)
 }
 
--- `n` as a float: `int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
--- `floor`, `ceil`, `round` and `truncate` in `nanyx/math`.
+--| `n` as a float: `int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
+  `floor`, `ceil`, `round` and `truncate` in `nanyx/math`.
 export def int.toFloat: int -> float = { n ->
   __nanyx_int_to_float(n)
 }
 
 -- Booleans --------------------------------------------------------------------------------------
 
--- The boolean `s` writes, `true` or `false` exactly as `bool.toString` writes them, or
--- `#invalidBool` for anything else (other capitalisation, spaces, an empty string).
+--| The boolean `s` writes, `true` or `false` exactly as [`bool.toString`] writes them, or
+  `#invalidBool` for anything else (other capitalisation, spaces, an empty string).
 export def bool.fromString: string -> #some(bool) | #invalidBool = { s ->
   if s == "true" then #some(true) else if s == "false" then #some(false) else #invalidBool
 }
 
 -- Equality --------------------------------------------------------------------------------------
 
--- How two values of type `a` are compared. `x == y` is read through it, and `x != y` is
--- `not (x == y)`. The compiler has its own for every type that holds no function, which compares
--- by structure: records field by field, lists element by element, tags by name and then payload.
--- Functions have no equality. A function that compares values of one of its type variables
--- requires it: `def same: [Eq(a)] a, a -> bool`.
+--| How two values of type `a` are compared. `x == y` is read through it, and `x != y` is
+  `not (x == y)`. The compiler has its own for every type that holds no function, which compares
+  by structure: records field by field, lists element by element, tags by name and then payload.
+  Functions have no equality. A function that compares values of one of its type variables
+  requires it: `def same: [Eq(a)] a, a -> bool`.
 export context Eq(a) = (`==`: (a, a) -> bool)
 
--- The `==` of the compiler's own `Eq`: what a function that requires `Eq(a)` is passed when it is
--- called with a type that has no `==` of its own.
+--| The `==` of the compiler's own [`Eq`]: what a function that requires `Eq(a)` is passed when it is
+  called with a type that has no `==` of its own.
 export def __equals: a, a -> bool = { x, y ->
   x == y
 }
 
--- What `xs == ys` calls on two lists whose elements have an `Eq` other than the compiler's own:
--- `==` on a `list($Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
--- compared element by element through that `Eq`. `!=` is `not` of it.
+--| What `xs == ys` calls on two lists whose elements have an `Eq` other than the compiler's own:
+  `==` on a `list($Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
+  compared element by element through that `Eq`. `!=` is `not` of it.
 export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
   | [], [] -> true
   | [x, ...xs], [y, ...ys] -> (if x == y then __listEquals(xs, ys) else false)
   | _, _ -> false
 }
 
--- Whether the lists `xs` and `ys` hold equal elements in the same order, as `same` compares two
--- elements. The `==` the compiler derives for a list whose elements have an `==` of their own
--- calls it.
+--| Whether the lists `xs` and `ys` hold equal elements in the same order, as `same` compares two
+  elements. The `==` the compiler derives for a list whose elements have an `==` of their own
+  calls it.
 export def __listEqualsBy: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
   match xs
     | [] -> list.isEmpty(ys)
@@ -102,10 +100,10 @@ export def __listEqualsBy: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, 
 
 -- Arithmetic ------------------------------------------------------------------------------------
 
--- The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
--- so is `0` beside a value of type `a` in a function whose type requires it:
--- `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
--- `def $Money.zero = ...`, `` def $Money.`+` = ... ``, and so on.
+--| The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
+  so is `0` beside a value of type `a` in a function whose type requires it:
+  `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
+  `def $Money.zero = ...`, `` def $Money.`+` = ... ``, and so on.
 export context Add(a) = (
   zero: a
   `+`: (a, a) -> a
@@ -113,12 +111,12 @@ export context Add(a) = (
   negate: a -> a
 )
 
--- The numbers of type `a`: `Add`'s members, and `x * y`, `x / y` and `x % y`. In a function whose
--- type requires it, any other integer literal beside a value of type `a` is `fromInt` of it, so
--- `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
--- A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
--- an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
--- IEEE 754's.
+--| The numbers of type `a`: [`Add`]'s members, and `x * y`, `x / y` and `x % y`. In a function whose
+  type requires it, any other integer literal beside a value of type `a` is `fromInt` of it, so
+  `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
+  A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
+  an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
+  IEEE 754's.
 export context Num(a) = (
   zero: a
   `+`: (a, a) -> a
@@ -134,114 +132,114 @@ export context Num(a) = (
 -- `float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
 -- the built-in operator, not a call.
 
--- The `int` that adds nothing.
+--| The `int` that adds nothing.
 export def int.zero: int = 0
 
--- `x` plus `y`.
+--| `x` plus `y`.
 export def int.`+`: int, int -> int = { x, y ->
   x + y
 }
 
--- `x` minus `y`.
+--| `x` minus `y`.
 export def int.`-`: int, int -> int = { x, y ->
   x - y
 }
 
--- `n` with its sign changed.
+--| `n` with its sign changed.
 export def int.negate: int -> int = { n ->
   -n
 }
 
--- `x` times `y`.
+--| `x` times `y`.
 export def int.`*`: int, int -> int = { x, y ->
   x * y
 }
 
--- `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
+--| `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
 export def int.`/`: int, int -> int = { x, y ->
   x / y
 }
 
--- The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+--| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
 export def int.`%`: int, int -> int = { x, y -> x % y }
 
--- `n` itself.
+--| `n` itself.
 export def int.fromInt: int -> int = { n ->
   n
 }
 
--- The `float` that adds nothing.
+--| The `float` that adds nothing.
 export def float.zero: float = 0.0
 
--- `x` plus `y`.
+--| `x` plus `y`.
 export def float.`+`: float, float -> float = { x, y ->
   x + y
 }
 
--- `x` minus `y`.
+--| `x` minus `y`.
 export def float.`-`: float, float -> float = { x, y ->
   x - y
 }
 
--- `x` with its sign changed: `float.negate(0.0)` is negative zero.
+--| `x` with its sign changed: `float.negate(0.0)` is negative zero.
 export def float.negate: float -> float = { x ->
   -x
 }
 
--- `x` times `y`.
+--| `x` times `y`.
 export def float.`*`: float, float -> float = { x, y ->
   x * y
 }
 
--- `x` divided by `y`.
+--| `x` divided by `y`.
 export def float.`/`: float, float -> float = { x, y ->
   x / y
 }
 
--- The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
+--| The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
 export def float.`%`: float, float -> float = { x, y -> x % y }
 
--- `n` as a float, as `int.toFloat(n)` is.
+--| `n` as a float, as [`int.toFloat`] gives it.
 export def float.fromInt: int -> float = { n ->
   int.toFloat(n)
 }
 
 -- Powers ----------------------------------------------------------------------------------------
 
--- `acc` times `base` to the power `exponent`, for an `exponent` of zero or more: by repeated
--- squaring, so it takes as many steps as `exponent` has bits.
+--| `acc` times `base` to the power `exponent`, for an `exponent` of zero or more: by repeated
+  squaring, so it takes as many steps as `exponent` has bits.
 def powOnto: [Num(a)] a, int, a -> a = { base, exponent, acc ->
   if exponent == 0
     then acc
     else powOnto(base * base, exponent / 2, if exponent % 2 == 0 then acc else acc * base)
 }
 
--- What `base ** exponent` is: `base` multiplied by itself `exponent` times, so `2 ** 10` is 1024
--- and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent`, so on an `int` it truncates
--- towards zero.
+--| What `base ** exponent` is: `base` multiplied by itself `exponent` times, so `2 ** 10` is 1024
+  and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent`, so on an `int` it truncates
+  towards zero.
 export def __pow: [Num(a)] a, int -> a = { base, exponent ->
   if exponent < 0
     then fromInt(1) / powOnto(base, -exponent, fromInt(1))
     else powOnto(base, exponent, fromInt(1))
 }
 
--- `base ** exponent`, as a function that can be passed around.
+--| `base ** exponent`, as a function that can be passed around.
 export def pow: [Num(a)] a, int -> a = { base, exponent ->
   base ** exponent
 }
 
--- `2 ** n` times `x`, for an `n` that is a whole number of any size.
+--| `2 ** n` times `x`, for an `n` that is a whole number of any size.
 def scaleByTwos: float, int -> float = { x, n ->
   if n >= 0 then x * 2.0 ** n else x / 2.0 ** -n
 }
 
--- The sum of the series for `e ** r`, from the term `term` (which is `r ** k / k!`) on, with `sum`
--- the terms before it. Twenty terms are enough for any `r` of at most `ln(2) / 2`.
+--| The sum of the series for `e ** r`, from the term `term` (which is `r ** k / k!`) on, with `sum`
+  the terms before it. Twenty terms are enough for any `r` of at most `ln(2) / 2`.
 def expSeries: float, float, float, int -> float = { r, term, sum, k ->
   if k > 20 then sum else expSeries(r, term * r / int.toFloat(k + 1), sum + term, k + 1)
 }
 
--- `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`.
+--| `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`.
 def floatExp: float -> float = { z ->
   if z != z
     then z
@@ -252,40 +250,40 @@ def floatExp: float -> float = { z ->
         else expAround(z, __nanyx_float_floor(z / 0.6931471805599453 + 0.5))
 }
 
--- `e ** z`, for `n` the number of `ln(2)`s nearest `z`.
+--| `e ** z`, for `n` the number of `ln(2)`s nearest `z`.
 def expAround: float, float -> float = { z, n ->
   scaleByTwos(expSeries(z - n * 0.6931471805599453, 1.0, 0.0, 0), __nanyx_float_to_int(n))
 }
 
--- The sum of the series for `atanh(t)`, from the term `term` (which is `t ** (2k + 1)`) on, with
--- `sum` the terms before it. Thirty terms are enough for any `t` below 1/3.
+--| The sum of the series for `atanh(t)`, from the term `term` (which is `t ** (2k + 1)`) on, with
+  `sum` the terms before it. Thirty terms are enough for any `t` below 1/3.
 def atanhSeries: float, float, float, int -> float = { term, tt, sum, k ->
   if k > 30 then sum else atanhSeries(term * tt, tt, sum + term / int.toFloat(2 * k + 1), k + 1)
 }
 
--- The natural logarithm of `m * 2 ** k`, for an `m` above zero: `m` is moved into [1, 2) first.
+--| The natural logarithm of `m * 2 ** k`, for an `m` above zero: `m` is moved into [1, 2) first.
 def lnScaled: float, int -> float = { m, k ->
   if m >= 2.0
     then lnScaled(m / 2.0, k + 1)
     else if m < 1.0 then lnScaled(m * 2.0, k - 1) else lnOfReduced(m, k)
 }
 
--- The natural logarithm of `m * 2 ** k`, for an `m` in [1, 2): `ln(m)` is `2 * atanh((m - 1) / (m + 1))`.
+--| The natural logarithm of `m * 2 ** k`, for an `m` in [1, 2): `ln(m)` is `2 * atanh((m - 1) / (m + 1))`.
 def lnOfReduced: float, int -> float = { m, k ->
   def t = (m - 1.0) / (m + 1.0)
   2.0 * atanhSeries(t, t * t, 0.0, 0) + int.toFloat(k) * 0.6931471805599453
 }
 
--- The natural logarithm of `x`: minus infinity at zero, and NaN below it.
+--| The natural logarithm of `x`: minus infinity at zero, and NaN below it.
 def floatLn: float -> float = { x ->
   if x != x or x < 0.0
     then 0.0 / 0.0
     else if x == 0.0 then -1.0 / 0.0 else if x == 1.0 / 0.0 then x else lnScaled(x, 0)
 }
 
--- `x` to the power `y`, which need not be a whole number: `float.pow(2.0, 0.5)` is the square root
--- of 2. A whole `y` is `x ** y`, exactly; any other is `e ** (y * ln(x))`, so a negative `x` gives
--- NaN.
+--| `x` to the power `y`, which need not be a whole number: `float.pow(2.0, 0.5)` is the square root
+  of 2. A whole `y` is `x ** y`, exactly; any other is `e ** (y * ln(x))`, so a negative `x` gives
+  NaN.
 export def float.pow: float, float -> float = { x, y ->
   def whole = __nanyx_float_trunc(y)
 
@@ -300,9 +298,9 @@ export def float.pow: float, float -> float = { x, y ->
 -- `e` that puts the point back: "12.5e3" is 125 times 10 ** 2. `m` is held as a float, exactly
 -- while it is below 2 ** 53.
 
--- `m` times 10 ** `e`, for a whole `m` of zero or more. When `m` is below 2 ** 53 and `e` is
--- between -22 and 22 both are exact, so the one multiplication or division rounds to the nearest
--- float. Otherwise the power of ten is rounded too.
+--| `m` times 10 ** `e`, for a whole `m` of zero or more. When `m` is below 2 ** 53 and `e` is
+  between -22 and 22 both are exact, so the one multiplication or division rounds to the nearest
+  float. Otherwise the power of ten is rounded too.
 def scaleByTens: float, int -> float = { m, e ->
   if m == 0.0
     then 0.0
@@ -311,9 +309,9 @@ def scaleByTens: float, int -> float = { m, e ->
       else if e < -300 then m / 10.0 ** 300 / 10.0 ** (-300 - e) else m / 10.0 ** -e
 }
 
--- The decimal `s` writes from byte `i` on, with `m` and `e` the number read so far, `digits` how
--- many digits that is, and `afterPoint` whether they included a `.`. Digits past the first 18 or so
--- only move the point, as `m` holds no more.
+--| The decimal `s` writes from byte `i` on, with `m` and `e` the number read so far, `digits` how
+  many digits that is, and `afterPoint` whether they included a `.`. Digits past the first 18 or so
+  only move the point, as `m` holds no more.
 def readDecimal
   : string, int, float, int, int, bool -> #some(float) | #invalidFloat
   = { s, i, m, e, digits, afterPoint ->
@@ -322,7 +320,7 @@ def readDecimal
       else readDecimalByte(s, i, m, e, digits, afterPoint, __nanyx_string_byte_at(s, i))
   }
 
--- `readDecimal` at the byte `b`, which is byte `i` of `s`.
+--| [`readDecimal`] at the byte `b`, which is byte `i` of `s`.
 def readDecimalByte
   : string, int, float, int, int, bool, int -> #some(float) | #invalidFloat
   = { s, i, m, e, digits, afterPoint, b ->
@@ -344,8 +342,8 @@ def readDecimalByte
           else #invalidFloat
   }
 
--- The exponent that starts at byte `i` of `s`, after its `e`, with its optional sign, applied to
--- `m` and `e`.
+--| The exponent that starts at byte `i` of `s`, after its `e`, with its optional sign, applied to
+  `m` and `e`.
 def readExponent: string, int, float, int -> #some(float) | #invalidFloat = { s, i, m, e ->
   def sign = __nanyx_string_byte_at(s, i)
 
@@ -354,8 +352,8 @@ def readExponent: string, int, float, int -> #some(float) | #invalidFloat = { s,
     else readExponentDigits(s, (if sign == 43 then i + 1 else i), m, e, 1, 0, 0)
 }
 
--- The digits of an exponent from byte `i` of `s` on, with `n` and `digits` the value and count read
--- so far. An exponent past 100000 is held there: it makes infinity or zero all the same.
+--| The digits of an exponent from byte `i` of `s` on, with `n` and `digits` the value and count read
+  so far. An exponent past 100000 is held there: it makes infinity or zero all the same.
 def readExponentDigits
   : string, int, float, int, int, int, int -> #some(float) | #invalidFloat
   = { s, i, m, e, sign, n, digits ->
@@ -374,15 +372,15 @@ def readExponentDigits
         )
   }
 
--- The float `s` writes in decimal, or `#invalidFloat` for anything else (an empty string, a sign
--- alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
--- an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
--- exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
--- `float.toString` writes them. A number too large for a float is infinity.
---
--- The result is the nearest float to the decimal when it has at most 15 significant digits and an
--- exponent, once the point is moved to the end, between -22 and 22, which covers most text written
--- by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
+--| The float `s` writes in decimal, or `#invalidFloat` for anything else (an empty string, a sign
+  alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
+  an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
+  exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
+  [`float.toString`] writes them. A number too large for a float is infinity.
+
+  The result is the nearest float to the decimal when it has at most 15 significant digits and an
+  exponent, once the point is moved to the end, between -22 and 22, which covers most text written
+  by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
 export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
@@ -394,7 +392,7 @@ export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
       else readFloatMagnitude(s, start)
 }
 
--- The float `s` writes from byte `start` on, after any sign.
+--| The float `s` writes from byte `start` on, after any sign.
 def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start ->
   if s == "Infinity" or s == "+Infinity" or s == "-Infinity"
     then #some(1.0 / 0.0)
@@ -403,28 +401,28 @@ def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start
 
 -- Ordering --------------------------------------------------------------------------------------
 
--- How two values of type `a` are put in order. `x < y`, `x <= y`, `x > y` and `x >= y` are read
--- through it, so the four cannot disagree. The compiler has its own for numbers, `bool` (`false`
--- first), `string` (by bytes, which is the order of code points), and tuples and lists of them
--- (position by position, and a list that is a prefix of another first). Records and tags have no
--- order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
--- with `list.sortBy`. A function that orders values of one of its type variables requires it:
--- `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
--- should keep them consistent.
+--| How two values of type `a` are put in order. `x < y`, `x <= y`, `x > y` and `x >= y` are read
+  through it, so the four cannot disagree. The compiler has its own for numbers, `bool` (`false`
+  first), `string` (by bytes, which is the order of code points), and tuples and lists of them
+  (position by position, and a list that is a prefix of another first). Records and tags have no
+  order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
+  with [`list.sortBy`]. A function that orders values of one of its type variables requires it:
+  `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
+  should keep them consistent.
 export context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
 
--- The `compare` of the compiler's own `Ord`: what a function that requires `Ord(a)` is passed when
--- it is called with a type that has no `compare` of its own. On floats it is a total order, with
--- NaN after every other float, while `<` and the others on floats follow IEEE 754.
+--| The `compare` of the compiler's own [`Ord`]: what a function that requires `Ord(a)` is passed when
+  it is called with a type that has no `compare` of its own. On floats it is a total order, with
+  NaN after every other float, while `<` and the others on floats follow IEEE 754.
 export def __compare: a, a -> #less | #equal | #greater = { x, y ->
   def order = __nanyx_compare(x, y)
 
   if order < 0 then #less else if order > 0 then #greater else #equal
 }
 
--- What `x < y` calls when it reads an `Ord` other than the compiler's own: one a function
--- requires, one loaded with `use`, or one built from an attached `compare`. `<=`, `>` and `>=`
--- call the three after it.
+--| What `x < y` calls when it reads an `Ord` other than the compiler's own: one a function
+  requires, one loaded with `use`, or one built from an attached `compare`. `<=`, `>` and `>=`
+  call the three after it.
 export def __less: [Ord(a)] a, a -> bool = { x, y ->
   match compare(x, y)
     | #less -> true
@@ -449,10 +447,10 @@ export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
     | _ -> true
 }
 
--- What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
--- `<` on a `list($Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
--- ordered element by element through that `Ord`, and a list that is a prefix of the other comes
--- first. `<=`, `>` and `>=` call the three after it.
+--| What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
+  `<` on a `list($Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
+  ordered element by element through that `Ord`, and a list that is a prefix of the other comes
+  first. `<=`, `>` and `>=` call the three after it.
 export def __listCompare: [Ord(a)] list(a), list(a) -> #less | #equal | #greater = {
   | [], [] -> #equal
   | [], _ -> #less
@@ -489,36 +487,43 @@ export def __listGreaterOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
 }
 
 -- Each built-in type with an order has its order attached as `compare`, so it can be called and
--- passed around: `float.compare` puts NaN after every other float. A built-in type's order is
--- always the compiler's own: `<` and `Ord` do not read these.
+-- passed around. A built-in type's order is always the compiler's own: `<` and `Ord` do not read
+-- these.
+
+--| Whether `x` is less than, equal to or greater than `y`.
 export def int.compare: int, int -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
+--| Whether `x` is less than, equal to or greater than `y`, with NaN after every other float, as
+  [`__compare`] orders floats.
 export def float.compare: float, float -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
+--| Whether `x` is less than, equal to or greater than `y`, with `false` first.
 export def bool.compare: bool, bool -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
+--| Whether `x` is less than, equal to or greater than `y`, by bytes, which is the order of code
+  points.
 export def string.compare: string, string -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
 -- Hashing ---------------------------------------------------------------------------------------
 
--- How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
--- so that a map can find a key by its hash. The compiler has its own for every type it has its own
--- `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
--- `hash` that agrees with it, or it has none: `def $Email.hash = { e -> string.hash(lower(e)) }`
--- for an `==` that ignores case. A function that hashes values of one of its type variables
--- requires it: `def bucket: [Hash(a)] a, int -> int`.
+--| How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
+  so that a map can find a key by its hash. The compiler has its own for every type it has its own
+  `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
+  `hash` that agrees with it, or it has none: `def $Email.hash = { e -> string.hash(lower(e)) }`
+  for an `==` that ignores case. A function that hashes values of one of its type variables
+  requires it: `def bucket: [Hash(a)] a, int -> int`.
 export context Hash(a) = (hash: a -> int)
 
--- The `hash` of the compiler's own `Hash`: what a function that requires `Hash(a)` is passed when
--- it is called with a type that has no `hash` of its own.
+--| The `hash` of the compiler's own [`Hash`]: what a function that requires `Hash(a)` is passed when
+  it is called with a type that has no `hash` of its own.
 export def __hash: a -> int = { x ->
   __nanyx_hash(x)
 }
@@ -526,46 +531,51 @@ export def __hash: a -> int = { x ->
 -- Each built-in type has its hash attached as `hash`, so that a type's own `hash` can be built from
 -- its parts' hashes. A built-in type's hash is always the compiler's own: `Hash` does not read
 -- these.
+
+--| The compiler's own hash of `x`, as [`__hash`] gives it.
 export def int.hash: int -> int = { x ->
   __hash(x)
 }
 
+--| The compiler's own hash of `x`, as [`__hash`] gives it.
 export def float.hash: float -> int = { x ->
   __hash(x)
 }
 
+--| The compiler's own hash of `x`, as [`__hash`] gives it.
 export def bool.hash: bool -> int = { x ->
   __hash(x)
 }
 
+--| The compiler's own hash of `s`, as [`__hash`] gives it.
 export def string.hash: string -> int = { s ->
   __hash(s)
 }
 
 -- Text ------------------------------------------------------------------------------------------
 
--- How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
--- through it, so a type can be interpolated when it has one: a type gets one by attaching a
--- `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
--- `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
--- and derives one for a tag with a payload, a tuple, a record and a list from the `ToString` of
--- each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`.
+--| How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
+  through it, so a type can be interpolated when it has one: a type gets one by attaching a
+  `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
+  `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
+  and derives one for a tag with a payload, a tuple, a record and a list from the `ToString` of
+  each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`.
 export context ToString(a) = (toString: a -> string)
 
--- What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
--- needs a `ToString` of its value's type, as a call to a function that requires one does.
+--| What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
+  needs a [`ToString`] of its value's type, as a call to a function that requires one does.
 export def __interpolate: [ToString(a)] a -> string = { value ->
   toString(value)
 }
 
--- The `toString` of the compiler's own `ToString` of a tag without a payload: what a function
--- that requires `ToString(a)` is passed when it is called with one. It writes the tag's name.
+--| The `toString` of the compiler's own [`ToString`] of a tag without a payload: what a function
+  that requires `ToString(a)` is passed when it is called with one. It writes the tag's name.
 export def __toString: a -> string = { value ->
   "{value}"
 }
 
--- What the derived `toString` of a list calls: `xs` in square brackets, each element written by
--- `show`, with `, ` between them.
+--| What the derived `toString` of a list calls: `xs` in square brackets, each element written by
+  `show`, with `, ` between them.
 export def __listToString: list(a), (a -> string) -> string = { xs, show ->
   match xs
     | [] -> "[]"
@@ -582,55 +592,57 @@ def __listRestToString: list(a), (a -> string), string -> string = { xs, show, t
 -- that can be passed around, `scores \map(int.toString)`, as well as by interpolation. Each one
 -- writes the value as interpolation does, with the compiler's own `ToString` for the type.
 
--- `n` in decimal, with a leading `-` when it is negative.
+--| `n` in decimal, with a leading `-` when it is negative.
 export def int.toString: int -> string = { n ->
   "{n}"
 }
 
--- `x` in decimal, with the fewest digits that read back as `x`.
+--| `x` in decimal, with the fewest digits that read back as `x`.
 export def float.toString: float -> string = { x ->
   "{x}"
 }
 
--- `true` or `false`.
+--| `true` or `false`.
 export def bool.toString: bool -> string = { b ->
   "{b}"
 }
 
--- `s` itself.
+--| `s` itself.
 export def string.toString: string -> string = { s -> s }
 
--- How a value of type `a` is read from text, with `e` for text that does not hold one: `int.fromString`
--- gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
--- `float` and `bool` do, so a function can read a value of whichever type it is called at:
--- `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
+--| How a value of type `a` is read from text, with `e` for text that does not hold one: [`int.fromString`]
+  gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
+  `float` and `bool` do, so a function can read a value of whichever type it is called at:
+  `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
 export context FromString(a, e) = (fromString: string -> #some(a) | e)
 
 -- Results ---------------------------------------------------------------------------------------
 
--- A success carrying an `a`, or an error carrying an `e`.
+--| A success carrying an `a`, or an error carrying an `e`.
 export type Result(a, e) = #some(a) | #error(e)
 
--- `proc` is the result workflow: inside `proc { ... }`, `try x` continues with the payload of
--- `#some`, and gives back any `#error` as is without running the rest of the block, and
--- `return x` wraps the value in `#some`.
---
---   def total = proc {
---     def customer = try getCustomer(5)
---     def order = try getLastOrder(customer)
---     return order.total
---   }
---
--- A workflow builder is a record of keyword members. A block written after the builder's name
--- has each `try x` (and each `try x` nested inside an expression) turned into a call to the
--- builder's `try` member, with the rest of the block as its continuation, and each `return x`
--- into a call to its `return` member. A block that ends without `return` has `zero` as its
--- value, `#some()`, so a `proc` that is only run for what it does needs no `return`.
---
--- Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
--- `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
--- `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
--- `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
+--| The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
+  gives back any `#error` as is without running the rest of the block, and `return x` wraps the
+  value in `#some`.
+
+  ```nanyx
+  def total = proc {
+    def customer = try getCustomer(5)
+    def order = try getLastOrder(customer)
+    return order.total
+  }
+  ```
+
+  A workflow builder is a record of keyword members. A block written after the builder's name
+  has each `try x` (and each `try x` nested inside an expression) turned into a call to the
+  builder's `try` member, with the rest of the block as its continuation, and each `return x`
+  into a call to its `return` member. A block that ends without `return` has `zero` as its
+  value, `#some()`, so a `proc` that is only run for what it does needs no `return`.
+
+  Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
+  `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
+  `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
+  `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
 export def proc
   : (try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r)
   = (
@@ -642,43 +654,43 @@ export def proc
     zero = #some()
   )
 
--- Applies `f` to a success, and leaves an error as it is.
+--| Applies `f` to a success, and leaves an error as it is.
 export def Result.map: Result(a, e), (a -> b) -> Result(b, e) = {
   | #some(value), f -> #some(f(value))
   | #error(e), _ -> #error(e)
 }
 
--- Applies `f` to an error, and leaves a success as it is.
+--| Applies `f` to an error, and leaves a success as it is.
 export def Result.mapError: Result(a, e), (e -> f) -> Result(a, f) = {
   | #some(value), _ -> #some(value)
   | #error(e), f -> #error(f(e))
 }
 
--- Continues with `f` on a success. Both steps have the same error type.
+--| Continues with `f` on a success. Both steps have the same error type.
 export def Result.bind: Result(a, e), (a -> Result(b, e)) -> Result(b, e) = {
   | #some(value), f -> f(value)
   | #error(e), _ -> #error(e)
 }
 
--- The success, or `fallback` for an error.
+--| The success, or `fallback` for an error.
 export def Result.defaultValue: Result(a, e), a -> a = {
   | #some(value), _ -> value
   | #error(_), fallback -> fallback
 }
 
--- `f` applied to the success, or `default` for an error.
+--| `f` applied to the success, or `default` for an error.
 export def Result.mapOr: Result(a, e), b, (a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | #error(_), default, _ -> default
 }
 
--- The success as `#some`, or `#none` for an error.
+--| The success as `#some`, or `#none` for an error.
 export def Result.toOption: Result(a, e) -> #some(a) | #none = {
   | #some(value) -> #some(value)
   | #error(_) -> #none
 }
 
--- The success as it is, or `f` applied to the error.
+--| The success as it is, or `f` applied to the error.
 export def Result.orElse: Result(a, e), (e -> Result(a, f)) -> Result(a, f) = {
   | #some(value), _ -> #some(value)
   | #error(e), f -> f(e)
@@ -700,20 +712,20 @@ export def Result.isError: Result(a, e) -> bool = {
 -- keep every other tag as it is. They are plain functions whose names end in `Option`, called as
 -- `mapOption(x, f)` or `x \mapOption(f)`.
 
--- Applies `f` to the value of `#some`.
+--| Applies `f` to the value of `#some`.
 export def mapOption: (#some(a) | r), (a -> b) -> #some(b) | r = {
   | #some(value), f -> #some(f(value))
   | other, _ -> other
 }
 
--- Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
--- and a step given with other tags adds them to it.
+--| Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
+  and a step given with other tags adds them to it.
 export def bindOption: (#some(a) | r), (a -> #some(b) | r) -> #some(b) | r = {
   | #some(value), f -> f(value)
   | other, _ -> other
 }
 
--- The value of `#some`, or `fallback` for any other tag.
+--| The value of `#some`, or `fallback` for any other tag.
 export def defaultValueOption: (#some(a) | r), a -> a = {
   | #some(value), _ -> value
   | _, fallback -> fallback
@@ -729,39 +741,39 @@ export def isNoneOption: (#some(a) | r) -> bool = {
   | _ -> true
 }
 
--- The value of `#some` as a success, or `error` for any other tag.
+--| The value of `#some` as a success, or `error` for any other tag.
 export def toResultOption: (#some(a) | r), e -> Result(a, e) = {
   | #some(value), _ -> #some(value)
   | _, error -> #error(error)
 }
 
--- `f` applied to the value of `#some`, or `default` for any other tag.
+--| `f` applied to the value of `#some`, or `default` for any other tag.
 export def mapOrOption: (#some(a) | r), b, (a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, default, _ -> default
 }
 
--- `f` applied to the value of `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
--- when it is needed.
+--| `f` applied to the value of `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
+  when it is needed.
 export def mapOrElseOption: (#some(a) | r), (() -> b), (a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, fallback, _ -> fallback()
 }
 
--- The option as it is if it is `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
--- when it is needed.
+--| The option as it is if it is `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
+  when it is needed.
 export def orElseOption: (#some(a) | r), (() -> #some(a) | s) -> #some(a) | s = {
   | #some(value), _ -> #some(value)
   | _, fallback -> fallback()
 }
 
--- The value of `#some` as a one-element list, or the empty list for any other tag.
+--| The value of `#some` as a one-element list, or the empty list for any other tag.
 export def toListOption: (#some(a) | r) -> list(a) = {
   | #some(value) -> [value]
   | _ -> []
 }
 
--- The values of the `#some`s in `options`, in order. The other tags are dropped.
+--| The values of the `#some`s in `options`, in order. The other tags are dropped.
 export def valuesOption: list(#some(a) | r) -> list(a) = { options ->
   def keep = {
     | acc, #some(value) -> [value, ...acc]
@@ -780,53 +792,53 @@ export def valuesOption: list(#some(a) | r) -> list(a) = { options ->
 -- works on a list of any length. Those that build a list build it in reverse and reverse it at the
 -- end, until tail recursion modulo cons exists (see docs/src/content/work-in-progress/tail-calls.md).
 
--- `step` applied to `initial` and the first element, then to that result and the second, and so on.
+--| `step` applied to `initial` and the first element, then to that result and the second, and so on.
 export def list.fold: list(a), b, (b, a -> b) -> b = {
   | [], acc, _ -> acc
   | [x, ...rest], acc, step -> list.fold(rest, step(acc, x), step)
 }
 
--- The elements in reverse order.
+--| The elements in reverse order.
 export def list.reverse: list(a) -> list(a) = { xs ->
   list.fold(xs, [], { acc, x -> [x, ...acc] })
 }
 
--- The number of elements.
+--| The number of elements.
 export def list.length: list(a) -> int = { xs ->
   list.fold(xs, 0, { count, _ -> count + 1 })
 }
 
--- The elements added together: `[1, 2, 3] \list.sum` is 6, and the sum of no elements is `zero`.
+--| The elements added together: `[1, 2, 3] \list.sum` is 6, and the sum of no elements is `zero`.
 export def list.sum: [Add(a)] list(a) -> a = { xs ->
   list.fold(xs, zero, { total, x -> total + x })
 }
 
--- Whether there are no elements.
+--| Whether there are no elements.
 export def list.isEmpty: list(a) -> bool = {
   | [] -> true
   | _ -> false
 }
 
--- The number of elements `test` holds for.
+--| The number of elements `test` holds for.
 export def list.count: list(a), (a -> bool) -> int = { xs, test ->
   list.fold(xs, 0, { count, x -> if test(x) then count + 1 else count })
 }
 
--- The first element, or `#emptyList`.
+--| The first element, or `#emptyList`.
 export def list.head: list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ..._] -> #some(x)
 }
 
--- The last element, or `#emptyList`.
+--| The last element, or `#emptyList`.
 export def list.last: list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x] -> #some(x)
   | [_, ...rest] -> list.last(rest)
 }
 
--- The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
--- the end.
+--| The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
+  the end.
 export def list.get: list(a), int -> #some(a) | #outOfRange = {
   | [], _ -> #outOfRange
   | [x, ...rest], index -> if index < 0
@@ -834,73 +846,73 @@ export def list.get: list(a), int -> #some(a) | #outOfRange = {
     else if index == 0 then #some(x) else list.get(rest, index - 1)
 }
 
--- Whether any element is equal to `x`. Elements are compared with `==`, by their structure.
+--| Whether any element is equal to `x`. Elements are compared with `==`, by their structure.
 export def list.contains: [Eq(a)] list(a), a -> bool = { xs, x ->
   list.any(xs, { y -> y == x })
 }
 
--- The position of the first element of `xs` equal to `x`, counting `xs` as starting at `index`.
+--| The position of the first element of `xs` equal to `x`, counting `xs` as starting at `index`.
 def indexOfFrom: [Eq(a)] list(a), a, int -> #some(int) | #notFound = {
   | [], _, _ -> #notFound
   | [y, ...rest], x, index -> if y == x then #some(index) else indexOfFrom(rest, x, index + 1)
 }
 
--- The position of the first element equal to `x`, counting from 0, or `#notFound`. Elements are
--- compared with `==`, by their structure.
+--| The position of the first element equal to `x`, counting from 0, or `#notFound`. Elements are
+  compared with `==`, by their structure.
 export def list.indexOf: [Eq(a)] list(a), a -> #some(int) | #notFound = { xs, x ->
   indexOfFrom(xs, x, 0)
 }
 
--- `xs` reversed, in front of `tail`. It takes `xs` apart in a match arm that builds a cell of the same
--- size, so a list held only here has its cells rewritten in place rather than copied.
+--| `xs` reversed, in front of `tail`. It takes `xs` apart in a match arm that builds a cell of the same
+  size, so a list held only here has its cells rewritten in place rather than copied.
 def reverseOnto: list(a), list(a) -> list(a) = {
   | [], tail -> tail
   | [x, ...rest], tail -> reverseOnto(rest, [x, ...tail])
 }
 
--- `f` applied to each element of `xs`, last first, in front of `acc`.
+--| `f` applied to each element of `xs`, last first, in front of `acc`.
 def mapReversed: list(a), (a -> b), list(b) -> list(b) = {
   | [], _, acc -> acc
   | [x, ...rest], f, acc -> mapReversed(rest, f, [f(x), ...acc])
 }
 
--- `f` applied to each element, in order. Stack-safe: it works on a list of any length.
+--| `f` applied to each element, in order. Stack-safe: it works on a list of any length.
 export def list.map: list(a), (a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapReversed(xs, f, []), [])
 }
 
--- `f` applied to each element of `xs` and its position, counting `xs` as starting at `index`, last
--- first, in front of `acc`.
+--| `f` applied to each element of `xs` and its position, counting `xs` as starting at `index`, last
+  first, in front of `acc`.
 def mapIndexedReversed: list(a), int, (int, a -> b), list(b) -> list(b) = {
   | [], _, _, acc -> acc
   | [x, ...rest], index, f, acc -> mapIndexedReversed(rest, index + 1, f, [f(index, x), ...acc])
 }
 
--- `f` applied to each element's position, counting from 0, and the element, in order. Stack-safe:
--- it works on a list of any length.
+--| `f` applied to each element's position, counting from 0, and the element, in order. Stack-safe:
+  it works on a list of any length.
 export def list.mapIndexed: list(a), (int, a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapIndexedReversed(xs, 0, f, []), [])
 }
 
--- The lists `f` gives for each element, joined end to end. Stack-safe: it works however long the
--- lists are.
+--| The lists `f` gives for each element, joined end to end. Stack-safe: it works however long the
+  lists are.
 export def list.flatMap: list(a), (a -> list(b)) -> list(b) = { xs, f ->
   reverseOnto(list.fold(xs, [], { acc, x -> reverseOnto(f(x), acc) }), [])
 }
 
--- The elements of `xs` that `keep` holds for, last first, in front of `acc`.
+--| The elements of `xs` that `keep` holds for, last first, in front of `acc`.
 def filterReversed: list(a), (a -> bool), list(a) -> list(a) = {
   | [], _, acc -> acc
   | [x, ...rest], keep, acc -> filterReversed(rest, keep, if keep(x) then [x, ...acc] else acc)
 }
 
--- The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
+--| The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
 export def list.filter: list(a), (a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(filterReversed(xs, keep, []), [])
 }
 
--- The elements of `xs` that `test` holds for and those it fails for, `xs` taken last first: each in
--- front of `passed` or `failed`.
+--| The elements of `xs` that `test` holds for and those it fails for, `xs` taken last first: each in
+  front of `passed` or `failed`.
 def partitionOnto: list(a), (a -> bool), list(a), list(a) -> (list(a), list(a)) = {
   | [], _, passed, failed -> (passed, failed)
   | [x, ...rest], test, passed, failed -> if test(x)
@@ -908,47 +920,47 @@ def partitionOnto: list(a), (a -> bool), list(a), list(a) -> (list(a), list(a)) 
     else partitionOnto(rest, test, passed, [x, ...failed])
 }
 
--- The elements `test` holds for and the elements it fails for, each in order. Stack-safe: it works on
--- a list of any length.
+--| The elements `test` holds for and the elements it fails for, each in order. Stack-safe: it works on
+  a list of any length.
 export def list.partition: list(a), (a -> bool) -> (list(a), list(a)) = { xs, test ->
   partitionOnto(reverseOnto(xs, []), test, [], [])
 }
 
--- The first element `matches` holds for, or `#notFound`.
+--| The first element `matches` holds for, or `#notFound`.
 export def list.find: list(a), (a -> bool) -> #some(a) | #notFound = {
   | [], _ -> #notFound
   | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
 }
 
--- Whether `test` holds for every element (so `true` for an empty list).
+--| Whether `test` holds for every element (so `true` for an empty list).
 export def list.all: list(a), (a -> bool) -> bool = {
   | [], _ -> true
   | [x, ...rest], test -> if test(x) then list.all(rest, test) else false
 }
 
--- Whether `test` holds for any element (so `false` for an empty list).
+--| Whether `test` holds for any element (so `false` for an empty list).
 export def list.any: list(a), (a -> bool) -> bool = {
   | [], _ -> false
   | [x, ...rest], test -> if test(x) then true else list.any(rest, test)
 }
 
--- `list.fold` from the last element to the first.
+--| [`list.fold`] from the last element to the first.
 export def list.foldBack: list(a), b, (b, a -> b) -> b = { xs, initial, step ->
   list.fold(list.reverse(xs), initial, step)
 }
 
--- `xs` with `x` added at the end. Not written `xs ++ [x]`, since `++` copies its left operand by
--- recursing once per element (#558).
+--| `xs` with `x` added at the end.
 export def list.append: list(a), a -> list(a) = { xs, x ->
+  -- Not written `xs ++ [x]`, since `++` copies its left operand by recursing once per element (#558).
   reverseOnto(reverseOnto(xs, []), [x])
 }
 
--- The lists of `xss` joined end to end. Stack-safe: it works however long the lists are.
+--| The lists of `xss` joined end to end. Stack-safe: it works however long the lists are.
 export def list.flatten: list(list(a)) -> list(a) = { xss ->
   reverseOnto(list.fold(xss, [], { acc, xs -> reverseOnto(xs, acc) }), [])
 }
 
--- The first `count` elements of `xs`, last first, in front of `acc`.
+--| The first `count` elements of `xs`, last first, in front of `acc`.
 def takeReversed: list(a), int, list(a) -> list(a) = {
   | [], _, acc -> acc
   | [x, ...rest], count, acc -> if count <= 0
@@ -956,79 +968,79 @@ def takeReversed: list(a), int, list(a) -> list(a) = {
     else takeReversed(rest, count - 1, [x, ...acc])
 }
 
--- The first `count` elements (all of them when there are fewer). Stack-safe: it works on a list of
--- any length.
+--| The first `count` elements (all of them when there are fewer). Stack-safe: it works on a list of
+  any length.
 export def list.take: list(a), int -> list(a) = { xs, count ->
   reverseOnto(takeReversed(xs, count, []), [])
 }
 
--- The elements of `xs` before the first one `keep` fails for, last first, in front of `acc`.
+--| The elements of `xs` before the first one `keep` fails for, last first, in front of `acc`.
 def takeWhileReversed: list(a), (a -> bool), list(a) -> list(a) = {
   | [], _, acc -> acc
   | [x, ...rest], keep, acc -> if keep(x) then takeWhileReversed(rest, keep, [x, ...acc]) else acc
 }
 
--- The elements before the first one `keep` fails for. Stack-safe: it works on a list of any length.
+--| The elements before the first one `keep` fails for. Stack-safe: it works on a list of any length.
 export def list.takeWhile: list(a), (a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(takeWhileReversed(xs, keep, []), [])
 }
 
--- All the elements but the last (no elements for an empty list). Stack-safe: it works on a list of
--- any length.
+--| All the elements but the last (no elements for an empty list). Stack-safe: it works on a list of
+  any length.
 export def list.dropLast: list(a) -> list(a) = { xs ->
   match reverseOnto(xs, [])
     | [] -> []
     | [_, ...rest] -> reverseOnto(rest, [])
 }
 
--- The elements after the first `count`.
+--| The elements after the first `count`.
 export def list.skip: list(a), int -> list(a) = {
   | [], _ -> []
   | [x, ...rest], count -> if count <= 0 then [x, ...rest] else list.skip(rest, count - 1)
 }
 
--- The elements from the first one `test` fails for, so `list.takeWhile(xs, f) ++ list.skipWhile(xs, f)`
--- is `xs`.
+--| The elements from the first one `test` fails for, so `list.takeWhile(xs, f) ++ list.skipWhile(xs, f)`
+  is `xs`.
 export def list.skipWhile: list(a), (a -> bool) -> list(a) = {
   | [], _ -> []
   | [x, ...rest], test -> if test(x) then list.skipWhile(rest, test) else [x, ...rest]
 }
 
--- Pairs of the elements of `xs` and `ys` at the same position, last first, in front of `acc`.
+--| Pairs of the elements of `xs` and `ys` at the same position, last first, in front of `acc`.
 def zipReversed: list(a), list(b), list((a, b)) -> list((a, b)) = {
   | [x, ...xs], [y, ...ys], acc -> zipReversed(xs, ys, [(x, y), ...acc])
   | _, _, acc -> acc
 }
 
--- Pairs of the elements at the same position, as long as the shorter list. Stack-safe: it works on
--- lists of any length.
+--| Pairs of the elements at the same position, as long as the shorter list. Stack-safe: it works on
+  lists of any length.
 export def list.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
   reverseOnto(zipReversed(xs, ys, []), [])
 }
 
--- The first and second parts of `pairs`, taken last first: each in front of `xs` or `ys`.
+--| The first and second parts of `pairs`, taken last first: each in front of `xs` or `ys`.
 def unzipOnto: list((a, b)), list(a), list(b) -> (list(a), list(b)) = {
   | [], xs, ys -> (xs, ys)
   | [(x, y), ...rest], xs, ys -> unzipOnto(rest, [x, ...xs], [y, ...ys])
 }
 
--- The first parts of the pairs and their second parts, each in order: the inverse of `list.zip` for
--- lists of equal length. Stack-safe: it works on a list of any length.
+--| The first parts of the pairs and their second parts, each in order: the inverse of [`list.zip`] for
+  lists of equal length. Stack-safe: it works on a list of any length.
 export def list.unzip: list((a, b)) -> (list(a), list(b)) = { pairs ->
   unzipOnto(reverseOnto(pairs, []), [], [])
 }
 
--- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
--- by their structure, so this works for lists of anything but functions.
+--| The elements without repeats, each kept where it first appears. Elements are compared with `==`,
+  by their structure, so this works for lists of anything but functions.
 export def list.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
   list.reverse(
     list.fold(xs, [], { seen, x -> if list.any(seen, { y -> y == x }) then seen else [x, ...seen] })
   )
 }
 
--- `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
--- elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
--- same key, the one from `xs` comes first.
+--| `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
+  elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
+  same key, the one from `xs` comes first.
 def mergeBy: [Ord(b)] list(a), list(a), (a -> b), list(a) -> list(a) = {
   | [], ys, _, acc -> reverseOnto(acc, ys)
   | xs, [], _, acc -> reverseOnto(acc, xs)
@@ -1037,64 +1049,64 @@ def mergeBy: [Ord(b)] list(a), list(a), (a -> b), list(a) -> list(a) = {
     else mergeBy(xs, [y, ...ys], key, [x, ...acc])
 }
 
--- `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
+--| `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
 def mergePairs: [Ord(b)] list(list(a)), (a -> b), list(list(a)) -> list(list(a)) = {
   | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
   | rest, _, acc -> reverseOnto(acc, rest)
 }
 
--- The elements of `runs`, each run already in order of `key`, merged into one list in that order.
+--| The elements of `runs`, each run already in order of `key`, merged into one list in that order.
 def mergeRuns: [Ord(b)] list(list(a)), (a -> b) -> list(a) = {
   | [], _ -> []
   | [run], _ -> run
   | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
 }
 
--- The elements in ascending order of `key`. The sort is stable: elements with the same key keep
--- their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
--- Stack-safe: it works on a list of any length.
+--| The elements in ascending order of `key`. The sort is stable: elements with the same key keep
+  their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
+  Stack-safe: it works on a list of any length.
 export def list.sortBy: [Ord(b)] list(a), (a -> b) -> list(a) = { xs, key ->
   mergeRuns(list.map(xs, { x -> [x] }), key)
 }
 
--- The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
+--| The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
 export def list.sort: [Ord(a)] list(a) -> list(a) = { xs ->
   list.sortBy(xs, { x -> x })
 }
 
--- The least of `least` and the elements of `xs`, the first of them when several are least.
+--| The least of `least` and the elements of `xs`, the first of them when several are least.
 def leastOf: [Ord(a)] list(a), a -> a = {
   | [], least -> least
   | [x, ...rest], least -> leastOf(rest, if x < least then x else least)
 }
 
--- The greatest of `greatest` and the elements of `xs`, the first of them when several are greatest.
+--| The greatest of `greatest` and the elements of `xs`, the first of them when several are greatest.
 def greatestOf: [Ord(a)] list(a), a -> a = {
   | [], greatest -> greatest
   | [x, ...rest], greatest -> greatestOf(rest, if x > greatest then x else greatest)
 }
 
--- The least element, or `#emptyList`. Of several least elements, the first.
+--| The least element, or `#emptyList`. Of several least elements, the first.
 export def list.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ...rest] -> #some(leastOf(rest, x))
 }
 
--- The greatest element, or `#emptyList`. Of several greatest elements, the first.
+--| The greatest element, or `#emptyList`. Of several greatest elements, the first.
 export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ...rest] -> #some(greatestOf(rest, x))
 }
 
--- The elements `step` gives from `state` on, last first, in front of `acc`.
+--| The elements `step` gives from `state` on, last first, in front of `acc`.
 def unfoldReversed: b, (b -> #some(a, b) | #done), list(a) -> list(a) = { state, step, acc ->
   match step(state)
     | #some(x, next) -> unfoldReversed(next, step, [x, ...acc])
     | #done -> acc
 }
 
--- The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
--- `next`, and `#done` ends the list. Stack-safe: it works however many elements `step` gives.
+--| The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
+  `next`, and `#done` ends the list. Stack-safe: it works however many elements `step` gives.
 export def list.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
   reverseOnto(unfoldReversed(state, step, []), [])
 }
@@ -1110,7 +1122,7 @@ export def list.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step
 -- For now a map holds a list of its entries, each key once, in the order the keys were first added,
 -- so a lookup walks the list (see docs/src/content/work-in-progress/maps-and-sets.md).
 
--- The value `entries` holds for `key`, or `#notFound`.
+--| The value `entries` holds for `key`, or `#notFound`.
 def findEntry: [Eq(k)] list((k, v)), k -> #some(v) | #notFound = {
   | [], _ -> #notFound
   | [(entryKey, value), ...rest], key -> if entryKey == key
@@ -1118,8 +1130,8 @@ def findEntry: [Eq(k)] list((k, v)), k -> #some(v) | #notFound = {
     else findEntry(rest, key)
 }
 
--- `entries` with `key` holding `value`: in its place if `entries` has it, else at the end. `acc`
--- holds the entries before, last first.
+--| `entries` with `key` holding `value`: in its place if `entries` has it, else at the end. `acc`
+  holds the entries before, last first.
 def insertEntry: [Eq(k)] list((k, v)), k, v, list((k, v)) -> list((k, v)) = {
   | [], key, value, acc -> reverseOnto(acc, [(key, value)])
   | [(entryKey, entryValue), ...rest], key, value, acc -> if entryKey == key
@@ -1127,7 +1139,7 @@ def insertEntry: [Eq(k)] list((k, v)), k, v, list((k, v)) -> list((k, v)) = {
     else insertEntry(rest, key, value, [(entryKey, entryValue), ...acc])
 }
 
--- `entries` without `key`. `acc` holds the entries before, last first.
+--| `entries` without `key`. `acc` holds the entries before, last first.
 def removeEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
   | [], _, acc -> reverseOnto(acc, [])
   | [(entryKey, value), ...rest], key, acc -> if entryKey == key
@@ -1135,57 +1147,57 @@ def removeEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
     else removeEntry(rest, key, [(entryKey, value), ...acc])
 }
 
--- `m` with each of `entries` inserted in turn.
+--| `m` with each of `entries` inserted in turn.
 def insertAll: [Eq(k) + Hash(k)] map(k, v), list((k, v)) -> map(k, v) = {
   | m, [] -> m
   | m, [(key, value), ...rest] -> insertAll(map.insert(m, key, value), rest)
 }
 
--- The map with no keys. A map literal has at least one entry, since [] is the empty list.
+--| The map with no keys. A map literal has at least one entry, since [] is the empty list.
 export def map.empty: map(k, v) = __nanyx_map_of_entries([])
 
--- What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
--- `__map([("a", 1), ("b", 2)])`. A key written twice holds the value written last.
+--| What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
+  `__map([("a", 1), ("b", 2)])`. A key written twice holds the value written last.
 export def __map: [Eq(k) + Hash(k)] list((k, v)) -> map(k, v) = { entries ->
   insertAll(map.empty, entries)
 }
 
--- The map holding each of `entries`, in order: of two entries with the same key, the later wins.
+--| The map holding each of `entries`, in order: of two entries with the same key, the later wins.
 export def map.fromList: [Eq(k) + Hash(k)] list((k, v)) -> map(k, v) = { entries ->
   insertAll(map.empty, entries)
 }
 
--- The entries of `m`, each a key and its value, in the order the keys were first added.
+--| The entries of `m`, each a key and its value, in the order the keys were first added.
 export def map.toList: map(k, v) -> list((k, v)) = { m ->
   __nanyx_map_entries(m)
 }
 
--- The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
+--| The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
 export def map.get: [Eq(k) + Hash(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
   findEntry(__nanyx_map_entries(m), key)
 }
 
--- Whether `m` holds a value for `key`.
+--| Whether `m` holds a value for `key`.
 export def map.containsKey: [Eq(k) + Hash(k)] map(k, v), k -> bool = { m, key ->
   isSomeOption(findEntry(__nanyx_map_entries(m), key))
 }
 
--- `m` with `key` holding `value`, in place of any value it held before.
+--| `m` with `key` holding `value`, in place of any value it held before.
 export def map.insert: [Eq(k) + Hash(k)] map(k, v), k, v -> map(k, v) = { m, key, value ->
   __nanyx_map_of_entries(insertEntry(__nanyx_map_entries(m), key, value, []))
 }
 
--- `m` without `key` or its value. A map that has no `key` is given back as it is.
+--| `m` without `key` or its value. A map that has no `key` is given back as it is.
 export def map.remove: [Eq(k) + Hash(k)] map(k, v), k -> map(k, v) = { m, key ->
   __nanyx_map_of_entries(removeEntry(__nanyx_map_entries(m), key, []))
 }
 
--- The number of keys.
+--| The number of keys.
 export def map.count: map(k, v) -> int = { m ->
   list.length(__nanyx_map_entries(m))
 }
 
--- `groups` with the elements of `xs` added, each to the front of the group of its key.
+--| `groups` with the elements of `xs` added, each to the front of the group of its key.
 def groupInto: [Eq(b) + Hash(b)] list(a), (a -> b), map(b, list(a)) -> map(b, list(a)) = {
   | [], _, groups -> groups
   | [x, ...rest], key, groups ->
@@ -1193,45 +1205,45 @@ def groupInto: [Eq(b) + Hash(b)] list(a), (a -> b), map(b, list(a)) -> map(b, li
     groupInto(rest, key, map.insert(groups, key(x), [x, ...group]))
 }
 
--- The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
--- order. The keys are in the order they first appear.
+--| The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
+  order. The keys are in the order they first appear.
 export def list.groupBy: [Eq(b) + Hash(b)] list(a), (a -> b) -> map(b, list(a)) = { xs, key ->
   def groups = __nanyx_map_entries(groupInto(xs, key, map.empty))
   __nanyx_map_of_entries(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
 }
 
--- The keys of `m`, in the order they were first added.
+--| The keys of `m`, in the order they were first added.
 export def map.keys: map(k, v) -> list(k) = { m ->
   list.map(__nanyx_map_entries(m), { entry -> entry.0 })
 }
 
--- The values of `m`, in the order their keys were first added.
+--| The values of `m`, in the order their keys were first added.
 export def map.values: map(k, v) -> list(v) = { m ->
   list.map(__nanyx_map_entries(m), { entry -> entry.1 })
 }
 
--- Whether `m` has no keys.
+--| Whether `m` has no keys.
 export def map.isEmpty: map(k, v) -> bool = { m ->
   list.isEmpty(__nanyx_map_entries(m))
 }
 
--- `step` applied to `acc` and each key and value of `m` in turn, in the order of `map.toList`.
+--| `step` applied to `acc` and each key and value of `m` in turn, in the order of [`map.toList`].
 export def map.fold: map(k, v), b, (b, k, v -> b) -> b = { m, acc, step ->
   list.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
 }
 
--- `m` with `f` applied to each value. The keys stay as they are, in the same order.
+--| `m` with `f` applied to each value. The keys stay as they are, in the same order.
 export def map.map: map(k, v), (v -> w) -> map(k, w) = { m, f ->
   __nanyx_map_of_entries(list.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
 }
 
--- The entries of `m` whose key and value pass `keep`, in the same order.
+--| The entries of `m` whose key and value pass `keep`, in the same order.
 export def map.filter: map(k, v), (k, v -> bool) -> map(k, v) = { m, keep ->
   __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
 }
 
--- `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
--- does not have is added at the end.
+--| `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
+  does not have is added at the end.
 export def map.update
   : [Eq(k) + Hash(k)] map(k, v), k, ((#some(v) | #notFound) -> v) -> map(k, v)
   = { m, key, f ->
@@ -1248,73 +1260,73 @@ export def map.update
 -- For now a set holds a list of its elements, each once, in the order they were first added, so
 -- `contains` walks the list (see docs/src/content/work-in-progress/maps-and-sets.md).
 
--- The set with no elements.
+--| The set with no elements.
 export def set.empty: set(a) = __nanyx_set_of_elements([])
 
--- The set of the elements of `xs`, each once, in the order they first appear.
+--| The set of the elements of `xs`, each once, in the order they first appear.
 export def set.fromList: [Eq(a) + Hash(a)] list(a) -> set(a) = { xs ->
   __nanyx_set_of_elements(list.distinct(xs))
 }
 
--- The elements of `s`, in the order they were first added.
+--| The elements of `s`, in the order they were first added.
 export def set.toList: set(a) -> list(a) = { s ->
   __nanyx_set_elements(s)
 }
 
--- Whether `s` holds `x`.
+--| Whether `s` holds `x`.
 export def set.contains: [Eq(a) + Hash(a)] set(a), a -> bool = { s, x ->
   list.any(__nanyx_set_elements(s), { y -> y == x })
 }
 
--- `s` with `x` added at the end. A set that holds `x` is given back as it is.
+--| `s` with `x` added at the end. A set that holds `x` is given back as it is.
 export def set.insert: [Eq(a) + Hash(a)] set(a), a -> set(a) = { s, x ->
   if set.contains(s, x) then s else __nanyx_set_of_elements(list.append(__nanyx_set_elements(s), x))
 }
 
--- `s` without `x`. A set that does not hold `x` is given back as it is.
+--| `s` without `x`. A set that does not hold `x` is given back as it is.
 export def set.remove: [Eq(a) + Hash(a)] set(a), a -> set(a) = { s, x ->
   __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), { y -> y != x }))
 }
 
--- The number of elements.
+--| The number of elements.
 export def set.count: set(a) -> int = { s ->
   list.length(__nanyx_set_elements(s))
 }
 
--- Whether `s` has no elements.
+--| Whether `s` has no elements.
 export def set.isEmpty: set(a) -> bool = { s ->
   list.isEmpty(__nanyx_set_elements(s))
 }
 
--- `step` applied to `acc` and each element of `s` in turn, in the order of `set.toList`.
+--| `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`].
 export def set.fold: set(a), b, (b, a -> b) -> b = { s, acc, step ->
   list.fold(__nanyx_set_elements(s), acc, step)
 }
 
--- The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
--- first of them was.
+--| The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
+  first of them was.
 export def set.map: [Eq(b) + Hash(b)] set(a), (a -> b) -> set(b) = { s, f ->
   set.fromList(list.map(__nanyx_set_elements(s), f))
 }
 
--- The elements of `s` that pass `keep`, in the same order.
+--| The elements of `s` that pass `keep`, in the same order.
 export def set.filter: set(a), (a -> bool) -> set(a) = { s, keep ->
   __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), keep))
 }
 
--- Whether `t` holds every element of `s`.
+--| Whether `t` holds every element of `s`.
 export def set.isSubset: [Eq(a) + Hash(a)] set(a), set(a) -> bool = { s, t ->
   list.all(__nanyx_set_elements(s), { x -> set.contains(t, x) })
 }
 
--- The elements of `s`, then those of `t` that `s` does not hold.
+--| The elements of `s`, then those of `t` that `s` does not hold.
 export def set.union: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
   def ours = __nanyx_set_elements(s)
   def theirs = list.filter(__nanyx_set_elements(t), { x -> not list.any(ours, { y -> y == x }) })
   __nanyx_set_of_elements(reverseOnto(reverseOnto(ours, []), theirs))
 }
 
--- The elements of `s` that `t` holds too, in the order of `s`.
+--| The elements of `s` that `t` holds too, in the order of `s`.
 export def set.intersection: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
   def theirs = __nanyx_set_elements(t)
 
@@ -1323,7 +1335,7 @@ export def set.intersection: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t
   )
 }
 
--- The elements of `s` that `t` does not hold, in the order of `s`.
+--| The elements of `s` that `t` does not hold, in the order of `s`.
 export def set.difference: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
   def theirs = __nanyx_set_elements(t)
 

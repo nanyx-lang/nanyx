@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.Linters.StrayDocComments
 
 open Xunit
 open NyxCompiler
+open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
 /// What `default/strayDocComments` reports for `source`, compiled with every linter on: each diagnostic with the text
@@ -72,3 +73,15 @@ def one = {
 [<Fact>]
 let ``A doc comment at the end of the file is reported`` () =
     Assert.Equal<string list>([ "--| Nothing after it." ], reported "def a = 1\n--| Nothing after it.\n" |> List.map snd)
+
+[<Fact>]
+let ``No doc comment in the standard library is stray`` () =
+    let stray =
+        StandardLibrary.moduleNames
+        |> List.collect (fun moduleName ->
+            let file = $"{StandardLibrary.importPrefix}{moduleName}.nyx"
+            let docs = Documentation.ofSource file (StandardLibrary.tryLoadSource moduleName).Value
+            docs.Comments
+            |> List.filter (fun comment -> comment.Target = DocumentsNothing)
+            |> List.map (fun comment -> $"{file}:{comment.Span.StartLine + 1}"))
+    Assert.Empty stray
