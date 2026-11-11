@@ -1364,3 +1364,15 @@ export def set.difference: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t -
     list.filter(__nanyx_set_elements(s), { x -> not list.any(theirs, { y -> y == x }) })
   )
 }
+
+-- Memory ----------------------------------------------------------------------------------------
+
+--| The context mutation needs: `mut` makes a cell only where it is, and a lambda that uses a cell
+  needs it too. It is nominal, so `memory` is the only way to get one.
+export context $Memory = ()
+
+--| Runs `block` with `$Memory`, so that it can make cells with `mut` and change them with `:=`, and
+  gives back its result. Nothing that uses a cell can leave the block: only what the cells hold.
+export def memory: ([$Memory] () -> a) -> a = { block ->
+  block()
+}

@@ -47,6 +47,7 @@
     <Compile Include="LambdaArguments.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
+    <Compile Include="MemoryCells.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />

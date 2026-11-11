@@ -1313,7 +1313,7 @@ module Compiler =
                 let mismatchErrors =
                     mismatches
                     |> List.sortBy (fun (_, span) -> span.Start)
-                    |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message)
+                    |> List.map (fun (message, span) -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                 let moduleErrors = inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let placed = System.Collections.Generic.HashSet<string>()
