@@ -62,7 +62,7 @@ let ``A match on the result of bindOption that leaves out a step's tag says whic
 let ``Result.bind of two steps with one error type keeps it`` () =
     let typed =
         compileClean (
-            "def read: string -> Result(int, string) = { s -> Int.fromString(s) \\toResultOption(\"not a number\") }\n" +
+            "def read: string -> Result(int, string) = { s -> int.fromString(s) \\toResultOption(\"not a number\") }\n" +
             "def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error(\"odd\") }\n" +
             "def piped = read(\"42\") \\Result.bind(half)\n" +
             "def called = Result.bind(read(\"42\"), half)\n")

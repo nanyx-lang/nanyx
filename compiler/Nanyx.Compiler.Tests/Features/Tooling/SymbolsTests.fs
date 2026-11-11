@@ -151,8 +151,8 @@ let ``Imported names refer to the imported definition and the import`` () =
         check "module main\nimport \"mod.nyx\" as m1\ndef value = m1.foo" "m1.foo" "m1"
         check "module main\nimport \"mod.nyx\"\ndef value = foo" "foo" "mod.nyx"
         // A standard-library definition is declared in the library's own module.
-        let source = "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")"
-        let toUpper = (symbolAt (fun typed -> typed.References) (Compiler.compile source) (offsetOf source "t.String.uppercase" 0 2)).Value
+        let source = "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")"
+        let toUpper = (symbolAt (fun typed -> typed.References) (Compiler.compile source) (offsetOf source "t.string.uppercase" 0 2)).Value
         Assert.Equal("nanyx/text.nyx", toUpper.Declaration.File))
 
 /// What the name at `offset` goes to, as go-to-definition finds it: its kind, file and where it is declared.
@@ -266,9 +266,9 @@ let ``References are every name that refers to a declaration, in order`` () =
 
 [<Fact>]
 let ``References to an import are the alias its names are written with`` () =
-    let source = "import nanyx/text as t\ndef a = t.String.uppercase(\"x\")\ndef b = t.String.uppercase(\"y\")\n"
+    let source = "import nanyx/text as t\ndef a = t.string.uppercase(\"x\")\ndef b = t.string.uppercase(\"y\")\n"
     Assert.Equal<(string * int) list>(
-        [ "t", offsetOf source "t.String" 0 0; "t", offsetOf source "t.String" 1 0 ],
+        [ "t", offsetOf source "t.string" 0 0; "t", offsetOf source "t.string" 1 0 ],
         referencesAt source (offsetOf source "as t" 0 3))
 
 /// What hovering the type name at `offset` shows, and the text of the name it covers.

@@ -26,7 +26,7 @@ def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
 -- The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
 -- anything else (an empty string, a sign alone, spaces, other characters). Overflow is not
 -- detected.
-export def Int.fromString: string -> #some(int) | #invalidInt = { s ->
+export def int.fromString: string -> #some(int) | #invalidInt = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
 
@@ -37,17 +37,17 @@ export def Int.fromString: string -> #some(int) | #invalidInt = { s ->
       else parseDigits(s, start, 0)
 }
 
--- `n` as a float: `Int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
+-- `n` as a float: `int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
 -- `floor`, `ceil`, `round` and `truncate` in `nanyx/math`.
-export def Int.toFloat: int -> float = { n ->
+export def int.toFloat: int -> float = { n ->
   __nanyx_int_to_float(n)
 }
 
 -- Booleans --------------------------------------------------------------------------------------
 
--- The boolean `s` writes, `true` or `false` exactly as `Bool.toString` writes them, or
+-- The boolean `s` writes, `true` or `false` exactly as `bool.toString` writes them, or
 -- `#invalidBool` for anything else (other capitalisation, spaces, an empty string).
-export def Bool.fromString: string -> #some(bool) | #invalidBool = { s ->
+export def bool.fromString: string -> #some(bool) | #invalidBool = { s ->
   if s == "true" then #some(true) else if s == "false" then #some(false) else #invalidBool
 }
 
@@ -80,7 +80,7 @@ export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
 -- calls it.
 export def __listEqualsBy: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
   match xs
-    | [] -> List.isEmpty(ys)
+    | [] -> list.isEmpty(ys)
     | [x, ...restOfXs] ->
       match ys
         | [] -> false
@@ -118,80 +118,80 @@ export context Num(a) = (
   fromInt: int -> a
 )
 
--- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `Int` and
--- `Float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
+-- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `int` and
+-- `float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
 -- the built-in operator, not a call.
 
 -- The `int` that adds nothing.
-export def Int.zero: int = 0
+export def int.zero: int = 0
 
 -- `x` plus `y`.
-export def Int.`+`: int, int -> int = { x, y ->
+export def int.`+`: int, int -> int = { x, y ->
   x + y
 }
 
 -- `x` minus `y`.
-export def Int.`-`: int, int -> int = { x, y ->
+export def int.`-`: int, int -> int = { x, y ->
   x - y
 }
 
 -- `n` with its sign changed.
-export def Int.negate: int -> int = { n ->
+export def int.negate: int -> int = { n ->
   -n
 }
 
 -- `x` times `y`.
-export def Int.`*`: int, int -> int = { x, y ->
+export def int.`*`: int, int -> int = { x, y ->
   x * y
 }
 
 -- `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
-export def Int.`/`: int, int -> int = { x, y ->
+export def int.`/`: int, int -> int = { x, y ->
   x / y
 }
 
 -- The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
-export def Int.`%`: int, int -> int = { x, y -> x % y }
+export def int.`%`: int, int -> int = { x, y -> x % y }
 
 -- `n` itself.
-export def Int.fromInt: int -> int = { n ->
+export def int.fromInt: int -> int = { n ->
   n
 }
 
 -- The `float` that adds nothing.
-export def Float.zero: float = 0.0
+export def float.zero: float = 0.0
 
 -- `x` plus `y`.
-export def Float.`+`: float, float -> float = { x, y ->
+export def float.`+`: float, float -> float = { x, y ->
   x + y
 }
 
 -- `x` minus `y`.
-export def Float.`-`: float, float -> float = { x, y ->
+export def float.`-`: float, float -> float = { x, y ->
   x - y
 }
 
--- `x` with its sign changed: `Float.negate(0.0)` is negative zero.
-export def Float.negate: float -> float = { x ->
+-- `x` with its sign changed: `float.negate(0.0)` is negative zero.
+export def float.negate: float -> float = { x ->
   -x
 }
 
 -- `x` times `y`.
-export def Float.`*`: float, float -> float = { x, y ->
+export def float.`*`: float, float -> float = { x, y ->
   x * y
 }
 
 -- `x` divided by `y`.
-export def Float.`/`: float, float -> float = { x, y ->
+export def float.`/`: float, float -> float = { x, y ->
   x / y
 }
 
 -- The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
-export def Float.`%`: float, float -> float = { x, y -> x % y }
+export def float.`%`: float, float -> float = { x, y -> x % y }
 
--- `n` as a float, as `Int.toFloat(n)` is.
-export def Float.fromInt: int -> float = { n ->
-  Int.toFloat(n)
+-- `n` as a float, as `int.toFloat(n)` is.
+export def float.fromInt: int -> float = { n ->
+  int.toFloat(n)
 }
 
 -- Powers ----------------------------------------------------------------------------------------
@@ -226,7 +226,7 @@ def scaleByTwos: float, int -> float = { x, n ->
 -- The sum of the series for `e ** r`, from the term `term` (which is `r ** k / k!`) on, with `sum`
 -- the terms before it. Twenty terms are enough for any `r` of at most `ln(2) / 2`.
 def expSeries: float, float, float, int -> float = { r, term, sum, k ->
-  if k > 20 then sum else expSeries(r, term * r / Int.toFloat(k + 1), sum + term, k + 1)
+  if k > 20 then sum else expSeries(r, term * r / int.toFloat(k + 1), sum + term, k + 1)
 }
 
 -- `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`.
@@ -248,7 +248,7 @@ def expAround: float, float -> float = { z, n ->
 -- The sum of the series for `atanh(t)`, from the term `term` (which is `t ** (2k + 1)`) on, with
 -- `sum` the terms before it. Thirty terms are enough for any `t` below 1/3.
 def atanhSeries: float, float, float, int -> float = { term, tt, sum, k ->
-  if k > 30 then sum else atanhSeries(term * tt, tt, sum + term / Int.toFloat(2 * k + 1), k + 1)
+  if k > 30 then sum else atanhSeries(term * tt, tt, sum + term / int.toFloat(2 * k + 1), k + 1)
 }
 
 -- The natural logarithm of `m * 2 ** k`, for an `m` above zero: `m` is moved into [1, 2) first.
@@ -261,7 +261,7 @@ def lnScaled: float, int -> float = { m, k ->
 -- The natural logarithm of `m * 2 ** k`, for an `m` in [1, 2): `ln(m)` is `2 * atanh((m - 1) / (m + 1))`.
 def lnOfReduced: float, int -> float = { m, k ->
   def t = (m - 1.0) / (m + 1.0)
-  2.0 * atanhSeries(t, t * t, 0.0, 0) + Int.toFloat(k) * 0.6931471805599453
+  2.0 * atanhSeries(t, t * t, 0.0, 0) + int.toFloat(k) * 0.6931471805599453
 }
 
 -- The natural logarithm of `x`: minus infinity at zero, and NaN below it.
@@ -271,10 +271,10 @@ def floatLn: float -> float = { x ->
     else if x == 0.0 then -1.0 / 0.0 else if x == 1.0 / 0.0 then x else lnScaled(x, 0)
 }
 
--- `x` to the power `y`, which need not be a whole number: `Float.pow(2.0, 0.5)` is the square root
+-- `x` to the power `y`, which need not be a whole number: `float.pow(2.0, 0.5)` is the square root
 -- of 2. A whole `y` is `x ** y`, exactly; any other is `e ** (y * ln(x))`, so a negative `x` gives
 -- NaN.
-export def Float.pow: float, float -> float = { x, y ->
+export def float.pow: float, float -> float = { x, y ->
   def whole = __nanyx_float_trunc(y)
 
   if whole == y and y < 2147483648.0 and y > -2147483648.0
@@ -319,7 +319,7 @@ def readDecimalByte
         then readDecimal(
           s
           i + 1
-          m * 10.0 + Int.toFloat(digitValue(b))
+          m * 10.0 + int.toFloat(digitValue(b))
           (if afterPoint then e - 1 else e)
           digits + 1
           afterPoint
@@ -366,19 +366,19 @@ def readExponentDigits
 -- alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
 -- an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
 -- exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
--- `Float.toString` writes them. A number too large for a float is infinity.
+-- `float.toString` writes them. A number too large for a float is infinity.
 --
 -- The result is the nearest float to the decimal when it has at most 15 significant digits and an
 -- exponent, once the point is moved to the end, between -22 and 22, which covers most text written
 -- by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
-export def Float.fromString: string -> #some(float) | #invalidFloat = { s ->
+export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
 
   if s == "NaN"
     then #some(0.0 / 0.0)
     else if first == 45
-      then mapOption(readFloatMagnitude(s, start), Float.negate)
+      then mapOption(readFloatMagnitude(s, start), float.negate)
       else readFloatMagnitude(s, start)
 }
 
@@ -396,7 +396,7 @@ def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start
 -- first), `string` (by bytes, which is the order of code points), and tuples and lists of them
 -- (position by position, and a list that is a prefix of another first). Records and tags have no
 -- order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
--- with `List.sortBy`. A function that orders values of one of its type variables requires it:
+-- with `list.sortBy`. A function that orders values of one of its type variables requires it:
 -- `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
 -- should keep them consistent.
 export context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
@@ -477,21 +477,21 @@ export def __listGreaterOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
 }
 
 -- Each built-in type with an order has its order attached as `compare`, so it can be called and
--- passed around: `Float.compare` puts NaN after every other float. A built-in type's order is
+-- passed around: `float.compare` puts NaN after every other float. A built-in type's order is
 -- always the compiler's own: `<` and `Ord` do not read these.
-export def Int.compare: int, int -> #less | #equal | #greater = { x, y ->
+export def int.compare: int, int -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
-export def Float.compare: float, float -> #less | #equal | #greater = { x, y ->
+export def float.compare: float, float -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
-export def Bool.compare: bool, bool -> #less | #equal | #greater = { x, y ->
+export def bool.compare: bool, bool -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
-export def String.compare: string, string -> #less | #equal | #greater = { x, y ->
+export def string.compare: string, string -> #less | #equal | #greater = { x, y ->
   __compare(x, y)
 }
 
@@ -500,7 +500,7 @@ export def String.compare: string, string -> #less | #equal | #greater = { x, y 
 -- How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
 -- so that a map can find a key by its hash. The compiler has its own for every type it has its own
 -- `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
--- `hash` that agrees with it, or it has none: `def $Email.hash = { e -> String.hash(lower(e)) }`
+-- `hash` that agrees with it, or it has none: `def $Email.hash = { e -> string.hash(lower(e)) }`
 -- for an `==` that ignores case. A function that hashes values of one of its type variables
 -- requires it: `def bucket: [Hash(a)] a, int -> int`.
 export context Hash(a) = (hash: a -> int)
@@ -514,19 +514,19 @@ export def __hash: a -> int = { x ->
 -- Each built-in type has its hash attached as `hash`, so that a type's own `hash` can be built from
 -- its parts' hashes. A built-in type's hash is always the compiler's own: `Hash` does not read
 -- these.
-export def Int.hash: int -> int = { x ->
+export def int.hash: int -> int = { x ->
   __hash(x)
 }
 
-export def Float.hash: float -> int = { x ->
+export def float.hash: float -> int = { x ->
   __hash(x)
 }
 
-export def Bool.hash: bool -> int = { x ->
+export def bool.hash: bool -> int = { x ->
   __hash(x)
 }
 
-export def String.hash: string -> int = { s ->
+export def string.hash: string -> int = { s ->
   __hash(s)
 }
 
@@ -567,28 +567,28 @@ def __listRestToString: list(a), (a -> string), string -> string = { xs, show, t
 }
 
 -- Each built-in type has an attached `toString`, so a value can be turned into text by a function
--- that can be passed around, `scores \map(Int.toString)`, as well as by interpolation. Each one
+-- that can be passed around, `scores \map(int.toString)`, as well as by interpolation. Each one
 -- writes the value as interpolation does, with the compiler's own `ToString` for the type.
 
 -- `n` in decimal, with a leading `-` when it is negative.
-export def Int.toString: int -> string = { n ->
+export def int.toString: int -> string = { n ->
   "{n}"
 }
 
 -- `x` in decimal, with the fewest digits that read back as `x`.
-export def Float.toString: float -> string = { x ->
+export def float.toString: float -> string = { x ->
   "{x}"
 }
 
 -- `true` or `false`.
-export def Bool.toString: bool -> string = { b ->
+export def bool.toString: bool -> string = { b ->
   "{b}"
 }
 
 -- `s` itself.
-export def String.toString: string -> string = { s -> s }
+export def string.toString: string -> string = { s -> s }
 
--- How a value of type `a` is read from text, with `e` for text that does not hold one: `Int.fromString`
+-- How a value of type `a` is read from text, with `e` for text that does not hold one: `int.fromString`
 -- gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
 -- `float` and `bool` do, so a function can read a value of whichever type it is called at:
 -- `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
@@ -742,12 +742,12 @@ export def valuesOption: list(#some(a) | r) -> list(a) = { options ->
     | acc, _ -> acc
   }
 
-  options \List.fold([], keep) \List.reverse
+  options \list.fold([], keep) \list.reverse
 }
 
 -- Lists -----------------------------------------------------------------------------------------
 --
--- Attached to `List`, so they are called as `List.map(xs, f)`, or as `xs \map(f)` when `xs` is
+-- Attached to `list`, so they are called as `list.map(xs, f)`, or as `xs \map(f)` when `xs` is
 -- known to be a list. Lists are immutable: every function gives back a new list.
 --
 -- Every function here that walks a list is stack-safe: it calls itself only in tail position, so it
@@ -755,62 +755,62 @@ export def valuesOption: list(#some(a) | r) -> list(a) = { options ->
 -- end, until tail recursion modulo cons exists (see docs/src/content/work-in-progress/tail-calls.md).
 
 -- `step` applied to `initial` and the first element, then to that result and the second, and so on.
-export def List.fold: list(a), b, (b, a -> b) -> b = {
+export def list.fold: list(a), b, (b, a -> b) -> b = {
   | [], acc, _ -> acc
-  | [x, ...rest], acc, step -> List.fold(rest, step(acc, x), step)
+  | [x, ...rest], acc, step -> list.fold(rest, step(acc, x), step)
 }
 
 -- The elements in reverse order.
-export def List.reverse: list(a) -> list(a) = { xs ->
-  List.fold(xs, [], { acc, x -> [x, ...acc] })
+export def list.reverse: list(a) -> list(a) = { xs ->
+  list.fold(xs, [], { acc, x -> [x, ...acc] })
 }
 
 -- The number of elements.
-export def List.length: list(a) -> int = { xs ->
-  List.fold(xs, 0, { count, _ -> count + 1 })
+export def list.length: list(a) -> int = { xs ->
+  list.fold(xs, 0, { count, _ -> count + 1 })
 }
 
--- The elements added together: `[1, 2, 3] \List.sum` is 6, and the sum of no elements is `zero`.
-export def List.sum: [Add(a)] list(a) -> a = { xs ->
-  List.fold(xs, zero, { total, x -> total + x })
+-- The elements added together: `[1, 2, 3] \list.sum` is 6, and the sum of no elements is `zero`.
+export def list.sum: [Add(a)] list(a) -> a = { xs ->
+  list.fold(xs, zero, { total, x -> total + x })
 }
 
 -- Whether there are no elements.
-export def List.isEmpty: list(a) -> bool = {
+export def list.isEmpty: list(a) -> bool = {
   | [] -> true
   | _ -> false
 }
 
 -- The number of elements `test` holds for.
-export def List.count: list(a), (a -> bool) -> int = { xs, test ->
-  List.fold(xs, 0, { count, x -> if test(x) then count + 1 else count })
+export def list.count: list(a), (a -> bool) -> int = { xs, test ->
+  list.fold(xs, 0, { count, x -> if test(x) then count + 1 else count })
 }
 
 -- The first element, or `#emptyList`.
-export def List.head: list(a) -> #some(a) | #emptyList = {
+export def list.head: list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ..._] -> #some(x)
 }
 
 -- The last element, or `#emptyList`.
-export def List.last: list(a) -> #some(a) | #emptyList = {
+export def list.last: list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x] -> #some(x)
-  | [_, ...rest] -> List.last(rest)
+  | [_, ...rest] -> list.last(rest)
 }
 
 -- The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
 -- the end.
-export def List.get: list(a), int -> #some(a) | #outOfRange = {
+export def list.get: list(a), int -> #some(a) | #outOfRange = {
   | [], _ -> #outOfRange
   | [x, ...rest], index -> if index < 0
     then #outOfRange
-    else if index == 0 then #some(x) else List.get(rest, index - 1)
+    else if index == 0 then #some(x) else list.get(rest, index - 1)
 }
 
 -- Whether any element is equal to `x`. Elements are compared with `==`, by their structure.
-export def List.contains: [Eq(a)] list(a), a -> bool = { xs, x ->
-  List.any(xs, { y -> y == x })
+export def list.contains: [Eq(a)] list(a), a -> bool = { xs, x ->
+  list.any(xs, { y -> y == x })
 }
 
 -- The position of the first element of `xs` equal to `x`, counting `xs` as starting at `index`.
@@ -821,7 +821,7 @@ def indexOfFrom: [Eq(a)] list(a), a, int -> #some(int) | #notFound = {
 
 -- The position of the first element equal to `x`, counting from 0, or `#notFound`. Elements are
 -- compared with `==`, by their structure.
-export def List.indexOf: [Eq(a)] list(a), a -> #some(int) | #notFound = { xs, x ->
+export def list.indexOf: [Eq(a)] list(a), a -> #some(int) | #notFound = { xs, x ->
   indexOfFrom(xs, x, 0)
 }
 
@@ -839,7 +839,7 @@ def mapReversed: list(a), (a -> b), list(b) -> list(b) = {
 }
 
 -- `f` applied to each element, in order. Stack-safe: it works on a list of any length.
-export def List.map: list(a), (a -> b) -> list(b) = { xs, f ->
+export def list.map: list(a), (a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapReversed(xs, f, []), [])
 }
 
@@ -852,14 +852,14 @@ def mapIndexedReversed: list(a), int, (int, a -> b), list(b) -> list(b) = {
 
 -- `f` applied to each element's position, counting from 0, and the element, in order. Stack-safe:
 -- it works on a list of any length.
-export def List.mapIndexed: list(a), (int, a -> b) -> list(b) = { xs, f ->
+export def list.mapIndexed: list(a), (int, a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapIndexedReversed(xs, 0, f, []), [])
 }
 
 -- The lists `f` gives for each element, joined end to end. Stack-safe: it works however long the
 -- lists are.
-export def List.flatMap: list(a), (a -> list(b)) -> list(b) = { xs, f ->
-  reverseOnto(List.fold(xs, [], { acc, x -> reverseOnto(f(x), acc) }), [])
+export def list.flatMap: list(a), (a -> list(b)) -> list(b) = { xs, f ->
+  reverseOnto(list.fold(xs, [], { acc, x -> reverseOnto(f(x), acc) }), [])
 }
 
 -- The elements of `xs` that `keep` holds for, last first, in front of `acc`.
@@ -869,7 +869,7 @@ def filterReversed: list(a), (a -> bool), list(a) -> list(a) = {
 }
 
 -- The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
-export def List.filter: list(a), (a -> bool) -> list(a) = { xs, keep ->
+export def list.filter: list(a), (a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(filterReversed(xs, keep, []), [])
 }
 
@@ -884,42 +884,42 @@ def partitionOnto: list(a), (a -> bool), list(a), list(a) -> (list(a), list(a)) 
 
 -- The elements `test` holds for and the elements it fails for, each in order. Stack-safe: it works on
 -- a list of any length.
-export def List.partition: list(a), (a -> bool) -> (list(a), list(a)) = { xs, test ->
+export def list.partition: list(a), (a -> bool) -> (list(a), list(a)) = { xs, test ->
   partitionOnto(reverseOnto(xs, []), test, [], [])
 }
 
 -- The first element `matches` holds for, or `#notFound`.
-export def List.find: list(a), (a -> bool) -> #some(a) | #notFound = {
+export def list.find: list(a), (a -> bool) -> #some(a) | #notFound = {
   | [], _ -> #notFound
-  | [x, ...rest], matches -> if matches(x) then #some(x) else List.find(rest, matches)
+  | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
 }
 
 -- Whether `test` holds for every element (so `true` for an empty list).
-export def List.all: list(a), (a -> bool) -> bool = {
+export def list.all: list(a), (a -> bool) -> bool = {
   | [], _ -> true
-  | [x, ...rest], test -> if test(x) then List.all(rest, test) else false
+  | [x, ...rest], test -> if test(x) then list.all(rest, test) else false
 }
 
 -- Whether `test` holds for any element (so `false` for an empty list).
-export def List.any: list(a), (a -> bool) -> bool = {
+export def list.any: list(a), (a -> bool) -> bool = {
   | [], _ -> false
-  | [x, ...rest], test -> if test(x) then true else List.any(rest, test)
+  | [x, ...rest], test -> if test(x) then true else list.any(rest, test)
 }
 
--- `List.fold` from the last element to the first.
-export def List.foldBack: list(a), b, (b, a -> b) -> b = { xs, initial, step ->
-  List.fold(List.reverse(xs), initial, step)
+-- `list.fold` from the last element to the first.
+export def list.foldBack: list(a), b, (b, a -> b) -> b = { xs, initial, step ->
+  list.fold(list.reverse(xs), initial, step)
 }
 
 -- `xs` with `x` added at the end. Not written `xs ++ [x]`, since `++` copies its left operand by
 -- recursing once per element (#558).
-export def List.append: list(a), a -> list(a) = { xs, x ->
+export def list.append: list(a), a -> list(a) = { xs, x ->
   reverseOnto(reverseOnto(xs, []), [x])
 }
 
 -- The lists of `xss` joined end to end. Stack-safe: it works however long the lists are.
-export def List.flatten: list(list(a)) -> list(a) = { xss ->
-  reverseOnto(List.fold(xss, [], { acc, xs -> reverseOnto(xs, acc) }), [])
+export def list.flatten: list(list(a)) -> list(a) = { xss ->
+  reverseOnto(list.fold(xss, [], { acc, xs -> reverseOnto(xs, acc) }), [])
 }
 
 -- The first `count` elements of `xs`, last first, in front of `acc`.
@@ -932,7 +932,7 @@ def takeReversed: list(a), int, list(a) -> list(a) = {
 
 -- The first `count` elements (all of them when there are fewer). Stack-safe: it works on a list of
 -- any length.
-export def List.take: list(a), int -> list(a) = { xs, count ->
+export def list.take: list(a), int -> list(a) = { xs, count ->
   reverseOnto(takeReversed(xs, count, []), [])
 }
 
@@ -943,29 +943,29 @@ def takeWhileReversed: list(a), (a -> bool), list(a) -> list(a) = {
 }
 
 -- The elements before the first one `keep` fails for. Stack-safe: it works on a list of any length.
-export def List.takeWhile: list(a), (a -> bool) -> list(a) = { xs, keep ->
+export def list.takeWhile: list(a), (a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(takeWhileReversed(xs, keep, []), [])
 }
 
 -- All the elements but the last (no elements for an empty list). Stack-safe: it works on a list of
 -- any length.
-export def List.dropLast: list(a) -> list(a) = { xs ->
+export def list.dropLast: list(a) -> list(a) = { xs ->
   match reverseOnto(xs, [])
     | [] -> []
     | [_, ...rest] -> reverseOnto(rest, [])
 }
 
 -- The elements after the first `count`.
-export def List.skip: list(a), int -> list(a) = {
+export def list.skip: list(a), int -> list(a) = {
   | [], _ -> []
-  | [x, ...rest], count -> if count <= 0 then [x, ...rest] else List.skip(rest, count - 1)
+  | [x, ...rest], count -> if count <= 0 then [x, ...rest] else list.skip(rest, count - 1)
 }
 
--- The elements from the first one `test` fails for, so `List.takeWhile(xs, f) ++ List.skipWhile(xs, f)`
+-- The elements from the first one `test` fails for, so `list.takeWhile(xs, f) ++ list.skipWhile(xs, f)`
 -- is `xs`.
-export def List.skipWhile: list(a), (a -> bool) -> list(a) = {
+export def list.skipWhile: list(a), (a -> bool) -> list(a) = {
   | [], _ -> []
-  | [x, ...rest], test -> if test(x) then List.skipWhile(rest, test) else [x, ...rest]
+  | [x, ...rest], test -> if test(x) then list.skipWhile(rest, test) else [x, ...rest]
 }
 
 -- Pairs of the elements of `xs` and `ys` at the same position, last first, in front of `acc`.
@@ -976,7 +976,7 @@ def zipReversed: list(a), list(b), list((a, b)) -> list((a, b)) = {
 
 -- Pairs of the elements at the same position, as long as the shorter list. Stack-safe: it works on
 -- lists of any length.
-export def List.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
+export def list.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
   reverseOnto(zipReversed(xs, ys, []), [])
 }
 
@@ -986,17 +986,17 @@ def unzipOnto: list((a, b)), list(a), list(b) -> (list(a), list(b)) = {
   | [(x, y), ...rest], xs, ys -> unzipOnto(rest, [x, ...xs], [y, ...ys])
 }
 
--- The first parts of the pairs and their second parts, each in order: the inverse of `List.zip` for
+-- The first parts of the pairs and their second parts, each in order: the inverse of `list.zip` for
 -- lists of equal length. Stack-safe: it works on a list of any length.
-export def List.unzip: list((a, b)) -> (list(a), list(b)) = { pairs ->
+export def list.unzip: list((a, b)) -> (list(a), list(b)) = { pairs ->
   unzipOnto(reverseOnto(pairs, []), [], [])
 }
 
 -- The elements without repeats, each kept where it first appears. Elements are compared with `==`,
 -- by their structure, so this works for lists of anything but functions.
-export def List.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
-  List.reverse(
-    List.fold(xs, [], { seen, x -> if List.any(seen, { y -> y == x }) then seen else [x, ...seen] })
+export def list.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
+  list.reverse(
+    list.fold(xs, [], { seen, x -> if list.any(seen, { y -> y == x }) then seen else [x, ...seen] })
   )
 }
 
@@ -1025,15 +1025,15 @@ def mergeRuns: [Ord(b)] list(list(a)), (a -> b) -> list(a) = {
 }
 
 -- The elements in ascending order of `key`. The sort is stable: elements with the same key keep
--- their order. A key can be of any type with an order: `List.sortBy(people, { p -> p.name })`.
+-- their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
 -- Stack-safe: it works on a list of any length.
-export def List.sortBy: [Ord(b)] list(a), (a -> b) -> list(a) = { xs, key ->
-  mergeRuns(List.map(xs, { x -> [x] }), key)
+export def list.sortBy: [Ord(b)] list(a), (a -> b) -> list(a) = { xs, key ->
+  mergeRuns(list.map(xs, { x -> [x] }), key)
 }
 
 -- The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
-export def List.sort: [Ord(a)] list(a) -> list(a) = { xs ->
-  List.sortBy(xs, { x -> x })
+export def list.sort: [Ord(a)] list(a) -> list(a) = { xs ->
+  list.sortBy(xs, { x -> x })
 }
 
 -- The least of `least` and the elements of `xs`, the first of them when several are least.
@@ -1049,13 +1049,13 @@ def greatestOf: [Ord(a)] list(a), a -> a = {
 }
 
 -- The least element, or `#emptyList`. Of several least elements, the first.
-export def List.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+export def list.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ...rest] -> #some(leastOf(rest, x))
 }
 
 -- The greatest element, or `#emptyList`. Of several greatest elements, the first.
-export def List.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ...rest] -> #some(greatestOf(rest, x))
 }
@@ -1069,15 +1069,15 @@ def unfoldReversed: b, (b -> #some(a, b) | #done), list(a) -> list(a) = { state,
 
 -- The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
 -- `next`, and `#done` ends the list. Stack-safe: it works however many elements `step` gives.
-export def List.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
+export def list.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
   reverseOnto(unfoldReversed(state, step, []), [])
 }
 
 -- Maps ------------------------------------------------------------------------------------------
 --
 -- A `map(k, v)` holds one value for each of its keys. It is written `["a" => 1, "b" => 2]`, and
--- calling it looks a key up: `m("a")` is `Map.get(m, "a")`. Keys are compared with `==`, so a map
--- needs an `Eq` of its key type. Attached to `Map`, so they are called as `Map.insert(m, k, v)`, or
+-- calling it looks a key up: `m("a")` is `map.get(m, "a")`. Keys are compared with `==`, so a map
+-- needs an `Eq` of its key type. Attached to `map`, so they are called as `map.insert(m, k, v)`, or
 -- as `m \insert(k, v)` when `m` is known to be a map. Maps are immutable: every function gives back
 -- a new map.
 --
@@ -1112,142 +1112,142 @@ def removeEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
 -- `m` with each of `entries` inserted in turn.
 def insertAll: [Eq(k) + Hash(k)] map(k, v), list((k, v)) -> map(k, v) = {
   | m, [] -> m
-  | m, [(key, value), ...rest] -> insertAll(Map.insert(m, key, value), rest)
+  | m, [(key, value), ...rest] -> insertAll(map.insert(m, key, value), rest)
 }
 
 -- The map with no keys. A map literal has at least one entry, since [] is the empty list.
-export def Map.empty: map(k, v) = __nanyx_map_of_entries([])
+export def map.empty: map(k, v) = __nanyx_map_of_entries([])
 
 -- What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
 -- `__map([("a", 1), ("b", 2)])`. A key written twice holds the value written last.
 export def __map: [Eq(k) + Hash(k)] list((k, v)) -> map(k, v) = { entries ->
-  insertAll(Map.empty, entries)
+  insertAll(map.empty, entries)
 }
 
 -- The map holding each of `entries`, in order: of two entries with the same key, the later wins.
-export def Map.fromList: [Eq(k) + Hash(k)] list((k, v)) -> map(k, v) = { entries ->
-  insertAll(Map.empty, entries)
+export def map.fromList: [Eq(k) + Hash(k)] list((k, v)) -> map(k, v) = { entries ->
+  insertAll(map.empty, entries)
 }
 
 -- The entries of `m`, each a key and its value, in the order the keys were first added.
-export def Map.toList: map(k, v) -> list((k, v)) = { m ->
+export def map.toList: map(k, v) -> list((k, v)) = { m ->
   __nanyx_map_entries(m)
 }
 
 -- The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
-export def Map.get: [Eq(k) + Hash(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
+export def map.get: [Eq(k) + Hash(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
   findEntry(__nanyx_map_entries(m), key)
 }
 
 -- Whether `m` holds a value for `key`.
-export def Map.containsKey: [Eq(k) + Hash(k)] map(k, v), k -> bool = { m, key ->
+export def map.containsKey: [Eq(k) + Hash(k)] map(k, v), k -> bool = { m, key ->
   isSomeOption(findEntry(__nanyx_map_entries(m), key))
 }
 
 -- `m` with `key` holding `value`, in place of any value it held before.
-export def Map.insert: [Eq(k) + Hash(k)] map(k, v), k, v -> map(k, v) = { m, key, value ->
+export def map.insert: [Eq(k) + Hash(k)] map(k, v), k, v -> map(k, v) = { m, key, value ->
   __nanyx_map_of_entries(insertEntry(__nanyx_map_entries(m), key, value, []))
 }
 
 -- `m` without `key` or its value. A map that has no `key` is given back as it is.
-export def Map.remove: [Eq(k) + Hash(k)] map(k, v), k -> map(k, v) = { m, key ->
+export def map.remove: [Eq(k) + Hash(k)] map(k, v), k -> map(k, v) = { m, key ->
   __nanyx_map_of_entries(removeEntry(__nanyx_map_entries(m), key, []))
 }
 
 -- The number of keys.
-export def Map.count: map(k, v) -> int = { m ->
-  List.length(__nanyx_map_entries(m))
+export def map.count: map(k, v) -> int = { m ->
+  list.length(__nanyx_map_entries(m))
 }
 
 -- `groups` with the elements of `xs` added, each to the front of the group of its key.
 def groupInto: [Eq(b) + Hash(b)] list(a), (a -> b), map(b, list(a)) -> map(b, list(a)) = {
   | [], _, groups -> groups
   | [x, ...rest], key, groups ->
-    def group = defaultValueOption(Map.get(groups, key(x)), [])
-    groupInto(rest, key, Map.insert(groups, key(x), [x, ...group]))
+    def group = defaultValueOption(map.get(groups, key(x)), [])
+    groupInto(rest, key, map.insert(groups, key(x), [x, ...group]))
 }
 
 -- The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
 -- order. The keys are in the order they first appear.
-export def List.groupBy: [Eq(b) + Hash(b)] list(a), (a -> b) -> map(b, list(a)) = { xs, key ->
-  def groups = __nanyx_map_entries(groupInto(xs, key, Map.empty))
-  __nanyx_map_of_entries(List.map(groups, { group -> (group.0, List.reverse(group.1)) }))
+export def list.groupBy: [Eq(b) + Hash(b)] list(a), (a -> b) -> map(b, list(a)) = { xs, key ->
+  def groups = __nanyx_map_entries(groupInto(xs, key, map.empty))
+  __nanyx_map_of_entries(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
 }
 
 -- The keys of `m`, in the order they were first added.
-export def Map.keys: map(k, v) -> list(k) = { m ->
-  List.map(__nanyx_map_entries(m), { entry -> entry.0 })
+export def map.keys: map(k, v) -> list(k) = { m ->
+  list.map(__nanyx_map_entries(m), { entry -> entry.0 })
 }
 
 -- The values of `m`, in the order their keys were first added.
-export def Map.values: map(k, v) -> list(v) = { m ->
-  List.map(__nanyx_map_entries(m), { entry -> entry.1 })
+export def map.values: map(k, v) -> list(v) = { m ->
+  list.map(__nanyx_map_entries(m), { entry -> entry.1 })
 }
 
 -- Sets ------------------------------------------------------------------------------------------
 --
--- A `set(a)` holds each of its elements once. It is made with `Set.fromList([1, 2, 2, 3])`, or
--- from `Set.empty` with `Set.insert`. Its elements need an `Eq` and a `Hash`, as a map's keys do.
--- Attached to `Set`, so they are called as `Set.contains(s, x)`, or as `s \contains(x)` when `s` is
+-- A `set(a)` holds each of its elements once. It is made with `set.fromList([1, 2, 2, 3])`, or
+-- from `set.empty` with `set.insert`. Its elements need an `Eq` and a `Hash`, as a map's keys do.
+-- Attached to `set`, so they are called as `set.contains(s, x)`, or as `s \contains(x)` when `s` is
 -- known to be a set. Sets are immutable: every function gives back a new set.
 --
 -- For now a set holds a list of its elements, each once, in the order they were first added, so
 -- `contains` walks the list (see docs/src/content/work-in-progress/maps-and-sets.md).
 
 -- The set with no elements.
-export def Set.empty: set(a) = __nanyx_set_of_elements([])
+export def set.empty: set(a) = __nanyx_set_of_elements([])
 
 -- The set of the elements of `xs`, each once, in the order they first appear.
-export def Set.fromList: [Eq(a) + Hash(a)] list(a) -> set(a) = { xs ->
-  __nanyx_set_of_elements(List.distinct(xs))
+export def set.fromList: [Eq(a) + Hash(a)] list(a) -> set(a) = { xs ->
+  __nanyx_set_of_elements(list.distinct(xs))
 }
 
 -- The elements of `s`, in the order they were first added.
-export def Set.toList: set(a) -> list(a) = { s ->
+export def set.toList: set(a) -> list(a) = { s ->
   __nanyx_set_elements(s)
 }
 
 -- Whether `s` holds `x`.
-export def Set.contains: [Eq(a) + Hash(a)] set(a), a -> bool = { s, x ->
-  List.any(__nanyx_set_elements(s), { y -> y == x })
+export def set.contains: [Eq(a) + Hash(a)] set(a), a -> bool = { s, x ->
+  list.any(__nanyx_set_elements(s), { y -> y == x })
 }
 
 -- `s` with `x` added at the end. A set that holds `x` is given back as it is.
-export def Set.insert: [Eq(a) + Hash(a)] set(a), a -> set(a) = { s, x ->
-  if Set.contains(s, x) then s else __nanyx_set_of_elements(List.append(__nanyx_set_elements(s), x))
+export def set.insert: [Eq(a) + Hash(a)] set(a), a -> set(a) = { s, x ->
+  if set.contains(s, x) then s else __nanyx_set_of_elements(list.append(__nanyx_set_elements(s), x))
 }
 
 -- `s` without `x`. A set that does not hold `x` is given back as it is.
-export def Set.remove: [Eq(a) + Hash(a)] set(a), a -> set(a) = { s, x ->
-  __nanyx_set_of_elements(List.filter(__nanyx_set_elements(s), { y -> y != x }))
+export def set.remove: [Eq(a) + Hash(a)] set(a), a -> set(a) = { s, x ->
+  __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), { y -> y != x }))
 }
 
 -- The number of elements.
-export def Set.count: set(a) -> int = { s ->
-  List.length(__nanyx_set_elements(s))
+export def set.count: set(a) -> int = { s ->
+  list.length(__nanyx_set_elements(s))
 }
 
 -- The elements of `s`, then those of `t` that `s` does not hold.
-export def Set.union: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
+export def set.union: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
   def ours = __nanyx_set_elements(s)
-  def theirs = List.filter(__nanyx_set_elements(t), { x -> not List.any(ours, { y -> y == x }) })
+  def theirs = list.filter(__nanyx_set_elements(t), { x -> not list.any(ours, { y -> y == x }) })
   __nanyx_set_of_elements(reverseOnto(reverseOnto(ours, []), theirs))
 }
 
 -- The elements of `s` that `t` holds too, in the order of `s`.
-export def Set.intersection: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
+export def set.intersection: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
   def theirs = __nanyx_set_elements(t)
 
   __nanyx_set_of_elements(
-    List.filter(__nanyx_set_elements(s), { x -> List.any(theirs, { y -> y == x }) })
+    list.filter(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> y == x }) })
   )
 }
 
 -- The elements of `s` that `t` does not hold, in the order of `s`.
-export def Set.difference: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
+export def set.difference: [Eq(a) + Hash(a)] set(a), set(a) -> set(a) = { s, t ->
   def theirs = __nanyx_set_elements(t)
 
   __nanyx_set_of_elements(
-    List.filter(__nanyx_set_elements(s), { x -> not List.any(theirs, { y -> y == x }) })
+    list.filter(__nanyx_set_elements(s), { x -> not list.any(theirs, { y -> y == x }) })
   )
 }

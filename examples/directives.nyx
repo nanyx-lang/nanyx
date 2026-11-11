@@ -8,4 +8,4 @@ import nanyx/console
 
 def greet = { name -> println("Hello, " ++ name ++ "!") }
 
-List.fold(["Ada", "Grace", "Barbara"], (), { _, name -> greet(name) })
+list.fold(["Ada", "Grace", "Barbara"], (), { _, name -> greet(name) })

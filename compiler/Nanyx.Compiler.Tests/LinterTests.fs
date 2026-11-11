@@ -211,7 +211,7 @@ let ``Names the compiler makes up are not reported`` () =
         "def half: int -> Result(int, string) = { n -> #some(n / 2) }\n" +
         "def f = { pair ->\n" +
         "  def (a, b) = pair\n" +
-        "  def doubled = [a, b] \\ List.map({ * 2 })\n" +
+        "  def doubled = [a, b] \\ list.map({ * 2 })\n" +
         "  for doubled\n    | n -> n\n" +
         "}\n" +
         "def quarter = { n -> proc {\n  def h = try half(n)\n  return try half(h)\n} }\n"
@@ -309,7 +309,7 @@ let ``Calls to other functions, and calls from a lambda within the function, are
     let source =
         "def inc: int -> int = { n -> n + 1 }\n" +
         "def twice: int -> int = { n -> inc(inc(n)) }\n" +
-        "def again: list(int) -> list(int) = { xs -> xs \\ List.map({ x -> List.length(again([x])) }) }\n"
+        "def again: list(int) -> list(int) = { xs -> xs \\ list.map({ x -> list.length(again([x])) }) }\n"
     Assert.Empty(nonTailIn source)
 
 // The official linter's `unreachableArms` rule.

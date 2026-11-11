@@ -45,6 +45,9 @@ type private CheckedModule =
       /// The errors found checking the module itself. A module with errors is still typed, with what did check,
       /// for the editor's features; it cannot be run or imported.
       Errors: Diagnostic list
+      /// The warnings found checking the module itself, which do not stop it being run or imported: each deprecated
+      /// spelling of a built-in type (see `DeprecatedTypeNames`).
+      Warnings: Diagnostic list
       /// Those of `Errors` that are not compiled to a trap in `Own`, so a debug build cannot run the module.
       Undeferred: Diagnostic list
       /// The module's own items (imports removed), as the backend will see them.
@@ -249,7 +252,7 @@ module Compiler =
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the
     /// runtime's `Console`, say) without anything naming it. So is each attached definition an instance the type
     /// checker built for a call in `own`, or in a definition kept, is made of (`instances`, by the call's node), as
-    /// `Int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed.
+    /// `int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed.
     let private reachedItems (instances: Map<NodeId, ContextInstance option list>) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
         let bodies =
             inlined
@@ -1056,11 +1059,13 @@ module Compiler =
                 | _, (_ :: _ as errors), _ -> Error (Desugared, errors)
                 | desugaredAst, [], zeros ->
                     applyAttributes desugaredAst
-                    |> Result.map (fun desugared -> ast, declared, moduleBlocks, desugared, zeros)
+                    |> Result.map (fun desugared ->
+                        let desugared, warnings = DeprecatedTypeNames.replace declared desugared
+                        ast, declared, moduleBlocks, desugared, zeros, warnings)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros) ->
+        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros, warnings) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -1359,6 +1364,7 @@ module Compiler =
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }
                      Errors = moduleErrors
+                     Warnings = warnings
                      Undeferred = undeferred
                      Own = own
                      Inlined = inlined
@@ -1449,11 +1455,13 @@ module Compiler =
                     InlinedCalleeTypes = resolveInlined _.RawCalleeTypes }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
             // there for the editor's features. The linters only look at a module that type-checked; a rule
-            // configured as an error fails the compile as a compiler error does.
+            // configured as an error fails the compile as a compiler error does. Like the linters' findings, warnings
+            // are only reported for the module being compiled.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
-                else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                checkedModule.Warnings
+                @ if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped source checkedModule.Syntax typed)
+                  else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty

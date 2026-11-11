@@ -15,20 +15,20 @@ import (
 def money: int -> string = { pence ->
   def pounds = pence / 100
   def rest = pence % 100
-  "£{pounds}." ++ String.padStart("{rest}", width = 2, fill = "0")
+  "£{pounds}." ++ string.padStart("{rest}", width = 2, fill = "0")
 }
 
 -- `text` in a column `width` bytes wide, on the left or the right.
 def left: string, int -> string = { text, width ->
-  String.padEnd(text, width = width, fill = " ")
+  string.padEnd(text, width = width, fill = " ")
 }
 
 def right: string, int -> string = { text, width ->
-  String.padStart(text, width = width, fill = " ")
+  string.padStart(text, width = width, fill = " ")
 }
 
 def rule: int -> string = { width ->
-  String.repeat("-", width)
+  string.repeat("-", width)
 }
 
 -- The catalogue ----------------------------------------------------------------------------------
@@ -63,15 +63,15 @@ type OrderLine = (sku: string, qty: int)
 
 -- An order line written as `SKU x QTY`, such as `TEA x 2`.
 def parseLine: string -> #some(OrderLine) | #badLine(string) | #badQuantity(string) = { text ->
-  match String.words(text)
+  match string.words(text)
     | [sku, "x", qty] -> parseQuantity(text, sku, qty)
     | _ -> #badLine(text)
 }
 
 def parseQuantity = { text, sku, qty ->
-  match Int.fromString(qty)
+  match int.fromString(qty)
     | #some(n) -> (if n > 0
-      then #some(OrderLine(sku = String.uppercase(sku), qty = n))
+      then #some(OrderLine(sku = string.uppercase(sku), qty = n))
       else #badQuantity(text))
     | #invalidInt -> #badQuantity(text)
 }
@@ -170,7 +170,7 @@ def takeOrder: [Console] string, list(string) -> () = { customer, order ->
 -- Stock report -----------------------------------------------------------------------------------
 
 def bar: int -> string = { n ->
-  String.repeat("#", n)
+  string.repeat("#", n)
 }
 
 def lowStock: list(Product) -> list(Product) = {
@@ -227,7 +227,7 @@ def isOperator: string -> bool = { token ->
 
 -- The stack after one more token.
 def push: list(int), string -> Calc(list(int)) = { stack, token ->
-  match Int.fromString(token)
+  match int.fromString(token)
     | #some(n) -> #some([n, ...stack])
     | #invalidInt -> #unknownToken(token)
 }
@@ -262,17 +262,17 @@ def describe: Calc(list(int)) -> string = {
 }
 
 def calculate: [Console] string -> () = { program ->
-  println(left(program, 22) ++ describe(run([], String.words(program))))
+  println(left(program, 22) ++ describe(run([], string.words(program))))
 }
 
 -- Statistics -------------------------------------------------------------------------------------
 
 def sum: list(int) -> int = { xs ->
-  List.fold(xs, 0, { a, b -> a + b })
+  list.fold(xs, 0, { a, b -> a + b })
 }
 
 def largest: list(int) -> int = { xs ->
-  List.fold(xs, 0, { a, b -> math.max(a, b) })
+  list.fold(xs, 0, { a, b -> math.max(a, b) })
 }
 
 -- `x` put into the sorted list `xs` where it belongs.
@@ -283,13 +283,13 @@ def insert: int, list(int) -> list(int) = { x, xs ->
 }
 
 def sort: list(int) -> list(int) = { xs ->
-  List.fold(xs, [], { sorted, x -> insert(x, sorted) })
+  list.fold(xs, [], { sorted, x -> insert(x, sorted) })
 }
 
 def median: list(int) -> int = { xs ->
   def sorted = sort(xs)
-  def n = List.length(sorted)
-  def middle = List.head(List.skip(sorted, n / 2))
+  def n = list.length(sorted)
+  def middle = list.head(list.skip(sorted, n / 2))
 
   match middle
     | #some(m) -> m
@@ -301,7 +301,7 @@ def showInt: int -> string = { n ->
 }
 
 def showInts: list(int) -> string = { xs ->
-  String.join(List.map(xs, showInt), ", ")
+  string.join(list.map(xs, showInt), ", ")
 }
 
 -- Hourly takings in whole pounds, from opening at 8 until closing at 6.
@@ -329,7 +329,7 @@ def busiest: int, int, int, list(int) -> int = { hour, bestHour, best, amounts -
 context Log = (log: string -> ())
 
 def heading: [Log] string -> () = { title ->
-  log("== " ++ String.uppercase(title) ++ " ==")
+  log("== " ++ string.uppercase(title) ++ " ==")
 }
 
 -- The program ------------------------------------------------------------------------------------
@@ -354,7 +354,7 @@ def main = {
   heading("Stock")
   printStock(catalogue)
   println("Stock value: " ++ money(stockValue(catalogue)))
-  println("Running low: " ++ String.join(names(lowStock(catalogue)), ", "))
+  println("Running low: " ++ string.join(names(lowStock(catalogue)), ", "))
 
   heading("Till calculator")
   calculate("3 4 + 2 *")
@@ -372,6 +372,6 @@ def main = {
   println("Best:    £{largest(takings)} at {busiest(8, 8, 0, takings)}:00")
   println("Median:  £{median(takings)}")
   println("Sorted:  " ++ showInts(sort(takings)))
-  def quiet = List.filter(takings, { n -> n < 20 })
-  println("Quiet hours: {List.length(quiet)} (" ++ showInts(quiet) ++ ")")
+  def quiet = list.filter(takings, { n -> n < 20 })
+  println("Quiet hours: {list.length(quiet)} (" ++ showInts(quiet) ++ ")")
 }

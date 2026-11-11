@@ -58,7 +58,7 @@ let ``Run - Float.toString and dbg write a float as interpolation does`` () =
         "\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  println(Float.toString(0.1 + 0.2))\n" +
+        "  println(float.toString(0.1 + 0.2))\n" +
         "  dbg(1.0e-7)\n" +
         "}\n"
     runSource source |> assertRan "0.30000000000000004\ndbg: 1.0e-7\n"

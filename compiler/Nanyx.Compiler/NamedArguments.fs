@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// A call that passes by position an argument its callee takes by name, as `String.padStart(s, 2, "0")` does for
+/// A call that passes by position an argument its callee takes by name, as `string.padStart(s, 2, "0")` does for
 /// `(string, width: int, fill: string) -> string`. Unified as records, the two only differ in their fields, so
 /// the call is checked here first, to say which parameters to name.
 module internal NamedArguments =

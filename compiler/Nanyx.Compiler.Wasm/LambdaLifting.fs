@@ -481,7 +481,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             |> RecordExpr
             |> rebuild
         | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
-        // An attached function used as a value, `Int.toString`: the parser reads it as a member access.
+        // An attached function used as a value, `int.toString`: the parser reads it as a member access.
         | MemberAccess(Kind (IdentifierExpr qualifier), field, _) when
             topLevelFunctions.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []

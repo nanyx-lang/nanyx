@@ -304,8 +304,8 @@ let ``a shorthand lambda's body may continue after a member access`` () =
 
 [<Fact>]
 let ``a member access shorthand compared with a string is a pipe's trailing lambda`` () =
-    match (onlyValue "def bs = ps \\List.filter { .name == \"b\" }").Kind with
-    | Pipe (Kind (IdentifierExpr "ps"), "List.filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", Kind (MemberAccess (Kind target, "name", _)), Kind (LiteralExpr (StringLit "b")))))) ])
+    match (onlyValue "def bs = ps \\list.filter { .name == \"b\" }").Kind with
+    | Pipe (Kind (IdentifierExpr "ps"), "list.filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", Kind (MemberAccess (Kind target, "name", _)), Kind (LiteralExpr (StringLit "b")))))) ])
         when target = implicit -> ()
     | other -> failwith $"Unexpected pipe: %A{other}"
 

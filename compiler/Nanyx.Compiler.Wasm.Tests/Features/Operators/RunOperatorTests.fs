@@ -67,8 +67,8 @@ let ``Run - prefix minus negates ints and floats, and keeps the sign of zero`` (
         "def main = {\n" +
         "  def x = 5\n" +
         "  def z = 0.0\n" +
-        "  println(\"{-x} {-x * 2} {3 - -x} {-(2.5)} {Int.negate(4)} {Float.negate(1.5)}\")\n" +
-        "  println(\"{1.0 / -z < 0.0} {1.0 / -(-z) > 0.0} {1.0 / Float.negate(z) < 0.0}\")\n" +
+        "  println(\"{-x} {-x * 2} {3 - -x} {-(2.5)} {int.negate(4)} {float.negate(1.5)}\")\n" +
+        "  println(\"{1.0 / -z < 0.0} {1.0 / -(-z) > 0.0} {1.0 / float.negate(z) < 0.0}\")\n" +
         "}\n"
     runSource source |> assertRan "-5 -10 8 -2.5 -4 -1.5\ntrue true true\n"
 
@@ -88,8 +88,8 @@ let ``Run - generic code adds through Add, at ints, floats and a type that attac
         "def none: list(int) = []\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  def m = [$Money(pence = 150), $Money(pence = 250)] \\List.sum\n" +
-        "  println(\"{[1, 2, 3] \\List.sum} {[1.5, 2.5] \\List.sum} {List.sum(none)} {m.pence} {(-m).pence}\")\n" +
+        "  def m = [$Money(pence = 150), $Money(pence = 250)] \\list.sum\n" +
+        "  println(\"{[1, 2, 3] \\list.sum} {[1.5, 2.5] \\list.sum} {list.sum(none)} {m.pence} {(-m).pence}\")\n" +
         "  println(\"{orZero(4)} {orZero(2.5)} {twiceLess(1, 3)} {twiceLess(m, m).pence}\")\n" +
         "}\n"
     runSource source |> assertRan "6 4.0 0 400 -400\n4 2.5 5 400\n"
@@ -104,11 +104,11 @@ let ``Run - generic code multiplies and divides through Num, with integer litera
         "def square: [Num(a)] a -> a = { x -> x * x }\n" +
         "def halfPlusOne: [Num(a)] a -> a = { x -> x / 2 + 1 }\n" +
         "def rem3: [Num(a)] a -> a = { x -> x % 3 }\n" +
-        "def mean: [Num(a)] list(a) -> a = { xs -> List.sum(xs) / fromInt(List.length(xs)) }\n" +
+        "def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }\n" +
         "@entry\n" +
         "def main = {\n" +
         "  println(\"{square(3)} {square(1.5)} {halfPlusOne(7)} {halfPlusOne(7.0)} {rem3(7)} {rem3(7.5)}\")\n" +
-        "  println(\"{mean([1, 2, 4])} {mean([1.0, 2.0, 4.5])} {Float.fromInt(3)} {Int.`*`(6, 7)}\")\n" +
+        "  println(\"{mean([1, 2, 4])} {mean([1.0, 2.0, 4.5])} {float.fromInt(3)} {int.`*`(6, 7)}\")\n" +
         "}\n"
     runSource source |> assertRan "9 2.25 4 4.5 1 1.5\n2 2.5 3.0 42\n"
 
@@ -123,7 +123,7 @@ let ``Run - ** is the prelude's pow, and Float.pow takes any exponent`` () =
         "@entry\n" +
         "def main = {\n" +
         "  println(\"{2 ** 10} {1.5 ** 2} {2 ** 3 ** 2} {(2 ** 3) ** 2} {2 * 3 ** 2} {2 ** -1} {2.0 ** -2}\")\n" +
-        "  println(\"{Float.pow(2.0, 0.5)} {Float.pow(2.0, 10.0)} {Float.pow(10.0, -1.5)} {Float.pow(0.0, 0.5)}\")\n" +
+        "  println(\"{float.pow(2.0, 0.5)} {float.pow(2.0, 10.0)} {float.pow(10.0, -1.5)} {float.pow(0.0, 0.5)}\")\n" +
         "  println(\"{math.pow(2, 8)} {math.pow(1.5, 3)} {pow(3, 4)} {cube(2)} {cube(0.5)}\")\n" +
         "}\n"
     runSource source |> assertRan "1024 2.25 512 64 18 0 0.25\n1.414213562373095 1024.0 0.0316227766016838 0.0\n256 3.375 81 8 0.125\n"

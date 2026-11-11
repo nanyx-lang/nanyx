@@ -7,6 +7,6 @@ def everyone: greetings.$Person = greetings.$Person.new("everyone")
 @entry
 def main = {
   def names = ["Ada", "Grace", "Barbara"]
-  List.fold(names, (), { _, name -> println(greetings.greet(greetings.$Person.new(name))) })
+  list.fold(names, (), { _, name -> println(greetings.greet(greetings.$Person.new(name))) })
   println(greetings.farewell(everyone))
 }

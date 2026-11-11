@@ -270,8 +270,8 @@ let ``Run - a def whose annotation is too general does not change another def's 
         "  | #bad(s) -> s\n" +
         "}\n" +
         "\n" +
-        "println(show(mapError(Int.fromString(\"12\"), { #invalidInt -> #bad(\"bad\") })))\n" +
-        "println(show(mapError(Int.fromString(\"zz\"), { #invalidInt -> #bad(\"bad\") })))\n"
+        "println(show(mapError(int.fromString(\"12\"), { #invalidInt -> #bad(\"bad\") })))\n" +
+        "println(show(mapError(int.fromString(\"zz\"), { #invalidInt -> #bad(\"bad\") })))\n"
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("some 12\nbad\n", outcome.StandardOutput)

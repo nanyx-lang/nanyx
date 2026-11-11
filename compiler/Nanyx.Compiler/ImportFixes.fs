@@ -4,7 +4,7 @@ open System.Text.RegularExpressions
 open Parser.Program
 
 /// Fixes that import the standard-library module a name comes from. A name that is not in scope, but that a
-/// standard-library module exports, gets one fix per module that exports it: `String.trim` gets
+/// standard-library module exports, gets one fix per module that exports it: `string.trim` gets
 /// `import nanyx/text`. A name qualified by a module's name, as `math.abs`, gets the aliased import that makes the
 /// qualifier mean that module: `import nanyx/math as math`. The prelude is left out, since its names are always in
 /// scope.

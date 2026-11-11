@@ -67,7 +67,7 @@ let ``Comparing values with no type variable in their type requires nothing`` ()
         compileClean (
             "type Point = (x: int, y: int)\n" +
             "def same: Point, Point -> bool = { p, q -> p == q }\n" +
-            "def firsts: list(int) -> bool = { xs -> xs \\List.any({ x -> x == 1 }) }\n")
+            "def firsts: list(int) -> bool = { xs -> xs \\list.any({ x -> x == 1 }) }\n")
     Assert.True(typed.InferredContextTypes.IsEmpty)
 
 [<Fact>]
@@ -133,9 +133,9 @@ let ``Passing functions to a def that requires Eq is an error at the call`` () =
           "def same = { x, y -> x == y }\ndef f = { n -> n + 1 }\ndef b = same([f], [f])\n",
           "'same' compares values of type 'list(int -> int)', which cannot be compared: its elements are functions, and functions have no equality",
           "same"
-          "def f = { n -> n + 1 }\ndef b = List.distinct([f, f])\n",
-          "'List.distinct' compares values of type 'int -> int', which cannot be compared: functions have no equality",
-          "List.distinct" ]
+          "def f = { n -> n + 1 }\ndef b = list.distinct([f, f])\n",
+          "'list.distinct' compares values of type 'int -> int', which cannot be compared: functions have no equality",
+          "list.distinct" ]
     for source, expectedMessage, expectedAt in cases do
         let message, at = missingContext source
         Assert.Equal(expectedMessage, message)

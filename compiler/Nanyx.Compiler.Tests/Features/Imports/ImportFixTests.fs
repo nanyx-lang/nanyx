@@ -21,9 +21,9 @@ let private fixesFor (source: string) =
 
 [<Fact>]
 let ``A function a standard-library module exports offers its import at the top`` () =
-    let source = "def s = String.trim(\" a \")\n"
+    let source = "def s = string.trim(\" a \")\n"
     Assert.Equal<(string * string) list>(
-        [ "Add `import nanyx/text`", "import nanyx/text\n\ndef s = String.trim(\" a \")\n" ],
+        [ "Add `import nanyx/text`", "import nanyx/text\n\ndef s = string.trim(\" a \")\n" ],
         fixesFor source)
 
 [<Fact>]
@@ -92,5 +92,5 @@ let ``A name several modules export offers one fix for each`` () =
 [<Fact>]
 let ``The standard library's exports leave out the prelude's`` () =
     let exports = ImportFixes.standardLibraryExports.Value
-    Assert.Equal<string list>([ "text" ], exports.["String.trim"])
-    Assert.False(exports.ContainsKey "List.map")
+    Assert.Equal<string list>([ "text" ], exports.["string.trim"])
+    Assert.False(exports.ContainsKey "list.map")

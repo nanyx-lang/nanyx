@@ -137,12 +137,12 @@ let ``Only the imported definitions a module reaches are inlined`` () =
 
 [<Fact>]
 let ``Only the standard-library definitions a program reaches are inlined`` () =
-    let result = Compiler.compile "import nanyx/text\ndef x = String.contains(\"abc\", \"b\")"
+    let result = Compiler.compile "import nanyx/text\ndef x = string.contains(\"abc\", \"b\")"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let names = valueDefinitionNames result
-    Assert.Contains("String.contains", names)
-    Assert.DoesNotContain("String.padStart", names)
-    Assert.DoesNotContain("String.words", names)
+    Assert.Contains("string.contains", names)
+    Assert.DoesNotContain("string.padStart", names)
+    Assert.DoesNotContain("string.words", names)
 
 [<Fact>]
 let ``Definitions reached through an aliased import are inlined`` () =
@@ -156,11 +156,11 @@ let ``Definitions reached through an aliased import are inlined`` () =
 [<Fact>]
 let ``An attached name two imports define is ambiguous where it is used`` () =
     let modules =
-        [ "one.nyx", "module one\nexport def String.shout: string -> string = { s -> s }"
-          "two.nyx", "module two\nexport def String.shout: string -> string = { s -> s ++ \"!\" }" ]
+        [ "one.nyx", "module one\nexport def string.shout: string -> string = { s -> s }"
+          "two.nyx", "module two\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
     let result = compileImportingAll modules "module main\nimport \"one.nyx\"\nimport \"two.nyx\"\ndef a = \"x\" \\ shout"
     Assert.False(result.Diagnostics.IsEmpty)
-    Assert.Contains("'String.shout' is ambiguous between 'one.String.shout' and 'two.String.shout'", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("'string.shout' is ambiguous between 'one.string.shout' and 'two.string.shout'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Import does not bring private definitions into scope`` () =

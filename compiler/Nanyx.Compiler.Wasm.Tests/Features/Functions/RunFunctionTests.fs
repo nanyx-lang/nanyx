@@ -104,9 +104,9 @@ let ``Run - a shorthand lambda compares a field of its argument`` () =
         "\n" +
         "def ps: list(P) = [P(name = \"a\", age = 12), P(name = \"b\", age = 30), P(name = \"c\", age = 40)]\n" +
         "\n" +
-        "println(\"{ps \\List.filter { .name == \"b\" } \\List.length}\")\n" +
-        "for ps \\List.filter { .age > 18 } | p -> println(p.name)\n" +
-        "println(\"{ps \\List.filter { .age * 2 >= 60 } \\List.length}\")\n"
+        "println(\"{ps \\list.filter { .name == \"b\" } \\list.length}\")\n" +
+        "for ps \\list.filter { .age > 18 } | p -> println(p.name)\n" +
+        "println(\"{ps \\list.filter { .age * 2 >= 60 } \\list.length}\")\n"
     runSource source |> assertRan "1\nb\nc\n2\n"
 
 [<Fact>]
@@ -278,7 +278,7 @@ let ``Run - an attached function passed as a value`` () =
         "def Point.norm: Point -> int = { p -> p.x + p.y }\n" +
         "def apply: ((Point -> int), Point) -> int = { f, p -> f(p) }\n" +
         "dbg(apply(Point.norm, (x = 3, y = 4)))\n" +
-        "dbg(List.fold([(x = 1, y = 2), (x = 10, y = 20)] \\List.map(Point.norm), 0, { a, b -> a + b }))\n"
+        "dbg(list.fold([(x = 1, y = 2), (x = 10, y = 20)] \\list.map(Point.norm), 0, { a, b -> a + b }))\n"
     runSource source |> assertRan "dbg: 7\ndbg: 33\n"
 
 [<Fact>]

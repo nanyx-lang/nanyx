@@ -29,7 +29,7 @@ let ``Run - calling a map looks a key up`` () =
           "found(m(\"b\"))"
           "found(m(\"c\"))"
           "def counts = [1 => 10, 2 => 20]"
-          "found(counts([\"x\", \"y\"] \\List.length))" ]
+          "found(counts([\"x\", \"y\"] \\list.length))" ]
     |> runSource
     |> assertRan "1\n2\nnot found\n20\n"
 
@@ -41,7 +41,7 @@ let ``Run - a map literal can be written one entry per line`` () =
           "  1 => \"one\""
           "  2 => \"two\""
           "]"
-          "println(Map.get(m, 2) \\defaultValueOption(\"none\"))" ]
+          "println(map.get(m, 2) \\defaultValueOption(\"none\"))" ]
     |> runSource
     |> assertRan "two\n"
 
@@ -51,22 +51,22 @@ let ``Run - a key written twice in a literal holds the value written last`` () =
         []
         [ "def m = [\"a\" => 1, \"b\" => 2, \"a\" => 3]"
           "found(m(\"a\"))"
-          "println(\"{Map.count(m)}\")" ]
+          "println(\"{map.count(m)}\")" ]
     |> runSource
     |> assertRan "3\n2\n"
 
 [<Fact>]
 let ``Run - insert adds a key, or replaces its value, and leaves the map it was given as it was`` () =
     program
-        [ "def keys = { m -> Map.toList(m) \\List.map({ entry -> entry.0 }) \\List.fold(\"\", { acc, k -> acc ++ k }) }" ]
+        [ "def keys = { m -> map.toList(m) \\list.map({ entry -> entry.0 }) \\list.fold(\"\", { acc, k -> acc ++ k }) }" ]
         [ "def m = [\"a\" => 1, \"b\" => 2]"
           "def added = m \\insert(\"c\", 3)"
-          "def replaced = added \\Map.insert(\"a\", 10)"
+          "def replaced = added \\map.insert(\"a\", 10)"
           "found(added(\"c\"))"
           "found(replaced(\"a\"))"
           "found(m(\"c\"))"
           "println(keys(replaced))"
-          "println(\"{Map.count(replaced)}\")" ]
+          "println(\"{map.count(replaced)}\")" ]
     |> runSource
     |> assertRan "3\n10\nnot found\nabc\n3\n"
 
@@ -74,12 +74,12 @@ let ``Run - insert adds a key, or replaces its value, and leaves the map it was 
 let ``Run - remove takes a key out, and containsKey says whether a map has one`` () =
     program
         [ "def show = { b -> if b then \"T\" else \"F\" }" ]
-        [ "def m = Map.fromList([(1, 10), (2, 20), (3, 30)])"
-          "def removed = Map.remove(m, 2)"
-          "println(show(Map.containsKey(m, 2)))"
-          "println(show(Map.containsKey(removed, 2)))"
+        [ "def m = map.fromList([(1, 10), (2, 20), (3, 30)])"
+          "def removed = map.remove(m, 2)"
+          "println(show(map.containsKey(m, 2)))"
+          "println(show(map.containsKey(removed, 2)))"
           "found(removed(3))"
-          "println(\"{Map.count(Map.remove(removed, 7))}\")" ]
+          "println(\"{map.count(map.remove(removed, 7))}\")" ]
     |> runSource
     |> assertRan "T\nF\n30\n2\n"
 
@@ -122,12 +122,12 @@ let ``Run - a map is passed to and given back from functions`` () =
 [<Fact>]
 let ``Run - List.groupBy groups elements by a key, in order`` () =
     program
-        [ "def show = { xs -> xs \\List.map(Int.toString) \\List.fold(\"\", { acc, s -> acc ++ s }) }" ]
-        [ "def groups = [1, 2, 3, 4, 5] \\List.groupBy { x -> x % 2 }"
+        [ "def show = { xs -> xs \\list.map(int.toString) \\list.fold(\"\", { acc, s -> acc ++ s }) }" ]
+        [ "def groups = [1, 2, 3, 4, 5] \\list.groupBy { x -> x % 2 }"
           "println(show(groups(1) \\defaultValueOption([])))"
           "println(show(groups(0) \\defaultValueOption([])))"
-          "println(show(Map.toList(groups) \\List.map({ group -> group.0 })))"
-          "println(\"{Map.count(List.groupBy([], { (x: int) -> x }))}\")" ]
+          "println(show(map.toList(groups) \\list.map({ group -> group.0 })))"
+          "println(\"{map.count(list.groupBy([], { (x: int) -> x }))}\")" ]
     |> runSource
     |> assertRan "135\n24\n10\n0\n"
 
@@ -148,7 +148,7 @@ let ``Run - a nominal type with its own == and hash can be a key, compared by it
           "def $Code.`==`: $Code, $Code -> bool = { a, b -> true }"
           "def $Code.hash: $Code -> int = { c -> 0 }" ]
         [ "def m = [$Code(\"ab\") => 1] \\insert($Code(\"xy\"), 2)"
-          "println(\"{Map.count(m)}\")"
+          "println(\"{map.count(m)}\")"
           "found(m($Code(\"zz\")))" ]
     |> runSource
     |> assertRan "1\n2\n"
@@ -157,7 +157,7 @@ let ``Run - a nominal type with its own == and hash can be a key, compared by it
 let ``Run - tags of different names can be keys of a map whose key type is written`` () =
     program
         [ "type Colour = #red | #green | #blue" ]
-        [ "def lights: map(Colour, int) = Map.empty \\insert(#red, 1) \\insert(#green, 2)"
+        [ "def lights: map(Colour, int) = map.empty \\insert(#red, 1) \\insert(#green, 2)"
           "found(lights(#green))"
           "found(lights(#blue))" ]
     |> runSource
@@ -166,9 +166,9 @@ let ``Run - tags of different names can be keys of a map whose key type is writt
 [<Fact>]
 let ``Run - keys and values give a map's keys and values in order`` () =
     program
-        [ "def joined = { xs -> xs \\List.fold(\"\", { acc, x -> acc ++ x }) }" ]
+        [ "def joined = { xs -> xs \\list.fold(\"\", { acc, x -> acc ++ x }) }" ]
         [ "def m = [\"b\" => \"2\", \"a\" => \"1\"] \\insert(\"c\", \"3\")"
-          "println(joined(Map.keys(m)))"
-          "println(joined(Map.values(m)))" ]
+          "println(joined(map.keys(m)))"
+          "println(joined(map.values(m)))" ]
     |> runSource
     |> assertRan "bac\n213\n"

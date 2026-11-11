@@ -25,8 +25,8 @@ let ``Every compiler code is distinct and has the NYX form`` () =
         Assert.Matches("^NYX\\d{4}$", code)
 
 [<Fact>]
-let ``The compiler reports only critical and error severities`` () =
-    for code in DiagnosticCodes.all do
+let ``The compiler reports only critical and error severities, but for a deprecated type name`` () =
+    for code in DiagnosticCodes.all |> List.filter ((<>) DiagnosticCodes.DeprecatedTypeName) do
         Assert.True(code.Severity = Severity.Critical || code.Severity = Severity.Error, $"{code.Code} is {code.Severity}")
 
 [<Fact>]
@@ -327,9 +327,9 @@ let ``A type name in a type definition that names no type is reported`` () =
 [<Fact>]
 let ``Built-in types, type variables, type parameters and types defined anywhere in the module are known`` () =
     let source =
-        "def n: Int = 1\n" +
+        "def n: int = 1\n" +
         "def xs: list(string) = [ \"a\" ]\n" +
-        "def ys: Seq(Bool) -> Seq(Bool) = { s -> s }\n" +
+        "def ys: seq(bool) -> seq(bool) = { s -> s }\n" +
         "def id: a -> a = { x -> x }\n" +
         "def t: Tree = #leaf\n" +
         "type Tree = #leaf | #node(Tree, Tree)\n" +
@@ -425,14 +425,14 @@ let ``A list of a nominal type cannot hold its shape`` () =
 let ``A list of a nominal type is assignable to a list of its shape`` () =
     let main =
         "module main\nimport \"people.nyx\"\n" +
-        "def namesOf: list((name: string)) -> int = { xs -> List.length(xs) }\n" +
+        "def namesOf: list((name: string)) -> int = { xs -> list.length(xs) }\n" +
         "def people: list($Person) = [ $Person.new(\"Ada\") ]\n" +
         "def n: int = namesOf(people)\n"
     Assert.Empty(compiledWithPeople main)
 
 [<Fact>]
 let ``A nominal type cannot be constructed outside its module from inside a lambda`` () =
-    let main = "module main\nimport \"people.nyx\"\ndef all = [ \"Ada\", \"Grace\" ] \\List.map { name -> $Person(name = name) }\n"
+    let main = "module main\nimport \"people.nyx\"\ndef all = [ \"Ada\", \"Grace\" ] \\list.map { name -> $Person(name = name) }\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$Person" ], compiledWithPeople main)
 
 /// The undeclared-context diagnostics compiling `main` beside a module `mod` that exports a `[Console]` function `greet`.

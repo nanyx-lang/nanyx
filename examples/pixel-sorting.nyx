@@ -5,7 +5,7 @@ import nanyx/math
 -- Pixel sorting: a glitch-art effect where the pixels of each row of an
 -- image are reordered by colour.
 
-type Pixel = (r: float, g: float, b: float)   -- each channel in 0..1
+type Pixel = (r: float, g: float, b: float) -- each channel in 0..1
 type Image = list(list(Pixel))
 
 -- Perceived luminance
@@ -20,23 +20,25 @@ def Pixel.hsv: Pixel -> (h: float, s: float, v: float) = { p ->
   def delta = max - min
 
   def h =
-    if | delta == 0.0 -> 0.0
-       | max == p.r -> (((p.g - p.b) / delta) % 6.0) / 6.0
-       | max == p.g -> ((p.b - p.r) / delta + 2.0) / 6.0
-       | else -> ((p.r - p.g) / delta + 4.0) / 6.0
+    if
+      | delta == 0.0 -> 0.0
+      | max == p.r -> ((p.g - p.b) / delta % 6.0) / 6.0
+      | max == p.g -> ((p.b - p.r) / delta + 2.0) / 6.0
+      | else -> ((p.r - p.g) / delta + 4.0) / 6.0
 
-  (h = h, s = if max == 0.0 then 0.0 else delta / max, v = max)
+  (h = h, s = (if max == 0.0 then 0.0 else delta / max), v = max)
 }
 
 -- A sort key that groups pixels into `repetitions` hue bands, alternating the
 -- direction of the luminance in every other band so the result looks smoother
-def stepKey: (Pixel, int) -> (int, float, int) = { p, repetitions ->
+def stepKey: Pixel, int -> (int, float, int) = { p, repetitions ->
   def (h = h, v = v) = p.hsv
-  def band = Math.floor(h * Int.toFloat(repetitions))
-  def value = Math.floor(v * Int.toFloat(repetitions))
+  def band = Math.floor(h * int.toFloat(repetitions))
+  def value = Math.floor(v * int.toFloat(repetitions))
 
-  if band % 2 == 1 then (band, Int.toFloat(repetitions) - p.luminance, repetitions - value)
-  else (band, p.luminance, value)
+  if band % 2 == 1
+    then (band, int.toFloat(repetitions) - p.luminance, repetitions - value)
+    else (band, p.luminance, value)
 }
 
 def Pixel.isBlack: Pixel -> bool = { p -> p.r == 0.0 and p.g == 0.0 and p.b == 0.0 }
@@ -44,11 +46,12 @@ def Pixel.isBlack: Pixel -> bool = { p -> p.r == 0.0 and p.g == 0.0 and p.b == 0
 -- A row is sorted only if every pixel has some colour; rows containing black
 -- pixels are left alone so that hard edges survive
 def sortRow: list(Pixel) -> list(Pixel) = { row ->
-  if row \any { p -> p.isBlack } then row
-  else row \sortBy { p -> stepKey(p, 8) }
+  if row \any { p -> p.isBlack } then row else row \sortBy { p -> stepKey(p, 8) }
 }
 
-export def sortImage: Image -> Image = { image -> image \map(sortRow) }
+export def sortImage: Image -> Image = { image ->
+  image \map(sortRow)
+}
 
 -- The number of pixels that took part in the sort
 export def measure: Image -> int = { image ->

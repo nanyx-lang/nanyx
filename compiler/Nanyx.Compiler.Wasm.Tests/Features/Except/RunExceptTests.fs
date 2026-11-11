@@ -8,7 +8,7 @@ let ``Run - except replaces the tag it names and passes the others through`` () 
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def parseNumber = { s -> Int.fromString(s) except #invalidInt -> #invalidVersionNumber }\n" +
+        "def parseNumber = { s -> int.fromString(s) except #invalidInt -> #invalidVersionNumber }\n" +
         "\n" +
         "def show = {\n" +
         "  | #some(n) -> \"number {n}\"\n" +
@@ -38,7 +38,7 @@ let ``Run - except with several arms, a nested tag and a binding`` () =
         "def recover: Loaded -> #some(int) | #error(#denied) = { result ->\n" +
         "  result except\n" +
         "    | #error(#notFound) -> #some(0)\n" +
-        "    | #error(#io(message)) -> #some(message \\String.length)\n" +
+        "    | #error(#io(message)) -> #some(message \\string.length)\n" +
         "}\n" +
         "\n" +
         "def show: (#some(int) | #error(#denied)) -> string = {\n" +

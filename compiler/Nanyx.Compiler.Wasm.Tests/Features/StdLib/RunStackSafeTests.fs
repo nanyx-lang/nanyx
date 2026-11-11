@@ -20,43 +20,43 @@ let private withList (body: string) =
     "  | [] -> 0\n" +
     "}\n" +
     "def show: list(int) -> string = { ys ->\n" +
-    "  \"{List.length(ys)} {first(ys)} {List.fold(ys, 0, { _, y -> y })}\"\n" +
+    "  \"{list.length(ys)} {first(ys)} {list.fold(ys, 0, { _, y -> y })}\"\n" +
     "}\n" +
     "def xs = upTo(20000, [])\n" +
     body
 
 [<Fact>]
 let ``Run - List.map works on 20,000 elements`` () =
-    runSource (withList "println(show(List.map(xs, { x -> x * 2 })))\n") |> assertRan "20000 2 40000\n"
+    runSource (withList "println(show(list.map(xs, { x -> x * 2 })))\n") |> assertRan "20000 2 40000\n"
 
 [<Fact>]
 let ``Run - List.filter works on 20,000 elements`` () =
-    runSource (withList "println(show(List.filter(xs, { x -> x > 1 })))\n") |> assertRan "19999 2 20000\n"
+    runSource (withList "println(show(list.filter(xs, { x -> x > 1 })))\n") |> assertRan "19999 2 20000\n"
 
 [<Fact>]
 let ``Run - List.take works on 20,000 elements`` () =
-    runSource (withList "println(show(List.take(xs, 19999)))\n") |> assertRan "19999 1 19999\n"
+    runSource (withList "println(show(list.take(xs, 19999)))\n") |> assertRan "19999 1 19999\n"
 
 [<Fact>]
 let ``Run - List.flatten works on 20,000 lists and on long lists`` () =
     let body =
-        "println(show(List.flatten(List.map(xs, { x -> [x] }))))\n" +
-        "println(show(List.flatten([xs, [0], xs])))\n"
+        "println(show(list.flatten(list.map(xs, { x -> [x] }))))\n" +
+        "println(show(list.flatten([xs, [0], xs])))\n"
     runSource (withList body) |> assertRan "20000 1 20000\n40001 1 20000\n"
 
 [<Fact>]
 let ``Run - List.zip works on 20,000 elements`` () =
     let body =
-        "def pairs = List.zip(xs, List.reverse(xs))\n" +
+        "def pairs = list.zip(xs, list.reverse(xs))\n" +
         "match pairs\n" +
-        "  | [(a, b), ..._] -> println(\"{List.length(pairs)} {a} {b}\")\n" +
+        "  | [(a, b), ..._] -> println(\"{list.length(pairs)} {a} {b}\")\n" +
         "  | [] -> println(\"none\")\n"
     runSource (withList body) |> assertRan "20000 1 20000\n"
 
 [<Fact>]
 let ``Run - List.unzip works on 20,000 elements`` () =
     let body =
-        "def (firsts, seconds) = List.unzip(List.zip(xs, List.reverse(xs)))\n" +
+        "def (firsts, seconds) = list.unzip(list.zip(xs, list.reverse(xs)))\n" +
         "println(show(firsts))\n" +
         "println(show(seconds))\n"
     runSource (withList body) |> assertRan "20000 1 20000\n20000 20000 1\n"
@@ -64,35 +64,35 @@ let ``Run - List.unzip works on 20,000 elements`` () =
 [<Fact>]
 let ``Run - List.partition works on 20,000 elements`` () =
     let body =
-        "def (passed, failed) = List.partition(xs, { x -> x > 2 })\n" +
+        "def (passed, failed) = list.partition(xs, { x -> x > 2 })\n" +
         "println(show(passed))\n" +
         "println(show(failed))\n"
     runSource (withList body) |> assertRan "19998 3 20000\n2 1 2\n"
 
 [<Fact>]
 let ``Run - List.skipWhile works on 20,000 elements`` () =
-    runSource (withList "println(show(List.skipWhile(xs, { x -> x < 20000 })))\n") |> assertRan "1 20000 20000\n"
+    runSource (withList "println(show(list.skipWhile(xs, { x -> x < 20000 })))\n") |> assertRan "1 20000 20000\n"
 
 [<Fact>]
 let ``Run - List.get works on 20,000 elements`` () =
     let body =
-        "match List.get(xs, 19999)\n" +
+        "match list.get(xs, 19999)\n" +
         "  | #some(x) -> println(\"{x}\")\n" +
         "  | #outOfRange -> println(\"out of range\")\n"
     runSource (withList body) |> assertRan "20000\n"
 
 [<Fact>]
 let ``Run - List.sortBy works on 20,000 elements`` () =
-    runSource (withList "println(show(List.sortBy(xs, { x -> 0 - x })))\n") |> assertRan "20000 20000 1\n"
+    runSource (withList "println(show(list.sortBy(xs, { x -> 0 - x })))\n") |> assertRan "20000 20000 1\n"
 
 [<Fact>]
 let ``Run - List.unfold works for 20,000 elements`` () =
-    let body = "println(show(List.unfold(1, { i -> if i <= 20000 then #some(i, i + 1) else #done })))\n"
+    let body = "println(show(list.unfold(1, { i -> if i <= 20000 then #some(i, i + 1) else #done })))\n"
     runSource (withList body) |> assertRan "20000 1 20000\n"
 
 [<Fact>]
 let ``Run - List.append works on 20,000 elements`` () =
-    runSource (withList "println(show(List.append(xs, 0)))\n") |> assertRan "20001 1 0\n"
+    runSource (withList "println(show(list.append(xs, 0)))\n") |> assertRan "20001 1 0\n"
 
 [<Fact>]
 let ``Run - math.pow works for an exponent of 100,000`` () =
@@ -106,26 +106,26 @@ let ``Run - math.pow works for an exponent of 100,000`` () =
 [<Fact>]
 let ``Run - String.repeat works 100,000 times`` () =
     let body =
-        "def s = String.repeat(\"ab\", 100000)\n" +
-        "println(\"{String.length(s)} {String.count(s, \"ab\")}\")\n" +
-        "println(String.repeat(\"xy\", 5) ++ String.repeat(\"z\", 1))\n"
+        "def s = string.repeat(\"ab\", 100000)\n" +
+        "println(\"{string.length(s)} {string.count(s, \"ab\")}\")\n" +
+        "println(string.repeat(\"xy\", 5) ++ string.repeat(\"z\", 1))\n"
     runSource (withList body) |> assertRan "200000 100000\nxyxyxyxyxyz\n"
 
 [<Fact>]
 let ``Run - String.split and String.replace work on 20,000 pieces`` () =
     let body =
-        "def s = String.repeat(\"a,\", 20000)\n" +
-        "def pieces = String.split(s, on = \",\")\n" +
-        "println(\"{List.length(pieces)} {String.join(pieces, \",\") == s}\")\n" +
-        "def replaced = String.replace(s, pattern = \",\", replacement = \";\")\n" +
-        "println(\"{String.length(replaced)} {String.count(replaced, \";\")} {String.count(replaced, \",\")}\")\n"
+        "def s = string.repeat(\"a,\", 20000)\n" +
+        "def pieces = string.split(s, on = \",\")\n" +
+        "println(\"{list.length(pieces)} {string.join(pieces, \",\") == s}\")\n" +
+        "def replaced = string.replace(s, pattern = \",\", replacement = \";\")\n" +
+        "println(\"{string.length(replaced)} {string.count(replaced, \";\")} {string.count(replaced, \",\")}\")\n"
     runSource (withList body) |> assertRan "20001 true\n40000 20000 0\n"
 
 [<Fact>]
 let ``Run - String.lines and String.words work on 20,000 pieces`` () =
     let body =
-        "def lines = String.lines(String.repeat(\"a\r\n\", 20000))\n" +
-        "println(\"{List.length(lines)} {List.all(lines, { line -> line == \"a\" })}\")\n" +
-        "def words = String.words(String.repeat(\" a\", 20000))\n" +
-        "println(\"{List.length(words)} {List.all(words, { word -> word == \"a\" })}\")\n"
+        "def lines = string.lines(string.repeat(\"a\r\n\", 20000))\n" +
+        "println(\"{list.length(lines)} {list.all(lines, { line -> line == \"a\" })}\")\n" +
+        "def words = string.words(string.repeat(\" a\", 20000))\n" +
+        "println(\"{list.length(words)} {list.all(words, { word -> word == \"a\" })}\")\n"
     runSource (withList body) |> assertRan "20000 true\n20000 true\n"

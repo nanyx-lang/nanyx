@@ -64,24 +64,24 @@ export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
     def nextId = mut 1
 
     use TodoStore(
-      findAll = { todos \Map.values }
+      findAll = { todos \map.values }
 
       find = { id -> todos(id) }
 
       insert = { todo ->
         def saved = todo with id = nextId
-        todos := todos \Map.insert(saved.id, saved)
+        todos := todos \map.insert(saved.id, saved)
         nextId := nextId + 1
         #some(saved)
       }
 
       update = { todo ->
-        todos := todos \Map.insert(todo.id, todo)
+        todos := todos \map.insert(todo.id, todo)
         #some(todo)
       }
 
       delete = { id ->
-        todos := todos \Map.remove(id)
+        todos := todos \map.remove(id)
         #some()
       }
     ) in action()

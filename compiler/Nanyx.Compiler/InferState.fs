@@ -127,7 +127,7 @@ type InferState =
             /// ambiguous; one to a definition of the module's own, or to a local, is not.
             AmbiguousImports: Map<string, SymbolId * string list>;
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
-            /// `x \trim` on a string calls `String.trim`.
+            /// `x \trim` on a string calls `string.trim`.
             PipeTargets: Map<NodeId, Identifier>;
             /// The operators that call a definition, by the operator's node, with the name they call it by: `x + y`
             /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls

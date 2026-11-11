@@ -2,8 +2,8 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// How serious a diagnostic is. The compiler reports only `Critical` and `Error` (there are no compiler warnings);
-/// `Warning`, `Info` and `Hint` are for linters.
+/// How serious a diagnostic is. The compiler reports `Critical` and `Error`, and `Warning` only for a spelling it
+/// still accepts but will stop accepting (see `DeprecatedTypeName`); `Warning`, `Info` and `Hint` are for linters.
 [<RequireQualifiedAccess>]
 type Severity =
     /// Compilation cannot go on at all: there is no source to check.
@@ -80,6 +80,7 @@ module DiagnosticCodes =
     let UnknownType = code 109 "Unknown type" Severity.Error
     let OutsideModuleBlock = code 110 "Name from outside a module block" Severity.Error
     let NotImplemented = code 111 "Not implemented" Severity.Error
+    let DeprecatedTypeName = code 112 "Deprecated type name" Severity.Warning
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -112,7 +113,7 @@ module DiagnosticCodes =
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
-          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
+          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented; DeprecatedTypeName
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount

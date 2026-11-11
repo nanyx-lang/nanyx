@@ -168,11 +168,11 @@ let ``After an import's alias come its exports, and after a prefix the names und
         Assert.Equal<(string * Completion.MemberKind * string option) list>(
             [ "foo", Completion.Definition, Some "int"; "twice", Completion.Definition, Some "int -> int" ],
             membersIn (Compiler.compileFile mainPath) mainSource "def value" [ "m" ]))
-    let source = "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\n"
+    let source = "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")\n"
     let members = membersIn (Compiler.compile source) source "def shout"
     // A dotted export is offered a segment at a time.
-    Assert.Contains(("String", Completion.Prefix, None), members [ "t" ])
-    Assert.Contains("uppercase", members [ "t"; "String" ] |> List.map (fun (name, _, _) -> name))
+    Assert.Contains(("string", Completion.Prefix, None), members [ "t" ])
+    Assert.Contains("uppercase", members [ "t"; "string" ] |> List.map (fun (name, _, _) -> name))
     // The prelude's definitions attached to a type.
     Assert.Contains("map", members [ "Result" ] |> List.map (fun (name, _, _) -> name))
 

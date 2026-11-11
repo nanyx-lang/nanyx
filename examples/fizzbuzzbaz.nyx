@@ -8,11 +8,11 @@ def playNumber: (divisor: int, word: string, i: int) -> string = { divisor, word
   if i % divisor == 0 then word else ""
 }
 
-def numberGame: list((int, string)) -> (int -> string) = { rules ->
+def numberGame: list((int, string)) -> int -> string = { rules ->
   { i ->
     rules
       \map { divisor, word -> playNumber(divisor = divisor, word = word, i = i) }
-      \String.join("")
+      \string.join("")
       \match
         | "" -> "{i}"
         | s -> s

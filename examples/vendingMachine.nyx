@@ -36,7 +36,7 @@ export def Machine.vend: (Machine, string) -> #some(Machine) | #error(VendError)
       else
         #some(machine with (
           coinsDeposited = machine.coinsDeposited - item.price
-          inventory = machine.inventory \Map.insert(name, item with count = item.count - 1)
+          inventory = machine.inventory \map.insert(name, item with count = item.count - 1)
         ))
 }
 

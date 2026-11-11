@@ -9,7 +9,7 @@ let private version =
       "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b ->"
       "  if a.major < b.major then #less"
       "  else if a.major > b.major then #greater"
-      "  else Int.compare(a.minor, b.minor)"
+      "  else int.compare(a.minor, b.minor)"
       "}"
       "def v = { major, minor -> $Version(major = major, minor = minor) }"
       "def minor: $Version -> int = { x -> x.minor }" ]
@@ -18,7 +18,7 @@ let private version =
 let private orElse = "def orElse = { o, fallback -> match o | #some(x) -> x | _ -> fallback }"
 
 /// Writes a list of ints, each followed by a space.
-let private ints = "def ints = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ \"{x} \" }) }"
+let private ints = "def ints = { xs -> list.fold(xs, \"\", { acc, x -> acc ++ \"{x} \" }) }"
 
 [<Fact>]
 let ``Run - strings are ordered by their bytes`` () =
@@ -60,10 +60,10 @@ let ``Run - float operators follow IEEE 754, and Float.compare puts NaN last`` (
           "sqrt(0.0 - 1.0) < 1.0"
           "1.0 < sqrt(0.0 - 1.0)"
           "sqrt(0.0 - 1.0) >= sqrt(0.0 - 1.0)"
-          "isGreater(Float.compare(sqrt(0.0 - 1.0), 1.0))"
-          "List.take(List.sort([2.0, sqrt(0.0 - 1.0), 1.0]), 2) == [1.0, 2.0]"
-          "isNaN(orElse(List.max([1.0, sqrt(0.0 - 1.0), 2.0]), 0.0))"
-          "orElse(List.min([1.0, sqrt(0.0 - 1.0), 2.0]), 0.0) == 1.0" ]
+          "isGreater(float.compare(sqrt(0.0 - 1.0), 1.0))"
+          "list.take(list.sort([2.0, sqrt(0.0 - 1.0), 1.0]), 2) == [1.0, 2.0]"
+          "isNaN(orElse(list.max([1.0, sqrt(0.0 - 1.0), 2.0]), 0.0))"
+          "orElse(list.min([1.0, sqrt(0.0 - 1.0), 2.0]), 0.0) == 1.0" ]
     |> runSource
     |> assertRan "T\nF\nF\nF\nT\nT\nT\nT\n"
 
@@ -74,8 +74,8 @@ let ``Run - a nominal type is ordered by the compare attached to it`` () =
         [ "v(1, 2) < v(1, 10)"
           "v(2, 0) >= v(1, 10)"
           "v(1, 1) <= v(1, 1)"
-          "ints(List.map(List.sort([v(1, 10), v(1, 2), v(0, 5)]), minor)) == \"5 2 10 \""
-          "minor(orElse(List.max([v(1, 10), v(2, 0), v(1, 2)]), v(0, 0))) == 0" ]
+          "ints(list.map(list.sort([v(1, 10), v(1, 2), v(0, 5)]), minor)) == \"5 2 10 \""
+          "minor(orElse(list.max([v(1, 10), v(2, 0), v(1, 2)]), v(0, 0))) == 0" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\nT\n"
 
@@ -84,15 +84,15 @@ let ``Run - sort, min and max order a list by the compiler's own Ord`` () =
     comparing
         [ orElse
           "def none: list(int) = []" ]
-        [ "List.sort([3, 1, 2]) == [1, 2, 3]"
-          "List.sort([\"pear\", \"apple\", s]) == [\"aa\", \"apple\", \"pear\"]"
-          "List.sort([(2, \"a\"), (1, \"z\"), (1, \"b\")]) == [(1, \"b\"), (1, \"z\"), (2, \"a\")]"
-          "List.sort([[2], [1, 5], [1]]) == [[1], [1, 5], [2]]"
-          "orElse(List.min([4, 2, 8]), 0) == 2"
-          "orElse(List.max([4, 2, 8]), 0) == 8"
-          "orElse(List.max([\"b\", \"c\", \"a\"]), \"\") == \"c\""
-          "orElse(List.min(none), -1) == -1"
-          "List.sort([true, false]) == [false, true]" ]
+        [ "list.sort([3, 1, 2]) == [1, 2, 3]"
+          "list.sort([\"pear\", \"apple\", s]) == [\"aa\", \"apple\", \"pear\"]"
+          "list.sort([(2, \"a\"), (1, \"z\"), (1, \"b\")]) == [(1, \"b\"), (1, \"z\"), (2, \"a\")]"
+          "list.sort([[2], [1, 5], [1]]) == [[1], [1, 5], [2]]"
+          "orElse(list.min([4, 2, 8]), 0) == 2"
+          "orElse(list.max([4, 2, 8]), 0) == 8"
+          "orElse(list.max([\"b\", \"c\", \"a\"]), \"\") == \"c\""
+          "orElse(list.min(none), -1) == -1"
+          "list.sort([true, false]) == [false, true]" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\nT\nT\nT\nT\nT\n"
 
@@ -100,11 +100,11 @@ let ``Run - sort, min and max order a list by the compiler's own Ord`` () =
 let ``Run - sortBy orders by a key of any type with an order, keeping ties in order`` () =
     comparing
         [ "def people = [(name = \"Cy\", age = 30), (name = \"Al\", age = 40), (name = \"Bo\", age = 30)]"
-          "def names = { ps -> List.map(ps, { p -> p.name }) }" ]
-        [ "names(List.sortBy(people, { p -> p.name })) == [\"Al\", \"Bo\", \"Cy\"]"
-          "names(List.sortBy(people, { p -> p.age })) == [\"Cy\", \"Bo\", \"Al\"]"
-          "names(List.sortBy(people, { p -> (p.age, p.name) })) == [\"Bo\", \"Cy\", \"Al\"]"
-          "List.sortBy([\"bbb\", \"a\", \"cc\"], { w -> w }) == [\"a\", \"bbb\", \"cc\"]" ]
+          "def names = { ps -> list.map(ps, { p -> p.name }) }" ]
+        [ "names(list.sortBy(people, { p -> p.name })) == [\"Al\", \"Bo\", \"Cy\"]"
+          "names(list.sortBy(people, { p -> p.age })) == [\"Cy\", \"Bo\", \"Al\"]"
+          "names(list.sortBy(people, { p -> (p.age, p.name) })) == [\"Bo\", \"Cy\", \"Al\"]"
+          "list.sortBy([\"bbb\", \"a\", \"cc\"], { w -> w }) == [\"a\", \"bbb\", \"cc\"]" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\n"
 
@@ -125,10 +125,10 @@ let ``Run - a function that orders its type variable orders each type it is call
 [<Fact>]
 let ``Run - an Ord loaded with use changes how its block orders`` () =
     comparing
-        [ "def backwards: Ord(string) = (compare = { a, b -> String.compare(b, a) })"
+        [ "def backwards: Ord(string) = (compare = { a, b -> string.compare(b, a) })"
           "def sortedBackwards: list(string) -> list(string) = { xs ->"
           "  use backwards"
-          "  List.sort(xs)"
+          "  list.sort(xs)"
           "}"
           "def lessBackwards: string, string -> bool = { a, b ->"
           "  use backwards"

@@ -68,7 +68,7 @@ module internal ExpressionRewrites =
         mapExpr expr
 
     /// Every pipe in an expression that inference resolved to an attached definition (`targets`, by the pipe's
-    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \String.trim`. A
+    /// node) written with that definition's name, so the backend calls it: `x \trim` becomes `x \string.trim`. A
     /// hole that calls a derived definition (see `StructuralInstances.callTargets`) is written as a call to it.
     let retargetPipes (targets: Map<NodeId, Identifier>) (expr: Expression) : Expression =
         if targets.IsEmpty then
@@ -100,7 +100,7 @@ module internal ExpressionRewrites =
 
     /// Every expression that inference read as another (`readAs`, by the node of the one written) written as that
     /// one: `0` in `x + 0` becomes `zero`, `x ** n` becomes `__pow(x, n)` (see `ArithmeticOperators`), and a call of a
-    /// map, `m(k)`, becomes `Map.get(m, k)` (see `Maps`). A call an operator is read as takes the operands as they are
+    /// map, `m(k)`, becomes `map.get(m, k)` (see `Maps`). A call an operator is read as takes the operands as they are
     /// rewritten, since one may be read as another too, and so does a call that a call is read as with the callee
     /// first: the map's lookup takes the call's arguments as they are rewritten.
     let writeAsRead (readAs: Map<NodeId, Expression>) (expr: Expression) : Expression =
@@ -117,11 +117,11 @@ module internal ExpressionRewrites =
                 | _, None -> kind)
 
     /// The function that reads a built-in property: the string-length intrinsic, which needs no import, and the
-    /// prelude's `List.length`, which every module imports.
+    /// prelude's `list.length`, which every module imports.
     let builtInPropertyFunction (property: BuiltInProperty) : Identifier =
         match property with
         | StringLength -> Intrinsics.stringLength
-        | ListLength -> "List.length"
+        | ListLength -> "list.length"
 
     /// `expr` with each read of a built-in property (`properties`, by the member access's node) written as a call to
     /// the function that reads it, for the backend, which knows only records' fields: `s.length` is
@@ -137,7 +137,7 @@ module internal ExpressionRewrites =
                 | other, _ -> other)
 
     /// The definitions that the instances synthesized for the calls in `expr` are made of (`instances`, by the call's
-    /// node): `Float.zero`, `` Float.`+` ``, ... for a call in it that is passed a `Num(float)`.
+    /// node): `float.zero`, `` float.`+` ``, ... for a call in it that is passed a `Num(float)`.
     let synthesizedMembersIn (instances: Map<NodeId, ContextInstance option list>) (expr: Expression) : string list =
         let found = ResizeArray<string>()
         expr

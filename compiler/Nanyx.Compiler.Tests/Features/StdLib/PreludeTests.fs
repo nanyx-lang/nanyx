@@ -58,28 +58,28 @@ let ``The prelude's toList, values, mapOr, toOption and orElse keep the option's
 
 [<Fact>]
 let ``Int.fromString is in the prelude`` () =
-    let result = Compiler.compile "def n = Int.fromString(\"42\")\ndef piped = \"7\" \\ Int.fromString"
+    let result = Compiler.compile "def n = int.fromString(\"42\")\ndef piped = \"7\" \\ int.fromString"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["n"])
     Assert.Equal("#some(int) | #invalidInt", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
 let ``Int.toFloat is in the prelude`` () =
-    let result = Compiler.compile "def x = Int.toFloat(3) * 1.5\ndef piped = 7 \\toFloat"
+    let result = Compiler.compile "def x = int.toFloat(3) * 1.5\ndef piped = 7 \\toFloat"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["x"])
     Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.["piped"])
 
 [<Fact>]
 let ``Float.fromString is in the prelude`` () =
-    let result = Compiler.compile "def x = Float.fromString(\"1.5\")\ndef piped = \"7\" \\ Float.fromString"
+    let result = Compiler.compile "def x = float.fromString(\"1.5\")\ndef piped = \"7\" \\ float.fromString"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(float) | #invalidFloat", Unifier.tyToString result.Typed.Value.Types.["x"])
     Assert.Equal("#some(float) | #invalidFloat", Unifier.tyToString result.Typed.Value.Types.["piped"])
 
 [<Fact>]
 let ``Bool.fromString is in the prelude`` () =
-    let result = Compiler.compile "def b = Bool.fromString(\"true\")\ndef piped = \"false\" \\ Bool.fromString"
+    let result = Compiler.compile "def b = bool.fromString(\"true\")\ndef piped = \"false\" \\ bool.fromString"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["b"])
     Assert.Equal("#some(bool) | #invalidBool", Unifier.tyToString result.Typed.Value.Types.["piped"])
@@ -87,11 +87,11 @@ let ``Bool.fromString is in the prelude`` () =
 [<Fact>]
 let ``Each built-in type has an attached toString in the prelude`` () =
     let source =
-        "def i = Int.toString(1)\n" +
+        "def i = int.toString(1)\n" +
         "def f = 1.5 \\ toString\n" +
         "def b = true \\ toString\n" +
-        "def s = String.toString(\"a\")\n" +
-        "def texts = [1, 2] \\ map(Int.toString)"
+        "def s = string.toString(\"a\")\n" +
+        "def texts = [1, 2] \\ map(int.toString)"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -111,7 +111,7 @@ let ``A context of toString is synthesized for a built-in type from its attached
 
 [<Fact>]
 let ``FromString is in the prelude, and a function that requires it keeps its failure type open`` () =
-    let source = "def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \\List.map(fromString) }"
+    let source = "def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \\list.map(fromString) }"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal("list(string) -> list(#some(a) | e)", Unifier.tyToString result.Typed.Value.Types.["readAll"])
@@ -143,8 +143,8 @@ let ``The prelude's List functions are found by a pipe on a list`` () =
         "def names = xs \\ map({ x -> \"n\" })\n" +
         "def big = xs \\ filter({ x -> x > 1 })\n" +
         "def first = xs \\ head\n" +
-        "def total = List.fold(xs, 0, { acc, x -> acc + x })\n" +
-        "def pairs = List.zip(xs, names)"
+        "def total = list.fold(xs, 0, { acc, x -> acc + x })\n" +
+        "def pairs = list.zip(xs, names)"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -161,7 +161,7 @@ let ``The prelude's distinct, sortBy and unfold have the docs' types`` () =
         "def xs = [3, 1, 2]\n" +
         "def unique = xs \\ distinct\n" +
         "def sorted = xs \\ sortBy({ x -> 0 - x })\n" +
-        "def counted = List.unfold(3, { n -> if n == 0 then #done else #some(\"x\", n - 1) })"
+        "def counted = list.unfold(3, { n -> if n == 0 then #done else #some(\"x\", n - 1) })"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]
@@ -175,8 +175,8 @@ let ``The prelude's skipWhile, partition, unzip and get have the docs' types`` (
         "def xs = [3, 1, 2]\n" +
         "def rest = xs \\ skipWhile({ x -> x > 2 })\n" +
         "def halves = xs \\ partition({ x -> x > 1 })\n" +
-        "def columns = List.unzip([(1, \"a\"), (2, \"b\")])\n" +
-        "def second = xs \\ List.get(1)"
+        "def columns = list.unzip([(1, \"a\"), (2, \"b\")])\n" +
+        "def second = xs \\ list.get(1)"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf name = Unifier.tyToString result.Typed.Value.Types.[name]

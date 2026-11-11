@@ -17,9 +17,9 @@ let ``Attaching == to a structural or built-in type, or != to any type, is an er
         [ "type Point = (x: int, y: int)\ndef Point.`==`: Point, Point -> bool = { p, q -> p.x == q.x }\n",
           "'Point.==' cannot be defined: 'Point' is a structural type, so its equality is always that of its structure. Make it nominal ('$Point') to define its own equality",
           "Point.`==`"
-          "def String.`==`: string, string -> bool = { a, b -> true }\n",
-          "'String.==' cannot be defined: 'string' is a built-in type, so its equality is the compiler's own. Make a nominal type of it to define its own equality",
-          "String.`==`"
+          "def string.`==`: string, string -> bool = { a, b -> true }\n",
+          "'string.==' cannot be defined: 'string' is a built-in type, so its equality is the compiler's own. Make a nominal type of it to define its own equality",
+          "string.`==`"
           "type $Email = string\ndef $Email.`!=`: $Email, $Email -> bool = { a, b -> false }\n",
           "'$Email.!=' cannot be defined: '!=' is always 'not (a == b)'. Attach '==' instead",
           "$Email.`!=`" ]

@@ -10,6 +10,7 @@
     <Compile Include="TestSupport.fs" />
     <Compile Include="Features\Arithmetic\ArithmeticTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
+    <Compile Include="Features\Attached\DeprecatedTypeNameTests.fs" />
     <Compile Include="Features\Attributes\AttributeTests.fs" />
     <Compile Include="Features\Blocks\BlockTests.fs" />
     <Compile Include="Features\Blocks\DoBlockTests.fs" />

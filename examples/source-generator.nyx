@@ -22,14 +22,14 @@ def getterCases: list(Property) -> string = { properties ->
   properties
     \filter { .isGettable }
     \map { p -> '"' ++ p.name ++ '" => ' ++ p.name ++ "," }
-    \String.join("\n            ")
+    \string.join("\n            ")
 }
 
 def setterCases: list(Property) -> string = { properties ->
   properties
     \filter { .isSettable }
     \map { p -> 'case "' ++ p.name ++ '": ' ++ p.name ++ " = ({p.type}) value; break;" }
-    \String.join("\n                ")
+    \string.join("\n                ")
 }
 
 def indexer: PartialRecord -> string = { record ->
@@ -50,7 +50,7 @@ def indexer: PartialRecord -> string = { record ->
     '        }'
     '    }'
     '}'
-  ] \String.join("\n")
+  ] \string.join("\n")
 }
 
 export def generateSource: PartialRecord -> string = { record ->

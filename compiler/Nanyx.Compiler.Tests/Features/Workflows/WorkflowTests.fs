@@ -51,7 +51,7 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
         reported "  for xs | x -> halve(try halve(x))")
     Assert.Equal(
         "`try` is inside a lambda, so the rest of the `proc` block cannot follow it: move it out of the lambda, or handle the value with a `match` there",
-        reported "  def halves = List.map(xs, { x -> try halve(x) })")
+        reported "  def halves = list.map(xs, { x -> try halve(x) })")
     Assert.Equal(
         "`try` is in a part of an expression that may not run, so the rest of the `proc` block cannot follow it: make the `if` or `match` it is in a statement of its own",
         reported "  def m = 1 + (if true then try halve(2) else 0)")
@@ -59,7 +59,7 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
     let nested =
         "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
         "def f = { xs -> proc {\n" +
-        "  def results = List.map(xs, { x -> proc {\n" +
+        "  def results = list.map(xs, { x -> proc {\n" +
         "    def h = try halve(x)\n" +
         "    return h\n" +
         "  } })\n" +

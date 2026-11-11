@@ -36,7 +36,7 @@ let ``Transpile function call with arguments`` () =
 let ``Transpile attached function on a built-in type`` () =
     let source =
         "module M\n\n" +
-        "def Int.double: int -> int = { n -> n * 2 }\n\n" +
+        "def int.double: int -> int = { n -> n * 2 }\n\n" +
         "def main = 3 \\ double"
 
     let result = NyxCompiler.Compiler.compile source
@@ -44,7 +44,7 @@ let ``Transpile attached function on a built-in type`` () =
     let wat = Transpiler.Wasm.CodeGen.transpileTypedModuleToWat result.Typed.Value
 
     Assert.Contains("i32.const 3", wat)
-    Assert.Contains("call $Int_double", wat)
+    Assert.Contains("call $int_double", wat)
 
 /// What the backend reports for `source`, which type-checks but which it cannot compile: the diagnostic, and the line
 /// and column (both from 1) it is reported at.

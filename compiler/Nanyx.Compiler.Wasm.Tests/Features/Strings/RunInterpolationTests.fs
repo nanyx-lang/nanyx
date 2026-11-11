@@ -12,7 +12,7 @@ let ``Run - a hole of a built-in type writes it as it always has`` () =
         "def main = {\n" +
         "  def n = -42\n" +
         "  println(\"{n} {0} {1.5} {true} {false} {\"text\"} {#red} {n > 0}\")\n" +
-        "  println(\"{Int.toString(7)} {Bool.toString(true)} {Float.toString(2.5)}\")\n" +
+        "  println(\"{int.toString(7)} {bool.toString(true)} {float.toString(2.5)}\")\n" +
         "}\n"
     runSource source |> assertRan "-42 0 1.5 true false text #red false\n7 true 2.5\n"
 
@@ -45,7 +45,7 @@ let ``Run - a use changes how a hole writes its type`` () =
         "@entry\n" +
         "def main = {\n" +
         "  println(\"before {1}\")\n" +
-        "  def bracketed: ToString(int) = ( toString = { n -> \"<{Int.toString(n)}>\" } )\n" +
+        "  def bracketed: ToString(int) = ( toString = { n -> \"<{int.toString(n)}>\" } )\n" +
         "  use bracketed\n" +
         "  println(\"after {1}\")\n" +
         "}\n"
@@ -67,7 +67,7 @@ let ``Run - a generic function that interpolates its parameter writes each type 
         "def main = {\n" +
         "  println(angled(1) ++ angled(\"s\") ++ angled(Point(x = 3, y = 4)))\n" +
         "  println(labelled(\"at\", Point(x = 5, y = 6)))\n" +
-        "  println([1, 2] \\List.map({ n -> \"#{n}\" }) \\String.join(\" \"))\n" +
+        "  println([1, 2] \\list.map({ n -> \"#{n}\" }) \\string.join(\" \"))\n" +
         "}\n"
     runSource source |> assertRan "<1><s><(3, 4)>\nat: (5, 6)\n#1 #2\n"
 
@@ -85,7 +85,7 @@ let ``Run - a function that requires ToString writes a tag passed to it by its n
         "def main = {\n" +
         "  println(angled(#red) ++ angled(color))\n" +
         "  println(labelled(\"size\", #large))\n" +
-        "  println([1, 2] \\List.map({ n -> angled(if n == 1 then #one else #two) }) \\String.join(\" \"))\n" +
+        "  println([1, 2] \\list.map({ n -> angled(if n == 1 then #one else #two) }) \\string.join(\" \"))\n" +
         "}\n"
     runSource source |> assertRan "<#red><#green>\nsize: #large\n<#one> <#two>\n"
 

@@ -42,9 +42,9 @@ let ``A def that writes its type must require Ord of a type variable it orders``
           "def atLeast: list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n",
           "'atLeast' orders values of type 'a' with >=, so its type must require Ord(a): add [Ord(a)] to the type of 'atLeast'",
           "xs >= ys"
-          "def sorted: list(a) -> list(a) = { xs -> List.sort(xs) }\n",
-          "'List.sort' requires the context 'Ord(a)', which is not available here: add [Ord(a)] to the type of 'sorted'",
-          "List.sort" ]
+          "def sorted: list(a) -> list(a) = { xs -> list.sort(xs) }\n",
+          "'list.sort' requires the context 'Ord(a)', which is not available here: add [Ord(a)] to the type of 'sorted'",
+          "list.sort" ]
 
 [<Fact>]
 let ``A def that requires Ord of a type variable orders through the instance it is passed`` () =
@@ -65,10 +65,10 @@ let ``Numbers, bools, strings, tuples and lists of them are ordered by the compi
 let ``Records, tags and functions have no order`` () =
     assertMissingContexts
         [ "def a = (x = 1) < (x = 2)\n",
-          "'(x: int)' cannot be ordered with <: records have no order. Make it a nominal type to attach a 'compare' to it, or order by a key with List.sortBy",
+          "'(x: int)' cannot be ordered with <: records have no order. Make it a nominal type to attach a 'compare' to it, or order by a key with list.sortBy",
           "(x = 1) < (x = 2)"
           "type Color = #red | #blue\ndef less: Color, Color -> bool = { p, q -> p > q }\n",
-          "'Color' cannot be ordered with >: tags have no order. Make it a nominal type to attach a 'compare' to it, or order by a key with List.sortBy",
+          "'Color' cannot be ordered with >: tags have no order. Make it a nominal type to attach a 'compare' to it, or order by a key with list.sortBy",
           "p > q"
           "def f = { x -> x }\ndef d = f < f\n",
           "'a -> a' cannot be ordered with <: functions have no order",
@@ -77,32 +77,32 @@ let ``Records, tags and functions have no order`` () =
           "'list(x: int)' cannot be ordered with <=: its elements are records, and records have no order",
           "[(x = 1)] <= [(x = 2)]"
           "type $Version = (major: int, minor: int)\ndef v = $Version(major = 1, minor = 2) < $Version(major = 1, minor = 3)\n",
-          "'$Version' cannot be ordered with <: records have no order. Attach '$Version.compare', or order by a key with List.sortBy",
+          "'$Version' cannot be ordered with <: records have no order. Attach '$Version.compare', or order by a key with list.sortBy",
           "$Version(major = 1, minor = 2) < $Version(major = 1, minor = 3)" ]
 
 [<Fact>]
 let ``A call that requires Ord of a type with no order is an error at the call`` () =
     assertMissingContexts
-        [ "def g = List.sort([(x = 1)])\n",
-          "'List.sort' orders values of type '(x: int)', which cannot be ordered: records have no order",
-          "List.sort" ]
+        [ "def g = list.sort([(x = 1)])\n",
+          "'list.sort' orders values of type '(x: int)', which cannot be ordered: records have no order",
+          "list.sort" ]
 
 [<Fact>]
 let ``A nominal type orders with the compare attached to it`` () =
     let typed =
         compileClean (
             "type $Version = (major: int, minor: int)\n" +
-            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> Int.compare(a.major, b.major) }\n" +
+            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
             "def v = { major -> $Version(major = major, minor = 0) }\n" +
             "def a = v(1) < v(2)\n" +
-            "def b = List.sort([v(2), v(1)])\n")
+            "def b = list.sort([v(2), v(1)])\n")
     Assert.Contains(InstanceSynthesized [ "compare", "$Version.compare" ], instancesOf typed)
 
 [<Fact>]
 let ``An Ord loaded with use orders a built-in type in its block`` () =
     let typed =
         compileClean (
-            "def backwards: Ord(string) = (compare = { a, b -> String.compare(b, a) })\n" +
+            "def backwards: Ord(string) = (compare = { a, b -> string.compare(b, a) })\n" +
             "def a = {\n  use backwards\n  \"a\" < \"b\"\n}\n" +
             "def b = \"a\" < \"b\"\n")
     match instancesOf typed with
@@ -111,20 +111,20 @@ let ``An Ord loaded with use orders a built-in type in its block`` () =
 
 [<Fact>]
 let ``List.sortBy takes a key of any type with an order`` () =
-    let typed = compileClean "def sorted = List.sortBy([\"bb\", \"a\"], { s -> s })\ndef byPair = List.sortBy([1, 2], { n -> (n, \"x\") })\n"
+    let typed = compileClean "def sorted = list.sortBy([\"bb\", \"a\"], { s -> s })\ndef byPair = list.sortBy([1, 2], { n -> (n, \"x\") })\n"
     Assert.Equal("list(string)", Unifier.tyToString typed.Types.["sorted"])
     Assert.Equal("list(int)", Unifier.tyToString typed.Types.["byPair"])
 
 [<Fact>]
 let ``Only a nominal type may attach compare, and a built-in type's attached compare is not read`` () =
-    let source = "type Point = (x: int, y: int)\ndef Point.compare: Point, Point -> #less | #equal | #greater = { p, q -> Int.compare(p.x, q.x) }\n"
+    let source = "type Point = (x: int, y: int)\ndef Point.compare: Point, Point -> #less | #equal | #greater = { p, q -> int.compare(p.x, q.x) }\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
     Assert.Equal(
         "'Point.compare' cannot be defined: 'Point' is a structural type, so it is only ordered by its structure, and records and tags have none. Make it nominal ('$Point') to define its own order",
         diagnostic.Message)
     // The prelude attaches `Int.compare`, but `List.sort` of ints uses the compiler's own.
-    let typed = compileClean "def sorted = List.sort([2, 1])\n"
+    let typed = compileClean "def sorted = list.sort([2, 1])\n"
     Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "compare", "__compare" ] ], instancesOf typed)
 
 [<Fact>]
@@ -153,7 +153,7 @@ let ``A list of a type with its own compare is ordered through it, element by el
     let typed =
         compileClean (
             "type $Version = (major: int, minor: int)\n" +
-            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> Int.compare(a.major, b.major) }\n" +
+            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
             "def v = { major -> $Version(major = major, minor = 0) }\n" +
             "def a = [v(1), v(2)] < [v(3)]\n" +
             "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n")

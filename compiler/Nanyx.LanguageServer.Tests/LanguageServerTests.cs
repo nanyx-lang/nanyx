@@ -230,7 +230,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
     {
         var uri = DocumentUri.Parse("untitled:Untitled-1");
 
-        Open(uri, "import nanyx/text\n\ndef shout = String.uppercase(\"hi\")\n");
+        Open(uri, "import nanyx/text\n\ndef shout = string.uppercase(\"hi\")\n");
 
         var diagnostics = await NextPublished(uri);
         Assert.Empty(diagnostics.Diagnostics!);
@@ -491,7 +491,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
     public async Task An_unknown_name_the_standard_library_exports_offers_its_import()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-12");
-        const string text = "import nanyx/console\n\ndef s = String.trim(\" a \")\n";
+        const string text = "import nanyx/console\n\ndef s = string.trim(\" a \")\n";
 
         Open(uri, text);
         Assert.Single((await NextPublished(uri)).Diagnostics!);
@@ -500,7 +500,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Equal(("Add `import nanyx/text`", CodeActionKind.QuickFix, true), (import.Title, import.Kind, import.IsPreferred));
         Assert.Equal("NYX0102", Assert.Single(import.Diagnostics!).Code?.String);
         Assert.Equal(
-            "import nanyx/console\nimport nanyx/text\n\ndef s = String.trim(\" a \")\n",
+            "import nanyx/console\nimport nanyx/text\n\ndef s = string.trim(\" a \")\n",
             Applied(text, Assert.Single(import.Edit!.Changes![uri])));
     }
 
@@ -643,7 +643,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
             });
             var uri = DocumentUri.Parse("untitled:Untitled-2");
 
-            Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\ndef n = Int.fromString(\"1\")\n");
+            Open(uri, "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")\ndef n = int.fromString(\"1\")\n");
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
             // A qualified import of nanyx/text, and a definition the prelude brings into scope.
@@ -1022,10 +1022,10 @@ public sealed class LanguageServerTests : IAsyncLifetime
     {
         var uri = DocumentUri.Parse("untitled:Untitled-3");
 
-        Open(uri, "import nanyx/text as t\ndef shout = t.String.uppercase(\"hi\")\n");
+        Open(uri, "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        Assert.Contains(await CompletionsAt(uri, 1, 14), item => item.Label == "String" && item.Kind == CompletionItemKind.Module);
+        Assert.Contains(await CompletionsAt(uri, 1, 14), item => item.Label == "string" && item.Kind == CompletionItemKind.Module);
         Assert.Contains(await CompletionsAt(uri, 1, 21), item => item.Label == "uppercase" && item.Kind == CompletionItemKind.Function);
     }
 

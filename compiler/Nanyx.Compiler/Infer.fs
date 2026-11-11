@@ -43,23 +43,22 @@ let private tupleFieldName index =
 
 let private lookupPrimitive (name: string) =
     match name with
-    | "int" | "Int" -> Some (primitiveType "int")
-    | "float" | "Float" -> Some (primitiveType "float")
-    | "bool" | "Bool" -> Some (primitiveType "bool")
-    | "string" | "String" -> Some (primitiveType "string")
-    | "unit" | "Unit" -> Some (primitiveType "unit")
+    | "int"
+    | "float"
+    | "bool"
+    | "string"
+    | "unit" -> Some (primitiveType name)
     | "undefined" -> Some Unifier.bottomType
     | _ -> None
 
-/// Whether `name` is a type the compiler provides, such as `Int` or `List`, rather than one the program defines.
-/// `Option` is one too, though only as a name to attach the helpers for option-like unions to: there is no type.
+/// Whether `name` is a type the compiler provides, such as `int` or `list`, rather than one the program defines.
+/// The capitalised spellings, `Int` and `List`, are not: `DeprecatedTypeNames` replaces them before inference.
 let private isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
-    || name.Equals("list", StringComparison.OrdinalIgnoreCase)
-    || name.Equals("seq", StringComparison.OrdinalIgnoreCase)
+    || name = "list"
+    || name = "seq"
     || Maps.isTypeName name
     || Sets.isTypeName name
-    || name = "Option"
 
 /// Whether the type `name` is attached to exists; `span` is where the definition's name is written.
 let private ensureAttachedTypeExists (state: InferState) (currentModuleOpt: string option) (name: Identifier) (span: SourceSpan) : Result<unit, Diagnostic list> =
@@ -84,22 +83,22 @@ let private nameSpan (spanOpt: SourceSpan option) (expr: Expression) : SourceSpa
     spanOpt |> Option.defaultValue expr.Span
 
 /// The names definitions can be attached to a value of type `ty` under, nearest first: each alias it is written
-/// with, then the nominal type or the language's name for a built-in type (`String`, `List`). Empty when the type
-/// has no name, such as a union, a record written out in full, or a type that is not known yet.
+/// with, then the nominal type or the built-in type's name (`string`, `list`). Empty when the type has no name, such
+/// as a union, a record written out in full, or a type that is not known yet.
 let rec attachedTypeNames (ty: Ty) : string list =
     match ty with
     | TyAlias(name, _, underlying) -> name :: attachedTypeNames underlying
     | TyNominal(name, _, _) -> [ name ]
-    | TyPrimitive name -> [ string (Char.ToUpperInvariant name.[0]) + name.Substring 1; name ]
-    | TyApply("list", _) -> [ "List" ]
-    | TyApply("seq", _) -> [ "Seq" ]
-    | Maps.MapType _ -> [ Maps.moduleName ]
-    | Sets.SetType _ -> [ Sets.moduleName ]
+    | TyPrimitive name -> [ name ]
+    | TyApply("list", _) -> [ "list" ]
+    | TyApply("seq", _) -> [ "seq" ]
+    | Maps.MapType _ -> [ Maps.typeName ]
+    | Sets.SetType _ -> [ Sets.typeName ]
     | _ -> []
 
 /// The attached definition `x \funcName` calls: `Name.funcName` for the first name of `x`'s type that has one in
 /// scope. None when `funcName` is already qualified, or no name of the type attaches it, so the pipe calls a plain
-/// `funcName` instead. Only names in `env` count, so a module imported with `as` is reached as `\t.String.trim`.
+/// `funcName` instead. Only names in `env` count, so a module imported with `as` is reached as `\t.string.trim`.
 let private tryResolveAttachedFunction (env: TypeEnv) (lhsType: Ty) (funcName: string) : string option =
     if funcName.Contains(".") then
         None
@@ -249,7 +248,7 @@ let rec private typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * Inf
                 let ty, next = typeExprToTy current arg
                 current <- next
                 ty)
-        if name.Equals("list", StringComparison.OrdinalIgnoreCase) then
+        if name = "list" then
             let elementTy =
                 match argTys with
                 | [] -> TyPrimitive "unit"
@@ -822,7 +821,7 @@ let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identif
 
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
 /// is for, its first argument, has a name definitions can be attached to (not a variable, or a record written out).
-/// The others may still be open: the definitions' types settle them, as `Int.fromString` makes a
+/// The others may still be open: the definitions' types settle them, as `int.fromString` makes a
 /// `FromString(int, e)` a `FromString(int, #invalidInt)`.
 let private canSynthesize (argTys: Ty list) =
     match argTys with
@@ -839,7 +838,7 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
     let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
     match argTys, contextMemberTypes state ctxName argTys with
     | forType :: _, Some members ->
-        // The name a definition for the type is attached under: `Point`, `$Money`, `Int`.
+        // The name a definition for the type is attached under: `Point`, `$Money`, `int`.
         let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
         let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, tryResolveAttachedFunction env forType memberName)
         match found |> List.filter (fun (_, _, definition) -> definition.IsNone) |> List.map (fun (memberName, _, _) -> $"'{attachTo}.{memberName}'") with
@@ -1073,7 +1072,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                                   Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors; ChecksOnly = false }
                             Ok (found @ [ None ], { current with PendingContextInstances = pending :: current.PendingContextInstances })
                         | _ -> Error errors
-                    // A hole of a built-in type is written by the backend, not by the prelude's `Int.toString` and the
+                    // A hole of a built-in type is written by the backend, not by the prelude's `int.toString` and the
                     // others, which are written with one.
                     | None, None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
                         Ok (found @ [ Some InstanceBuiltIn ], current)
@@ -1186,7 +1185,7 @@ let private checkLocalComparisons (env: TypeEnv) (state: InferState) (call: Expr
 /// Builds, before the def `name` is generalised, the instances of contexts of more than one parameter that its calls
 /// left to be found and that are now known to be for a type with a name, from that type's attached definitions, as a
 /// call does. Building one can settle the context's other arguments, as a `FromString(int, e)` built from
-/// `Int.fromString` makes `e` the `#invalidInt` it gives back, and the def's type must have them settled, not be
+/// `int.fromString` makes `e` the `#invalidInt` it gives back, and the def's type must have them settled, not be
 /// generic in them. The others are left to `resolvePendingInstances`.
 let private synthesizeSettledInstances (env: TypeEnv) (state: InferState) (name: Identifier) : Result<InferState, Diagnostic list> =
     let settled, others =
@@ -1488,7 +1487,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     |> Result.map (fun (typedIterable, afterIterable) ->
                         match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
                         | TyApply(("seq" | "list" | "gen") as sequence, [ elementTy ]) -> (elementTy, sequence = "gen"), afterIterable
-                        // A map's elements are its entries, each a key and its value, in the order of `Map.toList`.
+                        // A map's elements are its entries, each a key and its value, in the order of `map.toList`.
                         | Maps.MapType(key, value) -> (tupleRecordType [ key; value ], false), afterIterable
                         | Sets.SetType element -> (element, false), afterIterable
                         | _ ->
@@ -2294,7 +2293,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match baseExpr.Kind with
         | IdentifierExpr baseName ->
             let qualifiedName = $"{baseName}.{memberName}"
-            match TypeEnv.tryFind qualifiedName env with
+            // A value named as a built-in type is, as `list` in `{ list -> list.length }`, not the type.
+            let isValue = isBuiltInTypeName baseName && (TypeEnv.tryFind baseName env).IsSome
+            match if isValue then None else TypeEnv.tryFind qualifiedName env with
             | Some scheme when not (referenceErrors qualifiedName expr scheme state).IsEmpty -> Error (referenceErrors qualifiedName expr scheme state)
             | Some scheme ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
@@ -2321,7 +2322,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         else
             Error errors
 
-/// `expr`, a call of the map `map` with `args`: a lookup, read as the call `Map.get(map, args...)` (see `Maps`) and
+/// `expr`, a call of the map `map` with `args`: a lookup, read as the call `map.get(map, args...)` (see `Maps`) and
 /// recorded in `ReadAs` to be written as it. The call keeps the node of `expr`, which is what its types and the
 /// instances it finds are recorded by.
 and private inferMapLookup (env: TypeEnv) (state: InferState) (expr: Expression) (map: Expression) (spanOpt: SourceSpan option) (args: Expression list) =

@@ -18,23 +18,23 @@ def splitWords: string -> list(string) = { input ->
 def capitalize: string -> string = { word ->
   match word \chars
     | [] -> ""
-    | [first, ...rest] -> first \toUpper ++ (rest \String.join("") \toLower)
+    | [first, ...rest] -> first \toUpper ++ (rest \string.join("") \toLower)
 }
 
 export def rejoin: (list(string), Casing) -> string = { words, casing ->
   match casing
-    | #kebab -> words \map { .toLower } \String.join("-")
-    | #snake -> words \map { .toLower } \String.join("_")
-    | #pascal -> words \map(capitalize) \String.join("")
-    | #title -> words \map(capitalize) \String.join(" ")
+    | #kebab -> words \map { .toLower } \string.join("-")
+    | #snake -> words \map { .toLower } \string.join("_")
+    | #pascal -> words \map(capitalize) \string.join("")
+    | #title -> words \map(capitalize) \string.join(" ")
     | #camel ->
       match words
         | [] -> ""
-        | [first, ...rest] -> first \toLower ++ (rest \map(capitalize) \String.join(""))
+        | [first, ...rest] -> first \toLower ++ (rest \map(capitalize) \string.join(""))
     | #sentence ->
       match words
         | [] -> ""
-        | [first, ...rest] -> capitalize(first) ++ " " ++ (rest \map { .toLower } \String.join(" "))
+        | [first, ...rest] -> capitalize(first) ++ " " ++ (rest \map { .toLower } \string.join(" "))
 }
 
 export def convert: (string, Casing) -> string = { input, casing ->
