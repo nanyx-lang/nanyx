@@ -28,6 +28,10 @@ npm run check    # type-check .astro and .ts files
 - `src/components/` — layout pieces. `SearchDialog.tsx` is the only React
   island; everything else is static HTML with small inline scripts.
 - `src/styles/global.css` — Tailwind setup and site styles.
+- `vercel.json` — Vercel settings. `ignoreCommand` skips a deployment when a
+  commit changes nothing the site is built from: `docs/`,
+  `extension/syntaxes/` and `examples/`. If the site starts reading files from
+  another directory outside `docs/`, add it there.
 
 ## Machine-readable output
 
