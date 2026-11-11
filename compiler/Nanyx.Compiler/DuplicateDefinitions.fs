@@ -1,5 +1,5 @@
 /// A module defines each top-level name once (#202). Values and types are named apart, so a def and a type may share
-/// a name. An attached def's name has its type in it (`Option.map`, `List.map`), and a def in a `module name =` block
+/// a name. An attached def's name has its type in it (`list.map`, `string.map`), and a def in a `module name =` block
 /// is lifted to the top level under its qualified name, so neither is mistaken for another of the same short name.
 module NyxCompiler.DuplicateDefinitions
 
