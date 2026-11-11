@@ -1937,9 +1937,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | [] ->
                 let elementTy, nextState = freshVar current
                 Ok (mkTypedExpr expr (listType elementTy) None None None, nextState)
-            | head :: tail ->
-                let constrained = tail |> List.fold (fun st ty -> addConstraint head.Type ty.Type st) current
-                Ok (mkTypedExpr expr (listType head.Type) None None None, constrained)
+            | typedItems ->
+                // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
+                let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)
+                Ok (mkTypedExpr expr (listType elementTy) None None None, constrained)
         else
             Error errors
     | TagExpr(name, payloadOpt) ->

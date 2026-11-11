@@ -4,12 +4,13 @@ module NyxCompiler.BranchJoin
 open NyxCompiler
 open NyxCompiler.InferState
 
-/// The type of an `if` or `match` whose branches have the given types.
+/// The type of an `if` or `match` whose branches have the given types, or of a list literal's elements.
 ///
 /// When every branch is a tag (or a union of tags), the tags are collected into one union instead of
 /// being forced to agree, so `if c then #some(x) else #none` is `#some(a) | #none` without an
 /// annotation. Same-named tags unify their payloads, so `#some(1)` against `#some("a")` is still an
-/// error. When every branch is a record (or tuple) with the same fields, the fields are joined one by
+/// error, unless both payloads are tags, which are joined: `#error(#notFound)` against `#error(#denied)` is
+/// `#error(#notFound | #denied)`. When every branch is a record (or tuple) with the same fields, the fields are joined one by
 /// one, so `if c then (s, #some(x)) else (s, #none)` is `(string, #some(a) | #none)`. Otherwise the
 /// branches have to agree as before: every later branch is constrained equal to the first.
 ///
@@ -60,21 +61,33 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
         let unknownBranches =
             if untagged.Length < branchTypes.Length && untagged |> List.forall isUnknown then untagged else []
         if untagged.IsEmpty || not unknownBranches.IsEmpty then
-            // Merge in order of first appearance; an existing tag of the same name unifies with the new one.
-            // A union has one rest, so a second rest variable is unified with the first.
+            // Merge in order of first appearance; an existing tag of the same name unifies with the new one, unless
+            // both payloads are tags, which are joined in turn. A union has one rest, so a second rest variable is
+            // unified with the first.
             let taggedBranches = branchTags |> List.choose id
             let items = List.concat taggedBranches
             let tags = items |> List.filter (function TyTag _ -> true | _ -> false)
             let isJoinRest = function TyVar v -> state.JoinRests.Contains v.Id | _ -> false
             let rests = items |> List.filter (function TyVar _ -> true | _ -> false) |> List.distinct
             let joinRests, ownRests = rests |> List.partition isJoinRest
+            let isTagPayload st payload =
+                match Unifier.unalias (resolveSoFar st payload) with
+                | TyTag _ -> true
+                | TyUnion members -> members |> List.forall isUnionMember
+                | _ -> false
             let merged, nextState =
                 tags
                 |> List.fold (fun (acc: Ty list, st) tag ->
                     let name = match tag with TyTag(n, _) -> n | _ -> ""
-                    match acc |> List.tryFind (function TyTag(n, _) -> n = name | _ -> false) with
-                    | Some existing -> acc, addConstraint existing tag st
-                    | None -> acc @ [ tag ], st) ([], state)
+                    let index = acc |> List.tryFindIndex (function TyTag(n, _) -> n = name | _ -> false)
+                    match index |> Option.map (fun i -> acc.[i]), tag with
+                    | Some (TyTag(_, Some existingPayload)), TyTag(_, Some payload) when
+                        isTagPayload st existingPayload && isTagPayload st payload ->
+                        let joinedPayload, next =
+                            joinBranchTypes rowVars st [ resolveSoFar st existingPayload; resolveSoFar st payload ]
+                        acc |> List.updateAt index.Value (TyTag(name, Some joinedPayload)), next
+                    | Some existing, _ -> acc, addConstraint existing tag st
+                    | None, _ -> acc @ [ tag ], st) ([], state)
             let rest, nextState =
                 match ownRests with
                 | rest :: others -> Some rest, others |> List.fold (fun st other -> addConstraint rest other st) nextState
@@ -109,9 +122,13 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                 | TyRecord fields -> Some fields
                 | _ -> None
             let branchFields = branchTypes |> List.map recordFields
+            // A named record's fields have the types its declaration gives them, so there is nothing to join, and
+            // joining them would lose the name: `[Point(x = 1, y = 2), Point(x = 3, y = 4)]` is a `list(Point)`.
+            let isNamed = match head with TyAlias _ -> true | _ -> false
             match branchFields with
             | Some first :: _ when
                 tail.Length > 0
+                && not isNamed
                 && branchFields |> List.forall (function Some fields -> List.ofSeq fields.Keys = List.ofSeq first.Keys | None -> false) ->
                 let allFields = branchFields |> List.choose id
                 let joined, nextState =

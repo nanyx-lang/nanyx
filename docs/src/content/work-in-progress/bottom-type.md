@@ -30,11 +30,12 @@ solved to when it adds no tags.
   value of that type. Two closed unions agree when one's tags are among the other's, so a closed union can be given
   for `undefined` too, as it could before.
 - **`Equal` is unchanged.** An `Equal` constraint treats it as the empty union it is, so it does not agree with an
-  `int`. The items of a list literal are made equal to the first, so `[1, stop(0)]` is an error.
+  `int`.
 - **It binds no variable.** Given where a variable is expected, it is dropped, and the variable takes what the other
   values given for it are. The order constraints are solved in (newest first) then makes no difference.
 - **Branches leave it out.** `joinBranchTypes` (`BranchJoin.fs`) drops the branches of an `if` or `match` whose type
-  is `undefined`, and joins the rest. The whole is `undefined` only when every branch is.
+  is `undefined`, and joins the rest. The whole is `undefined` only when every branch is. The items of a list literal
+  are joined the same way, so `[1, stop(0)]` is a `list(int)`.
 
 ## How it is shown
 
@@ -56,5 +57,4 @@ As `undefined`, the name an annotation writes, in hovers, signatures and message
   statements of blocks.
 - **Inferred divergence.** A function that never returns but is not annotated, such as `def loop = { x -> loop(x) }`,
   is inferred as `a -> b`, not `a -> undefined`, so calls to it are not seen as diverging.
-- **List literals and other `Equal` constraints.** `[1, panic("x")]` is an error, since a list's items are made equal.
-  Whether those constraints should let `undefined` through too is open.
+- **Other `Equal` constraints.** Whether they should let `undefined` through too is open.
