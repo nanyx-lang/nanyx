@@ -666,7 +666,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | FunctionCall(name, _, args) when scope.Members.ContainsKey name ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
-            this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(scope.Members.[name], atoms)) ty))
+            this.CallValue scope scope.Members.[name] args ty k
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
@@ -691,7 +691,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                         | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
                     toIrType (substitute subst (TyFunc(inputTy, resultTy)))
                 | _ -> tyOf expr
-            let arity = parameterNames target |> List.length
+            let arity = IrType.closureArity (parameterNames target) ty
             match input.Lifted |> Map.tryFind target with
             | Some (LiftedLambda _) ->
                 this.Atoms scope captured (fun atoms ->
@@ -711,7 +711,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             // A call through a function value in a parameter or local.
             let ty = tyOf expr
             match scope.Vars.[name] with
-            | { Type = IrFunction _ } as var -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(var, atoms)) ty))
+            | { Type = IrFunction _ } as var -> this.CallValue scope var args ty k
             | var -> cannot $"a call to '{name}', a value of type {IrType.show var.Type}"
         | FunctionCall(name, _, args) when definitions.ContainsKey name && not (isFunction name) && not (flattenCallArgs args).IsEmpty ->
             // A call through a function value a top-level value holds. The value is evaluated once, into a local, which
@@ -723,7 +723,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | None -> cannot $"a call to '{name}' whose type is not known"
             let value = mk (Call(callee name instanceTy, [])) (toIrType instanceTy)
             let closure = newVar (uniqueName name) Local value.Type
-            let body = this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(closure, atoms)) ty))
+            let body = this.CallValue scope closure args ty k
             mk (Let(closure, value, body)) body.Type
         | FunctionCall(name, _, args) when input.Lifted.ContainsKey name ->
             // A `rec` local function calling itself, directly, with its environment passed on.
@@ -858,7 +858,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let key = contextMemberKey (Some contextType) memberName
             let ty = tyOf expr
             match scope.Members |> Map.tryFind key with
-            | Some memberVar -> this.Atoms scope (flattenCallArgs args) (fun atoms -> k (mk (CallClosure(memberVar, atoms)) ty))
+            | Some memberVar -> this.CallValue scope memberVar args ty k
             | None -> cannot $"the context member {key}, which is not in scope"
         | ContextMemberAccess(contextType, memberName) ->
             // `C(T).m`: the member of that instance of the context as a value.
@@ -948,7 +948,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             | Some _, Some ty when (freeVars ty).IsEmpty -> (wrapper, [ toIrType ty ]), ty
             | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
         let name = request key subst (WrapperCalling(wrapped, wrappedTy))
-        mk (MakeClosure(name, parameterNames wrapper |> List.length, [])) (toIrType wrappedTy)
+        mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) (toIrType wrappedTy), [])) (toIrType wrappedTy)
 
     /// The type of `expr` where it is: a name in scope has its variable's type, and a field of one the field's, which
     /// may be more than the type checker recorded at the node (for a parameter lambda lifting annotated, say).
@@ -994,6 +994,49 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`.
     member this.Record (scope: Scope) (fields: (string * Expression) list) (ty: IrType) (k: Expr -> Expr) : Expr =
         this.Atoms scope (List.map snd fields) (fun atoms -> k (mk (MakeRecord(List.zip (List.map fst fields) atoms)) ty))
+
+    /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple
+    /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it.
+    member this.CallValue (scope: Scope) (closure: Var) (args: Expression list) (ty: IrType) (k: Expr -> Expr) : Expr =
+        let call atoms = k (mk (CallClosure(closure, atoms)) ty)
+        let elements =
+            match closure.Type with
+            | IrFunction(input, _) -> IrType.tupleElements input
+            | _ -> None
+        match elements, flattenCallArgs args with
+        | Some elements, [ tuple ] ->
+            this.Atoms scope [ tuple ] (fun atoms ->
+                let rec loadElements (remaining: (int * IrType) list) (acc: Atom list) =
+                    match remaining with
+                    | [] -> call (List.rev acc)
+                    | (slot, elementTy) :: rest ->
+                        bindTemp (mk (Field(atoms.Head, slot)) elementTy) (fun atom -> loadElements rest (atom :: acc))
+                loadElements elements [])
+        | _, flatArgs -> this.Atoms scope flatArgs call
+
+    /// The parameters a lifted function takes for its parameters `names` of types `tys` (its environment aside), and
+    /// how to bind those names around its body. A lone parameter whose type is a tuple takes the tuple's elements, which
+    /// the body then has as one tuple again (see `IrType.tupleElements`).
+    member private this.ValueParameters (names: string list) (tys: IrType list) : Var list * (Expr -> Expr) * Var list =
+        let tupleElements =
+            match tys with
+            | [ ty ] -> IrType.tupleElements ty
+            | _ -> None
+        match names, tys, tupleElements with
+        | [ name ], [ tupleTy ], Some elementTys ->
+            let elements = elementTys |> List.mapi (fun index (_, ty) -> newVar (uniqueName $"{name}_{index}") Param ty)
+            let tuple = newVar (uniqueName name) Local tupleTy
+            // Each element in its slot of the tuple, under its position's name.
+            let fieldValues =
+                List.zip elementTys elements
+                |> List.mapi (fun index ((slot, _), element) -> slot, (string index, AVar element))
+                |> List.sortBy fst
+                |> List.map snd
+            let bind (body: Expr) = mk (Let(tuple, mk (MakeRecord fieldValues) tupleTy, body)) body.Type
+            elements, bind, [ tuple ]
+        | _ ->
+            let parameters = List.map2 (fun name ty -> newVar (uniqueName name) Param ty) names tys
+            parameters, id, parameters
 
     /// Lowers `expr` in tail position: the whole of what is left to do.
     member this.Tail (scope: Scope) (expr: Expression) : Expr = this.Complex scope expr id
@@ -1288,9 +1331,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | None -> cannot "a lambda without a type"
             let environment = IrRecord(("0", IrInt) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
             let parameterTys, resultTy = this.LiftedParameterTypes name lambdaTy
-            let parameters =
-                parameterOf parameterNames.Head environment
-                :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
+            let environmentParameter = parameterOf parameterNames.Head environment
+            let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
             // The owner's context members are bound from the environment with what else it captures.
             let capturedMembers =
                 let contextParameters, aliases = input.ContextParameters |> Map.tryFind owner |> Option.defaultValue ([], Map.empty)
@@ -1299,17 +1341,17 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     let otherNames = aliases |> Map.filter (fun _ key -> key = parameter.Key) |> Map.keys |> List.ofSeq
                     parameter.Name, parameter.Key :: otherNames)
                 |> Map.ofList
-            make parameters (toIrType resultTy) (this.Tail { scopeOf parameters with CapturedMembers = capturedMembers } body)
+            let scope = { scopeOf (environmentParameter :: named) with CapturedMembers = capturedMembers }
+            make (environmentParameter :: valueParameters) (toIrType resultTy) (bind (this.Tail scope body))
         | WrapperCalling(wrapped, instanceTy) ->
             // Takes an environment, ignores it, and calls the function with the rest.
             if input.ContextParameters.ContainsKey wrapped then cannot $"a wrapper of '{wrapped}', which requires contexts"
             let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail instanceTy true
             let environment = IrRecord [ "0", IrInt ]
-            let parameters =
-                parameterOf parameterNames.Head environment
-                :: List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames.Tail parameterTys
-            let call = mk (Call(callee wrapped instanceTy, parameters.Tail |> List.map AVar)) (toIrType resultTy)
-            make parameters (toIrType resultTy) call
+            let environmentParameter = parameterOf parameterNames.Head environment
+            let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
+            let call = mk (Call(callee wrapped instanceTy, named |> List.map AVar)) (toIrType resultTy)
+            make (environmentParameter :: valueParameters) (toIrType resultTy) (bind call)
 /// Lowers every definition that is not generic, the start function, and the specialisations and lifted functions they
 /// need, and runs `finish` over each function (the emitter, which can still fail). A generic definition exists only as
 /// its specialisations. What cannot be lowered or finished is in `Failures`, where it is written as far as is known.
