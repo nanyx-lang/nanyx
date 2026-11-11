@@ -2186,11 +2186,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 arms
                 |> List.choose (fun (patterns, _) ->
                     if index < patterns.Length then Some patterns.[index] else None)
-            // A scrutinee's type may still be a variable here (a call's result, a local bound to one). For the
-            // exhaustiveness check it is resolved against the constraints gathered so far, and before the arms
-            // add theirs: a lone `#some(_)` arm would otherwise narrow the variable to that tag first and the
-            // check would pass silently (#61).
-            let resolvedScrutineeTypes = scrutineeTypes |> List.map (resolveSoFar current >> Unifier.unalias)
+            // For the exhaustiveness check, the scrutinees' types are resolved before the arms add their constraints.
+            let resolvedScrutineeTypes = ScrutineeRests.resolve env current scrutineeTypes
             let mutable scrutineeOverrides: Map<int, Ty> = Map.empty
             for (index, scrutineeTy) in scrutineeTypes |> List.indexed do
                 // The arms describe the scrutinee's union, payloads included (`ArmUnion`). With a catch-all arm they
@@ -2274,26 +2271,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             typedArms <- typedArms @ [ (typedPatterns, typedExpr) ]
                         | Error err -> errors <- err
             if errors.IsEmpty then
-                let hasRestUnion =
-                    resolvedScrutineeTypes
-                    |> List.exists (function
-                        | TyUnion items -> items |> List.exists (function TyVar _ -> true | _ -> false)
-                        | _ -> false)
-                let restError =
-                    if hasRestUnion then
-                        let hasCatchAll =
-                            arms
-                            |> List.exists (fun (patterns, _) ->
-                                patterns
-                                |> List.exists (function
-                                    | Kind (WildcardPattern | ElsePattern | IdentifierPattern _) -> true
-                                    | _ -> false))
-                        if hasCatchAll then
-                            None
-                        else
-                            Some (Diagnostics.at DiagnosticCodes.MissingCatchAllArm headSpan "Tag union rest parameters require a catch-all match arm")
-                    else
-                        None
+                let restError = ScrutineeRests.missingCatchAll resolvedScrutineeTypes arms headSpan
                 let exhaustivenessErrors =
                     if restError.IsSome then
                         []

@@ -723,8 +723,13 @@ module Unifier =
                             | _ -> unifyEqual false origin l r rest
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
                         // there too: `list($Person)` is assignable to `list((name: string))`, but not the reverse.
-                        // Values are immutable, so a type's arguments are covariant; a function's argument is
-                        // contravariant, since the function is given values of the type it expects.
+                        // Values are immutable, so a type's arguments are covariant, and so are a record's fields:
+                        // the arguments of `f(a, b)` are one tuple, each item given where its parameter is
+                        // expected. A function's argument is contravariant, since the function is given values of
+                        // the type it expects.
+                        | TyRecord lFields, TyRecord rFields when keySet lFields = keySet rFields ->
+                            let pairs = keySet lFields |> Seq.map (fun key -> (lFields.[key], rFields.[key], Assignable, origin)) |> Seq.toList
+                            loop subst (pairs @ rest)
                         | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->
                             loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Assignable, origin)) lArgs rArgs) @ rest)
                         | TyFunc(lArg, lRet), TyFunc(rArg, rRet) ->

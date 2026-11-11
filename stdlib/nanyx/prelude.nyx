@@ -642,7 +642,7 @@ export def Result.mapError: Result(a, e), (e -> f) -> Result(a, f) = {
   | #error(e), f -> #error(f(e))
 }
 
--- Continues with `f` on a success. The errors of both steps are kept.
+-- Continues with `f` on a success. Both steps have the same error type.
 export def Result.bind: Result(a, e), (a -> Result(b, e)) -> Result(b, e) = {
   | #some(value), f -> f(value)
   | #error(e), _ -> #error(e)
@@ -694,7 +694,8 @@ export def mapOption: (#some(a) | r), (a -> b) -> #some(b) | r = {
   | other, _ -> other
 }
 
--- Continues with `f` on the value of `#some`. The other tags of both steps are kept.
+-- Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
+-- and a step given with other tags adds them to it.
 export def bindOption: (#some(a) | r), (a -> #some(b) | r) -> #some(b) | r = {
   | #some(value), f -> f(value)
   | other, _ -> other

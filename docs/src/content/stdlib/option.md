@@ -30,15 +30,22 @@ value \mapOption { .length }
 # bind
 
 ```nanyx
-bindOption: ((#some(a) | r), (a -> (#some(b) | s))) -> (#some(b) | r | s)
+bindOption: ((#some(a) | r), (a -> (#some(b) | r))) -> (#some(b) | r)
 ```
 
-Chains option-producing operations.
+Chains option-producing operations. The result has the other tags of both steps: `r` stands for all of them, and each step adds its own.
 
 ```nanyx
 def a: (#some(string) | #notFound) = #some("42")
 def b = a \bindOption(Int.fromString) -- b: (#some(int) | #notFound | #invalidInt)
+
+match b
+  | #some(n) -> "the number {n}"
+  | #notFound -> "nothing to read"
+  | #invalidInt -> "not a number"
 ```
+
+A function that is itself generic in both steps cannot say so yet: a union has one rest variable, so `#some(b) | r | s` is not a type ([#680](https://github.com/nanyx-lang/nanyx/issues/680)).
 
 ---
 

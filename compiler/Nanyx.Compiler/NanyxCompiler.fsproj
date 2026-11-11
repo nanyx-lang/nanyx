@@ -28,6 +28,7 @@
     <Compile Include="Except.fs" />
     <Compile Include="TypeHoles.fs" />
     <Compile Include="ArmUnion.fs" />
+    <Compile Include="ScrutineeRests.fs" />
     <Compile Include="InterpolationHoles.fs" />
     <Compile Include="WellKnownContexts.fs" />
     <Compile Include="EqualityOperators.fs" />
