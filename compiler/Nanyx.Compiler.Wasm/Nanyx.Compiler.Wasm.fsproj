@@ -15,6 +15,7 @@
     <Compile Include="Wat.fs" />
     <Compile Include="CoreIr.fs" />
     <Compile Include="CoreIrFacts.fs" />
+    <Compile Include="CoreIrLowerTypes.fs" />
     <Compile Include="CoreIrLower.fs" />
     <Compile Include="CoreIrDrop.fs" />
     <Compile Include="CoreIrEquality.fs" />
