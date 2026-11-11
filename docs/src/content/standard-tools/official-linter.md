@@ -104,8 +104,13 @@ The rule (`noTagInCommon`) reports `==` or `!=` on two values whose types are cl
 ## Unreachable code path
 
 ```nanyx
--- Linter warning: unreachable code
+def f: int -> int = { x ->
+  panic("bad input")
+  x + 1 -- Linter warning: this code never runs: `panic` never returns
+}
 ```
+
+The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `panic`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
 
 ## Recursion not in tail position
 

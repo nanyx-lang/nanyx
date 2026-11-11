@@ -6,6 +6,12 @@ order: 16
 
 In Nanyx, errors are values: a function that can fail says so in its return type, using tag unions, so callers must handle the failure cases. There is no catchable exception mechanism. A program can still _panic_ on an unrecoverable failure (such as running out of memory), but a panic is not something code is expected to catch or recover from.
 
+To panic on purpose, call the prelude's `panic` with a message. It writes `panic: ` and the message to standard error and ends the program with exit code 1. It never returns, so its type is [`undefined`](./types#top-and-bottom-types) and a call to it fits wherever a value is expected:
+
+```nanyx
+def half: int -> int = { n -> if n % 2 == 0 then n / 2 else panic("{n} is odd") }
+```
+
 # Result types
 
 In Nanyx, functions that can fail return a result type using tag unions:

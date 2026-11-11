@@ -216,7 +216,9 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > export, or a member of such a context, that no entry of `References` names from outside the definition itself. A
 > call that makes a value of a type (`Point(x = 1)`) records a reference to the type for it. The `SemanticModel`
 > carries `ContextInstances`, so that a def an instance built from attached definitions picks up counts as used; the
-> call to `@entry`'s def that `applyAttributes` adds is a reference like any other. The rules for unused and
+> call to `@entry`'s def that `applyAttributes` adds is a reference like any other. Its seventh is `unreachableCode`
+> ([#498](https://github.com/nanyx-lang/nanyx/issues/498)): the statements of a block after one whose type in `Types`
+> is the [bottom type](./bottom-type), `undefined`. The rules for unused and
 > unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:

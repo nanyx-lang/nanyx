@@ -4,9 +4,9 @@ description: "`undefined`, the type of an expression that never gives a value, a
 order: 23
 ---
 
-> **Status: in progress.** The type checker has `undefined`, and annotations can name it. Still to come: a
-> `panic` in the prelude that stops the program, and a linter rule for code after an expression that never gives a
-> value ([#498](https://github.com/nanyx-lang/nanyx/issues/498)).
+> **Status: in progress.** The type checker has `undefined`, and annotations can name it. The prelude's `panic`
+> returns it, and the official linter's `unreachableCode` rule reports the statements after one of its type
+> ([#498](https://github.com/nanyx-lang/nanyx/issues/498)). Open questions are [below](#open-questions).
 
 ## What it is
 
@@ -39,3 +39,22 @@ solved to when it adds no tags.
 ## How it is shown
 
 As `undefined`, the name an annotation writes, in hovers, signatures and messages.
+
+## What is built on it
+
+- **`panic`**, in the prelude: `string -> undefined`. It writes `panic: ` and its message on a line to standard
+  error, then calls the intrinsic `__nanyx_exit(1)`, `int -> undefined`, which the backend lowers to WASI's
+  `proc_exit` followed by `unreachable`. Panicking is not an effect, so `panic` needs no context.
+- **The `unreachableCode` rule** (`Linters.fs`) looks at every block of the module. The first statement whose type
+  is `undefined` (an expression, or the value a def binds) that is not the block's last makes the rest of the block
+  unreachable, and they are reported together, with a fix that removes them when the statement before them is not a
+  def.
+
+## Open questions
+
+- **Arguments after one that never returns.** In `f(panic("a"), g())`, `g()` never runs. The rule only looks at the
+  statements of blocks.
+- **Inferred divergence.** A function that never returns but is not annotated, such as `def loop = { x -> loop(x) }`,
+  is inferred as `a -> b`, not `a -> undefined`, so calls to it are not seen as diverging.
+- **List literals and other `Equal` constraints.** `[1, panic("x")]` is an error, since a list's items are made equal.
+  Whether those constraints should let `undefined` through too is open.

@@ -6,6 +6,18 @@ module prelude
 -- library included. A module's own definitions and its explicit imports take precedence over the
 -- names here, so a module can define its own `proc`.
 
+-- Stopping --------------------------------------------------------------------------------------
+
+-- Stops the program: writes `panic: ` and `message` on a line to standard error, and exits with
+-- code 1. It never returns, so its result is `undefined` and a call fits wherever a value of any
+-- type is expected: `if n > 0 then n else panic("n must be positive")` is an `int`.
+export def panic: string -> undefined = { message ->
+  __nanyx_write_stderr("panic: ")
+  __nanyx_write_stderr(message)
+  __nanyx_write_stderr(__nanyx_string_from_byte(10))
+  __nanyx_exit(1)
+}
+
 -- Numbers ---------------------------------------------------------------------------------------
 
 -- The value of the ASCII digit `b`, or -1 when `b` is not one.

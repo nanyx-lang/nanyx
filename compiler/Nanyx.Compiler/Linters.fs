@@ -138,6 +138,13 @@ module internal SyntaxTree =
             | _ -> None)
         |> Set.ofList
 
+    /// The blocks of `expr` and of everything within it, each as its statements.
+    let rec blocksWithin (expr: Expression) : Statement list list =
+        let children, statements = childrenOf expr
+        (if statements.IsEmpty then [] else [ statements ])
+        @ (children |> List.collect blocksWithin)
+        @ (statements |> List.collect ofStatement |> List.collect blocksWithin)
+
 /// The edits the official linter's fixes make.
 module private SourceEdits =
     /// An edit that removes what `span` covers with its lines: from the start of its first line to the end of its
@@ -164,13 +171,6 @@ module UnusedBindings =
           DefaultSeverity = Severity.Warning
           Description =
             "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported." }
-
-    /// The blocks of `expr` and of everything within it, each as its statements.
-    let rec private blocksWithin (expr: Expression) : Statement list list =
-        let children, statements = SyntaxTree.childrenOf expr
-        (if statements.IsEmpty then [] else [ statements ])
-        @ (children |> List.collect blocksWithin)
-        @ (statements |> List.collect SyntaxTree.ofStatement |> List.collect blocksWithin)
 
     /// The fix for an unused `symbol`. A def is removed, unless it is one of the defs a destructuring def stands for
     /// (they share its span), where removing it would remove the others too. Those, and any other name, become `_`.
@@ -207,7 +207,7 @@ module UnusedBindings =
         let removableDefs =
             model.Syntax
             |> List.collect SyntaxTree.ofItem
-            |> List.collect blocksWithin
+            |> List.collect SyntaxTree.blocksWithin
             |> List.concat
             |> List.filter (function Kind (DefStatement _) -> true | _ -> false)
             |> List.groupBy (fun statement -> statement.Span)
@@ -635,17 +635,63 @@ module NoTagInCommon =
                 | _ -> None
             | _ -> None)
 
+/// The official linter's `unreachableCode` rule: the statements of a block after one that never gives a value, whose
+/// type is `undefined` (a call to `panic`, say). They can never run. It is reported once per block, at the statements
+/// from the first that never runs to the end of the block.
+module UnreachableCode =
+    let rule =
+        { Id = "unreachableCode"
+          Title = "Unreachable code"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "Statements of a block after one that never gives a value, such as a call to `panic`, whose type is `undefined`. They can never run." }
+
+    /// Why `expr`, whose type is `undefined`, means what follows never runs.
+    let private whyNever (expr: Expression) =
+        match expr.Kind with
+        | FunctionCall(name, _, _)
+        | Pipe(_, name, _, _) -> $"`{name}` never returns"
+        | _ -> "the statement before it never gives a value"
+
+    let lint (model: SemanticModel) : Report list =
+        let never (expr: Expression) =
+            model.Types |> Map.tryFind expr.Id |> Option.exists Unifier.isBottom
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.blocksWithin
+        |> List.choose (fun statements ->
+            statements
+            |> List.indexed
+            |> List.tryPick (fun (index, statement) ->
+                match SyntaxTree.ofStatement statement with
+                | [ value ] when index < statements.Length - 1 && never value -> Some (index, statement, value)
+                | _ -> None)
+            |> Option.map (fun (index, diverging, value) ->
+                let unreachable = statements |> List.skip (index + 1)
+                let span = SourceSpan.between (List.head unreachable).Span (List.last unreachable).Span
+                // Removing them would leave the block ending with a def, which is an error (NYX0220).
+                let fixes =
+                    match diverging.Kind with
+                    | ExprStatement _ -> [ { Title = "Remove the unreachable code"; Edits = [ SourceEdits.removal model.Source span ] } ]
+                    | _ -> []
+                { Rule = rule.Id
+                  Span = span
+                  Message = $"This code never runs: {whyNever value}"
+                  Related = [ diverging.Span, "never gives a value" ]
+                  Fixes = fixes }))
+        |> List.sortBy (fun report -> report.Span.Start)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
-              UnusedPrivateDefinitions.rule ]
+              UnusedPrivateDefinitions.rule; UnreachableCode.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
-                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model }
+                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.
