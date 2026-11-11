@@ -83,21 +83,25 @@ let ``Run - ++ on a long list does not overflow the stack`` () =
     // `++` copied its first list by calling itself once per cell, which ran out of stack (#558). The list of strings
     // goes through the copy that takes a reference to each element.
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def build: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else build(n - 1, [n, ...acc]) }\n" +
-        "def words: int, list(string) -> list(string) = { n, acc ->\n" +
-        "  if n == 0 then acc else words(n - 1, [\"w{n}\", ...acc])\n" +
-        "}\n" +
-        "def xs = build(1000000, []) ++ [0]\n" +
-        "def ws = words(200000, []) ++ [\"end\"]\n" +
-        "println(\"{List.length(xs)} {List.length(ws)}\")\n" +
-        "match List.last(xs)\n" +
-        "  | #some(n) -> println(\"last {n}\")\n" +
-        "  | #emptyList -> println(\"empty\")\n" +
-        "match List.last(ws)\n" +
-        "  | #some(w) -> println(\"last {w}\")\n" +
-        "  | #emptyList -> println(\"empty\")\n"
+        """import nanyx/console
+
+def build: int, list(int) -> list(int) = { n, acc -> if n == 0 then acc else build(n - 1, [n, ...acc]) }
+def words: int, list(string) -> list(string) = { n, acc ->
+  if n == 0 then acc else words(n - 1, ["w{n}", ...acc])
+}
+def xs = build(1000000, []) ++ [0]
+def ws = words(200000, []) ++ ["end"]
+@entry
+def main = {
+  println("{list.length(xs)} {list.length(ws)}")
+  match list.last(xs)
+    | #some(n) -> println("last {n}")
+    | #emptyList -> println("empty")
+  match list.last(ws)
+    | #some(w) -> println("last {w}")
+    | #emptyList -> println("empty")
+}
+"""
     runSource source |> assertRan "1000001 200001\nlast 0\nlast end\n"
 
 [<Fact>]
