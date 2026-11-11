@@ -362,6 +362,55 @@ let memoryCheckFunctions (heapBase: int) (messageOffset: string -> int) =
             ")" ] ]
     |> String.concat "\n"
 
+/// A function `name` for `a ++ b` on lists: it copies the cells of `a`, in order, in front of `b`, which it takes
+/// over and shares (lists being immutable). `copyHead` runs on each head before it goes into its copy, to take a
+/// reference to it when the elements are on the heap. It walks `a` in a loop, writing each new cell's tail once the
+/// next cell exists, so a long `a` does not run out of stack.
+let listConcatFunction (name: string) (copyHead: string list) =
+    lines
+        [ yield $"(func ${name} (param $a i32) (param $b i32) (result i32)"
+          yield "  (local $result i32)"
+          yield "  (local $last i32)"
+          yield "  (local $cell i32)"
+          yield "  local.get $b"
+          yield "  local.set $result"
+          yield "  block $done"
+          yield "    loop $copy"
+          yield "      local.get $a"
+          yield "      i32.eqz"
+          yield "      br_if $done"
+          yield "      local.get $a"
+          yield "      i32.load"
+          yield! copyHead |> List.map (fun line -> "      " + line)
+          yield "      i32.const 0"
+          yield $"      call ${Helpers.listCons}"
+          yield "      local.set $cell"
+          yield "      local.get $last"
+          yield "      if"
+          yield "        local.get $last"
+          yield "        local.get $cell"
+          yield "        i32.store offset=4"
+          yield "      else"
+          yield "        local.get $cell"
+          yield "        local.set $result"
+          yield "      end"
+          yield "      local.get $cell"
+          yield "      local.set $last"
+          yield "      local.get $a"
+          yield "      i32.load offset=4"
+          yield "      local.set $a"
+          yield "      br $copy"
+          yield "    end"
+          yield "  end"
+          yield "  local.get $last"
+          yield "  if"
+          yield "    local.get $last"
+          yield "    local.get $b"
+          yield "    i32.store offset=4"
+          yield "  end"
+          yield "  local.get $result"
+          yield ")" ]
+
 /// The WebAssembly helper functions, keyed by name. The ones named after a compiler intrinsic implement
 /// that intrinsic; the rest back language operators (`+` and `==` on strings, list literals and patterns)
 /// and the allocator they share. Only the helpers a module uses are emitted.
@@ -935,26 +984,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.store"
             "  local.get $cell"
             ")" ]
-      // a ++ b copies the cells of a in front of b (b itself is shared, lists being immutable).
-      Helpers.listConcat,
-      lines
-          [ $"(func ${Helpers.listConcat} (param $a i32) (param $b i32) (result i32)"
-            "  local.get $a"
-            "  i32.eqz"
-            "  if (result i32)"
-            "    local.get $b"
-            "  else"
-            "    local.get $a"
-            "    i32.load"
-            "    local.get $a"
-            "    i32.const 4"
-            "    i32.add"
-            "    i32.load"
-            "    local.get $b"
-            $"    call ${Helpers.listConcat}"
-            $"    call ${Helpers.listCons}"
-            "  end"
-            ")" ] ]
+      Helpers.listConcat, listConcatFunction Helpers.listConcat [] ]
     |> Map.ofList
 
 /// The WebAssembly helper functions, keyed by name, with the free-list heads at `heapBase` (see `helpersWith`).

@@ -281,24 +281,7 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                   ")" ] ])
     let listConcats =
         drops.ListConcats
-        |> List.map (fun element ->
-            lines [
-                $"(func ${listConcatName element} (param $a i32) (param $b i32) (result i32)"
-                "  local.get $a"
-                "  i32.eqz"
-                "  if (result i32)"
-                "    local.get $b"
-                "  else"
-                "    local.get $a"
-                "    i32.load"
-                $"    call ${dupName element}"
-                "    local.get $a"
-                "    i32.load offset=4"
-                "    local.get $b"
-                $"    call ${listConcatName element}"
-                $"    call ${Helpers.listCons}"
-                "  end"
-                ")" ])
+        |> List.map (fun element -> listConcatFunction (listConcatName element) [ $"call ${dupName element}" ])
     let environmentDrops =
         drops.Environments
         |> List.distinctBy environmentDropName

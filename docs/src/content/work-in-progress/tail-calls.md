@@ -145,8 +145,8 @@ is: `default/nonTailRecursion` reports nothing in `stdlib/nanyx`, which a test c
 (writing a list cell's tail after the recursive call returns, as OCaml and Koka do) would let `list.map` and the
 like be written as plainly as they read, but it is an optimisation and not part of the promise; until it exists,
 the functions that build a list build it in reverse with an accumulator and reverse the result. `++` on lists is
-not yet stack-safe (its runtime helper recurses once per element of its left operand,
-[#558](https://github.com/nanyx-lang/nanyx/issues/558)), so the library does not use it on a list that can be long.
+stack-safe too: its runtime helper copies the cells of its left operand in a loop, writing each new cell's tail once
+the next cell exists ([#558](https://github.com/nanyx-lang/nanyx/issues/558)).
 
 # Plan
 
