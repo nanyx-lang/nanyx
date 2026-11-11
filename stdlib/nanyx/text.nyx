@@ -349,26 +349,26 @@ def charsBefore: string, int, list(string) -> list(string) = { s, stop, acc ->
     else charsBefore(
       s
       start
-      __nanyx_list_cons(String.substring(s, start = start, length = stop - start), acc)
+      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
     )
 }
 
 -- Each character of `s` as a string of its own, in order. A character is one Unicode code point, so
 -- "héllo" has five characters though it is six bytes long. Stack-safe: it works on a string of any
 -- length.
-export def String.chars: string -> list(string) = { s ->
-  charsBefore(s, String.length(s), [])
+export def string.chars: string -> list(string) = { s ->
+  charsBefore(s, string.length(s), [])
 }
 
 -- `s` with its characters (code points, not bytes) in reverse order. It cuts `s` at a character
 -- boundary near its middle and reverses each half, so it never cuts a character in half.
-export def String.reverse: string -> string = { s ->
-  def half = String.length(s) / 2
+export def string.reverse: string -> string = { s ->
+  def half = string.length(s) / 2
   def after = nextCharStart(s, half)
-  def cut = if after < String.length(s) then after else charStart(s, half)
+  def cut = if after < string.length(s) then after else charStart(s, half)
 
   if cut == 0
     then s
-    else String.reverse(String.substring(s, start = cut, length = String.length(s) - cut)) ++
-      String.reverse(String.substring(s, start = 0, length = cut))
+    else string.reverse(string.substring(s, start = cut, length = string.length(s) - cut)) ++
+      string.reverse(string.substring(s, start = 0, length = cut))
 }

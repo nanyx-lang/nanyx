@@ -129,30 +129,30 @@ let ``Run - text lines and words`` () =
 
 [<Fact>]
 let ``Run - text chars takes a string apart by code point`` () =
-    let source =
-        "import nanyx/console\n" +
-        "import nanyx/text\n" +
-        "\n" +
-        "println(String.join(\"abc\" \\chars, \"|\"))\n" +
-        "println(String.join(String.chars(\"héllo\"), \"|\"))\n" +
-        "println(\"{List.length(String.chars(\"héllo\"))} {String.length(\"héllo\")}\")\n" +
-        "println(\"{List.length(String.chars(\"\"))}\")\n" +
-        "println(String.join(String.chars(\"a€b😀c\"), \"|\"))\n" +
-        "println(\"{String.concat(String.chars(\"a€b😀c\")) == \"a€b😀c\"}\")\n"
+    let source = """import nanyx/console
+import nanyx/text
+
+println(string.join("abc" \chars, "|"))
+println(string.join(string.chars("héllo"), "|"))
+println("{list.length(string.chars("héllo"))} {string.length("héllo")}")
+println("{list.length(string.chars(""))}")
+println(string.join(string.chars("a€b😀c"), "|"))
+println("{string.concat(string.chars("a€b😀c")) == "a€b😀c"}")
+"""
     runSource source |> assertRan "a|b|c\nh|é|l|l|o\n5 6\n0\na|€|b|😀|c\ntrue\n"
 
 [<Fact>]
 let ``Run - text reverse turns a string around by code point`` () =
-    let source =
-        "import nanyx/console\n" +
-        "import nanyx/text\n" +
-        "\n" +
-        "println(String.reverse(\"abc\"))\n" +
-        "println(\"héllo\" \\reverse)\n" +
-        "println(String.reverse(\"a€b😀c\"))\n" +
-        "println(String.reverse(\"é€😀\"))\n" +
-        "println(\"[\" ++ String.reverse(\"\") ++ \"]\")\n" +
-        "println(String.reverse(\"x\"))\n"
+    let source = """import nanyx/console
+import nanyx/text
+
+println(string.reverse("abc"))
+println("héllo" \reverse)
+println(string.reverse("a€b😀c"))
+println(string.reverse("é€😀"))
+println("[" ++ string.reverse("") ++ "]")
+println(string.reverse("x"))
+"""
     runSource source |> assertRan "cba\nolléh\nc😀b€a\n😀€é\n[]\nx\n"
 
 [<Fact>]

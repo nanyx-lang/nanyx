@@ -280,19 +280,19 @@ string.words("  one two   three ")
 # chars
 
 ```nanyx
-String.chars: string -> list(string)
+string.chars: string -> list(string)
 ```
 
-Each character of the string as a string of its own, in order. A character is one code point, so a string can have fewer characters than bytes, and `s \chars \String.concat` is `s` again.
+Each character of the string as a string of its own, in order. A character is one code point, so a string can have fewer characters than bytes, and `s \chars \string.concat` is `s` again.
 
 ```nanyx
 "héllo" \chars
 -- ["h", "é", "l", "l", "o"]
 
-List.length(String.chars("héllo"))
+list.length(string.chars("héllo"))
 -- 5
 
-String.chars("")
+string.chars("")
 -- []
 ```
 
@@ -301,13 +301,13 @@ String.chars("")
 # reverse
 
 ```nanyx
-String.reverse: string -> string
+string.reverse: string -> string
 ```
 
 The string with its characters, not its bytes, in reverse order, so a character outside ASCII is never cut in half.
 
 ```nanyx
-String.reverse("héllo")
+string.reverse("héllo")
 -- "olléh"
 ```
 
