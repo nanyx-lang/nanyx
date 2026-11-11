@@ -692,6 +692,7 @@ let primaryExprNoWs =
         attempt workflowReturnExpr
         attempt workflowBindExpr
         workflowKeywordExpr
+        mutExpr
         attempt useInExpr
         attempt unitExpr
         attempt ifExpr  // if-then-else must be early to avoid partial matches
@@ -923,6 +924,7 @@ let pipeExpr =
         (many (attempt (pipeOp .>> wsInline)))
         applyPipes
     |> withExcept pipeLeadingWs
+    |> withAssignment expression
 
 /// An expression that stops at the end of its line, except that a pipe or an `except` may continue it on the lines
 /// after, indented more than the line it starts on (see `continuationWs`).
@@ -934,6 +936,7 @@ let inlinePipeExpr =
             (many (attempt (pipeOp .>> wsInline)))
             applyPipes
         |> withExcept (continuationWs lineIndent)
+        |> withAssignment exprWithoutCrossingNewlines
 
 do inlineExpressionRef := inlinePipeExpr
 

@@ -11,6 +11,7 @@
     <Compile Include="FormatterTests.fs" />
     <Compile Include="TypeDefinitionTests.fs" />
     <Compile Include="LambdaBodyTests.fs" />
+    <Compile Include="MemoryTests.fs" />
     <Compile Include="LineWidthTests.fs" />
     <Compile Include="LexicalTests.fs" />
     <Compile Include="DocCommentTests.fs" />

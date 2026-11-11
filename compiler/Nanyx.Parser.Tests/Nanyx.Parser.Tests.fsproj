@@ -27,6 +27,7 @@
     <Compile Include="Features\Literals\LiteralsTests.fs" />
     <Compile Include="Features\Literals\StringEscapeTests.fs" />
     <Compile Include="Features\Maps\MapLiteralTests.fs" />
+    <Compile Include="Features\Memory\MutationTests.fs" />
     <Compile Include="Features\Matches\MatchTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />

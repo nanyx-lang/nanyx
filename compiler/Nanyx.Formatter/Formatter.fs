@@ -377,7 +377,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | WorkflowBindExpr _
         | WorkflowReturnExpr _ -> true
         | FunctionCall("__with", _, [ _; _ ]) -> true
-        | ForSyntax.Call _ -> true
+        | ForSyntax.Call _
+        | MutSyntax.Call _
+        | AssignSyntax.Call _ -> true
         | _ -> false
 
     and exprBare (position: Position) (e: Expression) : Doc =
@@ -415,6 +417,8 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ForSyntax.Call(iterables, loop, parameters, _) when parameters = List.init iterables.Length (fun index -> (ForSyntax.element (index + 1), None)) ->
             forDoc iterables loop
         | MapSyntax.Call entries -> mapDoc e.Span entries
+        | MutSyntax.Call value -> cat [ text "mut "; expr { full with Tail = position.Tail } value ]
+        | AssignSyntax.Call(target, value) -> cat [ expr operandPosition target; text " := "; expr { full with Tail = position.Tail } value ]
         | FunctionCall(n, nameSpan, args) ->
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
