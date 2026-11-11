@@ -593,11 +593,19 @@ let private checkContextUse (env: TypeEnv) (state: InferState) (name: Identifier
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
 /// is an error only when `reportMissing`.
 let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+    // A function imported under an alias (`c.println`) finds the members of its contexts under the alias too
+    // (`c.write`), as the ambient instance has them, when they are not in scope by their own names.
+    let inScopeAs (memberName: Identifier) =
+        match name.LastIndexOf '.' with
+        | dot when dot > 0 && (TypeEnv.tryFind memberName env).IsNone ->
+            let qualified = $"{name.Substring(0, dot)}.{memberName}"
+            if (TypeEnv.tryFind qualified env).IsSome then qualified else memberName
+        | _ -> memberName
     let requiredMembers =
         contexts
         |> List.map (fun ctx ->
             let members, _ = collectContextMembers state ctx
-            ctx, members |> List.map (fun (memberName, _, _) -> memberName))
+            ctx, members |> List.map (fun (memberName, _, _) -> inScopeAs memberName))
     let isCarried (ctx: TypeExpr) =
         match ctx.Kind with
         | TypeName ctxName
@@ -859,6 +867,9 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
                     let definitionTy, next = instantiate current (TypeEnv.tryFind definition env).Value
                     match Unifier.unify ((memberTy, definitionTy, Equal, span) :: next.Constraints) with
                     | Ok _ -> Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
+                    // The constraints so far fail without this one: that is an error reported where it is, not here.
+                    | Error _ when Result.isError (Unifier.unify next.Constraints) ->
+                        Ok (bound @ [ memberName, definition ], addConstraintAt span memberTy definitionTy next)
                     | Error _ ->
                         fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'")) (Ok ([], state))
         | _ when InterpolationHoles.isHole calleeName -> fail (InterpolationHoles.noInstance forType)
@@ -1015,7 +1026,7 @@ let private derivedInstance
             match failure with
             | StructuralInstances.NoInstanceOf missing -> InterpolationHoles.undeclared (TyVar missing) annotatedDef
             | StructuralInstances.NotAHole -> StructuralInstances.notAHole (InterpolationHoles.requirer calleeName argTys) ctxName argTys.Head
-            | StructuralInstances.HoldsFunction held -> InterpolationHoles.noInstance held
+            | StructuralInstances.HoldsFunction held -> InterpolationHoles.holdsFunction calleeName argTys held
         [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]))
 
 /// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
@@ -1066,6 +1077,13 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                         else None
                     match instanceInScope env current ctxName argTys, wellKnown |> Option.orElseWith derived with
                     | Some written, _ -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    // A value that failed to check has every context, so that the call is not an error too. It has the
+                    // compiler's own `ToString`, so the backend still has a member to pass. A hole of one is written by
+                    // the backend, which reports the error where the hole is.
+                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.contains Unifier.errorType ->
+                        if ctxName = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then
+                            Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
+                        else Ok (found @ [ None ], current)
                     | None, Some resolved -> resolved
                     // A structure with more to settle finds its instance once its type is known: a hole as any hole
                     // does, and another call when the def around it is inferred, if that def does not write its type.

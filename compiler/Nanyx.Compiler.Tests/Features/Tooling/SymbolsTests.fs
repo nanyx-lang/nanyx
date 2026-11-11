@@ -229,11 +229,11 @@ let ``Context members are declared in the context and referred to where it is re
 
 [<Fact>]
 let ``Context members of an imported context are declared in its module`` () =
-    let source = "import nanyx/console\ndef hello: [Console] () -> () = { println(\"hi\") }\n"
+    let source = "import nanyx/console\ndef hello: [Console] () -> () = { write(\"hi\") }\n"
     let consoleSource = (StandardLibrary.tryLoadSource "console").Value.Replace("\r\n", "\n")
     Assert.Equal(
-        Some (ContextMember, "nanyx/console.nyx", offsetOf consoleSource "println:" 0 0),
-        definitionOf (Compiler.compile source) (offsetOf source "println(" 0 2))
+        Some (ContextMember, "nanyx/console.nyx", offsetOf consoleSource "write:" 0 0),
+        definitionOf (Compiler.compile source) (offsetOf source "write(" 0 2))
     Assert.Equal(
         Some (TypeDefinition, "nanyx/console.nyx", offsetOf consoleSource "Console =" 0 0),
         definitionOf (Compiler.compile source) (offsetOf source "[Console]" 0 2))

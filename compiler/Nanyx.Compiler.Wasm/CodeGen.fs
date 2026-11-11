@@ -387,17 +387,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // This is how the runtime-provided `Console` (the functions `nanyx/console` exports) reaches `@entry`.
     // Closure conversion made a wrapper for each such function, so the member is a closure over it.
     let ambientContextMembers =
-        let contextMemberNames =
-            module'
-            |> List.collect (function
-                | Kind (Def (TypeDef(_, modifiers, _, Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
-                    fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
-                | _ -> [])
         if functionContextRequirements.IsEmpty then Map.empty
         else
-            contextMemberNames
-            |> List.filter (fun memberName -> not (functionContextRequirements.ContainsKey memberName))
-            |> List.choose (fun memberName -> functionWrappers |> Map.tryFind memberName |> Option.map (fun wrapper -> memberName, wrapper))
+            LambdaLifting.ambientMemberDefinitions module'
+            |> List.filter (fun (_, definition) -> not (functionContextRequirements.ContainsKey definition))
+            |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> memberName, wrapper))
             |> Map.ofList
 
     let functionTable: FunctionTable =

@@ -266,6 +266,14 @@ module Compiler =
                     fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
                 | _ -> [])
             |> Set.ofList
+        // The members of the contexts without parameters, which an import under an alias defines under it (`c.write`).
+        let plainContextMembers =
+            inlined @ own
+            |> List.collect (function
+                | Kind (Def (TypeDef(_, modifiers, [], Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
+                    fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
+                | _ -> [])
+            |> Set.ofList
         let rootNames =
             own
             |> List.collect (function
@@ -275,6 +283,7 @@ module Compiler =
             referenced.Contains name
             || contextMembers.Contains name
             || (name.Contains "." && referenced.Contains (name.Substring(name.LastIndexOf '.')))
+            || (name.Contains "." && plainContextMembers.Contains (name.Substring(name.LastIndexOf '.' + 1)))
         let rec reach (referenced: Set<string>) (reached: Set<string>) =
             let newlyReached =
                 bodies |> List.filter (fun (name, _) -> not (reached.Contains name) && isReferenced referenced name)

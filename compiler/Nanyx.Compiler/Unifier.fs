@@ -698,9 +698,15 @@ module Unifier =
                 let r = apply subst right
                 if l = r then
                     loop subst rest
-                // A variable takes the error type, as it would any other; anything else agrees with it.
+                // A variable takes the error type, as it would any other; anything else agrees with it. What a call to
+                // a value that failed to check gives back failed to check too: the variables of a function type's
+                // result take the error type, so that a function the result is passed to finds it has every context.
                 elif (isError l || isError r) && not (match l, r with TyVar _, _ | _, TyVar _ -> true | _ -> false) then
-                    loop subst rest
+                    match (if isError l then r else l) with
+                    | TyFunc(_, output) ->
+                        let resultVars = varOccurrences output |> List.distinct |> List.map (fun v -> TyVar v, errorType, Equal, origin)
+                        loop subst (resultVars @ rest)
+                    | _ -> loop subst rest
                 else
                     match kind with
                     | Assignable ->

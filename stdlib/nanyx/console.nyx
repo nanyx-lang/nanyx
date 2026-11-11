@@ -3,26 +3,25 @@ module console
 -- nanyx/console: how a program talks to the terminal.
 --
 -- `Console` is a context. Code that needs the terminal declares `[Console]` and calls its members,
--- which come from whichever `Console` instance its caller supplies. The definitions below are the
--- instance the runtime supplies to the program's entry point (and to the top level of a script):
--- each reads or writes the standard streams through the host, via the compiler intrinsics
--- `__nanyx_write_stdout`, `__nanyx_write_stderr` and `__nanyx_read_stdin_byte`.
+-- which come from whichever `Console` instance its caller supplies. The members are primitives
+-- that take text as it is: `print`, `println`, `eprint` and `eprintln` are written on top of
+-- them, so an instance supplies `write` and `writeError` and gets all four. The definitions of
+-- the members below are the instance the runtime supplies to the program's entry point (and to
+-- the top level of a script): each reads or writes the standard streams through the host, via
+-- the compiler intrinsics `__nanyx_write_stdout`, `__nanyx_write_stderr` and
+-- `__nanyx_read_stdin_byte`.
 
 --| Why reading from standard input gave no line: the input has ended.
 export type IoError = #endOfInput
 
 --| The terminal: standard output, standard error and standard input. Code that needs it declares
   `[Console]`, and its caller supplies an instance; the runtime supplies the one in this module to
-  the program's entry point.
+  the program's entry point. `print`, `println`, `eprint` and `eprintln` write through it.
 export context Console = (
-  --| Writes `text` to standard output.
-  print: string -> ()
-  --| Writes `text` followed by a line break to standard output.
-  println: string -> ()
-  --| Writes `text` to standard error.
-  eprint: string -> ()
-  --| Writes `text` followed by a line break to standard error.
-  eprintln: string -> ()
+  --| Writes `text` to standard output, as it is.
+  write: string -> ()
+  --| Writes `text` to standard error, as it is.
+  writeError: string -> ()
   --| The next line of standard input, without its line break, or `#error(#endOfInput)` when the
     input has ended.
   readLine: () -> #some(string) | #error(IoError)
@@ -32,26 +31,37 @@ export context Console = (
   flush: () -> ()
 )
 
---| Writes `text` to standard output.
-export def print: string -> () = { text ->
+--| Writes `text` to standard output, as it is.
+export def write: string -> () = { text ->
   __nanyx_write_stdout(text)
 }
 
---| Writes `text` followed by a line break to standard output.
-export def println: string -> () = { text ->
-  __nanyx_write_stdout(text)
-  __nanyx_write_stdout(__nanyx_string_from_byte(10))
-}
-
---| Writes `text` to standard error.
-export def eprint: string -> () = { text ->
+--| Writes `text` to standard error, as it is.
+export def writeError: string -> () = { text ->
   __nanyx_write_stderr(text)
 }
 
---| Writes `text` followed by a line break to standard error.
-export def eprintln: string -> () = { text ->
-  __nanyx_write_stderr(text)
-  __nanyx_write_stderr(__nanyx_string_from_byte(10))
+--| Writes `value` to standard output as its `toString` writes it: a string as it is, `print(42)`
+  as `42`, `print([1, 2])` as `[1, 2]`.
+export def print: [Console + ToString(a)] a -> () = { value ->
+  write(toString(value))
+}
+
+--| Writes `value` followed by a line break to standard output, as `print` writes it.
+export def println: [Console + ToString(a)] a -> () = { value ->
+  write(toString(value))
+  write(__nanyx_string_from_byte(10))
+}
+
+--| Writes `value` to standard error, as `print` writes it.
+export def eprint: [Console + ToString(a)] a -> () = { value ->
+  writeError(toString(value))
+}
+
+--| Writes `value` followed by a line break to standard error, as `print` writes it.
+export def eprintln: [Console + ToString(a)] a -> () = { value ->
+  writeError(toString(value))
+  writeError(__nanyx_string_from_byte(10))
 }
 
 --| `line` without a carriage return at its end.
