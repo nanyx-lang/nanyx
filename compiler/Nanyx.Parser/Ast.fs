@@ -394,6 +394,28 @@ module NotSyntax =
 module NegateSyntax =
     let builtIn = "__negate"
 
+/// `mut e` (see the memory page): a call to the built-in "__mut" with `e`. A def whose value it is makes a cell that
+/// holds the value of `e`.
+module MutSyntax =
+    let builtIn = "__mut"
+
+    /// The value a cell is made with.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ value ]) when name = builtIn -> Some value
+        | _ -> None
+
+/// `x := e` (see the memory page): a call to the built-in "__assign" with the cell and its new value. Its name span is
+/// the `:=`.
+module AssignSyntax =
+    let builtIn = "__assign"
+
+    /// What is assigned to, and the value assigned.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ target; value ]) when name = builtIn -> Some (target, value)
+        | _ -> None
+
 module TypeExpr =
     /// A type expression written at `span`.
     let at (span: SourceSpan) (kind: TypeExprKind) : TypeExpr =
