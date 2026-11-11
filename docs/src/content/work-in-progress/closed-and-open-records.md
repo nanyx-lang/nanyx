@@ -145,7 +145,7 @@ offsets, so open records cost code size, not speed.
   reading a field of an unknown value gives, and is printed `(x: int, ...a)`. Unification solves its row as the
   table above says. There is no syntax for it: the parser's `typeRecord` ([Types.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Parser/Types.fs))
   does not accept `...`.
-- **The backend specialises open records.** `bindScheme` in [CoreIrLower.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler.Wasm/CoreIrLower.fs)
+- **The backend specialises open records.** `bindScheme` in [CoreIrLowerTypes.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler.Wasm/CoreIrLowerTypes.fs)
   binds an open record's row to the fields of the record it is used at. An open record still open at code generation
   is reported as not supported.
 
