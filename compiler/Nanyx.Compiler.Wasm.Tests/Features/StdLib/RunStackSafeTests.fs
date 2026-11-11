@@ -111,6 +111,17 @@ let ``Run - String.repeat works 100,000 times`` () =
     runSource (withList body) |> assertRan "200000 100000\nxyxyxyxyxyz\n"
 
 [<Fact>]
+let ``Run - string.chars and string.reverse work on 100,000 characters`` () =
+    let body = """def s = string.repeat("é", 100000)
+match string.chars(s)
+  | [c, ..._] -> println(c)
+  | [] -> println("none")
+println("{string.reverse(s) == s} {string.reverse(string.repeat("ab", 100000)) == string.repeat("ba", 100000)}")
+println("{list.length(string.chars(string.repeat("a€", 50000)))}")
+"""
+    runSource (withList body) |> assertRan "é\ntrue true\n100000\n"
+
+[<Fact>]
 let ``Run - String.split and String.replace work on 20,000 pieces`` () =
     let body =
         "def s = string.repeat(\"a,\", 20000)\n" +

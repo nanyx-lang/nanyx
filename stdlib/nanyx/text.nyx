@@ -6,11 +6,13 @@ module text
 -- `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
 -- `s.trim` is an error.
 --
--- Strings are UTF-8. This first slice works byte by byte: `length` counts bytes (not characters
+-- Strings are UTF-8. Most of this first slice works byte by byte: `length` counts bytes (not characters
 -- or grapheme clusters), indices and widths are byte offsets, `uppercase` and
 -- `lowercase` only change ASCII letters, and the trimming and `words` functions only treat ASCII
 -- whitespace as whitespace. Multi-byte characters pass through unchanged, except that `padStart` and
--- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character.
+-- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars` and
+-- `reverse` work by character, where a character is one Unicode code point: they read each UTF-8
+-- sequence's lead byte, so they never cut a character in half.
 --
 -- Everything here is written over four compiler intrinsics: `__nanyx_string_length`,
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split` and
@@ -322,4 +324,74 @@ def wordsFrom: string, int, list(string) -> list(string) = { s, from, acc ->
 -- The runs of non-whitespace in `s`, in order. Stack-safe: it works however many words there are.
 export def string.words: string -> list(string) = { s ->
   list.reverse(wordsFrom(s, 0, []))
+}
+
+-- Whether byte `b` continues a UTF-8 sequence rather than starting one.
+def isContinuationByte: int -> bool = { b -> b >= 128 and b < 192 }
+
+-- The index of the first byte of the character that byte `i` of `s` belongs to.
+def charStart: string, int -> int = { s, i ->
+  if i > 0 and isContinuationByte(__nanyx_string_byte_at(s, i)) then charStart(s, i - 1) else i
+}
+
+-- The index of the first byte at or after `i` that starts a character (or the length of `s`).
+def nextCharStart: string, int -> int = { s, i ->
+  if isContinuationByte(__nanyx_string_byte_at(s, i)) then nextCharStart(s, i + 1) else i
+}
+
+-- The characters of `s` before byte `stop`, in order, in front of `acc`.
+def charsBefore: string, int, list(string) -> list(string) = { s, stop, acc ->
+  def start = charStart(s, stop - 1)
+
+  if stop <= 0
+    then acc
+    else charsBefore(
+      s
+      start
+      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
+    )
+}
+
+-- Each character of `s` as a string of its own, in order. A character is one Unicode code point, so
+-- "héllo" has five characters though it is six bytes long. Stack-safe: it works on a string of any
+-- length.
+export def string.chars: string -> list(string) = { s ->
+  charsBefore(s, string.length(s), [])
+}
+
+-- The characters of `s` from byte `start` on, last first, in front of `acc`.
+def charsReversedFrom: string, int, list(string) -> list(string) = { s, start, acc ->
+  def stop = nextCharStart(s, start + 1)
+
+  if start >= string.length(s)
+    then acc
+    else charsReversedFrom(
+      s
+      stop
+      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
+    )
+}
+
+-- `pieces` joined two at a time (the first with the second, the third with the fourth, and so on),
+-- last first, in front of `acc`.
+def pairUp: list(string), list(string) -> list(string) = { pieces, acc ->
+  match pieces
+    | [first, second, ...rest] -> pairUp(rest, __nanyx_list_cons(first ++ second, acc))
+    | [last] -> __nanyx_list_cons(last, acc)
+    | [] -> acc
+}
+
+-- `pieces` concatenated end to end, joined in pairs pass by pass, so that each byte is copied only as
+-- many times as the number of pieces can be halved.
+def concatInPairs: list(string) -> string = { pieces ->
+  match pieces
+    | [] -> ""
+    | [piece] -> piece
+    | _ -> concatInPairs(list.reverse(pairUp(pieces, [])))
+}
+
+-- `s` with its characters (code points, not bytes) in reverse order, so it never cuts a character in
+-- half. Stack-safe: it works on a string of any length.
+export def string.reverse: string -> string = { s ->
+  concatInPairs(charsReversedFrom(s, 0, []))
 }
