@@ -38,7 +38,7 @@ let ``A doc comment that documents nothing is reported, with a fix that makes it
     -- Of everything.
   42
 }
-""",
+""".ReplaceLineEndings "\n",
             applyFix (source.ReplaceLineEndings "\n") diagnostic.Fixes.Head)
     | other -> failwith $"Expected one report, got %A{other}"
 
