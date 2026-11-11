@@ -117,9 +117,9 @@ match string.chars(s)
   | [c, ..._] -> println(c)
   | [] -> println("none")
 println("{string.reverse(s) == s} {string.reverse(string.repeat("ab", 100000)) == string.repeat("ba", 100000)}")
-println("{list.length(string.chars(string.repeat("a€", 10000)))}")
+println("{list.length(string.chars(string.repeat("a€", 50000)))}")
 """
-    runSource (withList body) |> assertRan "é\ntrue true\n20000\n"
+    runSource (withList body) |> assertRan "é\ntrue true\n100000\n"
 
 [<Fact>]
 let ``Run - String.split and String.replace work on 20,000 pieces`` () =

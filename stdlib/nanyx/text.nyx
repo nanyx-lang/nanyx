@@ -20,8 +20,7 @@ module text
 -- prelude's `list.reverse`. `++` (concatenation) and `==` on strings are language operators.
 --
 -- Every function here is stack-safe: each one that walks a string calls itself only in tail position,
--- except `reverse`, which halves the string at each step and so recurses only as deep as the
--- number of times its length can be halved. Each works on a string of any length.
+-- so it works on a string of any length.
 
 -- The number of bytes in `s`.
 export def string.length: string -> int = { s ->
@@ -360,15 +359,39 @@ export def string.chars: string -> list(string) = { s ->
   charsBefore(s, string.length(s), [])
 }
 
--- `s` with its characters (code points, not bytes) in reverse order. It cuts `s` at a character
--- boundary near its middle and reverses each half, so it never cuts a character in half.
-export def string.reverse: string -> string = { s ->
-  def half = string.length(s) / 2
-  def after = nextCharStart(s, half)
-  def cut = if after < string.length(s) then after else charStart(s, half)
+-- The characters of `s` from byte `start` on, last first, in front of `acc`.
+def charsReversedFrom: string, int, list(string) -> list(string) = { s, start, acc ->
+  def stop = nextCharStart(s, start + 1)
 
-  if cut == 0
-    then s
-    else string.reverse(string.substring(s, start = cut, length = string.length(s) - cut)) ++
-      string.reverse(string.substring(s, start = 0, length = cut))
+  if start >= string.length(s)
+    then acc
+    else charsReversedFrom(
+      s
+      stop
+      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
+    )
+}
+
+-- `pieces` joined two at a time (the first with the second, the third with the fourth, and so on),
+-- last first, in front of `acc`.
+def pairUp: list(string), list(string) -> list(string) = { pieces, acc ->
+  match pieces
+    | [first, second, ...rest] -> pairUp(rest, __nanyx_list_cons(first ++ second, acc))
+    | [last] -> __nanyx_list_cons(last, acc)
+    | [] -> acc
+}
+
+-- `pieces` concatenated end to end, joined in pairs pass by pass, so that each byte is copied only as
+-- many times as the number of pieces can be halved.
+def concatInPairs: list(string) -> string = { pieces ->
+  match pieces
+    | [] -> ""
+    | [piece] -> piece
+    | _ -> concatInPairs(list.reverse(pairUp(pieces, [])))
+}
+
+-- `s` with its characters (code points, not bytes) in reverse order, so it never cuts a character in
+-- half. Stack-safe: it works on a string of any length.
+export def string.reverse: string -> string = { s ->
+  concatInPairs(charsReversedFrom(s, 0, []))
 }

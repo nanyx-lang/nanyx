@@ -12,7 +12,7 @@ For now most of these functions work byte by byte. `length` counts bytes, indice
 
 [`chars`](#chars) and [`reverse`](#reverse) work by character instead. A character here is one Unicode code point, so `"é"` is one character even though it takes two bytes. A letter with a combining accent (a grapheme cluster of two code points) counts as two.
 
-Every one of them is stack-safe: `repeat`, `split`, `replace`, `lines`, `words`, `chars` and the rest work on a string of any length, and give any number of pieces, without running out of stack. Each walks the string with [tail calls](../tour/functions#tail-recursion), except `reverse`, which halves the string at each step and so recurses only about 17 deep for a string of 100,000 characters.
+Every one of them is stack-safe: `repeat`, `split`, `replace`, `lines`, `words`, `chars`, `reverse` and the rest work on a string of any length, and give any number of pieces, without running out of stack. Each walks the string with [tail calls](../tour/functions#tail-recursion).
 
 `string.toString`, which gives back the string itself, is in the prelude rather than in this module, with the `toString` of the other built-in types: see [Converting to text](./standard-library#converting-to-text).
 
