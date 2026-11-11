@@ -7,55 +7,55 @@ module internal Transpiler.Wasm.LambdaLifting
 open Parser.Program
 open Transpiler.Wasm.Identifiers
 
-/// Every name an expression refers to: identifiers, callees and pipe targets.
-let rec private referencedNames (expr: Expression) : string list =
+/// Every name an expression refers to, with the node that refers to it: identifiers, callees and pipe targets.
+let rec references (expr: Expression) : (string * Expression) list =
     match expr.Kind with
-    | IdentifierExpr name -> [ name ]
-    | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
-    | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
-    | Lambda(_, body) -> referencedNames body
-    | BinaryOp(_, left, right) -> referencedNames left @ referencedNames right
-    | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
-    | Block statements -> statements |> List.collect referencedNamesStatement
-    | Except(value, arms) -> referencedNames { expr with Kind = Match([ value ], arms) }
+    | IdentifierExpr name -> [ name, expr ]
+    | FunctionCall(name, _, args) -> (name, expr) :: (args |> List.collect references)
+    | Pipe(value, name, _, args) -> (name, expr) :: references value @ (args |> List.collect references)
+    | Lambda(_, body) -> references body
+    | BinaryOp(_, left, right) -> references left @ references right
+    | IfExpr(cond, thenExpr, elseExpr) -> references cond @ references thenExpr @ references elseExpr
+    | Block statements -> statements |> List.collect referencesInStatement
+    | Except(value, arms) -> references { expr with Kind = Match([ value ], arms) }
     | Match(values, arms) ->
-        (values |> List.collect referencedNames)
-        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencedNamesPattern) @ referencedNames body))
+        (values |> List.collect references)
+        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencesInPattern) @ references body))
     | TupleExpr items
-    | ListExpr items -> items |> List.collect referencedNames
+    | ListExpr items -> items |> List.collect references
     | RecordExpr fields ->
-        fields |> List.collect (function NamedField(_, value) | PositionalField value -> referencedNames value)
-    | TagExpr(_, payload) -> payload |> Option.map referencedNames |> Option.defaultValue []
-    | MemberAccess(inner, _, _) -> referencedNames inner
-    | UseIn(value, body) -> referencedNames value @ referencedNames body
+        fields |> List.collect (function NamedField(_, value) | PositionalField value -> references value)
+    | TagExpr(_, payload) -> payload |> Option.map references |> Option.defaultValue []
+    | MemberAccess(inner, _, _) -> references inner
+    | UseIn(value, body) -> references value @ references body
     | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> referencedNames value
+    | WorkflowReturnExpr value -> references value
     | InterpolatedString parts ->
-        parts |> List.collect (function StringExpr value -> referencedNames value | StringText _ -> [])
-    | ContextMemberCall(_, _, args) -> args |> List.collect referencedNames
+        parts |> List.collect (function StringExpr value -> references value | StringText _ -> [])
+    | ContextMemberCall(_, _, args) -> args |> List.collect references
     | ContextMemberAccess _
     | UnitExpr
     | LiteralExpr _ -> []
 
-and private referencedNamesStatement (statement: Statement) : string list =
+and private referencesInStatement (statement: Statement) : (string * Expression) list =
     match statement.Kind with
-    | DefStatement(_, _, _, rhs) -> referencedNames rhs
+    | DefStatement(_, _, _, rhs) -> references rhs
     | ExprStatement value
-    | UseStatement value -> referencedNames value
+    | UseStatement value -> references value
     | ImportStatement _
     | TypeDefStatement _ -> []
 
-and private referencedNamesPattern (pattern: Pattern) : string list =
+and private referencesInPattern (pattern: Pattern) : (string * Expression) list =
     match pattern.Kind with
-    | GuardPattern predicate -> referencedNames predicate
-    | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
-    | TagPattern(_, Some payload) -> referencedNamesPattern payload
+    | GuardPattern predicate -> references predicate
+    | RangePattern(startValue, endValue) -> references startValue @ references endValue
+    | TagPattern(_, Some payload) -> referencesInPattern payload
     | TuplePattern patterns
     | AndPattern patterns
-    | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesPattern
-    | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesPattern
-    | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesPattern
-    | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencedNamesPattern)
+    | ListPattern(patterns, _) -> patterns |> List.collect referencesInPattern
+    | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencesInPattern
+    | RecordPattern(_, patterns) -> patterns |> List.collect referencesInPattern
+    | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencesInPattern)
     | TagPattern(_, None)
     | LiteralPattern _
     | IdentifierPattern _
@@ -413,7 +413,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                     let innerScope = Set.union parameterNames (boundNames body |> Set.ofList) |> Set.add name
                     let liftedBody = liftExpr (Set.union scope innerScope) body |> redirectSelfReferences name liftedName
                     let captured =
-                        Set.difference (referencedNames liftedBody |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add envParameter)
+                        Set.difference (references liftedBody |> List.map fst |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add envParameter)
                         |> Set.intersect scope
                         |> Set.toList
                         |> withMembers
@@ -541,7 +541,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         // what it captures from outside is then referenced here, so this lambda captures it in turn.
         let liftedBody = liftExpr (Set.union scope innerScope) body
         let captured =
-            Set.difference (referencedNames liftedBody |> Set.ofList) innerScope
+            Set.difference (references liftedBody |> List.map fst |> Set.ofList) innerScope
             |> Set.intersect scope
             |> Set.toList
             |> withMembers

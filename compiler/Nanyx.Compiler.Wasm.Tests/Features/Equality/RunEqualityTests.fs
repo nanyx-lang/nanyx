@@ -96,6 +96,39 @@ let ``Run - a local function compares at each type it is called with`` () =
     |> assertRan "T\nF\nT\n"
 
 [<Fact>]
+let ``Run - a local function compares strings, lists and tags on the heap by what they hold`` () =
+    // One closure for each type it is used at, each comparing as that type does, and freeing what it is given (#616).
+    """
+import nanyx/console
+
+type Shape = #circle(string) | #square(int)
+
+def show = { b -> if b then "T" else "F" }
+
+@entry
+def main = {
+  def s = "a" ++ "a"
+  def same = { x, y -> x == y }
+  def differ = { x, y -> x != y }
+  def circle: Shape = #circle(s)
+  def square: Shape = #square(1)
+  println(show(same(s, "aa")))
+  println(show(same(s, "ab")))
+  println(show(same([s], ["aa"])))
+  println(show(same([["a"], [s]], [["a"], ["aa"]])))
+  println(show(same([["a"]], [["b"]])))
+  println(show(same(#circle(s), #circle("aa"))))
+  println(show(same(circle, square)))
+  println(show(differ(s, "aa")))
+  println(show(differ([s], ["b"])))
+  println(show(same(1, 1)))
+  println(show(same(2, 3)))
+}
+"""
+    |> runSource
+    |> assertRan "T\nF\nT\nT\nF\nT\nF\nF\nT\nT\nF\n"
+
+[<Fact>]
 let ``Run - a function that compares its type variable uses the == attached to a type`` () =
     comparing
         [ "type $Email = string"
