@@ -472,10 +472,6 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             topLevelFunctions.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []
         | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
-        // `use value in { ... }` is a function of no parameters, the lambda `{ use value; ... }`: the instance is
-        // loaded each time it is called.
-        | UseIn(value, (Kind (Lambda([], body)) as lambda)) ->
-            liftLambda scope lambda [] (Expression.from body (Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ]))
         // `use value in body` is the block `{ use value; body }`: what it loads is in scope for `body` only.
         | UseIn(value, body) ->
             recur { expr with Kind = Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ] }

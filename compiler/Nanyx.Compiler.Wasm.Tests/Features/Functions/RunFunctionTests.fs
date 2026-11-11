@@ -445,23 +445,3 @@ let ``Run - a lambda of no parameters can be passed as a value (#589)`` () =
         "  for thunks | t -> println(\"{t()}\")\n" +
         "}\n"
     runSource source |> assertRan "22 40\n10\n9\n"
-
-[<Fact>]
-let ``Run - use ... in a block of no parameters is a function that loads the instance when called (#589)`` () =
-    let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "context Counter = (next: int -> int)\n" +
-        "\n" +
-        "def counted: [Counter] int -> int = { n -> next(n) }\n" +
-        "\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  def offset = 10\n" +
-        "  def total = use Counter(next = { n -> n - 1 }) in {\n" +
-        "    def a = counted(3)\n" +
-        "    a + offset\n" +
-        "  }\n" +
-        "  println(\"{total()}\")\n" +
-        "}\n"
-    runSource source |> assertRan "12\n"
