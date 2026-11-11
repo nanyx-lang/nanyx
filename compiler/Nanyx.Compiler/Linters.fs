@@ -73,7 +73,7 @@ type LinterOptions =
       Severities: Map<string, Severity option> }
 
 /// Walking the module as written, for the rules of the official linter.
-module private SyntaxTree =
+module internal SyntaxTree =
     /// The expressions directly within `expr`, and the statements of it if it is a block: a guard's predicate among
     /// them. What types hold is left out: they hold no blocks.
     let childrenOf (expr: Expression) : Expression list * Statement list =
@@ -125,6 +125,18 @@ module private SyntaxTree =
         | ModuleDecl _
         | Import _
         | Attribute _ -> []
+
+    /// The names a module writes as values of their own rather than calls: `add` in `fold(0, add)`, not in
+    /// `add(1, 2)` or `1 \add(2)`.
+    let namedAsValues (items: Module) : Set<Identifier> =
+        items
+        |> List.collect ofItem
+        |> List.collect expressionsWithin
+        |> List.choose (fun expr ->
+            match expr.Kind with
+            | IdentifierExpr name -> Some name
+            | _ -> None)
+        |> Set.ofList
 
 /// The edits the official linter's fixes make.
 module private SourceEdits =

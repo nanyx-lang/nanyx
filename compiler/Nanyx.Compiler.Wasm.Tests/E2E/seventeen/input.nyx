@@ -1,5 +1,5 @@
 -- Tuple/record and multi-param function unification
-def f = { x, y -> x + y }
+def f: int, int -> int = { x, y -> x + y }
 
 def main = {
     -- Direct call

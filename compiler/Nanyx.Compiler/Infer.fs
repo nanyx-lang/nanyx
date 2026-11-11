@@ -357,6 +357,14 @@ let private extractContextFromTypeExpr (typeExpr: TypeExpr option) : TypeExpr li
     | Some other -> None, Some other
     | None -> None, None
 
+/// `typeOpt`, a def's annotation, with each operator it requires by its member read as the prelude's context that has
+/// it (see `InlineContexts`), and the errors in how they are written, if any.
+let private readInlineContexts (state: InferState) (typeOpt: TypeExpr option) : TypeExpr option * Result<unit, Diagnostic list> =
+    match typeOpt |> Option.map (InlineContexts.resolve typeExprToTy state) with
+    | Some (Ok resolved) -> Some resolved, Ok ()
+    | Some (Error errors) -> typeOpt, Error errors
+    | None -> None, Ok ()
+
 let private extendEnvWithRecordFields (env: TypeEnv) (ty: Ty) =
     let addFields fields =
         fields
@@ -1105,6 +1113,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
 /// type it is for, or from the type's parts, as a call does. A hole finds its instance as
 /// `InterpolationHoles.resolvePending` says.
 let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) : Result<TypeExpr option * InferState, Diagnostic list> =
+    let arithmetic, state = ArithmeticInference.require state name scheme
     let operators (isPending: PendingContextInstance -> bool) = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && isPending pending)
     let comparisons, orderings = operators EqualityOperators.isPending, operators OrderingOperators.isPending
     let defScheme def = TypeEnv.tryFind def env
@@ -1159,7 +1168,11 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
             | _ -> synthesize env |> Option.map (Result.map (fun (instance, next) -> Some instance, next)))
     |> Result.map (fun (annotation, resolved) ->
         let inputOf ty = inputTypeFromArgs [ ty; ty ]
-        annotation, resolved |> EqualityOperators.callMembers inputOf comparisons |> OrderingOperators.callHelpers inputOf orderings)
+        annotation,
+        resolved
+        |> EqualityOperators.callMembers inputOf comparisons
+        |> OrderingOperators.callHelpers inputOf orderings
+        |> ArithmeticInference.callMembers inputOf arithmetic)
 
 /// Checks `call`, a call to `name` that inference has just typed, when `name` is a local function that compares or
 /// orders values of type variables it is generic in: each needs that well-known context of the type it is at the call
@@ -2424,6 +2437,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             match statement.Kind with
             | DefStatement(isExport, name, typeOpt, expr) ->
                 if errors.IsEmpty then
+                    let typeOpt, inlineContextsRead = readInlineContexts current typeOpt
                     let contextsExist =
                         match fst (extractContextFromTypeExpr typeOpt) with
                         | Some contexts -> ensureContextsExist current name (declarationSpan current DefValue expr) contexts
@@ -2432,7 +2446,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         match typeOpt with
                         | Some typeExpr -> inferTypeOfValues env' current typeExpr
                         | None -> Ok current
-                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> AttachedOperators.check current name (declarationSpan current DefValue expr)) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> AttachedOperators.check current name (declarationSpan current DefValue expr)) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> inlineContextsRead) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
                     | Error err -> errors <- err
                     | Ok inferredState ->
                         current <- inferredState
@@ -2498,7 +2512,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             // rest alone, and a `try` in a branch could not add its own.
                             let scheme, generalizedState =
                                 if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
-                                else generalizeDef env' current declaredTy
+                                else ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
                             current <-
                                 let used =
                                     [ WellKnownContexts.equality; WellKnownContexts.ordering ]
@@ -2728,6 +2742,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         match item.Kind with
         | Def (ValueDef(isExport, name, typeOpt, expr)) ->
             beginDef ()
+            let typeOpt, inlineContextsRead = readInlineContexts state typeOpt
             let contextsExist =
                 match fst (extractContextFromTypeExpr typeOpt) with
                 | Some contexts -> ensureContextsExist state name (declarationSpan state DefValue expr) contexts
@@ -2737,7 +2752,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match typeOpt with
                 | Some typeExpr -> inferTypeOfValues (withoutTopLevel name env) state typeExpr
                 | None -> Ok state
-            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> AttachedOperators.check state name (declarationSpan state DefValue expr)) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> AttachedOperators.check state name (declarationSpan state DefValue expr)) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> inlineContextsRead) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
             | Error err -> abandon isExport name expr err
             | Ok inferredState ->
                 state <- inferredState
@@ -2817,17 +2832,29 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         // variable it was pre-bound at does not stop its type being generalized. It is resolved
                         // first, as a local def's is: `{ x -> x + 1 }` is `α -> α` until its constraints are
                         // applied, and generalising that would make every use `α -> α` too.
-                        let scheme, generalizedState = generalizeDef (withoutTopLevel name env) state declaredTy
+                        let scheme, generalizedState =
+                            ArithmeticInference.generalize (fun state -> generalizeDef (withoutTopLevel name env) state declaredTy) (ArithmeticInference.TopLevelDef name) state
                         // The parameterised contexts an unannotated def requires are part of its type, as if written.
                         match resolvePendingInstances env generalizedState name symbol scheme with
                         | Error err ->
                             state <- generalizedState
                             abandon isExport name expr err
                         | Ok (inferredAnnotation, resolvedState) ->
+                            // A def that writes parameterised contexts but not its type is given the type it would
+                            // have written, which a call reads the contexts' arguments from.
+                            let annotation, resolvedState =
+                                match contextOpt, declaredTypeExprOpt with
+                                | Some contexts, None when contexts |> List.exists (isParameterizedContext resolvedState) ->
+                                    match ContextInference.writtenType resolvedState scheme with
+                                    | Some signature ->
+                                        Some (TypeExpr.synthetic (TypeWithContext(contexts, signature))),
+                                        registerContextRequirement resolvedState name contexts (Some signature)
+                                    | None -> typeOpt, resolvedState
+                                | _ -> Option.orElse inferredAnnotation typeOpt, resolvedState
                             state <- resolvedState
                             env <- declareTopLevel name symbol scheme env
                             types <- types |> Map.add name declaredTy
-                            items <- items @ [ TypedDef (TypedValueDef(isExport, name, Option.orElse inferredAnnotation typeOpt, typedExpr)) ]
+                            items <- items @ [ TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)) ]
                 | Error err -> abandon isExport name expr err
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->

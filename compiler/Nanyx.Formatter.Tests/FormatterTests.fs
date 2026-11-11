@@ -418,6 +418,10 @@ let ``Names that are operators keep their backticks`` () =
     unchanged "def i = Eq(int).`==`(1, 2)\n"
     unchanged "def f = `+`\n"
     unchanged "def g = `+`(1, 2)\n"
+    unchanged "def add: [`+`: a, a -> a] = { + }\n"
+    Assert.Equal(
+        "def f: [`+`: a, a -> a + `*`: a, a -> a + Eq(a)] a -> a = { x -> x }\n",
+        format "def f: [`+`:(a, a) -> a + `*` : a,a -> a+Eq(a)] a -> a = { x -> x }\n")
     unchanged (lines [ "def main = {"; "  def eqInt: Eq(int) = (`==` = { a, b -> true })"; "  use eqInt"; "  1"; "}" ])
 
 [<Fact>]

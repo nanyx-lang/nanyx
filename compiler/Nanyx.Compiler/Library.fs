@@ -1208,6 +1208,13 @@ module Compiler =
                         CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
                         Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
                         ImportedThrough = importedThrough
+                        // The prelude's contexts are the ones operators are read through (see `OperatorContexts`),
+                        // but for one whose name an import after it gives to a type of its own.
+                        PreludeContexts =
+                            if importedKey = preludeKey then
+                                exportedTypeDefs |> Map.filter (fun _ info -> info.IsContext) |> Map.keys |> Set.ofSeq
+                            elif qualifier.IsNone then state.PreludeContexts - Set.ofSeq exportedTypeDefs.Keys
+                            else state.PreludeContexts
                         // Where each definition is imported, since a `module name =` block's imports are its own.
                         ImportSites =
                             Seq.append exportedSymbols exportedTypeSymbols
@@ -1272,7 +1279,11 @@ module Compiler =
                     | _ :: _ :: _, Some symbol -> Some (name, (symbol, sources |> List.map (fun (_, moduleName) -> $"{moduleName}.{name}")))
                     | _ -> None)
                 |> Map.ofSeq
-            state <- { state with AmbiguousImports = ambiguousImports }
+            state <-
+                { state with
+                    AmbiguousImports = ambiguousImports
+                    PreludeContexts = OperatorContexts.inModule (key = preludeKey) desugared state.PreludeContexts
+                    NamedAsValues = SyntaxTree.namedAsValues desugared }
             if not errors.IsEmpty then
                 // A module imported along several paths fails each importer with the same diagnostics.
                 Error (Typed, List.distinct errors)
@@ -1286,7 +1297,7 @@ module Compiler =
                     mismatches
                     |> List.sortBy (fun (_, span) -> span.Start)
                     |> List.map (fun (message, span) -> Diagnostics.at DiagnosticCodes.TypeMismatch span message)
-                let moduleErrors = inferErrors @ mismatchErrors
+                let moduleErrors = inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let placed = System.Collections.Generic.HashSet<string>()
                 let defer =

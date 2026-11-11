@@ -39,6 +39,18 @@ type PendingContextInstance =
       Errors: Diagnostic list
       ChecksOnly: bool }
 
+/// An arithmetic operator, in the unannotated top-level def `InDef`, on operands of a type, `OperandTy`, that was
+/// still a variable where the operator is written, at `At`: `x + y` on two parameters. `MemberName` is the context
+/// member the operator reads: itself, or `negate` for prefix `-`. Once the def is inferred, a type that turned out
+/// to be one of the def's own variables is one the def requires the prelude's context with that member of, and any
+/// other is a number (see `ArithmeticInference`).
+type PendingArithmetic =
+    { InDef: Identifier
+      Operator: NodeId
+      MemberName: Identifier
+      OperandTy: Ty
+      At: SourceSpan }
+
 /// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
 type BlockImport =
     { Import: ImportItem
@@ -77,6 +89,15 @@ type InferState =
             DeferredContextUses: DeferredContextUse list;
             /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
             PendingContextInstances: PendingContextInstance list;
+            /// The arithmetic operators left to be read once the def around them is inferred (see `PendingArithmetic`).
+            PendingArithmetic: PendingArithmetic list;
+            /// The names of the prelude's contexts, as they are in `TypeDefs`: the only ones an operator on a value of
+            /// a type variable is read through (see `OperatorContexts`). A module checked without the prelude has none.
+            PreludeContexts: Set<Identifier>;
+            /// The names the module writes as values of their own rather than calls (`add` in `fold(0, add)`). A
+            /// function that requires a parameterised context cannot be a value yet (#599), so one named here has no
+            /// requirement inferred for its arithmetic (see `ArithmeticInference`).
+            NamedAsValues: Set<Identifier>;
             /// Where each interpolation hole among `PendingContextInstances` is, by the hole's node: the environment
             /// there, whose instances it finds its `ToString` among once its type is known, and the def that writes
             /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
@@ -206,6 +227,9 @@ let emptyState =
             UnannotatedDefs = Map.empty;
             DeferredContextUses = [];
             PendingContextInstances = [];
+            PendingArithmetic = [];
+            PreludeContexts = Set.empty;
+            NamedAsValues = Set.empty;
             HoleScopes = Map.empty;
             LocalComparisons = Map.empty;
             InferredContextTypes = Map.empty;

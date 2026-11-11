@@ -368,7 +368,8 @@ block, which is what that page already proposes.
 Making the arithmetic operators well-known contexts raises separate questions: one context per operator or one
 `Num`, how literals like `0` are typed, and how units and dimensions fit. They are answered in
 [Numeric contexts](./numeric-contexts), which keeps the principle this design sets: a built-in operator is sugar for
-a well-known context's member. `+`, `-` and prefix `-` now read through the prelude's `Add(a)`.
+a well-known context's member. `+`, `-` and prefix `-` now read through the prelude's `Add(a)`, which the compiler
+finds by the member each reads rather than by name ([Operator contexts](./operator-contexts)).
 
 # Diagnostics
 

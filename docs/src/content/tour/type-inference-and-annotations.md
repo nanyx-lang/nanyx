@@ -17,11 +17,18 @@ def message: string = "Hello world" -- explicitly annotated
 # Inference for functions
 
 ```nanyx
-def add = { a, b -> a + b }
--- inferred as `int, int -> int` from the usage of `+` on `a` and `b`
+def double = { a -> a * 2 }
+-- inferred as `int -> int` from the usage of `*` on `a` and the int `2`
 ```
 
 The inferred types on this page are written as an editor shows them, in hovers and in the lens above a definition. A function's parameters are written bare, as `int, int -> int`, which is the same type as `(int, int) -> int`.
+
+An operator on parameters that nothing else makes numbers is inferred as generic, with the [context](../advanced/contexts#operators-find-their-context) the operator needs:
+
+```nanyx
+def add = { a, b -> a + b }
+-- inferred as `[Add(α)] α, α -> α`: it adds ints, floats, or any type that has an `Add`
+```
 
 Since functions conceptually have exactly one parameter, the parameter types are inferred from how the function is used. If the function is never called, or if the parameter types cannot be inferred from the body of the function, then the parameter types will be inferred as generic type variables, and the function will be inferred as a generic function:
 

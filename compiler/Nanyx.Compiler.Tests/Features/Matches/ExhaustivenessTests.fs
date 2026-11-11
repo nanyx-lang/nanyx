@@ -253,7 +253,7 @@ let ``A lambda's pattern parameter must be total, as a destructuring def's patte
         Compiler.compile (
             "type $Email = string\n" +
             "def value: $Email -> string = { $Email(s) -> s }\n" +
-            "def add = { (a, b), c -> a + b + c }\n" +
+            "def add = { (a, b), c -> a + b + c + 1 }\n" +
             "def ignore = { (), n -> n }\n")
     Assert.True(total.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{total.Diagnostics}")
     Assert.Equal("(int, int), int -> int", Unifier.tyToString total.Typed.Value.Types.["add"])

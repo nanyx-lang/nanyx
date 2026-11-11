@@ -86,6 +86,29 @@ module internal ContextInference =
         | Some signature when written |> List.forall Option.isSome -> Some (written |> List.map Option.get, signature)
         | _ -> None
 
+    /// The type of a def generalised as `scheme` that writes the contexts it requires but not its type, as it would
+    /// have written it: `a, a -> a` for `` def add: [Add(a)] = { + } ``. A variable of the type that one written in
+    /// the contexts turned out to be has that one's name, and each other a letter no written one has. A call reads
+    /// the contexts' arguments from it, as it does from a type that is written. `None` when the type is one an
+    /// annotation cannot write.
+    let writtenType (state: InferState) (scheme: TypeScheme) : TypeExpr option =
+        let subst = fst (Unifier.solve state.Constraints)
+        let written =
+            state.TypeVars
+            |> Map.toList
+            |> List.choose (fun (name, v) ->
+                match Unifier.apply subst (TyVar v) with
+                | TyVar solved when scheme.Quantified.Contains solved.Id -> Some (solved.Id, name)
+                | _ -> None)
+            |> Map.ofList
+        let taken = written |> Map.values |> Set.ofSeq
+        let others = varsInOrder scheme.Type |> List.filter (fun v -> not (written.ContainsKey v.Id))
+        let letters = [ for letter in 'a' .. 'z' do if not (taken.Contains (string letter)) then string letter ]
+        if others.Length > letters.Length then None
+        else
+            let names = List.zip others (List.truncate others.Length letters) |> List.fold (fun names (v, letter) -> names |> Map.add v.Id letter) written
+            typeExprOf names scheme.Type
+
     /// `instances` with the call `pending` names finding its context as `instance`.
     let internal withInstance (pending: PendingContextInstance) (instance: ContextInstance) (instances: Map<NodeId, ContextInstance option list>) =
         let found = instances |> Map.tryFind pending.Call |> Option.defaultValue (List.replicate pending.Count None)

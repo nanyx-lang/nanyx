@@ -232,7 +232,7 @@ let ``A shorthand match lambda shows its own type, not that of the parameters it
 [<Fact>]
 let ``A lambda with a pattern parameter shows its own type, and the pattern what it takes apart`` () =
     let source =
-        "def add = { (a, b), c -> a + b * c }\n" +
+        "def add = { (a, b), c -> a + b * c + 1 }\n" +
         "def g = add\n"
     Assert.Equal(Some "(int, int), int -> int", hoverType source (offsetOf source "{" 0 0))
     Assert.Equal(Some "(int, int)", hoverType source (offsetOf source "(a, b)" 0 0))

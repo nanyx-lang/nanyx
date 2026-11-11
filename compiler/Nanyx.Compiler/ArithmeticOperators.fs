@@ -4,18 +4,16 @@ open Parser.Program
 open NyxCompiler.InferState
 
 /// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Numeric contexts" in the docs' work in progress). On `int` and
-/// `float` they are the built-in operators. `+`, `-` and prefix `-` read through the prelude's well-known context
-/// `Add`, whose members are `zero`, `` `+` ``, `` `-` `` and `negate`: on a type that attaches them, or a type variable
-/// of a function that requires `Add` of it, the operator calls the member (see `OperatorCalls`). `*`, `/` and `%` read
-/// through `Num`, which has `Add`'s members and those three, and `fromInt`. The compiler's own instances for `int` and
-/// `float` are the members the prelude attaches to `Int` and `Float`, which are what generic code is passed.
+/// `float` they are the built-in operators. Each reads the context member of its name, and prefix `-` reads `negate`,
+/// through the prelude's smallest context that has it (see `OperatorContexts`): `+`, `-` and prefix `-` through `Add`,
+/// whose members are `zero`, `` `+` ``, `` `-` `` and `negate`, and `*`, `/` and `%` through `Num`, which has `Add`'s
+/// members and those three, and `fromInt`. On a type that attaches the member, or a type variable of a function that
+/// requires the context of it, the operator calls the member (see `OperatorCalls`). The compiler's own instances for
+/// `int` and `float` are the members the prelude attaches to them, which are what generic code is passed.
+///
+/// A function that writes its type says which contexts it requires. One that does not has them inferred: an operator
+/// on a type still a variable there is left until the function is inferred (see `ArithmeticInference`).
 module internal ArithmeticOperators =
-    /// The prelude's context of the values that add and subtract.
-    let addContext = "Add"
-
-    /// The prelude's context of the numbers: `Add`'s members, and `*`, `/`, `%` and `fromInt`.
-    let numContext = "Num"
-
     /// `Add`'s member that the literal `0` reads as where a value of a type variable is added to it.
     let zero = "zero"
 
@@ -60,21 +58,27 @@ module internal ArithmeticOperators =
             | _ -> ""
         $"'{Unifier.tyToDisplayString Ascii ty}' cannot be used with {written op}: it is not a number{advice}"
 
-    /// The context the operator `op` needs of a type variable it is used on, and what the operator does, as a
-    /// diagnostic says it: `Add` for `+`, `-` and prefix `-`, and `Num` for `*`, `/` and `%`.
-    let private contextFor (op: string) =
+    /// The context member the operator `op` reads: the one of its name, or `negate` for prefix `-`.
+    let memberOf (op: string) = if op = NegateSyntax.builtIn then negate else op
+
+    /// What the operator `op` does, as a diagnostic says it.
+    let private does (op: string) =
         match op with
-        | "+" -> Some (addContext, "adds")
-        | "-" -> Some (addContext, "subtracts")
-        | "*" -> Some (numContext, "multiplies")
-        | "/" -> Some (numContext, "divides")
-        | "%" -> Some (numContext, "takes the remainder of")
-        | _ when op = NegateSyntax.builtIn -> Some (addContext, "negates")
+        | "+" -> Some "adds"
+        | "-" -> Some "subtracts"
+        | "*" -> Some "multiplies"
+        | "/" -> Some "divides"
+        | "%" -> Some "takes the remainder of"
+        | _ when op = NegateSyntax.builtIn -> Some "negates"
         | _ -> None
 
-    /// Whether the prelude's `context` is in scope: a module checked without the prelude has none to require.
-    let private isDeclared (state: InferState) (context: string) =
-        state.TypeDefs |> Map.tryFind context |> Option.exists (fun info -> info.IsContext && info.Parameters.Length = 1)
+    /// The context the operator `op` needs of a type variable it is used on, the prelude's smallest with the member it
+    /// reads, and what the operator does: `Add` for `+`, `-` and prefix `-`, and `Num` for `*`, `/` and `%`. A module
+    /// checked without the prelude has no context to require.
+    let private contextFor (state: InferState) (op: string) =
+        match does op, OperatorContexts.smallest state (memberOf op) with
+        | Some does, Some context -> Some (context, does)
+        | _ -> None
 
     /// The error for `op`, which needs `context`, on values of the type variable `v` of the function `defName`, whose
     /// type does not require it.
@@ -86,16 +90,22 @@ module internal ArithmeticOperators =
     /// operand whose type is already known not to be a number is an error that names the operator. So is one of a type
     /// variable of the type the function around it writes, which then does not require the context the operator needs
     /// of it: had it, the operator would have called its member. That one fails to check, and the def around it
-    /// carries on, so that the variable is not also reported as having to be a number. Otherwise the operands are the
+    /// carries on, so that the variable is not also reported as having to be a number. In a function that does not
+    /// write its type, operands of a type still a variable are left until the function is inferred, which then requires
+    /// the context of the variable if it is one of its own (see `ArithmeticInference`). Otherwise the operands are the
     /// number `numberTy`, `int` or `float`.
     let check (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (rightTy: Ty) (numberTy: Ty) : Result<InferState, Diagnostic list> =
         let tys = [ leftTy; rightTy ] |> List.map (resolveSoFar state)
         let declaredVar = tys |> List.tryPick (function TyVar({ Name = Some _ } as v) -> Some v | _ -> None)
-        match tys |> List.tryFind isKnownNonNumber, contextFor op, declaredVar, state.ContextScope with
+        let areVariables = tys |> List.forall (function TyVar { Name = None } -> true | _ -> false)
+        match tys |> List.tryFind isKnownNonNumber, contextFor state op, declaredVar, state.ContextScope with
         | Some ty, _, _, _ -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span (notANumber op ty) ]
-        | None, Some (context, does), Some v, DefScope(defName, false) when isDeclared state context ->
+        | None, Some (context, does), Some v, DefScope(defName, false) ->
             let error = Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span (undeclared op context does v defName)
             Ok { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs }
+        | None, Some _, None, DefScope(defName, true) when areVariables ->
+            let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; At = expr.Span }
+            Ok { state with PendingArithmetic = pending :: state.PendingArithmetic }
         | _ -> Ok (addConstraint leftTy numberTy state)
 
     /// What a literal operand of an arithmetic operator is, where it is not the literal it would be elsewhere.
@@ -123,7 +133,9 @@ module internal ArithmeticOperators =
                 Some (AsMember { literal with Kind = FunctionCall(fromInt, None, [ Expression.at literal.Span (LiteralExpr(IntLit n)) ]) })
             | _ when v.Name.IsNone -> None
             | IntLit n ->
-                Some (Wrong (DiagnosticCodes.MissingContextMembers, $"'{n}' is an '{tyText}' here, which needs {numContext}({tyText}): add [{numContext}({tyText})] to the type of '{defName}'"))
+                OperatorContexts.smallest state fromInt
+                |> Option.map (fun context ->
+                    Wrong (DiagnosticCodes.MissingContextMembers, $"'{n}' is an '{tyText}' here, which needs {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"))
             | FloatLit x ->
                 let text = x.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
                 let text = if text.Contains '.' || text.Contains 'E' then text else text + ".0"

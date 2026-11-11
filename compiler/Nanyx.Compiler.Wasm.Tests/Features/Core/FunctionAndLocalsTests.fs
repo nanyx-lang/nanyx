@@ -9,7 +9,7 @@ open TranspilerWasmTestHelpers
 let ``Transpile function with parameters`` () =
     let source =
         "module M\n\n" +
-        "def add = { x, y -> x + y }"
+        "def add: int, int -> int = { x, y -> x + y }"
 
     let wat = transpileWat source
 
