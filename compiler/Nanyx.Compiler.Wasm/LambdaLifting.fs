@@ -247,6 +247,14 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         |> Map.ofList
     let topLevelFunctions = topLevelArities |> Map.filter (fun _ arity -> arity > 0)
 
+    // Every top-level record value, by name, for `use ctx` where `ctx` is one of them.
+    let topLevelRecords =
+        module'
+        |> List.choose (function
+            | Kind (Def (ValueDef(_, name, _, Kind (RecordExpr fields)))) -> Some (name, fields)
+            | _ -> None)
+        |> Map.ofList
+
     /// The type parameters and member types of every record type, by name: contexts are declared as
     /// records, with or without the `context` modifier.
     let recordTypes =
@@ -410,14 +418,20 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                             |> Option.defaultValue []
                             |> List.map (fun name -> name, Expression.from value (MemberAccess(instanceValue, name, None)))
                         | _ -> []
+                    // Each of `fields`, read from `record`.
+                    let fieldsOf (record: Expression) (fields: RecordField list) =
+                        namedFields fields
+                        |> List.map (fun (name, _) -> name, Expression.from value (MemberAccess(record, name, None)))
                     let evaluated, contextType, bindings =
                         match value.Kind with
                         | RecordExpr fields -> [], None, namedFields fields
                         | FunctionCall(contextName, _, [ Kind (RecordExpr fields) ]) -> [], Some (TypeExpr.synthetic (TypeName contextName)), namedFields fields
                         | IdentifierExpr recordName when localRecords.ContainsKey recordName ->
-                            [], instance,
-                            namedFields localRecords.[recordName]
-                            |> List.map (fun (name, _) -> name, Expression.from value (MemberAccess(Expression.from value (IdentifierExpr recordName), name, None)))
+                            [], instance, fieldsOf (Expression.from value (IdentifierExpr recordName)) localRecords.[recordName]
+                        // A top-level record of a plain context (one of a parameterised context is read below): read
+                        // from `value` itself, which has the record's type, as a top-level value is evaluated by it.
+                        | IdentifierExpr recordName when instance.IsNone && topLevelRecords.ContainsKey recordName && not (scope.Contains recordName) ->
+                            [], None, fieldsOf value topLevelRecords.[recordName]
                         | IdentifierExpr _ -> [], instance, membersOf value
                         // Any other instance is evaluated once, into a local its members are read from.
                         | _ when instance.IsSome ->

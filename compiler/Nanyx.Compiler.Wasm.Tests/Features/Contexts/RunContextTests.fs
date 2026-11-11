@@ -164,6 +164,49 @@ let ``Run - use loads a named instance of a parameterised context: a def, a loca
     runSource source |> assertRan "10\n25\n8\n102\n"
 
 [<Fact>]
+let ``Run - use loads a top-level instance of a parameterised context (#587)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Add(a) = (\n" +
+        "  `+`: (a, a) -> a\n" +
+        ")\n" +
+        "\n" +
+        "def add: [Add(a)] a, a -> a = { x, y -> `+`(x, y) }\n" +
+        "\n" +
+        "def addInt: Add(int) = (\n" +
+        "  `+` = { x, y -> x * 10 + y }\n" +
+        ")\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  use addInt\n" +
+        "  println(\"{add(1, 2)}\")\n" +
+        "}\n"
+    runSource source |> assertRan "12\n"
+
+[<Fact>]
+let ``Run - use loads a top-level record of a plain context (#587)`` () =
+    let source =
+        "import nanyx/console\n" +
+        "\n" +
+        "context Greeter = (greet: string -> string)\n" +
+        "\n" +
+        "def hello: [Greeter] string -> string = { name -> greet(name) }\n" +
+        "\n" +
+        "def polite: Greeter = (greet = { name -> \"Good day, {name}\" })\n" +
+        "\n" +
+        "def casual: Greeter = (greet = { name -> \"Hi {name}\" })\n" +
+        "\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  use polite\n" +
+        "  println(hello(\"Ann\"))\n" +
+        "  println(use casual in hello(\"Bo\"))\n" +
+        "}\n"
+    runSource source |> assertRan "Good day, Ann\nHi Bo\n"
+
+[<Fact>]
 let ``Run - use ... in loads an instance for its body only (#320)`` () =
     let source =
         "import nanyx/console\n" +
