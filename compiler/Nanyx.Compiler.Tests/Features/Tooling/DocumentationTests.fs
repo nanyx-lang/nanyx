@@ -69,3 +69,11 @@ def counted: [Counter] int -> int = { n -> next(n) }
     Assert.Equal(Some "A point.", docsOf file source result "Point")
     Assert.Equal(Some "Things that count.", docsOf file source result "Counter")
     Assert.Equal(Some "The next number.", docsOf file source result "next")
+
+[<Fact>]
+let ``A standard-library definition's doc comment is found by its symbol`` () =
+    let source = "def lengths = list.map([[1], [2, 3]], list.length)\n"
+    let result = Compiler.compileSource "main.nyx" source
+    Assert.Equal(
+        Some "`f` applied to each element, in order. Stack-safe: it works on a list of any length.",
+        docsOf (Path.GetFullPath "main.nyx") source result "list.map")

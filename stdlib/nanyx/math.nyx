@@ -11,7 +11,7 @@ module math
 -- Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified
 -- to call `abs(x)`.
 
--- `n` without its sign. A value that is neither below nor above `zero` is `zero`, so `abs(-0.0)` is `0.0`.
+--| `n` without its sign. A value that is neither below nor above `zero` is `zero`, so `abs(-0.0)` is `0.0`.
 export def abs: [Num(a) + Ord(a)] a -> a = { n ->
   match compare(n, zero)
     | #less -> -n
@@ -19,29 +19,29 @@ export def abs: [Num(a) + Ord(a)] a -> a = { n ->
     | #equal -> zero
 }
 
--- The smaller of `a` and `b`.
+--| The smaller of `a` and `b`.
 export def min: [Ord(a)] a, a -> a = { a, b ->
   if a <= b then a else b
 }
 
--- The larger of `a` and `b`.
+--| The larger of `a` and `b`.
 export def max: [Ord(a)] a, a -> a = { a, b ->
   if a >= b then a else b
 }
 
--- `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.
+--| `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.
 export def clamp: [Ord(a)] (a, min: a, max: a) -> a = { n, min, max ->
   if n < min then min else if n > max then max else n
 }
 
--- `base ** exponent`: `base` multiplied by itself `exponent` times, for any number type. A negative
--- exponent is `1 / base ** -exponent`, so on an `int` it truncates towards zero. For an exponent
--- that is not a whole number, see `float.pow`.
+--| `base ** exponent`: `base` multiplied by itself `exponent` times, for any number type. A negative
+  exponent is `1 / base ** -exponent`, so on an `int` it truncates towards zero. For an exponent
+  that is not a whole number, see [`float.pow`].
 export def pow: [Num(a)] a, int -> a = { base, exponent ->
   base ** exponent
 }
 
--- The square root of `x` (NaN when `x` is negative).
+--| The square root of `x` (NaN when `x` is negative).
 export def sqrt: float -> float = { x ->
   __nanyx_float_sqrt(x)
 }
@@ -49,17 +49,17 @@ export def sqrt: float -> float = { x ->
 -- The functions below give an `int`. A float that is NaN, infinite or out of the range of `int` stops the
 -- program.
 
--- The largest whole number not above `x`: `floor(3.9)` is 3 and `floor(-3.1)` is -4.
+--| The largest whole number not above `x`: `floor(3.9)` is 3 and `floor(-3.1)` is -4.
 export def floor: float -> int = { x ->
   __nanyx_float_to_int(__nanyx_float_floor(x))
 }
 
--- The smallest whole number not below `x`: `ceil(3.1)` is 4 and `ceil(-3.9)` is -3.
+--| The smallest whole number not below `x`: `ceil(3.1)` is 4 and `ceil(-3.9)` is -3.
 export def ceil: float -> int = { x ->
   __nanyx_float_to_int(__nanyx_float_ceil(x))
 }
 
--- The whole number nearest `x`, with halves rounded away from zero: `round(2.5)` is 3 and `round(-2.5)` is -3.
+--| The whole number nearest `x`, with halves rounded away from zero: `round(2.5)` is 3 and `round(-2.5)` is -3.
 export def round: float -> int = { x ->
   def whole = __nanyx_float_trunc(x)
 
@@ -68,7 +68,7 @@ export def round: float -> int = { x ->
     else if whole - x >= 0.5 then __nanyx_float_to_int(whole - 1.0) else __nanyx_float_to_int(whole)
 }
 
--- `x` with its fraction dropped, towards zero: `truncate(3.9)` is 3 and `truncate(-3.9)` is -3.
+--| `x` with its fraction dropped, towards zero: `truncate(3.9)` is 3 and `truncate(-3.9)` is -3.
 export def truncate: float -> int = { x ->
   __nanyx_float_to_int(__nanyx_float_trunc(x))
 }
