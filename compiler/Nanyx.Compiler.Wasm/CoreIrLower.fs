@@ -107,8 +107,9 @@ type private SpecKey = string * IrType list
 type private Lowering =
     /// As its definition says.
     | AsDefined
-    /// As a lifted lambda whose closure captures values of these types.
-    | LiftedCapturing of IrType list
+    /// As a lifted lambda whose closure captures values of these types, and these captured locals generic in type
+    /// variables of their own (see `Scope.CapturedLocals`).
+    | LiftedCapturing of IrType list * Map<string, Ty * (IrType list * int) list>
     /// As the wrapper of a top-level function, which it calls at this type.
     | WrapperCalling of string * Ty
     /// As the start function, from the module's top-level expressions.
@@ -121,6 +122,10 @@ let private maxSpecialisations = 32
 /// A WebAssembly name for `name` specialised at `typeArguments`, such as `id__int`.
 let private specialisationName (name: string) (typeArguments: IrType list) =
     sanitizeIdentifier name + (typeArguments |> List.map (IrType.mangle >> sanitizeIdentifier >> sprintf "__%s") |> String.concat "")
+
+/// Lowers the closure of a local function generic in type variables of its own at some type arguments, given what they
+/// bind, and passes it on.
+type private LocalClosure = Map<int, Ty> -> IrType list -> (Expr -> Expr) -> Expr
 
 /// What names refer to in the expression being lowered.
 type private Scope =
@@ -141,8 +146,12 @@ type private Scope =
       /// How many `for` loops enclose the expression, which names a loop's locals.
       ForDepth: int
       /// The closures of each local function generic in type variables of its own, by the variable its name is bound
-      /// to: its type, and a closure for each type arguments it is used at (see `Block`).
-      LocalInstances: Map<int, Ty * (IrType list * Var) list> }
+      /// to: its type, a closure for each type arguments it is used at (see `Block`), and how to make it at others where
+      /// that can be done.
+      LocalInstances: Map<int, Ty * (IrType list * Var) list * LocalClosure option>
+      /// In a lifted lambda, the captured locals that hold a local function generic in type variables of its own: its
+      /// type, and the field of the environment that holds its closure at each type arguments it is used at here.
+      CapturedLocals: Map<string, Ty * (IrType list * int) list> }
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type private FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
@@ -750,9 +759,77 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             | None -> tyOf expr
         let arity = IrType.closureArity (parameterNames target) ty
         this.Atoms scope captured (fun atoms ->
-            let capturedTys = atoms |> List.map atomType
-            let name = request (target, snd self @ typeArguments) subst (LiftedCapturing capturedTys)
-            k (mk (MakeClosure(name, arity, atoms)) ty))
+            this.CapturedInstances scope target bindings captured atoms (fun atoms capturedLocals ->
+                let capturedTys = atoms |> List.map atomType
+                let name = request (target, snd self @ typeArguments) subst (LiftedCapturing(capturedTys, capturedLocals))
+                k (mk (MakeClosure(name, arity, atoms)) ty)))
+
+    /// `atoms`, what a closure over the lifted lambda `target` captures (`captured`, lowered), with each local function
+    /// generic in variables of its own among them captured at each type arguments the lambda uses it at, where
+    /// `bindings` binds the variables of the closure's type: the first in its own field, the others after everything
+    /// else, as the lambda's `Scope.CapturedLocals` says.
+    member private this.CapturedInstances (scope: Scope) (target: string) (bindings: Map<int, Ty>) (captured: Expression list) (atoms: Atom list) (k: Atom list -> Map<string, Ty * (IrType list * int) list> -> Expr) : Expr =
+        let generic =
+            List.zip captured atoms
+            |> List.indexed
+            |> List.choose (fun (index, (capture, atom)) ->
+                match capture.Kind, atom with
+                | IdentifierExpr name, AVar var when scope.LocalInstances.ContainsKey var.Id ->
+                    let localTy, _, _ = scope.LocalInstances.[var.Id]
+                    match this.LocalUses bindings localTy name definitions.[target] with
+                    | [] -> None
+                    | used -> Some (index, name, var, localTy, used)
+                | _ -> None)
+        let rec instancesOf remaining acc =
+            match remaining with
+            | [] ->
+                let generic = List.rev acc
+                let capturedLocals, others =
+                    generic
+                    |> List.fold (fun (locals: Map<string, _>, others: Var list) (index, name, localTy, instances) ->
+                        let fields = instances |> List.mapi (fun i (typeArguments, _) -> typeArguments, (if i = 0 then index + 1 else atoms.Length + others.Length + i))
+                        locals |> Map.add name (localTy, fields), others @ (List.tail instances |> List.map snd)) (Map.empty, [])
+                let firsts = generic |> List.map (fun (index, _, _, instances) -> index, snd (List.head instances)) |> Map.ofList
+                let atoms = (atoms |> List.mapi (fun index atom -> firsts |> Map.tryFind index |> Option.map AVar |> Option.defaultValue atom)) @ (others |> List.map AVar)
+                k atoms capturedLocals
+            | (index, name, var, localTy, used) :: others ->
+                this.LocalInstanceVars scope name var used (fun vars ->
+                    instancesOf others ((index, name, localTy, List.zip (List.map fst used) vars) :: acc))
+        instancesOf generic []
+
+    /// The closure of `var`, the local function `name` generic in variables of its own, at each type arguments in `used`
+    /// (with what they bind): the one bound where it is defined, or else one made here, for a use in a lambda whose
+    /// own type arguments are only known where its closure is made.
+    member private this.LocalInstanceVars (scope: Scope) (name: string) (var: Var) (used: (IrType list * Map<int, Ty>) list) (k: Var list -> Expr) : Expr =
+        let _, instances, make = scope.LocalInstances.[var.Id]
+        let rec go remaining acc =
+            match remaining with
+            | [] -> k (List.rev acc)
+            | (typeArguments, bindings) :: others ->
+                match instances |> List.tryFind (fst >> (=) typeArguments), make with
+                | Some (_, instance), _ -> go others (instance :: acc)
+                | None, Some make ->
+                    let localName = uniqueName name
+                    make bindings typeArguments (fun value ->
+                        let local = newVar localName Local value.Type
+                        let body = go others (local :: acc)
+                        mk (Let(local, value, body)) body.Type)
+                | None, None -> go others (var :: acc)
+        go used []
+
+    /// The type arguments, and what they bind, of each use in `expr` of `name`, a local function of type `localTy`
+    /// generic in variables of its own, where `bindings` binds the variables of the function `expr` is in as it says:
+    /// none where a use's type is not known. A use in a lambda that captures it counts (see
+    /// `LambdaLifting.usesThroughClosures`).
+    member private this.LocalUses (bindings: Map<int, Ty>) (localTy: Ty) (name: string) (expr: Expression) : (IrType list * Map<int, Ty>) list =
+        LambdaLifting.usesThroughClosures (fun target -> definitions |> Map.tryFind target) name expr
+        |> List.map (fun reference ->
+            let instanceTy =
+                match reference.Kind with
+                | IdentifierExpr _ -> input.ExprTypes |> Map.tryFind reference.Id
+                | _ -> input.CalleeTypes |> Map.tryFind reference.Id
+            this.LocalTypeArguments localTy (instanceTy |> Option.map (substitute bindings)) |> Option.defaultValue ([], Map.empty))
+        |> List.distinctBy fst
 
     /// The type arguments the local function of type `localTy`, generic in variables of its own, is used at where the
     /// use has the type `instanceTy`, and what they bind; none where that is not known.
@@ -773,7 +850,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     /// function generic in variables of its own, which has a closure for each type arguments it is used at.
     member private this.LocalAt (scope: Scope) (var: Var) (instanceTy: Ty option) : Var =
         match scope.LocalInstances |> Map.tryFind var.Id with
-        | Some (localTy, instances) ->
+        | Some (localTy, instances, _) ->
             let typeArguments = this.LocalTypeArguments localTy instanceTy |> Option.map fst |> Option.defaultValue []
             instances |> List.tryFind (fst >> (=) typeArguments) |> Option.map snd |> Option.defaultValue var
         | None -> var
@@ -781,31 +858,32 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     /// Binds `name`, a local function of type `localTy` generic in variables of its own, around `rest`, the statements
     /// after it: a closure for each type arguments the function is used at in `rest`, the closure `rhs` over the lifted
     /// lambda `target` lowered at them, so that what it does with a value of one of those variables (compares it, drops
-    /// it) is what the value's type does. A use whose type is not known, such as a capture, reads the closure lowered at
-    /// none, with each of those variables unit.
+    /// it) is what the value's type does. A use in a lambda that captures it counts, and the lambda captures the closure
+    /// at each type arguments it uses it at. A use whose type is not known reads the closure lowered at none, with each
+    /// of those variables unit.
     member private this.GenericLocal (scope: Scope) (name: string) (rhs: Expression) (target: string) (captured: Expression list) (localTy: Ty) (rest: StatementKind list) (k: Expr -> Expr) : Expr =
-        let instances =
-            LambdaLifting.references (Expression.synthetic (Block(rest |> List.map Statement.synthetic)))
-            |> List.filter (fst >> (=) name)
-            |> List.map (fun (_, reference) ->
-                let instanceTy =
-                    match reference.Kind with
-                    | IdentifierExpr _ -> input.ExprTypes |> Map.tryFind reference.Id
-                    | _ -> input.CalleeTypes |> Map.tryFind reference.Id
-                this.LocalTypeArguments localTy instanceTy |> Option.defaultValue ([], Map.empty))
-            |> List.distinctBy fst
-        let rec bind (remaining: (IrType list * Map<int, Ty>) list) (bound: (IrType list * Var) list) =
+        let instances = this.LocalUses Map.empty localTy name (Expression.synthetic (Block(rest |> List.map Statement.synthetic)))
+        let instances = if instances.IsEmpty then [ [], Map.empty ] else instances
+        let make bindings typeArguments = this.Closure scope rhs target captured bindings typeArguments
+        let closures = instances |> List.map (fun (typeArguments, bindings) -> typeArguments, make bindings typeArguments)
+        this.LocalInstancesAround scope name localTy closures (Some make) rest k
+
+    /// Binds `name`, a local function of type `localTy` generic in variables of its own, around `rest`, the statements
+    /// after it, to its closure at each type arguments it is used at there, which `closures` lowers; `make` lowers it at
+    /// others, where it can be.
+    member private this.LocalInstancesAround (scope: Scope) (name: string) (localTy: Ty) (closures: (IrType list * ((Expr -> Expr) -> Expr)) list) (make: LocalClosure option) (rest: StatementKind list) (k: Expr -> Expr) : Expr =
+        let rec bind (remaining: (IrType list * ((Expr -> Expr) -> Expr)) list) (bound: (IrType list * Var) list) =
             match remaining with
             | [] ->
                 let var = bound |> List.tryFind (fst >> List.isEmpty) |> Option.defaultValue (List.head bound) |> snd
-                this.Block { scope with Vars = scope.Vars |> Map.add name var; LocalInstances = scope.LocalInstances |> Map.add var.Id (localTy, bound) } rest k
-            | (typeArguments, bindings) :: others ->
+                this.Block { scope with Vars = scope.Vars |> Map.add name var; LocalInstances = scope.LocalInstances |> Map.add var.Id (localTy, bound, make) } rest k
+            | (typeArguments, closure) :: others ->
                 let localName = uniqueName name
-                this.Closure scope rhs target captured bindings typeArguments (fun value ->
+                closure (fun value ->
                     let local = newVar localName Local value.Type
                     let body = bind others ((typeArguments, local) :: bound)
                     mk (Let(local, value, body)) body.Type)
-        bind (if instances.IsEmpty then [ [], Map.empty ] else instances) []
+        bind closures []
 
     /// How the hole `hole` of an interpolated string is printed, from its type. A tag's cases are in the order its type
     /// names them, which is the order they are tested in.
@@ -911,6 +989,14 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         | DefStatement(_, name, _, (Kind (FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured)) as rhs)) :: rest
             when (genericLocalType target rhs).IsSome ->
             this.GenericLocal scope name rhs target captured (genericLocalType target rhs).Value rest k
+        | DefStatement(_, name, _, Kind (MemberAccess(Kind (IdentifierExpr environment), _, _))) :: rest
+            when environment = LambdaLifting.envParameter && scope.CapturedLocals.ContainsKey name ->
+            // A captured local function generic in variables of its own, whose closure at each type arguments it is
+            // used at here is in a field of the environment.
+            let localTy, fields = scope.CapturedLocals.[name]
+            let read (field: int) =
+                this.Complex scope (Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr environment), string field, None)))
+            this.LocalInstancesAround scope name localTy (fields |> List.map (fun (typeArguments, field) -> typeArguments, read field)) None rest k
         | DefStatement(_, name, _, rhs) :: rest ->
             // The local is named before its value is lowered, so that locals are declared in the order they are
             // written. Its type is its value's, which a local lambda lifting made has as well.
@@ -1061,7 +1147,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               Members = Map.empty
               CapturedMembers = Map.empty
               ForDepth = 0
-              LocalInstances = Map.empty }
+              LocalInstances = Map.empty
+              CapturedLocals = Map.empty }
         // An expression that holds errors deferred to run time, and cannot be lowered because of them, reports them
         // when it is reached instead.
         let lowerExpression (expr: Expression) =
@@ -1146,7 +1233,8 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
               Members = Map.empty
               CapturedMembers = Map.empty
               ForDepth = 0
-              LocalInstances = Map.empty }
+              LocalInstances = Map.empty
+              CapturedLocals = Map.empty }
         let make (parameters: Var list) (result: IrType) (body: Expr) =
             { Name = functionName
               Source = name
@@ -1180,7 +1268,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             let scope = scopeOf parameters
             let scope = { scope with Members = memberScope; Vars = parameterVars |> List.fold (fun acc (name, var) -> acc |> Map.add name var) scope.Vars }
             make (parameters @ List.map snd members) (toIrType resultTy) (this.Tail scope body)
-        | LiftedCapturing capturedTys ->
+        | LiftedCapturing(capturedTys, capturedLocals) ->
             // The environment first: the function's table slot, then what it captures. The rest are the lambda's
             // parameters, typed as the lambda was where it was written.
             let lambda, owner =
@@ -1203,7 +1291,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     let otherNames = aliases |> Map.filter (fun _ key -> key = parameter.Key) |> Map.keys |> List.ofSeq
                     parameter.Name, parameter.Key :: otherNames)
                 |> Map.ofList
-            let scope = { scopeOf (environmentParameter :: named) with CapturedMembers = capturedMembers }
+            let scope = { scopeOf (environmentParameter :: named) with CapturedMembers = capturedMembers; CapturedLocals = capturedLocals }
             make (environmentParameter :: valueParameters) (toIrType resultTy) (bind (this.Tail scope body))
         | WrapperCalling(wrapped, instanceTy) ->
             // Takes an environment, ignores it, and calls the function with the rest.

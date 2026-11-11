@@ -63,6 +63,26 @@ and private referencesInPattern (pattern: Pattern) : (string * Expression) list 
     | UnitPattern
     | ElsePattern -> []
 
+/// The nodes in `expr`, after lifting, that use the local `name`: each reference to it, and, for a closure that captures
+/// it, the uses in the lifted function the closure is over (its definition, which `definitionOf` finds), which binds it
+/// under the same name. The capture itself is not a use.
+let rec usesThroughClosures (definitionOf: string -> Expression option) (name: string) (expr: Expression) : Expression list =
+    let found = references expr
+    let closures =
+        found
+        |> List.choose (fun (_, node) ->
+            match node.Kind with
+            | FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured) ->
+                let captures = captured |> List.filter (function Kind (IdentifierExpr captured) -> captured = name | _ -> false)
+                if captures.IsEmpty then None else Some (target, captures)
+            | _ -> None)
+    let captures = closures |> List.collect snd
+    let direct =
+        found
+        |> List.filter (fun (referenced, node) -> referenced = name && not (captures |> List.exists (fun capture -> obj.ReferenceEquals(capture, node))))
+        |> List.map snd
+    direct @ (closures |> List.collect (fun (target, _) -> definitionOf target |> Option.map (usesThroughClosures definitionOf name) |> Option.defaultValue []))
+
 /// Every name a pattern binds.
 let rec private boundNamesPattern (pattern: Pattern) : string list =
     match pattern.Kind with
