@@ -64,7 +64,7 @@ A file that does not parse is left as it is and its syntax error is reported. Th
 
 # Imports
 
-Imports in a row go in one bracketed `import (...)`, and their names are sorted: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each alphabetical. A blank line keeps groups of imports apart, and a comment on a line of its own starts a new group inside the brackets. A comment at the end of an import's line moves with it.
+Imports in a row go in one bracketed `import (...)`, and their names are sorted: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each alphabetical. A blank line keeps groups of imports apart, and a comment on a line of its own (or a `---` block comment) starts a new group inside the brackets. A comment at the end of an import's line moves with it.
 
 ```nanyx
 -- before

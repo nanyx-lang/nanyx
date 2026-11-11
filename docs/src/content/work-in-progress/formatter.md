@@ -244,8 +244,8 @@ its indent.
 ## Sorting imports
 
 The imports in each run of consecutive `import` statements are sorted, and the names within one `import (...)` are
-sorted. A blank line or a comment on a line of its own ends a run, so authors can group imports and keep the groups
-apart. Since imports in a row become one bracketed import, a run is a stretch of its names with no comment line among
+sorted. A blank line or a comment on a line of its own (a `--` comment or a `---` block comment) ends a run, so authors
+can group imports and keep the groups apart. Since imports in a row become one bracketed import, a run is a stretch of its names with no comment line among
 them: the comment stays where it is, as a heading for the names after it. A comment at the end of an import's line
 moves with the import. Duplicate imports are left alone: removing them is a linter's job.
 
@@ -265,7 +265,7 @@ the order. The order is `compiler/Nanyx.Formatter/ImportOrder.fs`; `importDoc` i
 
 The safety check sorts each side's imports before comparing the trees (`Syntax.normalize`), so a sort that dropped or
 duplicated an import is still caught. It compares the comments at the end of import lines as a sorted list, since they
-move with their imports, and every other comment in order.
+move with their imports, and every other comment in order (`FormatCommand.commentsOf`, which the corpus tests use too).
 
 Imports inside a block (`ImportStatement`) have their names sorted within one `import (...)`, but separate import
 statements in a row in a block are not merged or reordered.

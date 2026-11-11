@@ -38,12 +38,6 @@ let private parsed =
             | Result.Ok parsed -> Some(name, source, parsed)
             | Result.Error _ -> None)
 
-let private commentsOf (parsed: SourceModule) =
-    parsed.Trivia
-    |> List.choose (function
-        | LineComment(text, _, _) -> Some(text.TrimEnd())
-        | BlankLines _ -> None)
-
 let private format (parsed: SourceModule) = Formatter.format Formatter.Options.defaults parsed
 
 /// Fails listing every piece `check` finds a problem with.
@@ -70,6 +64,7 @@ let ``Formatted code parses to the same tree`` () =
 let ``Formatting keeps every comment, in order`` () =
     everyPiece (fun name _ tree ->
         let formatted = format tree
+        let commentsOf = FormatCommand.commentsOf
         match parseModuleWithTrivia name formatted with
         | Result.Ok again when commentsOf again <> commentsOf tree ->
             Some $"comments changed from %A{commentsOf tree} to %A{commentsOf again}\n---\n{formatted}"
