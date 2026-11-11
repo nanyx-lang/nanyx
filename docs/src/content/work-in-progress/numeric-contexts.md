@@ -4,7 +4,7 @@ description: "Add, Num, the arithmetic operators and number literals in generic 
 order: 9
 ---
 
-> **Status: agreed, steps 1 to 5 of the [order of work](#order-of-work) done, but for `math.abs`, `min`, `max` and `clamp`, which wait on `Ord`.** It answers the questions in
+> **Status: agreed, steps 1 to 5 of the [order of work](#order-of-work) done.** It answers the questions in
 > [#606](https://github.com/nanyx-lang/nanyx/issues/606) and picks up where
 > [Equality and well-known contexts](./equality-and-well-known-contexts#numeric-operators) stops. The decisions are
 > listed under [Decided](#decided), and the work is filed under [Order of work](#order-of-work).
@@ -53,6 +53,8 @@ prelude declares `Add(a)` and `Num(a)`.
   as many steps as the exponent has bits ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 - **`Float.pow(x, y)`** takes any `y`: a whole one is `x ** y`, and any other `e ** (y * ln(x))`, with `exp` and `ln`
   written in the prelude from their series, since WebAssembly has neither.
+- **`math.abs: [Num(a) + Ord(a)] a -> a`**, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
+  `int`, a `float` or any other type with an order ([#186](https://github.com/nanyx-lang/nanyx/issues/186)).
 - **An instance built for a call in the prelude is only compiled when that call is**: the definitions it is made of
   are reached from the definition the call is in, not from every module (`Library.reachedItems`).
 
@@ -60,14 +62,11 @@ Not done yet:
 
 - **A negative exponent on an integer type** is `1 / x ** -n`, which truncates, rather than stopping the program as
   the design says: `__pow` is generic, and cannot tell an integer type from a float without a member to ask.
-- **`math` is still `int` only.** `abs` needs `Ord(a)` to compare with `zero`, and `min`, `max` and `clamp` need only
-  `Ord(a)`, so they wait on [#476](https://github.com/nanyx-lang/nanyx/issues/476) (the rest of
-  [#186](https://github.com/nanyx-lang/nanyx/issues/186)).
-
-- **`0` elsewhere in generic code.** A `0` that is not an operand beside a value of the type variable, such as the
-  start of a `fold` or a function's result, is still an `int`; write `zero` there. Literals are typed before the
-  type they are expected to have is known, so reading them by their expected type needs a pass after the def is
-  inferred.
+- **`0` elsewhere in generic code.** A `0` that is not an operand of an arithmetic operator beside a value of the
+  type variable, such as the start of a `fold`, a function's result or the other side of a comparison, is still an
+  `int`; write `zero` there, as `math.abs` does in `compare(n, zero)`. A literal beside a comparison is
+  [#678](https://github.com/nanyx-lang/nanyx/issues/678). Literals are typed before the type they are expected to
+  have is known, so reading them by their expected type needs a pass after the def is inferred.
 - **`use` does not change concrete arithmetic** (decision 6): an `Add(int)` loaded with `use` reaches generic code
   called from its block, but a concrete `1 + 2` there is still the built-in `+`.
 - **A user context can still give `+` another meaning**: an operator calls whatever its name is bound to on a type
@@ -329,9 +328,8 @@ The language server's code action for the second and fourth adds the requirement
    implemented](#what-is-implemented)). `Add` in the prelude; `+` and `-` read through it; the compiler's own
    instances for `int` and `float`; prefix `-`; `0` as `zero` in annotated generic code. Adds `List.sum` (#475)
    ([#609](https://github.com/nanyx-lang/nanyx/issues/609)).
-4. **Done**, but for `math`, which waits on `Ord`. `Num`; `*`, `/` and `%` read through it; `fromInt` literals.
-   Makes `math.abs` generic (#186); `min`, `max` and `clamp` wait on `Ord`
-   ([#476](https://github.com/nanyx-lang/nanyx/issues/476)) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
+4. **Done.** `Num`; `*`, `/` and `%` read through it; `fromInt` literals. Makes `math.abs` generic, and `min`, `max`
+   and `clamp` with `Ord` (#186) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
 5. **Done.** `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 6. Instances for the sized numbers as they land ([#343](https://github.com/nanyx-lang/nanyx/issues/343)), and the
    dimension rules for `*` and `/` with units.

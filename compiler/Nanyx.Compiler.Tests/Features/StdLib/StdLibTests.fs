@@ -165,6 +165,31 @@ let ``nanyx/math exports int functions with their types`` () =
         Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.[name])
 
 [<Fact>]
+let ``nanyx/math abs, min, max and clamp give the type they are called with`` () =
+    // #610: they took an `int` only.
+    let result =
+        Compiler.compile (
+            "import nanyx/math as math\n" +
+            "def a = math.abs(-2.5)\n" +
+            "def b = math.min(1.5, 2.0)\n" +
+            "def c = math.max(1.5, 2.0)\n" +
+            "def d = math.clamp(1.5, min = 0.0, max = 1.0)\n" +
+            "def e = math.min(\"pear\", \"apple\")\n" +
+            "def f = math.clamp(\"m\", min = \"a\", max = \"f\")")
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    for name in [ "a"; "b"; "c"; "d" ] do
+        Assert.Equal(TyPrimitive "float", result.Typed.Value.Types.[name])
+    for name in [ "e"; "f" ] do
+        Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.[name])
+
+[<Fact>]
+let ``nanyx/math abs of a string is an error, and so is min of an int and a float`` () =
+    let notANumber = Compiler.compile "import nanyx/math as math\n\ndef a = math.abs(\"x\")"
+    Assert.Equal<string list>([ DiagnosticCodes.MissingContextMembers.Code ], notANumber.Diagnostics |> List.map (fun d -> d.Code))
+    let mixed = Compiler.compile "import nanyx/math as math\n\ndef a = math.min(1, 2.5)"
+    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], mixed.Diagnostics |> List.map (fun d -> d.Code))
+
+[<Fact>]
 let ``nanyx/math exports float functions with their types`` () =
     let result =
         Compiler.compile (

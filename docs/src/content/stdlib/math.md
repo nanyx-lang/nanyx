@@ -6,19 +6,21 @@ order: 9
 
 The `math` module provides common numeric and floating-point operations.
 
-Functions that work on any numeric type are to be generic over the `Num(a)` [context](../advanced/contexts) (with `Ord(a)` to compare); `int` and `float` are its built-in instances, so these functions will accept either without conversion. `pow` is; for now `abs`, `min`, `max` and `clamp` take `int` only: making them generic waits on `Ord` ([#186](https://github.com/nanyx-lang/nanyx/issues/186), [#476](https://github.com/nanyx-lang/nanyx/issues/476)). Functions that only make sense for floating-point values take `float` directly.
+Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs` and `pow` accept either without conversion. `min`, `max` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
 
 `floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `Int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 
 # abs
 
 ```nanyx
-math.abs: [Num(a)] a -> a
+math.abs: [Num(a) + Ord(a)] a -> a
 ```
 
 ```nanyx
 math.abs(-42)
 -- 42
+math.abs(-2.5)
+-- 2.5
 ```
 
 ---
@@ -26,12 +28,16 @@ math.abs(-42)
 # min
 
 ```nanyx
-math.min: [Num(a)] (a, a) -> a
+math.min: [Ord(a)] (a, a) -> a
 ```
 
 ```nanyx
 math.min(3, 7)
 -- 3
+math.min(1.5, 2.0)
+-- 1.5
+math.min("pear", "apple")
+-- "apple"
 ```
 
 ---
@@ -39,12 +45,14 @@ math.min(3, 7)
 # max
 
 ```nanyx
-math.max: [Num(a)] (a, a) -> a
+math.max: [Ord(a)] (a, a) -> a
 ```
 
 ```nanyx
 math.max(3, 7)
 -- 7
+math.max(1.5, 2.0)
+-- 2.0
 ```
 
 ---
@@ -52,12 +60,16 @@ math.max(3, 7)
 # clamp
 
 ```nanyx
-math.clamp: [Num(a)] (a, min: a, max: a) -> a
+math.clamp: [Ord(a)] (a, min: a, max: a) -> a
 ```
+
+The value moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.
 
 ```nanyx
 math.clamp(120, min = 0, max = 100)
 -- 100
+math.clamp(-0.5, min = 0.0, max = 1.0)
+-- 0.0
 ```
 
 ---
@@ -101,7 +113,7 @@ Float.pow: (float, float) -> float
 
 ```nanyx
 Float.pow(2.0, 0.5)
--- 1.414214
+-- 1.414213562373095
 ```
 
 A whole exponent gives exactly what `**` does; any other is computed as `e ** (y * ln(x))`, so a negative base gives NaN.

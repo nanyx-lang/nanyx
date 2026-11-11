@@ -2,32 +2,35 @@ module math
 
 -- nanyx/math: numeric utilities.
 --
--- The language docs make `abs`, `min`, `max`, `clamp` and `pow` generic over the `Num(a)` context, so that
--- they take an `int` or a `float`. `pow` is; the others take `int` only until `Ord` exists to compare
--- with (#476). `sqrt`, `floor`, `ceil`, `round` and `truncate`
+-- `abs` and `pow` are generic over the `Num(a)` context, so they take an `int` or a `float`. `abs`, `min`,
+-- `max` and `clamp` compare through `Ord(a)`, so the last three take a value of any type that has an order,
+-- a `string` among them. `sqrt`, `floor`, `ceil`, `round` and `truncate`
 -- take a `float`, and are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
 -- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`.
 --
 -- Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified
 -- to call `abs(x)`.
 
--- `n` without its sign.
-export def abs: int -> int = { n ->
-  if n < 0 then 0 - n else n
+-- `n` without its sign. A value that is neither below nor above `zero` is `zero`, so `abs(-0.0)` is `0.0`.
+export def abs: [Num(a) + Ord(a)] a -> a = { n ->
+  match compare(n, zero)
+    | #less -> -n
+    | #greater -> n
+    | #equal -> zero
 }
 
 -- The smaller of `a` and `b`.
-export def min: int, int -> int = { a, b ->
+export def min: [Ord(a)] a, a -> a = { a, b ->
   if a <= b then a else b
 }
 
 -- The larger of `a` and `b`.
-export def max: int, int -> int = { a, b ->
+export def max: [Ord(a)] a, a -> a = { a, b ->
   if a >= b then a else b
 }
 
 -- `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.
-export def clamp: (int, min: int, max: int) -> int = { n, min, max ->
+export def clamp: [Ord(a)] (a, min: a, max: a) -> a = { n, min, max ->
   if n < min then min else if n > max then max else n
 }
 
