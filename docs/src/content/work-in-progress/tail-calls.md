@@ -163,7 +163,8 @@ not yet stack-safe (its runtime helper recurses once per element of its left ope
 5. **Stack overflow error.** Report running out of stack as a Nanyx error.
 6. **`@tailrec`.** Check the attribute in the type checker, if per-function control turns out to be wanted.
 7. **Stack-safe `List.map` and `List.filter`.** **Done:** they and every other walk in the standard library
-   (`List.take`, `flatten`, `zip`, `sortBy`, `unfold`, `append`; `String.repeat`, `split`, `replace`, `lines`,
+   (`List.take`, `flatten`, `zip`, `unzip`, `partition`, `skipWhile`, `get`, `sortBy`, `unfold`, `append`;
+    `String.repeat`, `split`, `replace`, `lines`,
    `words`; `math.pow`) call themselves only in tail position, with tests that run them on 20,000 elements.
 
 # Open questions

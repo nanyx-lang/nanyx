@@ -28,7 +28,7 @@ def english = [
 
 def percent: (int, int) -> float = { n, m -> 100.0 * Int.toFloat(n) / Int.toFloat(m) }
 
-def rotateList: (list(a), int) -> list(a) = { xs, n -> xs \drop(n) ++ xs \take(n) }
+def rotateList: (list(a), int) -> list(a) = { xs, n -> xs \skip(n) ++ xs \take(n) }
 
 -- A frequency table for a string
 def freqs: string -> list(float) = { s ->

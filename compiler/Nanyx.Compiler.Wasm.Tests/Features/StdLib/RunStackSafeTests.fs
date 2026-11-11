@@ -54,6 +54,34 @@ let ``Run - List.zip works on 20,000 elements`` () =
     runSource (withList body) |> assertRan "20000 1 20000\n"
 
 [<Fact>]
+let ``Run - List.unzip works on 20,000 elements`` () =
+    let body =
+        "def (firsts, seconds) = List.unzip(List.zip(xs, List.reverse(xs)))\n" +
+        "println(show(firsts))\n" +
+        "println(show(seconds))\n"
+    runSource (withList body) |> assertRan "20000 1 20000\n20000 20000 1\n"
+
+[<Fact>]
+let ``Run - List.partition works on 20,000 elements`` () =
+    let body =
+        "def (passed, failed) = List.partition(xs, { x -> x > 2 })\n" +
+        "println(show(passed))\n" +
+        "println(show(failed))\n"
+    runSource (withList body) |> assertRan "19998 3 20000\n2 1 2\n"
+
+[<Fact>]
+let ``Run - List.skipWhile works on 20,000 elements`` () =
+    runSource (withList "println(show(List.skipWhile(xs, { x -> x < 20000 })))\n") |> assertRan "1 20000 20000\n"
+
+[<Fact>]
+let ``Run - List.get works on 20,000 elements`` () =
+    let body =
+        "match List.get(xs, 19999)\n" +
+        "  | #some(x) -> println(\"{x}\")\n" +
+        "  | #outOfRange -> println(\"out of range\")\n"
+    runSource (withList body) |> assertRan "20000\n"
+
+[<Fact>]
 let ``Run - List.sortBy works on 20,000 elements`` () =
     runSource (withList "println(show(List.sortBy(xs, { x -> 0 - x })))\n") |> assertRan "20000 20000 1\n"
 

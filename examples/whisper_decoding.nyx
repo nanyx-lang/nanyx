@@ -134,7 +134,7 @@ export def transcribe
     def #some(tokens) = mainLoop([sotSequence], audio, decoder, filters, sampleLen = sampleLen) \head
       except #emptyList -> #some([])
 
-    -- Drop the start sequence and everything from the end-of-transcript token on
-    def text = decode(tokens \drop(sotSequence.length) \takeWhile { != eot })
+    -- Skip the start sequence and drop everything from the end-of-transcript token on
+    def text = decode(tokens \skip(sotSequence.length) \takeWhile { != eot })
     return text \trim
   }}

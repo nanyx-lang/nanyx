@@ -207,3 +207,38 @@ let ``Run - List search and slicing helpers`` () =
     |> assertRan (
         "has 4\nno 9\nhas b\nat 1\nnot found\ndbg: 3\ndbg: 0\nempty\nnot empty\nlast 5\nno last\n" +
         "3 1 4 1 []\n[]\n3 1 []\n[]\n3 11 24 31 45 []\n1 2 2 3 3 3 []\n[]\n")
+
+[<Fact>]
+let ``Run - List.skipWhile, partition, unzip and get`` () =
+    let source =
+        showInts +
+        "def xs = [1, 2, 3, 4]\n" +
+        "def empty: list(int) = []\n" +
+        "def describe: #some(int) | #outOfRange -> string = {\n" +
+        "  | #some(n) -> \"some {n}\"\n" +
+        "  | #outOfRange -> \"out of range\"\n" +
+        "}\n" +
+        "println(show(xs \\ skipWhile { < 3 }))\n" +
+        "println(show(List.skipWhile([1, 5, 1], { x -> x < 3 })))\n" +
+        "println(show(List.skipWhile(xs, { x -> x < 9 })))\n" +
+        "println(show(List.takeWhile(xs, { x -> x < 3 }) ++ List.skipWhile(xs, { x -> x < 3 })))\n" +
+        "def (small, big) = xs \\ partition { < 3 }\n" +
+        "println(show(small) ++ show(big))\n" +
+        "def (odd, even) = List.partition([5, 2, 3, 4, 1], { x -> x % 2 == 1 })\n" +
+        "println(show(odd) ++ show(even))\n" +
+        "def (none, all) = List.partition(empty, { x -> x > 0 })\n" +
+        "println(show(none) ++ show(all))\n" +
+        "def (numbers, names) = List.unzip([(1, \"a\"), (2, \"b\")])\n" +
+        "println(show(numbers) ++ String.join(names, \",\"))\n" +
+        "def (firsts, seconds) = List.unzip(List.zip(xs, [5, 6, 7, 8]))\n" +
+        "println(show(firsts) ++ show(seconds))\n" +
+        "println(describe([10, 20, 30] \\ List.get(1)))\n" +
+        "println(describe([10, 20, 30] \\ get(0)))\n" +
+        "println(describe(List.get([10, 20, 30], 2)))\n" +
+        "println(describe(List.get([10, 20, 30], -1)))\n" +
+        "println(describe(List.get([10, 20, 30], 3)))\n" +
+        "println(describe(List.get(empty, 0)))\n"
+    runSource source
+    |> assertRan (
+        "3 4 []\n5 1 []\n[]\n1 2 3 4 []\n1 2 []3 4 []\n5 3 1 []2 4 []\n[][]\n1 2 []a,b\n1 2 3 4 []5 6 7 8 []\n" +
+        "some 20\nsome 10\nsome 30\nout of range\nout of range\nout of range\n")
