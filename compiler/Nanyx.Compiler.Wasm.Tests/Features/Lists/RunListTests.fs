@@ -143,6 +143,20 @@ let ``Run - List.distinct keeps the first of each value`` () =
     runSource source |> assertRan "1 2 3 []\nb,a\ndbg: 2\ndbg: 1\n[]\n"
 
 [<Fact>]
+let ``Run - list.distinct compares records, tuples and lists by their structure`` () =
+    // #191: `distinct` is `[Eq(a)] list(a) -> list(a)`; it took numbers, bools, strings and tags only.
+    let source =
+        showInts
+        + """type Person = (name: string, age: int)
+def people: list(Person) = [
+  Person(name = "Ann", age = 40), Person(name = "Bob", age = 30), Person(name = "Ann", age = 40)]
+println(string.join(list.map(list.distinct(people), { p -> p.name }), ","))
+println(string.join(list.map(list.distinct([(1, "a"), (2, "a"), (1, "a")]), { p -> "{p.0}{p.1}" }), ","))
+println("{list.length(list.distinct([[1, 2], [2, 1], [1, 2], []]))}")
+"""
+    runSource source |> assertRan "Ann,Bob\n1a,2a\n3\n"
+
+[<Fact>]
 let ``Run - List.sortBy sorts by an int key and keeps equal keys in order`` () =
     let source =
         showInts +
