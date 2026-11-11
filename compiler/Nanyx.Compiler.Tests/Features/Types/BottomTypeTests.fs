@@ -30,6 +30,16 @@ let ``A branch that never gives a value takes the type of the other, whichever c
         typesOf source [ "first"; "second"; "matched"; "matchedLast" ])
 
 [<Fact>]
+let ``A list item that never gives a value takes the type of the others, wherever it is`` () =
+    let source =
+        stop
+        + """
+def first = [stop(0), 1]
+def last = [1, stop(0)]
+"""
+    Assert.Equal<string list>([ "list(int)"; "list(int)" ], typesOf source [ "first"; "last" ])
+
+[<Fact>]
 let ``A call that never gives a value can be given where any type is expected`` () =
     let source =
         stop

@@ -329,3 +329,84 @@ let ``A call to a def that matches on a tag union keeps the argument's payload t
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     // `#some(5)` has no other tags, so neither has `y`.
     Assert.Equal(TyTag("some", Some (TyPrimitive "int")), result.Typed.Value.Types.["y"])
+
+[<Fact>]
+let ``Typecheck joins the tags of a list literal's elements into a union`` () =
+    let typed = compileClean "def colors = [#red, #green, #red]"
+    let expected = TyApply("list", [ TyUnion [ TyTag("red", None); TyTag("green", None) ] ])
+    Assert.Equal(expected, typed.Types.["colors"])
+
+[<Fact>]
+let ``Typecheck takes a list literal of tags at its annotation's element type`` () =
+    let typed =
+        compileClean
+            """
+type Color = #red | #green
+def annotated: list(Color) = [#red, #green]
+def wider: list(#red | #green | #blue) = [#red, #green]
+"""
+    let color = TyAlias("Color", [], TyUnion [ TyTag("red", None); TyTag("green", None) ])
+    Assert.Equal(TyApply("list", [ color ]), typed.Types.["annotated"])
+    let wider = TyUnion [ TyTag("red", None); TyTag("green", None); TyTag("blue", None) ]
+    Assert.Equal(TyApply("list", [ wider ]), typed.Types.["wider"])
+
+[<Fact>]
+let ``Typecheck keeps the name of a list literal's named records`` () =
+    let typed =
+        compileClean
+            """
+type Point = (x: int, y: int)
+def points = [Point(x = 1, y = 2), Point(x = 3, y = 4)]
+"""
+    Assert.Equal("list(Point)", Unifier.tyToString typed.Types.["points"])
+
+[<Fact>]
+let ``Typecheck joins the tags inside a list literal's tuples field by field`` () =
+    let typed = compileClean "def pairs = [(1, #some(2)), (3, #none)]"
+    Assert.Equal("list((int, #some(int) | #none))", Unifier.tyToString typed.Types.["pairs"])
+
+[<Fact>]
+let ``Typecheck still rejects list elements that are same-named tags with different payloads`` () =
+    let result = Compiler.compile """def f = [#some(1), #some("one")]"""
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal("Type mismatch: int vs string.", diagnostic.Message)
+
+[<Fact>]
+let ``Typecheck joins the tag payloads of same-named tags across branches`` () =
+    let typed =
+        compileClean
+            """
+def load = {
+  | 0 -> #error(#notFound)
+  | 2 -> #error(#denied)
+  | n -> #some(n)
+}
+"""
+    let expected =
+        TyFunc(
+            TyPrimitive "int",
+            TyUnion
+                [ TyTag("error", Some (TyUnion [ TyTag("notFound", None); TyTag("denied", None) ]))
+                  TyTag("some", Some (TyPrimitive "int")) ]
+        )
+    Assert.Equal(expected, typed.Types.["load"])
+
+[<Fact>]
+let ``Typecheck checks branches whose same-named tags hold different tags against an annotation`` () =
+    let typed =
+        compileClean
+            """
+def load: int -> #some(int) | #error(#notFound | #denied) = {
+  | 0 -> #error(#notFound)
+  | 2 -> #error(#denied)
+  | n -> #some(n)
+}
+"""
+    let expected =
+        TyFunc(
+            TyPrimitive "int",
+            TyUnion
+                [ TyTag("some", Some (TyPrimitive "int"))
+                  TyTag("error", Some (TyUnion [ TyTag("notFound", None); TyTag("denied", None) ])) ]
+        )
+    Assert.Equal(expected, typed.Types.["load"])

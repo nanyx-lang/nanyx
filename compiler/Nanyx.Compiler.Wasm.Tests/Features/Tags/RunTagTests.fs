@@ -132,3 +132,41 @@ let ``Run - a tag's string payload allocated past 64 KB of heap`` () =
         "  println(\"filler is empty: {filler == \"\"}\")\n" +
         "}\n"
     runSource source |> assertRan "name Ada!\nfiller is empty: false\n"
+
+[<Fact>]
+let ``Run - a list literal of different tags, and branches whose tags hold different tags`` () =
+    let source =
+        """
+import nanyx/console
+
+type Color = #red | #green
+
+def name: Color -> string = {
+  | #red -> "red"
+  | #green -> "green"
+}
+
+def names: list(Color) -> string = {
+  | [] -> ""
+  | [c, ...rest] -> name(c) ++ " " ++ names(rest)
+}
+
+def load = {
+  | 0 -> #error(#notFound)
+  | 2 -> #error(#denied)
+  | n -> #some(n)
+}
+
+def describe = { n ->
+  match load(n)
+    | #error(#notFound) -> "not found"
+    | #error(#denied) -> "denied"
+    | #some(v) -> "some {v}"
+}
+
+println(names([#red, #green, #red]))
+println(describe(0))
+println(describe(1))
+println(describe(2))
+"""
+    runSource source |> assertRan "red green red \nnot found\nsome 1\ndenied\n"
