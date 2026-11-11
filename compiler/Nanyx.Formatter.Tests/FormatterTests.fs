@@ -56,6 +56,9 @@ let ``Operators a statement cannot take without parentheses keep them`` () =
 let ``An annotated lambda parameter is bracketed`` () =
     unchanged "def f = { (x: int) -> x + 1 }\n"
     Assert.Equal("def f = { (x: int), y -> x + y }\n", format "def f = { x: int, y -> x + y }")
+    // An unbracketed annotation ends at the arrow, so the body may start with a name (#272).
+    Assert.Equal("def f = { (q: Point) -> q }\n", format "def f = { q: Point -> q }")
+    Assert.Equal("def f = { (g: int -> int) -> g(1) }\n", format "def f = { g: (int -> int) -> g(1) }")
 
 [<Fact>]
 let ``Pattern parameters are printed as written`` () =

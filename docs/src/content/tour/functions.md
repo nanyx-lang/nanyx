@@ -172,6 +172,8 @@ A lambda's parameters and result can be annotated inline when inference needs a 
 def double = { (x: int): int -> x * 2 }
 ```
 
+Without brackets, a parameter's annotation ends at the `->`, so `{ q: Point -> q }` takes a `Point` and returns it. A parameter of a function type has brackets around the type, `{ g: (int -> int) -> g(1) }`, or around the whole parameter, `{ (g: int -> int) -> g(1) }`.
+
 Named fields can be destructured to a different local name with `field = localName`:
 
 ```nanyx

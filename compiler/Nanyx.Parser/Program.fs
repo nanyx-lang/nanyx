@@ -921,11 +921,13 @@ do expressionRef := (attempt matchExpr <|> pipeExpr)
 
 // Wire up the lambda parser
 do 
-    let parameter =
-        getPosition .>>. typedIdentifier >>= fun (start, (name, typeOpt)) -> noteName start name >>% (name, typeOpt)
-    // A parameter may be bracketed, `{ (x: int) -> x + 1 }`, so the arrow after its annotation ends the parameters
-    // rather than making the annotation a function type.
-    let bracketedParameter = between (pstring "(" >>. wsInline) (wsInline >>. pstring ")") parameter
+    let parameterOf annotation =
+        getPosition .>>. typedIdentifier annotation >>= fun (start, (name, typeOpt)) -> noteName start name >>% (name, typeOpt)
+    let parameter = parameterOf parameterType
+    // A parameter may be bracketed, `{ (x: int) -> x + 1 }`, and its annotation may then be a function type without
+    // brackets of its own, `{ (g: int -> int) -> g(1) }`. Outside brackets, the arrow after an annotation ends the
+    // parameters.
+    let bracketedParameter = between (pstring "(" >>. wsInline) (wsInline >>. pstring ")") (parameterOf typeExpr)
     // A parameter may be a pattern, `{ (a, b) -> a + b }`, `{ $Email(s) -> s }`, with the names it binds. A name or
     // `_` alone is an ordinary parameter.
     let patternParameter =

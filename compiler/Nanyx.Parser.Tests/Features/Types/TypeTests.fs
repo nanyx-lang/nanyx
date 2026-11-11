@@ -120,6 +120,22 @@ let ``a bracketed lambda parameter's annotation ends at the bracket`` () =
     parametersOf "def f = { (x) -> x }" |> should equal [ ("x", (None: TypeExpr option)) ]
 
 [<Fact>]
+let ``an unbracketed lambda parameter's annotation ends at the arrow (#272)`` () =
+    let parametersOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Lambda (parameters, Kind body))))) ] -> parameters, body
+        | other -> failwith $"Unexpected parse: %A{other}"
+    parametersOf "def f = { q: Point -> q }"
+    |> should equal ([ ("q", Some (named "Point")) ], IdentifierExpr "q")
+    parametersOf "def f = { x: int, y: list(a) -> y }"
+    |> should equal ([ ("x", Some (named "int")); ("y", Some (ty (TypeApply ("list", [ var "a" ])))) ], IdentifierExpr "y")
+    parametersOf "def f = { x: int | string -> x }"
+    |> should equal ([ ("x", Some (ty (TypeUnion [ named "int"; named "string" ]))) ], IdentifierExpr "x")
+    // A function type there has brackets of its own.
+    parametersOf "def f = { g: (int -> int) -> g }"
+    |> should equal ([ ("g", Some (func (named "int") (named "int"))) ], IdentifierExpr "g")
+
+[<Fact>]
 let ``typeof names a value as a type`` () =
     let annotationOf source =
         match parseModule source with

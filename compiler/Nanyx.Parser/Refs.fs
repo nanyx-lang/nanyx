@@ -34,6 +34,9 @@ let typeExpr, typeExprRef = createParserForwardedToRef<TypeExpr, ParseState>()
 let typeSignature, typeSignatureRef = createParserForwardedToRef<TypeExpr, ParseState>()
 /// Types separated by commas, and the result they go to when an arrow follows them, with the span of the whole.
 let typeList, typeListRef = createParserForwardedToRef<(TypeExpr list * TypeExpr option) * SourceSpan, ParseState>()
+/// The type in a lambda parameter's annotation: a type expression with no `->` outside brackets, since the arrow
+/// after it ends the parameters. A function type there is bracketed, `{ g: (int -> int) -> g(1) }`.
+let parameterType, parameterTypeRef = createParserForwardedToRef<TypeExpr, ParseState>()
 
 /// What a `typeList` means: `a, b -> c` is a function of two parameters, since `,` binds tighter than `->`. The
 /// parameters' tuple spans the parameters.

@@ -7,7 +7,7 @@ open FParsec
 open Parser.Program
 
 // Type expression parser
-/// Fills `typeExpr`, `typeList` and `typeSignature`. Called by `Api`: a file's top-level code runs only when one of
+/// Fills `typeExpr`, `typeList`, `typeSignature` and `parameterType`. Called by `Api`: a file's top-level code runs only when one of
 /// its own values is first used.
 let internal fillTypeRefs () =
     // A type an aliased import brings in is qualified with the alias: `m.$Email`, `m.Shape`.
@@ -221,7 +221,8 @@ let internal fillTypeRefs () =
     // `,` binds tighter than `->` wherever types are listed (see the types page), so `int, int -> int` means
     // `(int, int) -> int` in a def's annotation, in brackets, in type arguments and in a tag's payload alike. A
     // function that is one of the items has brackets of its own. A record's fields and a lambda's parameters
-    // are separated by commas themselves, so a type there is a `typeExpr`, which takes no bare list.
+    // are separated by commas themselves, so a type there takes no bare list: a field's is a `typeExpr`, and a
+    // parameter's a `parameterType`.
     typeListRef :=
         withSpan (
             sepBy1 typeUnion (attempt (wsInline >>. pstring "," >>. ws))
@@ -233,12 +234,16 @@ let internal fillTypeRefs () =
             withSpan ((contextSet .>> ws) .>>. typeList) |>> fun ((ctx, list), span) ->
                 TypeExpr.at span (TypeWithContext(contextsOf ctx, typeListToType list)))
         <|> (typeList |>> typeListToType)
+
+    parameterTypeRef := typeUnion
     ()
 
-let typedIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
+/// A lambda parameter with an optional annotation of the type `annotation` parses: a `parameterType` where the `->`
+/// after it ends the parameters, a `typeExpr` inside brackets.
+let typedIdentifier (annotation: Parser<TypeExpr, ParseState>) : Parser<Identifier * TypeExpr option, ParseState> =
     pipe2
         identifierNoWs
-        (opt (attempt (wsInline >>. pstring ":" >>. ws >>. typeExpr)))
+        (opt (attempt (wsInline >>. pstring ":" >>. ws >>. annotation)))
         (fun name typeOpt -> (name, typeOpt))
 
 /// A def's name with an optional same-line annotation. Unlike `typedIdentifier` (lambda parameters), the
