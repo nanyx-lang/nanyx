@@ -194,6 +194,6 @@ myMap("hello")   -- #some("world")
 
 A literal whose items are all `key => value` is a `map(k, v)`; calling it looks a key up. The functions on maps are on the [map](map) page, and sets are on the [set](set) page.
 
-Square-bracket literals desugar to a call to the target type's builder, which is what makes the same syntax work for lists, sets and maps. See [Collections](../tour/collections).
+There is no set literal: a set is made from a list, `Set.fromList([1, 2, 3])`. Literals that build any collection type, through the target type's builder, are planned; see [Collections](../tour/collections#literal-types).
 
 If you want more detail, visit the specific module pages in this section.

@@ -81,9 +81,9 @@ These are the choices the docs leave open. The code takes the marked default unt
    - **Recommended:** make a map assignable to its lookup's type, which keeps the tour's promise; until then the
      tour's example is written with `map(string, string)`.
 4. **Builders.** [Collections](../tour/collections#syntax) has square-bracket literals call a target type's `apply`
-   with a `ListBuilder` or `MapBuilder` context, so any type can have literals, and the tour's
-   `def unique: Set(int) = [1, 2, 2, 3]` is a set. Today a map literal is always a `map(k, v)`, and a list literal
-   always a `list(a)`, so a set is made with `Set.fromList`. **Recommended:** leave builders for the
+   with a `ListBuilder` or `MapBuilder` context, so any type can have literals, and
+   `def unique: Set(int) = [1, 2, 2, 3]` would be a set; the tour marks this as planned. Today a map literal is always
+   a `map(k, v)`, and a list literal always a `list(a)`, so a set is made with `Set.fromList`. **Recommended:** leave builders for the
    [type members](./type-members-and-reflection) work; nothing here gets in their way, since `__map` is one place to
    change.
 

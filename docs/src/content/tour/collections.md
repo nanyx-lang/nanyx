@@ -47,18 +47,22 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 ```nanyx
 def lookup = ["a" => 1, "b" => 2]
 
-def unique: Set(int) = [1, 2, 2, 3]
+def unique = Set.fromList([1, 2, 2, 3])
 ```
 
-## Default literal types
+The functions on them are on the [collections](../stdlib/collections), [map](../stdlib/map) and [set](../stdlib/set) pages.
 
-A square-bracket literal takes its type from the annotation or the surrounding usage. When neither says otherwise, `[1, 2, 3]` is a `list(a)` and `["a" => 1]` is a `map(k, v)`.
+## Literal types
+
+Today a square-bracket literal of plain items, `[1, 2, 3]`, is always a `list(a)`, and one of `key => value` entries, `["a" => 1]`, is always a `map(k, v)`. There is no set literal: a set is made from a list with `Set.fromList`. Literals that take their type from an annotation, such as `def unique: Set(int) = [1, 2, 2, 3]`, are planned, with the builders described under [Syntax](#syntax).
 
 Associated types for constrained collection capabilities are a work in progress; see [Type members and reflection](../work-in-progress/type-members-and-reflection#associated-types).
 
 # Syntax
 
-Nanyx supports a generalisable literal syntax for all collection types; the square bracket form is available to any target type that implements the correct builder context:
+> **Planned.** Builders are not implemented yet: a literal is a `list(a)` or a `map(k, v)`, as described above. See [Maps and sets](../work-in-progress/maps-and-sets#open-questions).
+
+Nanyx is to support a generalisable literal syntax for all collection types; the square bracket form will be available to any target type that implements the correct builder context:
 
 ```nanyx
 context ListBuilder(a) = (

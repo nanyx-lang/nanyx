@@ -39,15 +39,25 @@ Transforms error values.
 # bind
 
 ```nanyx
-Result.bind: (#some(a) | #error(e), (a -> (#some(b) | #error(f)))) -> #some(b) | #error(e | f)
+Result.bind: (#some(a) | #error(e), (a -> (#some(b) | #error(e)))) -> #some(b) | #error(e)
 ```
 
-Chains result-producing operations. The error cases of both steps are preserved in the result, so the caller can still distinguish them.
+Chains result-producing operations. Both steps must have the same error type; to chain a step whose errors differ, bring them to one type with `mapError` first.
 
 ```nanyx
-readLine()
-  \Result.bind(parseInt)
--- #some(int) | #error(IoError | #invalidInt)
+def parse: string -> Result(int, string) = { s ->
+  Int.fromString(s) \Option.toResult("not a number: {s}")
+}
+
+def half: int -> Result(int, string) = { n ->
+  if n % 2 == 0 then #some(n / 2) else #error("odd: {n}")
+}
+
+parse("42") \Result.bind(half)
+-- #some(21)
+
+parse("7") \Result.bind(half)
+-- #error("odd: 7")
 ```
 
 ---
@@ -76,10 +86,10 @@ Result.mapOr: ((#some(a) | #error(e)), b, (a -> b)) -> b
 Maps the success value or returns a default for an error.
 
 ```nanyx
-Result.mapOr(#some(21), 0) { * 2 }
+#some(21) \Result.mapOr(0) { * 2 }
 -- 42
 
-Result.mapOr(#error("bad"), 0) { * 2 }
+#error("bad") \Result.mapOr(0) { * 2 }
 -- 0
 ```
 
