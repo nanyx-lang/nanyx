@@ -237,8 +237,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
     let mutable ownerMembers: string list = []
     let mutable counter = 0
 
-    // Every top-level function, with its number of parameters. One of none (`{ ... }`) is used as a value only as a
-    // member of a synthesized instance: a name elsewhere that refers to it is a call.
+    // Every top-level function, with its number of parameters. One of none (`{ ... }`) is a function too: its name,
+    // written on its own, is the function as a value, never a call (#182).
     let topLevelArities =
         module'
         |> List.choose (function
@@ -343,7 +343,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             rebuild (FunctionCall(ForSyntax.builtIn, None, List.map recur iterables @ [ { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) } ]))
         | Lambda(args, body) -> liftLambda scope expr args body
         // A top-level function used as a value: a closure over a wrapper that takes an environment.
-        | IdentifierExpr name when topLevelFunctions.ContainsKey name && not (scope.Contains name) ->
+        | IdentifierExpr name when topLevelArities.ContainsKey name && not (scope.Contains name) ->
             closureOf expr (wrapperOf name) []
         | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
         | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
@@ -483,7 +483,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
         // An attached function used as a value, `int.toString`: the parser reads it as a member access.
         | MemberAccess(Kind (IdentifierExpr qualifier), field, _) when
-            topLevelFunctions.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
+            topLevelArities.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []
         | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
         // `use value in body` is the block `{ use value; body }`: what it loads is in scope for `body` only.
