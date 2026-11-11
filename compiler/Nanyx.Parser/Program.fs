@@ -12,9 +12,9 @@ open Parser.Program
 do fillPatternRef ()
 do fillTypeRefs ()
 
-// Interpolated double-quoted strings with {expr} holes
+// Interpolated double-quoted strings with {expr} holes. `\{` is a brace in the text (see `StringEscapes`).
 let interpolatedStringExprNoWs: Parser<Expression, ParseState> =
-    let textPart = stringText (many1Chars (noneOf "\"{")) |>> StringText
+    let textPart = stringText (doubleQuotedText "{") |>> StringText
     let holePart =
         between (pchar '{' .>> ws) (ws >>. pchar '}') expression
         |>> StringExpr

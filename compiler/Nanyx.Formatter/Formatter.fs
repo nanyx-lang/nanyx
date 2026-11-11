@@ -107,6 +107,31 @@ let format (options: Options) (parsed: SourceModule) : string =
             i <- i - 1
         if i >= 0 && i < source.Length then source[i] else '\000'
 
+    /// The text of a double-quoted string that starts at `start` in the source, as it is written there, escapes and all:
+    /// up to the next `"` or `{` that is not escaped. The parser decodes escapes, so where that is not found, or does
+    /// not stand for `decoded`, the text is written with escapes of its own.
+    let writtenStringText (start: int option) (decoded: string) =
+        let written =
+            start
+            |> Option.bind (fun start ->
+                let mutable i = start
+                while i < source.Length && source[i] <> '"' && source[i] <> '{' do
+                    i <-
+                        if source[i] <> '\\' then i + 1
+                        // `\u{...}` runs to its `}`.
+                        elif String.CompareOrdinal(source, i + 1, "u{", 0, 2) = 0 && source.IndexOf('}', i) > i then source.IndexOf('}', i) + 1
+                        else i + 2
+                let raw = source.Substring(start, min i source.Length - start)
+                if StringEscapes.decode raw = Some decoded then Some raw else None)
+        Doc.textOrVerbatim (written |> Option.defaultWith (fun () -> StringEscapes.escape decoded))
+
+    /// Where the text after the interpolation hole `value` starts: past the `}` that closes the hole.
+    let afterHole (value: Expression) =
+        let mutable i = value.Span.End
+        while valid value.Span && i < source.Length && Char.IsWhiteSpace source[i] do
+            i <- i + 1
+        if valid value.Span && i < source.Length && source[i] = '}' then Some (i + 1) else None
+
     /// Where the `\match` is, if the match `e` on `value` was written `value \match | ...`, rather than `match value | ...`.
     let pipedMatchAt (e: Expression) (value: Expression) =
         if not (valid e.Span && valid value.Span) || startsWith e.Span "match" then
@@ -426,18 +451,20 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text keyword; expr full value ]
         | WorkflowReturnExpr value -> cat [ text "return "; expr full value ]
         | InterpolatedString parts ->
-            let part p =
+            // Each part of text starts after the opening quote or the hole before it.
+            let part start p =
                 match p with
-                | StringText s -> Doc.textOrVerbatim s
-                | StringExpr inner -> cat [ text "{"; expr full inner; text "}" ]
-            cat [ text "\""; cat (List.map part parts); text "\"" ]
+                | StringText s -> writtenStringText start s, None
+                | StringExpr inner -> cat [ text "{"; expr full inner; text "}" ], afterHole inner
+            let opening = if startsWith e.Span "\"" then Some (e.Span.Start + 1) else None
+            cat [ text "\""; cat (List.mapFold part opening parts |> fst); text "\"" ]
 
     and literalDoc (span: SourceSpan) (literal: Literal) : Doc =
         if valid span && span.End > span.Start then
             Doc.textOrVerbatim (source.Substring(span.Start, span.End - span.Start))
         else
             match literal with
-            | StringLit s -> Doc.textOrVerbatim ("\"" + s + "\"")
+            | StringLit s -> Doc.textOrVerbatim ("\"" + StringEscapes.escape s + "\"")
             | IntLit i -> text (string i)
             | FloatLit f -> text (f.ToString("R", CultureInfo.InvariantCulture))
             | BoolLit b -> text (if b then "true" else "false")

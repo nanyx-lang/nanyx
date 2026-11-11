@@ -97,17 +97,31 @@ def where = "{total} items at {Point(x = 1, y = 2)}"   // "3 items at (1, 2)"
 
 A function has no `ToString`, so putting one in a hole is an error, as is a list or a record that holds one.
 
-Single-quoted strings are _raw_: nothing inside them is interpolated or escaped, so braces, backslashes and quotes are taken literally. Use them for JSON, regular expressions, templates, and anything else that contains braces of its own:
+Double-quoted strings have backslash escapes:
+
+| Escape | Stands for |
+| --- | --- |
+| `\n` | a line break |
+| `\t` | a tab |
+| `\r` | a carriage return |
+| `\\` | a backslash |
+| `\"` | a double quote |
+| `\{` and `\}` | a brace, which does not start a hole |
+| `\u{...}` | the character with that code point, in hex: `\u{e9}` is `é` |
+
+```nanyx
+def lines = "first\nsecond"
+def quoted = "say \"hi\""
+def template = "Hello, {name}! Braces look like \{this}."
+```
+
+Any other character after a backslash is an error. A double-quoted string can also run across lines, and a line break in it is part of the string.
+
+Single-quoted strings are _raw_: nothing inside them is interpolated or escaped, so braces, backslashes and quotes are taken literally. Use them for JSON, regular expressions, templates, and anything else that contains braces or backslashes of its own:
 
 ```nanyx
 def json = '{"name": "Alice", "age": 30}'
 def emailPattern = '[^@]+@\w+\.\w+'
-```
-
-To write a literal brace inside a double-quoted string, double it:
-
-```nanyx
-def template = "Hello, {name}! Braces look like {{this}}."
 ```
 
 For library string operations (`length`, `split`, `trim`, etc.), see [string stdlib](../stdlib/string).

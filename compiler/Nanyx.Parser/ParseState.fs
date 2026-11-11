@@ -288,6 +288,16 @@ let internal blockSpanned (statements: Parser<Statement list, ParseState>) : Par
         Expression.at span (Block stmts)
 
 
+// Fails fatally at `position` with `message`, and notes the failure in the state, which `parseModuleFileWithNames`
+// reports in place of FParsec's error when the parse fails: the failure is backtracked over, and FParsec would report
+// some enclosing construct instead (often the whole def). Of two such failures, the furthest is reported.
+let internal reportFocused (position: Position) (message: string) : Parser<'a, ParseState> =
+    getUserState >>= fun state ->
+        match state.FocusedError.Value with
+        | Some (furthest, _) when furthest.Index >= position.Index -> ()
+        | _ -> state.FocusedError.Value <- Some (position, message)
+        failFatally message
+
 /// Runs `p`, which parses text inside a string literal, and notes where that text is.
 let internal stringText (p: Parser<string, ParseState>) =
     noting (fun range state -> { state with StringTexts = range :: state.StringTexts }) p
