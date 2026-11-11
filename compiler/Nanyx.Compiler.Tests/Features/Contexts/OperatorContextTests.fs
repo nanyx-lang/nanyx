@@ -55,14 +55,34 @@ let ``Operators on one type variable require the contexts that cover them`` () =
     Assert.Equal<string list>([ "Add" ], inferredContexts (compileClean "def f = { x, xs -> x + list.sum(xs) }\n") |> List.map fst)
 
 [<Fact>]
-let ``Operators on two type variables are on ints, as a def cannot yet require two contexts with a member of one name`` () =
-    let typed = compileClean "def r = { x, y, p, q -> (x + y, p * q) }\n"
-    Assert.True(typed.InferredContextTypes.IsEmpty)
-    Assert.Equal("int, int, int, int -> (int, int)", Unifier.tyToString typed.Types.["r"])
-    // The call requires `Add` of the list's elements, so the operator on the other two parameters is on ints.
-    let typed = compileClean "def r = { x, y, xs -> (x + y, list.sum(xs)) }\n"
-    Assert.Equal<string list>([ "Add" ], inferredContexts typed |> List.map fst)
-    Assert.StartsWith("int, int, list(", Unifier.tyToString typed.Types.["r"])
+let ``Operators on two type variables require the contexts of each`` () =
+    // #690: each variable's operators call the members of its own instance.
+    let cases =
+        [ "def r = { x, y, p, q -> (x + y, p * q) }", [ "Add"; "Num" ], "a, a, b, b -> (a, b)"
+          "def r = { x, y, p, q -> x == y and p == q }", [ "Eq"; "Eq" ], "a, a, b, b -> bool"
+          "def r = { x, p -> (-x, -p) }", [ "Add"; "Add" ], "a, b -> (a, b)"
+          // The call requires `Add` of the list's elements, another variable than the operator's.
+          "def r = { x, y, xs -> (x + y, list.sum(xs)) }", [ "Add"; "Add" ], "a, a, list(b) -> (a, b)" ]
+    for source, contexts, ty in cases do
+        let typed = compileClean (source + "\n")
+        let inferred = inferredContexts typed
+        Assert.Equal<string list>(contexts, inferred |> List.map fst |> List.sort)
+        Assert.Equal(2, inferred |> List.map snd |> List.distinct |> List.length)
+        Assert.Equal(ty, Unifier.tyToDisplayString Ascii typed.Types.["r"])
+
+[<Fact>]
+let ``A def that writes two contexts with a member of one name calls each instance's member`` () =
+    let source =
+        """
+def both: [Add(a) + Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def same: [Eq(a) + Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
+def negated: [Add(a) + Add(b)] a, b -> (a, b) = { x, p -> (-x, -p) }
+def t = both(1, 2, 1.5, 2.0)
+def u = same(1, 1, "a", "b")
+def v = negated(1, 2.5)
+"""
+    let typed = compileClean source
+    Assert.Equal<string list>([ "(int, float)"; "bool"; "(int, float)" ], [ "t"; "u"; "v" ] |> List.map (fun name -> Unifier.tyToString typed.Types.[name]))
 
 [<Fact>]
 let ``A def whose operands turn out to be numbers requires nothing`` () =

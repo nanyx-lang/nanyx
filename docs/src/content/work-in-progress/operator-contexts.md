@@ -55,15 +55,19 @@ def half = { x -> x / 2.0 }    -- float -> float
 A literal is still an `int` or a `float` in a function that does not write its type (numeric contexts,
 [decision 5](./numeric-contexts#decided)), which is what keeps most arithmetic at `int`.
 
-Three cases keep their operators on ints, as they were, because the requirement could not be used yet:
+Operators on two of the function's type variables require the contexts of each, and each operator calls the member
+of its own variable's instance:
+
+```nanyx
+def r = { x, y, p, q -> (x + y, p * q) }          -- [Add(a) + Num(b)] a, a, b, b -> (a, b)
+def same2 = { x, y, p, q -> x == y and p == q }   -- [Eq(a) + Eq(b)] a, a, b, b -> bool
+```
+
+Two cases keep their operators on ints, as they were, because the requirement could not be used yet:
 
 - **A local function requires no contexts**, so an operator on a type a local function would be generic in is on
   ints: in `def twice = { v -> v + v }` inside another function, `v` is an `int`.
-- **Operators on two of the function's type variables.** `def r = { x, y, p, q -> (x + y, p * q) }` is
-  `int, int, int, int -> (int, int)`. A function's contexts' members are bound by name in its body, so it cannot
-  call the `` `+` `` of one instance and the `` `*` `` of another
-  ([#690](https://github.com/nanyx-lang/nanyx/issues/690)). The same holds when a call in the function requires a
-  context with a member of the same name of another variable, as `list.sum(xs)` does beside `x + y`.
+
 - **A function the module names as a value**, as `add` is in `xs \list.fold(0, add)`. A function that requires a
   parameterised context cannot be a value yet ([#599](https://github.com/nanyx-lang/nanyx/issues/599)), so `add`
   stays `int, int -> int` there. Only the module's own text is looked at: an exported function another module
@@ -81,10 +85,29 @@ This replaces the numeric contexts page's "unannotated arithmetic is unchanged":
 
 - an operator on one of the function's own type variables stays, unless one of the three cases above applies, and
   `ArithmeticInference.require` turns it into a call that requires its context of that variable, which `ContextInference.resolvePending` makes the function
-  require, as it does for a call to a function that requires a context. The operator then calls the member;
+  require, as it does for a call to a function that requires a context. The operator then calls the member of
+  that instance (see [Two instances of one context](#two-instances-of-one-context));
 - any other operand is constrained to `int` (or is already a `float`), and the function is generalised again;
 - a local def does the second for the operators on types it would be generic in, and leaves the rest to the
   function around it.
+
+# Two instances of one context
+
+A function can require two contexts with a member of the same name, of different type variables:
+
+```nanyx
+def both: [Add(a) + Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p + q) }
+```
+
+Both `` `+` ``s are bound to the name in the body, so the name alone does not say which an operator calls. An
+operator on values of a type variable calls the member of the nearest instance in scope of a context of that
+variable that has it (`OperatorCalls.definition`): `x + y` calls `Add(a)`'s, and `p + q` calls `Add(b)`'s. The
+operator is recorded with that instance (`InferState.OperatorInstances`), and written for the backend as a call
+through it, `` Add(a).`+`(x, y) `` (`ExpressionRewrites.callOperators`), which the backend finds by the instance's
+key. An operator in a function whose requirement is inferred is recorded with the instance it found in the same way.
+
+A call to a member by its name, `show(x)`, still finds whichever is bound last when two contexts have a member of
+that name.
 
 # Requiring an operator by its member
 
@@ -137,8 +160,9 @@ prelude, or a member to one:
 - **A local function that is generic in its arithmetic.** It would need local functions to require contexts
   ([#550](https://github.com/nanyx-lang/nanyx/issues/550)). Until then a local def that writes a requirement,
   by member or by name, type-checks and fails in the backend with `NYX0301`.
-- **Arithmetic on two type variables, and functions named as values**: they wait on
-  [#690](https://github.com/nanyx-lang/nanyx/issues/690) and
-  [#599](https://github.com/nanyx-lang/nanyx/issues/599). When those land, the fallbacks in
-  `ArithmeticInference.generalize` (`clashes`, `namedAsValue`) go.
+- **Functions named as values**: they wait on [#599](https://github.com/nanyx-lang/nanyx/issues/599). When that
+  lands, the fallback in `ArithmeticInference.generalize` (`namedAsValue`) goes.
+- **Calling one of two members of one name by its name.** An operator on a type variable calls its variable's
+  instance's member, but a call written with the member's name has only the name to go by. The plan is to write
+  the instance, `Log(string).write(...)`.
 - **Inline requirements outside a def's type**: in a lambda parameter's type or a type definition they are not read.

@@ -154,6 +154,10 @@ type InferState =
             /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
             /// `` $Vector.`+` `` when that is attached.
             OperatorCalls: Map<NodeId, Identifier>;
+            /// The instance in scope whose member each of those operators calls, by the operator's node, as written
+            /// where it is put in scope, where the operator calls one: in a function that requires
+            /// `[Add(a) + Add(b)]`, `x + y` on two `a`s calls the `` `+` `` of `Add(a)`, not of `Add(b)`.
+            OperatorInstances: Map<NodeId, TypeExpr>;
             /// The expressions inference read as another, by the node of the one written, each with what it is written
             /// as: `0` in `x + 0`, where `x` is of a type variable `a` of a function that requires `Add(a)`, is `zero`,
             /// and `x ** n` is `__pow(x, n)` (see `ArithmeticOperators`).
@@ -250,6 +254,7 @@ let emptyState =
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
             OperatorCalls = Map.empty;
+            OperatorInstances = Map.empty;
             ReadAs = Map.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;

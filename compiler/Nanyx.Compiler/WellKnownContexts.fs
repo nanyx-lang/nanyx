@@ -316,7 +316,8 @@ module internal WellKnownContexts =
     /// `state` with each operator among `pendings` that found an instance `calls` takes (see `ContextInference`)
     /// calling a function, as an operator whose name is bound does (see `OperatorCalls`): one that takes two values of
     /// its type (`inputOf` is the input type of such a function) and gives a bool, by the name `calleeOf` gives.
-    /// `keepInstance` says whether the function needs the instance passed, or is the instance's own member.
+    /// `keepInstance` says whether the function needs the instance passed, or is the instance's own member, which the
+    /// operator then calls by its instance (see `InferState.OperatorInstances`).
     let callOperators
         (calls: ContextInstance -> bool)
         (keepInstance: bool)
@@ -330,10 +331,15 @@ module internal WellKnownContexts =
             match current.ContextInstances |> Map.tryFind pending.Call with
             | Some [ Some instance ] when calls instance ->
                 let calleeTy = TyFunc(inputOf (List.head pending.ArgTys), TyPrimitive "bool")
+                let operatorInstances =
+                    match instance with
+                    | InstanceInScope written when not keepInstance -> current.OperatorInstances |> Map.add pending.Call written
+                    | _ -> current.OperatorInstances
                 { current with
                     ContextInstances = if keepInstance then current.ContextInstances else current.ContextInstances |> Map.remove pending.Call
                     CalleeTypes = current.CalleeTypes |> Map.add pending.Call calleeTy
-                    OperatorCalls = current.OperatorCalls |> Map.add pending.Call (calleeOf pending) }
+                    OperatorCalls = current.OperatorCalls |> Map.add pending.Call (calleeOf pending)
+                    OperatorInstances = operatorInstances }
             | _ -> current) state
 
     /// Where a call to a function that requires a well-known context of the type `ty` finds it, when no instance is in
