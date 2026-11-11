@@ -37,9 +37,9 @@ let ``A record's rest is named only where it appears more than once`` () =
         "  | [] -> []\n" +
         "  | [p, ...rest] -> [p.name, ...names(rest)] }\n" +
         "def keep = { p -> (p.name, p) }\n"
-    Assert.Equal(Some "list(name: α, …) -> list(α)", hoverType source (offsetOf source "names" 0 0))
+    Assert.Equal(Some "def names: list(name: α, …) -> list(α)", hoverType source (offsetOf source "names" 0 0))
     // What it is given it gives back, other fields and all, so the rest is named to say it is the same in both.
-    Assert.Equal(Some "(name: α, …ω) -> (α, (name: α, …ω))", hoverType source (offsetOf source "keep" 0 0))
+    Assert.Equal(Some "def keep: (name: α, …ω) -> (α, (name: α, …ω))", hoverType source (offsetOf source "keep" 0 0))
 
 [<Fact>]
 let ``A function reading fields takes any record that has them`` () =
@@ -54,8 +54,8 @@ let ``A function reading fields takes any record that has them`` () =
         "def c = show(#some((name = \"pat\", age = 3)), \"!\")\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Assert.Equal(Some "string", hoverType source (offsetOf source "a = " 0 0))
-    Assert.Equal(Some "string", hoverType source (offsetOf source "c = " 0 0))
+    Assert.Equal(Some "def a: string", hoverType source (offsetOf source "a = " 0 0))
+    Assert.Equal(Some "def c: string", hoverType source (offsetOf source "c = " 0 0))
 
 [<Fact>]
 let ``A function reading a field rejects a record without it`` () =
@@ -95,12 +95,12 @@ let ``Hover shows the type of literals, locals, parameters, calls and lambdas`` 
         "}\n"
     // The innermost expression wins: the literal, not the multiplication around it.
     Assert.Equal(Some "int", hoverType source (offsetOf source "2" 0 0))
-    Assert.Equal(Some "int", hoverType source (offsetOf source "n *" 0 0))
+    Assert.Equal(Some "n: int", hoverType source (offsetOf source "n *" 0 0))
     Assert.Equal(Some "int -> int", hoverType source (offsetOf source "{ n" 0 0))
-    Assert.Equal(Some "int", hoverType source (offsetOf source "half)" 0 0))
+    Assert.Equal(Some "half: int", hoverType source (offsetOf source "half)" 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "(half)" 0 0))
     // On the call's function name, the function's type.
-    Assert.Equal(Some "int -> int", hoverType source (offsetOf source "double(" 0 1))
+    Assert.Equal(Some "def double: int -> int", hoverType source (offsetOf source "double(" 0 1))
 
 [<Fact>]
 let ``Hover inside a guard pattern shows the predicate's types`` () =
@@ -113,7 +113,7 @@ let ``Hover inside a guard pattern shows the predicate's types`` () =
         "}\n"
     Assert.Equal(Some "string -> bool", hoverType source (offsetOf source "{ ." 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "length" 0 0))
-    Assert.Equal(Some "string", hoverType source (offsetOf source "x ==" 0 0))
+    Assert.Equal(Some "x: string", hoverType source (offsetOf source "x ==" 0 0))
 
 [<Fact>]
 let ``Hover inside an and-pattern shows each part's types`` () =
@@ -123,7 +123,7 @@ let ``Hover inside an and-pattern shows each part's types`` () =
         "    | t & { .length > 5 } -> t.length\n" +
         "    | _ -> 0\n" +
         "}\n"
-    Assert.Equal(Some "string", hoverType source (offsetOf source "t &" 0 0))
+    Assert.Equal(Some "t: string", hoverType source (offsetOf source "t &" 0 0))
     Assert.Equal(Some "string -> bool", hoverType source (offsetOf source "{ ." 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "length >" 0 0))
 
@@ -141,13 +141,13 @@ let ``Hover on a declaration's name shows the type of what it declares`` () =
         "  | _ -> 0\n" +
         "}\n"
     // Top-level defs, generalised.
-    Assert.Equal(Some "α -> α", hoverType source (offsetOf source "id" 0 1))
-    Assert.Equal(Some "() -> int", hoverType source (offsetOf source "answer" 0 0))
+    Assert.Equal(Some "def id: α -> α", hoverType source (offsetOf source "id" 0 1))
+    Assert.Equal(Some "def answer: () -> int", hoverType source (offsetOf source "answer" 0 0))
     // A parameter, a local def and a pattern variable.
-    Assert.Equal(Some "α", hoverType source (offsetOf source "x ->" 0 0))
-    Assert.Equal(Some "int", hoverType source (offsetOf source "half" 0 2))
-    Assert.Equal(Some "int", hoverType source (offsetOf source "(n)" 0 1))
-    Assert.Equal(Some "#some(int) | … -> int", hoverType source (offsetOf source "describe" 0 0))
+    Assert.Equal(Some "x: α", hoverType source (offsetOf source "x ->" 0 0))
+    Assert.Equal(Some "half: int", hoverType source (offsetOf source "half" 0 2))
+    Assert.Equal(Some "n: int", hoverType source (offsetOf source "(n)" 0 1))
+    Assert.Equal(Some "def describe: #some(int) | … -> int", hoverType source (offsetOf source "describe" 0 0))
     // The range is the declared name.
     let info = (hoverAt source (offsetOf source "half" 0 2)).Value
     Assert.Equal(offsetOf source "half" 0 0, info.Span.Start)
@@ -168,9 +168,9 @@ let ``Hover on a polymorphic function shows it instantiated at the call`` () =
         "def n = id(5)\n" +
         "def s = id(\"a\")\n"
     Assert.Equal(Some "α -> α", hoverType source (offsetOf source "{ x" 0 0))
-    Assert.Equal(Some "α", hoverType source (offsetOf source "-> x" 0 3))
-    Assert.Equal(Some "int -> int", hoverType source (offsetOf source "id(" 0 0))
-    Assert.Equal(Some "string -> string", hoverType source (offsetOf source "id(" 1 0))
+    Assert.Equal(Some "x: α", hoverType source (offsetOf source "-> x" 0 3))
+    Assert.Equal(Some "def id: int -> int", hoverType source (offsetOf source "id(" 0 0))
+    Assert.Equal(Some "def id: string -> string", hoverType source (offsetOf source "id(" 1 0))
     Assert.Equal(Some "string", hoverType source (offsetOf source "id(" 1 4))
 
 [<Fact>]
@@ -183,9 +183,9 @@ let ``Types are shown in ASCII only when it is asked for`` () =
     let source = "def pair = { a, b -> (b, a) }\ndef keep = { p -> (p.name, p) }\ndef name = { p -> p.name }\n"
     Assert.Equal(Some "a, b -> (b, a)", latinHoverType source (offsetOf source "{" 0 0))
     // A record's rest is spread with three dots rather than an ellipsis.
-    Assert.Equal(Some "(name: a, ...z) -> (a, (name: a, ...z))", latinHoverType source (offsetOf source "keep" 0 0))
-    Assert.Equal(Some "(name: a, ...) -> a", latinHoverType source (offsetOf source "def name" 0 4))
-    Assert.Equal(Some "(name: α, …) -> α", hoverType source (offsetOf source "def name" 0 4))
+    Assert.Equal(Some "def keep: (name: a, ...z) -> (a, (name: a, ...z))", latinHoverType source (offsetOf source "keep" 0 0))
+    Assert.Equal(Some "def name: (name: a, ...) -> a", latinHoverType source (offsetOf source "def name" 0 4))
+    Assert.Equal(Some "def name: (name: α, …) -> α", hoverType source (offsetOf source "def name" 0 4))
 
 [<Fact>]
 let ``Greek type variable names go through the alphabet, then start again with a subscript`` () =
@@ -213,13 +213,13 @@ let ``A union's rest is named only where it appears more than once`` () =
         "  | #some(n) -> n\n" +
         "  | _ -> 0\n" +
         "}\n"
-    Assert.Equal(Some "#some(int) | … -> int", hoverType source (offsetOf source "describe" 0 0))
-    Assert.Equal(Some "#some(int) | ... -> int", latinHoverType source (offsetOf source "describe" 0 0))
+    Assert.Equal(Some "def describe: #some(int) | … -> int", hoverType source (offsetOf source "describe" 0 0))
+    Assert.Equal(Some "def describe: #some(int) | ... -> int", latinHoverType source (offsetOf source "describe" 0 0))
 
 [<Fact>]
 let ``A def's type is resolved before it is generalised, so a use of it has the inferred type`` () =
     let source = "def increment = { x -> x + 1 }\ndef f = increment\n"
-    Assert.Equal(Some "int -> int", hoverType source (offsetOf source "increment" 1 0))
+    Assert.Equal(Some "def increment: int -> int", hoverType source (offsetOf source "increment" 1 0))
 
 [<Fact>]
 let ``A shorthand match lambda shows its own type, not that of the parameters it makes up`` () =
@@ -227,7 +227,7 @@ let ``A shorthand match lambda shows its own type, not that of the parameters it
         "def mapOption = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
         "def g = mapOption\n"
     Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
-    Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapOption" 1 0))
+    Assert.Equal(Some "def mapOption: #some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapOption" 1 0))
 
 [<Fact>]
 let ``A lambda with a pattern parameter shows its own type, and the pattern what it takes apart`` () =
@@ -236,8 +236,8 @@ let ``A lambda with a pattern parameter shows its own type, and the pattern what
         "def g = add\n"
     Assert.Equal(Some "(int, int), int -> int", hoverType source (offsetOf source "{" 0 0))
     Assert.Equal(Some "(int, int)", hoverType source (offsetOf source "(a, b)" 0 0))
-    Assert.Equal(Some "int", hoverType source (offsetOf source "b)" 0 0))
-    Assert.Equal(Some "int", hoverType source (offsetOf source "c ->" 0 0))
+    Assert.Equal(Some "b: int", hoverType source (offsetOf source "b)" 0 0))
+    Assert.Equal(Some "c: int", hoverType source (offsetOf source "c ->" 0 0))
 
 [<Fact>]
 let ``A shorthand lambda shows its own type, and its operator the argument written there`` () =
@@ -258,8 +258,8 @@ let ``A rest variable nothing can add tags to is empty`` () =
         "  def a = #some(5) \\mapOption { n -> \"{n}\" }\n" +
         "  a\n" +
         "}\n"
-    Assert.Equal(Some "#some(string)", hoverType source (offsetOf source "a\n}" 0 0))
-    Assert.Equal(Some "#some(int), (int -> string) -> #some(string)", hoverType source (offsetOf source "mapOption {" 0 0))
+    Assert.Equal(Some "a: #some(string)", hoverType source (offsetOf source "a\n}" 0 0))
+    Assert.Equal(Some "def mapOption: #some(int), (int -> string) -> #some(string)", hoverType source (offsetOf source "mapOption {" 0 0))
     // A rest variable that the input still shares stays: what the function is given more of, it gives back.
     Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     // So does one shared with a parameter in scope, which a later use could still give tags to.
@@ -288,7 +288,7 @@ let ``A rest variable a closed union widened into is empty`` () =
         "  dbg(a)\n" +
         "  ()\n" +
         "}\n"
-    Assert.Equal(Some "#some(string) | #err | #none", hoverType source (offsetOf source "a =" 0 0))
+    Assert.Equal(Some "a: #some(string) | #err | #none", hoverType source (offsetOf source "a =" 0 0))
 
 [<Fact>]
 let ``A record type is written in brackets, as in source`` () =
@@ -373,7 +373,7 @@ let ``Hover shows tags with their hash`` () =
         "def mapOption: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
         "def result = mapOption(#some(1), { n -> \"Mapped: {n}\" })"
     Assert.Equal(
-        Some "#some(int), (int -> string) -> #some(string)",
+        Some "def mapOption: #some(int), (int -> string) -> #some(string)",
         hoverType union (offsetOf union "mapOption(" 0 0))
 
 [<Fact>]
@@ -415,7 +415,71 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
 [<Fact>]
 let ``A def annotated with holes shows its inferred type, and each hole what it was inferred to be`` () =
     let source = "def xs: list(_) = [1, 2]\ndef add: (int, _) -> _ = { a, b -> a + b }\n"
-    Assert.Equal(Some "list(int)", hoverType source (offsetOf source "xs" 0 0))
+    Assert.Equal(Some "def xs: list(int)", hoverType source (offsetOf source "xs" 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "_" 0 0))
-    Assert.Equal(Some "int, int -> int", hoverType source (offsetOf source "add" 0 0))
+    Assert.Equal(Some "def add: int, int -> int", hoverType source (offsetOf source "add" 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "_" 2 0))
+
+[<Fact>]
+let ``Hover on a top-level def's name shows it as its declaration writes it, contexts and all`` () =
+    let source = """
+def takeOrder: [Console] string, list(string) -> () = { customer, order -> println(customer) }
+def greet = { -> println("hello") }
+@entry
+def main = {
+  takeOrder("pat", [])
+  greet()
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    let expected = Some "def takeOrder: [Console] string, list(string) -> ()"
+    // At its definition, and where it is called.
+    Assert.Equal(expected, hoverType source (offsetOf source "takeOrder" 0 0))
+    Assert.Equal(expected, hoverType source (offsetOf source "takeOrder(" 0 0))
+    // A def that does not write its type shows the contexts it was inferred to need.
+    Assert.Equal(Some "def greet: [Console] () -> ()", hoverType source (offsetOf source "greet" 0 0))
+
+[<Fact>]
+let ``Hover on a use of a def with parameterised contexts shows them as it is called`` () =
+    let source = """
+context Show(a) = (show: a -> string)
+type Point = (x: int, y: int)
+def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
+def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
+def s = describe(Point(x = 1, y = 2))
+def f = describe
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "def describe: [Show(a)] a -> string", hoverType source (offsetOf source "describe" 0 0))
+    Assert.Equal(Some "def describe: [Show(Point)] Point -> string", hoverType source (offsetOf source "describe(" 0 0))
+
+[<Fact>]
+let ``Hover on a local def, a parameter or a pattern variable shows its name and type`` () =
+    let source = """
+def answer = {
+  def half = 21
+  half * 2
+}
+def bump = { n -> n + 1 }
+def size = { o ->
+  match o
+  | #some(text) -> text ++ "!"
+  | _ -> ""
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    // Each at its declaration and at a use.
+    Assert.Equal(Some "half: int", hoverType source (offsetOf source "half" 0 0))
+    Assert.Equal(Some "half: int", hoverType source (offsetOf source "half *" 0 0))
+    Assert.Equal(Some "n: int", hoverType source (offsetOf source "n ->" 0 0))
+    Assert.Equal(Some "n: int", hoverType source (offsetOf source "n +" 0 0))
+    Assert.Equal(Some "text: string", hoverType source (offsetOf source "text)" 0 0))
+    Assert.Equal(Some "text: string", hoverType source (offsetOf source "text ++" 0 0))
+
+[<Fact>]
+let ``Hover on an expression that is not a name shows just its type`` () =
+    let source = "def bump = { n -> n + 1 }\ndef two = bump(1) * 2\n"
+    Assert.Equal(Some "int", hoverType source (offsetOf source "1)" 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "+" 0 0))
+    Assert.Equal(Some "int -> int", hoverType source (offsetOf source "{ n" 0 0))
+    Assert.Equal(Some "int", hoverType source (offsetOf source "(1)" 0 0))

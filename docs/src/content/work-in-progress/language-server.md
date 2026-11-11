@@ -37,7 +37,13 @@ what the compiler keeps: exact spans, resolved names and types.
   [semantic model](./linters#3-the-semantic-model)), and the callee's type at each call (`CalleeTypes`), for
   the root module of a compile. Hover shows the narrowest typed expression under the pointer, or a call's
   function at that call site. On a declaration's own name (a def, a parameter, a pattern variable) it shows the
-  type of what that declares, recorded by symbol (`SymbolTypes`). A desugared workflow bind or return gets a node id of its own, so the bind as
+  type of what that declares, recorded by symbol (`SymbolTypes`). On a name, at its declaration or where it is
+  used, the type comes after the name, as the declaration would write it
+  ([#765](https://github.com/nanyx-lang/nanyx/issues/765)): `def takeOrder: [Console] string, list(string) -> ()`
+  for a top-level def, `half: int` for a local def, a parameter or a pattern variable. A top-level def of the
+  module's own shows the contexts it requires, written or inferred (`TypedModule.ContextTypes`, filled in by
+  `RequiredContexts`), instantiated where it is called as its type is (`[Show(Point)] Point -> string`); an
+  imported def does not show its contexts yet. A desugared workflow bind or return gets a node id of its own, so the bind as
   written has no type rather than that of the rest of the workflow. Each document
   is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A
   declared signature or doc comment needs name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)),
@@ -81,9 +87,9 @@ what the compiler keeps: exact spans, resolved names and types.
   its type gets a lens above it with its whole type; a local def, lambda parameter or pattern variable gets an
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
-  the `α` in its def's lens (see `NyxCompiler.TypeHints`). The lens, and hover on the def's name, show the
-  parameterised contexts the def was inferred to require before its type (`[Show(α)] α -> string`, from
-  `TypedModule.InferredContextTypes`). A def that writes only its contexts
+  the `α` in its def's lens (see `NyxCompiler.TypeHints`). The lens shows the parameterised contexts the def was
+  inferred to require before its type (`[Show(α)] α -> string`, from `TypedModule.InferredContextTypes`), as hover
+  on the def's name does. A def that writes only its contexts
   (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,
   without a colon (`[Log] string -> ()`), rather than after the name. Each hint carries its declaration's
   `SymbolKind`, so the server's settings can turn off the hints for local defs, parameters or pattern variables

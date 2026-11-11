@@ -323,7 +323,7 @@ let ``Hover and the type lens show the parameterised contexts a def was inferred
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let hover = Hover.typeAt Unicode result (offsetOf source "twice" 0 0)
-    Assert.Equal(Some "[Show(α)] α -> string", hover |> Option.map _.Type)
+    Assert.Equal(Some "def twice: [Show(α)] α -> string", hover |> Option.map _.Type)
     let lenses = TypeHints.typeLenses Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
     Assert.Equal<(string * string) list>([ "twice", "[Show(α)] α -> string" ], lenses)
 

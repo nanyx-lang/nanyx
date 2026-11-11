@@ -276,7 +276,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
 
         // The polymorphic `id`, instantiated at this call.
         var callee = await HoverAt(uri, 1, 13);
-        Assert.Equal("```nanyx\nint -> int\n```", callee?.Contents.MarkupContent?.Value);
+        Assert.Equal("```nanyx\ndef id: int -> int\n```", callee?.Contents.MarkupContent?.Value);
         Assert.Equal(new Range(1, 12, 1, 14), callee?.Range);
 
         // The lambda in its own definition, with its type variable named for reading.
@@ -285,7 +285,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Hover_on_a_declarations_name_shows_its_type()
+    public async Task Hover_on_a_declarations_name_shows_its_name_and_type()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-declaration.nyx"));
 
@@ -293,14 +293,14 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
         var id = await HoverAt(uri, 0, 5);
-        Assert.Equal("```nanyx\nα -> α\n```", id?.Contents.MarkupContent?.Value);
+        Assert.Equal("```nanyx\ndef id: α -> α\n```", id?.Contents.MarkupContent?.Value);
         Assert.Equal(new Range(0, 4, 0, 6), id?.Range);
 
         var total = await HoverAt(uri, 1, 6);
-        Assert.Equal("```nanyx\nint\n```", total?.Contents.MarkupContent?.Value);
+        Assert.Equal("```nanyx\ndef total: int\n```", total?.Contents.MarkupContent?.Value);
 
         var parameter = await HoverAt(uri, 0, 11);
-        Assert.Equal("```nanyx\nα\n```", parameter?.Contents.MarkupContent?.Value);
+        Assert.Equal("```nanyx\nx: α\n```", parameter?.Contents.MarkupContent?.Value);
         Assert.Equal(new Range(0, 11, 0, 12), parameter?.Range);
     }
 
@@ -313,7 +313,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
         var name = await HoverAt(uri, 0, 5);
-        Assert.Equal("```nanyx\nlist(int)\n```", name?.Contents.MarkupContent?.Value);
+        Assert.Equal("```nanyx\ndef xs: list(int)\n```", name?.Contents.MarkupContent?.Value);
 
         var hole = await HoverAt(uri, 0, 13);
         Assert.Equal("```nanyx\nint\n```", hole?.Contents.MarkupContent?.Value);
@@ -340,7 +340,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
             See [`dec`]({uri}#L4,5), and `nowhere`.
             """.ReplaceLineEndings("\n");
         var hover = await HoverAt(uri, 4, 11);
-        Assert.Equal($"```nanyx\nint -> int\n```\n\n---\n\n{expected}", hover?.Contents.MarkupContent?.Value);
+        Assert.Equal($"```nanyx\ndef inc: int -> int\n```\n\n---\n\n{expected}", hover?.Contents.MarkupContent?.Value);
 
         var item = (await CompletionsAt(uri, 4, 10)).Single(completion => completion.Label == "inc");
         Assert.Equal(expected, item.Documentation?.MarkupContent?.Value);
@@ -351,6 +351,28 @@ public sealed class LanguageServerTests : IAsyncLifetime
         Assert.Equal(new Range(3, 4, 3, 7), definition?.Range);
     }
 
+    [Fact]
+    public async Task Hover_on_a_defs_name_shows_its_declaration_with_its_contexts_then_its_doc_comment()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-def.nyx"));
+
+        Open(uri, """
+            --| Takes one order.
+            def takeOrder: [Console] string, list(string) -> () = { customer, order -> println(customer) }
+            @entry
+            def main = {
+              takeOrder("pat", [])
+            }
+            """);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var expected = "```nanyx\ndef takeOrder: [Console] string, list(string) -> ()\n```\n\n---\n\nTakes one order.";
+        // At its definition, and where it is called.
+        Assert.Equal(expected, (await HoverAt(uri, 1, 6))?.Contents.MarkupContent?.Value);
+        Assert.Equal(expected, (await HoverAt(uri, 4, 4))?.Contents.MarkupContent?.Value);
+        // A parameter shows its name and type.
+        Assert.Equal("```nanyx\ncustomer: string\n```", (await HoverAt(uri, 1, 58))?.Contents.MarkupContent?.Value);
+    }
     [Fact]
     public async Task Hover_outside_any_expression_returns_nothing()
     {
