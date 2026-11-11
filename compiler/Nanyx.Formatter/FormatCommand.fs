@@ -32,11 +32,26 @@ type FileResult =
     | Changed
     | Failed of Formatting
 
-let private commentsOf (parsed: SourceModule) =
-    parsed.Trivia
-    |> List.choose (function
-        | LineComment(text, _, _) -> Some(text.TrimEnd())
-        | BlankLines _ -> None)
+/// The comments of `parsed`, parsed from `text`: in order, except for those at the end of an import's line, which move
+/// with the import when the formatter sorts imports, and so are compared in sorted order.
+let private commentsOf (text: string) (parsed: SourceModule) =
+    let rec importEnds (items: TopLevelItem list) =
+        items
+        |> List.collect (fun i ->
+            match i.Kind with
+            | Import imports -> imports |> List.map (fun item -> item.Span.End)
+            | ModuleBlock(_, items) -> importEnds items
+            | _ -> [])
+    let ends = importEnds parsed.Items
+    let onImportLine (span: SourceSpan) =
+        ends |> List.exists (fun e -> 0 <= e && e <= span.Start && text.IndexOf('\n', e, span.Start - e) < 0)
+    let moved, kept =
+        parsed.Trivia
+        |> List.choose (function
+            | LineComment(comment, _, span) -> Some(comment.TrimEnd(), span)
+            | BlankLines _ -> None)
+        |> List.partition (snd >> onImportLine)
+    List.map fst kept, List.sort (List.map fst moved)
 
 /// Formats `text`, the source of the file at `path`, keeping its line endings: CRLF if its first line break is one,
 /// otherwise LF. The result is parsed again and compared with the original, and only returned if it says the same
@@ -49,7 +64,7 @@ let formatText (options: Formatter.Options) (path: string) (text: string) : Form
         match parseModuleWithTrivia path formatted with
         | Result.Error error -> NotSafe $"the formatted code does not parse: {error.Message}"
         | Result.Ok again when not (Syntax.same parsed.Items again.Items) -> NotSafe "formatting would change what the code says"
-        | Result.Ok again when commentsOf again <> commentsOf parsed -> NotSafe "formatting would lose or reorder a comment"
+        | Result.Ok again when commentsOf formatted again <> commentsOf text parsed -> NotSafe "formatting would lose or reorder a comment"
         | Result.Ok _ ->
             let firstBreak = text.IndexOf '\n'
             if firstBreak > 0 && text[firstBreak - 1] = '\r' then Formatted(formatted.Replace("\n", "\r\n")) else Formatted formatted

@@ -315,7 +315,7 @@ let ``An attribute's argument is printed as a tag's payload is`` () =
 
 [<Fact>]
 let ``Imports stay together, however many lines they span`` () =
-    unchanged (lines [ "import nanyx/console"; ""; "import ("; "  nanyx/text"; "  nanyx/math"; ")"; ""; "import nanyx/result"; ""; "def a = 1" ])
+    unchanged (lines [ "import nanyx/console"; ""; "import ("; "  nanyx/math"; "  nanyx/text"; ")"; ""; "import nanyx/result"; ""; "def a = 1" ])
 
 [<Fact>]
 let ``An indented block separates multi-line constructs and keeps the author's blank lines`` () =
