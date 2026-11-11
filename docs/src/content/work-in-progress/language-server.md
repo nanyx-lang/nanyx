@@ -213,6 +213,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    compiler error with fixes is an unknown name the standard library exports, which offers its import
    ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet.
 7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
+8. **Doc comments, a library browser, search by type and an info view.** Planned on
+   [Info view and library browser](./info-view-and-library-browser).
 
 # Open questions
 
