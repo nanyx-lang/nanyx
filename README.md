@@ -161,7 +161,7 @@ Then press F5 in VS Code to launch an Extension Development Host. The extension'
 
 ### Continuous integration and releases
 
-GitHub Actions build and test the compiler on Linux and Windows for every pull request. Merging a bump of `<Version>` in `compiler/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj` releases the compiler: `main` tags the commit `compiler/<version>` and publishes the self-contained binaries it built to a GitHub release. The extension works the same way: merging a bump of `version` in `extension/package.json` tags the commit `extension/<version>` and publishes the package to the Marketplace, Open VSX and a GitHub release.
+GitHub Actions build and test the compiler on Linux and Windows for every pull request. Merging a bump of `<Version>` in `compiler/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj` releases the compiler: `main` tags the commit `compiler/<version>` and publishes the self-contained binaries it built to a GitHub release. The extension works the same way: merging a bump of `version` in `extension/package.json` tags the commit `extension/<version>` and publishes the package to the Marketplace, Open VSX and a GitHub release. The docs site is deployed to Vercel by hand; [docs/README.md](docs/README.md) says how.
 
 ## Design
 
