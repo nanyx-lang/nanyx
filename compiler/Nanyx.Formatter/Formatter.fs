@@ -642,11 +642,20 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | [] when writtenWithUnit e -> text "{ () ->"
                 | [] -> text "{"
                 | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); text " ->" ]
+            // A body on its own line is read as a statement, which can't take every operator (`b == 1 or b == 2` is
+            // three statements there), so where the layout is ours to choose, a body that would need parentheses
+            // there stays on the `->`'s line instead, as does a block of just that body in parentheses.
+            let bracketedAsStatement (x: Expression) = needsParentheses statementPosition x && not (needsParentheses full x)
+            let body =
+                match body.Kind with
+                | Block [ { Kind = ExprStatement single } ] when
+                    bodyOnOwnLine && bracketedAsStatement single && not (valid e.Span && hasCommentsIn e.Span.Start e.Span.End) -> single
+                | _ -> body
             match body.Kind with
             // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
             // its braces go among them.
             | Block statements -> cat [ head; nest (cat [ hard; statementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
-            | _ when bodyOnOwnLine -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
+            | _ when bodyOnOwnLine && not (bracketedAsStatement body) -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
             | _ ->
                 let bodyDoc = expr full body
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
@@ -927,7 +936,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             | None -> cat [ name; text " =" ]
         let underHead doc = IfGroupBroken(signatureGroup, nest doc, doc)
         // A def with a type annotation whose value is a lambda keeps the signature's line to itself: the body goes on
-        // the next line, unless it is only a name or a literal (`def id: a -> a = { x -> x }`).
+        // the next line, unless it is only a name or a literal (`def id: a -> a = { x -> x }`), or a statement could
+        // not take it without parentheses (see `lambdaDoc`).
         let isTrivial (body: Expression) =
             match body.Kind with
             | IdentifierExpr _

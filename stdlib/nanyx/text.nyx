@@ -151,9 +151,7 @@ export def String.lowercase: string -> string = { s ->
 }
 
 -- Whether byte `b` is a space, tab, line feed or carriage return.
-def isWhitespace: int -> bool = { b ->
-  (b == 32 or b == 9 or b == 10 or b == 13)
-}
+def isWhitespace: int -> bool = { b -> b == 32 or b == 9 or b == 10 or b == 13 }
 
 -- The index of the first non-whitespace byte at or after `i` (or the length of `s`).
 def skipWhitespace: string, int -> int = { s, i ->

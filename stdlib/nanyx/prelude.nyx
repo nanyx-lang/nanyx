@@ -151,9 +151,7 @@ export def Int.`/`: int, int -> int = { x, y ->
 }
 
 -- The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
-export def Int.`%`: int, int -> int = { x, y ->
-  (x % y)
-}
+export def Int.`%`: int, int -> int = { x, y -> x % y }
 
 -- `n` itself.
 export def Int.fromInt: int -> int = { n ->
@@ -189,9 +187,7 @@ export def Float.`/`: float, float -> float = { x, y ->
 }
 
 -- The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
-export def Float.`%`: float, float -> float = { x, y ->
-  (x % y)
-}
+export def Float.`%`: float, float -> float = { x, y -> x % y }
 
 -- `n` as a float, as `Int.toFloat(n)` is.
 export def Float.fromInt: int -> float = { n ->

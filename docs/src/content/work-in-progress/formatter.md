@@ -159,7 +159,11 @@ issue):
 - A signature that does not fit on the def's line goes on the next line after the name, as does the `=`, and the value
   is indented under them (shown above).
 - A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
-  body is only a name or a literal (decided 2026-11-07):
+  body is only a name or a literal (decided 2026-11-07), or a statement could not take it without parentheses. A
+  body on its own line is read as a statement, whose operators leave out `%`, `..`, `and`, `or` and `not`, so a body
+  of one of those stays on the `->`'s line rather than being bracketed
+  ([#312](https://github.com/nanyx-lang/nanyx/issues/312)); a block of only that body in brackets is written the
+  same way, unless there is a comment in it:
 
   ```nanyx
   def heading: [Log] string -> () = { title ->
@@ -167,6 +171,8 @@ issue):
   }
 
   def id: a -> a = { x -> x }
+
+  def isWhitespace: int -> bool = { b -> b == 32 or b == 9 or b == 10 or b == 13 }
   ```
 
 - A record, tuple or call's arguments with an element that spans lines (a lambda with a block) also puts each
