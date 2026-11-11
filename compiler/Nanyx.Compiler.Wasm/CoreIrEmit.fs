@@ -499,9 +499,17 @@ type private FunctionEmitter(context: EmitContext) =
                 | [] -> "i32.const 1"
                 | checks -> List.reduceBack guarded checks
             | PList(elements, rest) ->
-                let lengthInstruction = if rest.IsSome then "i32.ge_s" else "i32.eq"
+                // Only the cells the pattern needs are looked at: one for each element, each checked only once the cell
+                // before it exists, and then, without a rest, that the list ends there.
+                let cellChecks = List.init elements.Length (fun index -> $"{listTailCode valueCode index}\n      i32.const 0\n      i32.ne")
+                let endCheck =
+                    match rest with
+                    | Some _ -> []
+                    | None -> [ $"{listTailCode valueCode elements.Length}\n      i32.eqz" ]
                 let lengthCheck =
-                    $"{valueCode}\n      call ${helper Helpers.listLength}\n      i32.const {elements.Length}\n      {lengthInstruction}"
+                    match cellChecks @ endCheck with
+                    | [] -> "i32.const 1"
+                    | checks -> List.reduceBack guarded checks
                 let elementChecks =
                     elements |> List.mapi (fun index element -> condition element (listElementCode valueCode index)) |> allOf
                 let restCheck =
@@ -509,9 +517,10 @@ type private FunctionEmitter(context: EmitContext) =
                     | Some restPattern -> condition restPattern (listTailCode valueCode elements.Length)
                     | None -> "i32.const 1"
                 // The elements only exist once the length check holds.
-                match allOf [ elementChecks; restCheck ] with
-                | "i32.const 1" -> lengthCheck
-                | elementsAndRest -> guarded lengthCheck elementsAndRest
+                match lengthCheck, allOf [ elementChecks; restCheck ] with
+                | _, "i32.const 1" -> lengthCheck
+                | "i32.const 1", elementsAndRest -> elementsAndRest
+                | _, elementsAndRest -> guarded lengthCheck elementsAndRest
         let rec binds (pattern: Pattern) (valueCode: string) =
             match pattern with
             | PBind var -> [ $"{valueCode}\n        local.set ${var.Name}" ]
