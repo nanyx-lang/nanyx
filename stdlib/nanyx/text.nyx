@@ -2,7 +2,7 @@ module text
 
 -- nanyx/text: functions on strings.
 --
--- Each is attached to `String`, so with `import nanyx/text` it is called as `String.trim(s)`, or as
+-- Each is attached to `string`, so with `import nanyx/text` it is called as `string.trim(s)`, or as
 -- `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
 -- `s.trim` is an error.
 --
@@ -15,45 +15,45 @@ module text
 -- Everything here is written over four compiler intrinsics: `__nanyx_string_length`,
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split` and
 -- `words` also build their results with `__nanyx_list_cons`, last first, and reverse them with the
--- prelude's `List.reverse`. `++` (concatenation) and `==` on strings are language operators.
+-- prelude's `list.reverse`. `++` (concatenation) and `==` on strings are language operators.
 --
 -- Every function here is stack-safe: each one that walks a string calls itself only in tail position,
 -- so it works on a string of any length.
 
 -- The number of bytes in `s`.
-export def String.length: string -> int = { s ->
+export def string.length: string -> int = { s ->
   __nanyx_string_length(s)
 }
 
 -- The `length` bytes of `s` starting at byte `start`. Out-of-range values are clamped, so the result
 -- is never longer than what `s` actually holds.
-export def String.substring: (string, start: int, length: int) -> string = { s, start, length ->
+export def string.substring: (string, start: int, length: int) -> string = { s, start, length ->
   __nanyx_string_slice(s, start, length)
 }
 
 -- Whether `s` begins with `prefix`.
-export def String.startsWith: string, string -> bool = { s, prefix ->
-  if String.length(prefix) > String.length(s)
+export def string.startsWith: string, string -> bool = { s, prefix ->
+  if string.length(prefix) > string.length(s)
     then false
-    else String.substring(s, start = 0, length = String.length(prefix)) == prefix
+    else string.substring(s, start = 0, length = string.length(prefix)) == prefix
 }
 
 -- Whether `s` ends with `suffix`.
-export def String.endsWith: string, string -> bool = { s, suffix ->
-  if String.length(suffix) > String.length(s)
+export def string.endsWith: string, string -> bool = { s, suffix ->
+  if string.length(suffix) > string.length(s)
     then false
-    else String.substring(
+    else string.substring(
         s
-        start = String.length(s) - String.length(suffix)
-        length = String.length(suffix)
+        start = string.length(s) - string.length(suffix)
+        length = string.length(suffix)
       ) == suffix
 }
 
 -- The byte index of the first occurrence of `needle` in `s` at or after `from`, or -1.
 def indexFrom: string, string, int -> int = { s, needle, from ->
-  if from + String.length(needle) > String.length(s)
+  if from + string.length(needle) > string.length(s)
     then -1
-    else if String.substring(s, start = from, length = String.length(needle)) == needle
+    else if string.substring(s, start = from, length = string.length(needle)) == needle
       then from
       else indexFrom(s, needle, from + 1)
 }
@@ -62,53 +62,53 @@ def indexFrom: string, string, int -> int = { s, needle, from ->
 def lastIndexFrom: string, string, int -> int = { s, needle, from ->
   if from < 0
     then -1
-    else if String.substring(s, start = from, length = String.length(needle)) == needle
+    else if string.substring(s, start = from, length = string.length(needle)) == needle
       then from
       else lastIndexFrom(s, needle, from - 1)
 }
 
 -- The byte index of the first occurrence of `needle` in `s`. An empty `needle` is found at 0.
-export def String.indexOf: string, string -> #some(int) | #notFound = { s, needle ->
+export def string.indexOf: string, string -> #some(int) | #notFound = { s, needle ->
   def index = indexFrom(s, needle, 0)
   if index >= 0 then #some(index) else #notFound
 }
 
 -- The byte index of the last occurrence of `needle` in `s`. An empty `needle` is found at the end.
-export def String.lastIndexOf: string, string -> #some(int) | #notFound = { s, needle ->
-  def index = lastIndexFrom(s, needle, String.length(s) - String.length(needle))
+export def string.lastIndexOf: string, string -> #some(int) | #notFound = { s, needle ->
+  def index = lastIndexFrom(s, needle, string.length(s) - string.length(needle))
   if index >= 0 then #some(index) else #notFound
 }
 
 -- Whether `needle` occurs anywhere in `s`.
-export def String.contains: string, string -> bool = { s, needle ->
+export def string.contains: string, string -> bool = { s, needle ->
   indexFrom(s, needle, 0) >= 0
 }
 
 def countFrom: string, string, int, int -> int = { s, needle, from, found ->
   def index = indexFrom(s, needle, from)
-  if index < 0 then found else countFrom(s, needle, index + String.length(needle), found + 1)
+  if index < 0 then found else countFrom(s, needle, index + string.length(needle), found + 1)
 }
 
 -- The number of non-overlapping occurrences of `needle` in `s`. An empty `needle` is counted 0 times.
-export def String.count: string, string -> int = { s, needle ->
-  if String.length(needle) == 0 then 0 else countFrom(s, needle, 0, 0)
+export def string.count: string, string -> int = { s, needle ->
+  if string.length(needle) == 0 then 0 else countFrom(s, needle, 0, 0)
 }
 
 -- `s` without `prefix`, or `s` unchanged when it doesn't start with `prefix`.
-export def String.removePrefix: string, string -> string = { s, prefix ->
-  if String.startsWith(s, prefix)
-    then String.substring(
+export def string.removePrefix: string, string -> string = { s, prefix ->
+  if string.startsWith(s, prefix)
+    then string.substring(
       s
-      start = String.length(prefix)
-      length = String.length(s) - String.length(prefix)
+      start = string.length(prefix)
+      length = string.length(s) - string.length(prefix)
     )
     else s
 }
 
 -- `s` without `suffix`, or `s` unchanged when it doesn't end with `suffix`.
-export def String.removeSuffix: string, string -> string = { s, suffix ->
-  if String.endsWith(s, suffix)
-    then String.substring(s, start = 0, length = String.length(s) - String.length(suffix))
+export def string.removeSuffix: string, string -> string = { s, suffix ->
+  if string.endsWith(s, suffix)
+    then string.substring(s, start = 0, length = string.length(s) - string.length(suffix))
     else s
 }
 
@@ -121,7 +121,7 @@ def lowerByte: int -> int = { b ->
 }
 
 def toUpperFrom: string, int, string -> string = { s, i, acc ->
-  if i >= String.length(s)
+  if i >= string.length(s)
     then acc
     else toUpperFrom(
       s
@@ -131,7 +131,7 @@ def toUpperFrom: string, int, string -> string = { s, i, acc ->
 }
 
 def toLowerFrom: string, int, string -> string = { s, i, acc ->
-  if i >= String.length(s)
+  if i >= string.length(s)
     then acc
     else toLowerFrom(
       s
@@ -141,12 +141,12 @@ def toLowerFrom: string, int, string -> string = { s, i, acc ->
 }
 
 -- `s` with every ASCII letter upper-cased.
-export def String.uppercase: string -> string = { s ->
+export def string.uppercase: string -> string = { s ->
   toUpperFrom(s, 0, "")
 }
 
 -- `s` with every ASCII letter lower-cased.
-export def String.lowercase: string -> string = { s ->
+export def string.lowercase: string -> string = { s ->
   toLowerFrom(s, 0, "")
 }
 
@@ -155,14 +155,14 @@ def isWhitespace: int -> bool = { b -> b == 32 or b == 9 or b == 10 or b == 13 }
 
 -- The index of the first non-whitespace byte at or after `i` (or the length of `s`).
 def skipWhitespace: string, int -> int = { s, i ->
-  if i < String.length(s)
+  if i < string.length(s)
     then (if isWhitespace(__nanyx_string_byte_at(s, i)) then skipWhitespace(s, i + 1) else i)
     else i
 }
 
 -- The index of the first whitespace byte at or after `i` (or the length of `s`).
 def skipToWhitespace: string, int -> int = { s, i ->
-  if i < String.length(s)
+  if i < string.length(s)
     then (if isWhitespace(__nanyx_string_byte_at(s, i)) then i else skipToWhitespace(s, i + 1))
     else i
 }
@@ -177,31 +177,31 @@ def skipWhitespaceBack: string, int -> int = { s, stop ->
 }
 
 -- `s` without leading and trailing whitespace.
-export def String.trim: string -> string = { s ->
+export def string.trim: string -> string = { s ->
   def start = skipWhitespace(s, 0)
-  def stop = skipWhitespaceBack(s, String.length(s))
-  if stop > start then String.substring(s, start = start, length = stop - start) else ""
+  def stop = skipWhitespaceBack(s, string.length(s))
+  if stop > start then string.substring(s, start = start, length = stop - start) else ""
 }
 
 -- `s` without leading whitespace.
-export def String.trimStart: string -> string = { s ->
+export def string.trimStart: string -> string = { s ->
   def start = skipWhitespace(s, 0)
-  String.substring(s, start = start, length = String.length(s) - start)
+  string.substring(s, start = start, length = string.length(s) - start)
 }
 
 -- `s` without trailing whitespace.
-export def String.trimEnd: string -> string = { s ->
-  String.substring(s, start = 0, length = skipWhitespaceBack(s, String.length(s)))
+export def string.trimEnd: string -> string = { s ->
+  string.substring(s, start = 0, length = skipWhitespaceBack(s, string.length(s)))
 }
 
 -- Whether `s` has no bytes at all.
-export def String.isEmpty: string -> bool = { s ->
-  String.length(s) == 0
+export def string.isEmpty: string -> bool = { s ->
+  string.length(s) == 0
 }
 
 -- Whether `s` is empty or only whitespace.
-export def String.isBlank: string -> bool = { s ->
-  skipWhitespace(s, 0) == String.length(s)
+export def string.isBlank: string -> bool = { s ->
+  skipWhitespace(s, 0) == string.length(s)
 }
 
 -- `acc` followed by `s` repeated `times` times. `s` doubles at each step, so this takes as many steps
@@ -216,26 +216,26 @@ def repeatOnto: string, int, string -> string = { s, times, acc ->
 
 -- `s` repeated `times` times (the empty string when `times` is zero or negative). Stack-safe: it works
 -- for any `times`.
-export def String.repeat: string, int -> string = { s, times ->
+export def string.repeat: string, int -> string = { s, times ->
   repeatOnto(s, times, "")
 }
 
 -- The bytes needed in front of or behind `s` to make it `width` bytes long, cut from repeats of `fill`.
 def padding: string, int, string -> string = { s, width, fill ->
-  def missing = width - String.length(s)
+  def missing = width - string.length(s)
 
-  if missing <= 0 or String.length(fill) == 0
+  if missing <= 0 or string.length(fill) == 0
     then ""
-    else String.substring(String.repeat(fill, missing), start = 0, length = missing)
+    else string.substring(string.repeat(fill, missing), start = 0, length = missing)
 }
 
 -- `s` with `fill` repeated in front of it until it is `width` bytes long. Longer strings are unchanged.
-export def String.padStart: (string, width: int, fill: string) -> string = { s, width, fill ->
+export def string.padStart: (string, width: int, fill: string) -> string = { s, width, fill ->
   padding(s, width, fill) ++ s
 }
 
 -- `s` with `fill` repeated after it until it is `width` bytes long. Longer strings are unchanged.
-export def String.padEnd: (string, width: int, fill: string) -> string = { s, width, fill ->
+export def string.padEnd: (string, width: int, fill: string) -> string = { s, width, fill ->
   s ++ padding(s, width, fill)
 }
 
@@ -245,19 +245,19 @@ def splitFrom: string, string, int, list(string) -> list(string) = { s, separato
   def index = indexFrom(s, separator, from)
 
   if index < 0
-    then __nanyx_list_cons(String.substring(s, start = from, length = String.length(s) - from), acc)
+    then __nanyx_list_cons(string.substring(s, start = from, length = string.length(s) - from), acc)
     else splitFrom(
       s
       separator
-      index + String.length(separator)
-      __nanyx_list_cons(String.substring(s, start = from, length = index - from), acc)
+      index + string.length(separator)
+      __nanyx_list_cons(string.substring(s, start = from, length = index - from), acc)
     )
 }
 
 -- The pieces of `s` between occurrences of `on`. An empty `on` yields `[s]`. Stack-safe:
 -- it works however many pieces there are.
-export def String.split: (string, on: string) -> list(string) = { s, on ->
-  if String.length(on) == 0 then [s] else List.reverse(splitFrom(s, on, 0, []))
+export def string.split: (string, on: string) -> list(string) = { s, on ->
+  if string.length(on) == 0 then [s] else list.reverse(splitFrom(s, on, 0, []))
 }
 
 def joinRest: list(string), string, string -> string = { pieces, separator, acc ->
@@ -267,40 +267,40 @@ def joinRest: list(string), string, string -> string = { pieces, separator, acc 
 }
 
 -- The `pieces` concatenated with `separator` between each pair.
-export def String.join: list(string), string -> string = { pieces, separator ->
+export def string.join: list(string), string -> string = { pieces, separator ->
   match pieces
     | [] -> ""
     | [first, ...rest] -> joinRest(rest, separator, first)
 }
 
 -- The `pieces` concatenated end to end.
-export def String.concat: list(string) -> string = { pieces ->
-  String.join(pieces, "")
+export def string.concat: list(string) -> string = { pieces ->
+  string.join(pieces, "")
 }
 
 -- `s` with every occurrence of `pattern` replaced by `replacement`. An empty `pattern` leaves `s` unchanged.
-export def String.replace
+export def string.replace
   : (string, pattern: string, replacement: string) -> string
   = { s, pattern, replacement ->
-    if String.length(pattern) == 0
+    if string.length(pattern) == 0
       then s
-      else String.join(String.split(s, on = pattern), replacement)
+      else string.join(string.split(s, on = pattern), replacement)
   }
 
 def withoutCarriageReturn: string -> string = { line ->
-  String.removeSuffix(line, __nanyx_string_from_byte(13))
+  string.removeSuffix(line, __nanyx_string_from_byte(13))
 }
 
 -- The lines of `s`, split on line feeds, with any carriage return before a line feed dropped. A final
 -- line break doesn't start another line, so "a\nb\n" has two lines and "" has none. Stack-safe: it
 -- works however many lines there are.
-export def String.lines: string -> list(string) = { s ->
+export def string.lines: string -> list(string) = { s ->
   def lineFeed = __nanyx_string_from_byte(10)
 
-  if String.length(s) == 0
+  if string.length(s) == 0
     then []
-    else List.map(
-      String.split(String.removeSuffix(s, lineFeed), on = lineFeed)
+    else list.map(
+      string.split(string.removeSuffix(s, lineFeed), on = lineFeed)
       withoutCarriageReturn
     )
 }
@@ -310,16 +310,16 @@ def wordsFrom: string, int, list(string) -> list(string) = { s, from, acc ->
   def start = skipWhitespace(s, from)
   def stop = skipToWhitespace(s, start)
 
-  if start >= String.length(s)
+  if start >= string.length(s)
     then acc
     else wordsFrom(
       s
       stop
-      __nanyx_list_cons(String.substring(s, start = start, length = stop - start), acc)
+      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
     )
 }
 
 -- The runs of non-whitespace in `s`, in order. Stack-safe: it works however many words there are.
-export def String.words: string -> list(string) = { s ->
-  List.reverse(wordsFrom(s, 0, []))
+export def string.words: string -> list(string) = { s ->
+  list.reverse(wordsFrom(s, 0, []))
 }

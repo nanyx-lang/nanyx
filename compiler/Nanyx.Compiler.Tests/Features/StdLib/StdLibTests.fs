@@ -59,19 +59,19 @@ let ``nanyx/console declares the Console context`` () =
 let ``nanyx/text exports string functions with their types`` () =
     let source =
         "import nanyx/text\n" +
-        "def shout = String.uppercase(\"hi\")\n" +
-        "def n = String.length(\"hi\")\n" +
-        "def parts = String.split(\"a,b\", on = \",\")\n" +
-        "def joined = String.join(parts, \"-\")\n" +
-        "def yes = String.startsWith(\"nanyx\", \"nan\")\n" +
-        "def found = String.indexOf(\"nanyx\", \"yx\")\n" +
-        "def lastFound = String.lastIndexOf(\"nanyx\", \"n\")\n" +
-        "def times = String.count(\"nanyx\", \"n\")\n" +
-        "def replaced = String.replace(\"nanyx\", pattern = \"n\", replacement = \"N\")\n" +
-        "def padded = String.padStart(\"7\", width = 3, fill = \"0\")\n" +
-        "def blank = String.isBlank(\" \")\n" +
-        "def allLines = String.lines(\"a\")\n" +
-        "def allWords = String.words(\"a b\")"
+        "def shout = string.uppercase(\"hi\")\n" +
+        "def n = string.length(\"hi\")\n" +
+        "def parts = string.split(\"a,b\", on = \",\")\n" +
+        "def joined = string.join(parts, \"-\")\n" +
+        "def yes = string.startsWith(\"nanyx\", \"nan\")\n" +
+        "def found = string.indexOf(\"nanyx\", \"yx\")\n" +
+        "def lastFound = string.lastIndexOf(\"nanyx\", \"n\")\n" +
+        "def times = string.count(\"nanyx\", \"n\")\n" +
+        "def replaced = string.replace(\"nanyx\", pattern = \"n\", replacement = \"N\")\n" +
+        "def padded = string.padStart(\"7\", width = 3, fill = \"0\")\n" +
+        "def blank = string.isBlank(\" \")\n" +
+        "def allLines = string.lines(\"a\")\n" +
+        "def allWords = string.words(\"a b\")"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
@@ -92,7 +92,7 @@ let ``nanyx/text exports string functions with their types`` () =
 
 [<Fact>]
 let ``nanyx/text rejects a wrongly typed argument`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef bad = String.repeat(\"ab\", \"twice\")"
+    let result = Compiler.compile "import nanyx/text\n\ndef bad = string.repeat(\"ab\", \"twice\")"
     Assert.False(result.Diagnostics.IsEmpty)
 
 [<Fact>]
@@ -111,16 +111,16 @@ let ``Compiler intrinsics are not in scope in user code`` () =
 let ``Standard library import with alias is qualified`` () =
     let source =
         "import nanyx/text as t\n" +
-        "def shout = t.String.uppercase(\"hi\")"
+        "def shout = t.string.uppercase(\"hi\")"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["shout"])
-    let unqualified = Compiler.compile "import nanyx/text as t\n\ndef shout = String.uppercase(\"hi\")"
+    let unqualified = Compiler.compile "import nanyx/text as t\n\ndef shout = string.uppercase(\"hi\")"
     Assert.False(unqualified.Diagnostics.IsEmpty)
 
 [<Fact>]
 let ``nanyx/text functions are attached to String`` () =
-    let result = Compiler.compile "import nanyx/text\ndef s = \" a \"\ndef piped = s \\ trim\ndef called = String.trim(s)"
+    let result = Compiler.compile "import nanyx/text\ndef s = \" a \"\ndef piped = s \\ trim\ndef called = string.trim(s)"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["piped"])
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["called"])
@@ -206,13 +206,13 @@ let ``nanyx/math exports float functions with their types`` () =
 
 [<Fact>]
 let ``nanyx/text rejects a labelled argument passed by position`` () =
-    let result = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", \",\")"
+    let result = Compiler.compile "import nanyx/text\n\ndef parts = string.split(\"a,b\", \",\")"
     let diagnostic = List.exactlyOne result.Diagnostics
     Assert.Equal(DiagnosticCodes.PositionalForNamedArgument.Code, diagnostic.Code)
-    Assert.Equal("'String.split' takes 'on' by name, not by position: write 'on = ...'", diagnostic.Message)
+    Assert.Equal("'string.split' takes 'on' by name, not by position: write 'on = ...'", diagnostic.Message)
     let piped = List.exactlyOne (Compiler.compile "import nanyx/text\n\ndef parts = \"a,b\" \\split(\",\")").Diagnostics
     Assert.Equal(diagnostic.Message, piped.Message)
-    let named = Compiler.compile "import nanyx/text\n\ndef parts = String.split(\"a,b\", on = \",\")"
+    let named = Compiler.compile "import nanyx/text\n\ndef parts = string.split(\"a,b\", on = \",\")"
     Assert.True(named.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{named.Diagnostics}")
 
 [<Fact>]
@@ -221,12 +221,12 @@ let ``nanyx/text reports a labelled argument passed by position once, not in the
     // reported as errors too.
     let source =
         "import nanyx/text\n\n" +
-        "def pad = { n -> String.padStart(\"{n}\", 2, \"0\") }\n" +
-        "def quantity = { s -> match Int.fromString(s)\n" +
+        "def pad = { n -> string.padStart(\"{n}\", 2, \"0\") }\n" +
+        "def quantity = { s -> match int.fromString(s)\n" +
         "  | #some(n) -> n\n" +
         "  | #invalidInt -> 0\n" +
         "}\n"
     let diagnostic = List.exactlyOne (Compiler.compile source).Diagnostics
     Assert.Equal(DiagnosticCodes.PositionalForNamedArgument.Code, diagnostic.Code)
-    Assert.Equal("'String.padStart' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'", diagnostic.Message)
+    Assert.Equal("'string.padStart' takes 'width' and 'fill' by name, not by position: write 'width = ...' and 'fill = ...'", diagnostic.Message)
     Assert.Equal(2, diagnostic.Span.Value.StartLine)

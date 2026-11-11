@@ -45,9 +45,9 @@ let ``Run - a nominal type's own hash is used, and the built-in types' hashes ca
           "def $Name.`==`: $Name, $Name -> bool = { a, b -> true }"
           "def $Name.hash: $Name -> int = { n -> 7 }" ]
         [ "same($Name(\"Ada\"), $Name(\"Grace\"))"
-          "String.hash(s) == String.hash(\"aa\")"
-          "Int.hash(3) == Int.hash(1 + 2)"
-          "Bool.hash(true) != Bool.hash(false)"
-          "Float.hash(0.0) == Float.hash(-0.0)" ]
+          "string.hash(s) == string.hash(\"aa\")"
+          "int.hash(3) == int.hash(1 + 2)"
+          "bool.hash(true) != bool.hash(false)"
+          "float.hash(0.0) == float.hash(-0.0)" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\nT\n"

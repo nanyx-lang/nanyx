@@ -68,7 +68,7 @@ def lookup: [Http] string -> #some(Verdict) | #error(LookupError) = { sha -> pro
 }}
 
 def toCsvLine: Verdict -> string = { v ->
-  [v.name, v.sha256base64, v.sha256hex, "{v.maliciousVotes}"] \String.join(",")
+  [v.name, v.sha256base64, v.sha256hex, "{v.maliciousVotes}"] \string.join(",")
 }
 
 @entry

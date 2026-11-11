@@ -24,8 +24,8 @@ let ``A map literal is a map from its keys' type to its values' type`` () =
 let ``map(k, v) and Map(k, v) are the same type`` () =
     let source =
         "def m: map(string, int) = [\"a\" => 1]\n" +
-        "def n: Map(string, int) = m\n" +
-        "def count: Map(string, int) -> int = { x -> Map.count(x) }\n" +
+        "def n: map(string, int) = m\n" +
+        "def count: map(string, int) -> int = { x -> map.count(x) }\n" +
         "def c = count(m)\n"
     Assert.Equal<string list>([ "map(string, int)"; "map(string, int)"; "int" ], typesOf source [ "m"; "n"; "c" ])
 
@@ -45,7 +45,7 @@ let ``A map's functions are attached to Map, so a pipe finds them`` () =
 
 [<Fact>]
 let ``List.groupBy gives a map from each key to its elements`` () =
-    let source = "def groups = [\"a\", \"bb\", \"cc\"] \\List.groupBy { s -> s.length }\n"
+    let source = "def groups = [\"a\", \"bb\", \"cc\"] \\list.groupBy { s -> s.length }\n"
     Assert.Equal<string list>([ "map(int, list(string))" ], typesOf source [ "groups" ])
 
 [<Fact>]
@@ -79,17 +79,17 @@ let ``A key whose type attaches == and no hash is an error at the literal`` () =
 [<Fact>]
 let ``set(a) and Set(a) are the same type, made by the Set functions`` () =
     let source =
-        "def s = Set.fromList([1, 2, 2])\n" +
-        "def t: Set(int) = s \\insert(3)\n" +
-        "def u: set(string) = Set.empty\n" +
-        "def n = Set.count(t)\n"
+        "def s = set.fromList([1, 2, 2])\n" +
+        "def t: set(int) = s \\insert(3)\n" +
+        "def u: set(string) = set.empty\n" +
+        "def n = set.count(t)\n"
     Assert.Equal<string list>([ "set(int)"; "set(int)"; "set(string)"; "int" ], typesOf source [ "s"; "t"; "u"; "n" ])
 
 [<Fact>]
 let ``An element type with no equality is an error, and sets cannot be compared with == yet`` () =
-    let code, message = onlyDiagnostic "def s = Set.fromList([{ (x: int) -> x }])\n"
+    let code, message = onlyDiagnostic "def s = set.fromList([{ (x: int) -> x }])\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
-    Assert.Equal("'Set.fromList' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
-    let code, message = onlyDiagnostic "def same = Set.fromList([1]) == Set.fromList([1])\n"
+    Assert.Equal("'set.fromList' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
+    let code, message = onlyDiagnostic "def same = set.fromList([1]) == set.fromList([1])\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'set(int)' cannot be compared with ==: sets have no equality", message)

@@ -1,7 +1,9 @@
 module semanticVersion
 
-import nanyx/result
-import nanyx/text
+import (
+  nanyx/result
+  nanyx/text
+)
 
 type SemanticVersion = (
   major: int
@@ -12,14 +14,14 @@ type SemanticVersion = (
 )
 
 -- Split a string at the first occurrence of a separator, if there is one
-def splitOnce: (string, string) -> (string, #some(string) | #none) = { s, separator ->
+def splitOnce: string, string -> (string, (#some(string) | #none)) = { s, separator ->
   match s \indexOf(separator)
     | #some(i) -> (s \take(i), #some(s \drop(i + separator.length)))
     | #notFound -> (s, #none)
 }
 
 def parseNumber: string -> #some(int) | #error(#invalidVersionNumber) = { s ->
-  Int.fromString(s) \Result.mapError { _ -> #invalidVersionNumber }
+  int.fromString(s) \Result.mapError { _ -> #invalidVersionNumber }
 }
 
 -- "1.2.3-beta+build42" has core "1.2.3-beta" and build metadata "build42";
@@ -30,14 +32,14 @@ export def parse: string -> #some(SemanticVersion) | #error(#invalidVersionNumbe
 
   match numbers \split(on = ".")
     | [major, minor, patch] -> proc {
-        return SemanticVersion(
-          major = try parseNumber(major)
-          minor = try parseNumber(minor)
-          patch = try parseNumber(patch)
-          tag = tag
-          buildMetadata = buildMetadata
-        )
-      }
+      return SemanticVersion(
+        major = (try parseNumber(major))
+        minor = (try parseNumber(minor))
+        patch = (try parseNumber(patch))
+        tag = tag
+        buildMetadata = buildMetadata
+      )
+    }
     | _ -> #error(#invalidVersionNumber)
 }
 

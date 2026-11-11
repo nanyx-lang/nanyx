@@ -26,8 +26,8 @@ context Monoid(a) = (
 
 def additiveMonoid: Monoid(int) = (empty = 0, combine = { x, y -> x + y })
 def multiplicativeMonoid: Monoid(int) = (empty = 1, combine = { x, y -> x * y })
-def bitwiseAndMonoid: Monoid(int) = (empty = -1, combine = { x, y -> Int.bitAnd(x, y) })
-def bitwiseOrMonoid: Monoid(int) = (empty = 0, combine = { x, y -> Int.bitOr(x, y) })
+def bitwiseAndMonoid: Monoid(int) = (empty = -1, combine = { x, y -> int.bitAnd(x, y) })
+def bitwiseOrMonoid: Monoid(int) = (empty = 0, combine = { x, y -> int.bitOr(x, y) })
 
 def reduce: [Monoid(a)] list(a) -> a = { xs ->
   xs \fold(empty) { acc, x -> combine(acc, x) }

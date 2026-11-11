@@ -4,7 +4,7 @@ open Parser.Program
 open NyxCompiler.InferState
 
 /// A lambda passed to a function with a known signature takes its parameters' types from the parameter it is passed
-/// as, and from the arguments before it: in `List.map(["a"], { s -> s.length })`, `s` is already a string when
+/// as, and from the arguments before it: in `list.map(["a"], { s -> s.length })`, `s` is already a string when
 /// `s.length` is checked, so it reads the string's length, not a record's field.
 module internal LambdaArguments =
     /// The input type a lambda with the parameters `lambdaArgs` takes from `paramTy`, the callee's parameter it is

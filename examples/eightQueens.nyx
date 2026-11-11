@@ -4,7 +4,7 @@ def boardSize = 8
 
 -- A partial solution is the column of the queen in each row placed so far.
 -- A new queen is safe if no earlier queen shares its column or a diagonal.
-def isSafe: (list(int), int) -> bool = { queens, col ->
+def isSafe: list(int), int -> bool = { queens, col ->
   queens
     \reverse
     \zip(1..)
@@ -12,8 +12,7 @@ def isSafe: (list(int), int) -> bool = { queens, col ->
 }
 
 def solve: list(int) -> #some(list(int)) | #noSolution = { queens ->
-  if queens.length == boardSize then #some(queens)
-  else
+  if queens.length == boardSize then #some(queens) else
     rec tryColumns = {
       | [] -> #noSolution
       | [col, ...rest] ->
@@ -24,13 +23,13 @@ def solve: list(int) -> #some(list(int)) | #noSolution = { queens ->
         else tryColumns(rest)
     }
 
-    tryColumns((0..(boardSize - 1)) \toList)
+    tryColumns(0..boardSize - 1 \toList)
 }
 
 def render: list(int) -> string = { queens ->
   queens
-    \map { q -> (0..(boardSize - 1)) \map { c -> if c == q then "Q " else ". " } \String.join("") }
-    \String.join("\n")
+    \map { q -> 0..boardSize - 1 \map { c -> if c == q then "Q " else ". " } \string.join("") }
+    \string.join("\n")
 }
 
 @entry

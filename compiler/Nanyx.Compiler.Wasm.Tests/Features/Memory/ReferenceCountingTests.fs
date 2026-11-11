@@ -60,7 +60,7 @@ let ``Counting - closures and what they capture are freed`` () =
         count +
         "def step: int -> int = { i ->\n" +
         "  def suffix = \"-{i}\"\n" +
-        "  def tagged = List.map([\"a\", \"b {i}\"], { s -> s ++ suffix })\n" +
+        "  def tagged = list.map([\"a\", \"b {i}\"], { s -> s ++ suffix })\n" +
         "  count(tagged)\n" +
         "}\n" +
         loop

@@ -17,7 +17,7 @@ def stocks: list(Stock) =
 def quote: string -> string = { s -> '"' ++ s ++ '"' }
 
 def toCsvLine: Stock -> string = { s ->
-  [s.ticker, quote(s.name), "{s.price}", "{s.change}", "{s.pct}"] \String.join(",")
+  [s.ticker, quote(s.name), "{s.price}", "{s.change}", "{s.pct}"] \string.join(",")
 }
 
 def fromCsvLine: string -> #some(Stock) | #error(#malformed) | #invalidFloat = { line ->
@@ -26,9 +26,9 @@ def fromCsvLine: string -> #some(Stock) | #error(#malformed) | #invalidFloat = {
         return Stock(
           ticker = ticker
           name = name \trim('"')
-          price = try Float.fromString(price)
-          change = try Float.fromString(change)
-          pct = try Float.fromString(pct)
+          price = try float.fromString(price)
+          change = try float.fromString(change)
+          pct = try float.fromString(pct)
         )
       }
     | _ -> #error(#malformed)

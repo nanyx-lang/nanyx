@@ -283,12 +283,12 @@ let ``The start function and errors deferred to run time go through the core IR`
 let ``A generic function imported from another module is specialised where it is called`` () =
     // `List.map` comes from the prelude, inlined into the module with the types its own module gave its nodes.
     let source =
-        "def doubled: list(int) -> list(int) = { xs -> List.map(xs, { x -> x * 2 }) }\n" +
+        "def doubled: list(int) -> list(int) = { xs -> list.map(xs, { x -> x * 2 }) }\n" +
         "\n" +
-        "def positives: list(int) -> list(bool) = { xs -> List.map(xs, { x -> x > 0 }) }\n"
+        "def positives: list(int) -> list(bool) = { xs -> list.map(xs, { x -> x > 0 }) }\n"
     let _, report = compileWithReport source
-    let mapSpecialisations = report.Specialisations |> List.filter (snd >> (=) "List_map") |> List.map fst
-    Assert.Equal<string list>([ "List_map__int__int"; "List_map__bool__int" ], mapSpecialisations)
+    let mapSpecialisations = report.Specialisations |> List.filter (snd >> (=) "list_map") |> List.map fst
+    Assert.Equal<string list>([ "list_map__int__int"; "list_map__bool__int" ], mapSpecialisations)
     Assert.Contains("doubled", report.Functions)
     Assert.Contains("positives", report.Functions)
 
@@ -304,15 +304,15 @@ let ``A generic function over an open union, and a list's length, go through the
     Assert.Contains("bump", report.Functions)
     Assert.Contains("count", report.Functions)
     Assert.Contains("mapOption", report.Specialisations |> List.map snd)
-    Assert.Contains("List_length", report.Specialisations |> List.map snd)
+    Assert.Contains("list_length", report.Specialisations |> List.map snd)
 
 [<Fact>]
 let ``A type variable that nothing constrains is unit in the core IR`` () =
     // The element of `[]` is fixed by nothing: no value of it can be made or inspected.
-    let source = "def none: () -> int = { List.length([]) }\n"
+    let source = "def none: () -> int = { list.length([]) }\n"
     let _, report = compileWithReport source
     Assert.Contains("none", report.Functions)
-    Assert.Contains("List_length__unit", report.Functions)
+    Assert.Contains("list_length__unit", report.Functions)
 
 [<Fact>]
 let ``A guard's predicate is inlined with the value matched in a local, in the core IR`` () =

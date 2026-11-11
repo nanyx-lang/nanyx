@@ -25,7 +25,7 @@ let ``a block that ends with a def after an expression is an error`` () =
 
 [<Fact>]
 let ``a nested lambda that forgets to give back its local is an error`` () =
-    Assert.Equal("def r = rules\n      \\List.map { x -> x + i }", withoutResult "def g = { rules ->\n  { i ->\n    def r = rules\n      \\List.map { x -> x + i }\n  }\n}\n")
+    Assert.Equal("def r = rules\n      \\list.map { x -> x + i }", withoutResult "def g = { rules ->\n  { i ->\n    def r = rules\n      \\list.map { x -> x + i }\n  }\n}\n")
 
 [<Fact>]
 let ``an empty block and a block that ends with unit are fine`` () =

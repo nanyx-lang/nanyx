@@ -7,8 +7,8 @@ open NyxCompiler.InferState
 /// work in progress). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
 /// whether or not the alias it is written with is known: only a nominal or protected type, `$Email`, may attach its
 /// own `==`, `compare` or `hash`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's
-/// order and hash are always the compiler's own, so a `compare` or `hash` attached to one, as the prelude's `Int.compare`
-/// and `Int.hash` are, is an ordinary function that the operators, `Ord` and `Hash` do not read (see
+/// order and hash are always the compiler's own, so a `compare` or `hash` attached to one, as the prelude's `int.compare`
+/// and `int.hash` are, is an ordinary function that the operators, `Ord` and `Hash` do not read (see
 /// `WellKnownContexts.isBuiltIn`).
 module internal AttachedOperators =
     /// The members only a nominal or protected type may attach, each with what it decides and what a structural type's
@@ -32,8 +32,8 @@ module internal AttachedOperators =
         | Some info when info.IsContext -> None
         | Some _ -> Some Structural
         | None ->
-            match typeName.ToLowerInvariant() with
-            | "int" | "float" | "bool" | "string" | "unit" | "list" -> Some (BuiltIn (typeName.ToLowerInvariant()))
+            match typeName with
+            | "int" | "float" | "bool" | "string" | "unit" | "list" -> Some (BuiltIn typeName)
             | _ -> None
 
     /// The error for the definition `name`, attached to a type and written at `span`, if that type may not attach it.

@@ -67,7 +67,7 @@ let ``Run - a function that compares its type variable compares each type it is 
         [ "type Point = (x: int, y: int)"
           "def same = { x, y -> x == y }"
           "def differ = { x, y -> x != y }"
-          "def holds = { xs, x -> xs \\List.any({ y -> y == x }) }"
+          "def holds = { xs, x -> xs \\list.any({ y -> y == x }) }"
           "def written: [Eq(a)] a, list(a) -> bool = { x, xs -> x != x or xs == [x] }" ]
         [ "same(1, 1)"
           "same(s, \"ab\")"
@@ -78,7 +78,7 @@ let ``Run - a function that compares its type variable compares each type it is 
           "differ([s], [\"b\"])"
           "holds([1, 2, 3], 3)"
           "written(1, [1])"
-          "List.distinct([s, \"aa\", \"b\"]) == [\"aa\", \"b\"]" ]
+          "list.distinct([s, \"aa\", \"b\"]) == [\"aa\", \"b\"]" ]
     |> runSource
     |> assertRan "T\nF\nT\nT\nT\nF\nT\nT\nT\nT\n"
 

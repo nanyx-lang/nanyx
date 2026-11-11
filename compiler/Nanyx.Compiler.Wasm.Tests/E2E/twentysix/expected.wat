@@ -587,7 +587,7 @@
     )
   )
 
-  (func $List_filter__int (param $xs i32) (param $keep i32) (result i32)
+  (func $list_filter__int (param $xs i32) (param $keep i32) (result i32)
     local.get $xs
     local.get $keep
     i32.const 0
@@ -629,7 +629,7 @@
     i32.const 0
     i32.const 0
     call $__nanyx_record_set
-    call $List_filter__int
+    call $list_filter__int
     local.tee $__owned_0
     local.set $__for_cursor_0
     block $__for_done_0

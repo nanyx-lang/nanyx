@@ -24,7 +24,7 @@ let ``Typecheck supports record constructor syntax`` () =
 [<Fact>]
 let ``A lone record type argument in the application's own brackets is the same type`` () =
     let source =
-        "def count: list(name: string) -> int = { xs -> List.length(xs) }\n" +
+        "def count: list(name: string) -> int = { xs -> list.length(xs) }\n" +
         "def bracketed: list((name: string)) -> int = count\n" +
         "def n: int = count([(name = \"Ada\")])\n"
     let result = Compiler.compile source

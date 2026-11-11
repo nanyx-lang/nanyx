@@ -174,7 +174,7 @@ let ``Run - a function reading fields takes any record that has them`` () =
         "println(label(moved))\n" +
         "println(twice((name = \"f\", city = \"Hull\", extra = 0)))\n" +
         "def people = [(name = \"g\", city = \"X\"), (name = \"h\", city = \"Y\")]\n" +
-        "for people \\ List.map(label) | s -> println(s)\n"
+        "for people \\ list.map(label) | s -> println(s)\n"
     runSource source |> assertRan "a from Leeds\nb from York\nc one\nd two\ne from Ely\nf from Hull; f from Hull\ng from X\nh from Y\n"
 
 [<Fact>]

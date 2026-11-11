@@ -89,11 +89,11 @@ let ``A piped match stays piped, and a pipe after its arms goes on a line of its
 
 [<Fact>]
 let ``A pipe chain written over several lines keeps each step on a line of its own`` () =
-    unchanged (lines [ "def r ="; "  rules"; "    \\map { x -> f(x) }"; "    \\String.join(\"\")" ])
-    unchanged (lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\String.join(\"\")" ])
+    unchanged (lines [ "def r ="; "  rules"; "    \\map { x -> f(x) }"; "    \\string.join(\"\")" ])
+    unchanged (lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\string.join(\"\")" ])
     // One step on a line of its own puts them all on lines of their own.
-    Assert.Equal(lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\String.join(\"\")" ], format (lines [ "def r = rules \\map { x -> f(x) }"; "      \\String.join(\"\")" ]))
-    unchanged "def r = rules \\map { x -> f(x) } \\String.join(\"\")\n"
+    Assert.Equal(lines [ "def r = rules"; "  \\map { x -> f(x) }"; "  \\string.join(\"\")" ], format (lines [ "def r = rules \\map { x -> f(x) }"; "      \\string.join(\"\")" ]))
+    unchanged "def r = rules \\map { x -> f(x) } \\string.join(\"\")\n"
 
 [<Fact>]
 let ``A pipe chain over several lines in a lambda body is indented once from its line`` () =
@@ -113,15 +113,15 @@ let ``A pipe chain that spans lines keeps a multi-line lambda and the comments b
 
 [<Fact>]
 let ``A pipe chain that does not fit puts each step on a line of its own`` () =
-    let long = "def total = someLongValueName \\List.map { x -> x + someOtherLongName } \\List.filter { y -> y > 100 } \\List.sum"
-    Assert.Equal(lines [ "def total = someLongValueName"; "  \\List.map { x -> x + someOtherLongName }"; "  \\List.filter { y -> y > 100 }"; "  \\List.sum" ], format long)
+    let long = "def total = someLongValueName \\list.map { x -> x + someOtherLongName } \\list.filter { y -> y > 100 } \\list.sum"
+    Assert.Equal(lines [ "def total = someLongValueName"; "  \\list.map { x -> x + someOtherLongName }"; "  \\list.filter { y -> y > 100 }"; "  \\list.sum" ], format long)
 
 [<Fact>]
 let ``An except keeps one arm on its line and puts several on the lines after it`` () =
-    unchanged "def v = Int.fromString(s) except #invalidInt -> #invalidVersionNumber\n"
+    unchanged "def v = int.fromString(s) except #invalidInt -> #invalidVersionNumber\n"
     unchanged "def v = xs \\find(p) except #notFound | #empty -> #none\n"
     unchanged (lines [ "def v = load(n) except"; "  | #error(#notFound) -> #some(0)"; "  | #error(#io(message)) -> #some(1)" ])
-    unchanged (lines [ "def f = { s ->"; "  def n = Int.fromString(s) except #invalidInt -> #some(0)"; "  n"; "}" ])
+    unchanged (lines [ "def f = { s ->"; "  def n = int.fromString(s) except #invalidInt -> #some(0)"; "  n"; "}" ])
     Assert.Equal("def v = x except #a -> #b\n", format "def v = x   except   #a->#b")
 
 [<Fact>]
@@ -346,8 +346,8 @@ let ``Fields that each fit on one line stay on one line`` () =
 [<Fact>]
 let ``An annotated def's lambda body goes on the line after the arrow`` () =
     Assert.Equal(
-        lines [ "def heading: [Log] string -> () = { title ->"; "  log(\"== \" ++ String.uppercase(title) ++ \" ==\")"; "}" ],
-        format "def heading: [Log] string -> () = { title -> log(\"== \" ++ String.uppercase(title) ++ \" ==\") }")
+        lines [ "def heading: [Log] string -> () = { title ->"; "  log(\"== \" ++ string.uppercase(title) ++ \" ==\")"; "}" ],
+        format "def heading: [Log] string -> () = { title -> log(\"== \" ++ string.uppercase(title) ++ \" ==\") }")
     Assert.Equal(
         lines [ "def main = {"; "  def double: int -> int = { x ->"; "    x * 2"; "  }"; ""; "  double(2)"; "}" ],
         format (lines [ "def main = {"; "  def double: int -> int = { x -> x * 2 }"; "  double(2)"; "}" ]))

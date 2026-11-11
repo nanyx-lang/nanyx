@@ -213,7 +213,7 @@ let ``A use of a named value is only an instance for the type it has the shape o
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
         Assert.Equal(
-            "'describe' requires the context 'Show(int)', which is not loaded here, and 'Int.show' is not defined: define it, or load an instance with `use`",
+            "'describe' requires the context 'Show(int)', which is not loaded here, and 'int.show' is not defined: define it, or load an instance with `use`",
             diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
@@ -229,7 +229,7 @@ let ``A context that cannot be synthesized says which definition is missing or h
         "'describe' requires the context 'Show(Point)', which is not loaded here, and 'Point.show' is not defined: define it, or load an instance with `use`",
         message "def s = describe(Point(x = 1, y = 2))\n")
     Assert.Equal(
-        "'describe' requires the context 'Show(int)', which is not loaded here, and 'Int.show' is not defined: define it, or load an instance with `use`",
+        "'describe' requires the context 'Show(int)', which is not loaded here, and 'int.show' is not defined: define it, or load an instance with `use`",
         message "def s = describe(3)\n")
     Assert.Equal(
         "'describe' requires the context 'Show(Point)', but 'Point.show' has the type 'Point -> int', where 'show' must be 'Point -> string'",
@@ -301,7 +301,7 @@ let ``A context needed at a type the call leaves open is found once the rest of 
         "def onlyPoint: Point -> int = { p -> p.x }\n" +
         "def settled = { v ->\n" +
         "  def s = describe(v)\n" +
-        "  s ++ Int.toString(onlyPoint(v))\n" +
+        "  s ++ int.toString(onlyPoint(v))\n" +
         "}\n"
     match instancesIn source with
     | [ _; _; [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()

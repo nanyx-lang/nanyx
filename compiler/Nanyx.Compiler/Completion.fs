@@ -8,7 +8,7 @@ open Parser.Program
 /// ordered by name. Where several declarations of a name are in scope, the nearest is the one the name means: the one
 /// with the narrowest scope (a parameter before a top-level def, a top-level def before an import), and of equal
 /// scopes the one declared last (a def in a block shadows an earlier one of the same name). Names with a dot
-/// (`inner.secret`, `String.shout`) are left out: they are reached through what comes before the dot. Empty when
+/// (`inner.secret`, `string.shout`) are left out: they are reached through what comes before the dot. Empty when
 /// the module did not type-check.
 let namesInScope (result: CompileResult) (offset: int) : Symbol list =
     match result.Syntax, result.Typed with
@@ -58,9 +58,9 @@ type MemberKind =
     | Field
     /// A property a built-in type has: a string's `length`.
     | Property
-    /// A definition written after the prefix: `foo` in `m.foo`, `uppercase` in `String.uppercase`.
+    /// A definition written after the prefix: `foo` in `m.foo`, `uppercase` in `string.uppercase`.
     | Definition
-    /// A further prefix: `String` in `t.String.uppercase`.
+    /// A further prefix: `string` in `t.string.uppercase`.
     | Prefix
 
 /// What can follow a dot, with its type as hover writes it, if it has one.
@@ -90,7 +90,7 @@ let private valueType (typed: TypedModule) (result: CompileResult) (offset: int)
 /// are the fields of its record type, followed through the rest of the path, or the built-in properties of its type
 /// (a string's `length`); a tuple's numbered items are left out, and a value whose type is not yet known has none. Otherwise they are the module's names written
 /// under the path as a prefix (see `TypedModule.ModuleNames`): an import's exports under its alias (`m.`), or
-/// definitions attached to a type (`String.`). A dot on a value never reaches a definition attached to its type:
+/// definitions attached to a type (`string.`). A dot on a value never reaches a definition attached to its type:
 /// that is a pipe's (see `pipeTargetsAt`). Empty when the module did not type-check.
 /// What can follow a dot on a value of type `valueType`, ordered by name: the fields of its record type, or the
 /// built-in properties of its type. A tuple's numbered items are left out, and a value whose type is not yet known
@@ -164,7 +164,7 @@ type PipeTarget = { Name: string; Type: string option; IsFunction: bool; IsAttac
 
 /// What can follow `\` at `offset` in the compiled root module, where `path` names the value piped (`s`, or `p`,
 /// `inner` for `p.inner \`; empty when what is piped is not a name). First the definitions attached to the value's
-/// type, under each name a pipe resolves it by (see `Infer.attachedTypeNames`: `String` for a string, `List` for a
+/// type, under each name a pipe resolves it by (see `Infer.attachedTypeNames`: `string` for a string, `list` for a
 /// list), nearest name first, as a pipe resolves them; then the functions in scope, which a pipe calls when no
 /// attached definition has the name. Only the functions in scope when the value's type is not known.
 let pipeTargetsAt (names: TypeNotation) (result: CompileResult) (offset: int) (path: string list) : PipeTarget list =

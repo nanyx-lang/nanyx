@@ -9,7 +9,7 @@ let private header =
     "import nanyx/text\n" +
     "\n" +
     "def showInts: [Console] list(int) -> () = { xs ->\n" +
-    "  println(\"[\" ++ String.join(xs \\List.map(Int.toString), \", \") ++ \"]\")\n" +
+    "  println(\"[\" ++ string.join(xs \\list.map(int.toString), \", \") ++ \"]\")\n" +
     "}\n" +
     "def showOption: [Console] (#some(int) | #none) -> () = {\n" +
     "  | #some(n) -> println(\"#some({n})\")\n" +
@@ -62,8 +62,8 @@ let ``Run - valuesOption of a long list does not overflow the stack`` () =
         "@entry\n" +
         "def main = {\n" +
         "  def values = valuesOption(options(200000, []))\n" +
-        "  dbg(List.length(values))\n" +
-        "  dbg(defaultValueOption(List.head(values), 0))\n" +
+        "  dbg(list.length(values))\n" +
+        "  dbg(defaultValueOption(list.head(values), 0))\n" +
         "}\n"
     runSource source |> assertRan "dbg: 100000\ndbg: 2\n"
 
@@ -75,7 +75,7 @@ let ``Run - Result.mapOr applies the function to a success and gives the default
         "def main = {\n" +
         "  dbg(Result.mapOr(ok, 0, { n -> n * 10 }))\n" +
         "  dbg(bad \\Result.mapOr(0, { n -> n * 10 }))\n" +
-        "  println(Result.mapOr(bad, \"none\", Int.toString))\n" +
+        "  println(Result.mapOr(bad, \"none\", int.toString))\n" +
         "}\n"
     runSource source |> assertRan "dbg: 40\ndbg: 0\nnone\n"
 
@@ -98,7 +98,7 @@ let ``Run - Result.orElse keeps a success and passes an error to the fallback`` 
         "@entry\n" +
         "def main = {\n" +
         "  showResult(Result.orElse(ok, { e -> #some(0) }))\n" +
-        "  showResult(bad \\Result.orElse { e -> #some(String.length(e)) })\n" +
+        "  showResult(bad \\Result.orElse { e -> #some(string.length(e)) })\n" +
         "  showResult(bad \\Result.orElse(retry))\n" +
         "  showResult(bad \\Result.orElse { e -> #error(\"recovered from {e}\") })\n" +
         "}\n"

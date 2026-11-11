@@ -49,7 +49,7 @@ let ``Run - for loops over several iterables walk them in step`` () =
         "    println(\"{i}: {thing}\")\n" +
         "  for things, 1..2 | \"Sam\", i -> println(\"Sam is {i}\")\n" +
         "                   | thing, _ -> println(\"not Sam: {thing}\")\n" +
-        "  for 10..12, [[1], [2, 3], [4, 5, 6], [7]], 100.. | a, xs, c -> println(\"{a} {List.length(xs)} {c}\")\n" +
+        "  for 10..12, [[1], [2, 3], [4, 5, 6], [7]], 100.. | a, xs, c -> println(\"{a} {list.length(xs)} {c}\")\n" +
         "  for things, things -> println(\"tick\")\n" +
         "  for things, 0.. | thing, i ->\n" +
         "    for [true, false], 0.. | flag, j -> println(\"{i}.{j} {thing} {flag}\")\n" +

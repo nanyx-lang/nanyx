@@ -36,7 +36,7 @@ export def clamp: [Ord(a)] (a, min: a, max: a) -> a = { n, min, max ->
 
 -- `base ** exponent`: `base` multiplied by itself `exponent` times, for any number type. A negative
 -- exponent is `1 / base ** -exponent`, so on an `int` it truncates towards zero. For an exponent
--- that is not a whole number, see `Float.pow`.
+-- that is not a whole number, see `float.pow`.
 export def pow: [Num(a)] a, int -> a = { base, exponent ->
   base ** exponent
 }

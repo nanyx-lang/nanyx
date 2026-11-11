@@ -63,7 +63,7 @@ let ``A def that requires ToString of a type variable can interpolate it`` () =
 
 [<Fact>]
 let ``A hole of a parameter typed by the call it is passed to finds its ToString once the module is inferred`` () =
-    compileClean "def labels: list(int) -> list(string) = { xs -> xs \\List.map({ x -> \"#{x}\" }) }\n" |> ignore
+    compileClean "def labels: list(int) -> list(string) = { xs -> xs \\list.map({ x -> \"#{x}\" }) }\n" |> ignore
 
 [<Fact>]
 let ``A local function generic in the type it interpolates is not an error`` () =

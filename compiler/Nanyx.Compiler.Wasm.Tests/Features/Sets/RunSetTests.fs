@@ -9,7 +9,7 @@ let private program (definitions: string list) (lines: string list) =
     [ "import nanyx/console"
       ""
       "def show = { b -> if b then \"T\" else \"F\" }"
-      "def ints = { (s: set(int)) -> Set.toList(s) \\List.map(Int.toString) \\List.fold(\"\", { acc, n -> acc ++ n }) }"
+      "def ints = { (s: set(int)) -> set.toList(s) \\list.map(int.toString) \\list.fold(\"\", { acc, n -> acc ++ n }) }"
       yield! definitions
       ""
       "@entry"
@@ -22,12 +22,12 @@ let private program (definitions: string list) (lines: string list) =
 let ``Run - a set holds each element once, in the order they were first added`` () =
     program
         []
-        [ "def s = Set.fromList([3, 1, 3, 2, 1])"
+        [ "def s = set.fromList([3, 1, 3, 2, 1])"
           "println(ints(s))"
-          "println(\"{Set.count(s)}\")"
+          "println(\"{set.count(s)}\")"
           "println(ints(s \\insert(4) \\insert(1)))"
-          "println(ints(Set.remove(s, 1)))"
-          "println(\"{Set.count(Set.empty \\insert(5))}\")" ]
+          "println(ints(set.remove(s, 1)))"
+          "println(\"{set.count(set.empty \\insert(5))}\")" ]
     |> runSource
     |> assertRan "312\n3\n3124\n32\n1\n"
 
@@ -35,8 +35,8 @@ let ``Run - a set holds each element once, in the order they were first added`` 
 let ``Run - contains says whether a set holds an element`` () =
     program
         []
-        [ "def s = Set.fromList([\"tea\", \"cake\"])"
-          "println(show(Set.contains(s, \"te\" ++ \"a\")))"
+        [ "def s = set.fromList([\"tea\", \"cake\"])"
+          "println(show(set.contains(s, \"te\" ++ \"a\")))"
           "println(show(s \\contains(\"pie\")))" ]
     |> runSource
     |> assertRan "T\nF\n"
@@ -45,11 +45,11 @@ let ``Run - contains says whether a set holds an element`` () =
 let ``Run - union, intersection and difference`` () =
     program
         []
-        [ "def a = Set.fromList([1, 2, 3])"
-          "def b = Set.fromList([2, 3, 4])"
-          "println(ints(Set.union(a, b)))"
-          "println(ints(Set.intersection(a, b)))"
-          "println(ints(Set.difference(a, b)))" ]
+        [ "def a = set.fromList([1, 2, 3])"
+          "def b = set.fromList([2, 3, 4])"
+          "println(ints(set.union(a, b)))"
+          "println(ints(set.intersection(a, b)))"
+          "println(ints(set.difference(a, b)))" ]
     |> runSource
     |> assertRan "1234\n23\n1\n"
 
@@ -59,12 +59,12 @@ let ``Run - records, tuples and tags can be elements, compared by their structur
         [ "type Point = (x: int, y: int)"
           "type Colour = #red | #green | #blue"
           "def add: set(Colour), Colour -> set(Colour) = { s, c -> s \\insert(c) }" ]
-        [ "def points = Set.fromList([Point(x = 1, y = 2), Point(x = 1, y = 2), Point(x = 3, y = 4)])"
-          "println(\"{Set.count(points)} {show(Set.contains(points, Point(x = 3, y = 4)))}\")"
-          "def pairs = Set.fromList([(1, \"a\"), (1, \"a\"), (2, \"a\")])"
-          "println(\"{Set.count(pairs)}\")"
-          "def colours = add(add(add(Set.empty, #red), #green), #red)"
-          "println(\"{Set.count(colours)} {show(Set.contains(colours, #blue))}\")" ]
+        [ "def points = set.fromList([Point(x = 1, y = 2), Point(x = 1, y = 2), Point(x = 3, y = 4)])"
+          "println(\"{set.count(points)} {show(set.contains(points, Point(x = 3, y = 4)))}\")"
+          "def pairs = set.fromList([(1, \"a\"), (1, \"a\"), (2, \"a\")])"
+          "println(\"{set.count(pairs)}\")"
+          "def colours = add(add(add(set.empty, #red), #green), #red)"
+          "println(\"{set.count(colours)} {show(set.contains(colours, #blue))}\")" ]
     |> runSource
     |> assertRan "2 T\n2\n2 F\n"
 
@@ -72,6 +72,6 @@ let ``Run - records, tuples and tags can be elements, compared by their structur
 let ``Run - a for loop walks a set's elements`` () =
     program
         []
-        [ "for Set.fromList([2, 1, 2]) | n -> println(\"{n}\")" ]
+        [ "for set.fromList([2, 1, 2]) | n -> println(\"{n}\")" ]
     |> runSource
     |> assertRan "2\n1\n"

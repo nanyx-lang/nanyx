@@ -309,9 +309,9 @@ let ``Run - a context member named by an operator is synthesized from an attache
         "\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  println(Int.toString(`<+>`(1, 2)))\n" +
+        "  println(int.toString(`<+>`(1, 2)))\n" +
         "  def combine = `<+>`\n" +
-        "  println(Int.toString(combine(3, 4)))\n" +
+        "  println(int.toString(combine(3, 4)))\n" +
         "  println(if same($Point(x = 1, y = 2), $Point(x = 1, y = 9)) then \"same\" else \"different\")\n" +
         "  println(if $Point.`==`($Point(x = 1, y = 2), $Point(x = 2, y = 2)) then \"same\" else \"different\")\n" +
         "}\n"
@@ -328,11 +328,11 @@ let ``Run - a lambda in a generic function calls the members of the context the 
         "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
         "\n" +
         "def describe: [Show(a)] a -> string = { v -> \"<\" ++ Show(a).show(v) ++ \">\" }\n" +
-        "def qualified: [Show(a)] list(a) -> string = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ Show(a).show(x) }) }\n" +
-        "def plain: [Show(a)] list(a) -> string = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ show(x) }) }\n" +
-        "def passed: [Show(a)] list(a) -> string = { xs -> List.fold(xs, \"\", { acc, x -> acc ++ describe(x) }) }\n" +
+        "def qualified: [Show(a)] list(a) -> string = { xs -> list.fold(xs, \"\", { acc, x -> acc ++ Show(a).show(x) }) }\n" +
+        "def plain: [Show(a)] list(a) -> string = { xs -> list.fold(xs, \"\", { acc, x -> acc ++ show(x) }) }\n" +
+        "def passed: [Show(a)] list(a) -> string = { xs -> list.fold(xs, \"\", { acc, x -> acc ++ describe(x) }) }\n" +
         "def nested: [Show(a)] list(a) -> string = { xs ->\n" +
-        "  List.fold(xs, \"\", { acc, x -> acc ++ List.fold([1, 2], \"\", { inner, n -> inner ++ show(x) }) })\n" +
+        "  list.fold(xs, \"\", { acc, x -> acc ++ list.fold([1, 2], \"\", { inner, n -> inner ++ show(x) }) })\n" +
         "}\n" +
         "\n" +
         "@entry\n" +
@@ -375,7 +375,7 @@ let ``Run - an inferred parameterised context passes through two functions and i
         "def thrice = { v -> twice(v) ++ describe(v) }\n" +
         "def both = { p, s -> describe(p) ++ \" \" ++ describe(s) }\n" +
         "def logged = { v -> println(describe(v)) }\n" +
-        "def lengths = { xs -> List.map(xs, { x -> describe(x) }) \\List.length }\n" +
+        "def lengths = { xs -> list.map(xs, { x -> describe(x) }) \\list.length }\n" +
         "\n" +
         "@entry\n" +
         "def main = {\n" +
@@ -383,7 +383,7 @@ let ``Run - an inferred parameterised context passes through two functions and i
         "  println(twice(Size(w = 3)))\n" +
         "  println(both(Point(x = 4, y = 5), Size(w = 6)))\n" +
         "  logged(Size(w = 7))\n" +
-        "  println(Int.toString(lengths([Size(w = 8), Size(w = 9)])))\n" +
+        "  println(int.toString(lengths([Size(w = 8), Size(w = 9)])))\n" +
         "}\n"
     runSource source |> assertRan "(1, 2)(1, 2)(1, 2)\n3px3px\n(4, 5) 6px\n7px\n2\n"
 
@@ -472,9 +472,9 @@ let ``Run - a function member is passed on as a value, by its name and through i
         "\n" +
         "type Point = (x: int, y: int)\n" +
         "def Point.show: Point -> string = { p -> \"({p.x}, {p.y})\" }\n" +
-        "def concat: list(string) -> string = { xs -> xs \\List.fold(\"\") { acc, s -> acc ++ s } }\n" +
-        "def shown: [Show(a)] list(a) -> string = { xs -> concat(List.map(xs, show)) }\n" +
-        "def qualified: [Show(a)] list(a) -> string = { xs -> concat(List.map(xs, Show(a).show)) }\n" +
+        "def concat: list(string) -> string = { xs -> xs \\list.fold(\"\") { acc, s -> acc ++ s } }\n" +
+        "def shown: [Show(a)] list(a) -> string = { xs -> concat(list.map(xs, show)) }\n" +
+        "def qualified: [Show(a)] list(a) -> string = { xs -> concat(list.map(xs, Show(a).show)) }\n" +
         "\n" +
         "@entry\n" +
         "def main = {\n" +

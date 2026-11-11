@@ -43,13 +43,13 @@ let ``An import used only in a type is not reported`` () =
 
 [<Fact>]
 let ``A module imported by the file and by a module block is used by each where it is used`` () =
-    let block = "module inner =\n  import nanyx/text\n  export def a = String.trim(\" x \")\n"
-    Assert.Empty(reported ("import nanyx/text\n" + block + "def b = String.trim(\" y \")\n"))
+    let block = "module inner =\n  import nanyx/text\n  export def a = string.trim(\" x \")\n"
+    Assert.Empty(reported ("import nanyx/text\n" + block + "def b = string.trim(\" y \")\n"))
     // The block's import is its own: a use in the block does not use the file's, nor one outside it the block's.
     Assert.Equal<(string * string) list>(
         [ "`nanyx/text` is imported but never used", "nanyx/text" ],
         reported ("import nanyx/text\n" + block + "def b = 1\n"))
-    let source = "import nanyx/text\nmodule inner =\n  import nanyx/text\n  export def a = 1\ndef b = String.trim(\" y \")\n"
+    let source = "import nanyx/text\nmodule inner =\n  import nanyx/text\n  export def a = 1\ndef b = string.trim(\" y \")\n"
     let reportedAt =
         (Compiler.compileWith Linters.everyLinter source).Diagnostics
         |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
@@ -66,7 +66,7 @@ let ``An unused import is reported at the import, under its alias or its module`
 
 [<Fact>]
 let ``The prelude, the import entry adds, and aliases starting with an underscore are not reported`` () =
-    Assert.Empty(reported "@entry\ndef main = {\n  def x = List.length([1, 2])\n  x + 1\n}")
+    Assert.Empty(reported "@entry\ndef main = {\n  def x = list.length([1, 2])\n  x + 1\n}")
     Assert.Empty(reported "import nanyx/math as _m\ndef x = 1\n")
 
 [<Fact>]

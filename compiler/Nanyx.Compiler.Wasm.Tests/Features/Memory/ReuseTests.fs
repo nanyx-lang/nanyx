@@ -36,7 +36,7 @@ let ``Reuse - mapping over a list held once rewrites its cells in place`` () =
 
 [<Fact>]
 let ``Reuse - List.map with a closure over a list held once rewrites its cells in place`` () =
-    let source = lists + "def run: int -> int = { n -> sum(List.map(build(n), { x -> x + 1 })) }\n"
+    let source = lists + "def run: int -> int = { n -> sum(list.map(build(n), { x -> x + 1 })) }\n"
     use program = instantiateWasm source []
     let buildAllocations, total = allocationsOf program "built" 100
     let mapAllocations, mapped = allocationsOf program "run" 100

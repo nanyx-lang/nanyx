@@ -14,8 +14,8 @@ let ``Run - an interpolated value of a type only the type checker knows`` () =
         "import nanyx/console\n" +
         "\n" +
         "def xs = [1, 2, 3]\n" +
-        "def total = List.fold(xs, 0, { acc, x -> acc + x })\n" +
-        "println(\"{total} [{List.fold(xs, 1, { acc, x -> acc * x })}]\")\n" +
+        "def total = list.fold(xs, 0, { acc, x -> acc + x })\n" +
+        "println(\"{total} [{list.fold(xs, 1, { acc, x -> acc * x })}]\")\n" +
         "for [\"a\", \"b\"] | s ->\n" +
         "  println(\"[{s}]\")\n" +
         "def found = xs \\find({ x -> x > 1 })\n" +
@@ -32,12 +32,12 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
         "import nanyx/console\n" +
         "import nanyx/text\n" +
         "\n" +
-        "def pad: string, int -> string = { text, width -> String.padStart(text, width = width, fill = \" \") }\n" +
+        "def pad: string, int -> string = { text, width -> string.padStart(text, width = width, fill = \" \") }\n" +
         "\n" +
         "def money: int -> string = { pence ->\n" +
         "  def pounds = pence / 100\n" +
         "  def rest = pence % 100\n" +
-        "  \"£{pounds}.{String.padStart(\"{rest}\", width = 2, fill = \"0\")}\"\n" +
+        "  \"£{pounds}.{string.padStart(\"{rest}\", width = 2, fill = \"0\")}\"\n" +
         "}\n" +
         "\n" +
         "def show: [Console] string, int -> () = { name, qty ->\n" +
@@ -134,7 +134,7 @@ let ``Run - string literals inside interpolation holes`` () =
         "import nanyx/text\n" +
         "\n" +
         "def main = {\n" +
-        "  println(\"len {String.length(\"abc\")} and {String.uppercase(\"x\")}\")\n" +
+        "  println(\"len {string.length(\"abc\")} and {string.uppercase(\"x\")}\")\n" +
         "}\n" +
         "\n" +
         "main()\n"
@@ -151,9 +151,9 @@ let ``Run - interpolation holes that allocate or have effects run once`` () =
         "def s = \"b\"\n" +
         "def shout: [Console] string -> string = { v ->\n" +
         "  println(\"shouting \" ++ v)\n" +
-        "  String.uppercase(v)\n" +
+        "  string.uppercase(v)\n" +
         "}\n" +
-        "println(\"a {s ++ \"!\"} c {String.uppercase(s)} d\")\n" +
+        "println(\"a {s ++ \"!\"} c {string.uppercase(s)} d\")\n" +
         "println(\"[{shout(\"x\")}]\")\n"
     runSource source |> assertRan "a b! c B d\nshouting x\n[X]\n"
 

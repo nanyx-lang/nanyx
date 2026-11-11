@@ -12,12 +12,12 @@ def letters = 'a'..'z'
 def rotateChar: (string, int) -> string = { c, shift ->
   if letters \contains(c) then
     def base = c.codePoint - 'a'.codePoint
-    String.fromCodePoint('a'.codePoint + (base + shift) % 26)
+    string.fromCodePoint('a'.codePoint + (base + shift) % 26)
   else c
 }
 
 def rotate: (string, int) -> string = { s, shift ->
-  s \chars \map { c -> rotateChar(c, shift) } \String.join("")
+  s \chars \map { c -> rotateChar(c, shift) } \string.join("")
 }
 
 -- The letter frequency table for English
@@ -26,7 +26,7 @@ def english = [
   6.7, 7.5, 1.9, 0.1, 6.0, 6.3, 9.1, 2.8, 1.0, 2.4, 0.2, 2.0, 0.1
 ]
 
-def percent: (int, int) -> float = { n, m -> 100.0 * Int.toFloat(n) / Int.toFloat(m) }
+def percent: (int, int) -> float = { n, m -> 100.0 * int.toFloat(n) / int.toFloat(m) }
 
 def rotateList: (list(a), int) -> list(a) = { xs, n -> xs \skip(n) ++ xs \take(n) }
 

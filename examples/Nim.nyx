@@ -68,9 +68,9 @@ def showIndented: (GameTree, int) -> string = {
   | #winner(p), _ -> p.show ++ " wins"
   | #take(p, moves), indent ->
     def lines = moves \map { sticks, subtree ->
-      "\n" ++ String.repeat(" ", indent) ++ "{sticks} -> " ++ showIndented(subtree, indent + 2)
+      "\n" ++ string.repeat(" ", indent) ++ "{sticks} -> " ++ showIndented(subtree, indent + 2)
     }
-    p.show ++ (lines \String.join(""))
+    p.show ++ (lines \string.join(""))
 }
 
 def GameTree.show: GameTree -> string = { tree -> showIndented(tree, 2) }
@@ -138,7 +138,7 @@ def initialScores: Scores = [#alice => 0, #bob => 0]
 
 def updateScore: (Scores, Player) -> Scores = { scores, winner ->
   def #some(current) = scores(winner) except #notFound -> #some(0)
-  scores \Map.insert(winner, current + 1)
+  scores \map.insert(winner, current + 1)
 }
 
 def printBoard: [Console] Scores -> () = { scores ->
