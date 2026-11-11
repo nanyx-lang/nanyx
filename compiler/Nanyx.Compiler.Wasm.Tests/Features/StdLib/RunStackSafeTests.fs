@@ -5,8 +5,7 @@ open TranspilerWasmTestHelpers
 
 // The standard library's walks are stack-safe (docs/src/content/work-in-progress/tail-calls.md): each of these ran out of stack when
 // the function recursed once per element other than in tail position, as every one of them traps on 20,000 elements
-// written that way. The lists are 20,000 long, not more, only to keep the suite quick: matching a list pattern counts
-// the whole list for now, so a walk takes time in the square of the list's length (#557).
+// written that way. The lists are 20,000 long, not more, only to keep the suite quick.
 
 /// The start of each program: `xs` is the list 1 to 20,000, and `show` gives a list's length, first element and
 /// last element.
