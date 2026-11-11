@@ -17,6 +17,8 @@ let rec storesBeforeValue (expr: Expression) =
     // `dbg` of a tag value stores it in a hole local, as an interpolated string does, and a loop stores its elements.
     | FunctionCall("dbg", _, _)
     | FunctionCall("__for", _, _) -> true
+    // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).
+    | FunctionCall(name, _, [ _ ]) when name = CellSyntax.read || name = CellSyntax.unbox -> true
     | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue
     | TupleExpr items
     | ListExpr items -> items |> List.exists storesBeforeValue

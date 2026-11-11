@@ -155,3 +155,47 @@ module internal ExpressionRewrites =
             kind)
         |> ignore
         List.ofSeq found
+
+    /// `expr` with its cells written as the backend reads them (see `CellSyntax`), by what inference found: `state`'s
+    /// cells, the names that resolved to them, and the def each `mut` makes. A cell is captured when a lambda other than
+    /// a `for` loop's body names it and does not declare it.
+    let private writeCellsIn (state: InferState.InferState) (expr: Expression) : Expression =
+        let within = SyntaxTree.expressionsWithin expr
+        let cellOf (node: Expression) = state.References |> Map.tryFind node.Id |> Option.filter state.Cells.Contains
+        let loopBodies = within |> List.choose (fun node -> match node.Kind with ForSyntax.Call(_, loop, _, _) -> Some loop.Id | _ -> None) |> Set.ofList
+        let lambdas = within |> List.filter (fun node -> match node.Kind with Lambda _ -> not (loopBodies.Contains node.Id) | _ -> false)
+        let captured =
+            within
+            |> List.choose (fun node -> cellOf node |> Option.map (fun cell -> node, state.Symbols.[cell].Declaration, cell))
+            |> List.filter (fun (node, declared, _) ->
+                lambdas |> List.exists (fun lambda -> SourceSpan.contains lambda.Span node.Span && not (SourceSpan.contains lambda.Span declared)))
+            |> List.map (fun (_, _, cell) -> cell)
+            |> Set.ofList
+        let boxedValues =
+            state.DeclarationSymbols
+            |> Map.toSeq
+            |> Seq.choose (fun ((node, declarer, _), symbol) -> if declarer = DefValue && captured.Contains symbol then Some node else None)
+            |> Set.ofSeq
+        expr
+        |> mapExpressionKinds (fun current kind ->
+            match kind with
+            | IdentifierExpr _ ->
+                match cellOf current with
+                | Some cell -> FunctionCall((if captured.Contains cell then CellSyntax.unbox else CellSyntax.read), None, [ Expression.from current kind ])
+                | None -> kind
+            | AssignSyntax.Call(Kind (FunctionCall(form, _, [ cell ])), value) when form = CellSyntax.unbox -> FunctionCall(CellSyntax.setBox, None, [ cell; value ])
+            | AssignSyntax.Call(Kind (FunctionCall(form, _, [ cell ])), value) when form = CellSyntax.read -> FunctionCall(AssignSyntax.builtIn, None, [ cell; value ])
+            | MutSyntax.Call value when boxedValues.Contains current.Id -> FunctionCall(CellSyntax.box, None, [ value ])
+            | other -> other)
+
+    /// `module'` with the cells of its definitions written as the backend reads them (see `writeCellsIn`).
+    let writeCells (state: InferState.InferState) (module': Module) : Module =
+        if state.Cells.IsEmpty then
+            module'
+        else
+            module'
+            |> List.map (fun item ->
+                match item.Kind with
+                | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, typeOpt, writeCellsIn state value)) }
+                | Expr value -> { item with Kind = Expr (writeCellsIn state value) }
+                | _ -> item)

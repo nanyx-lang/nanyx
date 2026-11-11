@@ -83,6 +83,8 @@ let collect (functions: Function list) : ModuleFacts =
             atom payload
         | MakeRecord fields -> fields |> List.iter (snd >> atom)
         | Field(record, _) -> atom record
+        | Assign(_, value)
+        | SetField(_, _, value) -> atom value
         | UpdateRecord(record, _, updates) ->
             atom record
             updates |> List.iter (snd >> atom)

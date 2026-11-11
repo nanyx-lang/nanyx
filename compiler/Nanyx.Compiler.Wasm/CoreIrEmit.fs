@@ -49,6 +49,8 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | UpdateRecord(record, _, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
     | Field(atom, _)
+    | Assign(_, atom)
+    | SetField(_, _, atom)
     | Dbg(atom, _)
     | If(atom, _, _) -> ofAtoms [ atom ]
     | ForEach loop -> ofAtoms (ForLoop.sourceAtoms loop)
@@ -310,6 +312,21 @@ type private FunctionEmitter(context: EmitContext) =
                 $"i32.const {fieldCount * 4}\n    call ${helper Helpers.recordCopy}"
                 keepCode
                 yield! stores updates ]
+        | Assign(cell, value) ->
+            // The new value is computed before the old one is dropped, since it may be made from it.
+            let dropOld = if CoreIrDrop.isHeapType cell.Type then $"local.get ${cell.Name}\n    {dropValue cell.Type}" else ""
+            join "\n    " [ atoms [ value ]; dropOld; $"local.set ${cell.Name}"; "i32.const 0" ]
+        | SetField(record, slot, value) ->
+            let fieldTy = atomType value
+            let held = freshLocal "__set"
+            let dropOld =
+                if CoreIrDrop.isHeapType fieldTy then $"local.get ${record.Name}\n    i32.load offset={slot * 4}\n    {dropValue fieldTy}" else ""
+            join "\n    " [
+                atoms [ value ]
+                $"local.set ${held}"
+                dropOld
+                $"local.get ${record.Name}\n    local.get ${held}\n    i32.store offset={slot * 4}"
+                "i32.const 0" ]
         | MakeList items ->
             // The elements left to right, then the empty list, then a cons for each from the back.
             join "\n    " [
@@ -614,6 +631,8 @@ let private declaredLocals (body: Expr) : string list =
         | MakeRecord _
         | Field _
         | UpdateRecord _
+        | Assign _
+        | SetField _
         | MakeList _
         | CallRuntime _
         | MakeClosure _

@@ -69,6 +69,8 @@ let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -
         | MakeRecord _
         | Field _
         | UpdateRecord _
+        | Assign _
+        | SetField _
         | MakeList _
         | CallRuntime _
         | MakeClosure _

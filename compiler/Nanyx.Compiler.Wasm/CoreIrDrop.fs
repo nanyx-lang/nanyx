@@ -137,6 +137,8 @@ let collect (functions: Function list) : Drops =
         | MakeRecord _
         | Field _
         | UpdateRecord _
+        | Assign _
+        | SetField _
         | MakeList _
         | CallRuntime _
         | CallClosure _

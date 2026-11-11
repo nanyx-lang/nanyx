@@ -39,6 +39,9 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | MakeRecord fields -> fields |> List.map snd |> all Owned
     | Field(record, _) -> [ record, Borrowed ]
     | UpdateRecord(record, _, updates) -> (record, Borrowed) :: (updates |> List.map snd |> all Owned)
+    // The value is taken over by the cell, which is used after it, to drop what it held.
+    | Assign(cell, value) -> [ value, Owned; AVar cell, Borrowed ]
+    | SetField(record, _, value) -> [ value, Owned; AVar record, Borrowed ]
     | MakeList items -> all Owned items
     | CallRuntime(name, args, _) when name = Helpers.listCons -> all Owned args
     // The first list's cells are copied, and the second becomes the tail of the copy.
