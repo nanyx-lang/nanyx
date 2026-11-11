@@ -450,3 +450,36 @@ let ``Matches that cover every value pass, however the arms split them`` () =
     for source in sources do
         let result = Compiler.compile source
         Assert.True(result.Diagnostics.IsEmpty, $"{source}\n%A{result.Diagnostics}")
+
+[<Fact>]
+let ``A match on a call's result that leaves out one of its tags reports only that tag`` () =
+    // #681: the arms' closed union narrowed the call's result, and the call's argument was reported as well.
+    for head in [ """match find(n) \bindOption(parseDigit)"""; """match bindOption(find(n), parseDigit)""" ] do
+        let source =
+            $$"""
+def parseDigit: string -> #some(int) | #invalidInt = {
+  | "1" -> #some(1)
+  | _ -> #invalidInt
+}
+def find: int -> #some(string) | #notFound = {
+  | 1 -> #some("1")
+  | _ -> #notFound
+}
+def describe: int -> string = { n ->
+  {{head}}
+    | #some(n) -> "some {n}"
+    | #notFound -> "not found"
+}
+"""
+        let source = source.ReplaceLineEndings "\n"
+        let diagnostic = onlyDiagnostic source
+        Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
+        Assert.Equal("Non-exhaustive match, missing tags: invalidInt", diagnostic.Message)
+        Assert.Equal(head, textOf source diagnostic.Span.Value)
+    let direct =
+        onlyDiagnostic """
+def get: () -> #some(int) | #none | #error = { #none }
+def f = match get()
+  | #some(n) -> n
+"""
+    Assert.Equal("Non-exhaustive match, missing tags: error, none", direct.Message)
