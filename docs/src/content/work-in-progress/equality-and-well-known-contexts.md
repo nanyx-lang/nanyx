@@ -192,13 +192,14 @@ built from a type's structure (see [structural context synthesis](./type-members
 variables cannot be ordered ([#476](https://github.com/nanyx-lang/nanyx/issues/476)), which is why `list.sortBy`
 takes `(a -> int)` keys (`prelude.nyx:301-302`) and there is no `list.sort`
 ([#475](https://github.com/nanyx-lang/nanyx/issues/475), [#191](https://github.com/nanyx-lang/nanyx/issues/191)).
+*Since fixed:* `Ord` exists, and `list.sort` and `list.sortBy` take any ordered type.
 
 # Hashing, maps and sets: nothing
 
 There was no `Hash` context, no map or set type, and no map literal (#191, `groupBy`). Since then `map(k, v)`, map
-literals and `list.groupBy` exist, keyed by `Eq` alone ([#477](https://github.com/nanyx-lang/nanyx/issues/477)); see
-[Maps and sets](./maps-and-sets). `Hash` and sets are still to come
-([#533](https://github.com/nanyx-lang/nanyx/issues/533)).
+literals and `list.groupBy` exist ([#477](https://github.com/nanyx-lang/nanyx/issues/477)), and the `Hash` context
+([#533](https://github.com/nanyx-lang/nanyx/issues/533)): a map's keys, and `groupBy`'s, need `Eq` and `Hash`. See
+[Maps and sets](./maps-and-sets).
 
 # Printing: designed, partly implemented
 
@@ -215,8 +216,8 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 | Operators on built-in types are attached definitions: `1 + 2` resolves to ``int.`+` `` ([operators.md:45](../tour/operators)). | Each built-in operator is typed directly in `Infer.fs`. The prelude attaches no operators. An operator on a value of a type variable calls the member of that name of a context the function requires. |
 | A user type gets an operator by attaching one: ``def Vector.`+` = ...`` (operators.md:47-51, contexts.md:169-173). | A definition named in backticks did not parse, attached or not, and neither did an operator-named context member ([#527](https://github.com/nanyx-lang/nanyx/issues/527)). *Since fixed:* they parse, and `a + b` on a type that attaches `` `+` `` calls it. |
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
-| `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. |
-| `list.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. |
+| `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. *Since fixed:* both exist. |
+| `list.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. *Since fixed:* `[Ord(b)]`, keys of any ordered type. |
 | `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-53](./printing-values) has a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two pages disagree with each other. |
 
 Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and

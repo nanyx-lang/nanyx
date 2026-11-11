@@ -120,6 +120,21 @@ let ``Run - a map is passed to and given back from functions`` () =
     |> assertRan "2 1 0\n"
 
 [<Fact>]
+let ``Run - list.groupBy takes a key of any type with an Eq and a Hash`` () =
+    // #191: a string key, and a tuple key.
+    program
+        [ """type Person = (name: string, city: string, age: int)"""
+          """def names: list(Person) -> string = { ps -> list.fold(ps, "", { acc, p -> acc ++ p.name ++ "," }) }""" ]
+        [ """def people: list(Person) = [Person(name = "Ann", city = "Leeds", age = 40), Person(name = "Bob", city = "York", age = 30), Person(name = "Cy", city = "Leeds", age = 30)]"""
+          """def byCity = people \groupBy { p -> p.city }"""
+          """println(list.fold(map.keys(byCity), "", { acc, k -> acc ++ k ++ " " }))"""
+          """println(names(byCity("Leeds") \defaultValueOption([])))"""
+          """def byBoth = people \groupBy { p -> (p.city, p.age) }"""
+          """println("{map.count(byBoth)} {names(byBoth(("Leeds", 30)) \defaultValueOption([]))}")""" ]
+    |> runSource
+    |> assertRan "Leeds York \nAnn,Cy,\n3 Cy,\n"
+
+[<Fact>]
 let ``Run - List.groupBy groups elements by a key, in order`` () =
     program
         [ "def show = { xs -> xs \\list.map(int.toString) \\list.fold(\"\", { acc, s -> acc ++ s }) }" ]
