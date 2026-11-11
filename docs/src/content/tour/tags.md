@@ -93,10 +93,10 @@ def file = openFile("file.txt", #readwrite)
 
 Because tag unions are structural, functions can be written that require specific cases while allowing unknown cases to pass through. This is a common pattern for reusable APIs.
 
-For example, the `nanyx/option` module contains a `map` function that transforms only the `#some` case of a given union type and preserves everything else:
+For example, the prelude has a `mapOption` function that transforms only the `#some` case of a given union type and preserves everything else:
 
 ```nanyx
-def Option.map
+def mapOption
   : (#some(a) | r), (a -> b) -> (#some(b) | r)
   = { | #some(a), f -> #some(f(a))
       | other, _ -> other }
@@ -108,8 +108,8 @@ This preserves non-success cases while still transforming success values:
 def x: (#some(string) | #notFound) = ...
 def y: (#some(int) | #divideByZero) = ...
 
-x \Option.map { .length }
-y \Option.map { \Math.abs }
+x \mapOption { .length }
+y \mapOption { \Math.abs }
 ```
 
 For broader union and matching patterns, see [Pattern matching](./pattern-matching) and [Types](./types).

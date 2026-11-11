@@ -46,7 +46,7 @@ Chains result-producing operations. Both steps must have the same error type; to
 
 ```nanyx
 def parse: string -> Result(int, string) = { s ->
-  Int.fromString(s) \Option.toResult("not a number: {s}")
+  Int.fromString(s) \toResultOption("not a number: {s}")
 }
 
 def half: int -> Result(int, string) = { n ->

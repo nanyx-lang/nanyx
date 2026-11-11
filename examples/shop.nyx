@@ -4,8 +4,10 @@ module main
 -- a printed receipt, a stock report with a bar chart, an RPN calculator for the till, and a few
 -- statistics about the day. Everything here runs on the current compiler (`nanyx run shop.nyx`).
 
-import nanyx/text
-import nanyx/math as math
+import (
+  nanyx/text
+  nanyx/math as math
+)
 
 -- Money ------------------------------------------------------------------------------------------
 
@@ -17,25 +19,38 @@ def money: int -> string = { pence ->
 }
 
 -- `text` in a column `width` bytes wide, on the left or the right.
-def left: (string, int) -> string = { text, width -> String.padEnd(text, width = width, fill = " ") }
-def right: (string, int) -> string = { text, width -> String.padStart(text, width = width, fill = " ") }
+def left: string, int -> string = { text, width ->
+  String.padEnd(text, width = width, fill = " ")
+}
 
-def rule: int -> string = { width -> String.repeat("-", width) }
+def right: string, int -> string = { text, width ->
+  String.padStart(text, width = width, fill = " ")
+}
+
+def rule: int -> string = { width ->
+  String.repeat("-", width)
+}
 
 -- The catalogue ----------------------------------------------------------------------------------
 
-type Product = (sku: string, name: string, price: int, stock: int)
+type Product = (
+  sku: string
+  name: string
+  price: int
+  stock: int
+)
 
 def catalogue: list(Product) = [
-  Product(sku = "TEA", name = "Breakfast tea", price = 289, stock = 14),
-  Product(sku = "MLK", name = "Semi-skimmed milk", price = 125, stock = 30),
-  Product(sku = "BRD", name = "Sourdough loaf", price = 350, stock = 6),
-  Product(sku = "JAM", name = "Raspberry jam", price = 215, stock = 9),
-  Product(sku = "EGG", name = "Free-range eggs", price = 310, stock = 12),
-  Product(sku = "CHS", name = "Mature cheddar", price = 425, stock = 4)]
+  Product(sku = "TEA", name = "Breakfast tea", price = 289, stock = 14)
+  Product(sku = "MLK", name = "Semi-skimmed milk", price = 125, stock = 30)
+  Product(sku = "BRD", name = "Sourdough loaf", price = 350, stock = 6)
+  Product(sku = "JAM", name = "Raspberry jam", price = 215, stock = 9)
+  Product(sku = "EGG", name = "Free-range eggs", price = 310, stock = 12)
+  Product(sku = "CHS", name = "Mature cheddar", price = 425, stock = 4)
+]
 
 -- The product with code `sku`.
-def findProduct: (list(Product), string) -> #some(Product) | #unknownSku(string) = { products, sku ->
+def findProduct: list(Product), string -> #some(Product) | #unknownSku(string) = { products, sku ->
   match products
     | [] -> #unknownSku(sku)
     | [p, ...rest] -> if p.sku == sku then #some(p) else findProduct(rest, sku)
@@ -55,34 +70,45 @@ def parseLine: string -> #some(OrderLine) | #badLine(string) | #badQuantity(stri
 
 def parseQuantity = { text, sku, qty ->
   match Int.fromString(qty)
-    | #some(n) -> if n > 0 then #some(OrderLine(sku = String.uppercase(sku), qty = n)) else #badQuantity(text)
+    | #some(n) -> (if n > 0
+      then #some(OrderLine(sku = String.uppercase(sku), qty = n))
+      else #badQuantity(text))
     | #invalidInt -> #badQuantity(text)
 }
 
 -- A line of a checked order: the product, how many, and what they cost together.
-type Priced = (name: string, qty: int, each: int, cost: int)
+type Priced = (
+  name: string
+  qty: int
+  each: int
+  cost: int
+)
 
 -- `line` priced from `products`, as long as the product exists and there is enough of it.
 def priceLine
-  : (list(Product), OrderLine) -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
+  : list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
   = { products, line ->
-  match findProduct(products, line.sku)
-    | #unknownSku(sku) -> #unknownSku(sku)
-    | #some(p) ->
-        if line.qty > p.stock then #outOfStock(p.name)
-        else #some(Priced(name = p.name, qty = line.qty, each = p.price, cost = p.price * line.qty))
-}
+    match findProduct(products, line.sku)
+      | #unknownSku(sku) -> #unknownSku(sku)
+      | #some(p) ->
+        if line.qty > p.stock
+          then #outOfStock(p.name)
+          else #some(
+            Priced(name = p.name, qty = line.qty, each = p.price, cost = p.price * line.qty)
+          )
+  }
 
 -- Every line of an order read and priced. The first line that fails stops the order.
 def checkOrder = { products, lines -> proc {
-  match lines
-    | [] -> return []
-    | [first, ...rest] ->
+    match lines
+      | [] -> (return [])
+      | [first, ...rest] ->
         def line = try parseLine(first)
         def priced = try priceLine(products, line)
         def others = try checkOrder(products, rest)
         return [priced, ...others]
-} }
+  }
+}
 
 -- Why an order was turned away, in words.
 def explain = {
@@ -113,11 +139,15 @@ def discount: list(Priced) -> int = { lines ->
 def printLines: [Console] list(Priced) -> () = {
   | [] -> ()
   | [line, ...rest] ->
-      println(left(line.name, 20) ++ right("{line.qty}", 4) ++ " x " ++ right(money(line.each), 7) ++ right(money(line.cost), 9))
-      printLines(rest)
+    println(
+      left(line.name, 20) ++ right("{line.qty}", 4) ++ " x " ++ right(money(line.each), 7) ++
+        right(money(line.cost), 9)
+    )
+
+    printLines(rest)
 }
 
-def printReceipt: [Console] (string, list(Priced)) -> () = { customer, lines ->
+def printReceipt: [Console] string, list(Priced) -> () = { customer, lines ->
   def off = discount(lines)
   println("Receipt for " ++ customer)
   println(rule(43))
@@ -130,29 +160,33 @@ def printReceipt: [Console] (string, list(Priced)) -> () = { customer, lines ->
 }
 
 -- Takes one order, one line per item, and prints its receipt or why it was refused.
-def takeOrder: [Console] (string, list(string)) -> () = { customer, order ->
+def takeOrder: [Console] string, list(string) -> () = { customer, order ->
   match checkOrder(catalogue, order)
     | #some(lines) -> printReceipt(customer, lines)
     | failure ->
-        println("Order for " ++ customer ++ " refused: " ++ explain(failure))
+      println("Order for " ++ customer ++ " refused: " ++ explain(failure))
 }
 
 -- Stock report -----------------------------------------------------------------------------------
 
-def bar: int -> string = { n -> String.repeat("#", n) }
+def bar: int -> string = { n ->
+  String.repeat("#", n)
+}
 
 def lowStock: list(Product) -> list(Product) = {
   | [] -> []
   | [p, ...rest] -> if p.stock < 8 then [p, ...lowStock(rest)] else lowStock(rest)
 }
 
-def reorderFlag: int -> string = { stock -> if stock < 8 then "  <- reorder" else "" }
+def reorderFlag: int -> string = { stock ->
+  if stock < 8 then "  <- reorder" else ""
+}
 
-def printStock:[Console] list(Product) -> () = {
+def printStock: [Console] list(Product) -> () = {
   | [] -> ()
   | [p, ...rest] ->
-      println(left(p.sku, 5) ++ right("{p.stock}", 3) ++ " " ++ bar(p.stock) ++ reorderFlag(p.stock))
-      printStock(rest)
+    println(left(p.sku, 5) ++ right("{p.stock}", 3) ++ " " ++ bar(p.stock) ++ reorderFlag(p.stock))
+    printStock(rest)
 }
 
 def stockValue: list(Product) -> int = {
@@ -173,13 +207,13 @@ def names: list(Product) -> list(string) = {
 -- Why a calculation failed, or its answer.
 type Calc(a) = #some(a) | #divideByZero | #unknownToken(string) | #stackUnderflow(string)
 
-def applyOp: (string, int, int) -> Calc(int) = { op, a, b ->
+def applyOp: string, int, int -> Calc(int) = { op, a, b ->
   match op
     | "+" -> #some(a + b)
     | "-" -> #some(a - b)
     | "*" -> #some(a * b)
-    | "/" -> if b == 0 then #divideByZero else #some(a / b)
-    | "%" -> if b == 0 then #divideByZero else #some(a % b)
+    | "/" -> (if b == 0 then #divideByZero else #some(a / b))
+    | "%" -> (if b == 0 then #divideByZero else #some(a % b))
     | "max" -> #some(math.max(a, b))
     | "min" -> #some(math.min(a, b))
     | other -> #unknownToken(other)
@@ -192,29 +226,31 @@ def isOperator: string -> bool = { token ->
 }
 
 -- The stack after one more token.
-def push: (list(int), string) -> Calc(list(int)) = { stack, token ->
+def push: list(int), string -> Calc(list(int)) = { stack, token ->
   match Int.fromString(token)
     | #some(n) -> #some([n, ...stack])
     | #invalidInt -> #unknownToken(token)
 }
 
-def operate: (list(int), string) -> Calc(list(int)) = { stack, token ->
+def operate: list(int), string -> Calc(list(int)) = { stack, token ->
   match stack
-    | [b, a, ...rest] -> Option.map(applyOp(token, a, b), { n -> [n, ...rest] })
+    | [b, a, ...rest] -> mapOption(applyOp(token, a, b), { n -> [n, ...rest] })
     | _ -> #stackUnderflow(token)
 }
 
-def step: (list(int), string) -> Calc(list(int)) = { stack, token ->
+def step: list(int), string -> Calc(list(int)) = { stack, token ->
   if isOperator(token) then operate(stack, token) else push(stack, token)
 }
 
-def run: (list(int), list(string)) -> Calc(list(int)) = { stack, tokens -> proc {
-  match tokens
-    | [] -> return stack
-    | [token, ...rest] ->
+def run: list(int), list(string) -> Calc(list(int)) = { stack, tokens ->
+  proc {
+    match tokens
+      | [] -> (return stack)
+      | [token, ...rest] ->
         def next = try step(stack, token)
         return try run(next, rest)
-} }
+  }
+}
 
 def describe: Calc(list(int)) -> string = {
   | #some([n]) -> "= {n}"
@@ -231,48 +267,60 @@ def calculate: [Console] string -> () = { program ->
 
 -- Statistics -------------------------------------------------------------------------------------
 
-def sum: list(int) -> int = { xs -> List.fold(xs, 0, { a, b -> a + b }) }
+def sum: list(int) -> int = { xs ->
+  List.fold(xs, 0, { a, b -> a + b })
+}
 
-def largest: list(int) -> int = { xs -> List.fold(xs, 0, { a, b -> math.max(a, b) }) }
+def largest: list(int) -> int = { xs ->
+  List.fold(xs, 0, { a, b -> math.max(a, b) })
+}
 
 -- `x` put into the sorted list `xs` where it belongs.
-def insert: (int, list(int)) -> list(int) = { x, xs ->
+def insert: int, list(int) -> list(int) = { x, xs ->
   match xs
     | [] -> [x]
     | [y, ...rest] -> if x <= y then [x, y, ...rest] else [y, ...insert(x, rest)]
 }
 
-def sort: list(int) -> list(int) = { xs -> List.fold(xs, [], { sorted, x -> insert(x, sorted) }) }
+def sort: list(int) -> list(int) = { xs ->
+  List.fold(xs, [], { sorted, x -> insert(x, sorted) })
+}
 
 def median: list(int) -> int = { xs ->
   def sorted = sort(xs)
   def n = List.length(sorted)
   def middle = List.head(List.skip(sorted, n / 2))
+
   match middle
     | #some(m) -> m
     | #emptyList -> 0
 }
 
-def showInt: int -> string = { n -> "{n}" }
+def showInt: int -> string = { n ->
+  "{n}"
+}
 
-def showInts: list(int) -> string = { xs -> String.join(List.map(xs, showInt), ", ") }
+def showInts: list(int) -> string = { xs ->
+  String.join(List.map(xs, showInt), ", ")
+}
 
 -- Hourly takings in whole pounds, from opening at 8 until closing at 6.
 def takings = [12, 30, 41, 25, 18, 52, 47, 22, 15, 33]
 
-def printHours: [Console] (int, list(int)) -> () = { hour, amounts ->
+def printHours: [Console] int, list(int) -> () = { hour, amounts ->
   match amounts
     | [] -> ()
     | [amount, ...rest] ->
-        println(right("{hour}:00", 6) ++ " " ++ right("£{amount}", 4) ++ " " ++ bar(amount / 3))
-        printHours(hour + 1, rest)
+      println(right("{hour}:00", 6) ++ " " ++ right("£{amount}", 4) ++ " " ++ bar(amount / 3))
+      printHours(hour + 1, rest)
 }
 
-def busiest: (int, int, int, list(int)) -> int = { hour, bestHour, best, amounts ->
+def busiest: int, int, int, list(int) -> int = { hour, bestHour, best, amounts ->
   match amounts
     | [] -> bestHour
     | [amount, ...rest] ->
-        if amount > best then busiest(hour + 1, hour, amount, rest)
+      if amount > best
+        then busiest(hour + 1, hour, amount, rest)
         else busiest(hour + 1, bestHour, best, rest)
 }
 
@@ -280,16 +328,20 @@ def busiest: (int, int, int, list(int)) -> int = { hour, bestHour, best, amounts
 
 context Log = (log: string -> ())
 
-def heading: [Log] string -> () = { title -> log("== " ++ String.uppercase(title) ++ " ==") }
+def heading: [Log] string -> () = { title ->
+  log("== " ++ String.uppercase(title) ++ " ==")
+}
 
 -- The program ------------------------------------------------------------------------------------
 
 @entry
 def main = {
-  use Log(log = { message ->
-    println("")
-    println(message)
-  })
+  use Log(
+    log = { message ->
+      println("")
+      println(message)
+    }
+  )
 
   heading("Orders")
   println("")

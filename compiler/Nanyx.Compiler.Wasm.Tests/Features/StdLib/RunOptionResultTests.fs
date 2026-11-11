@@ -27,32 +27,32 @@ let private header =
     "\n"
 
 [<Fact>]
-let ``Run - Option.toList gives the value of #some as a list, and the empty list otherwise`` () =
+let ``Run - toListOption gives the value of #some as a list, and the empty list otherwise`` () =
     let source =
         header +
         "@entry\n" +
         "def main = {\n" +
-        "  showInts(Option.toList(present))\n" +
-        "  showInts(absent \\Option.toList)\n" +
+        "  showInts(toListOption(present))\n" +
+        "  showInts(absent \\toListOption)\n" +
         "  def notFound: #some(int) | #notFound = #notFound\n" +
-        "  showInts([1, ...(notFound \\Option.toList)])\n" +
+        "  showInts([1, ...(notFound \\toListOption)])\n" +
         "}\n"
     runSource source |> assertRan "[3]\n[]\n[1]\n"
 
 [<Fact>]
-let ``Run - Option.values keeps the values of the #somes in order and drops the other tags`` () =
+let ``Run - valuesOption keeps the values of the #somes in order and drops the other tags`` () =
     let source =
         header +
         "@entry\n" +
         "def main = {\n" +
-        "  showInts(Option.values([present, absent, #some(5), absent, #some(7)]))\n" +
-        "  showInts([absent, absent] \\Option.values)\n" +
-        "  showInts(Option.values([]))\n" +
+        "  showInts(valuesOption([present, absent, #some(5), absent, #some(7)]))\n" +
+        "  showInts([absent, absent] \\valuesOption)\n" +
+        "  showInts(valuesOption([]))\n" +
         "}\n"
     runSource source |> assertRan "[3, 5, 7]\n[]\n[]\n"
 
 [<Fact>]
-let ``Run - Option.values of a long list does not overflow the stack`` () =
+let ``Run - valuesOption of a long list does not overflow the stack`` () =
     let source =
         header +
         "def options: int, list(#some(int) | #none) -> list(#some(int) | #none) = {\n" +
@@ -61,9 +61,9 @@ let ``Run - Option.values of a long list does not overflow the stack`` () =
         "}\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  def values = Option.values(options(200000, []))\n" +
+        "  def values = valuesOption(options(200000, []))\n" +
         "  dbg(List.length(values))\n" +
-        "  dbg(Option.defaultValue(List.head(values), 0))\n" +
+        "  dbg(defaultValueOption(List.head(values), 0))\n" +
         "}\n"
     runSource source |> assertRan "dbg: 100000\ndbg: 2\n"
 

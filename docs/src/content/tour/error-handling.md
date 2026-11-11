@@ -118,8 +118,8 @@ The helpers in the prelude's `Option` and `Result` modules take the value first,
 def doubled: string -> int = { input ->
   input
     \Int.fromString
-    \Option.map { * 2 }
-    \Option.defaultValue(0)
+    \mapOption { * 2 }
+    \defaultValueOption(0)
 }
 ```
 

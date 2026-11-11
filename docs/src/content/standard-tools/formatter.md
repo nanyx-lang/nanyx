@@ -80,12 +80,12 @@ def add = { a, b -> a + b }
 
 ```nanyx
 -- before
-def Option.map: (#some(a) | r), (a -> b) -> (#some(b) | r) = { 
+def mapOption: (#some(a) | r), (a -> b) -> (#some(b) | r) = { 
   | #some(a), f -> #some(f(a))
   | other, _ -> other }
 
 -- after
-def Option.map
+def mapOption
   : (#some(a) | r), (a -> b) -> (#some(b) | r)
   = { | #some(a), f -> #some(f(a))
       | other, _ -> other }
