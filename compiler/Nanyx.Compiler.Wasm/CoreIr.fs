@@ -247,6 +247,30 @@ module IrType =
     let isTuple (fields: (string * IrType) list) =
         Set.ofList (List.map fst fields) = Set.ofList (List.init fields.Length string)
 
+    /// The slot and type of each element of a tuple of two or more, in the tuple's order; `None` for any other type.
+    ///
+    /// A function value whose input is such a tuple takes one WebAssembly argument for each element, whether its lambda
+    /// names one parameter (`{ t -> ... }`, `{ (a, b) -> ... }`) or one per element (`{ a, b -> ... }`), and whether the
+    /// call writes the elements (`f(a, b)`) or a tuple (`f(t)`): `int, int -> int` and `(int, int) -> int` are one type.
+    let tupleElements (ty: IrType) : (int * IrType) list option =
+        match ty with
+        | IrRecord fields when fields.Length > 1 && isTuple fields ->
+            List.init fields.Length (fun index ->
+                let slot = fields |> List.findIndex (fst >> (=) (string index))
+                slot, snd fields.[slot])
+            |> Some
+        | _ -> None
+
+    /// How many parameters the lifted function `parameterNames` (its environment first) takes as a function value of
+    /// type `ty`: a lone parameter whose type is a tuple takes the tuple's elements (see `tupleElements`).
+    let closureArity (parameterNames: string list) (ty: IrType) =
+        match parameterNames, ty with
+        | [ _; _ ], IrFunction(input, _) ->
+            match tupleElements input with
+            | Some elements -> 1 + elements.Length
+            | None -> 2
+        | _ -> parameterNames.Length
+
     /// Whether a value of `ty` is, or holds, a tag or a function, which have no order.
     let rec holdsUnordered (ty: IrType) =
         match ty with

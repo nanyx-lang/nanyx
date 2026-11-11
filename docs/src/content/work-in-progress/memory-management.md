@@ -238,6 +238,12 @@ in a generic definition is specialised along with it (`__lambda_0__int`), and th
 function be passed as a value is lowered for each type it is passed at. Lifting lambdas in the IR instead is
 [#425](https://github.com/nanyx-lang/nanyx/issues/425).
 
+How a function value is called follows from its type, not from how its lambda names its parameters or how the call
+writes its argument, since `int, int -> int` and `(int, int) -> int` are one type. A function value whose input is a
+tuple of two or more takes one argument for each element (`IrType.tupleElements` in `CoreIr.fs`): a lambda or wrapper of
+one parameter (`{ t -> ... }`, `{ (a, b) -> ... }`) takes the elements and builds the tuple again, and a call that
+passes a tuple whole (`f(t)`) reads the elements from it ([#441](https://github.com/nanyx-lang/nanyx/issues/441)).
+
 A function that requires contexts takes each of their members as a closure, in a parameter of its own after its
 others, typed from the context's definition. A call finds each member the callee requires where the type checker
 found its context (a `use`, the caller's own members, an instance built from attached definitions, or the ambient
