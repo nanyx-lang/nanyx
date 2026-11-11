@@ -10,7 +10,8 @@ open Parser.Program
 let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
 
 /// The items with what formatting may change taken out: each destructuring temporary is renamed by the order it first
-/// appears in, imports lose their spans (the only spans syntax equality looks at), imports in a row become one, and a
+/// appears in, imports lose their spans (the only spans syntax equality looks at), imports in a row become one and are
+/// sorted (see `ImportOrder`), and a
 /// lambda whose body is a block of one expression has that expression as its body.
 let normalize (items: TopLevelItem list) : TopLevelItem list =
     let temps = Dictionary<string, string>()
@@ -121,7 +122,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             match s.Kind with
             | DefStatement(isExport, n, t, value) -> DefStatement(isExport, name n, Option.map typeExpr t, expr value)
             | TypeDefStatement(n, modifiers, parameters, body) -> TypeDefStatement(typeDef (n, modifiers, parameters, body))
-            | ImportStatement items -> ImportStatement(List.map importItem items)
+            | ImportStatement items -> ImportStatement(items |> List.map importItem |> ImportOrder.sort)
             | UseStatement value -> UseStatement(expr value)
             | ExprStatement value -> ExprStatement(expr value)
         { s with Kind = kind }
@@ -138,7 +139,9 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | Expr value -> Expr(expr value)
         { i with Kind = kind }
 
-    // Imports in a row are one import of all their items, as the formatter writes them.
+    // Imports in a row are one import of all their items, as the formatter writes them, sorted. The formatter sorts
+    // only within a run that no comment interrupts, but its sort is stable, so sorting the whole of each side gives the
+    // same list whenever the formatter neither dropped nor added an import.
     and items' (items: TopLevelItem list) =
         items
         |> List.map item
@@ -152,6 +155,10 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
                 | _ -> i :: merged)
             []
         |> List.rev
+        |> List.map (fun i ->
+            match i.Kind with
+            | Import imports -> { i with Kind = Import(ImportOrder.sort imports) }
+            | _ -> i)
 
     items' items
 

@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="Doc.fs" />
+    <Compile Include="ImportOrder.fs" />
     <Compile Include="Syntax.fs" />
     <Compile Include="Formatter.fs" />
     <Compile Include="Settings.fs" />

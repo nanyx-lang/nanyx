@@ -1249,6 +1249,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text "("; nest (cat [ hard; sequence false body.Span.Start body.Span.End children ]); hard; text ")" ]
         | _ -> typeExpr body
 
+    /// An import, its names sorted (see `ImportOrder`) within each run of them that no comment on a line of its own
+    /// interrupts. A comment at the end of a name's line moves with the name; a comment on a line of its own stays
+    /// where it is, ahead of the names after it.
     and importDoc (start: int) (finish: int) (items: ImportItem list) : Doc =
         let item (i: ImportItem) =
             cat [
@@ -1262,8 +1265,39 @@ let format (options: Options) (parsed: SourceModule) : string =
         match items with
         | [ single ] -> cat [ text "import "; item single ]
         | _ ->
-            let children = items |> List.map (fun i -> i.Span.Start, i.Span.End, fun () -> item i)
-            cat [ text "import ("; nest (cat [ hard; sequence false start finish children ]); hard; text ")" ]
+            let items = Array.ofList items
+            // Where a comment at the end of the line `items[k]` ends on would have to start before.
+            let lineFinish k =
+                let afterLine = lineEnd (max items[k].Span.Start (items[k].Span.End - 1)) + 1
+                if k + 1 < items.Length then min items[k + 1].Span.Start afterLine else afterLine
+            let runs =
+                [ 0 .. items.Length - 1 ]
+                |> List.fold
+                    (fun runs k ->
+                        match runs with
+                        | run :: rest when not (hasCommentsIn (lineFinish (k - 1)) items[k].Span.Start) -> (k :: run) :: rest
+                        | _ -> [ k ] :: runs)
+                    []
+                |> List.rev
+                |> List.map List.rev
+            let entries = ResizeArray<StackEntry>()
+            let placeBetween a b =
+                for i in unplacedIn a b do
+                    placed[i] <- true
+                    entries.Add(StackComment(fst comments[i], true))
+            let mutable previous = start
+            for run in runs do
+                placeBetween previous items[List.head run].Span.Start
+                for k in run |> List.sortWith (fun a b -> ImportOrder.compare items[a] items[b]) do
+                    placeBetween items[k].Span.Start items[k].Span.End
+                    match unplacedIn items[k].Span.End (lineFinish k) with
+                    | i :: _ ->
+                        placed[i] <- true
+                        entries.Add(StackItem(cat [ item items[k]; Doc.lineSuffix (fst comments[i]) ], false))
+                    | [] -> entries.Add(StackItem(item items[k], false))
+                previous <- lineFinish (List.last run)
+            placeBetween previous finish
+            cat [ text "import ("; nest (cat [ hard; Stack(false, List.ofSeq entries) ]); hard; text ")" ]
 
     /// The items of the module, or of a module block.
     let rec topLevel (blankLines: bool) (start: int) (finish: int) (items: TopLevelItem list) : Doc =

@@ -62,6 +62,24 @@ A file that does not parse is left as it is and its syntax error is reported. Th
 
 `nanyx format` exits with `0` when it has nothing to report, `1` when `--check` finds a file that is not formatted, and `2` when a file could not be formatted.
 
+# Imports
+
+Imports in a row go in one bracketed `import (...)`, and their names are sorted: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each alphabetical. A blank line keeps groups of imports apart, and a comment on a line of its own (or a `---` block comment) starts a new group inside the brackets. A comment at the end of an import's line moves with it.
+
+```nanyx
+-- before
+import nanyx/text
+import "./tokens.nyx"
+import nanyx/math -- for sqrt
+
+-- after
+import (
+  nanyx/math -- for sqrt
+  nanyx/text
+  "./tokens.nyx"
+)
+```
+
 # Typical workflow
 
 Format files before committing changes, and enable format-on-save in your editor where possible.

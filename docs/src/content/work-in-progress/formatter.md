@@ -244,11 +244,31 @@ its indent.
 ## Sorting imports
 
 The imports in each run of consecutive `import` statements are sorted, and the names within one `import (...)` are
-sorted. A blank line or an own-line comment ends a run, so authors can group imports and keep the groups apart.
-Comments attached to an import move with it.
+sorted. A blank line or a comment on a line of its own (a `--` comment or a `---` block comment) ends a run, so authors
+can group imports and keep the groups apart. Since imports in a row become one bracketed import, a run is a stretch of its names with no comment line among
+them: the comment stays where it is, as a heading for the names after it. A comment at the end of an import's line
+moves with the import. Duplicate imports are left alone: removing them is a linter's job.
+
+```nanyx
+import (
+  nanyx/math -- for sqrt
+  nanyx/text
+  -- parsing
+  json
+  "./tokens.nyx"
+)
+```
 
 The order: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each
-group alphabetical by its source as written, ignoring case, with ties broken by case.
+group alphabetical by its source as written, ignoring case, with ties broken by case. The alias (`as m`) doesn't affect
+the order. The order is `compiler/Nanyx.Formatter/ImportOrder.fs`; `importDoc` in `Formatter.fs` applies it.
+
+The safety check sorts each side's imports before comparing the trees (`Syntax.normalize`), so a sort that dropped or
+duplicated an import is still caught. It compares the comments at the end of import lines as a sorted list, since they
+move with their imports, and every other comment in order (`FormatCommand.commentsOf`, which the corpus tests use too).
+
+Imports inside a block (`ImportStatement`) have their names sorted within one `import (...)`, but separate import
+statements in a row in a block are not merged or reordered.
 
 Reordering imports is safe because an import only brings names into scope, and a name exported by two imports is an
 error whatever their order (#155). If imports ever gain effects, this rule changes with them.
@@ -304,7 +324,7 @@ its own:
    server; format-on-save in the extension.
 7. **Blank lines** ([#225](https://github.com/nanyx-lang/nanyx/issues/225)). Blank lines around multi-line
    constructs, at every level.
-8. **Sorting imports** ([#226](https://github.com/nanyx-lang/nanyx/issues/226)).
+8. **Sorting imports** ([#226](https://github.com/nanyx-lang/nanyx/issues/226)). Done.
 9. **Configuration** ([#227](https://github.com/nanyx-lang/nanyx/issues/227)). The `[formatter]` table of
    `.nyxp`.
 10. **The repository** ([#223](https://github.com/nanyx-lang/nanyx/issues/223)). Format `examples/`, `stdlib/` and

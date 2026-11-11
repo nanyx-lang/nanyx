@@ -32,11 +32,27 @@ type FileResult =
     | Changed
     | Failed of Formatting
 
-let private commentsOf (parsed: SourceModule) =
-    parsed.Trivia
-    |> List.choose (function
-        | LineComment(text, _, _) -> Some(text.TrimEnd())
-        | BlankLines _ -> None)
+/// The comments of `parsed`: in order, except for those at the end of an import's line, which move with the import
+/// when the formatter sorts imports, and so are compared in sorted order.
+let commentsOf (parsed: SourceModule) =
+    let text = parsed.Source
+    let rec importEnds (items: TopLevelItem list) =
+        items
+        |> List.collect (fun i ->
+            match i.Kind with
+            | Import imports -> imports |> List.map (fun item -> item.Span.End)
+            | ModuleBlock(_, items) -> importEnds items
+            | _ -> [])
+    let ends = importEnds parsed.Items
+    let onImportLine (span: SourceSpan) =
+        ends |> List.exists (fun e -> 0 <= e && e <= span.Start && text.IndexOf('\n', e, span.Start - e) < 0)
+    let moved, kept =
+        parsed.Trivia
+        |> List.choose (function
+            | LineComment(comment, _, span) -> Some(comment.TrimEnd(), span)
+            | BlankLines _ -> None)
+        |> List.partition (snd >> onImportLine)
+    List.map fst kept, List.sort (List.map fst moved)
 
 /// Formats `text`, the source of the file at `path`, keeping its line endings: CRLF if its first line break is one,
 /// otherwise LF. The result is parsed again and compared with the original, and only returned if it says the same
