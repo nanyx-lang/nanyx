@@ -1,5 +1,7 @@
 module recordIndexerGenerator
 
+import nanyx/text
+
 -- Generate C# source for a string indexer over the properties of a record.
 -- Raw single-quoted strings keep C# braces literal, and `\{` in a
 -- double-quoted string is a literal brace next to interpolation.
@@ -14,7 +16,7 @@ type Property = (
 type PartialRecord = (
   identifier: string
   declaration: string
-  namespace?: string
+  namespace: #some(string) | #none
   properties: list(Property)
 )
 
@@ -22,14 +24,14 @@ def getterCases: list(Property) -> string = { properties ->
   properties
     \filter { .isGettable }
     \map { p -> '"' ++ p.name ++ '" => ' ++ p.name ++ "," }
-    \string.join("\n            ")
+    \string.join("\n        ")
 }
 
 def setterCases: list(Property) -> string = { properties ->
   properties
     \filter { .isSettable }
     \map { p -> 'case "' ++ p.name ++ '": ' ++ p.name ++ " = ({p.type}) value; break;" }
-    \string.join("\n                ")
+    \string.join("\n            ")
 }
 
 def indexer: PartialRecord -> string = { record ->
