@@ -211,6 +211,12 @@ let ``A lambda argument stays in brackets or after them, as written`` () =
     unchanged "def a = f({ x -> x })\n"
     unchanged "def b = f(1) { x -> x }\n"
     unchanged "def c = xs \\map { x -> x }\n"
+    unchanged "def d = f(1, 2) { x -> x }\n"
+    unchanged "def e = f(1, 2, { x -> x })\n"
+    unchanged "def g = f(1, y = 2) { x -> x }\n"
+    unchanged "def h = f(y = 2, 1) { x -> x }\n"
+    unchanged "def i = f(1, { x -> x }, y = 2)\n"
+    unchanged "def j = f((1, 2)) { x -> x }\n"
 
 [<Fact>]
 let ``if, if-is and multi-branch if are printed as written`` () =

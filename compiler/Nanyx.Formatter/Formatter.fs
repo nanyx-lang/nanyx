@@ -616,12 +616,35 @@ let format (options: Options) (parsed: SourceModule) : string =
         | [] -> text "()"
         | _ -> pipeArguments call afterName args
 
+    /// Whether `argument`, one of the values a call's brackets were parsed into, was written after them instead: a
+    /// trailing lambda ends where its call does, and one in the brackets ends before the `)`.
+    and endsCall (call: Expression) (argument: Expression) =
+        match argument.Kind with
+        | Lambda _ -> valid argument.Span && valid call.Span && argument.Span.End >= call.Span.End
+        | _ -> false
+
     and pipeArguments (call: Expression) (afterName: int) (args: Expression list) : Doc =
+        let withTrailing (fields: RecordField list) (lambda: Expression) =
+            cat [ fieldsDoc afterName lambda.Span.Start fields; text " "; expr full lambda ]
         match args with
         | [] -> Doc.empty
         | [ argument ] when isTrailingLambda afterName argument -> cat [ text " "; expr full argument ]
+        // `f(a, y = 1) { ... }`: the lambda was put among the named fields' positional ones. They go back in the order
+        // they were written.
+        | [ Kind (RecordExpr fields) ] when fields |> List.exists (function PositionalField e -> endsCall call e | NamedField _ -> false) ->
+            let lambda = fields |> List.pick (function PositionalField e when endsCall call e -> Some e | _ -> None)
+            let fieldStart = function PositionalField e -> e.Span.Start | NamedField(_, e) -> e.Span.Start
+            let written = fields |> List.filter (function PositionalField e -> not (obj.ReferenceEquals(e, lambda)) | NamedField _ -> true)
+            withTrailing (written |> List.sortBy fieldStart) lambda
         | [ argument ] -> parenFields argument afterName call.Span.End
-        | [ argument; lambda ] -> cat [ parenFields argument afterName lambda.Span.Start; text " "; expr full lambda ]
+        // A pipe keeps its brackets' values as one argument, before the lambda: `x \f(a, b) { ... }`.
+        | [ argument; lambda ] when (match call.Kind with Pipe _ -> true | _ -> false) ->
+            cat [ parenFields argument afterName lambda.Span.Start; text " "; expr full lambda ]
+        // `f(a, b) { ... }`, whose brackets' values and lambda are the call's arguments. A tuple among them was written
+        // in brackets of its own, as in `f((a, b)) { ... }`.
+        | _ when endsCall call (List.last args) ->
+            let lambda = List.last args
+            withTrailing (args |> List.take (args.Length - 1) |> List.map PositionalField) lambda
         | _ -> cat [ text "("; commaJoin (List.map (expr full) args); text ")" ]
 
     /// A lambda. With `bodyOnOwnLine`, a body that is an expression goes on a line of its own after the `->`, as the

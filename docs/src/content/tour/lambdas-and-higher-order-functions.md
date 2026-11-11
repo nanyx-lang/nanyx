@@ -32,6 +32,14 @@ def f = { (x: int): int -> x * 2 }
 def biggerNumbers = numbers \map { x -> x + 1 }
 ```
 
+A trailing lambda is the call's last positional argument, however many arguments come before it in brackets. These two calls are the same:
+
+```nanyx
+def total = list.fold([1, 2, 3], 0) { acc, x -> acc + x }
+
+def sameTotal = list.fold([1, 2, 3], 0, { acc, x -> acc + x })
+```
+
 # Shorthand lambdas
 
 The shorthand form omits the parameter and lifts members into scope:
