@@ -103,3 +103,58 @@ let ``Run - Result.orElse keeps a success and passes an error to the fallback`` 
         "  showResult(bad \\Result.orElse { e -> #error(\"recovered from {e}\") })\n" +
         "}\n"
     runSource source |> assertRan "#some(4)\n#some(3)\n#error(retried bad)\n#error(recovered from bad)\n"
+
+// #183: two steps that fail with different tags.
+let private steps =
+    "import nanyx/console\n" +
+    "\n" +
+    "def parseDigit: string -> #some(int) | #invalidInt = {\n" +
+    "  | \"1\" -> #some(1)\n" +
+    "  | _ -> #invalidInt\n" +
+    "}\n" +
+    "def find: int -> #some(string) | #notFound = {\n" +
+    "  | 1 -> #some(\"1\")\n" +
+    "  | 2 -> #some(\"x\")\n" +
+    "  | _ -> #notFound\n" +
+    "}\n"
+
+[<Fact>]
+let ``Run - bindOption keeps the tags both steps fail with, matched with no catch-all`` () =
+    let source =
+        steps +
+        "def piped: int -> string = { n ->\n" +
+        "  match find(n) \\bindOption(parseDigit)\n" +
+        "    | #some(digit) -> \"#some({digit})\"\n" +
+        "    | #notFound -> \"#notFound\"\n" +
+        "    | #invalidInt -> \"#invalidInt\"\n" +
+        "}\n" +
+        "def called: int -> string = { n ->\n" +
+        "  def b = bindOption(find(n), parseDigit)\n" +
+        "  match b\n" +
+        "    | #some(digit) -> \"#some({digit})\"\n" +
+        "    | #notFound -> \"#notFound\"\n" +
+        "    | #invalidInt -> \"#invalidInt\"\n" +
+        "}\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  println(piped(1))\n" +
+        "  println(piped(2))\n" +
+        "  println(piped(3))\n" +
+        "  println(called(1))\n" +
+        "  println(called(2))\n" +
+        "  println(called(3))\n" +
+        "}\n"
+    runSource source |> assertRan "#some(1)\n#invalidInt\n#notFound\n#some(1)\n#invalidInt\n#notFound\n"
+
+[<Fact>]
+let ``Run - Result.bind continues a success and stops at the first error`` () =
+    let source =
+        header +
+        "def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error(\"odd\") }\n" +
+        "@entry\n" +
+        "def main = {\n" +
+        "  showResult(ok \\Result.bind(half))\n" +
+        "  showResult(Result.bind(ok, half) \\Result.bind(half))\n" +
+        "  showResult(Result.bind(bad, half))\n" +
+        "}\n"
+    runSource source |> assertRan "#some(2)\n#some(1)\n#error(bad)\n"
