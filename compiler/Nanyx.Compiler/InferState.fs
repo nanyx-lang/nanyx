@@ -213,7 +213,11 @@ type InferState =
             /// that call a derived `==` or the `==` attached to their type in place of the compiler's own, by the
             /// node of the hole or the comparison: the definition's name, and where the call finds each context
             /// that definition requires.
-            DerivedCalls: Map<NodeId, Identifier * ContextInstance option list> }
+            DerivedCalls: Map<NodeId, Identifier * ContextInstance option list>;
+            /// The local defs that are cells, made with `mut` (see `MemoryCells`).
+            Cells: Set<SymbolId>;
+            /// Where each `:=` is written: a type mismatch there is the assignment's (see `MemoryCells.mismatchCode`).
+            CellAssignments: Set<SourceSpan> }
 
 let emptyState =
         { NextId = 0;
@@ -272,7 +276,9 @@ let emptyState =
             JoinRests = Set.empty;
             DerivedInstances = Map.empty;
             DerivedDefs = [];
-            DerivedCalls = Map.empty }
+            DerivedCalls = Map.empty;
+            Cells = Set.empty;
+            CellAssignments = Set.empty }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

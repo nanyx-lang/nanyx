@@ -104,6 +104,10 @@ module DiagnosticCodes =
     let PositionalForNamedArgument = code 218 "Named parameter passed by position" Severity.Error
     let UnattachableDefinition = code 219 "Definition cannot be attached" Severity.Error
     let BlockWithoutResult = code 220 "Block without a result" Severity.Error
+    let MutOutsideMemory = code 221 "mut outside a memory block" Severity.Error
+    let NotACell = code 222 "Assignment to a non-cell" Severity.Error
+    let CellAssignmentMismatch = code 223 "Cell assignment type mismatch" Severity.Error
+    let CellEscapesMemory = code 224 "Cell escapes its memory block" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -120,7 +124,8 @@ module DiagnosticCodes =
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
-          UnattachableDefinition; BlockWithoutResult
+          UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
+          CellEscapesMemory
           UnsupportedByBackend ]
 
 module Diagnostics =

@@ -39,6 +39,7 @@
     <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
     <Compile Include="Features\Maps\MapTests.fs" />
+    <Compile Include="Features\Memory\MemoryCellTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />

@@ -1419,6 +1419,7 @@ let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) 
             | FunctionCall(name, spanOpt, _) ->
                 resolveCallInstances env next expr name (nameSpan spanOpt expr)
                 |> Result.bind (fun next -> checkLocalComparisons env next expr name (nameSpan spanOpt expr))
+                |> Result.bind (MemoryCells.checkCall env expr name)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
     let recovered =
@@ -1544,6 +1545,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match args with
             | [ inner ] -> inferExpr env state inner
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
+        elif name = MutSyntax.builtIn || name = AssignSyntax.builtIn then
+            match expr.Kind with
+            | MutSyntax.Call value -> MemoryCells.inferMut inferExpr env state expr value
+            | AssignSyntax.Call(target, value) -> MemoryCells.inferAssign inferExpr env state expr target value
+            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span $"{name} expects a cell and a value" ]
         elif name = ForSyntax.builtIn then
             // `for xs, ys | arms`: the parser passes the iterables and a lambda of one element of each. Each iterable
             // is a `list(a)`, a `seq(a)`, a `gen(a)`, a `map(k, v)` or a `set(a)`, and the loop is unit. It stops when the shortest iterable
@@ -1577,6 +1583,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | Error err -> Error err
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
         else
+        let env = MemoryCells.aroundCall env state name
         let contextCheck =
             match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
             // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
@@ -2573,6 +2580,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             // rest alone, and a `try` in a branch could not add its own.
                             let scheme, generalizedState =
                                 if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
+                                // A cell holds values of one type: its own, not one for each use.
+                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell symbol current
                                 else ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
                             current <-
                                 let used =
