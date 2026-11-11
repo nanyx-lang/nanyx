@@ -9,7 +9,6 @@ module Helpers =
     let stringAlloc = "__nanyx_string_alloc"
     let stringConcat = "__nanyx_string_concat"
     let stringEquals = "__nanyx_string_equals"
-    let listLength = "__nanyx_list_length"
     let listConcat = "__nanyx_list_concat"
     let recordSet = "__nanyx_record_set"
     let recordCopy = "__nanyx_record_copy"
@@ -926,29 +925,6 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.store"
             "  local.get $cell"
             ")" ]
-      Helpers.listLength,
-      lines
-          [ $"(func ${Helpers.listLength} (param $list i32) (result i32)"
-            "  (local $count i32)"
-            "  block $done"
-            "    loop $walk"
-            "      local.get $list"
-            "      i32.eqz"
-            "      br_if $done"
-            "      local.get $count"
-            "      i32.const 1"
-            "      i32.add"
-            "      local.set $count"
-            "      local.get $list"
-            "      i32.const 4"
-            "      i32.add"
-            "      i32.load"
-            "      local.set $list"
-            "      br $walk"
-            "    end"
-            "  end"
-            "  local.get $count"
-            ")" ]
       // a ++ b copies the cells of a in front of b (b itself is shared, lists being immutable).
       Helpers.listConcat,
       lines
@@ -1030,7 +1006,6 @@ let helperDependencies =
       FloatText.bigAdd, []
       FloatText.bigSub, []
       FloatText.bigCompare, []
-      Helpers.listLength, []
       Helpers.listConcat, [ Helpers.listCons ]
       Helpers.reuseObject, [ Helpers.newObject ]
       Helpers.listConsAt, [ Helpers.listCons ]
