@@ -12,6 +12,7 @@
     <Compile Include="TypeDefinitionTests.fs" />
     <Compile Include="LambdaBodyTests.fs" />
     <Compile Include="LineWidthTests.fs" />
+    <Compile Include="LexicalTests.fs" />
     <Compile Include="CorpusTests.fs" />
     <Compile Include="FormatCommandTests.fs" />
   </ItemGroup>

@@ -64,6 +64,9 @@ def ratio = 3.14159
 def million = 1_000_000
 ```
 
+An underscore groups digits, in an int or a float (`3.141_592`), and has no other meaning. It goes between two digits:
+`1__000` and `1_` are errors.
+
 You can use standard arithmetic and comparison operators:
 
 ```nanyx
@@ -177,7 +180,8 @@ This is also a multi-line comment.
 ----------------------------------
 ```
 
-Multi-line comments must be closed with the same number of dashes that they were opened with.
+Multi-line comments must be closed with the same number of dashes that they were opened with. A line of dashes with
+text after it, `--- like this`, is a single-line comment.
 
 ## Tags, ranges and records
 

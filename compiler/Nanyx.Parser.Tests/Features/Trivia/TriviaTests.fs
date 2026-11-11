@@ -6,6 +6,9 @@ open Parser.Program
 
 let private lines (ls: string list) = String.concat "\n" ls
 
+/// `source` with `\n` line breaks, whatever the line endings of this file's checkout.
+let private normalized (source: string) = source.Replace("\r\n", "\n")
+
 let private trivia source =
     match parseModuleWithTrivia "" source with
     | Result.Ok parsed -> parsed.Trivia
@@ -113,6 +116,60 @@ let ``Module blocks are kept as written`` () =
         | other -> failwith $"Unexpected items: %A{other}"
     | Result.Error error -> failwith $"Parse failed: {error.Message}"
 
+[<Fact>]
+let ``A line of three or more dashes opens a block comment, closed by a line of the same dashes`` () =
+    let first = normalized """---
+This is a multi-line comment.
+---"""
+    let second = normalized """----------------------------------
+This is also a multi-line comment.
+----------------------------------"""
+    let source = $"{first}\n\n{second}\ndef a = 1"
+    Assert.Equal<_ list>(
+        [ "own-line", first, 0, 0; "blank", "1", 3, 0; "own-line", second, 4, 0 ],
+        describe (trivia source))
+
+[<Fact>]
+let ``A block comment opened with three dashes is not closed by four`` () =
+    let comment = normalized """---
+def a = 1
+----
+  ---"""
+    Assert.Equal<_ list>([ "own-line", comment, 0, 0 ], describe (trivia $"{comment}\ndef b = 2"))
+
+[<Fact>]
+let ``A block comment may be indented, and its blank lines are part of it`` () =
+    let source = normalized """def f = { x ->
+  ---
+  one
+
+  two
+  ---
+  x + 1
+}"""
+    Assert.Equal<_ list>([ "own-line", "---\n  one\n\n  two\n  ---", 1, 2 ], describe (trivia source))
+
+[<Fact>]
+let ``Dashes after code, or with text after them, are a -- comment`` () =
+    let source = normalized """def a = 1 ---
+--- not a block
+def b = 2"""
+    Assert.Equal<_ list>([ "trailing", "---", 0, 10; "own-line", "--- not a block", 1, 0 ], describe (trivia source))
+
+[<Fact>]
+let ``A block comment that is never closed is an error at its opening line`` () =
+    let source = normalized """def a = 1
+---
+never closed
+----
+def b = 2"""
+    match parseModuleWithTrivia "" source with
+    | Result.Error error ->
+        Assert.Contains("This block comment is never closed", error.Message)
+        Assert.Equal(1, error.Span.StartLine)
+        Assert.Equal(0, error.Span.StartColumn)
+    | Result.Ok parsed -> failwith $"Unexpected parse: %A{parsed.Items}"
+
 /// Every `.nyx` file the parser tests use that parses: each comment is recorded once, its text is the source at its
 /// span, and the trivia is in source order.
 [<Fact>]
@@ -133,5 +190,7 @@ let ``Every comment in the test files is recorded once, where it is written`` ()
                 | LineComment(text, _, span) ->
                     Assert.StartsWith("--", text)
                     Assert.Equal(text, parsed.Source.Substring(span.Start, span.End - span.Start))
-                    Assert.DoesNotContain("\n", text)
+                    // Only a block comment, which starts with its line of dashes, spans lines.
+                    if text.Contains "\n" then
+                        Assert.Matches("^---+\n", text)
                 | BlankLines _ -> ()

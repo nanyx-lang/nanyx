@@ -42,7 +42,8 @@ Out of scope here:
 
 - **Comments are discarded.** The parser (FParsec, `compiler/Nanyx.Parser/Program.fs`) skips `--` comments as
   whitespace (`ws`, `comment`, `inlineCommentNoNl`). Nothing records where they were. Blank lines are skipped the
-  same way. `---` block comments do not parse yet (#205).
+  same way. A `---` block comment (`lineComment` in `ParseState.fs`) is recorded as one comment whose text spans
+  lines.
 - **The syntax tree has spans.** Every expression, pattern, type expression, statement and top-level item carries a
   `SourceSpan`, and equality on them compares `Kind` only, ignoring spans. That makes "the formatted file parses to
   the same tree" a one-line check.
@@ -67,6 +68,8 @@ attaches each comment to a node:
   own line, at that node's indent, before it.
 - A comment with no following node in its block (the end of a file, a match or a lambda body) is printed at the end
   of that block.
+- A `---` block comment is always on lines of its own. Its opening line of dashes goes at the indent of the code
+  around it; the rest of its lines, the closing one included, are printed exactly as written.
 
 Blank lines are covered under [Blank lines](#blank-lines) below.
 

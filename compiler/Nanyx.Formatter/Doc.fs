@@ -47,7 +47,8 @@ type Doc =
 
 and StackEntry =
     | StackItem of Doc * isImport: bool
-    /// A comment on a line of its own. A `leading` one belongs to the item after it.
+    /// A comment on a line of its own. A `leading` one belongs to the item after it. A block comment is written as it
+    /// is, its line breaks included.
     | StackComment of string * leading: bool
     /// A blank line the author wrote.
     | StackBlank
@@ -147,7 +148,7 @@ module Doc =
                     let next = seq { k + 1 .. entries.Length - 1 } |> Seq.tryFind isItem
                     if blankLines && emitted && separated previousItem next then blank <- true
                     separatedNext <- true
-                emit (Text text)
+                emit (textOrVerbatim text)
             | StackItem(doc, _) ->
                 if not separatedNext && blankLines && emitted && separated previousItem (Some k) then blank <- true
                 emit doc
@@ -232,7 +233,7 @@ module Doc =
                         | Stack(_, entries), _ ->
                             match entries with
                             | StackItem(doc, _) :: more -> fits remaining [] (Print(indent, Break, doc) :: (if more.IsEmpty then rest else Print(indent, Break, HardLine) :: rest))
-                            | StackComment(text, _) :: _ -> remaining - text.Length >= 0
+                            | StackComment(text, _) :: _ -> remaining - fst (firstLine text) >= 0
                             | StackBlank :: more -> fits remaining [] (Print(indent, mode, Stack(false, more)) :: rest)
                             | [] -> fits remaining [] rest
 

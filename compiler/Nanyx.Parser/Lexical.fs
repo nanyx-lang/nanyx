@@ -19,25 +19,48 @@ let stringLiteralNoWs: Parser<Literal, ParseState> =
 
 let stringLiteral: Parser<Literal, ParseState> = stringLiteralNoWs  // Don't consume ws
 
+/// A `+` or `-` before a number, as text: empty when there is none.
+let private numberSign: Parser<string, ParseState> =
+    opt (attempt (anyOf "+-" .>> followedBy digit)) |>> function Some sign -> string sign | None -> ""
+
+/// Decimal digits, which may be grouped with a `_` between two of them (`1_000_000`), without the underscores. With
+/// `first`, the first character must be a digit; otherwise there may be no digits at all. A `_` that is not between
+/// two digits is an error.
+let private digitGroups (first: bool) : Parser<string, ParseState> =
+    let isDigitOrSeparator c = isDigit c || c = '_'
+    let digits = if first then many1Satisfy2 isDigit isDigitOrSeparator else manySatisfy isDigitOrSeparator
+    getPosition .>>. digits >>= fun (start, text) ->
+        if text.StartsWith "_" || text.EndsWith "_" || text.Contains "__" then
+            reportFocused start $"A `_` in a number goes between two digits: '{text}' is not a number"
+        else
+            preturn (text.Replace("_", ""))
+
 let intLiteralNoWs: Parser<Literal, ParseState> =
     // Allow parsing int even if followed by dots (for range operator "..")
     // Just don't allow a SINGLE dot (which would make it a float)
     let notFloat = followedBy (pstring "..") <|> notFollowedBy (pchar '.')
-    pint32 .>> notFloat |>> IntLit
+    // Hexadecimal, octal and binary, `0x1F`, are FParsec's.
+    let nonDecimal = followedBy (optional (anyOf "+-") >>. pchar '0' >>. anyOf "xXoObB") >>. pint32
+    let decimal =
+        pipe2 numberSign (digitGroups true) (+) >>= fun text ->
+            match Int32.TryParse(text, Globalization.NumberStyles.AllowLeadingSign, Globalization.CultureInfo.InvariantCulture) with
+            | true, value -> preturn value
+            | false, _ -> fail "The number is too large for an int"
+    (attempt nonDecimal <|> decimal) .>> notFloat |>> IntLit
     <?> "integer literal"
 
 let intLiteral: Parser<Literal, ParseState> = intLiteralNoWs  // Don't consume ws - let caller decide
 
-// Only decimal floats: digits, an optional fraction and an optional exponent. FParsec's `pfloat` also reads `NaN`,
-// `Inf`, `Infinity` and hexadecimal floats, which would take names such as `nan` and `inf` as numbers.
+// Only decimal floats: digits, an optional fraction and an optional exponent, each of which may be grouped with
+// underscores. FParsec's `pfloat` also reads `NaN`, `Inf`, `Infinity` and hexadecimal floats, which would take names
+// such as `nan` and `inf` as numbers.
 let floatLiteralNoWs: Parser<Literal, ParseState> =
-    let options =
-        NumberLiteralOptions.AllowMinusSign
-        ||| NumberLiteralOptions.AllowPlusSign
-        ||| NumberLiteralOptions.AllowFraction
-        ||| NumberLiteralOptions.AllowExponent
-    numberLiteral options "float literal"
-    |>> fun n -> FloatLit (Double.Parse(n.String, Globalization.CultureInfo.InvariantCulture))
+    let fraction = pchar '.' >>. digitGroups false |>> fun digits -> "." + digits
+    let exponent = anyOf "eE" >>. pipe2 numberSign (digitGroups true) (fun sign digits -> "e" + sign + digits)
+    pipe4 numberSign (digitGroups true) (opt fraction) (opt exponent) (fun sign whole fraction exponent ->
+        sign + whole + Option.defaultValue "" fraction + Option.defaultValue "" exponent)
+    |>> fun text -> FloatLit (Double.Parse(text, Globalization.CultureInfo.InvariantCulture))
+    <?> "float literal"
 
 let floatLiteral: Parser<Literal, ParseState> = floatLiteralNoWs  // Don't consume ws - let caller decide
 

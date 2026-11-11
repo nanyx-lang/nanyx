@@ -25,7 +25,7 @@ type ParseState =
       /// not forget it (see `reportFocused`).
       FocusedError: (Position * string) option ref
       /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
-      /// line break), most recent first. For the formatter, which puts them back: see `parseModuleWithTrivia`.
+      /// line break, or to the end of a block comment's closing line), most recent first. For the formatter, which puts them back: see `parseModuleWithTrivia`.
       Comments: (int * int) list
       /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
       /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
@@ -47,9 +47,40 @@ let private noting (note: int * int -> ParseState -> ParseState) (p: Parser<'a, 
     pipe3 getPosition p getPosition (fun start value finish -> value, (int start.Index, int finish.Index))
     >>= fun (value, range) -> updateUserState (note range) >>% value
 
+// Fails fatally at `position` with `message`, and notes the failure in the state, which `parseModuleFileWithNames`
+// reports in place of FParsec's error when the parse fails: the failure is backtracked over, and FParsec would report
+// some enclosing construct instead (often the whole def). Of two such failures, the furthest is reported.
+let internal reportFocused (position: Position) (message: string) : Parser<'a, ParseState> =
+    getUserState >>= fun state ->
+        match state.FocusedError.Value with
+        | Some (furthest, _) when furthest.Index >= position.Index -> ()
+        | _ -> state.FocusedError.Value <- Some (position, message)
+        failFatally message
+
+/// Whether only spaces and tabs come before the current position on its line.
+let private atLineStart: Parser<unit, ParseState> =
+    fun stream ->
+        let mutable back = 1
+        while stream.Peek(-back) = ' ' || stream.Peek(-back) = '\t' do
+            back <- back + 1
+        let previous = stream.Peek(-back)
+        if previous = '\n' || previous = CharStream.EndOfStreamChar then Reply(()) else Reply(Error, NoErrorMessages)
+
+/// A block comment's fence: a line holding only three or more dashes.
+let private isFence (line: string) = line.Length >= 3 && line |> Seq.forall ((=) '-')
+
 // Helper: whitespace and comment handling
+/// A comment: `--` to the end of the line, or a block comment. A line holding only three or more dashes opens a block
+/// comment, which runs to the next line holding exactly the same dashes and ends with it. `--- text` is a `--` comment.
 let private lineComment () =
-    noting (fun range state -> { state with Comments = range :: state.Comments }) (pstring "--" >>. skipRestOfLine false)
+    let blockRest (start: Position) (fence: string) =
+        let closing = attempt (skipNewline >>. restOfLine false >>= fun line -> if line.Trim() = fence then preturn () else pzero)
+        attempt (skipManyTill (skipNewline >>. skipRestOfLine false) closing)
+        <|> reportFocused start $"This block comment is never closed: end it with a line of exactly the same dashes, {fence}"
+    let comment =
+        pipe3 getPosition (opt atLineStart) (pstring "--" >>. restOfLine false) (fun start ownLine rest -> start, ownLine.IsSome, "--" + rest.TrimEnd())
+        >>= fun (start, ownLine, line) -> if ownLine && isFence line then blockRest start line else preturn ()
+    noting (fun range state -> { state with Comments = range :: state.Comments }) comment
 
 let comment () = lineComment () >>. optional skipNewline
 let inlineCommentNoNl () = lineComment ()
