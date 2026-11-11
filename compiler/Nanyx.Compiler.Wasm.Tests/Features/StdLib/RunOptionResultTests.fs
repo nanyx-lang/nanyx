@@ -107,32 +107,32 @@ let ``Run - Result.orElse keeps a success and passes an error to the fallback`` 
 [<Fact>]
 let ``Run - orElseOption keeps a #some and calls the fallback only for another tag (#480)`` () =
     let source =
-        header +
-        "def lookup: () -> #some(int) | #none = { #some(9) }\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  showOption(orElseOption(present, { #some(8) }))\n" +
-        "  showOption(absent \\orElseOption { #some(8) })\n" +
-        "  showOption(absent \\orElseOption(lookup))\n" +
-        "  showOption(absent \\orElseOption { absent })\n" +
-        "  showOption(present \\orElseOption {\n" +
-        "    println(\"not called\")\n" +
-        "    #none\n" +
-        "  })\n" +
-        "}\n"
+        header + """def lookup: () -> #some(int) | #none = { #some(9) }
+@entry
+def main = {
+  showOption(orElseOption(present, { #some(8) }))
+  showOption(absent \orElseOption { #some(8) })
+  showOption(absent \orElseOption(lookup))
+  showOption(absent \orElseOption { absent })
+  showOption(present \orElseOption {
+    println("not called")
+    #none
+  })
+}
+"""
     runSource source |> assertRan "#some(3)\n#some(8)\n#some(9)\n#none\n#some(3)\n"
 
 [<Fact>]
 let ``Run - mapOrElseOption maps a #some and calls the fallback only for another tag (#182)`` () =
     let source =
-        header +
-        "def seven: () -> int = { 7 }\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  dbg(mapOrElseOption(#none, { 7 }, { n -> n + 1 }))\n" +
-        "  dbg(mapOrElseOption(present, { dbg(0) }, { n -> n + 1 }))\n" +
-        "  dbg(absent \\mapOrElseOption(seven, { n -> n + 1 }))\n" +
-        "}\n"
+        header + """def seven: () -> int = { 7 }
+@entry
+def main = {
+  dbg(mapOrElseOption(#none, { 7 }, { n -> n + 1 }))
+  dbg(mapOrElseOption(present, { dbg(0) }, { n -> n + 1 }))
+  dbg(absent \mapOrElseOption(seven, { n -> n + 1 }))
+}
+"""
     runSource source |> assertRan "dbg: 7\ndbg: 4\ndbg: 7\n"
 
 // #183: two steps that fail with different tags.
