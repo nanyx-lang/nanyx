@@ -51,6 +51,26 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
     runSource source |> assertRan "[   tea][   2]\n   tea!|  2|<2>\n£2.89 and £12.05\n"
 
 [<Fact>]
+let ``Run - escapes in double-quoted strings`` () =
+    // A line break, a quote, a backslash, a brace and a code point can be written in a double-quoted string (#247);
+    // a single-quoted string is raw.
+    let source = """import nanyx/console
+
+def n = 5
+println("a\nb")
+println("say \"hi\"")
+println("\{n} = {n}|\\|\u{e9}")
+println('raw\n{n}')
+"""
+    let expected = """a
+b
+say "hi"
+{n} = 5|\|é
+raw\n{n}
+"""
+    runSource source |> assertRan (expected.Replace("\r\n", "\n"))
+
+[<Fact>]
 let ``Run - string literals larger than the space below the heap`` () =
     // The literals used to run from 256 into a heap and table of free-list heads fixed at 4096, so that `alloc`
     // overwrote them, or read a literal's bytes as the head of a free list (#375, #571). The last literal crosses the

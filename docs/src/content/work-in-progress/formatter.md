@@ -81,7 +81,9 @@ printer lays out each group on one line if it fits in the line width and breaks 
 construct are written once, as documents, and the printer decides where to break.
 
 - Parentheses are printed where precedence needs them, and nowhere else.
-- Literals are printed from their source text, through their spans, so `0xFF`, `1_000` and escapes survive.
+- Literals are printed from their source text, through their spans, so `0xFF`, `1_000` and escapes survive. The text
+  between the holes of an interpolated string has no span of its own: `writtenStringText` finds it in the source after
+  the opening quote or the hole before it, and keeps it if `StringEscapes.decode` gives back the parsed text.
 - Identifiers, operators and keywords are printed as written; the formatter never renames.
 
 ## Never changing meaning

@@ -1,7 +1,7 @@
 module recordIndexerGenerator
 
 -- Generate C# source for a string indexer over the properties of a record.
--- Raw single-quoted strings keep C# braces literal, and a doubled brace in a
+-- Raw single-quoted strings keep C# braces literal, and `\{` in a
 -- double-quoted string is a literal brace next to interpolation.
 
 type Property = (
@@ -54,10 +54,10 @@ def indexer: PartialRecord -> string = { record ->
 }
 
 export def generateSource: PartialRecord -> string = { record ->
-  def body = "partial {record.declaration}\n{{\n{indexer(record)}\n}}"
+  def body = "partial {record.declaration}\n\{\n{indexer(record)}\n}"
 
   match record.namespace
-    | #some(ns) -> "using System;\n\nnamespace {ns}\n{{\n{body}\n}}"
+    | #some(ns) -> "using System;\n\nnamespace {ns}\n\{\n{body}\n}"
     | #none -> "using System;\n\n{body}"
 }
 

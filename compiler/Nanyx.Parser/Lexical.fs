@@ -6,10 +6,38 @@ open FParsec
 // After the libraries, so that the parser's names shadow theirs (`identifier`, `Attribute`) as they did in one file.
 open Parser.Program
 
+/// A backslash escape in a double-quoted string (see `StringEscapes`), as the text it stands for. Any other backslash
+/// fails there, saying which escapes there are.
+let escapeSequence: Parser<string, ParseState> =
+    let simple = StringEscapes.simple |> List.map (fun (c, decoded) -> pchar c >>% string decoded) |> choice
+    let codePoint =
+        attempt (
+            pstring "u{" >>. manyChars hex .>> pchar '}'
+            >>= fun digits ->
+                match StringEscapes.tryCodePoint digits with
+                | Some decoded -> preturn decoded
+                | None -> pzero)
+    getPosition .>>? pchar '\\'
+    >>= fun position ->
+        simple
+        <|> codePoint
+        <|> (opt (lookAhead anyChar) >>= fun next ->
+            let message =
+                match next with
+                | Some 'u' -> "`\\u{...}` is a code point in hex, from 0 to 10FFFF, and not a surrogate"
+                | Some c when not (Char.IsControl c) -> $"`\\{c}` is not an escape"
+                | _ -> "A backslash on its own is not an escape"
+            reportFocused position
+                $"{message}. The escapes in a double-quoted string are {StringEscapes.written}; write a backslash as `\\\\`, or use a single-quoted string, which is raw")
+
+/// The text of a double-quoted string up to its closing quote or, with `stops`, any of those characters.
+let internal doubleQuotedText (stops: string) : Parser<string, ParseState> =
+    many1Strings (many1Chars (noneOf ("\"\\" + stops)) <|> escapeSequence)
+
 // Parser for literals
 let stringLiteralNoWs: Parser<Literal, ParseState> =
     let doubleQuoted =
-        between (pstring "\"") (pstring "\"") (stringText (manyChars (noneOf "\"")))
+        between (pstring "\"") (pstring "\"") (stringText (doubleQuotedText "" <|>% ""))
         |>> StringLit
     let singleQuoted =
         between (pstring "'") (pstring "'") (stringText (manyChars (noneOf "'")))

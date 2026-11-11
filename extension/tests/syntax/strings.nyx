@@ -1,0 +1,9 @@
+-- SYNTAX TEST "source.nanyx" "a backslash escape in a double-quoted string, and none in a raw one"
+
+def s = "a\nb\{c}\u{e9}"
+--        ^^ constant.character.escape.nanyx
+--           ^^ constant.character.escape.nanyx
+--               ^^^^^^ constant.character.escape.nanyx
+
+def r = 'a\nb'
+--        ^^ string.quoted.single.raw.nanyx - constant.character.escape.nanyx
