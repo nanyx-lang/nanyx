@@ -25,7 +25,7 @@ with a Stream field. An issue that serves several workstreams is placed under th
 
 The compilation workstream has pages of its own for the larger pieces of its design:
 [deferred errors](./deferred-errors), [closed and open records](./closed-and-open-records),
-[tail calls](./tail-calls), [memory management](./memory-management) and
+[tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls) and
 [the standard library's implementation](./standard-library-implementation).
 [The `nanyx` command](./command-line) lists what the CLI does today.
 
