@@ -18,6 +18,7 @@
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\OperatorContextTests.fs" />
     <Compile Include="Features\Contexts\StructuralInstanceTests.fs" />
+    <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />

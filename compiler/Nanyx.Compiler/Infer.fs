@@ -2633,7 +2633,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let mutable currentModule: string option = None
     let mutable types = Map.empty
     let mutable items: TypedTopLevelItem list = []
-    let mutable errors: Diagnostic list = []
+    // A name defined again is reported, and only its first definition is inferred.
+    let module', duplicateErrors = DuplicateDefinitions.check initialState.Declared module'
+    let mutable errors: Diagnostic list = duplicateErrors
 
     // An imported context whose every member is also an imported definition of that name is an ambient instance:
     // the one the runtime supplies, as `nanyx/console`'s definitions are its `Console`. The top level of the module

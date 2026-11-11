@@ -81,6 +81,7 @@ module DiagnosticCodes =
     let OutsideModuleBlock = code 110 "Name from outside a module block" Severity.Error
     let NotImplemented = code 111 "Not implemented" Severity.Error
     let DeprecatedTypeName = code 112 "Deprecated type name" Severity.Warning
+    let DuplicateDefinition = code 113 "Duplicate definition" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -114,6 +115,7 @@ module DiagnosticCodes =
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented; DeprecatedTypeName
+          DuplicateDefinition
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
