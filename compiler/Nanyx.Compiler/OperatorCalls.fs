@@ -42,15 +42,21 @@ module internal OperatorCalls =
     /// `==` is a lookup of `Eq` at its operands' type, whose order puts an instance in scope before the type's own: a
     /// binding of `==` that takes the operands comes first, on a built-in type too, so after `use ignoringCase`, an
     /// `Eq(string)`, `a == b` on strings calls its `==`.
+    ///
+    /// On a type variable, the operator calls the member of the nearest instance in scope of a context of that
+    /// variable that has it, which `instanceMember` finds, with that instance as written: in a function that requires
+    /// `[Add(a) + Add(b)]`, `x + y` on two `a`s calls the `` `+` `` of `Add(a)`, though `Add(b)`'s is bound to the
+    /// name too.
     let definition
+        (instanceMember: Identifier -> Ty -> (TypeExpr * TypeScheme) option)
         (attached: Identifier -> Identifier option)
         (env: TypeEnv)
         (state: InferState)
         (expr: Expression)
         (leftTy: Ty)
         (input: Ty)
-        : (Identifier * TypeScheme) option =
-        let bound (name: Identifier) = TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme)
+        : (Identifier * TypeScheme * TypeExpr option) option =
+        let bound (name: Identifier) = TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme, None)
         let name =
             match expr.Kind with
             | BinaryOp(op, _, _) when OrderingOperators.isOperator op -> None
@@ -58,30 +64,41 @@ module internal OperatorCalls =
             | BinaryOp(op, _, _) -> Some op
             | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> Some ArithmeticOperators.negate
             | _ -> None
+        let comparesOperands (operandTy: Ty) (_, scheme, _) = compares state operandTy input scheme
         let inScope (name: Identifier) (operandTy: Ty) =
-            if name = EqualityOperators.equals then bound name |> Option.filter (snd >> compares state operandTy input) else None
+            if name = EqualityOperators.equals then bound name |> Option.filter (comparesOperands operandTy) else None
         match name, Unifier.unalias (resolveSoFar state leftTy) with
         | None, _ -> None
+        | Some name, (TyVar _ as operandTy) when (instanceMember name operandTy).IsSome ->
+            instanceMember name operandTy |> Option.map (fun (instance, scheme) -> name, scheme, Some instance)
         | Some name, operandTy when (inScope name operandTy).IsSome -> inScope name operandTy
         | Some _, TyPrimitive _ -> None
         | Some name, operandTy ->
             match attached name with
             | Some attachedName -> bound attachedName
-            | None when name = EqualityOperators.equals -> bound name |> Option.filter (snd >> compares state operandTy input)
+            | None when name = EqualityOperators.equals -> bound name |> Option.filter (comparesOperands operandTy)
             | None -> bound name
 
-    /// `expr`, an operator that calls `scheme` by the name `callee`, typed as that call: the definition takes its
-    /// operands (`input`) and the operator's value is what it returns.
-    let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (input: Ty) : Ty * InferState =
+    /// `expr`, an operator that calls `scheme` by the name `callee`, of `instance` if it is an instance's member,
+    /// typed as that call: the definition takes its operands (`input`) and the operator's value is what it returns.
+    let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (instance: TypeExpr option) (input: Ty) : Ty * InferState =
         let funcTy, next = instantiate (recordReference expr scheme state) scheme
         let resultTy, next = freshVar next
         let next = addConstraint funcTy (TyFunc(input, resultTy)) next
-        resultTy, { next with CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy; OperatorCalls = next.OperatorCalls |> Map.add expr.Id callee }
+        resultTy,
+        { next with
+            CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy
+            OperatorCalls = next.OperatorCalls |> Map.add expr.Id callee
+            OperatorInstances =
+                match instance with
+                | Some instance -> next.OperatorInstances |> Map.add expr.Id instance
+                | None -> next.OperatorInstances }
 
     /// `expr`, `-x` on an operand of the type `operandTy`: a call to the `negate` of that type or of the function's
     /// `Add` (see `definition`), or else the negation of a built-in number. `numberTy` is the number that negation is
     /// of, `float` or `int`, as far as the operand's type is known.
     let inferNegation
+        (instanceMember: Identifier -> Ty -> (TypeExpr * TypeScheme) option)
         (attached: Identifier -> Identifier option)
         (env: TypeEnv)
         (state: InferState)
@@ -89,8 +106,8 @@ module internal OperatorCalls =
         (operandTy: Ty)
         (numberTy: Ty)
         : Result<Ty * InferState, Diagnostic list> =
-        match definition attached env state expr operandTy operandTy with
-        | Some (callee, scheme) -> Ok (infer state expr callee scheme operandTy)
+        match definition instanceMember attached env state expr operandTy operandTy with
+        | Some (callee, scheme, instance) -> Ok (infer state expr callee scheme instance operandTy)
         | None ->
             ArithmeticOperators.check state expr NegateSyntax.builtIn operandTy operandTy numberTy
             |> Result.map (fun negated -> operandTy, negated)

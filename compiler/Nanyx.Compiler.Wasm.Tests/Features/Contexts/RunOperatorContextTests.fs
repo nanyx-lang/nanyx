@@ -44,3 +44,44 @@ let ``Run - an operator required by its member is passed the instance of the pre
         "  println(\"{add(1, 2)} {add(1.5, 2.25)} {scale(3, 2)} {scale(1.5, 2.0)}\")\n" +
         "}\n"
     runSource source |> assertRan "3 3.75 9 4.5\n"
+
+[<Fact>]
+let ``Run - a def that compares values of two type variables calls each one's instance`` () =
+    // #690: `same2` is `[Eq(a) + Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
+    let source =
+        """
+import nanyx/console
+
+def same2 = { x, y, p, q -> x == y and p == q }
+
+@entry
+def main = {
+    println(if same2(1, 1, "a", "a") then "T" else "F")
+    println(if same2(1, 1, 2, 3) then "T" else "F")
+}
+"""
+    runSource source |> assertRan "T\nF\n"
+
+[<Fact>]
+let ``Run - arithmetic on two type variables calls each one's instance`` () =
+    let source =
+        """
+import nanyx/console
+
+def both: [Add(a) + Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def same: [Eq(a) + Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
+def r = { x, y, p, q -> (x + y, p * q) }
+def negated = { x, p -> (-x, -p) }
+def withSum = { x, y, xs -> (x + y, xs \list.sum) }
+
+@entry
+def main = {
+    def (i, f) = both(1, 2, 1.5, 2.0)
+    def (j, g) = r(3, 4, 1.5, 2.0)
+    def (k, h) = negated(1, 2.5)
+    def (l, m) = withSum(3, 4, [1.5, 2.5])
+    println("{i} {f} {j} {g} {k} {h} {l} {m}")
+    println(if same(1, 1, "a", "b") then "T" else "F")
+}
+"""
+    runSource source |> assertRan "3 -0.5 7 3.0 -1 -2.5 7 4.0\nT\n"

@@ -8,8 +8,7 @@ open NyxCompiler.InferState
 /// left pending (see `ArithmeticOperators.check`). When the function is generalised, an operator on one of the
 /// function's own type variables makes it require the prelude's context the operator is read through (see
 /// `OperatorContexts`), as if its type said so, and the operator calls the context's member: `def add = { x, y ->
-/// x + y }` is `[Add(a)] a, a -> a`. Any other operator is on numbers, as it would have been where it is written,
-/// and so are them all when they are on more than one of the function's variables (see `generalize`).
+/// x + y }` is `[Add(a)] a, a -> a`. Any other operator is on numbers, as it would have been where it is written.
 ///
 /// A local function requires no contexts, so an operator on a type one would be generic in is on numbers.
 module internal ArithmeticInference =
@@ -27,25 +26,6 @@ module internal ArithmeticInference =
         | TyPrimitive("int" | "float") -> state
         | _ -> addConstraintAt pending.At pending.OperandTy (TyPrimitive "int") state
 
-    /// Whether the top-level def `name`, about to be generalised over the variables `quantified`, cannot require the
-    /// contexts that reading `members` of its variable `variable` needs: whether a call in it may make it require, of
-    /// another of its variables, a context with a member of the same name as one of theirs. A def's contexts' members
-    /// are bound by name in its body, so the operator would have two of the name to call (`subst` is what the
-    /// constraints so far solve to).
-    let private clashes (state: InferState) (subst: Subst) (quantified: Set<int>) (name: Identifier) (variable: int) (members: Identifier list) =
-        let needed =
-            OperatorContexts.covering state members
-            |> Option.defaultValue []
-            |> List.map (OperatorContexts.membersOf state)
-            |> Set.unionMany
-        state.PendingContextInstances
-        |> List.exists (fun call ->
-            call.Def = name
-            && not (Set.isEmpty (Set.intersect needed (OperatorContexts.membersOf state call.Context)))
-            && call.ArgTys
-               |> List.exists (fun ty ->
-                   TypeEnv.freeTyVars (Unifier.apply subst ty) |> Set.exists (fun id -> quantified.Contains id && id <> variable)))
-
     /// Whether the module writes the top-level def `name` as a value of its own, as `add` is in `fold(0, add)`: a
     /// function that requires a parameterised context cannot be a value yet (#599), so such a def requires none for
     /// its arithmetic. A def of a `module name =` block is written inside it without the block's name.
@@ -57,10 +37,8 @@ module internal ArithmeticInference =
     /// the def settles (see `Generalising`) are read. An operator found to be on numbers constrains its operands, so
     /// the def is generalised again with them.
     ///
-    /// A top-level def requires contexts for its operators only when they are all on one of its type variables, and
-    /// no call in it would require a context with a member of the same name of another (see `clashes`). Otherwise they
-    /// are all on numbers, as they were before requirements were inferred: the backend cannot yet tell two members of
-    /// one name apart. So are those of a def the module names as a value (see `namedAsValue`).
+    /// A top-level def requires the contexts of each of its type variables its operators are on. The operators of a
+    /// def the module names as a value are all on numbers (see `namedAsValue`).
     let generalize (generalizeDef: InferState -> TypeScheme * InferState) (generalising: Generalising) (state: InferState) : TypeScheme * InferState =
         if state.PendingArithmetic.IsEmpty then generalizeDef state
         else
@@ -82,15 +60,9 @@ module internal ArithmeticInference =
                 | TopLevelDef name ->
                     let onVariables =
                         resolved |> List.filter (fun (pending, ty) -> isOwn ty && (OperatorContexts.smallest state pending.MemberName).IsSome)
-                    let variables = onVariables |> List.choose (function _, TyVar v -> Some v.Id | _ -> None) |> List.distinct
-                    let members = onVariables |> List.map (fun (pending, _) -> pending.MemberName) |> List.distinct
                     // A def whose type an annotation cannot write requires nothing (see `ContextInference.annotation`).
                     let writable () = (ContextInference.typeExprOf (ContextInference.varNames tentative.Type) tentative.Type).IsSome
-                    let requires =
-                        match variables with
-                        | [ variable ] ->
-                            not (namedAsValue state name) && writable () && not (clashes state subst tentative.Quantified name variable members)
-                        | _ -> false
+                    let requires = not onVariables.IsEmpty && not (namedAsValue state name) && writable ()
                     fun pending ty -> requires && onVariables |> List.exists (fun (other, _) -> other.Operator = pending.Operator)
             let staying, numbers = resolved |> List.partition (fun (pending, ty) -> stays pending ty)
             let pending = staying |> List.map fst
@@ -140,17 +112,18 @@ module internal ArithmeticInference =
             PendingContextInstances = settled.PendingContextInstances @ List.map snd calls }
 
     /// `state` with each of `operators`, which `require` gave, that found the instance its def requires calling that
-    /// instance's member, as an operator whose name is bound does (see `OperatorCalls`). `inputOf` is the input type
-    /// of a function that takes two values of a type; prefix `-` takes one.
+    /// instance's member, through the instance, as an operator on a type variable does (see `OperatorCalls`).
+    /// `inputOf` is the input type of a function that takes two values of a type; prefix `-` takes one.
     let callMembers (inputOf: Ty -> Ty) (operators: PendingArithmetic list) (state: InferState) : InferState =
         operators
         |> List.fold (fun (current: InferState) pending ->
             match current.ContextInstances |> Map.tryFind pending.Operator with
-            | Some [ Some (InstanceInScope _) ] ->
+            | Some [ Some (InstanceInScope written) ] ->
                 let ty = pending.OperandTy
                 let input = if pending.MemberName = ArithmeticOperators.negate then ty else inputOf ty
                 { current with
                     ContextInstances = current.ContextInstances |> Map.remove pending.Operator
                     CalleeTypes = current.CalleeTypes |> Map.add pending.Operator (TyFunc(input, ty))
-                    OperatorCalls = current.OperatorCalls |> Map.add pending.Operator pending.MemberName }
+                    OperatorCalls = current.OperatorCalls |> Map.add pending.Operator pending.MemberName
+                    OperatorInstances = current.OperatorInstances |> Map.add pending.Operator written }
             | _ -> current) state

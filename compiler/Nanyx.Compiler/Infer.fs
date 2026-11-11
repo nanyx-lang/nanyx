@@ -848,6 +848,30 @@ let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identif
     ofContext ctxName
     |> Option.orElse (ContextShapes.wider state (fun other -> contextMemberTypes state other argTys) ctxName |> List.tryPick ofContext)
 
+/// The member `memberName` of the instance nearest in scope in `env` of a context for the type variable `operandTy`
+/// (its first argument) that has that member, as written where it is put in scope, with the member's type there. An
+/// operator on values of a type variable calls it (see `OperatorCalls.definition`).
+let private memberOfInstanceInScope (env: TypeEnv) (state: InferState) (memberName: Identifier) (operandTy: Ty) : (TypeExpr * TypeScheme) option =
+    match resolveSoFar state operandTy with
+    | TyVar operand ->
+        env
+        |> Map.toSeq
+        |> Seq.filter (fun (name, _) -> name.StartsWith instancePrefix)
+        |> Seq.choose (fun (name, scheme) ->
+            match resolveSoFar state scheme.Type with
+            | TyApply(ctxName, (TyVar forVar :: _ as argTys)) when forVar.Id = operand.Id ->
+                let prefix = $"{instancePrefix}{ctxName} "
+                contextMemberTypes state ctxName argTys
+                |> Option.bind (List.tryFind (fst >> (=) memberName))
+                |> Option.map (fun (_, memberTy) ->
+                    let symbol = state.TypeDefs |> Map.tryFind ctxName |> Option.bind (fun info -> info.Members |> Map.tryFind memberName)
+                    int (name.Substring prefix.Length), name, { TypeEnv.mono memberTy with Symbol = symbol })
+            | _ -> None)
+        |> Seq.sortByDescending (fun (order, _, _) -> order)
+        |> Seq.tryHead
+        |> Option.bind (fun (_, name, scheme) -> state.InstanceContexts |> Map.tryFind name |> Option.map (fun written -> written, scheme))
+    | _ -> None
+
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
 /// is for, its first argument, has a name definitions can be attached to (not a variable, or a record written out).
 /// The others may still be open: the definitions' types settle them, as `int.fromString` makes a
@@ -1472,7 +1496,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 inferExpr env state single
                 |> Result.bind (fun (typedArg, next) ->
                     let ty = typedArg.Type
-                    OperatorCalls.inferNegation (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
+                    OperatorCalls.inferNegation (memberOfInstanceInScope env next) (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
                     |> Result.map (fun (resultTy, negated) -> mkTypedExpr expr resultTy None None None, negated))
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "- expects a single operand" ]
         elif name = "__with" then
@@ -1760,9 +1784,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     |> Option.filter (fun found ->
                         name <> EqualityOperators.equals
                         || (nextState.ContextScope <> DefScope(found, false) && nextState.ContextScope <> DefScope(found, true)))
-                match OperatorCalls.definition attached env nextState expr leftExpr.Type input with
-                | Some (callee, scheme) ->
-                    let resultTy, called = OperatorCalls.infer nextState expr callee scheme input
+                match OperatorCalls.definition (memberOfInstanceInScope env nextState) attached env nextState expr leftExpr.Type input with
+                | Some (callee, scheme, instance) ->
+                    let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
                     Ok (mkTypedExpr expr resultTy None None None, called)
                 | None ->
                 match expr.Kind with

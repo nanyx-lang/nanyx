@@ -84,18 +84,24 @@ module internal ExpressionRewrites =
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node, with
     /// the name it calls) written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``, or
     /// `` $Vector.`+`(x, y) ``, and `-x` becomes `negate(x)`. `x != y` calls what `==` does, and becomes
-    /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by.
-    let callOperators (calls: Map<NodeId, Identifier>) (expr: Expression) : Expression =
+    /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by. An operator
+    /// that calls the member of an instance in scope (`instances`, by the operator's node) calls it through that
+    /// instance, `` Add(a).`+`(x, y) ``, so that a function that requires `[Add(a) + Add(b)]` calls the right one.
+    let callOperators (calls: Map<NodeId, Identifier>) (instances: Map<NodeId, TypeExpr>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
         else
             expr
             |> mapExpressionKinds (fun current kind ->
+                let call (callee: Identifier) (args: Expression list) =
+                    match instances |> Map.tryFind current.Id with
+                    | Some instance -> ContextMemberCall(instance, callee, args)
+                    | None -> FunctionCall(callee, None, args)
                 match kind, calls |> Map.tryFind current.Id with
                 | BinaryOp(op, left, right), Some callee when op = EqualityOperators.notEquals ->
-                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = FunctionCall(callee, None, [ left; right ]) } ])
-                | BinaryOp(_, left, right), Some callee -> FunctionCall(callee, None, [ left; right ])
-                | FunctionCall(_, _, [ operand ]), Some callee -> FunctionCall(callee, None, [ operand ])
+                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = call callee [ left; right ] } ])
+                | BinaryOp(_, left, right), Some callee -> call callee [ left; right ]
+                | FunctionCall(_, _, [ operand ]), Some callee -> call callee [ operand ]
                 | other, _ -> other)
 
     /// Every expression that inference read as another (`readAs`, by the node of the one written) written as that
