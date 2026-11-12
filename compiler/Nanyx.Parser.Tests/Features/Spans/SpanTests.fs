@@ -123,7 +123,7 @@ let ``a pipe chain spans from its input to its last target, and a lambda spans i
             textOf source xs.Span |> should equal "xs"
             textOf source lambda.Span |> should equal "{ x -> x + 1 }"
             match lambda.Kind with
-            | Lambda ([ ("x", None) ], body) -> textOf source body.Span |> should equal "x + 1"
+            | Lambda ([ ("x", None) ], body, _) -> textOf source body.Span |> should equal "x + 1"
             | other -> failwith $"Expected a lambda, got %A{other}"
         | other -> failwith $"Expected the map pipe, got %A{other}"
     | other -> failwith $"Expected the sum pipe, got %A{other}"
@@ -153,7 +153,7 @@ let ``spans in a multi-line lambda have the lines and columns they were written 
     value.Span.StartLine |> should equal 0
     value.Span.StartColumn |> should equal 8
     match value.Kind with
-    | Lambda ([ ("x", None) ], Kind (Block [ Kind (DefStatement (_, "y", None, yValue)); Kind (ExprStatement result) ])) ->
+    | Lambda ([ ("x", None) ], Kind (Block [ Kind (DefStatement (_, "y", None, yValue)); Kind (ExprStatement result) ]), _) ->
         textOf source yValue.Span |> should equal "x + 1"
         yValue.Span.StartLine |> should equal 1
         yValue.Span.StartColumn |> should equal 10
@@ -170,7 +170,7 @@ let rec private expressionsOfKind (kind: ExpressionKind) : Expression list =
     | IdentifierExpr _
     | ContextMemberAccess _ -> []
     | FunctionCall (_, _, args) -> args |> List.collect expressions
-    | Lambda (parameters, body) ->
+    | Lambda (parameters, body, _) ->
         (parameters |> List.collect (snd >> Option.toList >> List.collect expressionsOfType)) @ expressions body
     | BinaryOp (_, left, right) -> expressions left @ expressions right
     | Pipe (value, _, _, args) -> expressions value @ (args |> List.collect expressions)
@@ -299,7 +299,7 @@ let private parameterTypes (parameters: (Identifier * TypeExpr option) list) = p
 /// The type expressions an expression itself is written with (not those of the expressions in it).
 let private typesOfExpression (expr: Expression) =
     match expr.Kind with
-    | Lambda (parameters, _) -> parameterTypes parameters
+    | Lambda (parameters, _, _) -> parameterTypes parameters
     | ContextMemberAccess (contextType, _)
     | ContextMemberCall (contextType, _, _) -> [ contextType ]
     | _ -> []
@@ -424,7 +424,7 @@ let ``an operator over parentheses or a lone spread spans the delimiters, and wh
 let ``a block ends at its last expression, not at a comment after it`` () =
     let source = "def f = { x ->\n  def y = x + 1\n  y * 2 -- doubled\n}"
     match (parse source |> valueOf "f").Kind with
-    | Lambda (_, body) -> textOf source body.Span |> should equal "def y = x + 1\n  y * 2"
+    | Lambda (_, body, _) -> textOf source body.Span |> should equal "def y = x + 1\n  y * 2"
     | other -> failwith $"Expected a lambda, got %A{other}"
     // `-` does not take the first dash of a comment.
     let topLevel = "def a = 5 - 1 -- four"
@@ -598,7 +598,7 @@ let ``patterns are equal wherever they were written`` () =
 /// The statements of the block that is the body of the lambda `def name` is bound to.
 let private lambdaStatements name (module': Module) =
     match (valueOf name module').Kind with
-    | Lambda (_, Kind (Block statements)) -> statements
+    | Lambda (_, Kind (Block statements), _) -> statements
     | other -> failwith $"Expected a lambda with a block body, got %A{other}"
 
 [<Fact>]
@@ -709,7 +709,7 @@ let ``the types of lambda parameters, context accesses and context instances spa
         "def g = { z ->\n  def sumInt: Sum(int) = (sum = add)\n  use sumInt\n  0\n}"
     let module' = parse source
     match (valueOf "f" module').Kind with
-    | Lambda ([ ("x", Some int); ("y", None) ], Kind (ContextMemberCall (context, "toString", _))) ->
+    | Lambda ([ ("x", Some int); ("y", None) ], Kind (ContextMemberCall (context, "toString", _)), _) ->
         textOf source int.Span |> should equal "int"
         textOf source context.Span |> should equal "ToString(list(a))"
     | other -> failwith $"Expected a lambda calling a context member, got %A{other}"

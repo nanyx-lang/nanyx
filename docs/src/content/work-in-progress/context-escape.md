@@ -130,8 +130,13 @@ Option A's rule rather than replacing it.
 # Settled
 
 - **A lambda with no parameters, checked against a type that takes one parameter, ignores it.** With no expected
-  type, `{ ... }` still infers `() -> ...`. Option B needs this so that `memory { ... }` and `memory { m -> ... }`
-  check against one signature. It's worth having anyway, but Option A doesn't depend on it.
+  type, `{ ... }` still infers `() -> ...`, and `{ () -> ... }` always takes unit. Option B needs this so that
+  `memory { ... }` and `memory { m -> ... }` check against one signature. It's worth having anyway, but Option A
+  doesn't depend on it. Done in [#813](https://github.com/nanyx-lang/nanyx/issues/813): the syntax tree marks a
+  lambda written `{ () -> ... }` (`takesUnit` on `Lambda`), and before the backend reads a module,
+  `ExpressionRewrites.nameIgnoredParameters` gives each `{ ... }` whose type takes an input a parameter it ignores.
+  None of the parser's desugarings (`for`, `__with`, `__rec`, workflow blocks) makes a lambda without parameters
+  that is checked against a one-parameter type, so they accept what they did.
 - **`use` loads a `$Memory`; it can't make one.** `use` loads any context instance you have. `$Memory` is nominal, so
   only the standard library can construct one, and `memory` is the only way to get one.
 
@@ -146,7 +151,5 @@ Option A's rule rather than replacing it.
 - **Whether the rule for `use` should be relaxed for contexts like `Foo`,** where escaping is safe because any caller
   can supply another instance. That needs a way to tell such contexts apart from `$Memory`, which is the special case
   this design is trying to avoid.
-- **Desugarings.** Check whether `for` or `__with` ever produce a no-parameter lambda checked against a one-parameter
-  type, since the settled lambda rule would change what they accept.
 - **Diagnostics.** Name the cell or member that introduced the requirement, and give the supplying `memory` or `use`
   as a related span, as NYX0224 and NYX0225 do today.

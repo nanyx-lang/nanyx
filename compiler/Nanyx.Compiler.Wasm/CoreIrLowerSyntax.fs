@@ -57,7 +57,7 @@ let rec deferredMessages (expr: Expression) : string list =
     | IfExpr(cond, ifTrue, ifFalse) -> all [ cond; ifTrue; ifFalse ]
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> all args
-    | Lambda(_, body)
+    | Lambda(_, body, _)
     | UseIn(_, body)
     | MemberAccess(body, _, _)
     | WorkflowBindExpr(_, body)
@@ -90,5 +90,5 @@ let flattenCallArgs (args: Expression list) =
 
 let parametersAndBody (expr: Expression) =
     match expr.Kind with
-    | Lambda(parameters, body) -> parameters |> List.map fst, body
+    | Lambda(parameters, body, _) -> parameters |> List.map fst, body
     | _ -> [], expr

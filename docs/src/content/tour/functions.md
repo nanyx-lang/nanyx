@@ -28,6 +28,20 @@ def main = { () ->
 
 But this is almost never preferred, since the unit parameter list is implied when no parameters are specified.
 
+The two differ in one way. A lambda written without parameters, `{ ... }`, that is checked against a function type
+taking something other than unit, takes that argument and ignores it:
+
+```nanyx
+def apply: (int -> string) -> string = { f -> f(1) }
+
+apply { "ignored" }        -- OK: the lambda is an int -> string that ignores its argument
+apply { () -> "ignored" }  -- error NYX0201: Type mismatch: int vs ()
+```
+
+Written `{ () -> ... }`, the lambda says it takes unit, and it is an error to pass it where an `int` is given. With no
+type to check it against, `def f = { 0 }` takes unit, as `def f = { () -> 0 }` does: both are `() -> int`. When the
+input is a type variable that nothing has settled yet, `{ ... }` takes unit too.
+
 All functions in Nanyx take exactly one argument and return exactly one result. The function type signature is `a -> b`, where `a` is the input type and `b` is the output type.
 
 ```nanyx

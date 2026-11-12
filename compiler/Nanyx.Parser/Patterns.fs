@@ -144,7 +144,7 @@ let guardPattern =
             |>> fun ((op, opSpan), value) ->
                 let argument = Expression.at opSpan (IdentifierExpr implicitArgument)
                 let body = Expression.at (SourceSpan.between opSpan value.Span) (BinaryOp(op, argument, value))
-                Expression.at body.Span (Lambda([ (implicitArgument, None) ], body)))
+                Expression.at body.Span (Lambda([ (implicitArgument, None) ], body, false)))
     spannedPattern (lambda <|> bare |>> GuardPattern)
 
 /// `()`, the unit value.

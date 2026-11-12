@@ -8,7 +8,7 @@ open Parser.Program
 [<Fact>]
 let ``try applied to a value is a workflow bind`` () =
     match parseModule "def f = proc {\n  def a = try g(1)\n  return a\n}\n" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (FunctionCall ("proc", _, [ Kind (Lambda ([], Kind (Block statements))) ]))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (FunctionCall ("proc", _, [ Kind (Lambda ([], Kind (Block statements), _)) ]))))) ] ->
         match statements with
         | [ Kind (DefStatement (_, "a", None, Kind (WorkflowBindExpr ("try", Kind (FunctionCall ("g", _, _))))))
             Kind (ExprStatement (Kind (WorkflowReturnExpr (Kind (IdentifierExpr "a"))))) ] -> ()
@@ -19,7 +19,7 @@ let ``try applied to a value is a workflow bind`` () =
 [<Fact>]
 let ``try can be applied inside an expression, and takes in the rest of it`` () =
     match parseModule "def f = proc {\n  return R(a = try g(1) \\h, b = 2)\n}\n" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (FunctionCall ("proc", _, [ Kind (Lambda ([], body)) ]))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (FunctionCall ("proc", _, [ Kind (Lambda ([], body, _)) ]))))) ] ->
         match body.Kind with
         | Block [ Kind (ExprStatement (Kind (WorkflowReturnExpr (Kind (FunctionCall ("R", _, [ Kind (RecordExpr fields) ])))))) ] ->
             match fields with
@@ -32,7 +32,7 @@ let ``try can be applied inside an expression, and takes in the rest of it`` () 
 [<Fact>]
 let ``??? is the placeholder for code not written yet`` () =
     match parseModule "def f = { a, b -> ??? }\ndef g = h(???, 1)\n" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda (_, Kind (IdentifierExpr "???"))))))
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda (_, Kind (IdentifierExpr "???"), _)))))
                   Kind (Def (ValueDef (_, "g", None, Kind (FunctionCall ("h", _, [ Kind (TupleExpr [ Kind (IdentifierExpr "???"); _ ]) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
@@ -40,7 +40,7 @@ let ``??? is the placeholder for code not written yet`` () =
 [<Fact>]
 let ``a name that starts with try is not the keyword`` () =
     match parseModule "def f = { s -> tryParse(s) }\n" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda (_, Kind (FunctionCall ("tryParse", _, _))))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda (_, Kind (FunctionCall ("tryParse", _, _)), _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

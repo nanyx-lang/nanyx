@@ -149,7 +149,7 @@ let ``nan, inf and infinity are names, not floats`` (name: string) =
                   Kind (Def (ValueDef (_, "x", _, Kind (IdentifierExpr used))))
                   Kind (Def (ValueDef (_, "scale", _, Kind (Lambda ([ (param, None) ],
                                                                     Kind (BinaryOp ("*", Kind (IdentifierExpr body),
-                                                                                    Kind (LiteralExpr (IntLit 2))))))))) ] ->
+                                                                                    Kind (LiteralExpr (IntLit 2)))), _))))) ] ->
         Assert.Equal(name, defName)
         Assert.Equal(name, used)
         Assert.Equal(name, param)

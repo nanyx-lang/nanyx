@@ -19,7 +19,7 @@ let ``Parse context feature files`` () =
 let ``a name that starts with use or in is not the use keyword`` () =
     let statementsOf source =
         match parseModule source with
-        | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements)))))) ] ->
+        | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements), _))))) ] ->
             statements |> List.map (fun (statement: Statement) -> statement.Kind)
         | other -> failwith $"Unexpected parse: %A{other}"
     match statementsOf "def main = {\n  def useful = 1\n  useful\n}" with
@@ -61,7 +61,7 @@ let ``An operator is required by the member it reads, among a def's contexts`` (
 /// The statements of `def main = { ... }` in `source`, its line endings made `\n`.
 let private mainStatements (source: string) =
     match parseModuleFile "t.nyx" (source.ReplaceLineEndings "\n") with
-    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements)))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements), _))))) ] ->
         statements |> List.map (fun (statement: Statement) -> statement.Kind)
     | other -> failwith $"Unexpected parse: %A{other}"
 
@@ -103,7 +103,7 @@ let ``use ... in with braces after in takes a lambda, not a block`` () =
   use counter in { counted(3) }
 }"""
     match mainStatements source with
-    | [ ExprStatement (Kind (UseIn (_, Kind (Lambda ([], _))))) ] -> ()
+    | [ ExprStatement (Kind (UseIn (_, Kind (Lambda ([], _, _))))) ] -> ()
     | other -> failwith $"Unexpected statements: %A{other}"
 
 [<Fact>]

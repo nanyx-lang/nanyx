@@ -104,7 +104,7 @@ let ``a record type may start with positional fields, named by position`` () =
 [<Fact>]
 let ``lambda parameters still split at commas`` () =
     match parseModule "def f = { x: int, y -> x + y }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda ([ ("x", Some (Kind (TypeName "int"))); ("y", None) ], _))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", None, Kind (Lambda ([ ("x", Some (Kind (TypeName "int"))); ("y", None) ], _, _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -112,7 +112,7 @@ let ``lambda parameters still split at commas`` () =
 let ``a bracketed lambda parameter's annotation ends at the bracket`` () =
     let parametersOf source =
         match parseModule source with
-        | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Lambda (parameters, _))))) ] -> parameters
+        | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Lambda (parameters, _, _))))) ] -> parameters
         | other -> failwith $"Unexpected parse: %A{other}"
     parametersOf "def f = { (x: int) -> x + 1 }" |> should equal [ ("x", Some (named "int")) ]
     parametersOf "def f = { (x: int -> int) -> x(1) }" |> should equal [ ("x", Some (func (named "int") (named "int"))) ]
@@ -123,7 +123,7 @@ let ``a bracketed lambda parameter's annotation ends at the bracket`` () =
 let ``an unbracketed lambda parameter's annotation ends at the arrow (#272)`` () =
     let parametersOf source =
         match parseModule source with
-        | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Lambda (parameters, Kind body))))) ] -> parameters, body
+        | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Lambda (parameters, Kind body, _))))) ] -> parameters, body
         | other -> failwith $"Unexpected parse: %A{other}"
     parametersOf "def f = { q: Point -> q }"
     |> should equal ([ ("q", Some (named "Point")) ], IdentifierExpr "q")

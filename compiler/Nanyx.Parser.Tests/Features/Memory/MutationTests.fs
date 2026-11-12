@@ -20,7 +20,7 @@ def f = {
 }
 """
     match parseModule source with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ first; second ])))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ first; second ]), _))))) ] ->
         match first.Kind, second.Kind with
         | ExprStatement (Kind (FunctionCall ("__assign", Some _, [ Kind (IdentifierExpr "total"); Kind (BinaryOp ("+", _, _)) ]))),
           ExprStatement (Kind (FunctionCall ("__assign", Some _, [ Kind (IdentifierExpr "names"); Kind (Pipe (_, "append", _, _)) ]))) -> ()
@@ -32,7 +32,7 @@ def f = {
 let ``An assignment can be a for loop's body and spans its target and value`` () =
     let source = "def f = for xs | x -> total := total + x"
     match parseModule source with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (FunctionCall ("__for", None, [ _; Kind (Lambda (_, Kind (Match (_, [ _, body ])))) ]))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (FunctionCall ("__for", None, [ _; Kind (Lambda (_, Kind (Match (_, [ _, body ])), _)) ]))))) ] ->
         match body.Kind with
         | AssignSyntax.Call (target, value) ->
             Assert.Equal("total := total + x", source.Substring(body.Span.Start, body.Span.End - body.Span.Start))

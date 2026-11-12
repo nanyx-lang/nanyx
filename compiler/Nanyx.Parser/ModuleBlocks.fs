@@ -66,7 +66,7 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         match e.Kind with
         | IdentifierExpr name -> IdentifierExpr(rewriteName name)
         | FunctionCall(name, range, args) -> FunctionCall(rewriteName name, range, args |> List.map rewrite)
-        | Lambda(args, body) -> Lambda(args, rewrite body)
+        | Lambda(args, body, takesUnit) -> Lambda(args, rewrite body, takesUnit)
         | BinaryOp(op, left, right) -> BinaryOp(op, rewrite left, rewrite right)
         | Pipe(value, funcName, range, args) -> Pipe(rewrite value, rewriteName funcName, range, args |> List.map rewrite)
         | Block statements -> Block (statements |> List.map (fun statement -> { statement with Kind = rewriteStatement statement.Kind }))

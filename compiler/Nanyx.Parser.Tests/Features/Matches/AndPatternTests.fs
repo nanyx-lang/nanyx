@@ -7,7 +7,7 @@ open ParserTestHelpers
 /// The patterns of each arm of `source`'s one def, a lambda that matches.
 let private armsOf (source: string) =
     match parseModule source with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms))))))) ] -> arms |> List.map fst
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms)), _))))) ] -> arms |> List.map fst
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -40,7 +40,7 @@ let ``an and-pattern binds tighter than an or-pattern and looser than a tag's pa
 let ``&& after a pattern is still the operator`` () =
     // A lambda whose body starts with a name and `&&` is not a pattern parameter.
     match parseModule "def f = { a -> { a && b } }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Lambda (_, Kind (BinaryOp (_, Kind (IdentifierExpr "a"), Kind (IdentifierExpr "b")))))))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Lambda (_, Kind (BinaryOp (_, Kind (IdentifierExpr "a"), Kind (IdentifierExpr "b"))), _)), _))))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

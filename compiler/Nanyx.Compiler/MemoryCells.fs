@@ -74,7 +74,7 @@ let mismatchCode (state: InferState) (span: SourceSpan) =
 /// one from outside itself, or a local function that uses one (see `EscapingLambdas.tryFind`).
 let checkEscape (state: InferState) (call: Expression) (block: Expression) : Diagnostic list =
     match block.Kind with
-    | Lambda([], body) ->
+    | Lambda([], body, _) ->
         let result = EscapingLambdas.resultOf body
         let declaredWithin (span: SourceSpan) (symbol: SymbolId) =
             state.Symbols |> Map.tryFind symbol |> Option.exists (fun declared -> SourceSpan.contains span declared.Declaration)

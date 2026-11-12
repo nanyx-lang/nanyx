@@ -32,7 +32,7 @@ let ``def x, y is def (x, y) without the brackets`` () =
                                                                                         Kind (DefStatement (_, "a", None, Kind (MemberAccess (_, "0", None))))
                                                                                         Kind (DefStatement (_, "b", None, Kind (MemberAccess (Kind (MemberAccess (_, "1", None)), "0", None))))
                                                                                         Kind (DefStatement (_, "c", None, Kind (MemberAccess (Kind (MemberAccess (_, "1", None)), "1", None))))
-                                                                                        Kind (ExprStatement (Kind (IdentifierExpr "a"))) ])))))) ] -> ()
+                                                                                        Kind (ExprStatement (Kind (IdentifierExpr "a"))) ]), _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
     // A pattern that may not match binds through a match, as with the brackets.
@@ -50,7 +50,7 @@ let ``def with a nested tuple pattern destructures through member access chains`
                                                                                         Kind (DefStatement (_, "a", None, Kind (MemberAccess (_, "0", None))))
                                                                                         Kind (DefStatement (_, "b", None, Kind (MemberAccess (Kind (MemberAccess (_, "1", None)), "0", None))))
                                                                                         Kind (DefStatement (_, "c", None, Kind (MemberAccess (Kind (MemberAccess (_, "1", None)), "1", None))))
-                                                                                        Kind (ExprStatement (Kind (IdentifierExpr "a"))) ])))))) ] -> ()
+                                                                                        Kind (ExprStatement (Kind (IdentifierExpr "a"))) ]), _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

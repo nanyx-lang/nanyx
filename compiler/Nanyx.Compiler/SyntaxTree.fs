@@ -16,7 +16,7 @@ module SyntaxTree =
         | ContextMemberCall(_, _, args)
         | TupleExpr args
         | ListExpr args -> args, []
-        | Lambda(_, body) -> [ body ], []
+        | Lambda(_, body, _) -> [ body ], []
         | BinaryOp(_, left, right) -> [ left; right ], []
         | Pipe(value, _, _, args) -> value :: args, []
         | Block statements -> [], statements
@@ -88,7 +88,7 @@ module SyntaxTree =
         | IdentifierExpr name -> [ name ]
         | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
         | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
-        | Lambda(_, body) -> referencedNames body
+        | Lambda(_, body, _) -> referencedNames body
         | BinaryOp(_, left, right) -> referencedNames left @ referencedNames right
         | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
         | Block statements -> statements |> List.collect referencedNamesInStatement

@@ -84,7 +84,7 @@ let ``Desugar workflow bind and return`` () =
             match expr.Kind with
             | Block [
                 Kind (DefStatement(_, awaitLocal, None, Kind (MemberAccess(Kind (IdentifierExpr "async"), "await", _))))
-                Kind (ExprStatement (Kind (FunctionCall(awaitCall, _, [ Kind (FunctionCall("foo", _, [])); Kind (Lambda([("x", None)], continuation)) ]))))
+                Kind (ExprStatement (Kind (FunctionCall(awaitCall, _, [ Kind (FunctionCall("foo", _, [])); Kind (Lambda([("x", None)], continuation, _)) ]))))
               ] when awaitCall = awaitLocal ->
                 match continuation.Kind with
                 | Block [
@@ -106,7 +106,7 @@ let ``Desugar workflow implicit return`` () =
     | Result.Ok ast ->
         let desugared = Compiler.desugar ast
         match desugared with
-        | [Kind (Def (ValueDef(_, "result", _, Kind (FunctionCall("async", _, [Kind (Lambda([], Kind (Block [Kind (ExprStatement (Kind (LiteralExpr (IntLit 1))))])))])))))] ->
+        | [Kind (Def (ValueDef(_, "result", _, Kind (FunctionCall("async", _, [Kind (Lambda([], Kind (Block [Kind (ExprStatement (Kind (LiteralExpr (IntLit 1))))]), _))])))))] ->
             Assert.True(true)
         | other -> Assert.True(false, $"Unexpected desugared module: %A{other}")
 
@@ -280,9 +280,9 @@ let ``A try nested in an expression of a proc block is bound before its statemen
                     | Kind (DefStatement(_, _, _, value))
                     | Kind (ExprStatement value) -> boundCalls value
                     | _ -> [])
-            | FunctionCall(_, _, [ Kind (FunctionCall("f", _, [ argument ])); Kind (Lambda(_, rest)) ]) ->
+            | FunctionCall(_, _, [ Kind (FunctionCall("f", _, [ argument ])); Kind (Lambda(_, rest, _)) ]) ->
                 argument :: boundCalls rest
-            | Lambda(_, body) -> boundCalls body
+            | Lambda(_, body, _) -> boundCalls body
             | _ -> []
         match Compiler.desugar ast |> List.tryPick (function Kind (Def (ValueDef(_, "run", _, body))) -> Some body | _ -> None) with
         | Some body ->

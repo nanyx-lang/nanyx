@@ -290,10 +290,10 @@ let forExpr : Parser<Expression, ParseState> =
     let withArms count =
         ws >>. withSpan matchArms |>> fun (arms, span) ->
             let scrutinees = elements count |> List.map (fun (name, _) -> Expression.at span (IdentifierExpr name))
-            Expression.at span (Lambda(elements count, Expression.at span (Match(scrutinees, arms))))
+            Expression.at span (Lambda(elements count, Expression.at span (Match(scrutinees, arms)), false))
     let withoutElement count =
         ws >>. withSpan (pstring "->" >>. matchArmBody) |>> fun (body, span) ->
-            Expression.at span (Lambda(elements count, body))
+            Expression.at span (Lambda(elements count, body, false))
     let iterables = sepBy1 expression (attempt (ws >>. pchar ',' >>. ws))
     spanned (
         (pstring "for" >>. keywordEnd >>. ws >>. iterables) >>= fun iterables ->
@@ -999,8 +999,8 @@ do
     // parameters and expressions a shorthand stands for are made up.
     // A pattern parameter is taken apart by a match with one arm at the top of the body, over the parameter that
     // stands in its place (`patternArgument`), so the pattern must be total as a destructuring def's is. The arm's
-    // body, the lambda's, declares the names the patterns bind. `{ () -> ... }` is `{ ... }`: unit is what a lambda
-    // without parameters takes.
+    // body, the lambda's, declares the names the patterns bind. `{ () -> ... }` has no parameters, as `{ ... }` has,
+    // but is marked as taking unit: only `{ ... }` ignores a parameter its expected type gives it.
     let lambdaWithParams =
         pipe2 (paramList .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun parameters body -> parameters, body)
         >>= fun (parameters, body) ->
@@ -1011,8 +1011,8 @@ do
                     | index, Choice2Of2(pattern, names) -> Some(index + 1, pattern, names)
                     | _ -> None)
             match parameters, destructured with
-            | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> preturn (fun _ -> Lambda([], body))
-            | _, [] -> preturn (fun _ -> Lambda(parameters |> List.choose (function Choice1Of2 named -> Some named | _ -> None), body))
+            | [ Choice2Of2({ Kind = UnitPattern }, _) ], _ -> preturn (fun _ -> Lambda([], body, true))
+            | _, [] -> preturn (fun _ -> Lambda(parameters |> List.choose (function Choice1Of2 named -> Some named | _ -> None), body, false))
             | _ ->
                 let named =
                     parameters
@@ -1026,10 +1026,10 @@ do
                     // reported there.
                     let scrutinees = destructured |> List.map (fun (position, pattern, _) -> Expression.at pattern.Span (IdentifierExpr (patternArgument position)))
                     let patterns = destructured |> List.map (fun (_, pattern, _) -> pattern)
-                    Lambda(named, Expression.at span (Match(scrutinees, [ patterns, body ])))
-    let lambdaNoParams = blockBody |>> (fun body _ -> Lambda([], body))
+                    Lambda(named, Expression.at span (Match(scrutinees, [ patterns, body ])), false)
+    let lambdaNoParams = blockBody |>> (fun body _ -> Lambda([], body, false))
     // `{ }`, possibly spanning lines, is a lambda that does nothing
-    let emptyLambda = skipMany (skipAnyOf " \t\r\n") >>. followedBy (pstring "}") >>% fun span -> Lambda([], Expression.at span UnitExpr)
+    let emptyLambda = skipMany (skipAnyOf " \t\r\n") >>. followedBy (pstring "}") >>% fun span -> Lambda([], Expression.at span UnitExpr, false)
 
     // The infix operators written with operator characters (see the operators page of the docs), longer ones before
     // the shorter ones they start with.
@@ -1045,7 +1045,7 @@ do
             let made kind = Expression.at span kind
             Lambda(
                 [ (implicitArgument, None); (implicitSecondArgument, None) ],
-                made (BinaryOp(op, made (IdentifierExpr implicitArgument), made (IdentifierExpr implicitSecondArgument))))
+                made (BinaryOp(op, made (IdentifierExpr implicitArgument), made (IdentifierExpr implicitSecondArgument))), false)
 
     // Shorthand lambda: a body that starts with an operator or a member access has left out its first operand, which is
     // the argument. The rest of the body follows as it would after that operand, so `{ % 2 == 0 }` means
@@ -1054,7 +1054,7 @@ do
         lookAhead (withSpan (attempt shorthandOperator <|> (pstring "." .>> followedBy identifierNoWs)))
         >>= fun (_, operatorSpan) -> updateUserState (fun state -> { state with ImplicitArgumentNext = Some operatorSpan })
         >>. expression .>> skipMany (skipAnyOf " \t\r\n")
-        |>> fun body _ -> Lambda([ (implicitArgument, None) ], body)
+        |>> fun body _ -> Lambda([ (implicitArgument, None) ], body, false)
 
     // Shorthand match lambda: { | pat -> expr ... }
     let shorthandMatchLambda =
@@ -1070,7 +1070,7 @@ do
             let scrutinees =
                 argNames
                 |> List.map (fun (name, _) -> made (IdentifierExpr name))
-            Lambda(argNames, made (Match(scrutinees, arms))))
+            Lambda(argNames, made (Match(scrutinees, arms)), false))
 
     // The names noted while a lambda is parsed are its parameters: whatever is nested in it takes its own.
     lambdaRef :=

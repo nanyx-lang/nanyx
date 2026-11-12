@@ -15,8 +15,8 @@ module internal ExpressionRewrites =
             | IdentifierExpr _ -> current.Kind
             | FunctionCall(name, rangeOpt, args) ->
                 FunctionCall(name, rangeOpt, args |> List.map mapExpr)
-            | Lambda(parameters, body) ->
-                Lambda(parameters, mapExpr body)
+            | Lambda(parameters, body, takesUnit) ->
+                Lambda(parameters, mapExpr body, takesUnit)
             | BinaryOp(op, left, right) ->
                 BinaryOp(op, mapExpr left, mapExpr right)
             | Pipe(value, name, rangeOpt, args) ->
@@ -187,6 +187,30 @@ module internal ExpressionRewrites =
             | AssignSyntax.Call(Kind (FunctionCall(form, _, [ cell ])), value) when form = CellSyntax.read -> FunctionCall(AssignSyntax.builtIn, None, [ cell; value ])
             | MutSyntax.Call value when boxedValues.Contains current.Id -> FunctionCall(CellSyntax.box, None, [ value ])
             | other -> other)
+
+    /// The parameter given to a lambda written without parameters whose type takes one (see `nameIgnoredParameters`).
+    let ignoredParameter = "__ignored"
+
+    /// `module'` with each lambda written without parameters, `{ ... }`, that was checked against a type taking an input
+    /// other than unit given a parameter it ignores, so that the backend compiles it as taking one: in
+    /// `apply { "x" }`, where `apply` takes an `int -> string`, the lambda takes the int. `types` are the types of
+    /// `module'`'s expressions as inference left them, and `subst` solves them.
+    let nameIgnoredParameters (types: Map<NodeId, Ty>) (subst: Subst) (module': Module) : Module =
+        let takesInput (lambda: Expression) =
+            match types |> Map.tryFind lambda.Id |> Option.map (Unifier.apply subst >> Unifier.unalias) with
+            | Some (TyFunc(input, _, _)) -> Unifier.unalias input <> TyPrimitive "unit"
+            | _ -> false
+        let rewrite =
+            mapExpressionKinds (fun current kind ->
+                match kind with
+                | Lambda([], body, false) when takesInput current -> Lambda([ (ignoredParameter, None) ], body, false)
+                | other -> other)
+        module'
+        |> List.map (fun item ->
+            match item.Kind with
+            | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, typeOpt, rewrite value)) }
+            | Expr value -> { item with Kind = Expr (rewrite value) }
+            | _ -> item)
 
     /// `module'` with the cells of its definitions written as the backend reads them (see `writeCellsIn`).
     let writeCells (state: InferState.InferState) (module': Module) : Module =

@@ -193,7 +193,7 @@ let ``A concrete comparison calls the == attached to its type, except in that de
                 let rec calledIn (expr: Expression) =
                     match expr.Kind with
                     | FunctionCall(callee, _, args) -> callee :: List.collect calledIn args
-                    | Lambda(_, body) -> calledIn body
+                    | Lambda(_, body, _) -> calledIn body
                     | BinaryOp(_, left, right) -> calledIn left @ calledIn right
                     | _ -> []
                 calledIn value |> List.map (fun callee -> name, callee)
