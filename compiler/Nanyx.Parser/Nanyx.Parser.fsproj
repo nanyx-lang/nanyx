@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="Ast.fs" />
+    <Compile Include="Operators.fs" />
     <Compile Include="StringEscapes.fs" />
     <Compile Include="ParseState.fs" />
     <Compile Include="Lexical.fs" />

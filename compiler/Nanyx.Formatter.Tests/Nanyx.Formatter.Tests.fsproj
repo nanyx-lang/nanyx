@@ -14,6 +14,7 @@
     <Compile Include="MemoryTests.fs" />
     <Compile Include="LineWidthTests.fs" />
     <Compile Include="LexicalTests.fs" />
+    <Compile Include="OperatorTests.fs" />
     <Compile Include="DocCommentTests.fs" />
     <Compile Include="ImportSortingTests.fs" />
     <Compile Include="StringEscapeTests.fs" />
