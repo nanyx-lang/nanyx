@@ -474,7 +474,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope (flattenCallArgs args) (fun atoms ->
                 k (mk (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
-        | FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured) ->
+        | ClosureSyntax.Closure(target, captured) ->
             // A function value: the closure block of a lifted function over what it captures.
             match input.Lifted |> Map.tryFind target with
             | Some (LiftedLambda _) -> this.Closure scope expr target captured Map.empty [] k
@@ -1091,11 +1091,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | [] -> cannot "an empty block"
         | [ ExprStatement last ] -> this.Complex scope last k
         | DefStatement(_, _, _, Kind (Lambda _)) :: _ -> cannot "a local function"
-        | DefStatement(_, name, _, (Kind (FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured)) as rhs)) :: rest
+        | DefStatement(_, name, _, (Kind (ClosureSyntax.Closure(target, captured)) as rhs)) :: rest
             when (genericLocalType target rhs).IsSome ->
             this.GenericLocal scope name rhs target captured (genericLocalType target rhs).Value rest k
         | DefStatement(_, name, _, Kind (MemberAccess(Kind (IdentifierExpr environment), _, _))) :: rest
-            when environment = LambdaLifting.envParameter && scope.CapturedLocals.ContainsKey name ->
+            when environment = ClosureSyntax.envParameter && scope.CapturedLocals.ContainsKey name ->
             // A captured local function generic in variables of its own, whose closure at each type arguments it is
             // used at here is in a field of the environment.
             let localTy, fields = scope.CapturedLocals.[name]
@@ -1458,7 +1458,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | IrFunction(_, _, given), IrFunction(_, result, wanted) -> given, result, wanted
             | _ -> internalError $"an adapter from {IrType.show givenTy} to {IrType.show expectedTy}"
         let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
-        let environment = newVar LambdaLifting.envParameter Param (IrRecord(("0", IrInt) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
+        let environment = newVar ClosureSyntax.envParameter Param (IrRecord(("0", IrInt) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
         let valueTys = adaptedValueTypes givenTy expectedTy
         let values = valueTys |> List.mapi (fun index ty -> newVar $"__arg{index + 1}" Param ty)
         let passed = wanted |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty)

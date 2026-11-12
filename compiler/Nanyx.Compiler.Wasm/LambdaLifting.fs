@@ -73,7 +73,7 @@ let rec usesThroughClosures (definitionOf: string -> Expression option) (name: s
         found
         |> List.choose (fun (_, node) ->
             match node.Kind with
-            | FunctionCall("__closure", _, Kind (FunctionCall("__slot", _, [ Kind (IdentifierExpr target) ])) :: captured) ->
+            | ClosureSyntax.Closure(target, captured) ->
                 let captures = captured |> List.filter (function Kind (IdentifierExpr captured) -> captured = name | _ -> false)
                 if captures.IsEmpty then None else Some (target, captures)
             | _ -> None)
@@ -141,9 +141,6 @@ and private boundNames (expr: Expression) : string list =
     | LiteralExpr _
     | IdentifierExpr _ -> []
 
-/// The name of the environment parameter every lifted function takes first: the closure block itself.
-let envParameter = "__env"
-
 /// `expr` with every reference to the local function `from` redirected to its lifted form `to'`: a call
 /// becomes a direct call that passes the environment on, and a use as a value is the environment itself
 /// (the closure block).
@@ -155,10 +152,10 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
         | [ Kind (TupleExpr items) ] -> items
         | _ -> args
     match expr.Kind with
-    | IdentifierExpr name when name = from -> rebuild (IdentifierExpr envParameter)
+    | IdentifierExpr name when name = from -> rebuild (IdentifierExpr ClosureSyntax.envParameter)
     | IdentifierExpr _ -> expr
     | FunctionCall(name, range, args) when name = from ->
-        rebuild (FunctionCall(to', range, [ Expression.from expr (TupleExpr (Expression.from expr (IdentifierExpr envParameter) :: (flatten args |> List.map recur))) ]))
+        rebuild (FunctionCall(to', range, [ Expression.from expr (TupleExpr (Expression.from expr (IdentifierExpr ClosureSyntax.envParameter) :: (flatten args |> List.map recur))) ]))
     | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
     | Pipe(value, name, range, args) when name = from ->
         recur (rebuild (FunctionCall(name, range, pipeCallArguments value args)))
@@ -360,7 +357,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 | [] -> []
                 | _ -> [ Expression.synthetic (TupleExpr (parameters |> List.map (fun p -> Expression.synthetic (IdentifierExpr p)))) ]
             let call = Expression.synthetic (FunctionCall(name, None, arguments))
-            lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, wrapperName, None, Expression.synthetic (Lambda((envParameter, None) :: (parameters |> List.map (fun p -> p, None)), call, false))))))
+            lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, wrapperName, None, Expression.synthetic (Lambda((ClosureSyntax.envParameter, None) :: (parameters |> List.map (fun p -> p, None)), call, false))))))
             wrappers.[name] <- wrapperName
             wrapperName
 
@@ -401,15 +398,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         let ownerMembers = ownerMembers |> List.filter (fun name -> not (passed |> Set.exists (fun key -> contextMemberParameter key = name)))
         captured @ (ownerMembers @ usedMembers |> List.filter (fun name -> not (List.contains name captured)))
 
-    /// The closure block for the lifted function `liftedName` over the given captured names, standing in for
-    /// `origin` (the lambda or function reference it replaces), whose id and span it keeps. (A marker call
-    /// rather than a tuple, so that `f(closure)` is not flattened into one argument per field.)
+    /// The closure block for the lifted function `liftedName` over the given captured names, standing in for `origin`.
     let closureOf (origin: Expression) (liftedName: string) (captured: string list) =
-        { origin with
-            Kind =
-                FunctionCall("__closure", None,
-                    Expression.synthetic (FunctionCall("__slot", None, [ Expression.synthetic (IdentifierExpr liftedName) ]))
-                    :: (captured |> List.map (fun name -> Expression.synthetic (IdentifierExpr name)))) }
+        ClosureSyntax.make origin liftedName (captured |> List.map (fun name -> Expression.synthetic (IdentifierExpr name)))
 
     /// The lifted function's lambda: the environment parameter first, then the captured names bound
     /// from the environment's fields ahead of the original body, and the members of the `use`s in scope loaded
@@ -427,14 +418,14 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         let captureBindings =
             (captured
              |> List.mapi (fun index name ->
-                 Statement.synthetic (DefStatement(false, name, None, Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr envParameter), string (index + 1), None))))))
+                 Statement.synthetic (DefStatement(false, name, None, Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr ClosureSyntax.envParameter), string (index + 1), None))))))
             @ useBinding
         let bodyWithCaptures =
             match captureBindings, body.Kind with
             | [], _ -> body
             | _, Block statements -> { body with Kind = Block (captureBindings @ statements) }
             | _, _ -> Expression.from body (Block (captureBindings @ [ Statement.from body (ExprStatement body) ]))
-        Expression.from lambda (Lambda((envParameter, None) :: args, bodyWithCaptures, false))
+        Expression.from lambda (Lambda((ClosureSyntax.envParameter, None) :: args, bodyWithCaptures, false))
 
     // `scope` is every name the enclosing function binds; a lambda referring to one of them captures it.
     let rec liftExpr (scope: Set<string>) (expr: Expression) : Expression =
@@ -493,7 +484,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                     let innerScope = Set.union parameterNames (boundNames body |> Set.ofList) |> Set.add name
                     let liftedBody = liftExpr (Set.union scope innerScope) body |> redirectSelfReferences name liftedName
                     let captured =
-                        Set.difference (references liftedBody |> List.map fst |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add envParameter)
+                        Set.difference (references liftedBody |> List.map fst |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add ClosureSyntax.envParameter)
                         |> Set.intersect scope
                         |> Set.toList
                         |> withMembers (passedMembers lambda) liftedBody
