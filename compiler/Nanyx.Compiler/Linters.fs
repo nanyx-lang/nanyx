@@ -453,6 +453,7 @@ module UnusedPrivateDefinitions =
         |> Seq.collect id
         |> Seq.collect (function
             | Some (InstanceSynthesized members) -> members |> List.map snd
+            | Some (InstanceDerived(_, definition, _)) -> [ definition ]
             | Some (InstanceInScope _)
             | Some InstanceBuiltIn
             | None -> [])

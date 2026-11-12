@@ -80,13 +80,13 @@ operators call, and `Hash(a)` and `__hash`.
   compared by the compiler's own. `ToString` is derived the same way (see
   [printing values](./printing-values#structures)).
 
-Not done yet:
-
-- **A derived `==` reads only what the top of the module can see**
-  ([#630](https://github.com/nanyx-lang/nanyx/issues/630)). It uses a part's attached `==`, and the `Eq` of
-  a type variable, but not an `Eq` of a concrete part loaded by `use` in a block. A call that requires `Eq` of a
-  structure with a type variable in it, `same(#some(x), #some(y))` inside a function that requires `[Eq(a)]`, is
-  passed the compiler's own instance, not one built from `Eq(a)`: compare with `==` there.
+- **A derived `==` is built from the instances where it is used**
+  ([#630](https://github.com/nanyx-lang/nanyx/issues/630)). A part of a concrete type with an `Eq` loaded by `use` in
+  the block is compared through it: the derived definition is written for the structure with that part as a type
+  variable, and passed the instance in scope (`StructuralInstances.abstractParts`). A call that requires `Eq` of a
+  structure with a type variable in it, `same([x], [y])` inside a function that requires `[Eq(a)]`, is passed the
+  derived definition as a closure over the `Eq(a)` the function was given (`InstanceDerived`), so a user-defined
+  `Eq(a)` that differs from structural equality is the one that compares the elements.
 
 ## Ordering
 

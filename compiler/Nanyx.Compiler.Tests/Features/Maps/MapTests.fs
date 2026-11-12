@@ -79,7 +79,7 @@ let ``A map whose values are functions cannot be compared with ==`` () =
     Assert.Equal("'map(int, (int -> int))' cannot be compared with ==: a value it holds is a function, and functions have no equality", message)
 
 [<Fact>]
-let ``A map compared by a local function, or by a call generic in its types, is an error for now`` () =
+let ``A map compared by a local function is an error for now`` () =
     let local =
         """def same = {
   def local = { a, b -> a == b }
@@ -89,10 +89,11 @@ let ``A map compared by a local function, or by a call generic in its types, is 
     let code, message = onlyDiagnostic (local.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'local' compares values of type 'map(string, int)' with the compiler's own ==, which cannot compare a map or a set yet: a local function, or a function that compares a union's rest, is passed no other", message)
-    let generic = "def count: [Eq(a)] list(set(a)) -> int = { xs -> list.distinct(xs) \\list.length }\n"
-    let code, message = onlyDiagnostic generic
-    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
-    Assert.Equal("'list.distinct' compares values of type 'set(a)', which holds a map or a set and so is compared by an == the compiler derives from its parts, but it cannot yet pass a function that == for a type with type variables in it", message)
+
+[<Fact>]
+let ``A call generic in the types of the sets it compares is passed the == derived for them`` () =
+    let source = "def count: [Eq(a)] list(set(a)) -> int = { xs -> list.distinct(xs) \\list.length }\n"
+    Assert.Equal<string list>([ "list(set(a)) -> int" ], typesOf source [ "count" ])
 
 [<Fact>]
 let ``Maps and sets cannot be ordered or hashed`` () =

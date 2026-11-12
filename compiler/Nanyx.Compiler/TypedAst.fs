@@ -156,6 +156,11 @@ type ContextInstance =
     /// An instance the compiler builds from the definitions attached to the type: each member's name, and the
     /// definition it is (`+`, `Point.+`).
     | InstanceSynthesized of (string * string) list
+    /// An instance the compiler derives from the parts of a type with type variables in it (see
+    /// `StructuralInstances`): its one member, `memberName`, is the definition `definition`, which requires the context
+    /// of each variable and finds them as a call at the node `at` would (`TypedModule.ContextInstances`). The backend
+    /// passes it as a closure over the definition and those instances.
+    | InstanceDerived of memberName: string * definition: string * at: NodeId
     /// The compiler's own `ToString` of a built-in type, at an interpolation hole (see `InterpolationHoles`): the
     /// backend writes the value itself.
     | InstanceBuiltIn

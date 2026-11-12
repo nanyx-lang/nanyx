@@ -1060,56 +1060,82 @@ let private derivableType (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list)
                   && not (InterpolationHoles.hasBuiltInInstance ty) -> Some ty
     | _ -> None
 
+/// The instance of `ctxName` in scope in `env` at the part `ty` of a structure, for one that is not a type variable
+/// (see `StructuralInstances.abstractParts`).
+let private partInstanceIn (env: TypeEnv) (state: InferState) (ctxName: Identifier) (ty: Ty) : TypeExpr option =
+    instanceInScope env state ctxName [ ty ]
+
 /// Whether comparing two values of the structure `ty` compares a part with an `==` of its own (see
-/// `StructuralInstances.comparesParts`): one attached to the part's type, or the `Eq` of a type variable that
-/// `hasInstance` says is in scope.
-let private comparesOwnParts (env: TypeEnv) (rigid: Set<int>) (hasInstance: TyVar -> bool) (ty: Ty) : bool =
+/// `StructuralInstances.comparesParts`): one attached to the part's type, an `Eq` of it in scope that `partInstance`
+/// finds, or the `Eq` of a type variable that `hasInstance` says is in scope.
+let private comparesOwnParts (env: TypeEnv) (rigid: Set<int>) (partInstance: Ty -> TypeExpr option) (hasInstance: TyVar -> bool) (ty: Ty) : bool =
     ty
     |> StructuralInstances.comparesParts rigid (fun part ->
         match part with
         | TyVar var -> hasInstance var
-        | _ -> (tryResolveAttachedFunction env part EqualityOperators.equals).IsSome)
+        | _ -> (tryResolveAttachedFunction env part EqualityOperators.equals).IsSome || (partInstance part).IsSome)
 
 /// `state` with the comparison `call`, at `span`, of two values of the type `ty` calling the `==` the type has of its
 /// own, if it has one: the `==` attached to it, or, for a structure that compares a part with an `==` of its own,
 /// the one derived for it (see `StructuralInstances.comparison`, which `rigid` and `instanceOf` are for). Inside the
 /// attached `==` itself the comparison stays the compiler's own, which is how it compares the values underneath.
-let private derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyVar -> TypeExpr option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : InferState option =
+let private derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyVar -> ContextInstance option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : InferState option =
     let calling (callee: Identifier, next: InferState) =
         { next with
             CalleeTypes = next.CalleeTypes |> Map.add call (TyFunc(inputTypeFromArgs [ ty; ty ], TyPrimitive "bool", []))
             OperatorCalls = next.OperatorCalls |> Map.add call callee }
+    let partInstance = partInstanceIn env state EqualityOperators.context
     match tryResolveAttachedFunction env ty EqualityOperators.equals, state.ContextScope with
     | Some attached, DefScope(name, _) when name = attached -> None
     | Some attached, _ -> Some (calling (attached, state))
-    | None, _ when comparesOwnParts env rigid (instanceOf >> Option.isSome) ty ->
-        StructuralInstances.comparison rigid instanceOf call span ty state |> Option.map calling
+    | None, _ when comparesOwnParts env rigid partInstance (instanceOf >> Option.isSome) ty ->
+        StructuralInstances.comparison rigid partInstance instanceOf call span ty state |> Option.map calling
     | None, _ -> None
 
-/// The instance of `Eq` the call `call` to `calleeName`, at `span`, finds for the structure `ty` in place of the
-/// compiler's own (`wellKnown` is `Eq`, found as `instance`), when `ty` has nothing left to settle and compares a part
-/// with an `==` of its own: the derived definition, as the context's member. A type with variables in it that holds a
-/// map or a set is an error: the compiler's own cannot compare it, and the derived one cannot be passed yet.
-let private derivedEquality (env: TypeEnv) (state: InferState) (wellKnown: WellKnownContexts.WellKnownContext) (instance: WellKnownContexts.CallInstance) (calleeName: Identifier) (call: NodeId) (span: SourceSpan) (ty: Ty) : Result<ContextInstance * InferState, Diagnostic list> option =
+/// The instance of `Eq` the call `call` to `calleeName`, at `span` in `env`, finds for the structure `ty` in place of
+/// the compiler's own (`wellKnown` is `Eq`, found as `instance`), when `ty` compares a part with an `==` of its own, or
+/// holds a map or a set: the derived definition, as the context's member. A variable of `ty` is compared with the
+/// instance `instanceOf` finds for it, and `rigid` holds the variables of the function around the call (see
+/// `StructuralInstances.instance`). A type with variables in it that holds a map or a set and has no derived `==` is an
+/// error, since the compiler's own cannot compare it.
+let private derivedEquality
+    (env: TypeEnv)
+    (state: InferState)
+    (rigid: Set<int>)
+    (instanceOf: TyVar -> ContextInstance option)
+    (wellKnown: WellKnownContexts.WellKnownContext)
+    (instance: WellKnownContexts.CallInstance)
+    (calleeName: Identifier)
+    (call: NodeId)
+    (span: SourceSpan)
+    (ty: Ty)
+    : Result<ContextInstance * InferState, Diagnostic list> option =
+    let partInstance = partInstanceIn env state EqualityOperators.context
     if wellKnown.Context <> EqualityOperators.context || instance <> WellKnownContexts.BuiltIn then None
-    elif not (TypeEnv.freeTyVars ty).IsEmpty then
-        if StructuralInstances.holdsCollection ty then
+    else
+        let derived =
+            if comparesOwnParts env rigid partInstance (instanceOf >> Option.isSome) ty then
+                StructuralInstances.instance rigid partInstance instanceOf false call span EqualityOperators.context ty state
+                |> Option.bind Result.toOption
+            else None
+        match derived with
+        | Some derived -> Some (Ok derived)
+        | None when not (TypeEnv.freeTyVars ty).IsEmpty && StructuralInstances.holdsCollection ty ->
             Some (Error (WellKnownContexts.error span (EqualityOperators.collectionAtGenericCall calleeName ty)))
-        else None
-    elif comparesOwnParts env Set.empty (fun _ -> false) ty then
-        StructuralInstances.instance Set.empty (fun _ -> None) false call span EqualityOperators.context ty state
-        |> Option.bind Result.toOption
-        |> Option.map Ok
-    else None
+        | None -> None
 
-/// The instance of `ctxName` at `argTys` derived from the type's parts for `call`, a call to `calleeName` at `span`,
-/// if one can be (see `StructuralInstances.instance`, which `rigid` and `instanceOf` are for). `annotatedDef` is the
-/// def around the call, if it writes its type.
+/// The instance in scope in `env` of `ctxName` of the type variable `var`, as a derived instance is passed it.
+let private variableInstanceIn (env: TypeEnv) (state: InferState) (ctxName: Identifier) (var: TyVar) : ContextInstance option =
+    instanceInScope env state ctxName [ TyVar var ] |> Option.map InstanceInScope
+
+/// The instance of `ctxName` at `argTys` derived from the type's parts for `call`, a call to `calleeName` at `span`
+/// in `env`, if one can be (see `StructuralInstances.instance`, which `rigid` and `instanceOf` are for). `annotatedDef`
+/// is the def around the call, if it writes its type.
 let private derivedInstance
     (env: TypeEnv)
     (state: InferState)
     (rigid: Set<int>)
-    (instanceOf: TyVar -> TypeExpr option)
+    (instanceOf: TyVar -> ContextInstance option)
     (annotatedDef: Identifier option)
     (calleeName: Identifier)
     (call: NodeId)
@@ -1118,13 +1144,14 @@ let private derivedInstance
     (argTys: Ty list)
     : Result<ContextInstance * InferState, Diagnostic list> option =
     derivableType env ctxName argTys
-    |> Option.bind (fun ty -> StructuralInstances.instance rigid instanceOf (InterpolationHoles.isHole calleeName) call span ctxName ty state)
+    |> Option.bind (fun ty -> StructuralInstances.instance rigid (partInstanceIn env state ctxName) instanceOf (InterpolationHoles.isHole calleeName) call span ctxName ty state)
     |> Option.map (Result.mapError (fun failure ->
         let message =
             match failure with
-            | StructuralInstances.NoInstanceOf missing -> InterpolationHoles.undeclared (TyVar missing) annotatedDef
-            | StructuralInstances.NotAHole -> StructuralInstances.notAHole (InterpolationHoles.requirer calleeName argTys) ctxName argTys.Head
+            | StructuralInstances.NoInstanceOf missing when InterpolationHoles.isHole calleeName -> InterpolationHoles.undeclared (TyVar missing) annotatedDef
+            | StructuralInstances.NoInstanceOf missing -> InterpolationHoles.undeclaredPart calleeName argTys.Head (TyVar missing) annotatedDef
             | StructuralInstances.HoldsFunction held -> InterpolationHoles.holdsFunction calleeName argTys held
+            | StructuralInstances.OpenToCaller -> InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef
         [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]))
 
 /// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
@@ -1162,12 +1189,15 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // A well-known context of a type with no member attached is the compiler's own (see
                     // `WellKnownContexts.resolveCall`). `Eq` of a structure with a part that has an `==` of its own
                     // is derived from its parts.
+                    // Until the def around the call is inferred, any variable of the type may turn out to stand for one
+                    // its callers choose, so a union open to more tags is left to the compiler's own.
+                    let rigid = argTys |> List.map TypeEnv.freeTyVars |> Set.unionMany
                     let wellKnown =
                         if reference && not settled then None
                         else
                             wellKnownInstanceAtCall env ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
                             |> Option.bind (fun (wellKnown, instance) ->
-                                match derivedEquality env current wellKnown instance name call.Id calleeSpan argTys.Head with
+                                match derivedEquality env current rigid (variableInstanceIn env current ctxName) wellKnown instance name call.Id calleeSpan argTys.Head with
                                 | Some derived -> Some (derived |> Result.map (fun (derived, next) -> found @ [ Some derived ], next))
                                 | None -> WellKnownContexts.resolveCall wellKnown env current call name calleeSpan found contexts.Length argTys.Head instance)
                     // A structure with nothing left to settle has the instance derived from its parts.
@@ -1187,19 +1217,30 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                             Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
                         else Ok (found @ [ None ], current)
                     | None, Some resolved -> resolved
-                    // A structure with more to settle finds its instance once its type is known: a hole as any hole
-                    // does, and another call when the def around it is inferred, if that def does not write its type.
+                    // A structure with more to settle finds its instance once its type is known, as a hole does: when
+                    // the def around it is inferred, if that def does not write its type, and otherwise once the module
+                    // is inferred.
                     | None, None when not settled && (derivableType env ctxName argTys |> Option.bind (StructuralInstances.variables Set.empty)).IsSome ->
-                        let errors = [ Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (StructuralInstances.notAHole (InterpolationHoles.requirer name argTys) ctxName argTys.Head) ]
                         match current.ContextScope with
                         | _ when InterpolationHoles.isHole name ->
                             InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
-                        | DefScope(defName, true) ->
+                        | scope ->
+                            let def, annotatedDef =
+                                match scope with
+                                | DefScope(defName, true) -> defName, None
+                                | DefScope(defName, false) -> InterpolationHoles.moduleEnd, Some defName
+                                | AmbientScope -> InterpolationHoles.moduleEnd, None
+                            let errors =
+                                ContextInference.varsInOrder argTys.Head
+                                |> List.truncate 1
+                                |> List.map (fun var -> Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart name argTys.Head (TyVar var) annotatedDef))
                             let pending =
-                                { Def = defName; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
+                                { Def = def; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
                                   Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors; ChecksOnly = false }
-                            Ok (found @ [ None ], { current with PendingContextInstances = pending :: current.PendingContextInstances })
-                        | _ -> Error errors
+                            Ok (found @ [ None ],
+                                { current with
+                                    PendingContextInstances = pending :: current.PendingContextInstances
+                                    HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
                     // A hole of a built-in type is written by the backend, not by the prelude's `int.toString` and the
                     // others, which are written with one.
                     | None, None when InterpolationHoles.isHole name && argTys |> List.forall InterpolationHoles.hasBuiltInInstance ->
@@ -1257,34 +1298,42 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
     let operators (isPending: PendingContextInstance -> bool) = state.PendingContextInstances |> List.filter (fun pending -> pending.Def = name && isPending pending)
     let comparisons, orderings = operators EqualityOperators.isPending, operators OrderingOperators.isPending
     let defScheme def = TypeEnv.tryFind def env
-    // A hole of a structure with the def's variables in it makes the def require the context of each.
+    // A call that requires a context of a structure with the def's variables in it, whose instance is derived from its
+    // parts, makes the def require the context of each.
     let derivedVars (pending: PendingContextInstance) (argTys: Ty list) =
-        if InterpolationHoles.isHole pending.Callee then
-            derivableType env pending.Context argTys
-            |> Option.bind (StructuralInstances.variables scheme.Quantified)
-            |> Option.defaultValue []
-        else []
+        derivableType env pending.Context argTys
+        |> Option.bind (StructuralInstances.variables scheme.Quantified)
+        |> Option.defaultValue []
     ContextInference.resolvePending state name symbol scheme derivedVars (fun ownInstance pending argTys current ->
         let scopeEnv, annotatedDef = current.HoleScopes |> Map.tryFind pending.Call |> Option.defaultValue (env, None)
         let declaredVars = annotatedDef |> Option.bind defScheme |> Option.map _.Quantified |> Option.defaultValue Set.empty
+        let rigid = Set.union scheme.Quantified declaredVars
         let hasInstanceIn env ty = (instanceInScope env current pending.Context [ ty ]).IsSome
         // The instance of each variable of a structure: the one in scope where the call is, or the one the def around
-        // it was just found to require.
+        // it was just found to require. A variable of neither is one a local function is generic in (or one nothing
+        // settles, as in `[]`): it is written with the compiler's own `ToString` at each type the function is
+        // specialised at, as a hole of the variable itself is (see `InterpolationHoles.resolvePending`).
         let instanceOf (var: TyVar) =
-            instanceInScope scopeEnv current pending.Context [ TyVar var ] |> Option.orElseWith (fun () -> ownInstance pending.Context var)
-        let derived () =
-            derivedInstance env current (Set.union scheme.Quantified declaredVars) instanceOf annotatedDef pending.Callee pending.Call pending.Span pending.Context argTys
+            match instanceInScope scopeEnv current pending.Context [ TyVar var ] |> Option.orElseWith (fun () -> ownInstance pending.Context var) with
+            | Some written -> Some (InstanceInScope written)
+            | None when not (rigid.Contains var.Id)
+                         && pending.Context = InterpolationHoles.context
+                         && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome ->
+                Some (InstanceSynthesized InterpolationHoles.builtInMembers)
+            | None -> None
+        let derived (env: TypeEnv) =
+            derivedInstance env current rigid instanceOf annotatedDef pending.Callee pending.Call pending.Span pending.Context argTys
         let attached env =
             if canSynthesize argTys then
                 Some (synthesizeInstance env current pending.Callee pending.Context argTys pending.Span)
             else None
         let synthesize env =
-            derived () |> Option.orElseWith (fun () -> attached env |> Option.map (Result.map (fun (members, next) -> InstanceSynthesized members, next)))
+            derived env |> Option.orElseWith (fun () -> attached env |> Option.map (Result.map (fun (members, next) -> InstanceSynthesized members, next)))
         if InterpolationHoles.isHole pending.Callee then
             Some (InterpolationHoles.resolvePending (fun env -> instanceInScope env current) synthesize defScheme current pending argTys)
         elif EqualityOperators.isPending pending then
             let derive (ty: Ty) =
-                derivedComparison scopeEnv (Set.union scheme.Quantified declaredVars) instanceOf pending.Call pending.Span ty current
+                derivedComparison scopeEnv rigid instanceOf pending.Call pending.Span ty current
             Some (EqualityOperators.resolvePending hasInstanceIn derive defScheme current pending argTys)
         elif OrderingOperators.isPending pending then
             Some (OrderingOperators.resolvePending (orderingInstance pending.Callee pending.Span) hasInstanceIn defScheme current pending argTys)
@@ -1307,12 +1356,12 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
             | Some (wellKnown, WellKnownContexts.NoInstance reason) ->
                 Some (Error (WellKnownContexts.error pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
             | Some (wellKnown, WellKnownContexts.BuiltIn) ->
-                match derivedEquality env current wellKnown WellKnownContexts.BuiltIn pending.Callee pending.Call pending.Span (List.head argTys) with
+                match derivedEquality scopeEnv current rigid instanceOf wellKnown WellKnownContexts.BuiltIn pending.Callee pending.Call pending.Span (List.head argTys) with
                 | Some derived -> Some (derived |> Result.map (fun (instance, next) -> Some instance, next))
                 | None -> Some (Ok (Some (InstanceSynthesized (WellKnownContexts.builtInMembers wellKnown)), current))
             | _ when InterpolationHoles.passesBuiltIn env pending.Context argTys ->
                 Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
-            | _ -> synthesize env |> Option.map (Result.map (fun (instance, next) -> Some instance, next)))
+            | _ -> synthesize scopeEnv |> Option.map (Result.map (fun (instance, next) -> Some instance, next)))
     |> Result.map (fun (annotation, resolved) ->
         let inputOf ty = inputTypeFromArgs [ ty; ty ]
         annotation,
@@ -1940,7 +1989,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
                             joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
                         else leftExpr.Type, constrained
-                    let comparesParts = comparesOwnParts env Set.empty (fun _ -> true)
+                    let comparesParts = comparesOwnParts env Set.empty (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
                     let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
                     EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
                     |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)

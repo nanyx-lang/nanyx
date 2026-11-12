@@ -26,7 +26,9 @@ open NyxCompiler.InferState
 ///
 /// A definition for a type with no variables is the `toString` of a synthesized instance. One for a type with
 /// variables requires `ToString` of each, so a hole calls it by name instead of the hole function, with the
-/// instances in scope where the hole is (see `InferState.DerivedCalls`).
+/// instances in scope where the hole is (see `InferState.DerivedCalls`), and any other call is passed it as a closure
+/// over those instances (`InstanceDerived`). A part with an instance loaded by `use` where the call is counts as a
+/// variable, so it is written through that instance (see `abstractParts`).
 ///
 /// Every type that holds no function has the compiler's own `Eq`, which compares two values by their structure and
 /// reads no `==` a part's type has of its own. So where a part has one, an `==` attached to its type or the `Eq` a
@@ -328,29 +330,68 @@ module internal StructuralInstances =
                         DerivedInstances = state.DerivedInstances |> Map.add (ctxName, written) name
                         DerivedDefs = state.DerivedDefs @ [ item ] }))
 
-    /// Why a call does not find the instance derived for a type with variables in it.
+    /// `ty` with each part of it, at any depth, that is not a type variable and that `partInstance` finds an instance
+    /// in scope of (one a `use` in a block loads) made a variable of its own, and the instance each such variable
+    /// stands for. A definition derived for the type that comes out requires the context of each, so the part is
+    /// written, or compared, through the instance in scope where the call is, not through the one the top of the
+    /// module would find. A nominal type, an alias and a function are not looked inside.
+    let private abstractParts (partInstance: Ty -> TypeExpr option) (ty: Ty) (state: InferState) : Ty * Map<int, TypeExpr> * InferState =
+        let rec part (found: Map<Ty, TyVar * TypeExpr>, state: InferState) (ty: Ty) =
+            match ty, found |> Map.tryFind ty with
+            | TyVar _, _ -> ty, (found, state)
+            | _, Some (var, _) -> TyVar var, (found, state)
+            | _ ->
+                match partInstance ty with
+                | Some written ->
+                    match freshVar state with
+                    | TyVar var, next -> TyVar var, (found |> Map.add ty (var, written), next)
+                    | _ -> inside (found, state) ty
+                | None -> inside (found, state) ty
+        and inside (acc: Map<Ty, TyVar * TypeExpr> * InferState) (ty: Ty) =
+            match ty with
+            | TyTag(name, Some payload) ->
+                let payload, acc = part acc payload
+                TyTag(name, Some payload), acc
+            | TyUnion items ->
+                let items, acc = items |> List.mapFold part acc
+                TyUnion items, acc
+            | TyRecord fields ->
+                let names, tys = fields |> Map.toList |> List.unzip
+                let tys, acc = tys |> List.mapFold part acc
+                TyRecord (List.zip names tys |> Map.ofList), acc
+            | TyApply("list", [ element ]) ->
+                let element, acc = part acc element
+                TyApply("list", [ element ]), acc
+            | _ -> ty, acc
+        let abstracted, (found, next) = inside (Map.empty, state) ty
+        if found.IsEmpty then ty, Map.empty, state
+        else abstracted, found |> Map.values |> Seq.map (fun (var, written) -> var.Id, written) |> Map.ofSeq, next
+
+    /// `instanceOf`, and the instance in scope each variable `abstractParts` made stands for.
+    let private withAbstracted (abstracted: Map<int, TypeExpr>) (instanceOf: TyVar -> ContextInstance option) (var: TyVar) =
+        match abstracted |> Map.tryFind var.Id with
+        | Some written -> Some (InstanceInScope written)
+        | None -> instanceOf var
+
+    /// Why a call does not find the instance derived for a type.
     type Failure =
         /// Nothing in scope is the context of this variable, which the derived instance requires.
         | NoInstanceOf of TyVar
-        /// The call is not a hole's: only a hole can call the derived definition with the instances it requires.
-        | NotAHole
         /// A part of the type is this function, and no function has an instance.
         | HoldsFunction of Ty
-
-    /// The error for a call by `requirer` (see `InterpolationHoles.requirer`) that requires `ctxName` of the type
-    /// `ty`, which has variables in it, and is not a hole's.
-    let notAHole (requirer: string) (ctxName: Identifier) (ty: Ty) =
-        let ctxText = $"{ctxName}({Unifier.tyToDisplayString Ascii ty})"
-        $"{requirer} requires the context '{ctxText}', which the compiler derives from the parts of the type, but it cannot yet pass a function the one for a type with type variables in it: turn the value into a string with a hole first, as in \"{{value}}\""
+        /// The type holds a union open to tags the caller of the function around the call chooses, which may be any.
+        | OpenToCaller
 
     /// Where the call `call`, at `span`, that requires `ctxName` of the type `ty` finds it, if an instance can be
     /// derived for the type. For a type with no variables it is the derived definition, as the context's member. For
-    /// one with variables, the call must be a hole (`isHole`), which calls the derived definition in place of the
-    /// hole function, with the instance `instanceOf` finds for each variable. `rigid` holds the variables of the
-    /// function around the call.
+    /// one with variables, the derived definition is passed the instance `instanceOf` finds for each variable: a hole
+    /// (`isHole`) calls it in place of the hole function, and any other call is passed it as the member of an
+    /// `InstanceDerived`. A part with an instance in scope that `partInstance` finds is written through it (see
+    /// `abstractParts`). `rigid` holds the variables of the function around the call.
     let instance
         (rigid: Set<int>)
-        (instanceOf: TyVar -> TypeExpr option)
+        (partInstance: Ty -> TypeExpr option)
+        (instanceOf: TyVar -> ContextInstance option)
         (isHole: bool)
         (call: NodeId)
         (span: SourceSpan)
@@ -358,28 +399,43 @@ module internal StructuralInstances =
         (ty: Ty)
         (state: InferState)
         : Result<ContextInstance * InferState, Failure> option =
-        match functionPart ty, derivable rigid ctxName ty |> Option.map (fun (_, _, vars) -> vars) with
-        | Some held, _ -> Some (Error (HoldsFunction held))
-        | None, Some (_ :: _) when not isHole -> Some (Error NotAHole)
-        | None, _ ->
+        match functionPart ty with
+        | Some held -> Some (Error (HoldsFunction held))
+        | None when (closed rigid ty).IsNone && (closed Set.empty ty |> Option.bind (shapeFor ctxName)).IsSome -> Some (Error OpenToCaller)
+        | None ->
+            let ty, abstracted, state = abstractParts partInstance ty state
+            let instanceOf = withAbstracted abstracted instanceOf
             derive rigid span ctxName ty state
             |> Option.map (fun (name, vars, next) ->
                 match vars, vars |> List.tryFind (instanceOf >> Option.isNone) with
                 | [], _ -> Ok (InstanceSynthesized [ memberOf ctxName, name ], next)
                 | _, Some missing -> Error (NoInstanceOf missing)
                 | _, None ->
-                    let instances = vars |> List.map (instanceOf >> Option.map InstanceInScope)
-                    Ok (InstanceBuiltIn, { next with DerivedCalls = next.DerivedCalls |> Map.add call (name, instances) }))
+                    let instances = vars |> List.map instanceOf
+                    if isHole then Ok (InstanceBuiltIn, { next with DerivedCalls = next.DerivedCalls |> Map.add call (name, instances) })
+                    else
+                        let at = NodeId.next ()
+                        Ok (InstanceDerived(memberOf ctxName, name, at), { next with ContextInstances = next.ContextInstances |> Map.add at instances }))
 
     /// The `==` derived for the type `ty`, which the comparison `call`, at `span`, of two values of it calls, and
     /// `state` with the comparison finding the instance `instanceOf` finds for each variable of the type. `None` if
-    /// none can be derived, or a variable has no instance: the comparison is then the compiler's own. `rigid` is as
-    /// `instance` has it.
-    let comparison (rigid: Set<int>) (instanceOf: TyVar -> TypeExpr option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : (Identifier * InferState) option =
+    /// none can be derived, or a variable has no instance: the comparison is then the compiler's own. `rigid` and
+    /// `partInstance` are as `instance` has them.
+    let comparison
+        (rigid: Set<int>)
+        (partInstance: Ty -> TypeExpr option)
+        (instanceOf: TyVar -> ContextInstance option)
+        (call: NodeId)
+        (span: SourceSpan)
+        (ty: Ty)
+        (state: InferState)
+        : (Identifier * InferState) option =
+        let ty, abstracted, state = abstractParts partInstance ty state
+        let instanceOf = withAbstracted abstracted instanceOf
         derive rigid span EqualityOperators.context ty state
         |> Option.bind (fun (name, vars, next) ->
             if vars |> List.forall (instanceOf >> Option.isSome) then
-                let instances = vars |> List.map (instanceOf >> Option.map InstanceInScope)
+                let instances = vars |> List.map instanceOf
                 Some (name, { next with DerivedCalls = next.DerivedCalls |> Map.add call (name, instances) })
             else None)
 

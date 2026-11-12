@@ -72,16 +72,13 @@ A tag with a payload, a tuple, a record and a list have a `ToString` when each o
 
 A record's fields are written in alphabetical order, and a string inside a structure is written without quotes, as it is on its own; `dbg` is the one that quotes.
 
-In generic code, a hole of a structure that holds one of the function's type variables requires `ToString` of the variable: `"{#some(value)}"` needs `[ToString(a)]`, and the derived definition is passed the instance the function was. A function that does not write its type has the requirement inferred.
+In generic code, a hole of a structure that holds one of the function's type variables requires `ToString` of the variable: `"{#some(value)}"` needs `[ToString(a)]`, and the derived definition is passed the instance the function was. A function that does not write its type has the requirement inferred. A call does the same as a hole ([#630](https://github.com/nanyx-lang/nanyx/issues/630)): inside a function that requires `[ToString(a)]`, `show(#some(x))` passes `show` the derived definition as a closure over the `ToString(a)` the function was given (`InstanceDerived`).
 
-A part with no `ToString`, such as a function or a protected type without a `toString`, is an error at the hole that names the part.
+The instances a derived definition writes its parts with are found where the hole or call is, not at the top of the module. A part of a concrete type with a `ToString` loaded by `use` in the block is written through it: with `use pounds` (a `ToString(int)`) in scope, `"{[1, 2]}"` writes `[£1, £2]`. The definition is written for the structure with that part as a type variable, and passed the instance in scope (`StructuralInstances.abstractParts`). The parts of an alias or a nominal type are not looked inside.
 
-Not done yet ([#630](https://github.com/nanyx-lang/nanyx/issues/630)):
+A local function generic in what it interpolates, `def wrap = { x -> "{#some(x)}" }` inside another def, writes its variable with the compiler's own `ToString` at each type the function is specialised at, as it does a hole of the variable itself. So does an empty list, `"{[]}"`, whose element type is never settled: it writes `[]`.
 
-- **Passing a function the `ToString` of a structure with a type variable in it.** Inside a function that requires `[ToString(a)]`, `show(#some(x))` is an error that says to write the value with a hole first; `"{#some(x)}"` works.
-- **A local function generic in what it interpolates** cannot interpolate a structure of its parameter: `def wrap = { x -> "{#some(x)}" }` inside another def is an error.
-- **A derived `toString` reads only what the top of the module can see**, so a `ToString` of a concrete part loaded by `use` in a block is not used for the part.
-- **An empty list literal**, `"{[]}"`, is an error, since its element type is never settled.
+A part with no `ToString`, such as a function or a protected type without a `toString`, is an error at each hole that names the part. So is a union open to tags the function's caller chooses, `#x(a) | r` in a function's type: those tags may be any, so the error says to name every tag in the type, or to match on the tags it names.
 
 ## Printing
 
@@ -116,4 +113,3 @@ Each hole is a call to a function the type checker has already chosen, so the ba
 - **Protected types in `dbg`.** Outside its home module, does `dbg` print a protected value's shape, `$UserId(42)`, or only its name, `$UserId(…)`? Printing the shape breaks no invariant, since invariants are about construction and no code can read what `dbg` prints, but it shows a structure the type means to hide. The current leaning is to print the shape, because `dbg` is a tool for the programmer.
 - **The name.** `ToString` matches its member and reads plainly. `Show` (Haskell) and `Display` (Rust) are the alternatives.
 - **Formatting.** Do precision and padding belong in the hole, as in `"{price:.2}"`, in separate functions such as `string.padStart`, or in a richer context than `ToString`?
-- **Compound types in generic calls.** A derived `ToString` of a type with a type variable in it can be used by a hole but not yet passed to a function ([Structures](#structures)). Passing it needs an instance built at the call from the instance for the variable.

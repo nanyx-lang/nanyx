@@ -285,6 +285,12 @@ let private contextArguments
                 | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
                 | None -> CoreIrLowerInput.DefinitionValue definition
             acc @ [ argument ], used
+        // An instance derived from the parts of a type with variables in it: a closure over its definition and the
+        // instances the definition requires.
+        | Some (_, Some (InstanceDerived(_, definition, at))) ->
+            match functionWrappers |> Map.tryFind definition with
+            | Some wrapper -> acc @ [ CoreIrLowerInput.DerivedClosure(wrapper, at) ], used
+            | None -> CoreIr.internalError $"the derived definition '{definition}' has no wrapper"
         | _ ->
             let resolvedKey =
                 if scopeKeys.Contains requiredKey then requiredKey
@@ -356,8 +362,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let synthesizedMembers =
         contextInstances
         |> Map.values
-        |> Seq.collect (List.choose (function Some (InstanceSynthesized members) -> Some members | _ -> None) >> List.concat)
-        |> Seq.map snd
+        |> Seq.collect (List.choose (function
+            | Some (InstanceSynthesized members) -> Some (List.map snd members)
+            | Some (InstanceDerived(_, definition, _)) -> Some [ definition ]
+            | _ -> None) >> List.concat)
         |> Set.ofSeq
     // A lambda lifted out of a function that requires contexts captures the function's members, by the names of the
     // parameters they come in, so that it can call them and pass them on.

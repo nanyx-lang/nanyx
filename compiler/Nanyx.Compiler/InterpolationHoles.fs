@@ -107,6 +107,29 @@ module InterpolationHoles =
             | None -> ""
         $"Interpolating a value of type '{tyText}' requires the context 'ToString({tyText})', which is not available here{advice}"
 
+    /// The error for a call to `calleeName` that requires `ToString` of `ty`, which holds a union open to tags the
+    /// caller of `defName` (the function around the call, if it is in one) chooses.
+    let openToCaller (calleeName: Identifier) (ty: Ty) (defName: Identifier option) =
+        let tyText = display ty
+        let caller =
+            match defName with
+            | Some name -> $"the caller of '{name}'"
+            | None -> "the caller"
+        let what =
+            if isHole calleeName then $"'{tyText}' cannot be interpolated"
+            else $"'{calleeName}' requires the context 'ToString({tyText})', which cannot be derived"
+        $"{what}: {caller} chooses the other tags its union may hold, and a toString is derived only for a union whose tags are all known: name every tag in the type, or match on the tags it names"
+
+    /// The error for a call to `calleeName` that requires `ToString` of the structure `ty`, whose variable `part` has
+    /// no `ToString` where the call is, in the function `defName` (if it is in one).
+    let undeclaredPart (calleeName: Identifier) (ty: Ty) (part: Ty) (defName: Identifier option) =
+        let partText = display part
+        let advice =
+            match defName with
+            | Some name -> $": add [ToString({partText})] to the type of '{name}'"
+            | None -> ""
+        $"'{calleeName}' requires the context 'ToString({display ty})', which is written through 'ToString({partText})', and that is not available here{advice}"
+
     /// The def the holes found once the whole module is inferred are pending in (see `resolveLater`). No def has it.
     let moduleEnd: Identifier = ""
 

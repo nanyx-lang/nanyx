@@ -4,14 +4,15 @@ open Xunit
 open NyxCompiler
 open Parser.Program
 
-/// `source` compiled, with no diagnostics.
+/// `source` compiled, with no diagnostics, whatever line endings it was checked out with.
 let private compileClean (source: string) =
-    let result = Compiler.compile source
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value
 
 /// The one diagnostic `source` has, which must be a missing context: its message, and the text it is reported at.
 let private missingContext (source: string) =
+    let source = source.ReplaceLineEndings "\n"
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
@@ -85,16 +86,123 @@ let ``A hole of a structure with a part that has no ToString is an error at the 
         Assert.Equal(expectedMessage, message)
         Assert.Equal(expectedAt, at)
 
+/// The derived instances of `typed` passed to a function, each with the instances its definition is passed.
+let private derivedInstances (typed: TypedModule) =
+    typed.ContextInstances
+    |> Map.values
+    |> Seq.concat
+    |> Seq.choose (function
+        | Some (InstanceDerived(memberName, definition, at)) -> Some (memberName, definition, typed.ContextInstances.[at])
+        | _ -> None)
+    |> List.ofSeq
+
+/// Whether `instance` is the one the function around a call requires of its variable `a`, `ctxName(a)`.
+let private isRequired (ctxName: string) (instance: ContextInstance option) =
+    match instance with
+    | Some (InstanceInScope (Kind (TypeApply(name, [ Kind (TypeVar "a") ])))) -> name = ctxName
+    | _ -> false
+
 [<Fact>]
-let ``A function cannot yet be passed the ToString derived for a type with variables in it`` () =
+let ``A function is passed the ToString derived for a type with variables in it, built from the instance in scope`` () =
+    let typed =
+        compileClean """def show: [ToString(a)] a -> string = { x -> "{x}" }
+def wrap: [ToString(a)] a -> string = { x -> show(#some(x)) }
+def s = wrap(1)
+"""
+    match derivedInstances typed with
+    | [ "toString", definition, [ instance ] ] ->
+        Assert.StartsWith("__toString_", definition)
+        Assert.True(isRequired "ToString" instance, $"Unexpected instance: %A{instance}")
+    | other -> failwith $"Expected one derived ToString, got %A{other}"
+
+[<Fact>]
+let ``A def that does not write its type requires ToString of a variable in a structure it passes to a function`` () =
+    let typed =
+        compileClean """def show: [ToString(a)] a -> string = { x -> "{x}" }
+def wrap = { x -> show((x, 1)) }
+def s = wrap(1)
+"""
+    match typed.InferredContextTypes |> Map.values |> List.ofSeq with
+    | [ [ TyApply("ToString", [ TyVar _ ]) ] ] -> ()
+    | other -> failwith $"Unexpected inferred contexts: %A{other}"
+
+[<Fact>]
+let ``A function that passes a structure of a variable it has no ToString of says which to require`` () =
     let message, at =
-        missingContext (
-            "def show: [ToString(a)] a -> string = { x -> \"{x}\" }\n" +
-            "def wrap: [ToString(a)] a -> string = { x -> show(#some(x)) }\n")
+        missingContext """def show: [ToString(a)] a -> string = { x -> "{x}" }
+def wrap: a -> string = { x -> show(#some(x)) }
+"""
     Assert.Equal(
-        "'show' requires the context 'ToString(#some(a))', which the compiler derives from the parts of the type, but it cannot yet pass a function the one for a type with type variables in it: turn the value into a string with a hole first, as in \"{value}\"",
+        "'show' requires the context 'ToString(#some(a))', which is written through 'ToString(a)', and that is not available here: add [ToString(a)] to the type of 'wrap'",
         message)
     Assert.Equal("show", at)
+
+[<Fact>]
+let ``A function that requires Eq is passed the one derived from the Eq of a variable in scope`` () =
+    let typed =
+        compileClean """def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
+def listed: [Eq(a)] a, a -> bool = { x, y -> same([x], [y]) }
+def b = listed(1, 2)
+"""
+    match derivedInstances typed with
+    | [ "==", definition, [ instance ] ] ->
+        Assert.StartsWith("__equals_", definition)
+        Assert.True(isRequired "Eq" instance, $"Unexpected instance: %A{instance}")
+    | other -> failwith $"Expected one derived ==, got %A{other}"
+
+[<Fact>]
+let ``A hole of a structure writes a part through a ToString loaded with use in its block`` () =
+    let typed =
+        compileClean """def pounds: ToString(int) = (toString = { p -> "£{p}" })
+def s = {
+  use pounds
+  "{[1, 2]}"
+}
+"""
+    let loaded =
+        typed.ContextInstances
+        |> Map.values
+        |> Seq.concat
+        |> Seq.exists (function
+            | Some (InstanceInScope (Kind (TypeApply("ToString", [ Kind (TypeName "int") ])))) -> true
+            | _ -> false)
+    Assert.True(loaded, "The derived toString is not passed the ToString(int) in scope")
+
+[<Fact>]
+let ``A local function can interpolate a structure of a variable it is generic in`` () =
+    compileClean """def outer = { y ->
+  def wrap = { x -> "{#some(x)}" }
+  wrap(y) ++ wrap("s")
+}
+def s = outer(1)
+"""
+    |> ignore
+
+[<Fact>]
+let ``An empty list can be interpolated`` () =
+    compileClean "def s = \"{[]}\"\n" |> ignore
+
+[<Fact>]
+let ``A union open to tags the caller chooses has no derived ToString, and the error says what to write`` () =
+    let message, at = missingContext "def f: [ToString(a)] (#x(a) | r) -> string = { v -> \"{v}\" }\n"
+    Assert.Equal(
+        "'#x(a) | r' cannot be interpolated: the caller of 'f' chooses the other tags its union may hold, and a toString is derived only for a union whose tags are all known: name every tag in the type, or match on the tags it names",
+        message)
+    Assert.Equal("v", at)
+
+[<Fact>]
+let ``Each hole of a structure with a part that has no ToString is an error`` () =
+    let source = """def g = { n -> n }
+def s = "{#some(g)}"
+def t = "{#some(g)}"
+"""
+    let source = source.ReplaceLineEndings "\n"
+    let diagnostics = (Compiler.compile source).Diagnostics
+    Assert.Equal<string list>(
+        [ "'a -> a' cannot be interpolated: it is a function, and functions have no toString"
+          "'a -> a' cannot be interpolated: it is a function, and functions have no toString" ],
+        diagnostics |> List.map _.Message)
+    Assert.Equal<int list>([ 2; 3 ], diagnostics |> List.map (fun diagnostic -> source.Substring(0, diagnostic.Span.Value.Start).Split('\n').Length))
 
 [<Fact>]
 let ``A function that requires ToString is passed the one derived for a type with nothing left open`` () =
