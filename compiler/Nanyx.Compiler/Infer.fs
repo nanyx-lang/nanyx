@@ -1724,12 +1724,21 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         // When the callee's type is already a function (an annotated or already-inferred
                         // def), its return type is the call's type directly, so a member access or match on
                         // the result can see it without waiting for the constraint below to be solved.
+                        // The callee's own context variables stand for the contexts of the arguments given for them,
+                        // which the call requires (see `ContextVariables`).
+                        let requireBound (next: InferState) =
+                            match next.ContextRequirements |> Map.tryFind (canonicalName env next name) |> Option.map ContextVariables.names with
+                            | Some vars when not vars.IsEmpty ->
+                                let bound = ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
+                                let requirePlain current ctx = ensureContextAvailable true env current name [ ctx ] calleeSpan
+                                ContextVariables.require requirePlain name calleeSpan bound next
+                            | _ -> Ok next
                         match Unifier.unalias funcTy, paramTys with
                         // Each argument was checked against its parameter above, which is all a known signature
                         // asks; constraining several arguments together as well, as one record, would make each
                         // equal to its parameter, and undo an argument union's widening into its parameter's.
                         | TyFunc(_, declaredRet, _), Some _ when args.Length > 1 ->
-                            Ok ({ mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, current)
+                            requireBound current |> Result.map (fun next -> { mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, next)
                         | _ ->
                         let retTy, nextState =
                             match Unifier.unalias funcTy with
@@ -1753,7 +1762,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             | _ -> []
                         let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy, calleeContexts)) nextState2
                         let withAssignable = addAssignableConstraintAt inputSpan inputTy expectedInput withFuncConstraint
-                        Ok ({ mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, withAssignable)
+                        requireBound withAssignable |> Result.map (fun next -> { mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, next)
                     else
                         Error errors
             | None ->
@@ -2559,6 +2568,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         match fst (extractContextFromTypeExpr typeOpt) with
                         | Some contexts -> ensureContextsExist current name (declarationSpan current DefValue expr) contexts
                         | None -> Ok ()
+                    let contextsExist = contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
                     let typeOfsInferred =
                         match typeOpt with
                         | Some typeExpr -> inferTypeOfValues env' current typeExpr
@@ -2873,6 +2883,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match fst (extractContextFromTypeExpr typeOpt) with
                 | Some contexts -> ensureContextsExist state name (declarationSpan state DefValue expr) contexts
                 | None -> Ok ()
+            let contextsExist = contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
             let typeOfsInferred =
                 match typeOpt with

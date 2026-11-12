@@ -153,7 +153,8 @@ let private withContextsAt (typed: TypedModule) (symbol: Symbol) (ty: Ty) : Ty *
     match required with
     | Some (general, (_ :: _ as contexts)) ->
         match Unifier.unify [ general, ty, Equal, SourceSpan.none ] with
-        | Ok subst -> Unifier.apply subst ty, contexts |> List.map (Unifier.apply subst)
+        // A context variable stands for the contexts it is bound to here, if any.
+        | Ok subst -> Unifier.apply subst ty, contexts |> List.map (Unifier.apply subst) |> FunctionContexts.flatten |> Unifier.writtenContexts
         | Error _ -> ty, []
     | _ -> ty, []
 
