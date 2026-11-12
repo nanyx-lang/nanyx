@@ -581,10 +581,6 @@ let private declaredLocals (body: Expr) : string list =
     let holeAt depth =
         interpolates.Value <- true
         holes.Add((depth, 0))
-    let holePlace (name: string) =
-        match name.Substring("__interp_hole_".Length).Split('_') with
-        | [| depth; index |] -> int depth, int index
-        | _ -> internalError $"{name} is not a hole local"
     let rec pattern (p: Pattern) =
         match p with
         | PBind var -> found.Add var
@@ -603,7 +599,7 @@ let private declaredLocals (body: Expr) : string list =
         | Let(var, value, body) ->
             match var.Kind with
             | Temp -> ()
-            | InterpolationHole -> holes.Add(holePlace var.Name)
+            | InterpolationHole(depth, index) -> holes.Add((depth, index))
             | _ -> found.Add var
             walk value
             walk body
