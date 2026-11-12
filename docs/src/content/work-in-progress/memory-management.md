@@ -233,12 +233,14 @@ A definition inlined from an imported module (the prelude's `list.map`, say) is 
 module's types by node are resolved for the editor's sake, so the types of the inlined definitions' nodes are resolved
 apart, each by the module it came from, and only the IR reads them (`TypedModule.InlinedExprTypes`).
 
-Lambda lifting still runs on the syntax tree first (`LambdaLifting.fs`): a lambda becomes a top-level function that
-takes a closure block as its environment, and the lambda is replaced by a closure over it. The IR lowers a lifted
-function where a closure over it is made, since only there are the types of what it captures known. A lambda written
-in a generic definition is specialised along with it (`__lambda_0__int`), and the wrapper that lets a top-level
-function be passed as a value is lowered for each type it is passed at. Lifting lambdas in the IR instead is
-[#425](https://github.com/nanyx-lang/nanyx/issues/425).
+Lambda lifting runs on the syntax tree first (`LambdaLifting.fs`): a lambda becomes a top-level function that
+takes a closure block as its environment, and the lambda is replaced by a closure over it, a call to the markers
+`ClosureSyntax.fs` names. The IR lowers a lifted function where a closure over it is made, since only there are the
+types of what it captures known. A lambda written in a generic definition is specialised along with it
+(`__lambda_0__int`), and the wrapper that lets a top-level function be passed as a value is lowered for each type it
+is passed at. So a lifted function is always lowered at concrete types, and lifting stays on the syntax tree: moving it
+into the IR was considered and set aside in [#425](https://github.com/nanyx-lang/nanyx/issues/425). A lifted lambda
+still captures context members it does not use ([#934](https://github.com/nanyx-lang/nanyx/issues/934)).
 
 How a function value is called follows from its type, not from how its lambda names its parameters or how the call
 writes its argument, since `int, int -> int` and `(int, int) -> int` are one type. A function value whose input is a
@@ -321,8 +323,7 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
 - **Tail calls.** An argument passed in a tail call that the caller owns makes the callee own that parameter, so
   nothing is left to drop after a tail call (see [Tail calls](./tail-calls)).
 - **Recursive local closures** need nothing more: lambda lifting already makes a `rec` local refer to itself
-  through the environment it is called with, never through what it captures, so it cannot capture itself. Lifting
-  lambdas in the IR ([#425](https://github.com/nanyx-lang/nanyx/issues/425)) is not needed first.
+  through the environment it is called with, never through what it captures, so it cannot capture itself.
 
 Steps 3 and 4 are `CoreIrReuse.fs`, run on the counted IR, which adds two more nodes: `release x; e` and an
 allocation `reusing` a token.
