@@ -4,7 +4,7 @@ description: "Generic iterable helpers via Iter(a) context"
 order: 11
 ---
 
-> **Planned.** This module is not yet in the library: neither the `Iter(a)` context nor any of the functions on this page exists. The work is tracked in [#192](https://github.com/nanyx-lang/nanyx/issues/192). Until then, use the [list](./collections), [map](./map) and [set](./set) functions.
+> **Planned.** This module is not yet in the library: neither the `Iter(a)` context nor any of the functions on this page exists. The work is tracked in [#192](https://github.com/nanyx-lang/nanyx/issues/192). Until then, use the [list](./collections), [map](./map) and [set](./set) functions. [Lazy sequences](../work-in-progress/lazy-sequences) proposes replacing `Iter(a)` with an `Iterable(c, a)` context whose one member is `toSeq`.
 
 The `iter` module provides generic operations for any type `a` for which an `Iter(a)` context is provided.
 
