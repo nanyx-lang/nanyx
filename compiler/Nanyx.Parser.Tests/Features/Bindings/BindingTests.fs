@@ -31,6 +31,21 @@ let ``Parse module declaration`` () =
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
 
 [<Fact>]
+let ``Parse dotted module declaration`` () =
+    let input = """
+module collections.list
+
+export def one = 1
+"""
+    match parseModule (input.TrimStart()) with
+    | Result.Ok module' ->
+        module' |> should haveLength 2
+        match module'.[0] with
+        | Kind (ModuleDecl name) -> Assert.Equal("collections.list", name)
+        | other -> failwith $"Expected ModuleDecl, got: {other}"
+    | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+[<Fact>]
 let ``Parse module with definition`` () =
     let input = "module Test\ndef message = \"Hello\""
     let result = parseModule input
