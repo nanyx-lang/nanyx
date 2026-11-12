@@ -59,9 +59,9 @@ module internal OperatorCalls =
         let bound (name: Identifier) = TypeEnv.tryFind name env |> Option.map (fun scheme -> name, scheme, None)
         let name =
             match expr.Kind with
-            | BinaryOp(op, _, _) when OrderingOperators.isOperator op -> None
-            | BinaryOp(op, _, _) when EqualityOperators.isOperator op -> Some EqualityOperators.equals
-            | BinaryOp(op, _, _) -> Some op
+            | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op -> None
+            | BinaryOp(op, _, _, _) when EqualityOperators.isOperator op -> Some EqualityOperators.equals
+            | BinaryOp(op, _, _, _) -> Some op
             | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> Some ArithmeticOperators.negate
             | _ -> None
         let comparesOperands (operandTy: Ty) (_, scheme, _) = compares state operandTy input scheme

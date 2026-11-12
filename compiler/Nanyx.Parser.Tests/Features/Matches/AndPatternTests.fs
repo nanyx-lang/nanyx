@@ -40,7 +40,7 @@ let ``an and-pattern binds tighter than an or-pattern and looser than a tag's pa
 let ``&& after a pattern is still the operator`` () =
     // A lambda whose body starts with a name and `&&` is not a pattern parameter.
     match parseModule "def f = { a -> { a && b } }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Lambda (_, Kind (BinaryOp (_, Kind (IdentifierExpr "a"), Kind (IdentifierExpr "b"))), _)), _))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Lambda (_, Kind (BinaryOp (_, _, Kind (IdentifierExpr "a"), Kind (IdentifierExpr "b"))), _)), _))))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

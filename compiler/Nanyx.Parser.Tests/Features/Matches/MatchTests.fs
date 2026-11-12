@@ -19,18 +19,18 @@ let private implicitArg = IdentifierExpr implicitArgument
 [<Fact>]
 let ``a braced guard pattern is a shorthand lambda and the bare form still parses as one`` () =
     match guardsOf "def f = { | { < 0 } -> 1 | { >= limit * 2 } -> 2 | > 5 -> 3 | _ -> 4 }" with
-    | [ Lambda ([ (a, None) ], Kind (BinaryOp ("<", Kind (IdentifierExpr a'), Kind (LiteralExpr (IntLit 0L)))), _)
-        Lambda ([ (b, None) ], Kind (BinaryOp (">=", Kind (IdentifierExpr b'), Kind (BinaryOp ("*", Kind (IdentifierExpr "limit"), _)))), _)
-        Lambda ([ (c, None) ], Kind (BinaryOp (">", Kind (IdentifierExpr c'), Kind (LiteralExpr (IntLit 5L)))), _) ]
+    | [ Lambda ([ (a, None) ], Kind (BinaryOp ("<", _, Kind (IdentifierExpr a'), Kind (LiteralExpr (IntLit 0L)))), _)
+        Lambda ([ (b, None) ], Kind (BinaryOp (">=", _, Kind (IdentifierExpr b'), Kind (BinaryOp ("*", _, Kind (IdentifierExpr "limit"), _)))), _)
+        Lambda ([ (c, None) ], Kind (BinaryOp (">", _, Kind (IdentifierExpr c'), Kind (LiteralExpr (IntLit 5L)))), _) ]
         when List.forall ((=) implicitArgument) [ a; a'; b; b'; c; c' ] -> ()
     | other -> failwith $"Unexpected guards: %A{other}"
 
 [<Fact>]
 let ``a guard pattern may be any predicate lambda`` () =
     match guardsOf "def f = { | { % 2 == 0 } -> 1 | { .length > 5 } -> 2 | { x -> x > limit } -> 3 | _ -> 4 }" with
-    | [ Lambda ([ (_, None) ], Kind (BinaryOp ("==", Kind (BinaryOp ("%", Kind left, _)), _)), _)
-        Lambda ([ (_, None) ], Kind (BinaryOp (">", Kind (MemberAccess (Kind field, "length", _)), _)), _)
-        Lambda ([ ("x", None) ], Kind (BinaryOp (">", Kind (IdentifierExpr "x"), Kind (IdentifierExpr "limit"))), _) ]
+    | [ Lambda ([ (_, None) ], Kind (BinaryOp ("==", _, Kind (BinaryOp ("%", _, Kind left, _)), _)), _)
+        Lambda ([ (_, None) ], Kind (BinaryOp (">", _, Kind (MemberAccess (Kind field, "length", _)), _)), _)
+        Lambda ([ ("x", None) ], Kind (BinaryOp (">", _, Kind (IdentifierExpr "x"), Kind (IdentifierExpr "limit"))), _) ]
         when left = implicitArg && field = implicitArg -> ()
     | other -> failwith $"Unexpected guards: %A{other}"
 
@@ -111,7 +111,7 @@ let ``A scrutinee may be a pipe`` () =
 [<Fact>]
 let ``A scrutinee may use operators, and several may be piped`` () =
     match scrutineesOf "  match a + 1, xs \\length\n    | 1, 0 -> 1\n    | _, _ -> 0" with
-    | Result.Ok [ Kind (BinaryOp ("+", _, _)); Kind (Pipe (_, "length", _, [])) ] -> ()
+    | Result.Ok [ Kind (BinaryOp ("+", _, _, _)); Kind (Pipe (_, "length", _, [])) ] -> ()
     | other -> failwith $"Unexpected scrutinees: %A{other}"
 
 [<Fact>]

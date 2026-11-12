@@ -8,9 +8,9 @@ open ParserTestHelpers
 [<Fact>]
 let ``list spread desugars to concatenation`` () =
     match parseModule "def x = [1, ...xs, 2, 3, ...ys]" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (BinaryOp ("++", Kind (ListExpr [ Kind (LiteralExpr (IntLit 1L)) ]),
-                                                                 Kind (BinaryOp ("++", Kind (IdentifierExpr "xs"),
-                                                                    Kind (BinaryOp ("++", Kind (ListExpr [ Kind (LiteralExpr (IntLit 2L)); Kind (LiteralExpr (IntLit 3L)) ]),
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (BinaryOp ("++", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 1L)) ]),
+                                                                 Kind (BinaryOp ("++", _, Kind (IdentifierExpr "xs"),
+                                                                    Kind (BinaryOp ("++", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 2L)); Kind (LiteralExpr (IntLit 3L)) ]),
                                                                                           Kind (IdentifierExpr "ys")))))))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
@@ -133,7 +133,7 @@ let ``a name that starts with true or false is a name, not a boolean`` () =
     match parseModule "def trueish = 1\ndef falsey = 2\ndef total = trueish + falsey" with
     | Result.Ok [ Kind (Def (ValueDef (_, "trueish", _, Kind (LiteralExpr (IntLit 1L)))))
                   Kind (Def (ValueDef (_, "falsey", _, Kind (LiteralExpr (IntLit 2L)))))
-                  Kind (Def (ValueDef (_, "total", _, Kind (BinaryOp ("+", Kind (IdentifierExpr "trueish"),
+                  Kind (Def (ValueDef (_, "total", _, Kind (BinaryOp ("+", _, Kind (IdentifierExpr "trueish"),
                                                                         Kind (IdentifierExpr "falsey")))))) ] -> ()
     | other -> failwith $"Unexpected: %A{other}"
 
@@ -148,7 +148,7 @@ let ``nan, inf and infinity are names, not floats`` (name: string) =
     | Result.Ok [ Kind (Def (ValueDef (_, defName, _, Kind (LiteralExpr (IntLit 3L)))))
                   Kind (Def (ValueDef (_, "x", _, Kind (IdentifierExpr used))))
                   Kind (Def (ValueDef (_, "scale", _, Kind (Lambda ([ (param, None) ],
-                                                                    Kind (BinaryOp ("*", Kind (IdentifierExpr body),
+                                                                    Kind (BinaryOp ("*", _, Kind (IdentifierExpr body),
                                                                                     Kind (LiteralExpr (IntLit 2L)))), _))))) ] ->
         Assert.Equal(name, defName)
         Assert.Equal(name, used)

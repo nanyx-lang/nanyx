@@ -253,11 +253,11 @@ module internal StructuralInstances =
         let field (target: Expression) (fieldName: Identifier) = expr (MemberAccess(target, fieldName, None))
         let pattern = Pattern.at span
         let answer (value: bool) = expr (LiteralExpr (BoolLit value))
-        let same (left: Expression) (right: Expression) = expr (BinaryOp(EqualityOperators.equals, left, right))
+        let same (left: Expression) (right: Expression) = expr (BinaryOp(EqualityOperators.equals, None, left, right))
         let all (comparisons: Expression list) =
             match comparisons with
             | [] -> answer true
-            | first :: rest -> rest |> List.fold (fun both next -> expr (BinaryOp("and", both, next))) first
+            | first :: rest -> rest |> List.fold (fun both next -> expr (BinaryOp("and", None, both, next))) first
         let positions (partName: int -> Identifier) (count: int) = pattern (TuplePattern (List.init count (partName >> IdentifierPattern >> pattern)))
         let value, other = name valueName, name otherName
         match shape with

@@ -66,7 +66,7 @@ let ``Parse member access in binary operation`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (BinaryOp("+", Kind (MemberAccess(Kind (IdentifierExpr p1), f1, _)), Kind (MemberAccess(Kind (IdentifierExpr p2), f2, _))))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (BinaryOp("+", _, Kind (MemberAccess(Kind (IdentifierExpr p1), f1, _)), Kind (MemberAccess(Kind (IdentifierExpr p2), f2, _))))))) ->
             name |> should equal "sum"
             p1 |> should equal "point"
             f1 |> should equal "x"

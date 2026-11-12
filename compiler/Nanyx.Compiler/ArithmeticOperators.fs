@@ -166,10 +166,10 @@ module internal ArithmeticOperators =
         : Result<TypedExpr * TypedExpr * InferState, Diagnostic list> =
         let reread (operand: TypedExpr) (other: TypedExpr) (state: InferState) =
             match expr.Kind, literalReading env state operand.Expr other.Type with
-            | BinaryOp(op, _, _), Some (AsMember asMember) when readsLiterals op ->
+            | BinaryOp(op, _, _, _), Some (AsMember asMember) when readsLiterals op ->
                 infer state asMember
                 |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add asMember.Id asMember })
-            | BinaryOp(op, _, _), Some (Wrong(code, message, fixes)) when readsLiterals op ->
+            | BinaryOp(op, _, _, _), Some (Wrong(code, message, fixes)) when readsLiterals op ->
                 let error = { Diagnostics.at code operand.Expr.Span message with Fixes = fixes }
                 Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)

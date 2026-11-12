@@ -416,12 +416,12 @@ module Compiler =
             | ContextMemberCall(ctxType, field, args) ->
                 let prefix, args' = liftAll args
                 prefix, rebuild (ContextMemberCall(ctxType, field, args'))
-            | BinaryOp(("and" | "or") as op, left, right) ->
+            | BinaryOp(("and" | "or") as op, opSpan, left, right) ->
                 let prefix, left' = liftBinds left
-                prefix, rebuild (BinaryOp(op, left', right))
-            | BinaryOp(op, left, right) ->
+                prefix, rebuild (BinaryOp(op, opSpan, left', right))
+            | BinaryOp(op, opSpan, left, right) ->
                 match liftAll [ left; right ] with
-                | prefix, [ left'; right' ] -> prefix, rebuild (BinaryOp(op, left', right'))
+                | prefix, [ left'; right' ] -> prefix, rebuild (BinaryOp(op, opSpan, left', right'))
                 | _ -> [], expr
             | Pipe(value, name, rangeOpt, args) ->
                 match liftAll (value :: args) with
@@ -515,7 +515,7 @@ module Compiler =
             | FunctionCall(_, _, args)
             | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
             | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
-            | BinaryOp(_, left, right) -> usesKeyword left || usesKeyword right
+            | BinaryOp(_, _, left, right) -> usesKeyword left || usesKeyword right
             | IfExpr(cond, thenExpr, elseExpr) -> usesKeyword cond || usesKeyword thenExpr || usesKeyword elseExpr
             | Match(values, arms) -> List.exists usesKeyword values || arms |> List.exists (snd >> usesKeyword)
             | Except(value, arms) -> usesKeyword value || arms |> List.exists (snd >> usesKeyword)
@@ -576,10 +576,10 @@ module Compiler =
             | Lambda(args, body, takesUnit) ->
                 Lambda(args, within InLambda (fun () -> desugarExpr body), takesUnit)
             // The right of `and` and `or` only runs when the left does not settle the result.
-            | BinaryOp(("and" | "or") as op, left, right) ->
-                BinaryOp(op, desugarExpr left, within InConditionalPart (fun () -> desugarExpr right))
-            | BinaryOp(op, left, right) ->
-                BinaryOp(op, desugarExpr left, desugarExpr right)
+            | BinaryOp(("and" | "or") as op, opSpan, left, right) ->
+                BinaryOp(op, opSpan, desugarExpr left, within InConditionalPart (fun () -> desugarExpr right))
+            | BinaryOp(op, opSpan, left, right) ->
+                BinaryOp(op, opSpan, desugarExpr left, desugarExpr right)
             | Pipe(value, name, rangeOpt, args) ->
                 Pipe(desugarExpr value, name, rangeOpt, args |> List.map desugarExpr)
             | Block statements ->

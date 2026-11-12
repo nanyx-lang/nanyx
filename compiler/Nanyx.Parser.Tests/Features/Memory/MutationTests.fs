@@ -7,7 +7,7 @@ open Parser.Program
 let ``mut is a call to __mut that takes the rest of the expression`` () =
     match parseModule "def a = mut 0\ndef b = mut x + 1" with
     | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__mut", None, [ Kind (LiteralExpr (IntLit 0L)) ])))))
-                  Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__mut", None, [ Kind (BinaryOp ("+", _, _)) ]))))) ] -> ()
+                  Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__mut", None, [ Kind (BinaryOp ("+", _, _, _)) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -22,7 +22,7 @@ def f = {
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ first; second ]), _))))) ] ->
         match first.Kind, second.Kind with
-        | ExprStatement (Kind (FunctionCall ("__assign", Some _, [ Kind (IdentifierExpr "total"); Kind (BinaryOp ("+", _, _)) ]))),
+        | ExprStatement (Kind (FunctionCall ("__assign", Some _, [ Kind (IdentifierExpr "total"); Kind (BinaryOp ("+", _, _, _)) ]))),
           ExprStatement (Kind (FunctionCall ("__assign", Some _, [ Kind (IdentifierExpr "names"); Kind (Pipe (_, "append", _, _)) ]))) -> ()
         | other -> failwith $"Unexpected statements: %A{other}"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
