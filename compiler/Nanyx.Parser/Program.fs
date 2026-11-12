@@ -951,6 +951,13 @@ do
     
     // Each form builds the lambda's kind given the span of the whole `{ ... }`, which is also where the
     // parameters and expressions a shorthand stands for are made up.
+    // Names and then arms, `{ m, f -> | #some(v), _ -> f(v) | other, _ -> other }`, match the arms against the
+    // parameters in order, which stay in scope in each arm unless it binds the same name.
+    let lambdaWithParamsAndArms =
+        pipe2 (sepBy1 (attempt bracketedParameter <|> parameter) (pstring "," .>> ws) .>> arrow) (ws >>. withSpan matchArms)
+            (fun named (arms, armsSpan) span ->
+                let scrutinees = named |> List.map (fun (name, _) -> Expression.at armsSpan (IdentifierExpr name))
+                Lambda(named, Expression.at span (Match(scrutinees, arms)), false))
     // A pattern parameter is taken apart by a match with one arm at the top of the body, over the parameter that
     // stands in its place (`patternArgument`), so the pattern must be total as a destructuring def's is. The arm's
     // body, the lambda's, declares the names the patterns bind. `{ () -> ... }` has no parameters, as `{ ... }` has,
@@ -1042,6 +1049,7 @@ do
                         attempt shorthandBinaryOp
                         attempt shorthandWithArgument
                         attempt shorthandMatchLambda
+                        attempt lambdaWithParamsAndArms
                         attempt lambdaWithParams
                         lambdaNoParams
                     ] .>> skipMany (skipAnyOf " \t\r\n")

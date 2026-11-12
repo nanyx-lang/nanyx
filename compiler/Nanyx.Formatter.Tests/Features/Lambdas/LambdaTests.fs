@@ -90,3 +90,14 @@ let ``A lambda body that spans lines is indented, with the closing braces on dif
     Assert.Equal(
         lines [ "def f = { x -> match x"; "    | 1 -> a"; "    | _ -> b"; "}" ],
         format (lines [ "def f = { x -> match x"; "  | 1 -> a"; "  | _ -> b"; "}" ]))
+
+[<Fact>]
+let ``Arms after a lambda's parameters are printed as written`` () =
+    unchanged "def a = { o -> | #some(s) -> s }\n"
+    unchanged (lines [ "def `>>=` = { m, f ->"; "  | #some(v), f -> f(v)"; "  | other, _ -> other"; "}" ])
+    unchanged "def b = { m, (n: int) -> | 0, _ -> n }\n"
+    // A match written out stays one.
+    unchanged (lines [ "def c = { m, f ->"; "  match m, f"; "    | x, _ -> x"; "}" ])
+    Assert.Equal(
+        lines [ "def d = { m, f ->"; "  | #some(v), f -> f(v)"; "  | other, _ -> other"; "}" ],
+        format "def d = {  m,f  ->  | #some(v), f -> f(v) | other, _ -> other }")

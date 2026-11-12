@@ -61,6 +61,20 @@ things \map {
 } \sum
 ```
 
+With several parameters, each arm gives a pattern for each of them, in order. The parameters can also be named before the arms, which keeps them in scope in every arm (unless an arm binds the same name itself):
+
+```nanyx
+def orElse = { o, fallback ->
+  | #some(v), _ -> v
+  | #none, _ -> fallback
+}
+
+def first = orElse(#some(1), 0)
+def second = orElse(#none, 0)
+```
+
+An arm that gives the wrong number of patterns is an error.
+
 A parameter can also be a pattern, which takes the argument apart as it is passed in:
 
 ```nanyx fragment

@@ -689,12 +689,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Some doc -> doc
         | None ->
             let parameters, body = writtenLambda e parameters body
-            // An annotated parameter is bracketed, so an arrow after its annotation is not read as part of it.
-            let parameterDoc ((n, typeOpt), patternOpt) =
-                match patternOpt, typeOpt with
-                | Some p, _ -> pattern p
-                | None, Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
-                | None, None -> text n
             let takesUnit = match e.Kind with Lambda(_, _, takesUnit) -> takesUnit | _ -> false
             let head =
                 match parameters with
@@ -725,8 +719,17 @@ let format (options: Options) (parsed: SourceModule) : string =
                 // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
                 Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
 
+    /// A lambda's parameter, with the pattern it was written as, if any (see `writtenLambda`). An annotated parameter is
+    /// bracketed, so an arrow after its annotation is not read as part of it.
+    and parameterDoc ((n, typeOpt), patternOpt) =
+        match patternOpt, typeOpt with
+        | Some p, _ -> pattern p
+        | None, Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
+        | None, None -> text n
+
     /// The shorthand lambdas the parser expands: `{ }`, `{ * }`, a body that leaves out its first operand (`{ * 2 }`,
-    /// `{ .name }`, which the implicit argument is printed as nothing in), and `{ | pattern -> ... }`.
+    /// `{ .name }`, which the implicit argument is printed as nothing in), `{ | pattern -> ... }` and
+    /// `{ m -> | pattern -> ... }`.
     and shorthand (e: Expression) parameters (body: Expression) : Doc option =
         let made (x: Expression) = valid e.Span && x.Span = e.Span
         match parameters, body.Kind with
@@ -736,17 +739,23 @@ let format (options: Options) (parsed: SourceModule) : string =
             Some(text $"{{ {op} }}")
         | [ (only, None) ], _ when only = implicitArgument ->
             Some(Doc.group (cat [ text "{ "; nest (expr full body); Doc.line; text "}" ]))
+        // `{ | ... }` makes up its parameters and their scrutinees at the lambda; `{ m, f -> | ... }` makes up the
+        // scrutinees of the parameters it names at its arms.
         | _, Match(scrutinees, arms) when
             made body
             && not parameters.IsEmpty
-            && parameters = List.init parameters.Length (fun i -> $"arg{i + 1}", None)
             && scrutinees.Length = parameters.Length
-            && List.forall2 (fun (s: Expression) (n, _) -> made s && s.Kind = IdentifierExpr n) scrutinees parameters
+            && List.forall2 (fun (s: Expression) (n, _) -> s.Kind = IdentifierExpr n) scrutinees parameters
+            && (if List.forall made scrutinees then parameters = List.init parameters.Length (fun i -> $"arg{i + 1}", None)
+                else parameters |> List.indexed |> List.forall (fun (i, (n, _)) -> n <> patternArgument (i + 1)))
             ->
+            let head =
+                if List.forall made scrutinees then text "{"
+                else cat [ text "{ "; commaJoin (parameters |> List.map (fun parameter -> parameterDoc (parameter, None))); text " ->" ]
             let armsDoc = armsInSequence e.Span.Start e.Span.End arms
             let single = (List.distinctBy (fun (_, b: Expression) -> b.Id) arms).Length = 1
-            if single && not (Doc.hasHardLine armsDoc) then Some(cat [ text "{ "; armsDoc; text " }" ])
-            else Some(cat [ text "{"; nest (cat [ hard; armsDoc ]); hard; text "}" ])
+            if single && not (Doc.hasHardLine armsDoc) then Some(cat [ head; text " "; armsDoc; text " }" ])
+            else Some(cat [ head; nest (cat [ hard; armsDoc ]); hard; text "}" ])
         | _ -> None
 
     /// Match arms one per line. Arms that share one body are the alternatives of an or-pattern, `| a | b -> body`.

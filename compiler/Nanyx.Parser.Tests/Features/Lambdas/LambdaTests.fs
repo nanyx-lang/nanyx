@@ -399,3 +399,24 @@ let ``the implicit argument is made up at the operator written in its place`` ()
         source.Substring(argument.Span.Start, argument.Span.End - argument.Span.Start) |> should equal "%"
         source.Substring(remainder.Span.Start, remainder.Span.End - remainder.Span.Start) |> should equal "% 2"
     | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``named parameters followed by arms match the arms against the parameters`` () =
+    let source =
+        """def bind = { m, f ->
+  | #some(v), f -> f(v)
+  | other, _ -> other
+}"""
+            .ReplaceLineEndings "\n"
+    match (onlyValue source).Kind with
+    | Lambda ([ ("m", None); ("f", None) ], Kind (Match ([ Kind (IdentifierExpr "m"); Kind (IdentifierExpr "f") ], [ [ Kind (TagPattern _); _ ], _; [ Kind (IdentifierPattern "other"); Kind WildcardPattern ], _ ])), false) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``arms after parameters may follow on the arrow's line, after one parameter or an operator's`` () =
+    match (onlyValue "def name = { o -> | #some(s) -> s | #none -> \"none\" }").Kind with
+    | Lambda ([ ("o", None) ], Kind (Match ([ Kind (IdentifierExpr "o") ], [ _; _ ])), false) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    match (onlyValue "def `>>=` = { m, (f: int -> int) -> | #some(v), f -> f(v) | other, _ -> other }").Kind with
+    | Lambda ([ ("m", None); ("f", Some _) ], Kind (Match ([ _; _ ], [ _; _ ])), false) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
