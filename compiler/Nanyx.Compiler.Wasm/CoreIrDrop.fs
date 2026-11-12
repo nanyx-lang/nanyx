@@ -12,8 +12,10 @@ open Transpiler.Wasm.CoreIr
 
 /// Whether a value of this type can be a pointer to an object on the heap. A union of tags is one when some tag has a
 /// payload, though a value of it is a pointer only when it is not a code.
-let isHeapType (ty: IrType) =
+let rec isHeapType (ty: IrType) =
     match ty with
+    | IrRecursive _ -> isHeapType (IrType.unfold ty)
+    | IrSelf -> internalError "a recursive type's own type outside it"
     | IrString
     | IrFloat
     | IrList _
@@ -28,7 +30,7 @@ let isHeapType (ty: IrType) =
 /// How far before an object's pointer its count is: 8 for an object with an info word (a string, a record, a
 /// closure), else 4.
 let countOffset (ty: IrType) =
-    match ty with
+    match IrType.unfold ty with
     | IrString
     | IrRecord _
     | IrFunction _ -> 8
@@ -69,7 +71,7 @@ let collect (functions: Function list) : Drops =
     let rec add (ty: IrType) =
         if isHeapType ty && seen.Add ty then
             types.Add ty
-            match ty with
+            match IrType.unfold ty with
             | IrList element -> add element
             | IrRecord fields -> fields |> List.iter (snd >> add)
             | IrTags tags -> tags |> List.iter (snd >> Option.iter add)
@@ -184,7 +186,7 @@ let private releaseThen (ty: IrType) (fields: string list) =
 
 /// The body of the drop function of `ty`, which takes the value in `$p`.
 let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
-    match ty with
+    match IrType.unfold ty with
     | IrString
     | IrFloat -> releaseThen ty []
     | IrRecord fields ->
@@ -244,12 +246,14 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrInt
     | IrBool
     | IrUnit
-    | IrError -> internalError $"a drop function for {IrType.show ty}, which is not on the heap"
+    | IrError
+    | IrRecursive _
+    | IrSelf -> internalError $"a drop function for {IrType.show ty}, which is not on the heap"
 
 /// The body of the dup function of `ty`, which takes the value in `$p` and leaves it.
 let private dupBody (ty: IrType) : string list =
     let notOnHeap =
-        match ty with
+        match IrType.unfold ty with
         | IrList _ -> [ "local.get $p"; "i32.eqz"; "br_if $shared" ]
         | IrTags _ -> [ "local.get $p"; "i32.const 1"; "i32.and"; "br_if $shared" ]
         | _ -> []

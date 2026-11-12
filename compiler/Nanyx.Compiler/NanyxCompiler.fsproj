@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="Diagnostics.fs" />
     <Compile Include="TypedAst.fs" />
+    <Compile Include="RecursiveAliases.fs" />
     <Compile Include="TypeEnv.fs" />
     <Compile Include="Constraints.fs" />
     <Compile Include="FunctionContexts.fs" />

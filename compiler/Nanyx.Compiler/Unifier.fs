@@ -25,10 +25,11 @@ type TypeNotation =
 
 module Unifier =
     /// The type an alias stands for, looking through any number of aliases; any other type as it is. Only the
-    /// outermost type is unwrapped, so aliases inside it keep their names.
+    /// outermost type is unwrapped, so aliases inside it keep their names. A recursive alias is unfolded one level
+    /// (see `RecursiveAliases`).
     let rec unalias (ty: Ty) : Ty =
         match ty with
-        | TyAlias(_, _, underlying) -> unalias underlying
+        | TyAlias _ -> unalias (RecursiveAliases.underlying ty)
         | _ -> ty
 
     /// The type of an expression that failed to check. It agrees with every type, so nothing that uses the
@@ -595,6 +596,8 @@ module Unifier =
             failures
             |> List.tryFind (fun (_, span, _) -> span <> origin)
             |> Option.orElse (List.tryLast failures)
+        // The pairs of references to recursive aliases being compared by what they stand for (see `unfoldBoth`).
+        let assumed = HashSet<Ty * Ty>(HashIdentity.Structural)
         let rec loop (subst: Subst) (remaining: ConstraintSet) =
             // A closed record has exactly its fields, so two closed records agree only when they have the same ones:
             // a record with a field more or a field fewer is a different type.
@@ -607,6 +610,16 @@ module Unifier =
                     loop subst (pairConstraints @ rest)
                 else
                     Error (recordKeyMessage lKeys rKeys left right, origin, TypesDiffer)
+            // Two references to recursive aliases are compared by what they stand for, taking them to agree while that
+            // is checked: unfolded, they may hold the same two references again, which agree if nothing else differs.
+            let unfoldBoth kind origin l r rest =
+                if assumed.Contains((l, r)) then
+                    loop subst rest
+                else
+                    assumed.Add((l, r)) |> ignore
+                    let result = loop subst ((RecursiveAliases.underlying l, RecursiveAliases.underlying r, kind, origin) :: rest)
+                    assumed.Remove((l, r)) |> ignore
+                    result
             // `exact` when the two types are to be the same (an `Equal` constraint), and not only one given where the
             // other is expected. A lone tag is then the same as an open union only when the union's rest adds nothing:
             // `#notFound` is `#notFound | r` with `r` empty. A rest an annotation names is left alone, as the
@@ -624,11 +637,16 @@ module Unifier =
                     else
                         let newSubst = subst |> Map.add v.Id ty
                         loop newSubst rest
+                // Two references to one recursive alias are the same type when their arguments are: unfolded, each
+                // would hold the same two references again.
+                | RecursiveAliases.RecursiveAlias(lBody, lArgs), RecursiveAliases.RecursiveAlias(rBody, rArgs) when lBody = rBody ->
+                    loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs) @ rest)
+                | RecursiveAliases.RecursiveAlias _, RecursiveAliases.RecursiveAlias _ -> unfoldBoth Equal origin l r rest
                 // An alias is the type it stands for.
-                | TyAlias(_, _, underlying), _ ->
-                    loop subst ((underlying, r, Equal, origin) :: rest)
-                | _, TyAlias(_, _, underlying) ->
-                    loop subst ((l, underlying, Equal, origin) :: rest)
+                | TyAlias _, _ ->
+                    loop subst ((RecursiveAliases.underlying l, r, Equal, origin) :: rest)
+                | _, TyAlias _ ->
+                    loop subst ((l, RecursiveAliases.underlying r, Equal, origin) :: rest)
                 | TyPrimitive lName, TyPrimitive rName when lName = rName ->
                     loop subst rest
                 | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->
@@ -806,10 +824,13 @@ module Unifier =
                         | TyVar _, _
                         | _, TyVar _ ->
                             unifyEqual false origin l r rest
-                        | TyAlias(_, _, underlying), _ ->
-                            loop subst ((underlying, r, Assignable, origin) :: rest)
-                        | _, TyAlias(_, _, underlying) ->
-                            loop subst ((l, underlying, Assignable, origin) :: rest)
+                        // A type's arguments may be read in a function's input, so two references to recursive aliases
+                        // are compared by what they stand for (see `unfoldBoth`).
+                        | RecursiveAliases.RecursiveAlias _, RecursiveAliases.RecursiveAlias _ -> unfoldBoth Assignable origin l r rest
+                        | TyAlias _, _ ->
+                            loop subst ((RecursiveAliases.underlying l, r, Assignable, origin) :: rest)
+                        | _, TyAlias _ ->
+                            loop subst ((l, RecursiveAliases.underlying r, Assignable, origin) :: rest)
                         // A closed union given where an open one is expected widens it: the tags it has that the
                         // expected union does not name go into the expected union's rest, which stays open for
                         // more. So `#some(string) | #nil` and then `#some(int) | #notFound`, given in turn to a

@@ -16,7 +16,7 @@ let hashName (ty: IrType) = "__nanyx_hash_" + sanitizeIdentifier (IrType.mangle 
 
 /// The parts of a value of `ty` whose hashes its hash is made of.
 let private parts (ty: IrType) : IrType list =
-    match ty with
+    match IrType.unfold ty with
     | IrRecord fields -> fields |> List.map snd
     | IrList element -> [ element ]
     | IrTags tags -> tags |> List.choose snd
@@ -38,7 +38,7 @@ let private indent (lines: string list) = lines |> List.map (fun line -> "  " + 
 /// The locals the hash function of `ty` needs, and its body, which leaves the hash of `$a`. `tagId` gives the number of
 /// each tag the module numbers.
 let private hashBody (tagId: string -> int option) (ty: IrType) : string list * string list =
-    match ty with
+    match IrType.unfold ty with
     | IrInt
     | IrBool
     | IrUnit -> [], [ "local.get $a" ]
@@ -152,7 +152,9 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
           yield! hashPayload
           "local.get $h" ]
     | IrFunction _
-    | IrError -> internalError $"a hash function for {IrType.show ty}, which has no hash"
+    | IrError
+    | IrRecursive _
+    | IrSelf -> internalError $"a hash function for {IrType.show ty}, which has no hash"
 
 /// The runtime helpers the hash functions of `types` call.
 let helpersUsed (types: IrType list) : string list =

@@ -682,6 +682,39 @@ let private ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: 
                 $"'{name}' requires {contextsText} {Diagnostics.listed contextNames} and the context members {Diagnostics.listed memberNames}, which are not available here"
         Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
 
+/// Whether the definition of the type `name` can name the type itself: an alias can, unless it is a context, or a
+/// type of that name is already in scope, which the name then means.
+let private canReferToItself (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) =
+    not (isNominalName name) && not (isContextDef modifiers) && (tryFindTypeDef name state).IsNone
+
+/// The type the definition of `name`, with the parameters `paramVars`, stands for. An alias that names itself inside
+/// the payload of one of its tags is recursive (see `RecursiveAliases`); one that names itself anywhere else reads the
+/// name as it did before the alias was defined, and `unguardedSelfReferences` reports it.
+let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (paramVars: TyVar list) (body: TypeExpr) =
+    let plain () = typeExprToTy state body
+    if not (canReferToItself state name modifiers) then
+        plain ()
+    else
+        let self =
+            { Name = name
+              Home = state.Home
+              Parameters = paramVars
+              Underlying = RecursiveAliases.selfMarker paramVars
+              IsPrivate = false
+              IsContext = false
+              Symbol = None
+              Members = Map.empty }
+        let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add name self } body
+        match RecursiveAliases.selfReferences ty with
+        | true, false -> RecursiveAliases.close paramVars ty, { next with TypeDefs = next.TypeDefs |> Map.remove name }
+        | true, true -> plain ()
+        | false, _ -> ty, { next with TypeDefs = next.TypeDefs |> Map.remove name }
+
+/// The error for each place the alias `name` names itself other than inside the payload of one of its tags (see
+/// `RecursiveAliases.unguardedReferences`).
+let private unguardedSelfReferences (name: Identifier) (modifiers: TypeDefModifier list) (body: TypeExpr) : Diagnostic list =
+    if isNominalName name || isContextDef modifiers then [] else RecursiveAliases.unguardedReferences name body
+
 let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     let originalTypeVars = state.TypeVars
     let mutable current = state
@@ -698,9 +731,10 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
         paramEntries
         |> List.fold (fun acc (paramName, var) -> acc |> Map.add paramName var) current.TypeVars
     let stateWithParams = { current with TypeVars = updatedTypeVars }
-    let underlyingTy, next = typeExprToTy stateWithParams body
     let isPrivate = isPrivateType modifiers
     let paramVars = paramEntries |> List.map snd
+    let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars body
+    let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
     let nextNominals =
         if isNominalName name then next.LocalNominals |> Set.add name else next.LocalNominals
     let nextPrivate =
@@ -727,19 +761,20 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
                 | TypeMember _ -> None)
             |> Map.ofList
         | _ -> Map.empty
+    let info =
+        { Name = name
+          Home = next.Home
+          Parameters = paramVars
+          Underlying = underlyingTy
+          IsPrivate = isPrivate
+          IsContext = isContextDef modifiers
+          Symbol = symbol
+          Members = members }
+    // A name of the type in its own definition refers to it, as any other does.
+    let next = selfReferences |> List.fold (fun state typeExpr -> recordTypeReference typeExpr info state) next
     { next with
         TypeVars = originalTypeVars
-        TypeDefs =
-            next.TypeDefs
-            |> Map.add name
-                { Name = name
-                  Home = next.Home
-                  Parameters = paramVars
-                  Underlying = underlyingTy
-                  IsPrivate = isPrivate
-                  IsContext = isContextDef modifiers
-                  Symbol = symbol
-                  Members = members }
+        TypeDefs = next.TypeDefs |> Map.add name info
         HiddenTypeNames = next.HiddenTypeNames |> Set.remove name
         ContextDefs = nextContexts
         LocalNominals = nextNominals
@@ -2722,7 +2757,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters
                 current <- registerTypeDef current name modifiers parameters body
                 // Checked once the type is registered, so it can name itself.
-                if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters
+                if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters @ unguardedSelfReferences name modifiers body
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement value ->
                 if errors.IsEmpty then
@@ -3079,7 +3114,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
             match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
-            | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters
+            | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters @ unguardedSelfReferences name modifiers body
             | typeOfErrors -> errors <- errors @ typeOfErrors
             emit (TypedDef (TypedTypeDef(name, modifiers, parameters, body)))
 

@@ -27,6 +27,12 @@ type IrType =
     /// contexts the function requires where it is called, by key, each with its type: a call passes the ones in scope
     /// there after its arguments, in this order (contexts by name, and each context's members in its layout's order).
     | IrFunction of IrType * IrType * members: (string * IrType) list
+    /// A type that holds itself, as a type alias that names itself in the payload of one of its tags does
+    /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`): the type is its body, with each `IrSelf` in it the whole
+    /// type again. Code that reads what the type is made of reads `IrType.unfold` of it.
+    | IrRecursive of IrType
+    /// In the body of an `IrRecursive`, and not inside another one there, the `IrRecursive` itself.
+    | IrSelf
 
 /// What a variable is, which decides how it is stored. The lowering names every variable as it is to be written in
 /// WebAssembly text; variables of the same kind and name share a local.
@@ -250,6 +256,28 @@ exception InternalError of string
 let internalError message : 'a = raise (InternalError message)
 
 module IrType =
+    /// What a recursive type is made of: its body, with each `IrSelf` that stands for it the type itself. Any other
+    /// type as it is.
+    let unfold (ty: IrType) : IrType =
+        let rec replace inner =
+            match inner with
+            | IrSelf -> ty
+            | IrRecursive _ -> inner
+            | IrTags tags -> IrTags(tags |> List.map (fun (name, payload) -> name, Option.map replace payload))
+            | IrRecord fields -> IrRecord(fields |> List.map (fun (name, fieldTy) -> name, replace fieldTy))
+            | IrList element -> IrList(replace element)
+            | IrFunction(input, output, members) ->
+                IrFunction(replace input, replace output, members |> List.map (fun (key, memberTy) -> key, replace memberTy))
+            | IrInt
+            | IrBool
+            | IrUnit
+            | IrString
+            | IrFloat
+            | IrError -> inner
+        match ty with
+        | IrRecursive body -> replace body
+        | _ -> ty
+
     /// Whether a record's fields are a tuple's: its positions, `0`, `1`, ...
     let isTuple (fields: (string * IrType) list) =
         Set.ofList (List.map fst fields) = Set.ofList (List.init fields.Length string)
@@ -291,6 +319,9 @@ module IrType =
         | IrTags _
         | IrFunction _
         | IrError -> true
+        // A type holds itself only in the payload of a tag.
+        | IrRecursive _
+        | IrSelf -> true
         | IrRecord fields -> fields |> List.exists (snd >> holdsUnordered)
         | IrList element -> holdsUnordered element
         | IrInt
@@ -322,6 +353,8 @@ module IrType =
         | IrFunction(input, output, members) ->
             let keys = members |> List.map fst |> String.concat ", "
             $"([{keys}] {show input} -> {show output})"
+        | IrRecursive body -> $"rec self. {show body}"
+        | IrSelf -> "self"
 
     /// The type as part of a WebAssembly name, such as `list_string` in `id__list_string`.
     let rec mangle (ty: IrType) =
@@ -344,6 +377,7 @@ module IrType =
         | IrFunction(input, output, members) ->
             let keys = members |> List.map fst |> String.concat "_"
             $"fn_{mangle input}_to_{mangle output}_ctx_{keys}"
+        | IrRecursive body -> $"mu_{mangle body}"
         | _ -> show ty
 
 /// The type of an atom's value.

@@ -57,6 +57,17 @@ let ``Drop - a tag's payload is dropped by the type its code gives it`` () =
     Assert.Equal(heap, program.HeapPointer)
 
 [<Fact>]
+let ``Drop - a value of a recursive alias frees every node it holds`` () =
+    let source = """
+type Tree = #leaf | #node(Tree, string, Tree)
+
+def build: int -> Tree = { n -> if n == 0 then #leaf else #node(build(n - 1), "node {n}", build(n / 2)) }
+"""
+    let ty = IrRecursive(IrTags [ "leaf", None; "node", Some(IrRecord [ "0", IrSelf; "1", IrString; "2", IrSelf ]) ])
+    use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]
+    assertDropFreesEverything program "build" ty
+
+[<Fact>]
 let ``Drop - a closure frees what it captures`` () =
     let source =
         "def prefixer: int -> (string -> string) = { n ->\n" +

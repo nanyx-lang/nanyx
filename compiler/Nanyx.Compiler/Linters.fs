@@ -471,14 +471,15 @@ module UnusedPrivateDefinitions =
     let lint (model: SemanticModel) : Report list =
         let definitions = definitionsOf model.Syntax
         let picked = synthesizedMembers model
-        // The span of each expression as written, so that a reference from within a definition to itself is told
-        // apart. Nodes desugaring made are not among them, and their references count as uses: the call to
-        // `@entry`'s def that `applyAttributes` adds is one.
+        // The span of each expression and type as written, so that a reference from within a definition to itself is
+        // told apart: a def that calls itself, a type that names itself. Nodes desugaring made are not among them, and
+        // their references count as uses: the call to `@entry`'s def that `applyAttributes` adds is one.
+        let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+        let types =
+            (model.Syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
+            |> List.collect TypeExpr.within
         let spans =
-            model.Syntax
-            |> List.collect SyntaxTree.ofItem
-            |> List.collect SyntaxTree.expressionsWithin
-            |> List.map (fun expr -> expr.Id, expr.Span)
+            (expressions |> List.map (fun expr -> expr.Id, expr.Span)) @ (types |> List.map (fun typeExpr -> typeExpr.Id, typeExpr.Span))
             |> Map.ofList
         let usesBySymbol =
             model.References

@@ -96,7 +96,8 @@ type Ty =
     | TyUnion of Ty list
     /// A type alias by name, with its arguments, and the type it stands for. It is that type in every way but how it
     /// is written: inference, unification and codegen look straight through it, and a type shown to a reader keeps
-    /// the name the user gave it (`Customer`, not `(name: string)`).
+    /// the name the user gave it (`Customer`, not `(name: string)`). An alias that names itself holds its definition
+    /// closed instead, and is unfolded where it is looked through (see `RecursiveAliases`).
     | TyAlias of string * Ty list * Ty
 
 /// A simple typed expression placeholder for future expansion. `Arguments` are a call's arguments (a pipe's

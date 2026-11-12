@@ -122,17 +122,26 @@ module internal StructuralInstances =
         | RecordShape fields -> fields |> List.map snd
         | ListShape element -> [ element ]
 
+    /// The first part of the structure `ty`, at any depth, that `found` picks. A type met again is not looked inside
+    /// again, as it holds what it did the first time: a recursive alias holds itself (see `RecursiveAliases`).
+    let private tryPickPart (found: Ty -> 'a option) (ty: Ty) : 'a option =
+        let rec pick (seen: Set<Ty>) (ty: Ty) =
+            if seen.Contains ty then None
+            else
+                match found ty with
+                | Some result -> Some result
+                | None -> shapeOf ty |> Option.bind (partsOf >> List.tryPick (pick (seen.Add ty)))
+        pick Set.empty ty
+
     /// The part of the structure `ty`, at any depth, that is a function, if one is.
-    let rec private functionPart (ty: Ty) : Ty option =
-        match Unifier.unalias ty with
-        | TyFunc _ -> Some ty
-        | _ -> shapeOf ty |> Option.bind (partsOf >> List.tryPick functionPart)
+    let private functionPart (ty: Ty) : Ty option =
+        ty |> tryPickPart (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
 
     /// Whether comparing two values of the structure `ty` compares a part, at any depth, that `hasOwn` says has an
     /// `==` the compiler's own comparison would not read. `rigid` is as `closed` has it.
     let comparesParts (rigid: Set<int>) (hasOwn: Ty -> bool) (ty: Ty) : bool =
-        let rec inParts (ty: Ty) =
-            shapeOf ty |> Option.exists (partsOf >> List.exists (fun part -> hasOwn part || inParts part))
+        let inParts (ty: Ty) =
+            shapeOf ty |> Option.exists (partsOf >> List.exists (tryPickPart (fun part -> if hasOwn part then Some () else None) >> Option.isSome))
         closed rigid ty |> Option.exists inParts
 
     /// The type an instance is derived for and the variables it requires the context of, for a value of the type
