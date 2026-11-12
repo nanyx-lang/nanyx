@@ -1204,26 +1204,35 @@ module Compiler =
                             | None -> name
                         acc |> Map.add importedName signature) state.ContextSignatures
                 let typeDefs = mergeTypeDefs typeDefs exportedTypeDefs
-                // The ambient contexts the imported functions require that this module cannot name are carried in
-                // with their definitions, hidden, so a call to one is checked as a call needing the context is here.
-                let carried =
+                // The contexts the imported functions require that this module cannot name are carried in with their
+                // definitions, hidden, so a call to one is checked as a call needing the context is here: an ambient
+                // one, and a parameterised one, whose instance each call finds (an attached `Point.show` for a
+                // `Show(Point)`, say).
+                let carried, carriedParameterised =
                     let rec contextNames (ctx: TypeExpr) =
                         match ctx.Kind with
                         | TypeContext contexts -> contexts |> List.collect contextNames
                         | TypeName name
                         | TypeApply(name, _) -> [ name ]
                         | _ -> []
-                    imported.ContextRequirements
-                    |> Map.values
-                    |> Seq.collect (List.collect contextNames)
-                    |> Seq.distinct
-                    |> Seq.filter (fun name -> not (typeDefs.ContainsKey name) && not (state.ContextDefs.ContainsKey name))
-                    |> Seq.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info))
-                    |> List.ofSeq
+                    let unnamed =
+                        imported.ContextRequirements
+                        |> Map.values
+                        |> Seq.collect (List.collect contextNames)
+                        |> Seq.distinct
+                        |> Seq.filter (fun name -> not (typeDefs.ContainsKey name) && not (state.ContextDefs.ContainsKey name))
+                        |> List.ofSeq
+                    unnamed |> List.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info)),
+                    unnamed
+                    |> List.choose (fun name ->
+                        imported.Typed.TypeDefs
+                        |> Map.tryFind name
+                        |> Option.filter (fun info -> info.IsContext && not info.Parameters.IsEmpty && not (imported.AmbientContexts.ContainsKey name))
+                        |> Option.map (fun info -> name, info))
                 state <-
                     { state with
-                        TypeDefs = carried |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
-                        HiddenTypeNames = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
+                        TypeDefs = carried @ carriedParameterised |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
+                        HiddenTypeNames = carried @ carriedParameterised |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
                         CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
                         Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
                         ImportedThrough = importedThrough

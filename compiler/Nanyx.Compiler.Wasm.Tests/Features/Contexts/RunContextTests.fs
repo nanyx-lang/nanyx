@@ -531,3 +531,23 @@ let ``Run - an operator in a generic function calls the member of the context th
         "  println(\"{total.x} {total.y}\")\n" +
         "}\n"
     runSource source |> assertRan "4 6\n14 26 42\n9 12\n"
+
+// An imported function that requires a context its module does not export finds the instance where it is called, from
+// the importer's attached definitions, though the importer cannot name the context (#551).
+[<Fact>]
+let ``Run - an imported function requiring an unexported parameterised context`` () =
+    let lib = """module lib
+context Show(a) = (show: a -> string)
+export def describe: [Show(a)] a -> string = { v -> Show(a).show(v) }
+"""
+    let main = """import lib
+type Point = (x: int, y: int)
+def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
+@entry
+def main = { println(describe(Point(x = 1, y = 2))) }
+"""
+    use directory = new TempDirectory()
+    File.WriteAllText(Path.Combine(directory.Path, "lib.nyx"), lib)
+    let mainPath = Path.Combine(directory.Path, "main.nyx")
+    File.WriteAllText(mainPath, main)
+    runFile mainPath |> assertRan "(1, 2)\n"
