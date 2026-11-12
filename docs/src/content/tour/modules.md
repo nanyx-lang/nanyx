@@ -230,15 +230,15 @@ def area: Shape -> float = { shape -> ... }
 
 Order-independent name resolution is not the same as unrestricted recursion. The compiler analyses the dependency graph between declarations separately from name resolution, and rejects cycles where a value would need itself to be constructed:
 
-```nanyx skip=#955
+```nanyx
 module invalid
 
--- Error: `a` and `b` form a cycle; neither can be built without the other
+-- error NYX0115: `a` and `b` form a cycle; neither can be built without the other
 def a = b + 1
 def b = a + 1
 ```
 
-Being visible everywhere in the module (as `b` is to `a` above) doesn't excuse a genuine initialization cycle — this is a distinct check on top of ordinary name lookup. A recursive *function* is not a cycle of this kind: its body is not evaluated until it is called, so a top-level function may refer to itself freely. Only recursive definitions local to a function body need the `rec` keyword, as described in [Recursive functions](./functions#recursive-functions).
+Being visible everywhere in the module (as `b` is to `a` above) doesn't excuse a genuine initialization cycle — this is a distinct check on top of ordinary name lookup. A recursive *function* is not a cycle of this kind: its body is not evaluated until it is called, so a top-level function may refer to itself freely. A value that refers to a function may call it while it is being built, though, so a cycle that passes through a function is still one if a value is in it: `def a = f()` with `def f = { -> a }` is rejected. Only recursive definitions local to a function body need the `rec` keyword, as described in [Recursive functions](./functions#recursive-functions).
 
 # Nested modules
 
