@@ -298,7 +298,8 @@ let ``A generic function imported from another module is specialised where it is
         "def positives: list(int) -> list(bool) = { xs -> list.map(xs, { x -> x > 0 }) }\n"
     let _, report = compileWithReport source
     let mapSpecialisations = report.Specialisations |> List.filter (snd >> (=) "list_map") |> List.map fst
-    Assert.Equal<string list>([ "list_map__int__int"; "list_map__bool__int" ], mapSpecialisations)
+    // Named by its annotation's variables in order, `a` then `b`.
+    Assert.Equal<string list>([ "list_map__int__int"; "list_map__int__bool" ], mapSpecialisations)
     Assert.Contains("doubled", report.Functions)
     Assert.Contains("positives", report.Functions)
 
