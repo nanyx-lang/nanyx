@@ -849,7 +849,7 @@ module Compiler =
     /// `FromString(int, #invalidInt)` does to the `e` of `[FromString(a, e)] string -> #some(a) | e`.
     let private resolveTypes (subst: Subst) (types: Map<string, Ty>) (contexts: Map<string, TypeExpr list>) (typeDefs: Map<string, TypeDefInfo>) (items: TypedTopLevelItem list) =
         let closeOutputRests name ty =
-            let contextVars = contexts |> Map.tryFind name |> Option.defaultValue [] |> List.collect NyxCompiler.Infer.annotationVarNames |> Set.ofList
+            let contextVars = contexts |> Map.tryFind name |> Option.defaultValue [] |> List.collect NyxCompiler.InferModule.annotationVarNames |> Set.ofList
             let closed =
                 Unifier.outputOnlyRestVars ty
                 |> List.filter (fun v -> not (v.Name |> Option.exists contextVars.Contains))
@@ -1265,7 +1265,7 @@ module Compiler =
                 // A module imported along several paths fails each importer with the same diagnostics.
                 Error (Typed, List.distinct errors)
             else
-                let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.Infer.inferModuleWithEnv env state desugared
+                let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Unifier.solveDetailed state.Constraints
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
