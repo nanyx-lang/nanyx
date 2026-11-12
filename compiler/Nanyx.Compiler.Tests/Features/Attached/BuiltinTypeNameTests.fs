@@ -65,7 +65,7 @@ let ``Int, Float and Bool are not types, and the fix writes the alias`` () =
 def n = Int.fromString("4")
 def m = 3 \Int.double
 def show = Float.toString
-def b: Bool = true"""
+def b: Bool = true""".ReplaceLineEndings "\n"
     Assert.Equal<(string * string) list>(
         [ "Int", source.Replace("def Int.double", "def int.double")
           "Int", source.Replace("Int.fromString", "int.fromString")
