@@ -69,6 +69,13 @@ it is. The chain can then be shortened by turning its long match arms into separ
 
 The large test files are now split into `Features/<Area>/` files.
 
+**2026-11-12.** Splitting `Infer.fs` around its recursive chain
+([#364](https://github.com/nanyx-lang/nanyx/issues/364)), which had grown back to 3,269 lines:
+
+| File | Lines | What changed |
+|---|---|---|
+| `Infer.fs` | 2,802 | `TypeResolution.fs` moved out |
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review
