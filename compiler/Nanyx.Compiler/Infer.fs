@@ -1500,15 +1500,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
         | Some scheme ->
-            // A function passed as a value is passed with the contexts it requires, as they are where it is named, so
-            // it can only be named where they are available, as it can only be called there. A parameterised context
-            // is not checked here: a call finds it by type (see `resolveCallInstances`).
+            // A function named as a value requires its contexts where it is called, which its type says (see
+            // `ContextVariables.ofNamedValue`), so they need not be available where it is named. A parameterised context
+            // is found where it is named, but by type, once a call settles it (see `resolveCallInstances`).
             let contextCheck =
                 match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
                 | Some contexts ->
-                    let parameterized, plain = contexts |> List.partition (isParameterizedContext state)
-                    ensureContextAvailable true env state name plain expr.Span
-                    |> Result.bind (fun current -> ensureContextAvailable false env current name parameterized expr.Span)
+                    let parameterized = contexts |> List.filter (isParameterizedContext state)
+                    ensureContextAvailable false env state name parameterized expr.Span
                 | None -> Ok state
                 |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) expr.Span)
             match contextCheck with
@@ -1952,8 +1951,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedValue.Type) nextState value typedValue.Type
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) ->
-                ContextEscapes.checkUseIn finalState expr value body
-                |> Result.map (fun () -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
+                Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
             | Error err -> Error err
     | WorkflowBindExpr _ ->
         Error [ Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow expr.Span "Workflow bind used outside of a workflow block" ]
@@ -2666,7 +2664,6 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                                 inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                             | _ -> inferExpr envWithRec bodyState expr
-                            |> Result.bind (fun (typedExpr, next) -> ContextEscapes.checkDef next name contextOpt expr |> Result.map (fun () -> typedExpr, next))
                             |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = outerScope })
                         match inferResult with
                         | Ok (typedExpr, next) ->
@@ -2731,7 +2728,6 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         lastExpr <- typedExpr
                     | Error err -> errors <- err
         if errors.IsEmpty then errors <- BlockResult.check statements
-        if errors.IsEmpty then errors <- (match ContextEscapes.checkBlock current statements with Ok () -> [] | Error err -> err)
         if errors.IsEmpty then
             let blockExpr = mkTypedExpr block lastExpr.Type (Some lastExpr) (Some typedStatements) None
             Ok (blockExpr, current)
@@ -2983,7 +2979,6 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                         inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                     | _ -> inferExpr envWithRec bodyState expr
-                    |> Result.bind (fun (typedExpr, next) -> ContextEscapes.checkDef next name contextOpt expr |> Result.map (fun () -> typedExpr, next))
                     |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = AmbientScope })
                 match inferResult with
                 | Ok (typedExpr, next) ->

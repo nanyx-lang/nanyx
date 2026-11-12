@@ -72,8 +72,9 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
   `env.dbg_tag_payload_<tag>`), which the runtime provides
 - a function that requires a context (`[Console]`) takes its members as function-table slots; a
   `use` binding supplies them, otherwise a module-level function of the member's name does (that is how
-  the runtime's `Console` reaches `@entry`); passed as a value (`list.map(xs, println)`), it is a closure over its
-  members as they are where it is named (see [Context calls](./context-calls#functions-that-require-contexts-as-values))
+  the runtime's `Console` reaches `@entry`); a function value whose type requires contexts, a lambda or a function
+  passed as a value (`list.map(xs, println)`), is passed their members at each call, as they are where it is called
+  (see [Context calls](./context-calls#functions-that-require-contexts-as-values))
 
 A construct the backend cannot lower yet is reported as an `UnsupportedByBackend` error where it is written (see
 [Memory management](./memory-management#core-ir)).

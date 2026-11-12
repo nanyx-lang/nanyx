@@ -9,8 +9,7 @@
 /// contexts, checked as they always are. A parameterised context is found where the lambda is made, as a call finds it,
 /// and the lambda's type does not carry it.
 ///
-/// The lambda is still checked where it is made, against the contexts there: the Wasm backend gives it the members it
-/// uses from the scope it is made in.
+/// The lambda is still checked where it is made, against the contexts there.
 module internal NyxCompiler.LambdaContexts
 
 open Parser.Program

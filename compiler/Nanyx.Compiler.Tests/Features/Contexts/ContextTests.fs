@@ -105,7 +105,7 @@ let ``Missing contexts are named, not listed by their members`` () =
         message (contexts + "def g: [Log & Clock] () -> () = { log(\"hi\") }\ndef h: [Log] () -> () = { g() }"))
 
 [<Fact>]
-let ``A function passed as a value needs its contexts where it is named, as a call does`` () =
+let ``A function passed as a value needs its contexts where it is called, not where it is named`` () =
     let definitions = """
 context Foo = (bar: string -> string)
 
@@ -113,12 +113,15 @@ def useFoo: [Foo] string -> string = { s -> bar(s) }
 
 def run2 = { f, a -> f(a) }
 """
+    // The call that runs it needs them: here, the call to `run2`, which calls it.
     let diagnostic = (Compiler.compile (definitions + """run2(useFoo, "hi")""")).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-    Assert.Equal("'useFoo' requires the context 'Foo', which is not available here", diagnostic.Message)
-    // Where the context is available, the function is passed with it.
+    Assert.Equal("'run2' requires the context 'Foo', which is not available here", diagnostic.Message)
     let declared = definitions + """def pass: [Foo] string -> string = { s -> run2(useFoo, s) }"""
     Assert.Empty((Compiler.compile declared).Diagnostics)
+    // Naming it needs nothing (#836): its type requires `Foo` where it is called.
+    let named = definitions + """def later = useFoo"""
+    Assert.Empty((Compiler.compile named).Diagnostics)
     let loaded = definitions + """
 def main = {
   use Foo(bar = { s -> s })

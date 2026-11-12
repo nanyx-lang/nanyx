@@ -121,8 +121,7 @@ How it differs from the design above, for now:
 - **A lambda's body is checked against the contexts where it is written,** so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
 - **A parameterised context is never carried,** even at a type variable: it is found where the lambda is made, as before.
 - **A cell doesn't make a lambda require `$Memory`,** so `NYX0224` still keeps a lambda over a cell in its block (see [Context escape](./context-escape)).
-- **`NYX0225` stays for now.** A def that requires a context can't return a lambda that uses it, and a `use` can't result in one. It was there because the backend gave a lambda the members of the scope it was made in. Since [#836](https://github.com/nanyx-lang/nanyx/issues/836) each call passes them instead, so the check can go.
-- **A named function passed as a value still needs its contexts where it is named** ([#773](https://github.com/nanyx-lang/nanyx/pull/773)), for the same reason, and it can go too.
+- **A lambda written inside a `use` doesn't require the context the `use` loads** ([#844](https://github.com/nanyx-lang/nanyx/issues/844)): `use Foo(bar = ...) in { bar("x") }` is a `() -> string`, so the backend has nothing to pass it, and it keeps the member it captured where it was made.
 - **A call reads what a context variable stands for from the types solved so far,** and lambda parameters take their types from the constraints only while they all agree, so an earlier type error can leave a context unbound or a parameter's type unknown.
 
 In the Wasm backend ([#836](https://github.com/nanyx-lang/nanyx/issues/836)), a function value whose type requires contexts takes their members as parameters after its others, and each call passes the ones in scope there: the IR type `IrFunction` lists them, by key, contexts sorted by name and each context's members in its layout's order. So:
@@ -132,7 +131,7 @@ In the Wasm backend ([#836](https://github.com/nanyx-lang/nanyx/issues/836)), a 
 - A def with context variables, such as `[c]` in `run: [c] ([c] () -> string) -> string`, is specialised on the members of the contexts they stand for at each call (`CoreIrLower.callee`), and takes those members after the ones it declares.
 - A function value given where one requiring other contexts is expected, as an argument, a context member, a `use` binding, a list element or a def's result, is adapted (`FunctionLowering.Coerce`): a closure over an adapter that holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as they are where it is given. That is how `use (write = { s -> write(...) })` calls the outer `write`, and how a builder's `try`, whose context variable no call binds, takes a continuation that prints.
 
-`ContextEscapes.fs` holds the `NYX0225` check, and `EscapingLambdas.fs` the walk it shares with `MemoryCells.checkEscape`.
+So a lambda that uses a context may leave the scope that supplies it, and a function may be named as a value where its contexts aren't available: the type checker's `NYX0225` and the check from [#773](https://github.com/nanyx-lang/nanyx/pull/773), which stopped both because the backend once captured the members, are gone. A lambda that leaves still requires the context where it is called, as its type says.
 
 # Design notes
 

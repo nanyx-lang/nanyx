@@ -110,7 +110,6 @@ module DiagnosticCodes =
     let NotACell = code 222 "Assignment to a non-cell" Severity.Error
     let CellAssignmentMismatch = code 223 "Cell assignment type mismatch" Severity.Error
     let CellEscapesMemory = code 224 "Cell escapes its memory block" Severity.Error
-    let ContextEscapesScope = code 225 "Context escapes its scope" Severity.Error
     let UnboundContextVariable = code 226 "Unbound context variable" Severity.Error
     let ContextsNotAllowed = code 227 "Function requires contexts not allowed here" Severity.Error
 
@@ -131,7 +130,7 @@ module DiagnosticCodes =
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
-          CellEscapesMemory; ContextEscapesScope; UnboundContextVariable; ContextsNotAllowed
+          CellEscapesMemory; UnboundContextVariable; ContextsNotAllowed
           UnsupportedByBackend ]
 
 module Diagnostics =

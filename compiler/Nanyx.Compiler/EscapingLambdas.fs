@@ -1,5 +1,5 @@
 /// Finding a lambda that outlives the scope that gives it something it uses: a `memory` block's cells (see
-/// `MemoryCells`), or the members of a context a def or a `use` supplies (see `ContextEscapes`).
+/// `MemoryCells`).
 module internal NyxCompiler.EscapingLambdas
 
 open Parser.Program
