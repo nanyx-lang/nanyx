@@ -32,7 +32,7 @@ module internal TypeHoles =
     let constrainLambda (span: SourceSpan) (declared: TypeExpr option) (declaredTy: Ty) (lambdaTy: Ty) (state: InferState) =
         match declared, Unifier.unalias declaredTy, lambdaTy with
         | Some (Kind TypeHole), _, _ -> addConstraintAt span declaredTy lambdaTy state
-        | Some (Kind (TypeFunc(Kind TypeHole, _))), TyFunc(input, _), TyFunc(lambdaInput, _) -> addConstraintAt span input lambdaInput state
+        | Some (Kind (TypeFunc(Kind TypeHole, _))), TyFunc(input, _, _), TyFunc(lambdaInput, _, _) -> addConstraintAt span input lambdaInput state
         | _ -> state
 
     /// `state` with `expr`, a def's value of type `actualTy`, checked against `declaredTy`, the type its annotation

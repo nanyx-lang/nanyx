@@ -23,7 +23,7 @@ module internal InlineContexts =
         let inAll (pairs: (Ty * Ty) list) = pairs |> List.tryPick (fun (g, s) -> bindingOf parameter g s)
         match general, specific with
         | TyVar v, _ when v.Id = parameter.Id -> Some specific
-        | TyFunc(ga, gr), TyFunc(sa, sr) -> inAll [ ga, sa; gr, sr ]
+        | TyFunc(ga, gr, _), TyFunc(sa, sr, _) -> inAll [ ga, sa; gr, sr ]
         | TyRecord gf, TyRecord sf -> inAll [ for KeyValue(name, g) in gf do match sf |> Map.tryFind name with Some s -> yield g, s | None -> () ]
         | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> inAll (List.zip gs ss)
         | TyTag(_, Some g), TyTag(_, Some s) -> bindingOf parameter g s

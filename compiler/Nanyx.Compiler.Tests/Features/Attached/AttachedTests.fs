@@ -16,7 +16,7 @@ let ``Typecheck dotted def name`` () =
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     match typed.Types.["Person.fullName"] with
-    | TyFunc(TyAlias("Person", [], TyRecord fields), TyPrimitive "string") when fields.ContainsKey("firstName") ->
+    | TyFunc(TyAlias("Person", [], TyRecord fields), TyPrimitive "string", _) when fields.ContainsKey("firstName") ->
         Assert.True(true)
     | other -> Assert.True(false, $"Unexpected dotted def type: %A{other}")
 
@@ -42,7 +42,7 @@ let ``Typecheck infers attached receiver type for unannotated lambda`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     match typed.Types.["Person.toString"] with
-    | TyFunc(TyAlias("Person", [], TyRecord fields), TyPrimitive "string") when fields.ContainsKey("firstName") ->
+    | TyFunc(TyAlias("Person", [], TyRecord fields), TyPrimitive "string", _) when fields.ContainsKey("firstName") ->
         Assert.True(true)
     | other -> Assert.True(false, $"Unexpected inferred attached def type: %A{other}")
 
@@ -55,7 +55,7 @@ let ``Typecheck infers nominal attached receiver type for unannotated lambda`` (
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     match typed.Types.["$Email.toString"] with
-    | TyFunc(TyNominal({ Name = name }, _, _), TyPrimitive "string") when name = "$Email" ->
+    | TyFunc(TyNominal({ Name = name }, _, _), TyPrimitive "string", _) when name = "$Email" ->
         Assert.True(true)
     | other -> Assert.True(false, $"Unexpected inferred nominal attached def type: %A{other}")
 
@@ -68,7 +68,7 @@ let ``Typecheck infers nominal attached receiver as argument in body`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     match typed.Types.["$Email.toDisplay"] with
-    | TyFunc(TyNominal({ Name = nameIn }, _, _), TyNominal({ Name = nameOut }, _, _)) when nameIn = "$Email" && nameOut = "$Email" ->
+    | TyFunc(TyNominal({ Name = nameIn }, _, _), TyNominal({ Name = nameOut }, _, _), _) when nameIn = "$Email" && nameOut = "$Email" ->
         Assert.True(true)
     | other -> Assert.True(false, $"Unexpected inferred nominal identity attached def type: %A{other}")
 
@@ -89,7 +89,7 @@ let ``Typecheck allows attached defs on built-in types`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    Assert.Equal(TyFunc(TyPrimitive "string", TyPrimitive "int"), typed.Types.["int.parse"])
+    Assert.Equal(TyFunc(TyPrimitive "string", TyPrimitive "int", []), typed.Types.["int.parse"])
 
 [<Fact>]
 let ``Typecheck infers primitive attached receiver type for unannotated lambda`` () =
@@ -97,7 +97,7 @@ let ``Typecheck infers primitive attached receiver type for unannotated lambda``
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int"), typed.Types.["int.double"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int", []), typed.Types.["int.double"])
 
 [<Fact>]
 let ``Typecheck pipe resolves attached functions on built-in types`` () =
@@ -135,7 +135,7 @@ let ``Typecheck pipe resolves attached functions on a lambda parameter pinned ea
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int"), typed.Types.["f"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int", []), typed.Types.["f"])
 
 [<Fact>]
 let ``Typecheck pipe resolves attached functions`` () =

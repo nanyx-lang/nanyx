@@ -32,7 +32,7 @@ module internal OrderingOperators =
     /// function takes the operands (`input`, as a call's arguments are typed) and gives a bool.
     let private callWith (state: InferState) (expr: Expression) (op: string) (input: Ty) (instance: ContextInstance) =
         { state with
-            CalleeTypes = state.CalleeTypes |> Map.add expr.Id (TyFunc(input, TyPrimitive "bool"))
+            CalleeTypes = state.CalleeTypes |> Map.add expr.Id (TyFunc(input, TyPrimitive "bool", []))
             OperatorCalls = state.OperatorCalls |> Map.add expr.Id (callee op)
             ContextInstances = state.ContextInstances |> Map.add expr.Id [ Some instance ] }
 

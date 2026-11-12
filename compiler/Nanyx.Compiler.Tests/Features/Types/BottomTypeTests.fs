@@ -57,7 +57,7 @@ let ``Only undefined can be given where undefined is expected`` () =
 
 let private others =
     [ TyPrimitive "int"
-      TyFunc(TyPrimitive "int", TyPrimitive "string")
+      TyFunc(TyPrimitive "int", TyPrimitive "string", [])
       TyTag("some", Some (TyPrimitive "int"))
       TyUnion [ TyTag("a", None); TyTag("b", None) ]
       TyApply("list", [ TyPrimitive "bool" ])

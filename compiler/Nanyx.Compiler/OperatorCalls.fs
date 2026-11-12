@@ -22,7 +22,7 @@ module internal OperatorCalls =
     let private compares (state: InferState) (operandTy: Ty) (input: Ty) (scheme: TypeScheme) =
         let parameter =
             match Unifier.unalias (resolveSoFar state scheme.Type) with
-            | TyFunc(TyRecord fields, _) -> fields |> Map.tryFind "0"
+            | TyFunc(TyRecord fields, _, _) -> fields |> Map.tryFind "0"
             | _ -> None
         match parameter, operandTy with
         | Some (TyVar v), TyVar _ when not (scheme.Quantified.Contains v.Id) -> true
@@ -30,7 +30,7 @@ module internal OperatorCalls =
         | _ ->
             let funcTy, next = instantiate state scheme
             let resultTy, next = freshVar next
-            Unifier.unify ((funcTy, TyFunc(input, resultTy), Equal, SourceSpan.none) :: next.Constraints) |> Result.isOk
+            Unifier.unify ((funcTy, TyFunc(input, resultTy, []), Equal, SourceSpan.none) :: next.Constraints) |> Result.isOk
 
     /// The definition the operator `expr` calls with its operands (`input`, as a call's arguments are typed), if it
     /// calls one, and the name it calls it by. On a built-in type, that of its left operand (`leftTy`) as far as it is
@@ -85,7 +85,7 @@ module internal OperatorCalls =
     let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (instance: TypeExpr option) (input: Ty) : Ty * InferState =
         let funcTy, next = instantiate (recordReference expr scheme state) scheme
         let resultTy, next = freshVar next
-        let next = addConstraint funcTy (TyFunc(input, resultTy)) next
+        let next = addConstraint funcTy (TyFunc(input, resultTy, [])) next
         resultTy,
         { next with
             CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy

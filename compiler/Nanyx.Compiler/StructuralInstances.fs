@@ -80,7 +80,7 @@ module internal StructuralInstances =
             | Some args, Some underlying -> Some (TyAlias(name, args, underlying))
             | _ -> None
         | TyApply(name, args) -> all args |> Option.map (fun args -> TyApply(name, args))
-        | TyFunc(arg, ret) -> all [ arg; ret ] |> Option.map (fun parts -> TyFunc(parts.[0], parts.[1]))
+        | TyFunc(arg, ret, contexts) -> all [ arg; ret ] |> Option.map (fun parts -> TyFunc(parts.[0], parts.[1], contexts))
         | TyRecord fields -> fieldsOf fields |> Option.map TyRecord
         | TyOpenRecord(fields, row) -> fieldsOf fields |> Option.map (fun fields -> TyOpenRecord(fields, row))
         | TyTag(name, payload) ->

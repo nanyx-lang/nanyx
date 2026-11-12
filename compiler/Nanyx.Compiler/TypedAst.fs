@@ -82,7 +82,10 @@ type Ty =
     /// A nominal type: its identity, the type it is made from, and whether that is private to its home module. It is
     /// written by its own name, `$Person`.
     | TyNominal of NominalId * Ty * bool
-    | TyFunc of Ty * Ty
+    /// A function: its input, its result, and the contexts it requires where it is called (see `FunctionContexts`).
+    /// Each context is one applied to its arguments, `TyApply("Console", [])` or `TyApply("Show", [a])`, or a context
+    /// variable, `c` in `[c] a -> b`, which stands for any contexts. A function that requires none is pure.
+    | TyFunc of Ty * Ty * Ty list
     | TyRecord of Map<string, Ty>
     /// A record known to have at least these fields, its others standing for the row variable: what reading `p.name`
     /// tells inference about a `p` of no other known type. The variable is solved to a record (or another open one)

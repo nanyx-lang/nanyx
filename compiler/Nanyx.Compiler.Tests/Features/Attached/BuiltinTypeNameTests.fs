@@ -23,17 +23,17 @@ let ``A definition attached to a built-in type is called by the type's alias`` (
 let ``A definition attached under the type's alias is reached by a pipe`` () =
     let typed = compileClean "def int.double = { n -> n * 2 }\ndef n = 3 \\double"
     Assert.Equal(TyPrimitive "int", typed.Types.["n"])
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int"), typed.Types.["int.double"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int", []), typed.Types.["int.double"])
 
 [<Fact>]
 let ``An attached definition is used as a value by the type's alias`` () =
     let typed = compileClean "def show = int.toString"
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "string"), typed.Types.["show"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "string", []), typed.Types.["show"])
 
 [<Fact>]
 let ``A value named as a built-in type is the value`` () =
     let typed = compileClean "def count = { (list: list(int)) -> list.length }"
-    Assert.Equal(TyFunc(TyApply("list", [ TyPrimitive "int" ]), TyPrimitive "int"), typed.Types.["count"])
+    Assert.Equal(TyFunc(TyApply("list", [ TyPrimitive "int" ]), TyPrimitive "int", []), typed.Types.["count"])
 
 [<Fact>]
 let ``A capitalised built-in type is the type its alias names`` () =
@@ -53,10 +53,10 @@ def s: Set(int) = set.fromList([1])
 def q = { (items: Seq(int)) -> items }"""
     Assert.Equal(TyPrimitive "string", typed.Types.["a"])
     Assert.Equal(TyPrimitive "string", typed.Types.["c"])
-    Assert.Equal(TyFunc(TyPrimitive "string", TyPrimitive "string"), typed.Types.["string.shout"])
+    Assert.Equal(TyFunc(TyPrimitive "string", TyPrimitive "string", []), typed.Types.["string.shout"])
     Assert.Equal(TyApply("list", [ TyPrimitive "int" ]), typed.Types.["d"])
     Assert.Equal(TyPrimitive "unit", typed.Types.["u"])
-    Assert.Equal(TyFunc(TyApply("seq", [ TyPrimitive "int" ]), TyApply("seq", [ TyPrimitive "int" ])), typed.Types.["q"])
+    Assert.Equal(TyFunc(TyApply("seq", [ TyPrimitive "int" ]), TyApply("seq", [ TyPrimitive "int" ]), []), typed.Types.["q"])
 
 [<Fact>]
 let ``Int, Float and Bool are not types, and the fix writes the alias`` () =

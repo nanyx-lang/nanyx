@@ -87,27 +87,27 @@ module Intrinsics =
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
-        [ writeStdout, TypeEnv.mono (TyFunc(stringTy, unitTy))
-          writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy))
-          readStdinByte, TypeEnv.mono (TyFunc(unitTy, intTy))
-          exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType))
-          stringLength, TypeEnv.mono (TyFunc(stringTy, intTy))
-          stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy))
-          stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy))
-          stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy))
-          floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy))
-          floatFloor, TypeEnv.mono (TyFunc(floatTy, floatTy))
-          floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy))
-          floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy))
-          floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy))
-          intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy))
-          mapOfEntries, overEntries (TyFunc(entries, map))
-          mapEntries, overEntries (TyFunc(map, entries))
-          setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element); Symbol = None }
-          setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element); Symbol = None }
-          listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element); Symbol = None }
-          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy); Symbol = None }
-          hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy); Symbol = None } ]
+        [ writeStdout, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
+          writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
+          readStdinByte, TypeEnv.mono (TyFunc(unitTy, intTy, []))
+          exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType, []))
+          stringLength, TypeEnv.mono (TyFunc(stringTy, intTy, []))
+          stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy, []))
+          stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy, []))
+          stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy, []))
+          floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
+          floatFloor, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
+          floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
+          floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
+          floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy, []))
+          intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy, []))
+          mapOfEntries, overEntries (TyFunc(entries, map, []))
+          mapEntries, overEntries (TyFunc(map, entries, []))
+          setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None }
+          setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element, []); Symbol = None }
+          listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None }
+          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None }
+          hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None } ]
 
     let names : Set<string> = all |> List.map fst |> Set.ofList
 
@@ -119,7 +119,7 @@ module Intrinsics =
         |> List.exists (fun (intrinsicName, scheme) ->
             intrinsicName = name
             && (match scheme.Type with
-                | TyFunc(_, TyPrimitive "unit") -> true
+                | TyFunc(_, TyPrimitive "unit", _) -> true
                 | _ -> false))
 
     /// The type environment a standard-library module is checked in.

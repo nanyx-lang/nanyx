@@ -91,7 +91,7 @@ let ``The error type agrees with every type`` () =
     let a = TyVar { Id = 1; Name = None }
     let constraints: ConstraintSet =
         [ (Unifier.errorType, TyPrimitive "int", Equal, SourceSpan.none)
-          (TyFunc(Unifier.errorType, TyPrimitive "int"), TyFunc(TyPrimitive "string", TyPrimitive "int"), Assignable, SourceSpan.none)
+          (TyFunc(Unifier.errorType, TyPrimitive "int", []), TyFunc(TyPrimitive "string", TyPrimitive "int", []), Assignable, SourceSpan.none)
           // A variable that takes it agrees with everything from then on.
           (a, Unifier.errorType, Equal, SourceSpan.none)
           (a, TyPrimitive "int", Equal, SourceSpan.none)

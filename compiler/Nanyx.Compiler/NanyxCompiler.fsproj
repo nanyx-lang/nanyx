@@ -17,10 +17,12 @@
     <Compile Include="TypedAst.fs" />
     <Compile Include="TypeEnv.fs" />
     <Compile Include="Constraints.fs" />
+    <Compile Include="FunctionContexts.fs" />
     <Compile Include="Unifier.fs" />
     <Compile Include="Maps.fs" />
     <Compile Include="Sets.fs" />
     <Compile Include="InferState.fs" />
+    <Compile Include="WrittenContexts.fs" />
     <Compile Include="BranchJoin.fs" />
     <Compile Include="BlockResult.fs" />
     <Compile Include="Visibility.fs" />

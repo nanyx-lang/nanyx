@@ -117,10 +117,10 @@ let ``A match arm of a type not known yet joins the other arms' tags as the unio
     Assert.Empty(result.Diagnostics)
     let typed = result.Typed.Value
     match typed.Types.["mapOther"] with
-    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar a)); TyVar resultRest ]) ->
+    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar a)); TyVar resultRest ], _) ->
         match fields.["0"], fields.["1"] with
         | TyUnion [ TyTag("some", Some (TyVar a')); TyVar inputRest ],
-          TyFunc(TyVar fInput, TyUnion [ TyTag("some", Some (TyVar a'')); TyVar fRest ]) ->
+          TyFunc(TyVar fInput, TyUnion [ TyTag("some", Some (TyVar a'')); TyVar fRest ], _) ->
             Assert.Equal(a.Id, a'.Id)
             Assert.Equal(a.Id, a''.Id)
             Assert.Equal(inputRest.Id, fInput.Id)
@@ -177,9 +177,9 @@ let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typed = result.Typed.Value
     match typed.Types.["mapOption"] with
-    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar b)); TyVar resultRest ]) ->
+    | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar b)); TyVar resultRest ], _) ->
         match fields.["0"], fields.["1"] with
-        | TyUnion [ TyTag("some", Some (TyVar a)); TyVar inputRest ], TyFunc(TyVar fa, TyVar fb) ->
+        | TyUnion [ TyTag("some", Some (TyVar a)); TyVar inputRest ], TyFunc(TyVar fa, TyVar fb, _) ->
             Assert.NotEqual(a.Id, b.Id)
             Assert.Equal(a.Id, fa.Id)
             Assert.Equal(b.Id, fb.Id)
@@ -246,7 +246,7 @@ let ``Typecheck joins the tags of if branches into a union`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    let expected = TyFunc(TyPrimitive "unit", TyUnion [ TyTag("some", Some (TyPrimitive "string")); TyTag("noMessage", None) ])
+    let expected = TyFunc(TyPrimitive "unit", TyUnion [ TyTag("some", Some (TyPrimitive "string")); TyTag("noMessage", None) ], [])
     Assert.Equal(expected, typed.Types.["getMessage"])
 
 [<Fact>]
@@ -262,7 +262,7 @@ let ``Typecheck joins the tags of match arms into a union`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
     let expected =
-        TyFunc(TyPrimitive "int", TyUnion [ TyTag("zero", None); TyTag("one", Some (TyPrimitive "int")); TyTag("many", Some (TyPrimitive "int")) ])
+        TyFunc(TyPrimitive "int", TyUnion [ TyTag("zero", None); TyTag("one", Some (TyPrimitive "int")); TyTag("many", Some (TyPrimitive "int")) ], [])
     Assert.Equal(expected, typed.Types.["classify"])
 
 [<Fact>]
@@ -277,7 +277,7 @@ let ``Typecheck joins nested if branches and repeated tags once`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    let expected = TyFunc(TyPrimitive "int", TyUnion [ TyTag("zero", None); TyTag("small", Some (TyPrimitive "int")); TyTag("big", None) ])
+    let expected = TyFunc(TyPrimitive "int", TyUnion [ TyTag("zero", None); TyTag("small", Some (TyPrimitive "int")); TyTag("big", None) ], [])
     Assert.Equal(expected, typed.Types.["pick"])
 
 [<Fact>]
@@ -393,7 +393,8 @@ def load = {
             TyPrimitive "int",
             TyUnion
                 [ TyTag("error", Some (TyUnion [ TyTag("notFound", None); TyTag("denied", None) ]))
-                  TyTag("some", Some (TyPrimitive "int")) ]
+                  TyTag("some", Some (TyPrimitive "int")) ],
+            []
         )
     Assert.Equal(expected, typed.Types.["load"])
 
@@ -413,6 +414,7 @@ def load: int -> #some(int) | #error(#notFound | #denied) = {
             TyPrimitive "int",
             TyUnion
                 [ TyTag("some", Some (TyPrimitive "int"))
-                  TyTag("error", Some (TyUnion [ TyTag("notFound", None); TyTag("denied", None) ])) ]
+                  TyTag("error", Some (TyUnion [ TyTag("notFound", None); TyTag("denied", None) ])) ],
+            []
         )
     Assert.Equal(expected, typed.Types.["load"])

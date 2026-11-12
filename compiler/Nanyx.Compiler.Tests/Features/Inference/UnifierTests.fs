@@ -23,13 +23,13 @@ let ``Applying a definition's parameters replaces each once, even by a variable 
     let a = { Id = 1; Name = Some "a" }
     let e = { Id = 2; Name = Some "e" }
     let local = TyVar { Id = 1; Name = None }
-    let applied = Unifier.applyToParameters [ a; e ] [ TyPrimitive "int"; local ] (TyFunc(TyVar a, TyVar e))
-    Assert.Equal(TyFunc(TyPrimitive "int", local), applied)
+    let applied = Unifier.applyToParameters [ a; e ] [ TyPrimitive "int"; local ] (TyFunc(TyVar a, TyVar e, []))
+    Assert.Equal(TyFunc(TyPrimitive "int", local, []), applied)
 
 [<Fact>]
 let ``Unifier rejects occurs check`` () =
     let tvar = TyVar { Id = 2; Name = None }
-    let constraintSet: ConstraintSet = [ (tvar, TyFunc(tvar, TyPrimitive "int"), Equal, SourceSpan.none) ]
+    let constraintSet: ConstraintSet = [ (tvar, TyFunc(tvar, TyPrimitive "int", []), Equal, SourceSpan.none) ]
     let result = Unifier.unify constraintSet
     match result with
     | Ok _ -> Assert.True(false, "Expected occurs check failure")
@@ -111,7 +111,7 @@ let ``Solving carries on past a conflict to find the next`` () =
 [<Fact>]
 let ``Solving constraints that agree gives what unify gives`` () =
     let a = TyVar { Id = 1; Name = None }
-    let constraints: ConstraintSet = [ (a, TyFunc(TyPrimitive "int", TyPrimitive "string"), Equal, SourceSpan.none) ]
+    let constraints: ConstraintSet = [ (a, TyFunc(TyPrimitive "int", TyPrimitive "string", []), Equal, SourceSpan.none) ]
     let subst, failures = Unifier.solve constraints
     Assert.Empty(failures)
     Assert.Equal(Unifier.unify constraints, Ok subst)

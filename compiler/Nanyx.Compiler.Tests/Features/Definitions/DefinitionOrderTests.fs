@@ -22,7 +22,7 @@ let ``A function's pipe on the result of a function defined later finds the func
 def shout = { n -> later(n) \trim }
 
 def later = { x -> " text {x + 1} " }"""
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "string"), result.Types.["shout"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "string", []), result.Types.["shout"])
 
 [<Fact>]
 let ``A function used before its definition is generalised before the use`` () =
@@ -43,8 +43,8 @@ def check = { n -> isEven(n) \toString \contains("t") }
 
 def isEven = { n -> if n == 0 then true else isOdd(n - 1) }
 def isOdd = { n -> if n == 0 then false else isEven(n - 1) }"""
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "bool"), result.Types.["isEven"])
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "bool"), result.Types.["isOdd"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "bool", []), result.Types.["isEven"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "bool", []), result.Types.["isOdd"])
 
 [<Fact>]
 let ``The typed module keeps its items in the order they are written`` () =

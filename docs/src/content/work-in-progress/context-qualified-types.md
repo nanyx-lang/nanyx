@@ -102,7 +102,14 @@ These rules land together. A lambda's type carrying `[Console]` without context 
 
 ## What is implemented
 
-Function types don't carry contexts yet. Until they do:
+A function type written in an annotation carries its contexts ([#797](https://github.com/nanyx-lang/nanyx/issues/797)). A parameter's, a result's, a record field's or a type alias's `[Console] string -> ()` keeps `Console`, and `nanyx check`, hover, type lenses and inlay hints show it: `[c] Option(a), ([c] a -> b) -> Option(b)`. `TyFunc` holds the contexts, and `FunctionContexts.fs` says when two lists of them agree. Two function types that must be the same require the same contexts. A function that requires fewer fits where one requiring more is expected, so a pure function can be passed for a `[Console] int -> int` parameter, but a `[Console] int -> int` can't be passed for an `int -> int` one.
+
+Not yet done:
+
+- A context variable such as `c` is kept and shown, but not checked, and a call doesn't bind it ([#798](https://github.com/nanyx-lang/nanyx/issues/798)).
+- A lambda's type, and that of a named function used as a value, doesn't carry the contexts it uses ([#799](https://github.com/nanyx-lang/nanyx/issues/799)), and calling a function value doesn't require its contexts.
+
+Until they are:
 
 - A named function passed as a value needs its contexts where it is named, as a call to it does ([#773](https://github.com/nanyx-lang/nanyx/pull/773)).
 - A lambda that uses a context's members is checked where it is written, against the def around it.

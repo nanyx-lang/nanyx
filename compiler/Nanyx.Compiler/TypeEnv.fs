@@ -33,8 +33,8 @@ module TypeEnv =
         | TyPrimitive _ -> Set.empty
         | TyNominal(_, underlying, _) -> freeTyVars underlying
         | TyAlias(_, _, underlying) -> freeTyVars underlying
-        | TyFunc(arg, ret) ->
-            Set.union (freeTyVars arg) (freeTyVars ret)
+        | TyFunc(arg, ret, contexts) ->
+            Set.union (freeTyVars arg) (freeTyVars ret) |> Set.union (contexts |> List.map freeTyVars |> Set.unionMany)
         | TyRecord fields ->
             fields
             |> Map.values

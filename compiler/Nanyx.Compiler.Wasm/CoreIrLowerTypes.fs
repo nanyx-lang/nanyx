@@ -15,7 +15,7 @@ let rec freeVars (ty: Ty) : int list =
     | TyVar v -> [ v.Id ]
     | TyPrimitive _ -> []
     | TyNominal(_, underlying, _) -> freeVars underlying
-    | TyFunc(input, output) -> freeVars input @ freeVars output
+    | TyFunc(input, output, _) -> freeVars input @ freeVars output
     | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> freeVars)
     | TyOpenRecord(fields, rest) -> (fields |> Map.toList |> List.collect (snd >> freeVars)) @ [ rest.Id ]
     | TyTag(_, payload) -> payload |> Option.map freeVars |> Option.defaultValue []
@@ -29,7 +29,7 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
     | TyPrimitive _ -> ty
     | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, go underlying, isPrivate)
-    | TyFunc(input, output) -> TyFunc(go input, go output)
+    | TyFunc(input, output, _) -> TyFunc(go input, go output, [])
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> go))
     | TyOpenRecord(fields, rest) ->
         let fields = fields |> Map.map (fun _ -> go)
@@ -57,7 +57,7 @@ let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<in
         | Some bound when oneTagAsTag bound <> oneTagAsTag instance -> cannot "a type variable stands for two types in one call"
         | _ -> bindings |> Map.add v.Id instance
     | TyPrimitive a, TyPrimitive b when a = b -> bindings
-    | TyFunc(input, output), TyFunc(input', output') -> bindScheme (bindScheme bindings input input') output output'
+    | TyFunc(input, output, _), TyFunc(input', output', _) -> bindScheme (bindScheme bindings input input') output output'
     | TyRecord fields, TyRecord fields' when Set.ofSeq fields.Keys = Set.ofSeq fields'.Keys ->
         fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
     // A function that reads fields of any record that has them, used at a record: its other fields are the rest.
@@ -140,7 +140,7 @@ let rec toIrType (ty: Ty) : IrType =
     | Sets.SetType element -> IrList(toIrType element)
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
-    | TyFunc(input, output) -> IrFunction(toIrType input, toIrType output)
+    | TyFunc(input, output, _) -> IrFunction(toIrType input, toIrType output)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"

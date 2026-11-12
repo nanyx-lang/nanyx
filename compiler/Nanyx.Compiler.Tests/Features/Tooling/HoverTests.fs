@@ -315,7 +315,7 @@ let ``The empty union is the bottom type`` () =
 let ``Where the two ends of the alphabet meet, each goes round its own part again`` () =
     let var id = TyVar { Id = id; Name = None }
     // Each rest is given back as well as taken, so it is named.
-    let open' id = TyFunc(TyUnion [ TyTag("x", None); var id ], TyUnion [ TyTag("x", None); var id ])
+    let open' id = TyFunc(TyUnion [ TyTag("x", None); var id ], TyUnion [ TyTag("x", None); var id ], [])
     // 20 variables and 4 rests take the whole alphabet the first time, so the front keeps α to υ and the back
     // φ to ω; the rests and variables after that go round their own parts again.
     let ty = TyApply("f", [ for id in 1..20 -> var id ] @ [ for id in 21..26 -> open' id ] @ [ var 27; var 28 ])
@@ -395,25 +395,25 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     let union = TyUnion [ TyTag("some", Some a); TyTag("none", None) ]
     let pair x y = TyRecord(Map.ofList [ "0", x; "1", y ])
     // `->` groups to the right: a function input is bracketed, a function result is not.
-    Assert.Equal("(a -> b) -> c", Unifier.tyToString (TyFunc(TyFunc(a, b), c)))
-    Assert.Equal("a -> b -> c", Unifier.tyToString (TyFunc(a, TyFunc(b, c))))
+    Assert.Equal("(a -> b) -> c", Unifier.tyToString (TyFunc(TyFunc(a, b, []), c, [])))
+    Assert.Equal("a -> b -> c", Unifier.tyToString (TyFunc(a, TyFunc(b, c, []), [])))
     // `|` binds tighter than `->`: a union is never bracketed next to an arrow.
-    Assert.Equal("a -> #some(a) | #none", Unifier.tyToString (TyFunc(a, union)))
-    Assert.Equal("#some(a) | #none -> a", Unifier.tyToString (TyFunc(union, a)))
+    Assert.Equal("a -> #some(a) | #none", Unifier.tyToString (TyFunc(a, union, [])))
+    Assert.Equal("#some(a) | #none -> a", Unifier.tyToString (TyFunc(union, a, [])))
     // A signature's parameters are bare; a function among them, or anywhere items are separated by commas,
     // has brackets of its own.
-    Assert.Equal("int, (a -> b) -> c", Unifier.tyToString (TyFunc(pair (TyPrimitive "int") (TyFunc(a, b)), c)))
-    Assert.Equal("(int, (a -> b))", Unifier.tyToString (pair (TyPrimitive "int") (TyFunc(a, b))))
-    Assert.Equal("map(string, (a -> b))", Unifier.tyToString (TyApply("map", [ TyPrimitive "string"; TyFunc(a, b) ])))
+    Assert.Equal("int, (a -> b) -> c", Unifier.tyToString (TyFunc(pair (TyPrimitive "int") (TyFunc(a, b, [])), c, [])))
+    Assert.Equal("(int, (a -> b))", Unifier.tyToString (pair (TyPrimitive "int") (TyFunc(a, b, []))))
+    Assert.Equal("map(string, (a -> b))", Unifier.tyToString (TyApply("map", [ TyPrimitive "string"; TyFunc(a, b, []) ])))
     // Only the signature itself writes parameters bare: a function nested in it, as its input or its result,
     // keeps its brackets, since a bare list can only come before the arrow.
-    Assert.Equal("((a, b) -> c) -> (a, b) -> c", Unifier.tyToString (TyFunc(TyFunc(pair a b, c), TyFunc(pair a b, c))))
-    Assert.Equal("a -> (a, b) -> c", Unifier.tyToString (TyFunc(a, TyFunc(pair a b, c))))
+    Assert.Equal("((a, b) -> c) -> (a, b) -> c", Unifier.tyToString (TyFunc(TyFunc(pair a b, c, []), TyFunc(pair a b, c, []), [])))
+    Assert.Equal("a -> (a, b) -> c", Unifier.tyToString (TyFunc(a, TyFunc(pair a b, c, []), [])))
     // A lone argument or payload needs no brackets, and a tuple payload's items are the payload's.
-    Assert.Equal("list(a -> b)", Unifier.tyToString (TyApply("list", [ TyFunc(a, b) ])))
+    Assert.Equal("list(a -> b)", Unifier.tyToString (TyApply("list", [ TyFunc(a, b, []) ])))
     Assert.Equal("#some(int)", Unifier.tyToString (TyTag("some", Some (TyPrimitive "int"))))
-    Assert.Equal("#pair(int, (a -> b))", Unifier.tyToString (TyTag("pair", Some (pair (TyPrimitive "int") (TyFunc(a, b))))))
-    Assert.Equal("#apply((int, a) -> b)",Unifier.tyToString (TyTag("apply", Some (TyFunc(pair (TyPrimitive "int") a, b)))))
+    Assert.Equal("#pair(int, (a -> b))", Unifier.tyToString (TyTag("pair", Some (pair (TyPrimitive "int") (TyFunc(a, b, []))))))
+    Assert.Equal("#apply((int, a) -> b)",Unifier.tyToString (TyTag("apply", Some (TyFunc(pair (TyPrimitive "int") a, b, [])))))
     // A lone record argument's fields are in the application's own brackets, as a payload's are; a tuple's are not,
     // as its items would read as more arguments.
     let named = Map.ofList [ "name", a ]
@@ -421,7 +421,7 @@ let ``Printed types have the fewest brackets the grammar allows`` () =
     Assert.Equal("list(name: a, ...r)", Unifier.tyToString (TyApply("list", [ TyOpenRecord(named, { Id = 4; Name = Some "r" }) ])))
     Assert.Equal("list((a, b))", Unifier.tyToString (TyApply("list", [ pair a b ])))
     // The unit type is written `()`.
-    Assert.Equal("() -> ()", Unifier.tyToString (TyFunc(TyPrimitive "unit", TyPrimitive "unit")))
+    Assert.Equal("() -> ()", Unifier.tyToString (TyFunc(TyPrimitive "unit", TyPrimitive "unit", [])))
 
 [<Fact>]
 let ``A def annotated with holes shows its inferred type, and each hole what it was inferred to be`` () =

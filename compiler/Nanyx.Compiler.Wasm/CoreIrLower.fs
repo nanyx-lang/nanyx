@@ -554,7 +554,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                         | [ single ] -> single
                         | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
                     match input.ExprTypes |> Map.tryFind expr.Id with
-                    | Some output -> TyFunc(input', output)
+                    | Some output -> TyFunc(input', output, [])
                     | None -> cannot $"a call to '{name}' whose type is not known"
             let target = callee name instanceTy
             let ty = tyOf expr
@@ -745,7 +745,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
         let rec withoutOpenRests (ty: Ty) =
             match ty with
             | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
-            | TyFunc(input, output) -> TyFunc(withoutOpenRests input, withoutOpenRests output)
+            | TyFunc(input, output, _) -> TyFunc(withoutOpenRests input, withoutOpenRests output, [])
             | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutOpenRests))
             | TyTag(name, payload) -> TyTag(name, payload |> Option.map withoutOpenRests)
             | TyApply(name, args) -> TyApply(name, args |> List.map withoutOpenRests)
@@ -788,7 +788,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                     | [] -> TyPrimitive "unit"
                     | [ single ] -> single
                     | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList)
-                toIrType (substitute subst (TyFunc(inputTy, resultTy)))
+                toIrType (substitute subst (TyFunc(inputTy, resultTy, [])))
             | None -> tyOf expr
         let arity = IrType.closureArity (parameterNames target) ty
         this.Atoms scope captured (fun atoms ->
@@ -1233,10 +1233,10 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     /// (`(int, step: int) -> int`).
     member private this.ParameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * Ty =
         match names, Unifier.unalias fnTy with
-        | [], TyFunc(_, result) when isLambda -> [], result
+        | [], TyFunc(_, result, _) when isLambda -> [], result
         | [], _ -> [], fnTy
-        | [ _ ], TyFunc(input, result) -> [ input ], result
-        | several, TyFunc(input, result) ->
+        | [ _ ], TyFunc(input, result, _) -> [ input ], result
+        | several, TyFunc(input, result, _) ->
             match Unifier.unalias input with
             | TyRecord fields when fields.Count = several.Length ->
                 several
