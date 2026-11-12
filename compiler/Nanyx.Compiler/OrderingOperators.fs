@@ -50,7 +50,7 @@ module internal OrderingOperators =
     /// What to do about ordering values of `ty`, a record or a tag, with an operator.
     let private advice (ty: Ty) =
         match ty with
-        | TyNominal(name, _, _) when isRecordOrTag ty -> $". Attach '{name}.compare', or order by a key with list.sortBy"
+        | TyNominal(nominal, _, _) when isRecordOrTag ty -> $". Attach '{nominal.Name}.compare', or order by a key with list.sortBy"
         | _ when isRecordOrTag ty -> ". Make it a nominal type to attach a 'compare' to it, or order by a key with list.sortBy"
         | _ -> ""
 

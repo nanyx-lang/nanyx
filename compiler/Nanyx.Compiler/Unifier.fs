@@ -104,7 +104,7 @@ module Unifier =
             match v.Name with
             | Some name -> name
             | None -> $"t{v.Id}"
-        | TyNominal(name, _, _) -> name
+        | TyNominal(nominal, _, _) -> nominal.Name
         // An alias is written by name, as the user wrote it: `Customer`, `Validator(int)`.
         | TyAlias(name, [], _) -> name
         | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
@@ -193,8 +193,22 @@ module Unifier =
     let private varsInPrintOrder (ty: Ty) : TyVar list =
         varOccurrences ty |> List.distinctBy (fun v -> v.Id)
 
+    /// The module `origin` is, as a reader knows it: its file's name, or the standard library's module's.
+    let private moduleText (origin: ModuleOrigin) =
+        match origin with
+        | SourceFile fullPath -> $"'{System.IO.Path.GetFileName fullPath}'"
+        | StandardLibraryModule name -> $"the standard library's '{name}'"
+        | InMemory -> "this module"
+
+    /// Says that two types are not the same. Two nominal types of the same name from different modules are written
+    /// alike, so it says where each is defined.
     let private mismatchMessage left right =
-        $"Type mismatch: {tyToString left} vs {tyToString right}."
+        let homes =
+            match left, right with
+            | TyNominal(l, _, _), TyNominal(r, _, _) when l.Name = r.Name && l.Home <> r.Home ->
+                $" They are different types: the first is defined in {moduleText l.Home}, the second in {moduleText r.Home}."
+            | _ -> ""
+        $"Type mismatch: {tyToString left} vs {tyToString right}.{homes}"
 
     let private tagUnionLengthMessage leftCount rightCount left right =
         $"Tag union length mismatch: {leftCount} vs {rightCount}. {mismatchMessage left right}"
@@ -284,7 +298,7 @@ module Unifier =
             | Some replacement when replacement = ty -> ty
             | Some replacement -> apply subst replacement
             | None -> ty
-        | TyNominal(name, underlying, isPrivate) -> TyNominal(name, apply subst underlying, isPrivate)
+        | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, apply subst underlying, isPrivate)
         | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map (apply subst), apply subst underlying)
         | TyFunc(arg, ret) -> TyFunc(apply subst arg, apply subst ret)
         | TyRecord fields ->
@@ -572,8 +586,8 @@ module Unifier =
                     let pairs = List.zip lArgs rArgs
                     let pairConstraints = pairs |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
                     loop subst (pairConstraints @ rest)
-                | TyNominal(lName, lUnderlying, lPrivate), TyNominal(rName, rUnderlying, rPrivate) ->
-                    if lName = rName then
+                | TyNominal(lNominal, lUnderlying, lPrivate), TyNominal(rNominal, rUnderlying, rPrivate) ->
+                    if lNominal = rNominal then
                         if lPrivate || rPrivate then
                             loop subst rest
                         else
@@ -800,7 +814,7 @@ module Unifier =
                             loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: rest)
                         | _ ->
                         match l, r with
-                        | TyNominal(lName, _, _), TyNominal(rName, _, _) when lName = rName ->
+                        | TyNominal(lNominal, _, _), TyNominal(rNominal, _, _) when lNominal = rNominal ->
                             loop subst rest
                         | TyNominal(_, _, true), _
                         | _, TyNominal(_, _, true) ->

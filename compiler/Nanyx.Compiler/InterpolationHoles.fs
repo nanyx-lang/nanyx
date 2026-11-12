@@ -82,7 +82,7 @@ module InterpolationHoles =
     let noInstance (ty: Ty) =
         let tyText = display ty
         match ty, Unifier.unalias ty with
-        | (TyAlias(name, _, _) | TyNominal(name, _, _)), _ ->
+        | (TyAlias(name, _, _) | TyNominal({ Name = name }, _, _)), _ ->
             $"'{tyText}' cannot be interpolated because it has no toString: attach '{name}.toString', or load an instance of `ToString({tyText})` with `use`"
         | _, TyFunc _ -> $"'{tyText}' cannot be interpolated: it is a function, and functions have no toString"
         | _ -> $"'{tyText}' cannot be interpolated because it has no toString: turn it into a string first, or print it with `dbg`"

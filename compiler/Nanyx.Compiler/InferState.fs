@@ -113,6 +113,8 @@ type InferState =
             /// The contexts each local def that writes its type requires, as written, by the def's symbol: what
             /// `ContextRequirements` holds for it by name, which a def of the same name elsewhere can stand for.
             LocalContextRequirements: Map<SymbolId, TypeExpr list>;
+            /// The module being checked: the home of each nominal type it defines (see `NominalId`).
+            Home: ModuleOrigin;
             LocalNominals: Set<string>;
             LocalPrivateNominals: Set<string>;
             /// The type of every expression inferred so far, and of every `_` written in a type, by node. These are
@@ -245,6 +247,7 @@ let emptyState =
             LocalComparisons = Map.empty;
             InferredContextTypes = Map.empty;
             LocalContextRequirements = Map.empty;
+            Home = InMemory;
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
             ExprTypes = Map.empty;
