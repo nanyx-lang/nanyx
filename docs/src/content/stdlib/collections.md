@@ -140,6 +140,21 @@ Keeps only elements that satisfy the predicate.
 
 ---
 
+## filterMap
+
+```nanyx
+list.filterMap: [c] (list(a), ([c] a -> #some(b) | #skip)) -> list(b)
+```
+
+Applies the function to every element and keeps the values it gives as `#some`, in order, leaving out the elements it gives `#skip` for. It is a `map` and a `filter` in one walk over the list.
+
+```nanyx
+[1, 2, 3, 4, 5] \list.filterMap { x -> if x % 2 == 1 then #some(x * 10) else #skip }
+-- [10, 30, 50]
+```
+
+---
+
 ## find
 
 ```nanyx

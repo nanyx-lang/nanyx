@@ -33,6 +33,11 @@ let ``Run - List.filter works on 20,000 elements`` () =
     runSource (withList "println(show(list.filter(xs, { x -> x > 1 })))\n") |> assertRan "19999 2 20000\n"
 
 [<Fact>]
+let ``Run - List.filterMap works on 20,000 elements`` () =
+    let body = "println(show(list.filterMap(xs, { x -> if x > 1 then #some(x * 2) else #skip })))\n"
+    runSource (withList body) |> assertRan "19999 4 40000\n"
+
+[<Fact>]
 let ``Run - List.take works on 20,000 elements`` () =
     runSource (withList "println(show(list.take(xs, 19999)))\n") |> assertRan "19999 1 19999\n"
 

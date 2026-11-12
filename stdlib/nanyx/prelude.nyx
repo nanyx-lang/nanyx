@@ -942,6 +942,20 @@ export def list.filter: [c] list(a), ([c] a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(filterReversed(xs, keep, []), [])
 }
 
+--| The values `f` gives as `#some` for the elements of `xs`, last first, in front of `acc`.
+def filterMapReversed: [c] list(a), ([c] a -> #some(b) | #skip), list(b) -> list(b) = {
+  | [], _, acc -> acc
+  | [x, ...rest], f, acc -> match f(x)
+    | #some(y) -> filterMapReversed(rest, f, [y, ...acc])
+    | #skip -> filterMapReversed(rest, f, acc)
+}
+
+--| The values `f` gives as `#some`, in order, leaving out the elements it gives `#skip` for: a `map`
+  and a `filter` in one walk. Stack-safe: it works on a list of any length.
+export def list.filterMap: [c] list(a), ([c] a -> #some(b) | #skip) -> list(b) = { xs, f ->
+  reverseOnto(filterMapReversed(xs, f, []), [])
+}
+
 --| The elements of `xs` that `test` holds for and those it fails for, `xs` taken last first: each in
   front of `passed` or `failed`.
 def partitionOnto: [c] list(a), ([c] a -> bool), list(a), list(a) -> (list(a), list(a)) = {

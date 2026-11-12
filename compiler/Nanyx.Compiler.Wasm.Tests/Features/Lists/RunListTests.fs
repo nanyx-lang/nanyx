@@ -207,6 +207,24 @@ println("{list.length(list.distinct([[1, 2], [2, 1], [1, 2], []]))}")
     runSource source |> assertRan "Ann,Bob\n1a,2a\n3\n"
 
 [<Fact>]
+let ``Run - List.filterMap keeps the #some values in order and leaves out #skip`` () =
+    let source =
+        showInts
+        + """type Color = #red | #green | #other(string)
+def colors: list(Color) = [#red, #other("teal"), #green, #other("plum")]
+def empty: list(int) = []
+println(show(list.filterMap([1, 2, 3, 4, 5], { x -> if x % 2 == 1 then #some(x * 10) else #skip })))
+def otherNames = colors \list.filterMap {
+  | #other(name) -> #some(name)
+  | _ -> #skip
+}
+println(string.join(otherNames, ","))
+println(show(list.filterMap(empty, { x -> #some(x) })))
+println(show(list.filterMap([1, 2], { x -> #skip })))
+"""
+    runSource source |> assertRan "10 30 50 []\nteal,plum\n[]\n[]\n"
+
+[<Fact>]
 let ``Run - List.sortBy sorts by an int key and keeps equal keys in order`` () =
     let source =
         showInts +
