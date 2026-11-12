@@ -1855,6 +1855,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             match Unifier.unalias funcTy with
                             | TyFunc(_, _, contexts) -> contexts, current
                             | _ -> let var, next = freshVar current in [ var ], next
+                        // A local def calling itself from its own lambda requires what the def does, which the lambda
+                        // uses already (see `LambdaContexts`).
+                        let selfCall = LambdaContexts.isSelfCall funcTy current
+                        let current = LambdaContexts.recordSelfCall funcTy calleeContexts current
                         // The callee's own context variables stand for the contexts of the arguments given for them,
                         // and the call requires those too. Both are used by the lambda around the call, if any.
                         let requireUsed (next: InferState) =
@@ -1862,7 +1866,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 match next.ContextRequirements |> Map.tryFind (canonicalName env next name) |> Option.map ContextVariables.names with
                                 | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
                                 | _ -> []
-                            let ofValue = if calleeContexts.IsEmpty then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
+                            let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
                             let used = ofVariables @ ofValue |> List.distinct
                             let requirePlain current ctx = ensureContextAvailable true env current name [ ctx ] calleeSpan
                             ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.record used next)
@@ -2763,12 +2767,13 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             match typeOpt, expr.Kind with
                             | Some _, Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, false) } |> LambdaContexts.markBody expr
                             | _ -> nextStateWithReq
+                        let bodyState = if preboundFresh then LambdaContexts.enterSelf preboundTy bodyState else bodyState
                         let inferResult =
                             match expr.Kind with
                             | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                                 inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                             | _ -> inferExpr envWithRec bodyState expr
-                            |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = outerScope })
+                            |> Result.map (fun (typedExpr, next) -> typedExpr, { LambdaContexts.leaveSelf preboundTy typedExpr.Type next with ContextScope = outerScope })
                         match inferResult with
                         | Ok (typedExpr, next) ->
                             let declaredTy, finalState =

@@ -59,6 +59,13 @@ type BlockImport =
       /// Where the block is written.
       Block: SourceSpan }
 
+/// An unannotated local def whose value is being inferred, which may call itself (see `LambdaContexts.enterSelf`).
+type SelfDef =
+    { /// How many lambdas are being inferred once the def's own is.
+      Depth: int
+      /// The contexts of the type of each of its calls to itself so far: a variable that stands for the def's own.
+      Calls: Ty list }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -236,6 +243,9 @@ type InferState =
             LambdaContexts: Ty list list;
             /// The lambdas that are a def's own body: the def's contexts are its, not its type's (see `LambdaContexts`).
             BodyLambdas: Set<NodeId>;
+            /// The unannotated local defs whose values are being inferred, by the id of the variable each is bound at
+            /// meanwhile (see `LambdaContexts.enterSelf`).
+            SelfTypes: Map<int, SelfDef>;
             /// The context variables each unannotated top-level def uses so far, by the def's name: those of the
             /// functions it is given that it calls or passes on (see `ContextVariables`).
             InferredContextVars: Map<Identifier, Ty list> }
@@ -306,6 +316,7 @@ let emptyState =
             CellAssignments = Set.empty;
             LambdaContexts = [];
             BodyLambdas = Set.empty;
+            SelfTypes = Map.empty;
             InferredContextVars = Map.empty }
 
 let internal freshVar (state: InferState) =
