@@ -40,6 +40,7 @@
     <Compile Include="Features\Hashing\HashTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
+    <Compile Include="Features\Imports\NameSuggestionTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
     <Compile Include="Features\Inference\InferenceTests.fs" />
     <Compile Include="Features\Inference\TypedAstTests.fs" />

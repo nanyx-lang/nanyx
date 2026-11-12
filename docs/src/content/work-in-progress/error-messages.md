@@ -51,7 +51,11 @@ need it first. This workstream fills it with content.
 - **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.
 - **Few errors have fixes.** An unknown name that a standard library module exports offers to import it, and a
   named parameter passed by position (NYX0218) offers to name the arguments when each fits just one parameter.
-  None has suggestions yet.
+- **An unknown name asks "did you mean"** (`NameSuggestions.fs`): the names in scope closest to it by edit distance
+  (a swap of two letters counts as one edit), at most one edit for every three characters, are named in the message
+  (`Unknown identifier 'totl': did you mean 'total'?`), each with a fix that writes it. A dotted name is compared
+  only with names that have the same qualifier, and a name the compiler reserves (`__for`, `__nanyx_exit`) is never
+  offered.
 
 # Goals
 

@@ -241,7 +241,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty
                     | None -> ty
                 Ok (mkTypedExpr expr ty None None None, next)
-        | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" ]
+        | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | FunctionCall(name, spanOpt, args) ->
         let calleeSpan = nameSpan spanOpt expr
         if name = "dbg" then
@@ -570,7 +570,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 $"'{receiver}' is a value, so '{name}' is not a function's name. '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
                             | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
                         Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
-                    | _ -> Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" ]
+                    | _ -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
     | Lambda(args, body, _) ->
         inferLambdaWithExpected env state expr args body None None
     | BinaryOp(op, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
