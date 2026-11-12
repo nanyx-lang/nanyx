@@ -93,7 +93,7 @@ label.
   file exists, create one. Don't append to a catch-all file. Keep each project's `<Compile Include>` list
   in order.
 - **Shared helpers live in one file.** Each test project keeps its shared helpers in one file, compiled
-  first: `TestSupport.fs` in `Nanyx.Compiler.Tests`, `TestHelpers.fs` in the parser and Wasm test projects.
+  first: `TestSupport.fs` in `Nanyx.Compiler.Tests`, `TestHelpers.fs` in the parser, formatter and Wasm test projects.
   Use them. Don't write another temp-directory helper or single-diagnostic helper.
 - **Check which error.** An error test asserts the diagnostic's code, or the message it expects. A test
   that only asserts "some error was reported" also passes when an unrelated error breaks the program.
