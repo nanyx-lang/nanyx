@@ -64,7 +64,7 @@ let ``An error in a type definition is not deferred`` () =
 
 [<Fact>]
 let ``A module that imports one with errors is not typed`` () =
-    let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport \"mod.nyx\"\ndef value = foo"
+    let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport mod\ndef value = foo"
     Assert.True(result.Typed.IsNone)
     Assert.False(result.TypeChecked)
     Assert.Equal("Unknown identifier 'missing'", (Assert.Single result.Diagnostics).Message)

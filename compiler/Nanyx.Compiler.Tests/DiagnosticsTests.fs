@@ -168,7 +168,7 @@ let ``A diagnostic in an imported module is reported in that module's file`` () 
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(modulePath, "module mod\nexport def value = missing")
         // The root mentions `missing` too, where the old positioning would have put the error.
-        File.WriteAllText(mainPath, "module main\nimport \"mod.nyx\"\ndef missing2 = \"missing\"")
+        File.WriteAllText(mainPath, "module main\nimport mod\ndef missing2 = \"missing\"")
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
         let span = spanOf diagnostic
@@ -179,8 +179,8 @@ let ``A diagnostic in an imported module is reported in that module's file`` () 
 let ``An import cycle is reported at the import that closes it`` () =
     withTempDir (fun dir ->
         let mainPath = Path.Combine(dir, "main.nyx")
-        File.WriteAllText(Path.Combine(dir, "a.nyx"), "module a\nimport \"main.nyx\"\nexport def x = 1")
-        File.WriteAllText(mainPath, "module main\nimport \"a.nyx\"\ndef y = x")
+        File.WriteAllText(Path.Combine(dir, "a.nyx"), "module a\nimport main\nexport def x = 1")
+        File.WriteAllText(mainPath, "module main\nimport a\ndef y = x")
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.ImportCycle.Code, diagnostic.Code)
         let span = spanOf diagnostic
@@ -275,7 +275,7 @@ let ``A function imported from another module requires its contexts where it is 
         File.WriteAllText(
             Path.Combine(dir, "mod.nyx"),
             "module mod\nimport nanyx/console\nexport def greet: [Console] () -> () = { println(\"hi\") }\nexport def loud = { println(\"LOUD\") }")
-        File.WriteAllText(mainPath, "module main\nimport \"mod.nyx\"\ndef g: () -> () = { loud() }\n@entry\ndef main = {\n  greet()\n  g()\n}")
+        File.WriteAllText(mainPath, "module main\nimport mod\ndef g: () -> () = { loud() }\n@entry\ndef main = {\n  greet()\n  g()\n}")
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
         Assert.Contains("'loud' requires the context 'Console', which 'g' does not declare", diagnostic.Message))
@@ -301,7 +301,7 @@ let private compiledWithPeople (main: string) =
 
 [<Fact>]
 let ``An aliased import's nominal type cannot be named without the alias`` () =
-    let main = "module main\nimport \"people.nyx\" as people\ndef p: $Person = people.$Person.new(\"Ada\")\n"
+    let main = "module main\nimport people as people\ndef p: $Person = people.$Person.new(\"Ada\")\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownType.Code, "$Person" ], compiledWithPeople main)
 
 /// The diagnostics compiling `source` gives: each one's code and the text it is reported at.
@@ -340,13 +340,13 @@ let ``Built-in types, type variables, type parameters and types defined anywhere
 
 [<Fact>]
 let ``An aliased import's constructor cannot be called without the alias`` () =
-    let main = "module main\nimport \"people.nyx\" as people\ndef p = $Person(name = \"Ada\")\n"
+    let main = "module main\nimport people as people\ndef p = $Person(name = \"Ada\")\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownFunction.Code, "$Person" ], compiledWithPeople main)
 
 [<Fact>]
 let ``An aliased import's types and their attached definitions are named with the alias`` () =
     let main =
-        "module main\nimport \"people.nyx\" as people\n" +
+        "module main\nimport people as people\n" +
         "def p: people.$Person = people.$Person.new(\"Ada\")\n" +
         "def greeting: string = people.greet(p)\n" +
         "def all: list(people.$Person) = [ p ]\n"
@@ -354,14 +354,14 @@ let ``An aliased import's types and their attached definitions are named with th
 
 [<Fact>]
 let ``An unaliased import brings its types into scope unqualified`` () =
-    let main = "module main\nimport \"people.nyx\"\ndef p: $Person = $Person.new(\"Ada\")\ndef greeting: string = greet(p)\n"
+    let main = "module main\nimport people\ndef p: $Person = $Person.new(\"Ada\")\ndef greeting: string = greet(p)\n"
     Assert.Empty(compiledWithPeople main)
 
 [<Fact>]
 let ``A nominal type cannot be constructed outside the module that defines it`` () =
-    let unaliased = "module main\nimport \"people.nyx\"\ndef p = $Person(name = \"Ada\")\n"
+    let unaliased = "module main\nimport people\ndef p = $Person(name = \"Ada\")\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$Person" ], compiledWithPeople unaliased)
-    let aliased = "module main\nimport \"people.nyx\" as people\ndef p = people.$Person(name = \"Ada\")\n"
+    let aliased = "module main\nimport people as people\ndef p = people.$Person(name = \"Ada\")\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "people.$Person" ], compiledWithPeople aliased)
 
 [<Fact>]
@@ -371,9 +371,9 @@ let ``A nominal type can be constructed in the module that defines it`` () =
 
 [<Fact>]
 let ``A nominal value is assignable to its shape, but the shape is not assignable to the nominal type`` () =
-    let toShape = "module main\nimport \"people.nyx\"\ndef nameOf: (name: string) -> string = { r -> r.name }\ndef n: string = nameOf($Person.new(\"Ada\"))\n"
+    let toShape = "module main\nimport people\ndef nameOf: (name: string) -> string = { r -> r.name }\ndef n: string = nameOf($Person.new(\"Ada\"))\n"
     Assert.Empty(compiledWithPeople toShape)
-    let fromShape = "module main\nimport \"people.nyx\"\ndef g: string = greet((name = \"Ada\"))\n"
+    let fromShape = "module main\nimport people\ndef g: string = greet((name = \"Ada\"))\n"
     match compiledWithPeople fromShape with
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
@@ -383,40 +383,40 @@ let ``An aliased import's contexts are named with the alias`` () =
     withTempDir (fun dir ->
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(Path.Combine(dir, "logs.nyx"), "module logs\nexport context Logger = (log: string -> ())\n")
-        File.WriteAllText(mainPath, "module main\nimport \"logs.nyx\" as logs\ndef f: [logs.Logger] () -> () = { log(\"x\") }\ndef g: [Logger] () -> () = { log(\"x\") }\n")
+        File.WriteAllText(mainPath, "module main\nimport logs as logs\ndef f: [logs.Logger] () -> () = { log(\"x\") }\ndef g: [Logger] () -> () = { log(\"x\") }\n")
         let diagnostic = single (Compiler.compileFile mainPath)
         Assert.Equal(DiagnosticCodes.UnknownContext.Code, diagnostic.Code)
         Assert.Contains("Unknown context 'Logger' in the signature of 'g'", diagnostic.Message))
 
 [<Fact>]
 let ``An aliased import's functions cannot be called without the alias`` () =
-    let main = "module main\nimport \"people.nyx\" as people\ndef g: string = greet(people.$Person.new(\"Ada\"))\n"
+    let main = "module main\nimport people as people\ndef g: string = greet(people.$Person.new(\"Ada\"))\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownFunction.Code, "greet" ], compiledWithPeople main)
 
 [<Fact>]
 let ``An aliased import's attached definitions cannot be called without the alias`` () =
-    let main = "module main\nimport \"people.nyx\" as people\ndef p: people.$Person = $Person.new(\"Ada\")\n"
+    let main = "module main\nimport people as people\ndef p: people.$Person = $Person.new(\"Ada\")\n"
     match compiledWithPeople main with
     | [ _, text ] -> Assert.Equal("$Person.new", text)
     | other -> failwith $"Expected one diagnostic at '$Person.new', got %A{other}"
 
 [<Fact>]
 let ``A shape is not assignable to a nominal type through an annotation`` () =
-    let main = "module main\nimport \"people.nyx\" as people\ndef p: people.$Person = (name = \"Ada\")\n"
+    let main = "module main\nimport people as people\ndef p: people.$Person = (name = \"Ada\")\n"
     match compiledWithPeople main with
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
 
 [<Fact>]
 let ``A function that returns a nominal type cannot return its shape`` () =
-    let main = "module main\nimport \"people.nyx\"\ndef make: string -> $Person = { name -> (name = name) }\n"
+    let main = "module main\nimport people\ndef make: string -> $Person = { name -> (name = name) }\n"
     match compiledWithPeople main with
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
 
 [<Fact>]
 let ``A list of a nominal type cannot hold its shape`` () =
-    let main = "module main\nimport \"people.nyx\"\ndef all: list($Person) = [ $Person.new(\"Ada\"), (name = \"Grace\") ]\n"
+    let main = "module main\nimport people\ndef all: list($Person) = [ $Person.new(\"Ada\"), (name = \"Grace\") ]\n"
     match compiledWithPeople main with
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
@@ -424,7 +424,7 @@ let ``A list of a nominal type cannot hold its shape`` () =
 [<Fact>]
 let ``A list of a nominal type is assignable to a list of its shape`` () =
     let main =
-        "module main\nimport \"people.nyx\"\n" +
+        "module main\nimport people\n" +
         "def namesOf: list((name: string)) -> int = { xs -> list.length(xs) }\n" +
         "def people: list($Person) = [ $Person.new(\"Ada\") ]\n" +
         "def n: int = namesOf(people)\n"
@@ -432,7 +432,7 @@ let ``A list of a nominal type is assignable to a list of its shape`` () =
 
 [<Fact>]
 let ``A nominal type cannot be constructed outside its module from inside a lambda`` () =
-    let main = "module main\nimport \"people.nyx\"\ndef all = [ \"Ada\", \"Grace\" ] \\list.map { name -> $Person(name = name) }\n"
+    let main = "module main\nimport people\ndef all = [ \"Ada\", \"Grace\" ] \\list.map { name -> $Person(name = name) }\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$Person" ], compiledWithPeople main)
 
 /// The undeclared-context diagnostics compiling `main` beside a module `mod` that exports a `[Console]` function `greet`.
@@ -452,12 +452,12 @@ let private undeclaredContextsWithMod (main: string) =
 
 [<Fact>]
 let ``An aliased import's function still requires its contexts where it is called`` () =
-    let main = "module main\nimport \"mod.nyx\" as m\ndef g: () -> () = { m.greet() }\n@entry\ndef main = { g() }\n"
+    let main = "module main\nimport mod as m\ndef g: () -> () = { m.greet() }\n@entry\ndef main = { g() }\n"
     Assert.Equal<string list>([ "m.greet" ], undeclaredContextsWithMod main)
 
 [<Fact>]
 let ``An imported function requires its contexts in a module that does not have them in scope`` () =
-    let main = "module main\nimport \"mod.nyx\"\ndef g: () -> () = { greet() }\n"
+    let main = "module main\nimport mod\ndef g: () -> () = { greet() }\n"
     Assert.Equal<string list>([ "greet" ], undeclaredContextsWithMod main)
 
 [<Fact>]
@@ -466,7 +466,7 @@ let ``A standard-library function imported under an alias still requires its con
     Assert.Equal<string list>([ "c.write" ], undeclaredContextsWithMod main)
 [<Fact>]
 let ``An imported function's context needs nothing more where the module cannot name it, at the top level or in a def that infers it`` () =
-    let main = "module main\nimport \"mod.nyx\"\ngreet()\ndef h = { greet() }\ndef k: () -> () = { h() }\n"
+    let main = "module main\nimport mod\ngreet()\ndef h = { greet() }\ndef k: () -> () = { h() }\n"
     Assert.Equal<string list>([ "h" ], undeclaredContextsWithMod main)
 
 [<Fact>]
@@ -584,8 +584,8 @@ let ``A module block names only the imported types it imports itself`` () =
             (Compiler.compileFile mainPath).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt main (spanOf diagnostic))
         Assert.Equal<(string * string) list>(
             [ DiagnosticCodes.OutsideModuleBlock.Code, "$Person" ],
-            compile "import \"people.nyx\"\n\nmodule greet =\n  export def name: $Person -> string = { p -> p.name }\n")
-        Assert.Empty(compile "module greet =\n  import \"people.nyx\"\n  export def name: $Person -> string = { p -> p.name }\n"))
+            compile "import people\n\nmodule greet =\n  export def name: $Person -> string = { p -> p.name }\n")
+        Assert.Empty(compile "module greet =\n  import people\n  export def name: $Person -> string = { p -> p.name }\n"))
 [<Fact>]
 let ``#some() matches a tag carrying (), and () the unit value`` () =
     let save = "def save: int -> #some() | #failed = { n -> if n > 0 then #some() else #failed }\n"

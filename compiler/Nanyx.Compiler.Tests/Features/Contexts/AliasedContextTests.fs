@@ -75,7 +75,7 @@ export context Greeter = (greeting: string -> string)
 export def greeting: string -> string = { name -> "hello " ++ name }
 """
     let main = """module main
-import "mod.nyx" as gr
+import mod as gr
 
 def g: [gr.Greeter] () -> string = { gr.greeting("ada") }
 

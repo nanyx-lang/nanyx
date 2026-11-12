@@ -304,7 +304,7 @@ def price: $Money = $Money.new(250)
 println(price \toString)
 ```
 
-This gives a single file the encapsulation of a separate module: only `money` can build a `$Money` (see [Nominal and protected types](../advanced/nominal-and-protected-types)), so the rest of the file has to go through `$Money.new`. Moving the block to a file of its own later changes one line, the import (to `import "./money"`), and nothing that uses it.
+This gives a single file the encapsulation of a separate module: only `money` can build a `$Money` (see [Nominal and protected types](../advanced/nominal-and-protected-types)), so the rest of the file has to go through `$Money.new`. Moving the block to a file of its own later, `money.nyx` beside this one and starting `module money`, changes nothing that uses it: `import money` then finds the file.
 
 A block is imported exactly as a file module is:
 

@@ -1,6 +1,6 @@
 module main
 
-import "./greetings" as greetings
+import greetings as greetings
 
 def everyone: greetings.$Person = greetings.$Person.new("everyone")
 

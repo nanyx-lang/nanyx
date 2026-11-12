@@ -55,11 +55,11 @@ As in a manifest, only the linters a script's `::linters` directives name run, s
 
 # Importing by file path
 
-Files can import each other by file path. 
+Files can import each other by file path. An import by file path needs an alias, and the file it names must be a script: one without a `module name` declaration.
 
 ```nanyx
 -- utils.nyx
-def someHelper = { ... }
+export def someHelper = { ... }
 ```
 
 ```nanyx

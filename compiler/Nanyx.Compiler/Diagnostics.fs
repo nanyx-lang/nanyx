@@ -67,6 +67,9 @@ module DiagnosticCodes =
     let UnsupportedDirective = code 11 "Unsupported directive" Severity.Error
     let CodeInModuleBlock = code 12 "Code in a module block" Severity.Error
     let UnexpectedAttributeArgument = code 13 "Unexpected attribute argument" Severity.Error
+    let PathImportWithoutAlias = code 14 "File-path import without an alias" Severity.Error
+    let NamedModuleImportedByPath = code 15 "Named module imported by file path" Severity.Error
+    let EntrypointImported = code 16 "Entrypoint imported" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -117,7 +120,8 @@ module DiagnosticCodes =
     let all =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
-          UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument
+          UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
+          NamedModuleImportedByPath; EntrypointImported
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented; DeprecatedTypeName
           DuplicateDefinition

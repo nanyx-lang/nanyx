@@ -150,7 +150,7 @@ let ``Only the module being compiled is analyzed, not the modules it imports`` (
     try
         File.WriteAllText(Path.Combine(dir, "lib.nyx"), "module lib\nexport def helper = 1\n")
         let mainPath = Path.Combine(dir, "main.nyx")
-        File.WriteAllText(mainPath, "import \"./lib.nyx\"\nimport nanyx/console\ndef answer = helper + 1\n")
+        File.WriteAllText(mainPath, "import lib\nimport nanyx/console\ndef answer = helper + 1\n")
         let result = Compiler.compileFileWith (options [ everyDef ] []) mainPath
         let diagnostic = Assert.Single(result.Diagnostics)
         Assert.Equal("def answer", diagnostic.Message)

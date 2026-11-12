@@ -147,9 +147,9 @@ let ``Imported names refer to the imported definition and the import`` () =
             let import = (symbolAt (fun typed -> typed.ImportReferences) result offset).Value
             Assert.Equal(ImportedModule, import.Kind)
             Assert.Equal(importName, import.Name)
-            Assert.Equal(offsetOf mainSource "\"mod.nyx\"" 0 0, import.Declaration.Start)
-        check "module main\nimport \"mod.nyx\" as m1\ndef value = m1.foo" "m1.foo" "m1"
-        check "module main\nimport \"mod.nyx\"\ndef value = foo" "foo" "mod.nyx"
+            Assert.Equal(offsetOf mainSource "import mod" 0 7, import.Declaration.Start)
+        check "module main\nimport mod as m1\ndef value = m1.foo" "m1.foo" "m1"
+        check "module main\nimport mod\ndef value = foo" "foo" "mod"
         // A standard-library definition is declared in the library's own module.
         let source = "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")"
         let toUpper = (symbolAt (fun typed -> typed.References) (Compiler.compile source) (offsetOf source "t.string.uppercase" 0 2)).Value
@@ -198,7 +198,7 @@ let ``Type names refer to imported types in their own file`` () =
         let moduleSource = "module shapes\nexport type Shape = #circle(int) | #square(int)\n"
         File.WriteAllText(modulePath, moduleSource)
         let mainPath = Path.Combine(dir, "main.nyx")
-        let mainSource = "module main\nimport \"shapes.nyx\"\ndef unit: Shape = #circle(1)\ndef ok: Result(int, string) = #some(1)\n"
+        let mainSource = "module main\nimport shapes\ndef unit: Shape = #circle(1)\ndef ok: Result(int, string) = #some(1)\n"
         File.WriteAllText(mainPath, mainSource)
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)

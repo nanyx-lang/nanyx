@@ -69,14 +69,14 @@ Imports in a row go in one bracketed `import (...)`, and their names are sorted:
 ```nanyx
 -- before
 import nanyx/text
-import "./tokens.nyx"
+import "./tokens.nyx" as tokens
 import nanyx/math -- for sqrt
 
 -- after
 import (
   nanyx/math -- for sqrt
   nanyx/text
-  "./tokens.nyx"
+  "./tokens.nyx" as tokens
 )
 ```
 

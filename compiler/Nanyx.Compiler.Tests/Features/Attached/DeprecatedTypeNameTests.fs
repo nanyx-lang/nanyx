@@ -69,7 +69,7 @@ let ``A type the module defines with a capitalised name is that type`` () =
 
 [<Fact>]
 let ``An imported module's capitalised type names do not warn in the importer`` () =
-    let result = compileImporting "export def Int.triple = { n -> n * 3 }" "import \"./mod\"\ndef n = int.triple(2)"
+    let result = compileImporting "module mod\nexport def Int.triple = { n -> n * 3 }" "import mod\ndef n = int.triple(2)"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
 
 [<Fact>]

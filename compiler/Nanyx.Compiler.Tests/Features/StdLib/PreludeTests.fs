@@ -194,7 +194,7 @@ let ``A module's own definition wins over the prelude's`` () =
 [<Fact>]
 let ``An import's definition wins over the prelude's without being ambiguous`` () =
     let modules = [ "mod.nyx", "module mod\nexport def proc = 5" ]
-    let result = compileImportingAll modules "module main\nimport \"mod.nyx\"\ndef x = proc + 1"
+    let result = compileImportingAll modules "module main\nimport mod\ndef x = proc + 1"
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["x"])
 
