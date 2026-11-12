@@ -397,12 +397,17 @@ module PatternSpace =
                 |> List.map fst
                 |> Some
 
-    /// `witness` as a pattern would be written.
-    let rec show (witness: Witness) : string =
+    /// `witness` as a pattern would be written. `arm` is the tags that have a payload when it is written for an arm,
+    /// where such a tag is written with `(_)` and a record pattern that names only some of a record's fields ends in
+    /// `...`; it is `None` when it is written for a message.
+    let rec private render (arm: Set<string> option) (witness: Witness) : string =
+        let show = render arm
+        let asArm = arm.IsSome
         let items (witnesses: Witness list) = witnesses |> List.map show |> String.concat ", "
         match witness with
         | Anything -> "_"
         | OneOfTags tags -> tags |> List.tryHead |> Option.map (sprintf "#%s") |> Option.defaultValue "_"
+        | TagCase(name, Anything) when arm |> Option.exists (Set.contains name) -> $"#{name}(_)"
         | TagCase(name, Anything) -> $"#{name}"
         | TagCase(name, payload) -> $"#{name}({show payload})"
         | BoolCase value -> if value then "true" else "false"
@@ -417,7 +422,7 @@ module PatternSpace =
         | RecordCase fields ->
             match fields |> List.filter (fun (_, part) -> part <> Anything) with
             | [] -> "_"
-            | named -> "(" + (named |> List.map (fun (name, part) -> $"{name} = {show part}") |> String.concat ", ") + ")"
+            | named -> "(" + (named |> List.map (fun (name, part) -> $"{name} = {show part}") |> String.concat ", ") + (if asArm then ", ...)" else ")")
         | NamedCase(name, parts) -> $"{name}({items parts})"
         | EmptyList -> "[]"
         | ListCons _ ->
@@ -428,6 +433,74 @@ module PatternSpace =
                 | _ -> [], "..."
             let shown, rest = elements witness
             "[" + String.concat ", " (shown @ (if rest = "" then [] else [ rest ])) + "]"
+
+    /// `witness` as a pattern would be written in a message.
+    let show (witness: Witness) : string = render None witness
+
+    /// The tags with a payload anywhere in `ty`.
+    let rec private tagsWithPayloads (ty: Ty) : Set<string> =
+        match unwrap ty with
+        | TyTag(name, Some payload) -> Set.add name (tagsWithPayloads payload)
+        | TyUnion items
+        | TyApply(_, items) -> items |> List.map tagsWithPayloads |> Set.unionMany
+        | TyRecord fields
+        | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.map (snd >> tagsWithPayloads) |> Set.unionMany
+        | _ -> Set.empty
+
+    /// Every way of choosing one item from each of `choices`, in order.
+    let private combinations (choices: 'a list list) : 'a list list =
+        List.foldBack (fun options rest -> [ for option in options do for after in rest -> option :: after ]) choices [ [] ]
+
+    /// The witnesses an arm is written for to match every value `witness` stands for: one for each tag of a
+    /// `OneOfTags`, and an int, string or float made `Anything`, since those have too many values to name one by one.
+    let rec private armWitnesses (witness: Witness) : Witness list =
+        match witness with
+        | OneOfTags tags -> tags |> List.map (fun tag -> TagCase(tag, Anything))
+        | IntCase _
+        | LiteralCase _ -> [ Anything ]
+        | TagCase(name, payload) -> armWitnesses payload |> List.map (fun inner -> TagCase(name, inner))
+        | RecordCase fields ->
+            fields
+            |> List.map (fun (name, part) -> armWitnesses part |> List.map (fun inner -> name, inner))
+            |> combinations
+            |> List.map RecordCase
+        | NamedCase(name, parts) -> parts |> List.map armWitnesses |> combinations |> List.map (fun inner -> NamedCase(name, inner))
+        | ListCons(head, tail) -> [ for first in armWitnesses head do for rest in armWitnesses tail -> ListCons(first, rest) ]
+        | Anything
+        | BoolCase _
+        | EmptyList -> [ witness ]
+
+    /// What an arm written for `witness`, which `armWitnesses` gives, matches.
+    let rec private spaceOfWitness (witness: Witness) : Space =
+        match witness with
+        | TagCase(name, payload) -> Tag(name, spaceOfWitness payload)
+        | BoolCase value -> Bool value
+        | RecordCase fields -> fields |> List.map (fun (name, part) -> name, spaceOfWitness part) |> Map.ofList |> Fields
+        | NamedCase(name, parts) -> Named(name, parts |> List.map spaceOfWitness)
+        | EmptyList -> Nil
+        | ListCons(head, tail) -> Cons(spaceOfWitness head, spaceOfWitness tail)
+        | Anything
+        | OneOfTags _
+        | IntCase _
+        | LiteralCase _ -> Any
+
+    /// The most arms `missingArms` offers to add; a match that needs more gets none.
+    let private mostMissingArms = 12
+
+    /// The arms to add to a match on values of the types `types`, whose arms have the patterns `arms`, so that it
+    /// matches every value: the patterns of each, as they are written, one per value. Empty if it already does, or if
+    /// it would take more than a dozen arms.
+    let missingArms (arms: Pattern list list) (types: Ty option list) : string list list =
+        let rec added (rows: Space list list) (found: Witness list list) =
+            match useful true rows (List.replicate types.Length Any) types with
+            | _ when found.Length > mostMissingArms -> []
+            | None -> List.rev found
+            | Some witnesses ->
+                let next = witnesses |> List.map armWitnesses |> combinations
+                added (rows @ (next |> List.map (List.map spaceOfWitness))) (List.rev next @ found)
+        let rows = arms |> List.filter (fun patterns -> patterns.Length = types.Length) |> List.map (List.map (spaceOf true))
+        let payloads = types |> List.choose id |> List.map tagsWithPayloads |> Set.unionMany
+        added rows [] |> List.map (List.map (render (Some payloads)))
 
     /// What a match is missing at one value, when `witness` is a value no arm matches there and every other value
     /// may be anything: the tags no arm names, list or record cases, or a value of a type with too many to name.

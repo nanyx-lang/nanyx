@@ -56,6 +56,11 @@ need it first. This workstream fills it with content.
   (`Unknown identifier 'totl': did you mean 'total'?`), each with a fix that writes it. A dotted name is compared
   only with names that have the same qualifier, and a name the compiler reserves (`__for`, `__nanyx_exit`) is never
   offered.
+- **A match that is not exhaustive offers the arms it is missing** (`PatternSpace.missingArms`, laid out by
+  `MatchArmFixes.fs`): each with `???` for a body, after the last arm and indented as it is, or on the same line
+  when the arms are written on one. A tag with a payload is added as `#some(_)`, and an int, string or float as `_`,
+  since those have too many values to name. A match that would take more than a dozen arms, or whose arms have no
+  `|` (a lambda's pattern parameters), gets no fix.
 
 # Goals
 

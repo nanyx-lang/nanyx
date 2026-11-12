@@ -1472,7 +1472,7 @@ module Compiler =
             { Phase = Typed
               Diagnostics =
                 if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax typed)
-                  else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                  else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
