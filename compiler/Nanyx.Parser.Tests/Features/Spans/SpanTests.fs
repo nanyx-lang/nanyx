@@ -456,6 +456,20 @@ let ``nodes made up for for-arms, record updates, tag payloads and multi-branch 
     | other -> failwith $"Expected an if, got %A{other}"
 
 [<Fact>]
+let ``updates in parentheses after with span from the opening parenthesis to the closing one`` () =
+    let source =
+        """
+def b = alice with (
+  age = 31
+)
+"""
+    let source = source.TrimStart().ReplaceLineEndings "\n"
+    checkAllSpans "t.nyx" source |> should be (greaterThan 3)
+    match (valueOf "b" (parse source)).Kind with
+    | FunctionCall ("__with", None, [ _; updates ]) -> textOf source updates.Span |> should equal "(\n  age = 31\n)"
+    | other -> failwith $"Expected a record update, got %A{other}"
+
+[<Fact>]
 let ``every expression in the comprehensive sample has a real span within the source`` () =
     // The parser gives the nodes it makes up when desugaring (shorthand lambda parameters, `else ()`, `__range`,
     // `__with`, `__for`, destructuring temporaries, ...) the span of the construct they came from, so every node

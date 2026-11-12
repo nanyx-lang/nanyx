@@ -193,6 +193,33 @@ let ``Loops, ranges and with are printed as written`` () =
     unchanged "def h = { r -> r with a = 1, b = 2 }\n"
 
 [<Fact>]
+let ``Updates written in parentheses after with stay there`` () =
+    unchanged """def older = user with (age = 31, name = "Bob")
+"""
+    unchanged "def x = (p with (x = 1)).x\n"
+    Assert.Equal("def older = user with (age = 31)\n", format "def older = user with(  age=31 )")
+    // They are laid out as a record's fields are: on one line where they fit, one per line where they don't.
+    let nested =
+        """
+def updatedLine = line with (
+  range = line.range with (
+    start = line.range.start with (
+      character = 4
+    )
+  )
+)
+"""
+    let formatted =
+        """
+def updatedLine = line with (
+  range = line.range with (start = line.range.start with (character = 4))
+)
+"""
+    let formatted = formatted.TrimStart().ReplaceLineEndings "\n"
+    Assert.Equal(formatted, format (nested.TrimStart().ReplaceLineEndings "\n"))
+    unchanged formatted
+
+[<Fact>]
 let ``A for loop keeps one arm on its line and puts several on the lines after it`` () =
     unchanged "for data | item -> println(item)\n"
     unchanged (lines [ "for things | thing ->"; "  println(thing)" ])

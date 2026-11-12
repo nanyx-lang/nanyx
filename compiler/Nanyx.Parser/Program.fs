@@ -723,12 +723,17 @@ let memberAccessChain =
     // as a call to "__with" with the record and a record of the updated fields, which the type checker and
     // backend handle as a built-in (the same way `not` is a call to "not"). The record of updates spans from the
     // first update to the last.
+    //
+    // The updates may instead be written in parentheses, laid out as a record's fields are, separated by commas or
+    // one per line: `record with (x = 1, y = 2)`. Then the record of updates spans from `(` to `)`.
     let withClause =
         let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         let update =
             (nameNoWs .>> wsInline .>> pstring "=" .>> ws) .>>. expression
             |>> fun (field, value) -> NamedField(field, value)
-        attempt (wsInline >>. pstring "with" >>. keywordEnd >>. ws >>. withSpan (sepBy1 update (pstring "," .>> ws)))
+        let updateBlock = withSpan (noteFailureInside (between (pstring "(") (ws >>. pstring ")") recordFields))
+        let updates = updateBlock <|> withSpan (sepBy1 update (pstring "," .>> ws))
+        attempt (wsInline >>. pstring "with" >>. keywordEnd >>. ws >>. updates)
     // `..` is the range operator, not a member access.
     let dotField = attempt (pstring "." >>. notFollowedBy (pchar '.') >>. withSpan fieldOrIndex)
     // The argument a shorthand lambda's body leaves out is the first operand of that body, as `x` is in

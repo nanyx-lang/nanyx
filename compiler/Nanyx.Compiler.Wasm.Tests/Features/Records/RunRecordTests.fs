@@ -87,6 +87,43 @@ let ``Run - with record update`` () =
     runSource source |> assertRan "31 30 Alice 32\n4\n"
 
 [<Fact>]
+let ``Run - with takes its updates in parentheses, as the records tour writes them`` () =
+    // Regression: `user with (` read `with` as an identifier (#204).
+    let source =
+        """
+import nanyx/console
+
+def user = (name = "Alice", age = 30, email = "old@example.com")
+def updatedUser = user with (
+  age = 31
+  email = "alice@example.com"
+)
+def renamed = user with (name = "Bob")
+
+def line = (
+  range = (
+    start = (character = 0)
+  )
+)
+
+def updatedLine = line with (
+  range = line.range with (
+    start = line.range.start with (
+      character = 4
+    )
+  )
+)
+
+@entry
+def main = {
+  println("{updatedUser.name} {updatedUser.age} {updatedUser.email}")
+  println("{renamed.name} {renamed.age}")
+  println("{updatedLine.range.start.character} {line.range.start.character}")
+}
+"""
+    runSource (source.TrimStart().ReplaceLineEndings "\n") |> assertRan "Alice 31 alice@example.com\nBob 30\n4 0\n"
+
+[<Fact>]
 let ``Run - member access on the result of a call`` () =
     // Regression: `shift(...)` returned a Point but `q.x` on it was "Record 'q' has no member 'x'" (#60).
     let source =

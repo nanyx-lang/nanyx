@@ -355,6 +355,8 @@ let format (options: Options) (parsed: SourceModule) : string =
         | FunctionCall("not", _, [ _ ]) -> 8 < position.Prec || position.Inline
         | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> 8 < position.Prec
         | Pipe _ -> 0 < position.Prec
+        // `(r with (x = 1)).x`: nothing follows a `with` but an operator, though its updates are bracketed.
+        | FunctionCall("__with", _, [ _; updates ]) when startsWith updates.Span "(" -> 8 < position.Prec
         | _ when isOpenEnded e -> not position.Tail || position.Prec > 8
         | _ -> false
 
@@ -397,6 +399,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | RangeSyntax.Call(a, Some b) ->
             cat [ expr { position with Tail = false; Prec = 4 } a; text ".."; expr { position with Prec = 5 } b ]
         | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = 4 } a; text ".." ]
+        // Updates written in parentheses, `record with (x = 1, y = 2)`, stay there, laid out as a record's fields are.
+        | FunctionCall("__with", _, [ record; updates ]) when startsWith updates.Span "(" ->
+            cat [ expr operandPosition record; text " with "; exprBare full updates ]
         | FunctionCall("__with", _, [ record; updates ]) when (match updates.Kind with RecordExpr fields -> fields |> List.forall (function NamedField _ -> true | _ -> false) | _ -> false) ->
             let fields = match updates.Kind with RecordExpr fields -> fields | _ -> []
             let count = fields.Length

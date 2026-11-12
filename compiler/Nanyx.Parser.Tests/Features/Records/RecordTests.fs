@@ -29,6 +29,35 @@ let private parsesLike (expected: string) (source: string) =
     | _, Result.Error err -> failwith $"Expected source failed to parse: {err}"
 
 [<Fact>]
+let ``with takes its updates in parentheses, separated by commas or one per line`` () =
+    """def older = user with (age = 31, name = "Al")"""
+    |> parsesLike """def older = user with age = 31, name = "Al" """
+    let block =
+        """
+def older = user with (
+  age = 31
+  name = "Al"
+)
+"""
+    block.ReplaceLineEndings "\n"
+    |> parsesLike """def older = user with age = 31, name = "Al" """
+
+[<Fact>]
+let ``with in parentheses nests, as the records tour writes it`` () =
+    let source =
+        """
+def updatedLine = line with (
+  range = line.range with (
+    start = line.range.start with (
+      character = 4
+    )
+  )
+)
+"""
+    source.ReplaceLineEndings "\n"
+    |> parsesLike "def updatedLine = line with range = (line.range with start = (line.range.start with character = 4))"
+
+[<Fact>]
 let ``record fields can be written one per line without commas`` () =
     lines [ "def x = ("; "  a = 1"; "  b = 2"; ")" ]
     |> parsesLike "def x = (a = 1, b = 2)"
