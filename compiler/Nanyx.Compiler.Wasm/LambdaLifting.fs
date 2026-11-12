@@ -273,13 +273,14 @@ let ambientMemberDefinitions (module': Module) : (string * string) list =
 /// `synthesized`, the top-level functions an instance the compiler builds from attached definitions is made of.
 ///
 /// `memberCaptures` names, for each definition that requires contexts, the parameters its context members come in. A
-/// lambda lifted out of it captures all of them, as it captures a local, so that it can call the members and pass them
-/// on to what it calls. It captures the locals the members of each `use` in scope are evaluated into as well, those it
-/// may call (see `withMembers`), and loads them again with a `use` of its own.
+/// lambda lifted out of it captures them, as it captures a local, so that it can call the members and pass them on to
+/// what it calls. It captures the locals the members of each `use` in scope are evaluated into as well, those it may
+/// call (see `withMembers`), and loads them again with a `use` of its own. But it captures none of the members
+/// `passedMembers` gives for it, by key: those of the contexts its type requires, which each call passes it instead.
 ///
 /// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
 /// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one.
-let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (useContexts: Map<NodeId, TypeExpr>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
+let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (passedMembers: Expression -> Set<string>) (useContexts: Map<NodeId, TypeExpr>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
@@ -290,6 +291,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
     // member is in scope by (its key and its own name), oldest first.
     let mutable useMembers: (string * string list) list = []
     let mutable counter = 0
+    // Whether some lambda is passed the members of contexts where it is called, which may be the ambient instance's.
+    let mutable passesMembers = false
 
     // Every top-level function, with its number of parameters. One of none (`{ ... }`) is a function too: its name,
     // written on its own, is the function as a value, never a call (#182).
@@ -359,13 +362,11 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             wrappers.[name] <- wrapperName
             wrapperName
 
-    /// The closure block for the lifted function `liftedName` over the given captured names, standing in for
-    /// `origin` (the lambda or function reference it replaces), whose id and span it keeps. (A marker call
-    /// rather than a tuple, so that `f(closure)` is not flattened into one argument per field.)
     /// `captured` with the context members of `owner` after it, and those of the `use`s in scope that `body` may call,
     /// those it does not capture already. `body` may call a member a `use` loads when it names it (as a call, a value
-    /// or an operator), names a function that requires contexts, or makes a closure that captures it.
-    let withMembers (body: Expression) (captured: string list) =
+    /// or an operator), names a function that requires contexts, or makes a closure that captures it. The members of
+    /// the keys in `passed`, which each call passes the lambda (see `passedMembers`), are not among them.
+    let withMembers (passed: Set<string>) (body: Expression) (captured: string list) =
         let mentioned =
             SyntaxTree.expressionsWithin body
             |> List.choose (fun expr ->
@@ -382,9 +383,14 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         let usedMembers =
             useMembers
             |> List.filter (fun (local, names) -> callsContexts || mentioned.Contains local || names |> List.exists mentioned.Contains)
+            |> List.filter (fun (_, names) -> not (names |> List.exists passed.Contains))
             |> List.map fst
+        let ownerMembers = ownerMembers |> List.filter (fun name -> not (passed |> Set.exists (fun key -> contextMemberParameter key = name)))
         captured @ (ownerMembers @ usedMembers |> List.filter (fun name -> not (List.contains name captured)))
 
+    /// The closure block for the lifted function `liftedName` over the given captured names, standing in for
+    /// `origin` (the lambda or function reference it replaces), whose id and span it keeps. (A marker call
+    /// rather than a tuple, so that `f(closure)` is not flattened into one argument per field.)
     let closureOf (origin: Expression) (liftedName: string) (captured: string list) =
         { origin with
             Kind =
@@ -396,10 +402,12 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
     /// from the environment's fields ahead of the original body, and the members of the `use`s in scope loaded
     /// again from their captured locals. It is reported where `lambda` was written.
     let liftedLambda (lambda: Expression) (args: (string * TypeExpr option) list) (captured: string list) (body: Expression) =
+        let passed = passedMembers lambda
         let useBinding =
             useMembers
             |> List.filter (fun (local, _) -> List.contains local captured)
-            |> List.collect (fun (local, names) -> names |> List.map (fun name -> NamedField(name, Expression.synthetic (IdentifierExpr local))))
+            |> List.collect (fun (local, names) ->
+                names |> List.filter (passed.Contains >> not) |> List.map (fun name -> NamedField(name, Expression.synthetic (IdentifierExpr local))))
             |> function
                 | [] -> []
                 | fields -> [ Statement.synthetic (UseStatement(Expression.synthetic (RecordExpr fields))) ]
@@ -475,7 +483,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                         Set.difference (references liftedBody |> List.map fst |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add envParameter)
                         |> Set.intersect scope
                         |> Set.toList
-                        |> withMembers liftedBody
+                        |> withMembers (passedMembers lambda) liftedBody
                     lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
                     origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda }
                     [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
@@ -606,9 +614,10 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             Set.difference (references liftedBody |> List.map fst |> Set.ofList) innerScope
             |> Set.intersect scope
             |> Set.toList
-            |> withMembers liftedBody
+            |> withMembers (passedMembers lambda) liftedBody
         let name = $"__lambda_{counter}"
         counter <- counter + 1
+        if not (passedMembers lambda).IsEmpty then passesMembers <- true
         lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda lambda args captured liftedBody))))
         origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda; Lambda = lambda }
         closureOf lambda name captured
@@ -635,7 +644,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
 
     // The ambient instance: a top-level function named like a member of a declared context, which takes
     // no contexts itself, stands in for that member wherever nothing else supplies it. Only worth a
-    // wrapper when some function takes contexts.
+    // wrapper when some function takes contexts, or some lambda is passed members where it is called.
     let takesContexts (typeOpt: TypeExpr option) =
         match typeOpt with
         | Some (Kind (TypeWithContext _))
@@ -643,7 +652,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         | _ -> false
     let defTypes =
         module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, _))) -> Some (name, typeOpt) | _ -> None) |> Map.ofList
-    if defTypes |> Map.exists (fun _ typeOpt -> takesContexts typeOpt) then
+    if passesMembers || defTypes |> Map.exists (fun _ typeOpt -> takesContexts typeOpt) then
         ambientMemberDefinitions module'
         |> List.map snd
         |> List.filter (fun name -> topLevelFunctions.ContainsKey name && not (takesContexts defTypes.[name]))

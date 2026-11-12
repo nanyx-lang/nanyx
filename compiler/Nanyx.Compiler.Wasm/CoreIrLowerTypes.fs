@@ -29,7 +29,7 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
     | TyPrimitive _ -> ty
     | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, go underlying, isPrivate)
-    | TyFunc(input, output, _) -> TyFunc(go input, go output, [])
+    | TyFunc(input, output, contexts) -> TyFunc(go input, go output, contexts |> List.map go |> FunctionContexts.flatten)
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> go))
     | TyOpenRecord(fields, rest) ->
         let fields = fields |> Map.map (fun _ -> go)
@@ -43,21 +43,45 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     | TyUnion items -> TyUnion(items |> List.map go)
     | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map go, go underlying)
 
-/// Binds the type variables of `scheme` so that it is `instance`, adding to `bindings`.
+/// The contexts a function type requires that are contexts rather than context variables: a variable still free
+/// stands for none.
+let concreteContexts (contexts: Ty list) : Ty list =
+    FunctionContexts.flatten contexts |> List.filter (FunctionContexts.isVariable >> not) |> List.distinct
+
+/// `ty` without the contexts its function types require, to compare types as values alone.
+let rec private withoutContexts (ty: Ty) : Ty =
+    match ty with
+    | TyFunc(input, output, _) -> TyFunc(withoutContexts input, withoutContexts output, [])
+    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutContexts))
+    | TyApply(name, args) -> TyApply(name, args |> List.map withoutContexts)
+    | TyUnion items -> TyUnion(items |> List.map withoutContexts)
+    | _ -> ty
+
+/// Binds the type variables of `scheme` so that it is `instance`, adding to `bindings`. A context variable of a
+/// function type in `scheme` is bound to the contexts the same function type in `instance` requires that `scheme`'s
+/// does not name, as a union; the first variable takes them all.
 let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<int, Ty> =
     // A tag alone is a union of one: a union's rest left with one tag is bound as `TyUnion [ tag ]`, and a lambda that
     // takes its input from its pattern has the tag itself (#457).
     let oneTagAsTag ty =
         match ty with
         | TyUnion [ TyTag _ as tag ] -> tag
-        | _ -> ty
+        | _ -> withoutContexts ty
     match Unifier.unalias scheme, Unifier.unalias instance with
     | TyVar v, _ ->
         match bindings |> Map.tryFind v.Id with
         | Some bound when oneTagAsTag bound <> oneTagAsTag instance -> cannot "a type variable stands for two types in one call"
         | _ -> bindings |> Map.add v.Id instance
     | TyPrimitive a, TyPrimitive b when a = b -> bindings
-    | TyFunc(input, output, _), TyFunc(input', output', _) -> bindScheme (bindScheme bindings input input') output output'
+    | TyFunc(input, output, contexts), TyFunc(input', output', contexts') ->
+        let named = concreteContexts contexts
+        let others = concreteContexts contexts' |> List.filter (fun context -> not (List.contains context named))
+        let bound =
+            contexts
+            |> List.choose (function TyVar v -> Some v | _ -> None)
+            |> List.mapi (fun index v -> v, (if index = 0 then others else []))
+            |> List.fold (fun acc (v, required) -> if acc |> Map.containsKey v.Id then acc else acc |> Map.add v.Id (TyUnion required)) bindings
+        bindScheme (bindScheme bound input input') output output'
     | TyRecord fields, TyRecord fields' when Set.ofSeq fields.Keys = Set.ofSeq fields'.Keys ->
         fields |> Map.fold (fun acc key fieldTy -> bindScheme acc fieldTy fields'.[key]) bindings
     // A function that reads fields of any record that has them, used at a record: its other fields are the rest.
@@ -110,10 +134,21 @@ let sortFields (fields: (string * 'a) list) =
     let byName = Map.ofList fields
     storageOrder (List.map fst fields) |> List.map (fun name -> name, byName.[name])
 
+/// The members of each context without parameters, by the context's name: each member's key and declared type, in
+/// the order the context's layout stores them.
+type ContextLayouts = Map<string, (string * Ty) list>
+
 /// The IR type of `ty`, once `subst` is applied. A type variable nothing constrains (the element of `[]`, the rest of
 /// an open union that no use closes) has no value of its own at run time, since nothing can make or inspect one, so it
-/// is unit, and the rest of a union adds no tags.
-let rec toIrType (ty: Ty) : IrType =
+/// is unit, and the rest of a union adds no tags. A function type takes the members of the contexts without parameters
+/// it requires, which `layouts` gives (see `IrFunction`); a parameterised one is found where the function is made, so
+/// it takes none for that.
+let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpanding layouts Set.empty ty
+
+/// `toIrTypeIn`, inside the members of the contexts `expanding`: a member's type that requires one of them again takes
+/// none of its members, so that a context whose member requires the context itself has an IR type.
+and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (ty: Ty) : IrType =
+    let toIrType = toIrTypeExpanding layouts expanding
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt
     | TyPrimitive "bool" -> IrBool
@@ -140,7 +175,24 @@ let rec toIrType (ty: Ty) : IrType =
     | Sets.SetType element -> IrList(toIrType element)
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
-    | TyFunc(input, output, _) -> IrFunction(toIrType input, toIrType output)
+    | TyFunc(input, output, contexts) ->
+        let names =
+            concreteContexts contexts
+            |> List.choose (function
+                | TyApply(name, [])
+                | TyAlias(name, [], _) when not (expanding.Contains name) -> Some name
+                | _ -> None)
+            |> List.distinct
+            |> List.sort
+        let members =
+            names
+            |> List.collect (fun name ->
+                layouts
+                |> Map.tryFind name
+                |> Option.defaultValue []
+                |> List.map (fun (key, memberTy) -> key, toIrTypeExpanding layouts (expanding.Add name) memberTy))
+            |> List.distinctBy fst
+        IrFunction(toIrType input, toIrType output, members)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"

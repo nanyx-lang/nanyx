@@ -63,7 +63,7 @@ let ``Drop - a closure frees what it captures`` () =
         "  def prefix = \"{n}: \"\n" +
         "  { s -> prefix ++ s }\n" +
         "}\n"
-    let ty = IrFunction(IrString, IrString)
+    let ty = IrFunction(IrString, IrString, [])
     use program = instantiateWasm source [ ty ]
     assertDropFreesEverything program "prefixer" ty
 

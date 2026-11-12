@@ -9,7 +9,8 @@ open Transpiler.Wasm.CoreIr
 type LiftedFunction =
     /// A lambda, or a `rec` local function, lifted out of a definition: the lambda as written (which the type checker
     /// typed), the names it captures, in the order its environment holds them, and the definition it was lifted out of.
-    /// It captures that definition's context members under the names of the parameters they come in.
+    /// It captures that definition's context members under the names of the parameters they come in, but those of the
+    /// contexts its own type requires, which each call passes it.
     | LiftedLambda of Expression * string list * owner: string
     /// What lets the top-level function of this name be passed as a value: it takes an environment and ignores it.
     | FunctionWrapper of string
@@ -34,6 +35,9 @@ type ContextArgument =
     | ClosureOverWrapper of string
     /// The value of this top-level definition.
     | DefinitionValue of string
+    /// None where the function is named: a member of a context its value requires where it is called, which each call
+    /// passes (see `IrFunction`).
+    | PassedByCaller
 
 /// What the lowering reads from the typed module.
 type LowerInput =
@@ -50,8 +54,13 @@ type LowerInput =
       /// that name).
       ContextParameters: Map<string, ContextParameter list * Map<string, string>>
       /// Where a call to the definition of this name, at this node, finds each context member it requires, given the
-      /// keys of the members in scope there; or why it cannot.
-      ContextArguments: string -> NodeId -> Set<string> -> Result<ContextArgument list, string>
+      /// keys of the members in scope there and of those its callers pass instead (`PassedByCaller`); or why it cannot.
+      ContextArguments: string -> NodeId -> Set<string> -> Set<string> -> Result<ContextArgument list, string>
+      /// The members of each context without parameters (see `CoreIrLowerTypes.ContextLayouts`).
+      ContextLayouts: Map<string, (string * Ty) list>
+      /// The wrapper of the ambient instance's member of each key (the runtime's `Console`), which stands in for it where
+      /// nothing in scope supplies it.
+      AmbientMembers: Map<string, string>
       /// The calls of interpolation holes that use the compiler's own `ToString` (see `InterpolationHoles`), by node: the
       /// value is written into the string as it is.
       BuiltInHoles: Set<NodeId>

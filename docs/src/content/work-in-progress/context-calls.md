@@ -38,9 +38,13 @@ How members are passed is described under Monomorphisation in [Memory management
 ## Functions that require contexts as values
 
 A top-level function that requires contexts can be passed as a value where they are all available, as in
-`[1, 2] \list.map(println)` or `apply(say, "hi")`. It is passed as a closure over its wrapper that captures the members
-found where it is named, and the wrapper calls the function with its arguments and them
-(`Lowering.WrapperCalling` in `CoreIrLower.fs`). The members are found as a call finds them: the type checker records
+`[1, 2] \list.map(println)` or `apply(say, "hi")`. Its value's type requires its contexts without parameters, such as
+`Console`, and each call passes their members, as it does to any function value whose type requires contexts
+([#836](https://github.com/nanyx-lang/nanyx/issues/836), see
+[Context-qualified types](./context-qualified-types#what-is-implemented)). It is passed as a closure over its wrapper
+that takes those members after its other parameters and captures the members of its parameterised contexts, found
+where it is named; the wrapper calls the function with its arguments and them all
+(`Lowering.WrapperCalling` in `CoreIrLower.fs`). The captured members are found as a call finds them: the type checker records
 where a function named as an argument of a call finds each parameterised context, once that call has settled its
 type (`resolveReferenceInstances` in `Infer.fs`), so `println` at `int` is passed `ToString(int)`, and at a type
 variable `a` of a function that requires `ToString(a)`, that function's member. A context it requires at a type left
@@ -49,10 +53,10 @@ open where it is named, with no instance in scope for it, cannot be compiled yet
 named as a value anywhere other than an argument of a call, such as `def f = println`
 ([#807](https://github.com/nanyx-lang/nanyx/issues/807)).
 
-When function types carry contexts ([#768](https://github.com/nanyx-lang/nanyx/issues/768)), a value of type
-`[c] a -> b` will be passed its members where it is called instead. Such a value can be a closure over a wrapper that
-takes the members as parameters after its others, rather than from its environment; a value of a type with no
-contexts stays a closure over the members where it is named, as now.
+A function with a context variable, such as `apply: [c] ([c] a -> b), a -> b`, is specialised on the members of the
+contexts the variable stands for at each call, which it takes after its other parameters and passes to the function
+value it calls. So `apply(say, "hi")` and `apply(double, 2)` call two specialisations of `apply`, one of which takes
+`Console`'s members.
 
 # Design
 

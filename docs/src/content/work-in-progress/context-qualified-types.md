@@ -118,14 +118,21 @@ The prelude's higher-order functions take a context variable ([#801](https://git
 
 How it differs from the design above, for now:
 
-- **The backend still uses the instance a lambda captured.** A function value is meant to use the instances in scope where it is called. The type checker does its part: a lambda's type says which contexts it requires, so its callers must have them. But the Wasm backend gives a lambda the members of the scope it is made in, and it runs with those until [#836](https://github.com/nanyx-lang/nanyx/issues/836) passes the caller's at each call. #836 must land before user-defined contexts rely on a different instance at the call site. For the same reason a lambda's body is checked against the contexts where it is written, so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
+- **A lambda's body is checked against the contexts where it is written,** so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
 - **A parameterised context is never carried,** even at a type variable: it is found where the lambda is made, as before.
 - **A cell doesn't make a lambda require `$Memory`,** so `NYX0224` still keeps a lambda over a cell in its block (see [Context escape](./context-escape)).
-- **`NYX0225` stays.** A def that requires a context can't return a lambda that uses it, and a `use` can't result in one, because the lambda would run with the members of a scope that has ended.
-- **A named function passed as a value still needs its contexts where it is named** ([#773](https://github.com/nanyx-lang/nanyx/pull/773)), because the backend passes it as a closure over the members there.
+- **`NYX0225` stays for now.** A def that requires a context can't return a lambda that uses it, and a `use` can't result in one. It was there because the backend gave a lambda the members of the scope it was made in. Since [#836](https://github.com/nanyx-lang/nanyx/issues/836) each call passes them instead, so the check can go.
+- **A named function passed as a value still needs its contexts where it is named** ([#773](https://github.com/nanyx-lang/nanyx/pull/773)), for the same reason, and it can go too.
 - **A call reads what a context variable stands for from the types solved so far,** and lambda parameters take their types from the constraints only while they all agree, so an earlier type error can leave a context unbound or a parameter's type unknown.
 
-In the Wasm backend, a lifted lambda captures the members its scope supplies: those of the def around it, by their parameters, and those each `use` in scope loads that it may call, by the locals lambda lifting evaluates the `use`'s bindings into. It may call one when it names it, names a function that requires contexts, or holds a closure that captured it. The lifted function loads them again with a `use` of its own ([#778](https://github.com/nanyx-lang/nanyx/issues/778)). `ContextEscapes.fs` holds the `NYX0225` check, and `EscapingLambdas.fs` the walk it shares with `MemoryCells.checkEscape`.
+In the Wasm backend ([#836](https://github.com/nanyx-lang/nanyx/issues/836)), a function value whose type requires contexts takes their members as parameters after its others, and each call passes the ones in scope there: the IR type `IrFunction` lists them, by key, contexts sorted by name and each context's members in its layout's order. So:
+
+- A lifted lambda takes the members of the contexts its type requires as parameters. It still captures the members of the others its scope supplies, those of a parameterised context found where it is made: those of the def around it, by their parameters, and those each `use` in scope loads that it may call, by the locals lambda lifting evaluates the `use`'s bindings into, which it loads again with a `use` of its own ([#778](https://github.com/nanyx-lang/nanyx/issues/778)).
+- A top-level function named as a value is a closure over a wrapper that takes the members its value's type requires and captures the others, found where it is named.
+- A def with context variables, such as `[c]` in `run: [c] ([c] () -> string) -> string`, is specialised on the members of the contexts they stand for at each call (`CoreIrLower.callee`), and takes those members after the ones it declares.
+- A function value given where one requiring other contexts is expected, as an argument, a context member, a `use` binding, a list element or a def's result, is adapted (`FunctionLowering.Coerce`): a closure over an adapter that holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as they are where it is given. That is how `use (write = { s -> write(...) })` calls the outer `write`, and how a builder's `try`, whose context variable no call binds, takes a continuation that prints.
+
+`ContextEscapes.fs` holds the `NYX0225` check, and `EscapingLambdas.fs` the walk it shares with `MemoryCells.checkEscape`.
 
 # Design notes
 
