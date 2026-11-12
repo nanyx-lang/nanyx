@@ -37,9 +37,9 @@ let ``Run - a use binding overrides the runtime's Console`` () =
 let private myConsolePrelude =
     "import nanyx/console\n" +
     "\n" +
-    "context MyConsole = (p: string -> ())\n" +
+    "context MyConsole = (p: [Console] string -> ())\n" +
     "\n" +
-    "def greet: [MyConsole] string -> () = { name -> p(name) }\n" +
+    "def greet: [MyConsole & Console] string -> () = { name -> p(name) }\n" +
     "\n"
 
 [<Fact>]
@@ -73,7 +73,7 @@ let ``Run - a use binding lambda that captures a local`` () =
 let ``Run - a parameter or local holding a function as a use binding`` () =
     let source =
         myConsolePrelude +
-        "def viaParameter: (string -> ()) -> () = { f ->\n" +
+        "def viaParameter: [Console] ([Console] string -> ()) -> () = { f ->\n" +
         "  use MyConsole(p = f)\n" +
         "  greet(\"parameter\")\n" +
         "}\n" +

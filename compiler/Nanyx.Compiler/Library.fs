@@ -292,9 +292,11 @@ module Compiler =
     /// would be replaced twice.
     let private extendEnvWithImport (env: TypeEnv) (qualifierOpt: string option) (types: Map<string, Ty>) (symbols: Map<string, SymbolId>) =
         let quantify ty =
+            // A context variable keeps its name, which a call binds it by (see `ContextVariables`).
+            let contextVariables = FunctionContexts.variablesIn ty
             let renumbered =
                 TypeEnv.freeTyVars ty
-                |> Seq.mapi (fun index id -> id, TyVar { Id = -(index + 1); Name = None })
+                |> Seq.mapi (fun index id -> id, TyVar { Id = -(index + 1); Name = contextVariables |> Map.tryFind id |> Option.flatten })
                 |> Map.ofSeq
             TypeEnv.generalize TypeEnv.empty (Unifier.apply renumbered ty)
         types
@@ -1257,14 +1259,19 @@ module Compiler =
                 Error (Typed, List.distinct errors)
             else
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.Infer.inferModuleWithEnv env state desugared
-                let subst, mismatches = Unifier.solve state.Constraints
+                let subst, mismatches = Unifier.solveDetailed state.Constraints
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.
                 let mismatchErrors =
                     mismatches
-                    |> List.sortBy (fun (_, span) -> span.Start)
-                    |> List.map (fun (message, span) -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
+                    |> List.sortBy (fun (_, span, _) -> span.Start)
+                    |> List.map (fun (message, span, kind) ->
+                        let code =
+                            match kind with
+                            | ContextsNotAllowed -> DiagnosticCodes.ContextsNotAllowed
+                            | TypesDiffer -> MemoryCells.mismatchCode state span
+                        Diagnostics.at code span message)
                 let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let placed = System.Collections.Generic.HashSet<string>()

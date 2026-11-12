@@ -446,6 +446,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             match annotation.Kind, Unifier.unalias ty with
             | (TypeName varName | TypeVar varName), TyVar _ -> [ varName, ty ]
             | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
+            // A function type written with the contexts it requires, `[c] a -> b`.
+            | TypeWithContext(_, inner), _ -> matchAnnotation inner ty
             | TypeTuple items, TyRecord fields ->
                 items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
             | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->

@@ -92,7 +92,7 @@ export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
 --| Whether the lists `xs` and `ys` hold equal elements in the same order, as `same` compares two
   elements. The `==` the compiler derives for a list whose elements have an `==` of their own
   calls it.
-export def __listEqualsBy: list(a), list(a), (a, a -> bool) -> bool = { xs, ys, same ->
+export def __listEqualsBy: [c] list(a), list(a), ([c] a, a -> bool) -> bool = { xs, ys, same ->
   match xs
     | [] -> list.isEmpty(ys)
     | [x, ...restOfXs] ->
@@ -607,13 +607,13 @@ export def __toString: a -> string = { value ->
 
 --| What the derived `toString` of a list calls: `xs` in square brackets, each element written by
   `show`, with `, ` between them.
-export def __listToString: list(a), (a -> string) -> string = { xs, show ->
+export def __listToString: [c] list(a), ([c] a -> string) -> string = { xs, show ->
   match xs
     | [] -> "[]"
     | [first, ...rest] -> "[{__listRestToString(rest, show, show(first))}]"
 }
 
-def __listRestToString: list(a), (a -> string), string -> string = { xs, show, text ->
+def __listRestToString: [c] list(a), ([c] a -> string), string -> string = { xs, show, text ->
   match xs
     | [] -> text
     | [first, ...rest] -> __listRestToString(rest, show, "{text}, {show(first)}")
@@ -675,7 +675,7 @@ export type Result(a, e) = #some(a) | #error(e)
   `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
   `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
 export def proc
-  : (try: ((#some(a) | r), (a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r)
+  : (try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r)
   = (
     try = {
       | #some(value), continue -> continue(value)
@@ -686,19 +686,19 @@ export def proc
   )
 
 --| Applies `f` to a success, and leaves an error as it is.
-export def Result.map: Result(a, e), (a -> b) -> Result(b, e) = {
+export def Result.map: [c] Result(a, e), ([c] a -> b) -> Result(b, e) = {
   | #some(value), f -> #some(f(value))
   | #error(e), _ -> #error(e)
 }
 
 --| Applies `f` to an error, and leaves a success as it is.
-export def Result.mapError: Result(a, e), (e -> f) -> Result(a, f) = {
+export def Result.mapError: [c] Result(a, e), ([c] e -> f) -> Result(a, f) = {
   | #some(value), _ -> #some(value)
   | #error(e), f -> #error(f(e))
 }
 
 --| Continues with `f` on a success. Both steps have the same error type.
-export def Result.bind: Result(a, e), (a -> Result(b, e)) -> Result(b, e) = {
+export def Result.bind: [c] Result(a, e), ([c] a -> Result(b, e)) -> Result(b, e) = {
   | #some(value), f -> f(value)
   | #error(e), _ -> #error(e)
 }
@@ -710,7 +710,7 @@ export def Result.defaultValue: Result(a, e), a -> a = {
 }
 
 --| `f` applied to the success, or `default` for an error.
-export def Result.mapOr: Result(a, e), b, (a -> b) -> b = {
+export def Result.mapOr: [c] Result(a, e), b, ([c] a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | #error(_), default, _ -> default
 }
@@ -722,7 +722,7 @@ export def Result.toOption: Result(a, e) -> #some(a) | #none = {
 }
 
 --| The success as it is, or `f` applied to the error.
-export def Result.orElse: Result(a, e), (e -> Result(a, f)) -> Result(a, f) = {
+export def Result.orElse: [c] Result(a, e), ([c] e -> Result(a, f)) -> Result(a, f) = {
   | #some(value), _ -> #some(value)
   | #error(e), f -> f(e)
 }
@@ -744,14 +744,14 @@ export def Result.isError: Result(a, e) -> bool = {
 -- `mapOption(x, f)` or `x \mapOption(f)`.
 
 --| Applies `f` to the value of `#some`.
-export def mapOption: (#some(a) | r), (a -> b) -> #some(b) | r = {
+export def mapOption: [c] (#some(a) | r), ([c] a -> b) -> #some(b) | r = {
   | #some(value), f -> #some(f(value))
   | other, _ -> other
 }
 
 --| Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
   and a step given with other tags adds them to it.
-export def bindOption: (#some(a) | r), (a -> #some(b) | r) -> #some(b) | r = {
+export def bindOption: [c] (#some(a) | r), ([c] a -> #some(b) | r) -> #some(b) | r = {
   | #some(value), f -> f(value)
   | other, _ -> other
 }
@@ -779,21 +779,21 @@ export def toResultOption: (#some(a) | r), e -> Result(a, e) = {
 }
 
 --| `f` applied to the value of `#some`, or `default` for any other tag.
-export def mapOrOption: (#some(a) | r), b, (a -> b) -> b = {
+export def mapOrOption: [c] (#some(a) | r), b, ([c] a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, default, _ -> default
 }
 
 --| `f` applied to the value of `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
   when it is needed.
-export def mapOrElseOption: (#some(a) | r), (() -> b), (a -> b) -> b = {
+export def mapOrElseOption: [c] (#some(a) | r), ([c] () -> b), ([c] a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, fallback, _ -> fallback()
 }
 
 --| The option as it is if it is `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
   when it is needed.
-export def orElseOption: (#some(a) | r), (() -> #some(a) | s) -> #some(a) | s = {
+export def orElseOption: [c] (#some(a) | r), ([c] () -> #some(a) | s) -> #some(a) | s = {
   | #some(value), _ -> #some(value)
   | _, fallback -> fallback()
 }
@@ -824,7 +824,7 @@ export def valuesOption: list(#some(a) | r) -> list(a) = { options ->
 -- end, until tail recursion modulo cons exists (see docs/src/content/work-in-progress/tail-calls.md).
 
 --| `step` applied to `initial` and the first element, then to that result and the second, and so on.
-export def list.fold: list(a), b, (b, a -> b) -> b = {
+export def list.fold: [c] list(a), b, ([c] b, a -> b) -> b = {
   | [], acc, _ -> acc
   | [x, ...rest], acc, step -> list.fold(rest, step(acc, x), step)
 }
@@ -851,7 +851,7 @@ export def list.isEmpty: list(a) -> bool = {
 }
 
 --| The number of elements `test` holds for.
-export def list.count: list(a), (a -> bool) -> int = { xs, test ->
+export def list.count: [c] list(a), ([c] a -> bool) -> int = { xs, test ->
   list.fold(xs, 0, { count, x -> if test(x) then count + 1 else count })
 }
 
@@ -902,49 +902,49 @@ def reverseOnto: list(a), list(a) -> list(a) = {
 }
 
 --| `f` applied to each element of `xs`, last first, in front of `acc`.
-def mapReversed: list(a), (a -> b), list(b) -> list(b) = {
+def mapReversed: [c] list(a), ([c] a -> b), list(b) -> list(b) = {
   | [], _, acc -> acc
   | [x, ...rest], f, acc -> mapReversed(rest, f, [f(x), ...acc])
 }
 
 --| `f` applied to each element, in order. Stack-safe: it works on a list of any length.
-export def list.map: list(a), (a -> b) -> list(b) = { xs, f ->
+export def list.map: [c] list(a), ([c] a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapReversed(xs, f, []), [])
 }
 
 --| `f` applied to each element of `xs` and its position, counting `xs` as starting at `index`, last
   first, in front of `acc`.
-def mapIndexedReversed: list(a), int, (int, a -> b), list(b) -> list(b) = {
+def mapIndexedReversed: [c] list(a), int, ([c] int, a -> b), list(b) -> list(b) = {
   | [], _, _, acc -> acc
   | [x, ...rest], index, f, acc -> mapIndexedReversed(rest, index + 1, f, [f(index, x), ...acc])
 }
 
 --| `f` applied to each element's position, counting from 0, and the element, in order. Stack-safe:
   it works on a list of any length.
-export def list.mapIndexed: list(a), (int, a -> b) -> list(b) = { xs, f ->
+export def list.mapIndexed: [c] list(a), ([c] int, a -> b) -> list(b) = { xs, f ->
   reverseOnto(mapIndexedReversed(xs, 0, f, []), [])
 }
 
 --| The lists `f` gives for each element, joined end to end. Stack-safe: it works however long the
   lists are.
-export def list.flatMap: list(a), (a -> list(b)) -> list(b) = { xs, f ->
+export def list.flatMap: [c] list(a), ([c] a -> list(b)) -> list(b) = { xs, f ->
   reverseOnto(list.fold(xs, [], { acc, x -> reverseOnto(f(x), acc) }), [])
 }
 
 --| The elements of `xs` that `keep` holds for, last first, in front of `acc`.
-def filterReversed: list(a), (a -> bool), list(a) -> list(a) = {
+def filterReversed: [c] list(a), ([c] a -> bool), list(a) -> list(a) = {
   | [], _, acc -> acc
   | [x, ...rest], keep, acc -> filterReversed(rest, keep, if keep(x) then [x, ...acc] else acc)
 }
 
 --| The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
-export def list.filter: list(a), (a -> bool) -> list(a) = { xs, keep ->
+export def list.filter: [c] list(a), ([c] a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(filterReversed(xs, keep, []), [])
 }
 
 --| The elements of `xs` that `test` holds for and those it fails for, `xs` taken last first: each in
   front of `passed` or `failed`.
-def partitionOnto: list(a), (a -> bool), list(a), list(a) -> (list(a), list(a)) = {
+def partitionOnto: [c] list(a), ([c] a -> bool), list(a), list(a) -> (list(a), list(a)) = {
   | [], _, passed, failed -> (passed, failed)
   | [x, ...rest], test, passed, failed -> if test(x)
     then partitionOnto(rest, test, [x, ...passed], failed)
@@ -953,30 +953,30 @@ def partitionOnto: list(a), (a -> bool), list(a), list(a) -> (list(a), list(a)) 
 
 --| The elements `test` holds for and the elements it fails for, each in order. Stack-safe: it works on
   a list of any length.
-export def list.partition: list(a), (a -> bool) -> (list(a), list(a)) = { xs, test ->
+export def list.partition: [c] list(a), ([c] a -> bool) -> (list(a), list(a)) = { xs, test ->
   partitionOnto(reverseOnto(xs, []), test, [], [])
 }
 
 --| The first element `matches` holds for, or `#notFound`.
-export def list.find: list(a), (a -> bool) -> #some(a) | #notFound = {
+export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
   | [], _ -> #notFound
   | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
 }
 
 --| Whether `test` holds for every element (so `true` for an empty list).
-export def list.all: list(a), (a -> bool) -> bool = {
+export def list.all: [c] list(a), ([c] a -> bool) -> bool = {
   | [], _ -> true
   | [x, ...rest], test -> if test(x) then list.all(rest, test) else false
 }
 
 --| Whether `test` holds for any element (so `false` for an empty list).
-export def list.any: list(a), (a -> bool) -> bool = {
+export def list.any: [c] list(a), ([c] a -> bool) -> bool = {
   | [], _ -> false
   | [x, ...rest], test -> if test(x) then true else list.any(rest, test)
 }
 
 --| [`list.fold`] from the last element to the first.
-export def list.foldBack: list(a), b, (b, a -> b) -> b = { xs, initial, step ->
+export def list.foldBack: [c] list(a), b, ([c] b, a -> b) -> b = { xs, initial, step ->
   list.fold(list.reverse(xs), initial, step)
 }
 
@@ -1006,13 +1006,13 @@ export def list.take: list(a), int -> list(a) = { xs, count ->
 }
 
 --| The elements of `xs` before the first one `keep` fails for, last first, in front of `acc`.
-def takeWhileReversed: list(a), (a -> bool), list(a) -> list(a) = {
+def takeWhileReversed: [c] list(a), ([c] a -> bool), list(a) -> list(a) = {
   | [], _, acc -> acc
   | [x, ...rest], keep, acc -> if keep(x) then takeWhileReversed(rest, keep, [x, ...acc]) else acc
 }
 
 --| The elements before the first one `keep` fails for. Stack-safe: it works on a list of any length.
-export def list.takeWhile: list(a), (a -> bool) -> list(a) = { xs, keep ->
+export def list.takeWhile: [c] list(a), ([c] a -> bool) -> list(a) = { xs, keep ->
   reverseOnto(takeWhileReversed(xs, keep, []), [])
 }
 
@@ -1032,7 +1032,7 @@ export def list.skip: list(a), int -> list(a) = {
 
 --| The elements from the first one `test` fails for, so `list.takeWhile(xs, f) ++ list.skipWhile(xs, f)`
   is `xs`.
-export def list.skipWhile: list(a), (a -> bool) -> list(a) = {
+export def list.skipWhile: [c] list(a), ([c] a -> bool) -> list(a) = {
   | [], _ -> []
   | [x, ...rest], test -> if test(x) then list.skipWhile(rest, test) else [x, ...rest]
 }
@@ -1072,7 +1072,7 @@ export def list.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
 --| `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
   elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
   same key, the one from `xs` comes first.
-def mergeBy: [Ord(b)] list(a), list(a), (a -> b), list(a) -> list(a) = {
+def mergeBy: [Ord(b) & c] list(a), list(a), ([c] a -> b), list(a) -> list(a) = {
   | [], ys, _, acc -> reverseOnto(acc, ys)
   | xs, [], _, acc -> reverseOnto(acc, xs)
   | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
@@ -1081,13 +1081,13 @@ def mergeBy: [Ord(b)] list(a), list(a), (a -> b), list(a) -> list(a) = {
 }
 
 --| `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
-def mergePairs: [Ord(b)] list(list(a)), (a -> b), list(list(a)) -> list(list(a)) = {
+def mergePairs: [Ord(b) & c] list(list(a)), ([c] a -> b), list(list(a)) -> list(list(a)) = {
   | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
   | rest, _, acc -> reverseOnto(acc, rest)
 }
 
 --| The elements of `runs`, each run already in order of `key`, merged into one list in that order.
-def mergeRuns: [Ord(b)] list(list(a)), (a -> b) -> list(a) = {
+def mergeRuns: [Ord(b) & c] list(list(a)), ([c] a -> b) -> list(a) = {
   | [], _ -> []
   | [run], _ -> run
   | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
@@ -1096,7 +1096,7 @@ def mergeRuns: [Ord(b)] list(list(a)), (a -> b) -> list(a) = {
 --| The elements in ascending order of `key`. The sort is stable: elements with the same key keep
   their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
   Stack-safe: it works on a list of any length.
-export def list.sortBy: [Ord(b)] list(a), (a -> b) -> list(a) = { xs, key ->
+export def list.sortBy: [Ord(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
   mergeRuns(list.map(xs, { x -> [x] }), key)
 }
 
@@ -1130,15 +1130,17 @@ export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
 }
 
 --| The elements `step` gives from `state` on, last first, in front of `acc`.
-def unfoldReversed: b, (b -> #some(a, b) | #done), list(a) -> list(a) = { state, step, acc ->
-  match step(state)
-    | #some(x, next) -> unfoldReversed(next, step, [x, ...acc])
-    | #done -> acc
-}
+def unfoldReversed
+  : [c] b, ([c] b -> #some(a, b) | #done), list(a) -> list(a)
+  = { state, step, acc ->
+    match step(state)
+      | #some(x, next) -> unfoldReversed(next, step, [x, ...acc])
+      | #done -> acc
+  }
 
 --| The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
   `next`, and `#done` ends the list. Stack-safe: it works however many elements `step` gives.
-export def list.unfold: b, (b -> #some(a, b) | #done) -> list(a) = { state, step ->
+export def list.unfold: [c] b, ([c] b -> #some(a, b) | #done) -> list(a) = { state, step ->
   reverseOnto(unfoldReversed(state, step, []), [])
 }
 
@@ -1229,7 +1231,7 @@ export def map.count: map(k, v) -> int = { m ->
 }
 
 --| `groups` with the elements of `xs` added, each to the front of the group of its key.
-def groupInto: [Eq(b) & Hash(b)] list(a), (a -> b), map(b, list(a)) -> map(b, list(a)) = {
+def groupInto: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), map(b, list(a)) -> map(b, list(a)) = {
   | [], _, groups -> groups
   | [x, ...rest], key, groups ->
     def group = defaultValueOption(map.get(groups, key(x)), [])
@@ -1238,10 +1240,12 @@ def groupInto: [Eq(b) & Hash(b)] list(a), (a -> b), map(b, list(a)) -> map(b, li
 
 --| The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
   order. The keys are in the order they first appear.
-export def list.groupBy: [Eq(b) & Hash(b)] list(a), (a -> b) -> map(b, list(a)) = { xs, key ->
-  def groups = __nanyx_map_entries(groupInto(xs, key, map.empty))
-  __nanyx_map_of_entries(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
-}
+export def list.groupBy
+  : [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> map(b, list(a))
+  = { xs, key ->
+    def groups = __nanyx_map_entries(groupInto(xs, key, map.empty))
+    __nanyx_map_of_entries(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
+  }
 
 --| The keys of `m`, in the order they were first added.
 export def map.keys: map(k, v) -> list(k) = { m ->
@@ -1259,24 +1263,24 @@ export def map.isEmpty: map(k, v) -> bool = { m ->
 }
 
 --| `step` applied to `acc` and each key and value of `m` in turn, in the order of [`map.toList`].
-export def map.fold: map(k, v), b, (b, k, v -> b) -> b = { m, acc, step ->
+export def map.fold: [c] map(k, v), b, ([c] b, k, v -> b) -> b = { m, acc, step ->
   list.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
 }
 
 --| `m` with `f` applied to each value. The keys stay as they are, in the same order.
-export def map.map: map(k, v), (v -> w) -> map(k, w) = { m, f ->
+export def map.map: [c] map(k, v), ([c] v -> w) -> map(k, w) = { m, f ->
   __nanyx_map_of_entries(list.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
 }
 
 --| The entries of `m` whose key and value pass `keep`, in the same order.
-export def map.filter: map(k, v), (k, v -> bool) -> map(k, v) = { m, keep ->
+export def map.filter: [c] map(k, v), ([c] k, v -> bool) -> map(k, v) = { m, keep ->
   __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
 }
 
 --| `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
   does not have is added at the end.
 export def map.update
-  : [Eq(k) & Hash(k)] map(k, v), k, ((#some(v) | #notFound) -> v) -> map(k, v)
+  : [Eq(k) & Hash(k) & c] map(k, v), k, ([c] (#some(v) | #notFound) -> v) -> map(k, v)
   = { m, key, f ->
     map.insert(m, key, f(map.get(m, key)))
   }
@@ -1330,18 +1334,18 @@ export def set.isEmpty: set(a) -> bool = { s ->
 }
 
 --| `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`].
-export def set.fold: set(a), b, (b, a -> b) -> b = { s, acc, step ->
+export def set.fold: [c] set(a), b, ([c] b, a -> b) -> b = { s, acc, step ->
   list.fold(__nanyx_set_elements(s), acc, step)
 }
 
 --| The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
   first of them was.
-export def set.map: [Eq(b) & Hash(b)] set(a), (a -> b) -> set(b) = { s, f ->
+export def set.map: [Eq(b) & Hash(b) & c] set(a), ([c] a -> b) -> set(b) = { s, f ->
   set.fromList(list.map(__nanyx_set_elements(s), f))
 }
 
 --| The elements of `s` that pass `keep`, in the same order.
-export def set.filter: set(a), (a -> bool) -> set(a) = { s, keep ->
+export def set.filter: [c] set(a), ([c] a -> bool) -> set(a) = { s, keep ->
   __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), keep))
 }
 
@@ -1383,6 +1387,6 @@ export context $Memory = ()
 
 --| Runs `block` with `$Memory`, so that it can make cells with `mut` and change them with `:=`, and
   gives back its result. Nothing that uses a cell can leave the block: only what the cells hold.
-export def memory: ([$Memory] () -> a) -> a = { block ->
+export def memory: [c] ([$Memory & c] () -> a) -> a = { block ->
   block()
 }

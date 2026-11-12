@@ -22,7 +22,7 @@ let ``A parameter's function type keeps the contexts written on it`` () =
         """
 import nanyx/console
 
-def apply: ([Console] int -> int), int -> int = { f, x -> f(x) }
+def apply: [Console] ([Console] int -> int), int -> int = { f, x -> f(x) }
 """
     Assert.Equal("([Console] int -> int), int -> int", typeOf source "apply")
 
@@ -44,7 +44,7 @@ import nanyx/console
 
 type Handler = [Console] string -> ()
 
-def handle: Handler, string -> () = { h, s -> h(s) }
+def handle: [Console] Handler, string -> () = { h, s -> h(s) }
 """
     let typed = compileClean source
     Assert.Equal("Handler, string -> ()", Unifier.tyToString typed.Types.["handle"])
@@ -77,7 +77,7 @@ let ``A pure function fits where one that requires contexts is expected`` () =
         """
 import nanyx/console
 
-def twice: ([Console] int -> int), int -> int = { f, x -> f(f(x)) }
+def twice: [Console] ([Console] int -> int), int -> int = { f, x -> f(f(x)) }
 
 def double: int -> int = { x -> x * 2 }
 
@@ -99,8 +99,8 @@ def pass: ([Console] int -> int) -> int = { f -> runPure(f) }
 """
     let result = Compiler.compile source
     let diagnostic = Assert.Single result.Diagnostics
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.Contains("only the first requires 'Console'", diagnostic.Message)
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, diagnostic.Code)
+    Assert.Contains("requires the context 'Console'", diagnostic.Message)
 
 let private console = TyApply("Console", [])
 let private intFunc contexts = TyFunc(TyPrimitive "int", TyPrimitive "int", contexts)

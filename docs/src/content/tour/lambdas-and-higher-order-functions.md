@@ -93,19 +93,19 @@ This pattern is called a **contextual lambda**: the higher-order function decide
 
 ## Parametric contexts
 
-Sometimes, a higher-order function wants to be flexible about what kinds of contexts.
+A function's type says which contexts it requires where it is called, and a lambda's type says which ones it uses: `{ n -> println(n) }` is a `[Console] int -> ()`. A function that requires no contexts is pure, and a pure function can be given wherever one that requires contexts is expected, but not the other way round.
 
-For example, what context does a `list.map` function run in? It could be a pure function, but it could also be a stateful computation or an effectful operation. To support all of these, `list.map` can be defined with a parametric context:
+So what context does a function such as `list.map` run its callback in? It could be pure, but it could also print or change memory. To take all of these, `list.map` has a parametric context:
 
 ```nanyx
-list.map: [c] (list(a), [c] a -> b) -> list(b)
+list.map: [c] list(a), ([c] a -> b) -> list(b)
 ```
 
-This function takes a context parameter, written as a single lowercase character (just like an automatically introduced type variable, which must also be one character). This means that the caller can choose any context `c` for the callback, and `list.map` will work with it. The callback can be a pure function, a stateful computation, or an effectful operation, depending on the caller's needs.
+`c` is a context variable, written as a single lowercase letter (just like an automatically introduced type variable, which must also be one character). It stands for whatever contexts the callback requires, and a call to `list.map` requires them too. The callback can be pure, or require `Console`, or anything else, depending on the caller's needs. The prelude's higher-order functions all take one.
 
 ```nanyx
 def f: list(int) -> list(int) = { numbers ->
-  -- Error: list.map inherits the [Console] context requirement from `println`, but `f` does not declare it
+  -- Error: the lambda calls `println`, which requires [Console], and `f` does not declare it
   numbers \list.map { n ->
     println(n)
     n + 1
@@ -113,11 +113,11 @@ def f: list(int) -> list(int) = { numbers ->
 }
 ```
 
-If we remove the context parameter and write `list.map` with a concrete context, like `[Console]`, then any lambda passed to `list.map` would require the `Console` context. This would make it impossible to use `list.map` with pure functions or functions that require different contexts, which is why parametric contexts are important for higher-order functions.
+If `list.map` were written with a concrete context instead, like `[Console]`, every lambda passed to it would have to be allowed `Console`, and a call to it would require `Console` even with a pure lambda. Written with no context at all, it couldn't be given a lambda that prints. That's why parametric contexts matter for higher-order functions.
 
 ```nanyx
 def f: list(int) -> list(int) = { numbers ->
-  -- Ok, because the lambda passed to `list.map` is pure (i.e. has no context requirements)
+  -- Ok, because the lambda passed to `list.map` is pure (it has no context requirements)
   numbers \list.map { n ->
     n + 1
   }
@@ -126,10 +126,24 @@ def f: list(int) -> list(int) = { numbers ->
 
 ```nanyx
 def f: [Console] list(int) -> list(int) = { numbers ->
-  -- Also okay, because `f` declares the [Console] context requirement that `list.map` inherits from `println`
+  -- Also okay, because `f` declares the [Console] that `list.map` requires of its lambda here
   numbers \list.map { n ->
     println(n)
     n + 1
+  }
+}
+```
+
+A higher-order function that doesn't write its type gets a context variable for each function it calls or passes on, so `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. One that writes its type without one only takes pure functions:
+
+```nanyx
+def runPure: (int -> int) -> int = { g -> g(5) }
+
+def main: [Console] () -> int = {
+  -- Error NYX0227: this lambda requires [Console], and `runPure` only takes a pure function
+  runPure { n ->
+    println(n)
+    n
   }
 }
 ```

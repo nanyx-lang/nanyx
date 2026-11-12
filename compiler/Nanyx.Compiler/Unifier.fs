@@ -6,6 +6,15 @@ open Parser.Program
 /// Substitution map for type variables.
 type Subst = Map<int, Ty>
 
+/// What made a constraint fail: two types that differ, or a function that requires contexts given where one that
+/// requires fewer is expected, which may be the same type otherwise.
+type MismatchKind =
+    | TypesDiffer
+    | ContextsNotAllowed
+
+/// A constraint that cannot be satisfied: what is wrong, where (the constraint's span), and what kind of failure it is.
+type Mismatch = string * SourceSpan * MismatchKind
+
 /// The characters a type shown to a reader is written in.
 type TypeNotation =
     /// Type variables the compiler made up are `α`, `β`, `γ`, … through the Greek alphabet, and the rest of an open
@@ -239,6 +248,13 @@ module Unifier =
             | _ -> Some $"""only the {which} requires {contexts |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "}"""
         let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
         $"Context mismatch: {differences}. {mismatchMessage left right}"
+
+    /// Says that a function of type `given`, which requires `extra`, is given where one of type `expected` is, which
+    /// has no room for them.
+    let private contextsNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
+        let contexts = extra |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "
+        let what = if extra.Length = 1 then "the context" else "the contexts"
+        $"A function that requires {what} {contexts} is given where '{tyToString expected}' is expected, which does not: '{tyToString given}'. Write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`."
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`
@@ -546,7 +562,8 @@ module Unifier =
         | TyUnion items -> items |> List.exists (occurs varId)
         | TyPrimitive _ -> false
 
-    let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
+    /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`).
+    let unifyDetailed (constraints: ConstraintSet) : Result<Subst, Mismatch> =
         // Widening a union (below) makes up rest variables. They are numbered past every variable in the
         // constraints, and far past where inference numbers its own, so that they are new to both.
         let mutable nextRestId =
@@ -574,9 +591,9 @@ module Unifier =
         // after it too, so one whose failure is elsewhere fitted here, and what failed is a constraint further on,
         // which may be in another def altogether: that is reported, not this constraint (`solve` would otherwise set
         // this one aside as wrong too). Only when every member failed here is the last one's failure reported.
-        let unionFailure (origin: SourceSpan) (failures: (string * SourceSpan) list) =
+        let unionFailure (origin: SourceSpan) (failures: Mismatch list) =
             failures
-            |> List.tryFind (fun (_, span) -> span <> origin)
+            |> List.tryFind (fun (_, span, _) -> span <> origin)
             |> Option.orElse (List.tryLast failures)
         let rec loop (subst: Subst) (remaining: ConstraintSet) =
             // A closed record has exactly its fields, so two closed records agree only when they have the same ones:
@@ -589,7 +606,7 @@ module Unifier =
                         lKeys |> Seq.map (fun key -> (lFields.[key], rFields.[key], Equal, origin)) |> Seq.toList
                     loop subst (pairConstraints @ rest)
                 else
-                    Error (recordKeyMessage lKeys rKeys left right, origin)
+                    Error (recordKeyMessage lKeys rKeys left right, origin, TypesDiffer)
             // `exact` when the two types are to be the same (an `Equal` constraint), and not only one given where the
             // other is expected. A lone tag is then the same as an open union only when the union's rest adds nothing:
             // `#notFound` is `#notFound | r` with `r` empty. A rest an annotation names is left alone, as the
@@ -603,7 +620,7 @@ module Unifier =
                 | TyVar v, ty
                 | ty, TyVar v ->
                     if occurs v.Id ty then
-                        Error ($"Occurs check failed: {tyToString ty} contains {tyToString (TyVar v)}.", origin)
+                        Error ($"Occurs check failed: {tyToString ty} contains {tyToString (TyVar v)}.", origin, TypesDiffer)
                     else
                         let newSubst = subst |> Map.add v.Id ty
                         loop newSubst rest
@@ -625,16 +642,16 @@ module Unifier =
                         else
                             loop subst ((lUnderlying, rUnderlying, Equal, origin) :: rest)
                     else
-                        Error (mismatchMessage l r, origin)
+                        Error (mismatchMessage l r, origin, TypesDiffer)
                 // A nominal type is a different type from its shape. Only assignability, which is one-way, lets a
                 // nominal value stand for its shape.
                 | TyNominal _, _
                 | _, TyNominal _ ->
-                    Error (mismatchMessage l r, origin)
+                    Error (mismatchMessage l r, origin, TypesDiffer)
                 | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
                     match FunctionContexts.agree freshRest origin lContexts rContexts with
                     | Ok contexts -> loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: contexts @ rest)
-                    | Error (onlyLeft, onlyRight) -> Error (contextsMessage onlyLeft onlyRight l r, origin)
+                    | Error (onlyLeft, onlyRight) -> Error (contextsMessage onlyLeft onlyRight l r, origin, TypesDiffer)
                 | TyRecord lFields, TyRecord rFields ->
                     unifyRecordFields origin lFields rFields rest l r
                 // An open record is a record with at least its fields: the record must have each of them, and the
@@ -647,7 +664,7 @@ module Unifier =
                         let others = fields |> Map.filter (fun key _ -> not (openKeys.Contains key))
                         loop subst (pairs @ [ (TyVar row, TyRecord others, Equal, origin) ] @ rest)
                     else
-                        Error (recordKeyMessage openKeys (keySet fields) l r, origin)
+                        Error (recordKeyMessage openKeys (keySet fields) l r, origin, TypesDiffer)
                 // Two open records: each row is the other's extra fields and a row they share, as with two open unions.
                 | TyOpenRecord(lFields, lRow), TyOpenRecord(rFields, rRow) ->
                     let lKeys = keySet lFields
@@ -658,7 +675,7 @@ module Unifier =
                         |> Seq.toList
                     if lRow.Id = rRow.Id then
                         if lKeys = rKeys then loop subst (pairs @ rest)
-                        else Error (recordKeyMessage lKeys rKeys l r, origin)
+                        else Error (recordKeyMessage lKeys rKeys l r, origin, TypesDiffer)
                     else
                         let shared = match freshRest () with TyVar v -> v | _ -> failwith "unreachable"
                         let rowOf (extras: Map<string, Ty>) =
@@ -670,7 +687,7 @@ module Unifier =
                     match lPayload, rPayload with
                     | None, None -> loop subst rest
                     | Some lTy, Some rTy -> loop subst ((lTy, rTy, Equal, origin) :: rest)
-                    | _ -> Error ($"Tag payload mismatch: #{lName}. {mismatchMessage l r}", origin)
+                    | _ -> Error ($"Tag payload mismatch: #{lName}. {mismatchMessage l r}", origin, TypesDiffer)
                 | TyUnion lItems, TyUnion rItems ->
                     match parseTagUnion lItems, parseTagUnion rItems with
                     | Ok (lMap, lRest), Ok (rMap, rRest) ->
@@ -709,16 +726,16 @@ module Unifier =
                             if extraLeft.IsEmpty || extraRight.IsEmpty then
                                 loop subst (pairs @ rest)
                             else
-                                Error (tagUnionMessage extraLeft extraRight l r, origin)
+                                Error (tagUnionMessage extraLeft extraRight l r, origin, TypesDiffer)
                         else if (lRest.IsSome || extraRight.IsEmpty) && (rRest.IsSome || extraLeft.IsEmpty) then
                             loop subst (pairs @ restConstraints @ rest)
                         else
                             // An open union can take the other's extra tags; only a closed one's are named.
                             let onlyLeft = if rRest.IsNone then extraLeft else Set.empty
                             let onlyRight = if lRest.IsNone then extraRight else Set.empty
-                            Error (tagUnionMessage onlyLeft onlyRight l r, origin)
-                    | Error message, _ -> Error (message, origin)
-                    | _, Error message -> Error (message, origin)
+                            Error (tagUnionMessage onlyLeft onlyRight l r, origin, TypesDiffer)
+                    | Error message, _ -> Error (message, origin, TypesDiffer)
+                    | _, Error message -> Error (message, origin, TypesDiffer)
                 | TyUnion lItems, ty ->
                     match parseTagUnion lItems with
                     | Ok (lMap, lRest) ->
@@ -726,37 +743,37 @@ module Unifier =
                         // A member of the union that unifies with `ty` is tried against the rest of the
                         // constraints too, so when none works the failure may come from later on (see
                         // `unionFailure`) rather than be a bare mismatch here.
-                        let rec tryItems items (failures: (string * SourceSpan) list) =
+                        let rec tryItems items (failures: Mismatch list) =
                             match items with
                             | [] ->
                                 // The rest takes a tag the union does not name; one it names is that member, which
                                 // did not unify (`#some(int)` is not the rest of `#some() | r`).
                                 match lRest with
                                 | Some restVar when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
-                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin))
+                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin, TypesDiffer))
                             | item :: restItems ->
                                 match loop subst ((item, ty, Equal, origin) :: emptyRest lRest @ rest) with
                                 | Ok result -> Ok result
                                 | Error inner -> tryItems restItems (failures @ [ inner ])
                         tryItems tags []
-                    | Error message -> Error (message, origin)
+                    | Error message -> Error (message, origin, TypesDiffer)
                 | ty, TyUnion rItems ->
                     match parseTagUnion rItems with
                     | Ok (rMap, rRest) ->
                         let tags = rMap |> Map.toList |> List.map snd
-                        let rec tryItems items (failures: (string * SourceSpan) list) =
+                        let rec tryItems items (failures: Mismatch list) =
                             match items with
                             | [] ->
                                 match rRest with
                                 | Some restVar when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
-                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin))
+                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin, TypesDiffer))
                             | item :: restItems ->
                                 match loop subst ((ty, item, Equal, origin) :: emptyRest rRest @ rest) with
                                 | Ok result -> Ok result
                                 | Error inner -> tryItems restItems (failures @ [ inner ])
                         tryItems tags []
-                    | Error message -> Error (message, origin)
-                | _ -> Error (mismatchMessage l r, origin)
+                    | Error message -> Error (message, origin, TypesDiffer)
+                | _ -> Error (mismatchMessage l r, origin, TypesDiffer)
             match remaining with
             | [] -> Ok subst
             | (left, right, kind, origin) :: rest ->
@@ -834,8 +851,8 @@ module Unifier =
                                     | _ -> []
                                 loop subst (pairs @ restConstraints @ rest)
                             // A rest this closed can repeat a tag, which the message leaves out.
-                            | _, Ok (rMap, _) -> Error (mismatchMessage l (TyUnion(rMap |> Map.toList |> List.map snd)), origin)
-                            | _ -> Error (mismatchMessage l r, origin)
+                            | _, Ok (rMap, _) -> Error (mismatchMessage l (TyUnion(rMap |> Map.toList |> List.map snd)), origin, TypesDiffer)
+                            | _ -> Error (mismatchMessage l r, origin, TypesDiffer)
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
                         // there too: `list($Person)` is assignable to `list((name: string))`, but not the reverse.
                         // Values are immutable, so a type's arguments are covariant, and so are a record's fields:
@@ -851,36 +868,45 @@ module Unifier =
                         | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
                             match FunctionContexts.fit freshRest origin lContexts rContexts with
                             | Ok contexts -> loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: contexts @ rest)
-                            | Error extra -> Error (contextsMessage extra [] l r, origin)
+                            | Error extra -> Error (contextsNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                         | _ ->
                         match l, r with
                         | TyNominal(lNominal, _, _), TyNominal(rNominal, _, _) when lNominal = rNominal ->
                             loop subst rest
                         | TyNominal(_, _, true), _
                         | _, TyNominal(_, _, true) ->
-                            Error (mismatchMessage l r, origin)
+                            Error (mismatchMessage l r, origin, TypesDiffer)
                         | TyNominal(_, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
                             loop subst ((underlying, other, Equal, origin) :: rest)
                         | other, TyNominal(_, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
-                            Error (mismatchMessage l r, origin)
+                            Error (mismatchMessage l r, origin, TypesDiffer)
                         | TyNominal _, TyNominal _ ->
-                            Error (mismatchMessage l r, origin)
+                            Error (mismatchMessage l r, origin, TypesDiffer)
                         | _ ->
                             unifyEqual false origin l r rest
                     | Equal ->
                         unifyEqual true origin l r rest
         loop empty constraints
 
+    /// Solves `constraints`, or gives the first that cannot be satisfied, with what was wrong and where.
+    let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
+        unifyDetailed constraints |> Result.mapError (fun (message, span, _) -> message, span)
+
     /// Solves `constraints` as `unify` does, carrying on past a failure: the constraints from where it failed are
     /// set aside and the rest solved again, until they agree. Gives the substitution the rest agree on, and each
-    /// failure in the order it was found. With no failure, the substitution is the one `unify` gives.
-    let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =
-        let rec attempt (remaining: ConstraintSet) (failures: (string * SourceSpan) list) =
-            match unify remaining with
+    /// failure in the order it was found (see `Mismatch`). With no failure, the substitution is the one `unify` gives.
+    let solveDetailed (constraints: ConstraintSet) : Subst * Mismatch list =
+        let rec attempt (remaining: ConstraintSet) (failures: Mismatch list) =
+            match unifyDetailed remaining with
             | Ok subst -> subst, List.rev failures
-            | Error (message, span) ->
+            | Error (_, span, _ as failure) ->
                 let kept = remaining |> List.filter (fun (_, _, _, origin) -> origin <> span)
                 // A failure from no constraint given (which `unify` does not make) cannot be set aside.
-                if kept.Length = remaining.Length then empty, List.rev ((message, span) :: failures)
-                else attempt kept ((message, span) :: failures)
+                if kept.Length = remaining.Length then empty, List.rev (failure :: failures)
+                else attempt kept (failure :: failures)
         attempt constraints []
+
+    /// Solves `constraints` as `solveDetailed` does, giving each failure's message and where it is.
+    let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =
+        let subst, failures = solveDetailed constraints
+        subst, failures |> List.map (fun (message, span, _) -> message, span)

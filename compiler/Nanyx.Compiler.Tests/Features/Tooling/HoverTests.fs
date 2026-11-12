@@ -213,8 +213,8 @@ let ``A union's rest variable is named from the end of the alphabet`` () =
         "  | #some(a) -> #some(f(a))\n" +
         "  | other -> other\n" +
         "}\n"
-    Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
-    Assert.Equal(Some "#some(a) | z, (a -> b) -> #some(b) | z", latinHoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(a) | z, ([c] a -> b) -> #some(b) | z", latinHoverType source (offsetOf source "{" 0 0))
 
 [<Fact>]
 let ``A union's rest is named only where it appears more than once`` () =
@@ -237,7 +237,7 @@ let ``A shorthand match lambda shows its own type, not that of the parameters it
     let source =
         "def mapOption = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
         "def g = mapOption\n"
-    Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     Assert.Equal(Some "def mapOption: #some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapOption" 1 0))
 
 [<Fact>]
@@ -272,7 +272,7 @@ let ``A rest variable nothing can add tags to is empty`` () =
     Assert.Equal(Some "a: #some(string)", hoverType source (offsetOf source "a\n}" 0 0))
     Assert.Equal(Some "def mapOption: #some(int), (int -> string) -> #some(string)", hoverType source (offsetOf source "mapOption {" 0 0))
     // A rest variable that the input still shares stays: what the function is given more of, it gives back.
-    Assert.Equal(Some "#some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     // So does one shared with a parameter in scope, which a later use could still give tags to.
     let inLambda =
         "def mapOption = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +

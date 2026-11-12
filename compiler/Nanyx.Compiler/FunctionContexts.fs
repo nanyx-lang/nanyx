@@ -20,6 +20,23 @@ module FunctionContexts =
         | TyVar _ -> true
         | _ -> false
 
+    /// The context variables of the function types in `ty`, by id, each with its name if it has one.
+    let rec variablesIn (ty: Ty) : Map<int, string option> =
+        let all (tys: Ty list) = tys |> List.fold (fun acc ty -> Map.fold (fun acc id name -> Map.add id name acc) acc (variablesIn ty)) Map.empty
+        match ty with
+        | TyFunc(input, output, contexts) ->
+            let own = contexts |> List.choose (function TyVar v -> Some (v.Id, v.Name) | _ -> None) |> Map.ofList
+            Map.fold (fun acc id name -> Map.add id name acc) own (all (input :: output :: contexts))
+        | TyVar _
+        | TyPrimitive _ -> Map.empty
+        | TyNominal(_, underlying, _) -> variablesIn underlying
+        | TyAlias(_, args, underlying) -> all (underlying :: args)
+        | TyRecord fields
+        | TyOpenRecord(fields, _) -> all (List.ofSeq fields.Values)
+        | TyTag(_, payload) -> payload |> Option.map variablesIn |> Option.defaultValue Map.empty
+        | TyApply(_, items)
+        | TyUnion items -> all items
+
     /// `contexts` once a substitution is applied to them: a variable solved to a union of contexts is those contexts,
     /// and each context is there once.
     let flatten (contexts: Ty list) : Ty list =
@@ -47,7 +64,8 @@ module FunctionContexts =
         let paired, leftExtra, rightExtra = go (fun l r -> key l = key r) leftOver rightOver [] []
         let leftOnly = leftVars |> List.filter (fun v -> not (List.contains v rightVars))
         let rightOnly = rightVars |> List.filter (fun v -> not (List.contains v leftVars))
-        same @ paired, leftExtra, rightExtra, leftOnly, rightOnly
+        let shared = leftVars |> List.filter (fun v -> List.contains v rightVars)
+        same @ paired, leftExtra, rightExtra, leftOnly, rightOnly, shared
 
     /// The constraints that make the arguments of each pair of contexts the same.
     let private argumentConstraints (origin: SourceSpan) (pairs: (Ty * Ty) list) : Constraint list =
@@ -64,9 +82,12 @@ module FunctionContexts =
     /// The constraints that make `left` and `right` the same contexts, with `fresh` making a variable for the contexts
     /// two variables share; or, when they cannot be, the contexts of each that the other has no room for.
     let agree (fresh: unit -> Ty) (origin: SourceSpan) (left: Ty list) (right: Ty list) : Result<Constraint list, Ty list * Ty list> =
-        let pairs, leftExtra, rightExtra, leftVars, rightVars = pairUp left right
+        let pairs, leftExtra, rightExtra, leftVars, rightVars, shared = pairUp left right
         let arguments = argumentConstraints origin pairs
         match leftVars, rightVars with
+        // A variable both have, as a recursive function's own contexts are, can take what either has besides.
+        | _ when not shared.IsEmpty && not (leftExtra.IsEmpty && rightExtra.IsEmpty) ->
+            Ok (arguments @ solveTo origin (List.truncate 1 shared) (leftExtra @ rightExtra @ leftVars @ rightVars @ [ fresh () ]))
         | [], [] when leftExtra.IsEmpty && rightExtra.IsEmpty -> Ok arguments
         | [], [] -> Error (leftExtra, rightExtra)
         | [], _ when rightExtra.IsEmpty -> Ok (arguments @ solveTo origin rightVars leftExtra)
@@ -82,9 +103,11 @@ module FunctionContexts =
     /// in a variable of `expected` takes the contexts `expected` has that `given` does not. When it cannot fit, the
     /// contexts `given` requires that `expected` has no room for.
     let fit (fresh: unit -> Ty) (origin: SourceSpan) (given: Ty list) (expected: Ty list) : Result<Constraint list, Ty list> =
-        let pairs, givenExtra, expectedExtra, givenVars, expectedVars = pairUp given expected
+        let pairs, givenExtra, expectedExtra, givenVars, expectedVars, shared = pairUp given expected
         let arguments = argumentConstraints origin pairs
         match expectedVars with
+        | [] when not givenExtra.IsEmpty && not shared.IsEmpty ->
+            Ok (arguments @ solveTo origin (List.truncate 1 shared) (givenExtra @ [ fresh () ]) @ solveTo origin givenVars expectedExtra)
         | [] when not givenExtra.IsEmpty -> Error givenExtra
         | [] -> Ok (arguments @ solveTo origin givenVars expectedExtra)
         // The variable keeps room for more, so that a function given for it elsewhere can require others.

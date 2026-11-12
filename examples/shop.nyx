@@ -5,8 +5,8 @@ module main
 -- statistics about the day. Everything here runs on the current compiler (`nanyx run shop.nyx`).
 
 import (
-  nanyx/text
   nanyx/math as math
+  nanyx/text
 )
 
 -- Money ------------------------------------------------------------------------------------------
@@ -326,9 +326,9 @@ def busiest: int, int, int, list(int) -> int = { hour, bestHour, best, amounts -
 
 -- Section headings, through a context --------------------------------------------------------------
 
-context Log = (log: string -> ())
+context Log = (log: [Console] string -> ())
 
-def heading: [Log] string -> () = { title ->
+def heading: [Log & Console] string -> () = { title ->
   log("== " ++ string.uppercase(title) ++ " ==")
 }
 

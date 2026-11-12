@@ -110,7 +110,7 @@ set.isEmpty(set.fromList([1]))    -- false
 ## fold
 
 ```nanyx
-set.fold: (set(a), b, ((b, a) -> b)) -> b
+set.fold: [c] (set(a), b, ([c] (b, a) -> b)) -> b
 ```
 
 Combines a starting value with each element of a set in turn, in the order of `set.toList`.
@@ -125,7 +125,7 @@ set.fromList([3, 1, 2]) \set.fold(0, { total, n -> total + n })
 ## map
 
 ```nanyx
-set.map: [Eq(b) & Hash(b)] (set(a), (a -> b)) -> set(b)
+set.map: [Eq(b) & Hash(b) & c] (set(a), ([c] a -> b)) -> set(b)
 ```
 
 The set of what a function makes of each element. Elements the function makes equal are kept once, where the first of them was.
@@ -140,7 +140,7 @@ set.fromList([1, 2, 3]) \set.map { % 2 } \set.toList
 ## filter
 
 ```nanyx
-set.filter: (set(a), (a -> bool)) -> set(a)
+set.filter: [c] (set(a), ([c] a -> bool)) -> set(a)
 ```
 
 The elements of a set that pass a test, in the same order.
