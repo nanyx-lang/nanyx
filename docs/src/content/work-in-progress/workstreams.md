@@ -23,6 +23,7 @@ with a Stream field. An issue that serves several workstreams is placed under th
 | Formatter | [Formatter](./formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
 | Code quality | [Code quality](./code-quality) | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
+[The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
 The compilation workstream has pages of its own for the larger pieces of its design:
 [deferred errors](./deferred-errors), [closed and open records](./closed-and-open-records),
 [tail calls](./tail-calls), [memory management](./memory-management), [context calls](./context-calls) and
