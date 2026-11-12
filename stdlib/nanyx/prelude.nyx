@@ -16,6 +16,10 @@ export def panic: string -> undefined = { message ->
   __nanyx_exit(1)
 }
 
+--| Throws its argument away and gives back `()`, for a result that isn't needed. It reads well at
+  the end of a pipeline: `items \list.map(process) \ignore`.
+export def ignore: a -> () = { _ -> () }
+
 -- Numbers ---------------------------------------------------------------------------------------
 
 --| The value of the ASCII digit `b`, or -1 when `b` is not one.
