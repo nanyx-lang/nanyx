@@ -25,7 +25,7 @@ ordinary function, `[Console & ToString(a)] a -> ()`. Hello world compiles to th
 
 - **The call site allocates a closure for every member.** `println("Hello, Nanyx!")` makes six closures on the heap,
   one for each of `Console`'s five members and one for `string.toString`, and drops them after the call. Each is a
-  closure over the wrapper of a top-level function (`ContextArgument.ClosureOverWrapper` in `CoreIrLower.fs`) and
+  closure over the wrapper of a top-level function (`ContextArgument.ClosureOverWrapper` in `CoreIrLowerInput.fs`) and
   captures nothing, so every one of them is the same block every time.
 - **The callee calls its members indirectly.** `println__string` takes the six closures as parameters, after its
   own. It reads two of them, `write` and `toString`, and makes three `call_indirect`s.
