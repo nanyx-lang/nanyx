@@ -31,8 +31,7 @@ let private providersIn (source: string) =
     |> List.collect (fun (_, name, provided) ->
         provided
         |> List.map (fun p ->
-            let context = match p.Context with TyApply(ctxName, []) -> ctxName | other -> failwith $"Unexpected context %A{other}"
-            name, context, describe p.Provider))
+            name, Unifier.tyToString p.Context, describe p.Provider))
 
 let private logContext = """
 context Log = (log: string -> ())
@@ -130,3 +129,54 @@ def pass: [Foo] string -> string = { s -> run2(useFoo, s) }
         [ "bar", "Foo", "signature Foo"
           "run2", "Foo", "signature Foo" ],
         providersIn source)
+
+let private showContext = """
+context Show(a) = (show: a -> string)
+
+type Point = (x: int, y: int)
+
+def describe: [Show(a)] a -> string = { x -> show(x) }
+"""
+
+[<Fact>]
+let ``An instance of a parameterised context the def's type declares is provided by its signature`` () =
+    let source = showContext + """
+def twice: [Show(a)] a -> string = { x -> describe(x) }
+"""
+    Assert.Equal<(string * string * string) list>(
+        [ "describe", "Show(a)", "signature Show(a)" ],
+        providersIn source)
+
+[<Fact>]
+let ``An instance of a parameterised context a use loads is provided by the use`` () =
+    let source = showContext + """
+def showPoint: Show(Point) = (show = { p -> "p" })
+
+def main = {
+  use showPoint
+  describe(Point(x = 1, y = 2))
+  use Show(show = { n: int -> "n" }) in describe(5)
+}
+"""
+    Assert.Equal<(string * string * string) list>(
+        [ "describe", "Show(Point)", "use showPoint"
+          "describe", "Show(int)", """use Show(show = { n: int -> "n" })""" ],
+        providersIn source)
+
+[<Fact>]
+let ``An instance of a parameterised context an unannotated def is inferred to require is provided by inference`` () =
+    let source = showContext + """
+def twice = { x -> describe(x) }
+"""
+    Assert.Equal<(string * string * string) list>(
+        [ "describe", "Show(a)", "inferred" ],
+        providersIn source)
+
+[<Fact>]
+let ``An instance the compiler builds from attached definitions has no provider`` () =
+    let source = showContext + """
+def Point.show: Point -> string = { p -> "p" }
+
+def main = { describe(Point(x = 1, y = 2)) }
+"""
+    Assert.Equal<(string * string * string) list>([], providersIn source)

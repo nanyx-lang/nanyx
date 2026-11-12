@@ -32,8 +32,8 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Type at the cursor | `ExprTypes`, `CalleeTypes`, `SymbolTypes`, read by `Hover.typeAt` |
 | Names in scope at the cursor | `Scopes`, read by `Completion.namesInScope` |
 | Contexts an unannotated def needs | `InferredContextTypes` |
-| Where a call finds a parameterised context | `ContextInstances`: in scope (from a `use` or the signature), built from attached definitions, or built in |
-| What provides each context a call finds by its members' names | `ContextProviders`: the signature, a `use`, inference, or the runtime |
+| Where a call finds a parameterised context | `ContextInstances`: in scope (with the `use`, signature or inference that put it there), built from attached definitions, derived from a type's parts, or built in |
+| What provides each context a call requires | `ContextProviders`: the signature, a `use`, inference, or the runtime |
 | What each `use` loads | `UseContexts` (parameterised contexts only); the type of the value it loads, in `ExprTypes` |
 | The contexts the runtime supplies at the top level | `AmbientContexts` |
 | The library's modules and their doc comments | `StandardLibrary.moduleNames`, `Documentation.ofModule` |
@@ -41,13 +41,8 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
 | Doc comments | attached by `DocComments.attach`, read for a symbol by `Documentation.Reader` |
 
-Some things are not recorded yet:
-
-- **Which `use` or signature provides a parameterised context.** `ContextInstances` says a call's `Show(Point)` is
-  in scope, as written there, but not whether a `use` or the signature put it there
-  ([#716](https://github.com/nanyx-lang/nanyx/issues/716)).
-- **Types of exports by symbol, for search.** These are in `ImportedTypes` only for what a module imports, not for
-  the whole library.
+Not recorded yet: **types of exports by symbol, for search.** These are in `ImportedTypes` only for what a module
+imports, not for the whole library.
 
 # 1. Info view
 
@@ -89,10 +84,10 @@ panel can switch to a flow view of the def that contains the cursor. It lists ea
 signature, and under each one, the calls it serves. A `use` that serves no call is shown as unused. The same data
 can decorate the editor: when the cursor is on a `use`, highlight the calls it serves, and the reverse.
 
-This needs the compiler to record, for each call, the provider of every context the callee requires. For a context
-found by its members' names, such as `Console`, it does: `TypedModule.ContextProviders` holds, by the node of each
-call or pipe, each such context the call requires, as a type (`Console` is `TyApply("Console", [])`), with what
-provides it there:
+This needs the compiler to record, for each call, the provider of every context the callee requires, and it does
+([#716](https://github.com/nanyx-lang/nanyx/issues/716)): `TypedModule.ContextProviders` holds, by the node of each
+call or pipe, each context the call requires, as a type (`Console` is `TyApply("Console", [])`, `Show(Point)` is
+`TyApply("Show", [Point])`), with what provides it there:
 
 ```fsharp
 type ContextProvider =
@@ -114,10 +109,17 @@ unannotated def (`Contexts.ambientProvider`). A call of an unannotated top-level
 context where it is (`DeferredContextUse.Providers`), and records the def's contexts once every def is inferred
 (`Contexts.recordDeferredProviders`).
 
-Parameterised contexts are still recorded only in `ContextInstances`, which says an instance in scope is
-`InstanceInScope` but not which `use` or signature put it there. Recording that, and an instance built from attached
-definitions, derived from a type's parts or the compiler's own, as providers too, is the rest of
-[#716](https://github.com/nanyx-lang/nanyx/issues/716).
+A parameterised context keeps its provider in `ContextInstances` itself, rather than in a table beside it:
+`InstanceInScope of TypeExpr * ContextProvider`. Each instance put in scope (`bindInstanceOf` in
+`ContextInstances.fs`) keeps the `use` or the signature that put it there beside it, in `InferState.InstanceContexts`,
+and `instanceInScope` returns it with the instance. An instance a def that does not write its type was inferred to
+require is provided by inference (`ContextInference.resolvePending`). Once the module is inferred,
+`ContextInstances.recordInstanceProviders` adds an entry to `ContextProviders` for each `InstanceInScope` a call
+found, before the contexts found by their members' names, as written where it is put in scope (`Show(a)`, over
+variables of its own that keep its names). So there is one source of truth for an instance and what provides it, and
+the backend, which reads `ContextInstances`, ignores the provider. An instance built from attached definitions
+(`InstanceSynthesized`), derived from a type's parts (`InstanceDerived`) or the compiler's own (`InstanceBuiltIn`) has
+no provider, and has no entry in `ContextProviders`; "This call" shows those from `ContextInstances`.
 
 ## Protocol and client
 
@@ -250,8 +252,8 @@ In order. Each item is one PR:
    the expression, names in scope, contexts from the signature, a `use`, inference and the runtime, and messages; the
    webview panel with pinning.
 6. **Context providers** ([#716](https://github.com/nanyx-lang/nanyx/issues/716)). Record a `ContextProvider` for
-   every context at every call. Done for the contexts found by their members' names (`ContextProviders`); the
-   parameterised ones are still to do. Then show "this call" in the info view
+   every context at every call. Done (`ContextProviders`, and `InstanceInScope`'s provider). Then show "this call"
+   in the info view
    ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
 7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). The flow view of a function, and
    the editor highlights between a `use` and its calls.
@@ -260,8 +262,6 @@ In order. Each item is one PR:
 
 - Should the info view show types as trees, so each part can be hovered and followed to its definition, as Lean's
   does? That changes the request from strings to a typed tree, and the type printer would need to emit one.
-- Should `ContextProvider` replace `ContextInstances`? The backend reads `ContextInstances`, so replacing it is a
-  wider change than adding a table beside it.
 - How loose should search be? Hoogle also matches a query in which an input is curried, or where a `list` could be
   a `maybe`. Each looser rule finds more, but buries the exact matches further down.
 - Should the browser also be a page on the docs site, generated from the same data, so the library's reference is

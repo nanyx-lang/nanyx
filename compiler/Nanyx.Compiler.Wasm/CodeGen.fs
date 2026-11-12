@@ -262,7 +262,7 @@ let private contextArguments
         // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
         // declares. A `use` of a record value, which the type checker found to be the instance by its shape, binds
         // its members by their names alone.
-        | Some (memberName, Some (InstanceInScope written)) ->
+        | Some (memberName, Some (InstanceInScope(written, _))) ->
             let writtenKey = contextMemberKey (Some written) memberName
             let key = if not (scopeKeys.Contains writtenKey) && scopeKeys.Contains (NamedMember memberName) then NamedMember memberName else writtenKey
             acc @ [ memberFor requiredKey key ], used.Add key

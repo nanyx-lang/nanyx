@@ -147,12 +147,25 @@ module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
     let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
 
+/// What provides a context where a call requires it, such as `Console`, or `Sum(Point)` from an instance in scope (see
+/// `TypedModule.ContextProviders`).
+type ContextProvider =
+    /// The type of the def around the call declares it: the context as the annotation writes it.
+    | FromSignature of SourceSpan
+    /// A `use` around the call loads it: the node of the value the `use` loads, as `TypedModule.UseContexts` has it.
+    | FromUse of NodeId
+    /// The def around the call does not write its type, and is inferred to require the context itself.
+    | FromInference
+    /// The runtime supplies it, at the top level of the module (see `TypedModule.AmbientContexts`).
+    | FromRuntime
+
 /// Where a call finds an instance of a parameterised context its callee requires, such as `Sum(Point)` for a callee
 /// that requires `[Sum(a)]`.
 type ContextInstance =
     /// An instance in scope where the call is: one a `use` loads, or one the type of the function around the call
-    /// declares. The context is as it is written there (`Sum(Point)`, `Sum(a)`).
-    | InstanceInScope of TypeExpr
+    /// declares or, where it does not write its type, was inferred to require. The context is as it is written there
+    /// (`Sum(Point)`, `Sum(a)`), with what put it there.
+    | InstanceInScope of TypeExpr * ContextProvider
     /// An instance the compiler builds from the definitions attached to the type: each member's name, and the
     /// definition it is (`+`, `Point.+`).
     | InstanceSynthesized of (string * string) list
@@ -164,18 +177,6 @@ type ContextInstance =
     /// The compiler's own `ToString` of a built-in type, at an interpolation hole (see `InterpolationHoles`): the
     /// backend writes the value itself.
     | InstanceBuiltIn
-
-/// What provides a context that is not parameterised, such as `Console`, where a call requires it (see
-/// `TypedModule.ContextProviders`).
-type ContextProvider =
-    /// The type of the def around the call declares it: the context as the annotation writes it.
-    | FromSignature of SourceSpan
-    /// A `use` around the call loads it: the node of the value the `use` loads, as `TypedModule.UseContexts` has it.
-    | FromUse of NodeId
-    /// The def around the call does not write its type, and is inferred to require the context itself.
-    | FromInference
-    /// The runtime supplies it, at the top level of the module (see `TypedModule.AmbientContexts`).
-    | FromRuntime
 
 /// A context a call requires, as a type (`Console` is `TyApply("Console", [])`), and what provides it there.
 type ProvidedContext = { Context: Ty; Provider: ContextProvider }
@@ -216,7 +217,10 @@ type ImportedFile = { File: string; Name: string option }
 /// function value's type requires, and the context of a member the call calls (`println` is `Console`'s). A context
 /// whose members a `use` or the def's signature binds is provided by that; one the ambient instance supplies, by the
 /// runtime at the top level, or by inference in a def that does not write its type. A context written out as a record
-/// has no name to record it by, and is left out.
+/// has no name to record it by, and is left out. Before those come the parameterised contexts the call finds an
+/// instance of in scope (`InstanceInScope` in `ContextInstances`), each as written where it is put in scope, over
+/// variables of their own that keep its names (`Sum(a)`); one the compiler builds, derives or writes itself has no
+/// provider, and is left out.
 ///
 /// `UseContexts` holds the instance of a parameterised context each `use` loads, by the node of the value it loads:
 /// `Sum(int)` for `use addInt`, where `def addInt: Sum(int) = (...)`. It is written as `InstanceInScope` writes it, so

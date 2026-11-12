@@ -137,7 +137,7 @@ module internal ArithmeticInference =
         operators
         |> List.fold (fun (current: InferState) pending ->
             match current.ContextInstances |> Map.tryFind pending.Operator with
-            | Some [ Some (InstanceInScope written) ] ->
+            | Some [ Some (InstanceInScope(written, _)) ] ->
                 let ty = pending.OperandTy
                 let input = if pending.MemberName = ArithmeticOperators.negate then ty else inputOf ty
                 { current with

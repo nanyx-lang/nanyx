@@ -224,11 +224,13 @@ type InferState =
             /// node (see `TypedModule.ContextInstances`).
             ContextInstances: Map<NodeId, ContextInstance option list>;
             /// What provides each context found by its members' names that a call requires, by the call's node (see
-            /// `TypedModule.ContextProviders`).
+            /// `TypedModule.ContextProviders`). Those of parameterised contexts are added from `ContextInstances` once
+            /// the module is inferred.
             ContextProviders: Map<NodeId, ProvidedContext list>;
             /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
-            /// as written there, by the name they are bound under in the environment (see `bindInstance`).
-            InstanceContexts: Map<string, TypeExpr>;
+            /// as written there, with the `use` or the signature that puts each there, by the name they are bound under
+            /// in the environment (see `bindInstanceOf`).
+            InstanceContexts: Map<string, TypeExpr * ContextProvider>;
             /// The instance of a parameterised context each `use` loads, by the node of the value it loads (see
             /// `TypedModule.UseContexts`).
             UseContexts: Map<NodeId, TypeExpr>;

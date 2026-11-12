@@ -50,7 +50,7 @@ let ``A def that writes its type must require Ord of a type variable it orders``
 let ``A def that requires Ord of a type variable orders through the instance it is passed`` () =
     let typed = compileClean "def less: [Ord(a)] a, a -> bool = { x, y -> x < y }\ndef b = less(\"a\", \"b\")\n"
     match instancesOf typed with
-    | [ InstanceInScope { Kind = TypeApply("Ord", _) }; _ ] -> ()
+    | [ InstanceInScope({ Kind = TypeApply("Ord", _) }, _); _ ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
@@ -106,7 +106,7 @@ let ``An Ord loaded with use orders a built-in type in its block`` () =
             "def a = {\n  use backwards\n  \"a\" < \"b\"\n}\n" +
             "def b = \"a\" < \"b\"\n")
     match instancesOf typed with
-    | [ InstanceInScope { Kind = TypeApply("Ord", _) } ] -> ()
+    | [ InstanceInScope({ Kind = TypeApply("Ord", _) }, _) ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
@@ -159,4 +159,4 @@ let ``A list of a type with its own compare is ordered through it, element by el
             "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n")
     Assert.Contains(InstanceSynthesized [ "compare", "$Version.compare" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
-    Assert.Contains(instances, function InstanceInScope (Kind (TypeApply("Ord", [ Kind (TypeVar "a") ]))) -> true | _ -> false)
+    Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Ord", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

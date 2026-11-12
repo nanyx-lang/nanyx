@@ -335,19 +335,19 @@ module internal StructuralInstances =
     /// stands for. A definition derived for the type that comes out requires the context of each, so the part is
     /// written, or compared, through the instance in scope where the call is, not through the one the top of the
     /// module would find. A nominal type, an alias and a function are not looked inside.
-    let private abstractParts (partInstance: Ty -> TypeExpr option) (ty: Ty) (state: InferState) : Ty * Map<int, TypeExpr> * InferState =
-        let rec part (found: Map<Ty, TyVar * TypeExpr>, state: InferState) (ty: Ty) =
+    let private abstractParts (partInstance: Ty -> (TypeExpr * ContextProvider) option) (ty: Ty) (state: InferState) : Ty * Map<int, TypeExpr * ContextProvider> * InferState =
+        let rec part (found: Map<Ty, TyVar * (TypeExpr * ContextProvider)>, state: InferState) (ty: Ty) =
             match ty, found |> Map.tryFind ty with
             | TyVar _, _ -> ty, (found, state)
             | _, Some (var, _) -> TyVar var, (found, state)
             | _ ->
                 match partInstance ty with
-                | Some written ->
+                | Some inScope ->
                     match freshVar state with
-                    | TyVar var, next -> TyVar var, (found |> Map.add ty (var, written), next)
+                    | TyVar var, next -> TyVar var, (found |> Map.add ty (var, inScope), next)
                     | _ -> inside (found, state) ty
                 | None -> inside (found, state) ty
-        and inside (acc: Map<Ty, TyVar * TypeExpr> * InferState) (ty: Ty) =
+        and inside (acc: Map<Ty, TyVar * (TypeExpr * ContextProvider)> * InferState) (ty: Ty) =
             match ty with
             | TyTag(name, Some payload) ->
                 let payload, acc = part acc payload
@@ -365,12 +365,12 @@ module internal StructuralInstances =
             | _ -> ty, acc
         let abstracted, (found, next) = inside (Map.empty, state) ty
         if found.IsEmpty then ty, Map.empty, state
-        else abstracted, found |> Map.values |> Seq.map (fun (var, written) -> var.Id, written) |> Map.ofSeq, next
+        else abstracted, found |> Map.values |> Seq.map (fun (var, inScope) -> var.Id, inScope) |> Map.ofSeq, next
 
     /// `instanceOf`, and the instance in scope each variable `abstractParts` made stands for.
-    let private withAbstracted (abstracted: Map<int, TypeExpr>) (instanceOf: TyVar -> ContextInstance option) (var: TyVar) =
+    let private withAbstracted (abstracted: Map<int, TypeExpr * ContextProvider>) (instanceOf: TyVar -> ContextInstance option) (var: TyVar) =
         match abstracted |> Map.tryFind var.Id with
-        | Some written -> Some (InstanceInScope written)
+        | Some inScope -> Some (InstanceInScope inScope)
         | None -> instanceOf var
 
     /// Why a call does not find the instance derived for a type.
@@ -390,7 +390,7 @@ module internal StructuralInstances =
     /// `abstractParts`). `rigid` holds the variables of the function around the call.
     let instance
         (rigid: Set<int>)
-        (partInstance: Ty -> TypeExpr option)
+        (partInstance: Ty -> (TypeExpr * ContextProvider) option)
         (instanceOf: TyVar -> ContextInstance option)
         (isHole: bool)
         (call: NodeId)
@@ -423,7 +423,7 @@ module internal StructuralInstances =
     /// `partInstance` are as `instance` has them.
     let comparison
         (rigid: Set<int>)
-        (partInstance: Ty -> TypeExpr option)
+        (partInstance: Ty -> (TypeExpr * ContextProvider) option)
         (instanceOf: TyVar -> ContextInstance option)
         (call: NodeId)
         (span: SourceSpan)
