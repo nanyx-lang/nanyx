@@ -1,0 +1,3 @@
+# Check every text file out with LF line endings, on Windows too, so tests that compare multi-line strings
+# see the same text everywhere. Git still detects binary files and leaves them alone.
+* text=auto eol=lf
