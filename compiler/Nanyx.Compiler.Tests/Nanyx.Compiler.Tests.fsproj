@@ -30,6 +30,7 @@
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
+    <Compile Include="Features\Equality\UnionRestEqualityTests.fs" />
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Hashing\HashTests.fs" />

@@ -118,6 +118,68 @@ module internal ContextInference =
             let names = List.zip others (List.truncate others.Length letters) |> List.fold (fun names (v, letter) -> names |> Map.add v.Id letter) written
             typeExprOf names scheme.Type
 
+    /// The rests of the unions anywhere in `ty`, each once: `r` in `#none | r -> bool`.
+    let unionRests (ty: Ty) : TyVar list =
+        let rec collect ty =
+            match ty with
+            | TyVar _
+            | TyPrimitive _
+            | TyNominal _ -> []
+            | TyAlias(_, args, _)
+            | TyApply(_, args) -> args |> List.collect collect
+            | TyUnion items -> items |> List.collect (function TyVar v -> [ v ] | item -> collect item)
+            | TyFunc(arg, ret, _) -> collect arg @ collect ret
+            | TyRecord fields
+            | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
+            | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
+        collect ty |> List.distinctBy _.Id
+
+    /// Whether `pending` is passed nothing for its context when it is of a rest of a union in the def's type: a
+    /// well-known context's operator, which is the compiler's own, or a call that `ChecksOnly`. Any other call is passed
+    /// the instance it finds.
+    let private checksRests (pending: PendingContextInstance) =
+        pending.ChecksOnly || WellKnownContexts.isOperatorPending pending
+
+    /// `state` with the rests of the unions in the type of the def `name`, generalised as `scheme` and declared as
+    /// `symbol`, that `pendings` need a well-known context of, by the context: the def is passed nothing for them, and a
+    /// call to it checks the context of what they are there (see `InferState.CheckedRests`). `pendings` are the def's
+    /// own and those left to the end of the module that are written in it (see `InferState.HoleScopes`).
+    let checkRestsAtCalls (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) (pendings: PendingContextInstance list) (state: InferState) =
+        let rests = unionRests scheme.Type |> List.map _.Id
+        let writtenIn (pending: PendingContextInstance) =
+            pending.Def = name
+            || (state.HoleScopes |> Map.tryFind pending.Call |> Option.bind snd) = Some name
+        let checkedRests =
+            pendings
+            |> List.filter (fun pending -> writtenIn pending && checksRests pending && (WellKnownContexts.tryFind pending.Context).IsSome)
+            |> List.collect (fun pending ->
+                pending.ArgTys
+                |> List.collect (resolveSoFar state >> WellKnownContexts.checkedVars)
+                |> List.filter (fun v -> scheme.Quantified.Contains v.Id)
+                |> List.choose (fun v -> rests |> List.tryFindIndex ((=) v.Id))
+                |> List.map (fun place -> pending.Context, place))
+            |> List.groupBy fst
+            |> List.map (fun (ctxName, places) -> ctxName, places |> List.map snd |> List.distinct |> List.sort)
+            |> Map.ofList
+        match symbol with
+        | Some symbol when not checkedRests.IsEmpty -> { state with CheckedRests = state.CheckedRests |> Map.add symbol checkedRests }
+        | _ -> state
+
+    /// The variables of the type of the function `symbol`, declared as `scheme`, that a call to it needs a well-known
+    /// context of but does not pass, by the context: those of a local function (see `InferState.LocalComparisons`),
+    /// and the rests of the unions it compares (see `InferState.CheckedRests`).
+    let checkedAtCalls (state: InferState) (symbol: SymbolId) (scheme: TypeScheme) : Map<Identifier, Set<int>> =
+        let rests = unionRests scheme.Type
+        let checkedRests =
+            state.CheckedRests
+            |> Map.tryFind symbol
+            |> Option.defaultValue Map.empty
+            |> Map.map (fun _ places -> places |> List.choose (fun place -> List.tryItem place rests) |> List.map _.Id |> Set.ofList)
+        state.LocalComparisons
+        |> Map.tryFind symbol
+        |> Option.defaultValue Map.empty
+        |> Map.fold (fun all ctxName used -> all |> Map.add ctxName (Set.union used (all |> Map.tryFind ctxName |> Option.defaultValue Set.empty))) checkedRests
+
     /// `instances` with the call `pending` names finding its context as `instance`.
     let internal withInstance (pending: PendingContextInstance) (instance: ContextInstance) (instances: Map<NodeId, ContextInstance option list>) =
         let found = instances |> Map.tryFind pending.Call |> Option.defaultValue (List.replicate pending.Count None)
@@ -140,6 +202,7 @@ module internal ContextInference =
         (derivedVars: PendingContextInstance -> Ty list -> TyVar list)
         (synthesize: (Identifier -> TyVar -> TypeExpr option) -> PendingContextInstance -> Ty list -> InferState -> Result<ContextInstance option * InferState, Diagnostic list> option)
         : Result<TypeExpr option * InferState, Diagnostic list> =
+        let state = checkRestsAtCalls name symbol scheme state.PendingContextInstances state
         let pending, others = state.PendingContextInstances |> List.partition (fun p -> p.Def = name)
         let state = { state with PendingContextInstances = others }
         let resolved = pending |> List.rev |> List.map (fun p -> p, p.ArgTys |> List.map (resolveSoFar state))
@@ -147,6 +210,10 @@ module internal ContextInference =
         let ownVars (argTys: Ty list) =
             let vars = argTys |> List.map (function TyVar v when scheme.Quantified.Contains v.Id -> Some v | _ -> None)
             if vars |> List.forall Option.isSome then Some (vars |> List.map Option.get) else None
+        // The rests of the unions in the def's own type, which an operator or a call that only checks its context is
+        // not passed one for: a call to the def checks it instead (see `checkRestsAtCalls`).
+        let rests = unionRests scheme.Type |> List.map _.Id |> Set.ofList
+        let ofRests (p: PendingContextInstance) (vars: TyVar list) = checksRests p && vars |> List.forall (fun v -> rests.Contains v.Id)
         let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.map _.Id
         // A well-known context of a type with more to it than a variable is that context of each of the def's
         // variables it compares values of: `Eq(list(a))` is `Eq(a)`.
@@ -155,12 +222,13 @@ module internal ContextInference =
                 if (WellKnownContexts.tryFind p.Context).IsSome then argTys |> List.collect WellKnownContexts.comparedVars
                 else derivedVars p argTys
             vars
-            |> List.filter (fun v -> scheme.Quantified.Contains v.Id)
+            |> List.filter (fun v -> scheme.Quantified.Contains v.Id && not (ofRests p [ v ]))
             |> List.map (fun v -> p.Context, [ v ])
         let required =
             resolved
             |> List.collect (fun (p, argTys) ->
                 match ownVars argTys with
+                | Some vars when ofRests p vars -> []
                 | Some vars -> [ p.Context, vars ]
                 | None -> reduced p argTys)
             |> List.distinctBy key
@@ -174,6 +242,7 @@ module internal ContextInference =
             result
             |> Result.bind (fun (current: InferState) ->
                 match ownVars argTys, written with
+                | Some vars, _ when ofRests p vars -> Ok current
                 // A call to a local function is passed nothing: the def requiring the context is all it needs.
                 | Some _, Some _ when p.ChecksOnly -> Ok current
                 | Some vars, Some (contexts, _) ->

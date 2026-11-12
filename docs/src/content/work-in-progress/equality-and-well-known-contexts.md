@@ -51,6 +51,15 @@ operators call, and `Hash(a)` and `__hash`.
   `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still
   names `Point`. The official linter's `noTagInCommon` rule warns about `#red == #some(1)`: closed types with no tag
   in common.
+- **A union's rest is checked at each call, not passed.** Comparing an `#none | r` compares whatever tags `r` holds,
+  so `isNone(#some(f))` with a function `f` is `NYX0205` at the call, naming the payload that is a function. The
+  function is passed nothing for `Eq(r)`: its comparison is the compiler's own at each type it is specialised at, so
+  `isNone` stays `#none | r -> bool`, and `classify(#ok)` makes no closure. Inference records, for each function, the
+  rests of its type that its comparisons, or its calls to such functions, compare
+  (`ContextInference.checkRestsAtCalls`, kept in `InferState.CheckedRests` and carried by imports), and a call checks
+  `Eq` of what each is there as a call to a local function does (`WellKnownContexts.checkLocalCall`). A function that
+  writes its type with an open union, `#none | r -> bool`, needs no `[Eq(r)]`. As for local functions, only a call
+  by name is checked, not a function passed as a value.
 - **A concrete `a == b` is a lookup too** (decision 2). Where `==` is bound to a definition that takes the operands,
   as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other; else, on
   a type with a `==` attached, it calls that, as any operator on a type that attaches it does (`OperatorCalls.fs`,
@@ -78,8 +87,6 @@ Not done yet:
   a type variable, but not an `Eq` of a concrete part loaded by `use` in a block. A call that requires `Eq` of a
   structure with a type variable in it, `same(#some(x), #some(y))` inside a function that requires `[Eq(a)]`, is
   passed the compiler's own instance, not one built from `Eq(a)`: compare with `==` there.
-- **`Eq` of a union's rest.** `Eq(#none | r)` does not reduce to `Eq(r)` yet, so `isNone(#some(f))` with a
-  function reaches the backend ([#623](https://github.com/nanyx-lang/nanyx/issues/623)).
 
 ## Ordering
 
@@ -324,8 +331,10 @@ comparing at `#some(int) | #none`. This is the same join `if` and `match` branch
 ([#433](https://github.com/nanyx-lang/nanyx/issues/433)).
 
 A row variable needs an instance too: `Eq(#none | r)` reduces to `Eq(r)`, meaning "every tag the rest holds has
-equality". A function generic over a union's rest writes `[Eq(r)]`. Most code never sees this, because it is
-inferred.
+equality". As built ([#623](https://github.com/nanyx-lang/nanyx/issues/623)), the requirement is checked at each
+call but never passed, so it is not part of the function's type and nobody writes `[Eq(r)]`: the comparison is the
+compiler's own at each type the function is specialised at, as a local function's is. Passing an instance for it
+would make every call to a function that compares with a tag build a closure.
 
 Comparing two closed types with no tag in common, `#red == #some(1)`, is always false; the compiler warns.
 

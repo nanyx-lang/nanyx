@@ -198,12 +198,13 @@ module internal WellKnownContexts =
     let cannotUse (wellKnown: WellKnownContext) (op: string) (ty: Ty) (reason: string) =
         $"'{display ty}' cannot be {wellKnown.Participle} with {op}: {reason}"
 
-    /// The type variables comparing two values of the type `ty` compares values of, each once: `a` for `list(a)`. A
-    /// union's rest and an open record's row are not among them.
-    let comparedVars (ty: Ty) : TyVar list =
+    /// The type variables comparing two values of the type `ty` compares values of, each once, as `rests` says: when
+    /// false, the variables that are values of their own, `a` for `list(a)`; when true, the rests of the unions it
+    /// compares, `r` for `#none | r`. An open record's row is among neither.
+    let private comparedParts (rests: bool) (ty: Ty) : TyVar list =
         let rec collect ty =
             match ty with
-            | TyVar v -> [ v ]
+            | TyVar v -> if rests then [] else [ v ]
             | TyPrimitive _
             | TyFunc _ -> []
             | TyAlias(_, _, underlying)
@@ -212,8 +213,24 @@ module internal WellKnownContexts =
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | TyApply(_, args) -> args |> List.collect collect
-            | TyUnion items -> items |> List.filter (function TyVar _ -> false | _ -> true) |> List.collect collect
+            | TyUnion items ->
+                let unionRests, tags = items |> List.partition (function TyVar _ -> true | _ -> false)
+                (if rests then unionRests |> List.choose (function TyVar v -> Some v | _ -> None) else []) @ List.collect collect tags
         collect ty |> List.distinctBy _.Id
+
+    /// The type variables comparing two values of the type `ty` compares values of, each once: `a` for `list(a)`. A
+    /// union's rest and an open record's row are not among them.
+    let comparedVars (ty: Ty) : TyVar list = comparedParts false ty
+
+    /// The rests of the unions comparing two values of the type `ty` compares, each once: `r` for `#none | r`, and for
+    /// `list(#none | r)`. Comparing them compares whatever tags the rest turns out to hold, so a function that does
+    /// needs the context of what the rest is at each call to it. It is passed nothing for it: the comparison is the
+    /// compiler's own at each type the function is specialised at, and the context is only checked (see
+    /// `InferState.CheckedRests`).
+    let comparedRests (ty: Ty) : TyVar list = comparedParts true ty
+
+    /// The type variables, rests among them, comparing two values of the type `ty` compares values of, each once.
+    let checkedVars (ty: Ty) : TyVar list = comparedVars ty @ comparedRests ty |> List.distinctBy _.Id
 
     /// The error for using `op` on values of the type variable `v` of the function `defName`, whose type does not
     /// require `wellKnown` of it.
@@ -418,27 +435,31 @@ module internal WellKnownContexts =
             let annotatedDef = match scope with DefScope(defName, _) -> Some defName | AmbientScope -> None
             later (pendingIn InterpolationHoles.moduleEnd v annotatedDef) { state with HoleScopes = state.HoleScopes |> Map.add call.Id (env, annotatedDef) }
 
-    // Local functions.
+    // Contexts checked at calls.
     //
     // A local function requires no contexts: the backend compiles it again at each type it is called with, so its
     // operators are the compiler's own at that type. A call to one that compares or orders values of a type variable
     // it is generic in still needs the well-known context of the type that variable is at the call, or the backend
-    // would be left to compare functions, or order records.
+    // would be left to compare functions, or order records. So does a call to any function that compares values of a
+    // union with a rest, `o == #none` on an `#none | r`: what it compares is the compiler's own at each type the
+    // function is specialised at, so it is passed nothing for the rest (see `comparedRests`).
 
     /// The type variables among `quantified`, those a local function was just generalised in, that the operators and
-    /// calls requiring `wellKnown` in `state` work on. Each is still pending, as none of its types was known.
+    /// calls requiring `wellKnown` in `state` work on, rests among them. Each is still pending, as none of its types
+    /// was known.
     let usedByLocal (wellKnown: WellKnownContext) (state: InferState) (quantified: Set<int>) : Set<int> =
         state.PendingContextInstances
         |> List.filter (fun pending -> pending.Context = wellKnown.Context)
-        |> List.collect (fun pending -> pending.ArgTys |> List.collect (resolveSoFar state >> comparedVars))
+        |> List.collect (fun pending -> pending.ArgTys |> List.collect (resolveSoFar state >> checkedVars))
         |> List.map _.Id
         |> List.filter quantified.Contains
         |> Set.ofList
 
-    /// Checks `call`, at `span` in `env`, to the local function `calleeName`, which needs `wellKnown` of the type `ty`
-    /// there, and finds it as `instance`. A type with none is an error at the call. A type with a variable left in it is
-    /// checked as a call to a top-level function would be, once the def around it is inferred (see `resolveCall`), but
-    /// the call is passed nothing (`ChecksOnly`).
+    /// Checks `call`, at `span` in `env`, to the function `calleeName`, which needs `wellKnown` of the type `ty` there
+    /// but is passed nothing for it (see `InferState.LocalComparisons` and `InferState.CheckedRests`), and finds it as
+    /// `instance`. A type with none is an error at the call. A type with a variable left in it is checked as a call to
+    /// a top-level function would be, once the def around it is inferred (see `resolveCall`), but the call is passed
+    /// nothing (`ChecksOnly`).
     let checkLocalCall
         (wellKnown: WellKnownContext)
         (env: TypeEnv)

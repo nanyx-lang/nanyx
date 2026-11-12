@@ -198,6 +198,19 @@ let ``Run - comparing with a tag takes a value of any union that has it`` () =
     |> assertRan "T\nF\nF\n"
 
 [<Fact>]
+let ``Run - a function that passes a union on to one that compares it with a tag compares at each type`` () =
+    comparing
+        [ "def isNone = { o -> o == #none }"
+          "def viaCaller = { o -> isNone(o) }"
+          "def isNoneTyped: #none | r -> bool = { o -> o == #none }" ]
+        [ "viaCaller(#none)"
+          "viaCaller(#some([1, 2]))"
+          "isNoneTyped(#none)"
+          "isNoneTyped(#some(s))" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nF\n"
+
+[<Fact>]
 let ``Run - a concrete comparison uses the == attached to a nominal type`` () =
     comparing
         [ "type $Point = (x: int, y: int)"
