@@ -69,18 +69,19 @@ def Point.`0` = Point(x = 0, y = 0)
 
 # Attaching to a built-in type
 
-The name before the dot must be a real type, spelled as the type is. A built-in type is spelled in lowercase, so a definition attached to strings is written and called with `string`:
+The name before the dot must be a type. A built-in type can be named by its alias as well as by its name (see [Built-in type names](../tour/types#built-in-type-names)), and the two mean the same type here too, so a definition attached to strings can be written and called with `string` or `String`:
 
 ```nanyx
 def string.shout = { (s: string) -> s ++ "!" }
 
 def a = string.shout("hi")
-def b = "hi" \shout
+def b = String.shout("hi")
+def c = "hi" \shout
 ```
 
-The same goes for `int`, `float`, `bool`, `unit`, `list`, `seq`, `map` and `set`: the prelude's functions are `int.fromString`, `list.map`, `map.get` and so on.
+`def String.shout` would be the same definition. The prelude writes its functions with the aliases: `int.fromString`, `list.map`, `map.get` and so on.
 
-The capitalised spellings, `Int.fromString` or `List(int)`, are not types. For now they are still read as the type they stand for, with the warning `NYX0112` and a fix that writes the type's name; they will stop working in a later release.
+`Int`, `Float` and `Bool` are not types: `Int.fromString` is the error `NYX0114`, with a fix that writes `int`.
 
 A name that is not a type cannot have definitions attached to it: `def Option.map` is an error, since there is no type `Option`. A helper that works on any option-like union is an ordinary function, such as the prelude's `mapOption`.
 

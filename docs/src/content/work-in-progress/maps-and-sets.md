@@ -12,9 +12,9 @@ order: 10
 
 # What is implemented
 
-- **The types.** `map(k, v)` and `set(a)` are types the compiler knows, as it knows `list(a)`; the capitalised
-  `Map(k, v)` and `Set(a)` are deprecated spellings of them, read with a warning for one release
-  (`Nanyx.Compiler/Maps.fs`, `Sets.fs` and `DeprecatedTypeNames.fs`). The functions on them are attached to `map` and
+- **The types.** `map(k, v)` and `set(a)` are types the compiler knows, as it knows `list(a)`; `Map(k, v)` and
+  `Set(a)` are the same types, by their capitalised names (`Nanyx.Compiler/Maps.fs`, `Sets.fs` and
+  `BuiltinTypeNames.fs`). The functions on them are attached to `map` and
   `set`, and documented on the [map](../stdlib/map) and [set](../stdlib/set) pages; `list.groupBy` gives a map.
 - **Literals.** `[k => v, ...]` is a map when every item is an entry. The parser makes it a call to the prelude's
   `__map` with the list of the entries as tuples, `__map([(k, v), ...])` (`MapSyntax` in `Nanyx.Parser/Ast.fs`), so the

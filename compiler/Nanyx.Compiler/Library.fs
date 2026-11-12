@@ -36,9 +36,6 @@ type private CheckedModule =
       /// The errors found checking the module itself. A module with errors is still typed, with what did check,
       /// for the editor's features; it cannot be run or imported.
       Errors: Diagnostic list
-      /// The warnings found checking the module itself, which do not stop it being run or imported: each deprecated
-      /// spelling of a built-in type (see `DeprecatedTypeNames`).
-      Warnings: Diagnostic list
       /// Those of `Errors` that are not compiled to a trap in `Own`, so a debug build cannot run the module.
       Undeferred: Diagnostic list
       /// The module's own items (imports removed), as the backend will see them.
@@ -998,12 +995,12 @@ module Compiler =
                 | desugaredAst, [], zeros ->
                     applyAttributes desugaredAst
                     |> Result.map (fun desugared ->
-                        let desugared, warnings = DeprecatedTypeNames.replace declared desugared
-                        ast, declared, moduleBlocks, desugared, zeros, warnings)
+                        let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
+                        ast, declared, moduleBlocks, desugared, zeros, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros, warnings) ->
+        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros, nameErrors) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -1259,7 +1256,7 @@ module Compiler =
                     mismatches
                     |> List.sortBy (fun (_, span) -> span.Start)
                     |> List.map (fun (message, span) -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
-                let moduleErrors = inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let placed = System.Collections.Generic.HashSet<string>()
                 let defer =
@@ -1339,7 +1336,6 @@ module Compiler =
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }
                      Errors = moduleErrors
-                     Warnings = warnings
                      Undeferred = undeferred
                      Own = own
                      Inlined = inlined
@@ -1447,12 +1443,10 @@ module Compiler =
                     InlinedCalleeTypes = resolveInlined _.RawCalleeTypes }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
             // there for the editor's features. The linters only look at a module that type-checked; a rule
-            // configured as an error fails the compile as a compiler error does. Like the linters' findings, warnings
-            // are only reported for the module being compiled.
+            // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                checkedModule.Warnings
-                @ if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax typed)
+                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax typed)
                   else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty

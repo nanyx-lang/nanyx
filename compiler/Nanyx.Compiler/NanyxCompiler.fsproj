@@ -59,7 +59,7 @@
     <Compile Include="Linters.fs" />
     <Compile Include="ImportFixes.fs" />
     <Compile Include="ExpressionRewrites.fs" />
-    <Compile Include="DeprecatedTypeNames.fs" />
+    <Compile Include="BuiltinTypeNames.fs" />
     <Compile Include="FileImports.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />

@@ -26,7 +26,7 @@ prelude declares `Add(a)` and `Num(a)`.
   function that requires it, `+` and `-` call its members, as an operator whose name is bound does. A function that
   writes its type and adds, subtracts or negates values of one of its variables without `[Add(a)]` is `NYX0205`:
   `'total' adds values of type 'a' with +, so its type must require Add(a): add [Add(a)] to the type of 'total'`.
-- **The compiler's own `Add(int)` and `Add(float)`** are the members the prelude attaches to `Int` and `Float`
+- **The compiler's own `Add(int)` and `Add(float)`** are the members the prelude attaches to `int` and `float`
   (`int.zero`, `` int.`+` ``, ...), found by the usual synthesis by name. A `+` on an `int` is still the built-in
   operator, not a call; only generic code is passed the members.
 - **Prefix `-x`** parses, as a call to the reserved `__negate` (`NegateSyntax`). On `int` it is `0 - x`, and on
@@ -38,7 +38,7 @@ prelude declares `Add(a)` and `Num(a)`.
 - **`list.sum: [Add(a)] list(a) -> a`** ([#475](https://github.com/nanyx-lang/nanyx/issues/475)).
 - **`Num(a)` is a prelude context**, with `Add`'s members and `` `*` ``, `` `/` ``, `` `%` `` and `fromInt`; `*`, `/`
   and `%` on a type variable call its members, and without `[Num(a)]` are `NYX0205`, as `+` is without `Add`. The
-  compiler's own `Num(int)` and `Num(float)` are again the members the prelude attaches to `Int` and `Float`
+  compiler's own `Num(int)` and `Num(float)` are again the members the prelude attaches to `int` and `float`
   ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
 - **Integer literals are `fromInt`** where `0` would be `zero` and the function requires `Num`: `x * 2` is
   `` `*`(x, fromInt(2)) ``. In a function that requires only `Add`, such a literal is `NYX0205`, `'1' is an 'a' here,
