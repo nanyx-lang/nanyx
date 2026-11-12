@@ -61,10 +61,47 @@ let ``A key type with no equality is an error at the literal`` () =
     Assert.Equal("'__map' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
 
 [<Fact>]
-let ``Maps cannot be compared with == yet (#618)`` () =
-    let code, message = onlyDiagnostic "def same = [\"a\" => 1] == [\"a\" => 1]\n"
+let ``Maps and sets can be compared with ==, and so can what holds them`` () =
+    let source =
+        """type Shop = (prices: map(string, int))
+def same = ["a" => 1] == ["a" => 1]
+def differ = set.fromList([1]) != set.fromList([2])
+def shops = Shop(prices = ["a" => 1]) == Shop(prices = ["a" => 1])
+def generic: [Eq(k) & Eq(v)] map(k, v), map(k, v) -> bool = { m, n -> m == n }
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal<string list>([ "bool"; "bool"; "bool" ], typesOf source [ "same"; "differ"; "shops" ])
+
+[<Fact>]
+let ``A map whose values are functions cannot be compared with ==`` () =
+    let code, message = onlyDiagnostic "def same = [1 => { (x: int) -> x }] == [1 => { (x: int) -> x }]\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
-    Assert.Equal("'map(string, int)' cannot be compared with ==: maps have no equality", message)
+    Assert.Equal("'map(int, (int -> int))' cannot be compared with ==: a value it holds is a function, and functions have no equality", message)
+
+[<Fact>]
+let ``A map compared by a local function, or by a call generic in its types, is an error for now`` () =
+    let local =
+        """def same = {
+  def local = { a, b -> a == b }
+  local(["a" => 1], ["a" => 1])
+}
+"""
+    let code, message = onlyDiagnostic (local.ReplaceLineEndings "\n")
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'local' compares values of type 'map(string, int)' with the compiler's own ==, which cannot compare a map or a set yet: a local function, or a function that compares a union's rest, is passed no other", message)
+    let generic = "def count: [Eq(a)] list(set(a)) -> int = { xs -> list.distinct(xs) \\list.length }\n"
+    let code, message = onlyDiagnostic generic
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'list.distinct' compares values of type 'set(a)', which holds a map or a set and so is compared by an == the compiler derives from its parts, but it cannot yet pass a function that == for a type with type variables in it", message)
+
+[<Fact>]
+let ``Maps and sets cannot be ordered or hashed`` () =
+    let code, message = onlyDiagnostic "def less = [\"a\" => 1] < [\"a\" => 1]\n"
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'map(string, int)' cannot be ordered with <: maps have no order", message)
+    let code, message = onlyDiagnostic "def keyed = [set.fromList([1]) => 1]\n"
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("'__map' hashes values of type 'set(int)', which cannot be hashed: sets have no hash", message)
 
 [<Fact>]
 let ``A key whose type attaches == and no hash is an error at the literal`` () =
@@ -86,10 +123,7 @@ let ``set(a) and Set(a) are the same type, made by the Set functions`` () =
     Assert.Equal<string list>([ "set(int)"; "set(int)"; "set(string)"; "int" ], typesOf source [ "s"; "t"; "u"; "n" ])
 
 [<Fact>]
-let ``An element type with no equality is an error, and sets cannot be compared with == yet`` () =
+let ``An element type with no equality is an error`` () =
     let code, message = onlyDiagnostic "def s = set.fromList([{ (x: int) -> x }])\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'set.fromList' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
-    let code, message = onlyDiagnostic "def same = set.fromList([1]) == set.fromList([1])\n"
-    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
-    Assert.Equal("'set(int)' cannot be compared with ==: sets have no equality", message)

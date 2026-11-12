@@ -56,6 +56,9 @@ module internal StructuralInstances =
         /// A record's named fields, in the order they are written out in: by name.
         | RecordShape of (string * Ty) list
         | ListShape of Ty
+        /// A map's key and value types. Only `Eq` is derived for a map, or a set.
+        | MapShape of Ty * Ty
+        | SetShape of Ty
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
 
@@ -115,50 +118,77 @@ module internal StructuralInstances =
         | TyApply("list", [ element ]) -> Some (ListShape element)
         | _ -> None
 
+    /// What `ty` is built from, as far as comparing two values of it goes: a map and a set are structures too, which
+    /// the compiler's own comparison cannot compare, as it would compare the order their entries were added in.
+    let private comparedShapeOf (ty: Ty) : Shape option =
+        match Unifier.unalias ty with
+        | Maps.MapType(key, value) -> Some (MapShape(key, value))
+        | Sets.SetType element -> Some (SetShape element)
+        | _ -> shapeOf ty
+
+    /// The shape an instance of `ctxName` is derived from.
+    let private shapeFor (ctxName: Identifier) = if ctxName = EqualityOperators.context then comparedShapeOf else shapeOf
+
     let private partsOf (shape: Shape) : Ty list =
         match shape with
         | TagShape tags -> tags |> List.choose snd
         | TupleShape items -> items
         | RecordShape fields -> fields |> List.map snd
-        | ListShape element -> [ element ]
+        | ListShape element
+        | SetShape element -> [ element ]
+        | MapShape(key, value) -> [ key; value ]
 
-    /// The first part of the structure `ty`, at any depth, that `found` picks. A type met again is not looked inside
-    /// again, as it holds what it did the first time: a recursive alias holds itself (see `RecursiveAliases`).
-    let private tryPickPart (found: Ty -> 'a option) (ty: Ty) : 'a option =
+    /// The first part of the structure `ty`, at any depth, that `found` picks, as `shape` takes structures apart. A
+    /// type met again is not looked inside again, as it holds what it did the first time: a recursive alias holds
+    /// itself (see `RecursiveAliases`).
+    let private tryPickPart (shape: Ty -> Shape option) (found: Ty -> 'a option) (ty: Ty) : 'a option =
         let rec pick (seen: Set<Ty>) (ty: Ty) =
             if seen.Contains ty then None
             else
                 match found ty with
                 | Some result -> Some result
-                | None -> shapeOf ty |> Option.bind (partsOf >> List.tryPick (pick (seen.Add ty)))
+                | None -> shape ty |> Option.bind (partsOf >> List.tryPick (pick (seen.Add ty)))
         pick Set.empty ty
 
     /// The part of the structure `ty`, at any depth, that is a function, if one is.
     let private functionPart (ty: Ty) : Ty option =
-        ty |> tryPickPart (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
+        ty |> tryPickPart shapeOf (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
+
+    /// Whether `ty` is a map or a set, which only a derived `==` compares.
+    let private isCollection (ty: Ty) =
+        match comparedShapeOf ty with
+        | Some (MapShape _ | SetShape _) -> true
+        | _ -> false
+
+    /// Whether `ty` is a map or a set, or holds one at any depth, so that only a derived `==` compares it.
+    let holdsCollection (ty: Ty) : bool =
+        (ty |> tryPickPart comparedShapeOf (fun part -> if isCollection part then Some () else None)).IsSome
 
     /// Whether comparing two values of the structure `ty` compares a part, at any depth, that `hasOwn` says has an
-    /// `==` the compiler's own comparison would not read. `rigid` is as `closed` has it.
+    /// `==` the compiler's own comparison would not read, or that is a map or a set, or is one itself. `rigid` is as
+    /// `closed` has it.
     let comparesParts (rigid: Set<int>) (hasOwn: Ty -> bool) (ty: Ty) : bool =
+        let needsDerived (part: Ty) = hasOwn part || isCollection part
         let inParts (ty: Ty) =
-            shapeOf ty |> Option.exists (partsOf >> List.exists (tryPickPart (fun part -> if hasOwn part then Some () else None) >> Option.isSome))
+            isCollection ty
+            || comparedShapeOf ty |> Option.exists (partsOf >> List.exists (tryPickPart comparedShapeOf (fun part -> if needsDerived part then Some () else None) >> Option.isSome))
         closed rigid ty |> Option.exists inParts
 
-    /// The type an instance is derived for and the variables it requires the context of, for a value of the type
-    /// `ty`: `ty` closed (see `closed`), if it is a structure, with its variables in the order they appear. `None`
-    /// for a type with a variable an annotation could not name, one inside a nominal type.
-    let private derivable (rigid: Set<int>) (ty: Ty) : (Ty * Shape * TyVar list) option =
+    /// The type an instance of `ctxName` is derived for and the variables it requires the context of, for a value of
+    /// the type `ty`: `ty` closed (see `closed`), if it is a structure, with its variables in the order they appear.
+    /// `None` for a type with a variable an annotation could not name, one inside a nominal type.
+    let private derivable (rigid: Set<int>) (ctxName: Identifier) (ty: Ty) : (Ty * Shape * TyVar list) option =
         closed rigid ty
         |> Option.bind (fun ty ->
             let vars = ContextInference.varsInOrder ty
-            match shapeOf ty with
+            match shapeFor ctxName ty with
             | Some shape when TypeEnv.freeTyVars ty = (vars |> List.map _.Id |> Set.ofList) -> Some (ty, shape, vars)
             | _ -> None)
 
-    /// The variables an instance derived for the type `ty` requires the context of, if one can be derived (see
-    /// `derivable`).
+    /// The variables an instance of `ToString` derived for the type `ty` requires the context of, if one can be
+    /// derived (see `derivable`).
     let variables (rigid: Set<int>) (ty: Ty) : TyVar list option =
-        derivable rigid ty |> Option.map (fun (_, _, vars) -> vars)
+        derivable rigid InterpolationHoles.context ty |> Option.map (fun (_, _, vars) -> vars)
 
     let private valueName = "__v"
 
@@ -206,6 +236,8 @@ module internal StructuralInstances =
             let element = partName 0
             let write = expr (Lambda([ element, None ], text [ StringExpr (expr (FunctionCall(InterpolationHoles.holeFunction, None, [ name element ]))) ], false))
             expr (FunctionCall(InterpolationHoles.listFunction, None, [ value; write ]))
+        | MapShape _
+        | SetShape _ -> invalidOp "ToString is never derived for a map or a set (see shapeFor)"
 
     let private otherName = "__w"
 
@@ -244,9 +276,16 @@ module internal StructuralInstances =
             let parts = List.init items.Length (fun index -> same (name (partName index)) (name (otherPartName index)))
             expr (Match([ value; other ], [ [ positions partName items.Length; positions otherPartName items.Length ], all parts ]))
         | RecordShape fields -> fields |> List.map (fun (fieldName, _) -> same (field value fieldName) (field other fieldName)) |> all
-        | ListShape _ ->
+        | ListShape _
+        | MapShape _
+        | SetShape _ ->
             let compare = expr (Lambda([ partName 0, None; otherPartName 0, None ], same (name (partName 0)) (name (otherPartName 0)), false))
-            expr (FunctionCall(EqualityOperators.listFunction, None, [ value; other; compare ]))
+            let helper =
+                match shape with
+                | MapShape _ -> EqualityOperators.mapFunction
+                | SetShape _ -> EqualityOperators.setFunction
+                | _ -> EqualityOperators.listFunction
+            expr (FunctionCall(helper, None, [ value; other; compare ]))
 
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
     /// requires `ctxName` of each of `varNames`: its name is `name`, and it is reported at `span`.
@@ -272,7 +311,7 @@ module internal StructuralInstances =
     /// is written the first time it is asked for, to be inferred with the module's other definitions, and is
     /// reported at `span`.
     let private derive (rigid: Set<int>) (span: SourceSpan) (ctxName: Identifier) (ty: Ty) (state: InferState) : (Identifier * TyVar list * InferState) option =
-        derivable rigid ty
+        derivable rigid ctxName ty
         |> Option.bind (fun (ty, shape, vars) ->
             let names = ContextInference.varNames ty
             ContextInference.typeExprOf names ty
@@ -319,7 +358,7 @@ module internal StructuralInstances =
         (ty: Ty)
         (state: InferState)
         : Result<ContextInstance * InferState, Failure> option =
-        match functionPart ty, variables rigid ty with
+        match functionPart ty, derivable rigid ctxName ty |> Option.map (fun (_, _, vars) -> vars) with
         | Some held, _ -> Some (Error (HoldsFunction held))
         | None, Some (_ :: _) when not isHole -> Some (Error NotAHole)
         | None, _ ->

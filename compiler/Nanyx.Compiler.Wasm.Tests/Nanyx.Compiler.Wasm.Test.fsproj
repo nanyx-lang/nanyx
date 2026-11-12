@@ -42,6 +42,7 @@
     <Compile Include="Features\Hashing\RunHashTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
+    <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />
     <Compile Include="Features\Matching\RunMatchingTests.fs" />
     <Compile Include="Features\Matching\RunAndPatternTests.fs" />

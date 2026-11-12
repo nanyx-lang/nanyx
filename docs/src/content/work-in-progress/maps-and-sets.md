@@ -34,9 +34,23 @@ order: 10
   a set the list of its elements. The prelude builds and reads them through four intrinsics,
   `__nanyx_map_of_entries`, `__nanyx_map_entries`, `__nanyx_set_of_elements` and `__nanyx_set_elements`, which the
   backend compiles to nothing: a `map(k, v)` is held as a `list((k, v))`, and a `set(a)` as a `list(a)`.
-- **No `==`, order or hash of maps and sets yet.** Comparing the lists would make two maps or sets with the same
-  contents, added in another order, unequal, so `==`, `<` or `Hash` of one, or of anything holding one, is an error
-  until [#618](https://github.com/nanyx-lang/nanyx/issues/618).
+- **`==` compares contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). Two maps are
+  equal when they have the same number of keys and each key of one is in the other, found with the key type's `==`,
+  holding an equal value by the value type's `Eq`. Two sets are equal when they have the same number of elements and
+  each element of one is in the other. The compiler's own comparison, which works by structure, would compare the
+  lists underneath in order, so a map or a set, and any structure that holds one, is always compared by an `==` the
+  compiler derives from its parts (`MapShape` and `SetShape` in `StructuralInstances.fs`, as for a list whose elements
+  have their own `==`). The derived `==` calls the prelude's `__mapEqualsBy` or `__setEqualsBy` with a function that
+  compares two values or elements. It takes time in proportion to the product of the sizes, as a lookup does; the
+  hash is not used yet.
+- **Not yet: comparing maps where the compiler's own `==` would be used.** A local function that compares values
+  generic in their type, or a call that needs `Eq` of a type with variables in it, such as `list.distinct` on a
+  `list(map(k, v))` inside a generic function, is passed the compiler's own `==`, which cannot compare a map. Both are
+  an error when the type holds a map or a set, where a type that holds a nominal type with its own `==` is compared by
+  structure instead ([#630](https://github.com/nanyx-lang/nanyx/issues/630)).
+- **No order or hash of maps and sets yet.** `<` on a map or a set, or on anything holding one, is an error, and so
+  is a map or a set as a key or a set's element: hashing the list underneath would give equal maps different
+  hashes.
 
 Known gaps:
 
@@ -65,8 +79,8 @@ These are the choices the docs leave open. The code takes the marked default unt
 2. **The order of a map's entries.** What `map.toList` and `for` give, and so what `==` and `hash` on maps see.
    - *(Default, while maps hold a list)* The order the keys were first added, which a list gives for free.
    - The order of the keys' hashes. Deterministic for a given set of keys whatever order they were added in, so
-     equal maps have one form, and `==` and `hash` on maps can be derived from structure (closing #618 with no code
-     of its own). The order is meaningless to a reader, and changes if `hash` does.
+     equal maps have one form, and `hash` on maps can be derived from structure, and `==` could compare in order
+     rather than by lookups. The order is meaningless to a reader, and changes if `hash` does.
    - Insertion order kept by a hash map (Python's `dict`). Predictable, but a persistent version needs a second
      index, and equal maps still differ in order.
    - **Recommended:** the order of the keys' hashes once maps are hash tries, documented as unspecified, with
