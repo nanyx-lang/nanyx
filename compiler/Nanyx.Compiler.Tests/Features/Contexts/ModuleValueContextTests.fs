@@ -57,6 +57,29 @@ def greet = { () -> println("Hi") }
     |> ignore
 
 [<Fact>]
+let ``A lambda in a named module's value may use a context, since building the value does not run it`` () =
+    compileClean """
+module config
+
+import nanyx/console
+
+def handlers = [ { (x: string) -> println(x) } ]
+"""
+    |> ignore
+
+[<Fact>]
+let ``A lambda a named module's value passes to a call may be run, so it cannot use a context`` () =
+    let errors =
+        errorsOf """
+module config
+
+import nanyx/console
+
+def printed = list.map([ "a" ], { x -> println(x) })
+"""
+    Assert.Equal<(string * string) list>([ undeclared, "println" ], errors |> List.map (fun (code, text, _) -> code, text))
+
+[<Fact>]
 let ``A script's value runs where the runtime's Console is`` () =
     compileClean """
 import nanyx/console

@@ -577,7 +577,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
                     | _ -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
     | Lambda(args, body, _) ->
-        inferLambdaWithExpected env state expr args body None None
+        state |> Contexts.outsideValue (fun state -> inferLambdaWithExpected env state expr args body None None)
     | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
     | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
         inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
