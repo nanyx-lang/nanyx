@@ -9,8 +9,8 @@ namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
 /// Keeps <see cref="DocumentStore"/> in step with the editor (full-text sync: the client sends the whole
-/// document on every change), which recompiles it, and republishes diagnostics whenever a document is opened
-/// or changed.
+/// document on every change). A document is compiled, and its diagnostics published, when it is opened, and after a
+/// change once the user pauses (see <see cref="CompileScheduler"/>).
 /// </summary>
 public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 {
@@ -19,19 +19,20 @@ public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     private readonly DocumentStore _documents;
     private readonly DiagnosticsPublisher _diagnostics;
+    private readonly CompileScheduler _compiles;
 
-    public TextDocumentSyncHandler(DocumentStore documents, DiagnosticsPublisher diagnostics)
+    public TextDocumentSyncHandler(DocumentStore documents, DiagnosticsPublisher diagnostics, CompileScheduler compiles)
     {
         _documents = documents;
         _diagnostics = diagnostics;
+        _compiles = compiles;
     }
 
     public override TextDocumentAttributes GetTextDocumentAttributes(DocumentUri uri) => new(uri, "nanyx");
 
     public override Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
     {
-        var document = _documents.Update(request.TextDocument.Uri, request.TextDocument.Text);
-        _diagnostics.Publish(request.TextDocument.Uri, document, request.TextDocument.Version);
+        _compiles.CompileNow(request.TextDocument.Uri, request.TextDocument.Text, request.TextDocument.Version);
         return Unit.Task;
     }
 
@@ -41,8 +42,7 @@ public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         var text = request.ContentChanges.LastOrDefault()?.Text;
         if (text is not null)
         {
-            var document = _documents.Update(request.TextDocument.Uri, text);
-            _diagnostics.Publish(request.TextDocument.Uri, document, request.TextDocument.Version);
+            _compiles.Changed(request.TextDocument.Uri, text, request.TextDocument.Version);
         }
 
         return Unit.Task;
@@ -50,12 +50,13 @@ public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     public override Task<Unit> Handle(DidSaveTextDocumentParams request, CancellationToken cancellationToken)
     {
-        // Diagnostics already follow every change; saving adds nothing.
+        // Diagnostics already follow every change once the user pauses; saving adds nothing.
         return Unit.Task;
     }
 
     public override Task<Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
     {
+        _compiles.Closed(request.TextDocument.Uri);
         _documents.Remove(request.TextDocument.Uri);
         _diagnostics.Clear(request.TextDocument.Uri);
         return Unit.Task;

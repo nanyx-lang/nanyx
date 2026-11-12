@@ -47,7 +47,8 @@ what the compiler keeps: exact spans, resolved names and types.
   def's, the standard library's among them, are in `ImportedContextTypes` with the def's type, carried over from the
   module that declares it with its annotation's variable names (both filled in by `RequiredContexts`). A desugared workflow bind or return gets a node id of its own, so the bind as
   written has no type rather than that of the rest of the workflow. Each document
-  is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A file
+  is compiled when it is opened, and after a change once the user pauses (see below), and the result cached in
+  `DocumentStore`, shared by diagnostics and hover. A file
   that has never parsed shows no hover.
 - **Hover on a type's name shows its definition** ([#297](https://github.com/nanyx-lang/nanyx/issues/297)):
   `type Point = (x: int, y: int)`, or `context Logger = (...)` for a context. The type is the one go-to-definition
@@ -207,7 +208,12 @@ standard input and output, so the same binary that compiles programs also serves
 The server lives in `Nanyx.LanguageServer` and calls the compiler as a library: on every open and change it runs
 `Compiler.compileSource` (or `Compiler.compile` for an untitled buffer) on the editor's text, keeps the
 `CompileResult` in `DocumentStore`, and publishes the resulting diagnostics; hover, go-to-definition, lenses and
-inlay hints read the same result, so each change is compiled once. Standard-library imports resolve because the
+inlay hints read the same result. A change is not compiled at once: `CompileScheduler` records its text and returns,
+and compiles the document when it has gone unchanged for 150 ms (`ServerSettings.CompileDelay`), only its latest text
+([#697](https://github.com/nanyx-lang/nanyx/issues/697)). A compile cannot be stopped, so a change during one waits for
+it, and that compile's result, already out of date, is neither recorded nor published. Until the latest text is
+compiled, requests read the last text that was typed (`OpenDocument.LastGood`); go-to-definition, references and code
+actions, which read only the latest text's own compile, find nothing in that pause. Standard-library imports resolve because the
 library is embedded in the compiler, and each of its modules is checked once for the life of the server, not on
 every change (see [Standard library implementation](./standard-library-implementation)); imports by path resolve relative to the file as they do for `nanyx check`. A
 compiler exception is reported as a diagnostic rather than taking the server down.
@@ -274,6 +280,6 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 
 # Open questions
 
-- Incremental re-checking: is compiling the whole document on every change fast enough as programs grow?
+- Incremental re-checking: is compiling the whole document after each pause in typing fast enough as programs grow?
 - Should semantic tokens replace or supplement the TextMate grammar?
 - Editors beyond VS Code: is `nanyx lsp` plus documented client setup enough?
