@@ -85,7 +85,7 @@ Not done yet:
   although [operators.md](../tour/operators) lists it, and no prefix `-`: `-5` is one literal token
   (`Lexical.fs:26`), but `-x` does not parse, so `math.abs` writes `0 - n` (`stdlib/nanyx/math.nyx:15`).
 - **Literals** have one type each, whatever is expected: an integer literal is `int` and a decimal one `float`
-  (`Infer.fs:27-33`).
+  (`literalType` in `TypeResolution.fs`).
 - **`+`, `-`, `*` and `/`** unify their operands and constrain them to a number: `float` when either side is already
   known to be one, `int` otherwise (`Infer.fs:1073-1080`, `1499-1503`). So `{ x, y -> x + y }` is
   `int, int -> int`, and a generic `sum: list(a) -> a` is rejected with "`a` would have to be `int`"
