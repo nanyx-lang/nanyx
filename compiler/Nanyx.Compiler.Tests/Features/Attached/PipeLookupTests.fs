@@ -45,6 +45,50 @@ def t = s \shout"""
     Assert.Equal("shout", at)
 
 [<Fact>]
+let ``A pipe to a name only another type attaches names what is attached`` () =
+    let source = """def list.shout: list(int) -> list(int) = { xs -> xs }
+def t = "x" \shout"""
+    let code, message, at = onlyDiagnostic source (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
+    Assert.Equal("'string' has no attached 'shout', and there is no function 'shout' in scope. Only 'list.shout' is in scope", message)
+    Assert.Equal("shout", at)
+
+[<Fact>]
+let ``A pipe to a plain function that does not take the value says what it takes`` () =
+    let source = """def shout: int -> int = { n -> n }
+def t = "x" \shout"""
+    let code, message, at = onlyDiagnostic source (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("'string' has no attached 'shout', and the function 'shout' in scope takes 'int', not 'string'", message)
+    Assert.Equal("shout", at)
+
+[<Fact>]
+let ``A pipe with arguments to a plain function whose first parameter does not take the value says what it takes`` () =
+    let source = """def shout: (int, string) -> int = { n, s -> n }
+def t = "x" \shout("y")"""
+    let code, message, at = onlyDiagnostic source (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("'string' has no attached 'shout', and the function 'shout' in scope takes 'int', not 'string'", message)
+    Assert.Equal("shout", at)
+
+[<Fact>]
+let ``A pipe to a plain function that takes the value calls it`` () =
+    let result = Compiler.compile """def shout: string -> string = { s -> s }
+def t = "x" \shout"""
+    Assert.Empty(result.Diagnostics)
+
+[<Fact>]
+let ``A pipe on the result of a function defined later finds the attached definition`` () =
+    let source = """def string.shout: string -> string = { s -> s }
+def main = {
+  def y = g(5)
+  y \shout
+}
+def g = { x -> "text {x}" }"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
+    Assert.Empty(result.Diagnostics)
+
+[<Fact>]
 let ``A pipe to a definition only an aliased import attaches says how to reach it`` () =
     let source = """module main
 import one as t

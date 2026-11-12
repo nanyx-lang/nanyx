@@ -1909,16 +1909,28 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 if resolvedName = name then nextState
                 else { nextState with PipeTargets = nextState.PipeTargets |> Map.add expr.Id resolvedName }
             let callArgs = pipeCallArguments value args
-            // Piping what failed to check to a name attached to nothing is not another error: the name may be
-            // attached to the type it was meant to have. Its arguments are still checked.
-            if resolvedName = name && Unifier.isError valueTy && (TypeEnv.tryFind name env).IsNone then
+            let lookup : PipeLookups.Lookup =
+                { PipedType = valueTy; AttachedUnder = attachedTypeNames valueTy; Written = name; Called = resolvedName; At = nameSpan spanOpt expr }
+            let checkArgumentsOnly () =
                 let mutable current = nextState
                 for arg in args do
                     match inferExpr env current arg with
                     | Ok (_, next) -> current <- next
                     | Error _ -> ()
+                current
+            // Piping what failed to check to a name attached to nothing is not another error: the name may be
+            // attached to the type it was meant to have. Its arguments are still checked.
+            if resolvedName = name && Unifier.isError valueTy && (TypeEnv.tryFind name env).IsNone then
+                let current = checkArgumentsOnly ()
                 Ok (mkTypedExpr expr Unifier.errorType None None None, { current with UnknownTypeUses = expr.Id :: current.UnknownTypeUses })
             else
+            match PipeLookups.misfit env nextState lookup (not args.IsEmpty) with
+            | Some misfit ->
+                // A plain function the value's type attaches nothing in place of, which does not take the value, is
+                // the pipe's error, on its name, rather than the call's mismatch.
+                let current = checkArgumentsOnly ()
+                Ok (mkTypedExpr expr Unifier.errorType None None None, { current with FailedExprs = (expr.Id, [ misfit ]) :: current.FailedExprs })
+            | None ->
             match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
             | Ok (typedCall, finalState) ->
                 // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
@@ -1929,8 +1941,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         let isTypeName typeName =
                             (nextState.TypeDefs.ContainsKey typeName && not (nextState.HiddenTypeNames.Contains typeName))
                             || isBuiltInTypeName typeName
-                        let lookup : PipeLookups.Lookup =
-                            { PipedType = valueTy; AttachedUnder = attachedTypeNames valueTy; Written = name; Called = resolvedName; At = nameSpan spanOpt expr }
                         { finalState with FailedExprs = (id, PipeLookups.explain env nextState isTypeName lookup diagnostics) :: rest }
                     | _ -> finalState
                 Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)

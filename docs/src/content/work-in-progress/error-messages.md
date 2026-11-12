@@ -41,8 +41,11 @@ need it first. This workstream fills it with content.
   known yet, it names the attached definitions it could not choose between. On a known type, it says the type has
   no such attached definition and no plain function has the name, and where the definition is if the pipe cannot
   reach it: under an `as` alias (`'string.trim' is available as 't.string.trim'`), or in a standard library module
-  that is not imported (`'string.trim' is defined in 'nanyx/text'`). A definition two imports attach is
-  `NYX0106`, naming both modules.
+  that is not imported (`'string.trim' is defined in 'nanyx/text'`); failing those, it names what other types
+  attach under the name (`Only 'list.shout' is in scope`). A plain function of the name that does not take the
+  value is a `NYX0201` on the name, saying what it takes (`the function 'shout' in scope takes 'int', not
+  'string'`), rather than a mismatch over the whole pipe. A definition two imports attach is `NYX0106`, naming both
+  modules.
 - **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
   and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
 - **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.
