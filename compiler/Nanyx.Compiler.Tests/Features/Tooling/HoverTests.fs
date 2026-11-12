@@ -454,6 +454,33 @@ def f = describe
     Assert.Equal(Some "def describe: [Show(Point)] Point -> string", hoverType source (offsetOf source "describe(" 0 0))
 
 [<Fact>]
+let ``Hover on a use of an imported def shows the contexts it requires`` () =
+    let shapes = """module shapes
+export context Show(a) = (show: a -> string)
+export def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
+"""
+    let main = """module main
+import "mod.nyx"
+type Point = (x: int, y: int)
+def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
+def s = describe(Point(x = 1, y = 2))
+"""
+    let main = main.ReplaceLineEndings "\n"
+    let result = compileImporting (shapes.ReplaceLineEndings "\n") main
+    Assert.Empty(result.Diagnostics)
+    let hovered = Hover.typeAt Unicode result (offsetOf main "describe(" 0 0) |> Option.map _.Type
+    Assert.Equal(Some "def describe: [Show(Point)] Point -> string", hovered)
+
+[<Fact>]
+let ``Hover on a use of a standard library def shows the contexts it requires`` () =
+    let source = """
+@entry
+def main = { println("hello") }
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "def println: [Console, ToString(string)] string -> ()", hoverType source (offsetOf source "println" 0 0))
+
+[<Fact>]
 let ``Hover on a local def, a parameter or a pattern variable shows its name and type`` () =
     let source = """
 def answer = {

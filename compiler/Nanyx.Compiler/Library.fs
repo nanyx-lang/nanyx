@@ -1110,6 +1110,8 @@ module Compiler =
             let mutable inlinedInstances: Map<NodeId, ContextInstance option list> = Map.empty
             // The instances the `use`s in the imported modules' definitions load.
             let mutable inlinedUseContexts: Map<NodeId, TypeExpr> = Map.empty
+            // The contexts the defs the imports bring in require, with their types (see `ImportedContextTypes`).
+            let mutable importedContextTypes: Map<SymbolId, Ty * Ty list> = Map.empty
             // The modules that bring each name in unqualified, by the module's key, with the name of the module.
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
             let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
@@ -1246,6 +1248,9 @@ module Compiler =
                 inlinedTypes <- inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
                 inlinedInstances <- imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
                 inlinedUseContexts <- imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
+                importedContextTypes <-
+                    RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
+                    |> Map.fold (fun acc id found -> acc |> Map.add id found) importedContextTypes
             for item in imports do
                 // An import of a module that is still being checked, because it imports this one, is a cycle.
                 let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
@@ -1389,6 +1394,7 @@ module Compiler =
                           // Resolved for the root module only, by `compileWith`.
                           InferredContextTypes = state.InferredContextTypes
                           ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
+                          ImportedContextTypes = importedContextTypes
                           // Filled in for the root module only, by `compileWith`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }

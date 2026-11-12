@@ -127,12 +127,16 @@ let private calleeSpan (expr: Expression) =
     | Pipe(_, _, nameSpan, _) -> nameSpan
     | _ -> None
 
-/// The contexts the module's own top-level def `symbol` requires (see `TypedModule.ContextTypes`), and the type `ty`
-/// it has where it is hovered, with the contexts instantiated as `ty` is: at a call, `[Show(int)]` for the `int` it is
-/// called with.
+/// The contexts the top-level def `symbol` requires, the module's own or one an import brings in (see
+/// `TypedModule.ContextTypes` and `ImportedContextTypes`), and the type `ty` it has where it is hovered, with the
+/// contexts instantiated as `ty` is: at a call, `[Show(int)]` for the `int` it is called with.
 let private withContextsAt (typed: TypedModule) (symbol: Symbol) (ty: Ty) : Ty * Ty list =
-    match typed.ContextTypes |> Map.tryFind symbol.Id, typed.SymbolTypes |> Map.tryFind symbol.Id with
-    | Some (_ :: _ as contexts), Some general ->
+    let required =
+        match typed.ContextTypes |> Map.tryFind symbol.Id, typed.SymbolTypes |> Map.tryFind symbol.Id with
+        | Some contexts, Some general -> Some (general, contexts)
+        | _ -> typed.ImportedContextTypes |> Map.tryFind symbol.Id
+    match required with
+    | Some (general, (_ :: _ as contexts)) ->
         match Unifier.unify [ general, ty, Equal, SourceSpan.none ] with
         | Ok subst -> Unifier.apply subst ty, contexts |> List.map (Unifier.apply subst)
         | Error _ -> ty, []
@@ -154,8 +158,8 @@ let private declared (symbol: Symbol) (typeWritten: string) =
 /// there that has one, or of the function itself on a call's function name, where it is instantiated at that
 /// call, or of what a declaration's own name declares (a def, a parameter, a pattern variable), or of what a `_` in
 /// a type was inferred to be, with made-up type variables named by `names`. On a name, the declaration's own or one
-/// that refers to it, the type comes after the name (see `declared`), and a top-level def of the module's own shows
-/// the contexts it requires too. `None` when the module did not type-check or nothing typed is at `offset`.
+/// that refers to it, the type comes after the name (see `declared`), and a top-level def, the module's own or an
+/// imported one, shows the contexts it requires too. `None` when the module did not type-check or nothing typed is at `offset`.
 ///
 /// The narrowest span wins rather than the deepest node, because a made-up node can sit inside the syntax it
 /// stands for: a `for` loop's element is an identifier spanning all of the loop's arms. Of equal spans the

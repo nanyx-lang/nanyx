@@ -171,6 +171,8 @@ type ContextInstance =
 /// `ContextTypes` holds the contexts each of the module's own top-level defs requires, written or inferred, by the
 /// def's symbol, as types over the variables of its type in `SymbolTypes`: those in `InferredContextTypes`, then the
 /// ones it writes or needs of the runtime (`Console`). Resolved for the root module only, as `SymbolTypes` is.
+/// `ImportedContextTypes` holds the same for each def an import brings in that requires contexts, by its symbol, with
+/// the def's type they are over: resolved as the module that declares it resolved them, and with variables of their own.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -190,5 +192,6 @@ type TypedModule =
       UseContexts: Map<NodeId, TypeExpr>
       InferredContextTypes: Map<SymbolId, Ty list>
       ContextTypes: Map<SymbolId, Ty list>
+      ImportedContextTypes: Map<SymbolId, Ty * Ty list>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }
