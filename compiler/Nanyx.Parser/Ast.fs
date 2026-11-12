@@ -402,6 +402,11 @@ module NotSyntax =
 module NegateSyntax =
     let builtIn = "__negate"
 
+/// `dbg(x)` or `x \dbg` (see the io page): a call to the built-in "dbg", which prints a value and gives it back. A
+/// name in scope called `dbg`, such as a def of the module's own, hides it.
+module DbgSyntax =
+    let builtIn = "dbg"
+
 /// `mut e` (see the memory page): a call to the built-in "__mut" with `e`. A def whose value it is makes a cell that
 /// holds the value of `e`.
 module MutSyntax =

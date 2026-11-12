@@ -125,6 +125,39 @@ def both: string, string -> #some(int) | #error(string) = { a, b -> proc {
     Assert.Empty(reported source)
 
 [<Fact>]
+let ``A call of the built-in dbg on a line of its own is not reported`` () =
+    let source =
+        """import nanyx/console
+
+def total: [Console] list(int) -> int = { xs ->
+  dbg(xs)
+  xs \dbg
+  def counted = dbg(xs \sum)
+  counted
+}
+"""
+    Assert.Empty(reported source)
+
+[<Fact>]
+let ``A call of a def called dbg whose result is thrown away is reported`` () =
+    let source =
+        """def dbg: int -> int = { n -> n * 2 }
+
+def f: int -> int = { n ->
+  dbg(n)
+  n \dbg
+  n
+}
+"""
+    match reported source with
+    | [ (first, firstText); (second, secondText) ] ->
+        Assert.Equal("dbg(n)", firstText)
+        Assert.Equal("n \\dbg", secondText)
+        Assert.Equal("The result of `dbg`, of type 'int', is never used: bind it to a name, or pass it to `ignore`", first.Message)
+        Assert.Equal(first.Message, second.Message)
+    | other -> failwith $"Expected two reports, got %A{other}"
+
+[<Fact>]
 let ``A call that never returns is left to unreachableCode`` () =
     let source =
         """def f: int -> int = { n ->
