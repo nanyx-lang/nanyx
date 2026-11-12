@@ -188,7 +188,7 @@ let ``Run - a lambda argument's inferred parameter types`` () =
         "\n" +
         "type P = (x: int)\n" +
         "def apply: P, (P -> int) -> int = { p, f -> f(p) }\n" +
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n" +
@@ -197,7 +197,7 @@ let ``Run - a lambda argument's inferred parameter types`` () =
         "def main = {\n" +
         "  def n = P(x = 3) \\apply { p -> p.x }\n" +
         "  def x: #some(int) | #notFound = #some(n)\n" +
-        "  def m = x \\mapOption { v -> \"got {v}\" }\n" +
+        "  def m = x \\mapSome { v -> \"got {v}\" }\n" +
         "  match m\n" +
         "    | #some(s) -> println(s)\n" +
         "    | #notFound -> println(\"none\")\n" +
@@ -476,7 +476,7 @@ def lazy: bool, (() -> int) -> int = { run, f -> if run then f() else 0 }
 def main = {
   println("{m} {mk({ 8 })}")
   println("{lazy(false, { dbg(1) })} {lazy(true, { dbg(2) })}")
-  println("{mapOrOption(#none, 7, { n -> n + 1 })}")
+  println("{mapSomeOr(#none, 7, { n -> n + 1 })}")
 }
 """
     runSource source |> assertRan "7 8\ndbg: 2\n0 2\n7\n"

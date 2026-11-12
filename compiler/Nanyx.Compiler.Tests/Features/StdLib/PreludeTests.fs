@@ -16,8 +16,8 @@ let ``The prelude is in scope with no imports`` () =
         "  return a + 1\n" +
         "} }\n" +
         "def name: #some(string) | #empty = #some(\"abc\")\n" +
-        "def called = mapOption(name, { s -> 1 })\n" +
-        "def piped = name \\ mapOption({ s -> 1 })\n" +
+        "def called = mapSome(name, { s -> 1 })\n" +
+        "def piped = name \\ mapSome({ s -> 1 })\n" +
         "def mapped = f(1) \\ Result.mapError({ e -> 0 })"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
@@ -38,14 +38,13 @@ let ``A pipe finds the prelude's Result helpers by the Result alias`` () =
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["fallback"])
 
 [<Fact>]
-let ``The prelude's toList, values, mapOr, toOption and orElse keep the option's and result's types`` () =
+let ``The prelude's toList, values, mapOr and orElse keep the option's and result's types`` () =
     let source =
         "def name: #some(string) | #notFound = #some(\"abc\")\n" +
         "def r: Result(int, string) = #error(\"x\")\n" +
-        "def listed = name \\ toListOption\n" +
-        "def present = valuesOption([name, name])\n" +
+        "def listed = name \\ someToList\n" +
+        "def present = somes([name, name])\n" +
         "def described = Result.mapOr(r, \"none\", { n -> \"n\" })\n" +
-        "def asOption = r \\ Result.toOption\n" +
         "def recovered = Result.orElse(r, { e -> #error(1.5) })"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
@@ -53,7 +52,6 @@ let ``The prelude's toList, values, mapOr, toOption and orElse keep the option's
     Assert.Equal("list(string)", typeOf "listed")
     Assert.Equal("list(string)", typeOf "present")
     Assert.Equal("string", typeOf "described")
-    Assert.Equal("#some(int) | #none", typeOf "asOption")
     Assert.Equal("Result(int, float)", typeOf "recovered")
 
 [<Fact>]

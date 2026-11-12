@@ -83,7 +83,7 @@ def c = "hi" \shout
 
 `Int`, `Float` and `Bool` are not types: `Int.fromString` is the error `NYX0114`, with a fix that writes `int`.
 
-A name that is not a type cannot have definitions attached to it: `def Option.map` is an error, since there is no type `Option`. A helper that works on any option-like union is an ordinary function, such as the prelude's `mapOption`.
+A name that is not a type cannot have definitions attached to it: `def Option.map` is an error, since there is no type `Option`. A helper that works on any option-like union is an ordinary function, such as the prelude's `mapSome`.
 
 # When to use attached definitions
 

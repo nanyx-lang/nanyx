@@ -314,11 +314,11 @@ let private readAllSource =
     "def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e) = { xs -> xs \\list.map(fromString) }\n" +
     "\n" +
     "def total: list(#some(int) | #invalidInt) -> int = { results ->\n" +
-    "  results \\valuesOption \\list.fold(0, { sum, n -> sum + n })\n" +
+    "  results \\somes \\list.fold(0, { sum, n -> sum + n })\n" +
     "}\n" +
     "\n" +
     "def countTrue: list(#some(bool) | #invalidBool) -> int = { results ->\n" +
-    "  results \\valuesOption \\list.filter({ b -> b }) \\list.length\n" +
+    "  results \\somes \\list.filter({ b -> b }) \\list.length\n" +
     "}\n" +
     "\n"
 
@@ -360,7 +360,7 @@ let ``Run - a function generic in FromString reads a type of your own with its a
         "}\n" +
         "\n" +
         "def sumY: list(#some(Point) | #invalidPoint) -> int = { results ->\n" +
-        "  results \\valuesOption \\list.fold(0, { sum, p -> sum + p.y })\n" +
+        "  results \\somes \\list.fold(0, { sum, p -> sum + p.y })\n" +
         "}\n" +
         "\n" +
         "def sumYs = { texts -> sumY(readAll(texts)) }\n" +

@@ -234,7 +234,7 @@ def push: list(int), string -> Calc(list(int)) = { stack, token ->
 
 def operate: list(int), string -> Calc(list(int)) = { stack, token ->
   match stack
-    | [b, a, ...rest] -> mapOption(applyOp(token, a, b), { n -> [n, ...rest] })
+    | [b, a, ...rest] -> mapSome(applyOp(token, a, b), { n -> [n, ...rest] })
     | _ -> #stackUnderflow(token)
 }
 

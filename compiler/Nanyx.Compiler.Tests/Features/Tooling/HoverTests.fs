@@ -208,7 +208,7 @@ let ``Greek type variable names go through the alphabet, then start again with a
 let ``A union's rest variable is named from the end of the alphabet`` () =
     // The catch-all arm leaves the union open for the tags the arms do not name.
     let source =
-        "def mapOption = { o, f ->\n" +
+        "def mapSome = { o, f ->\n" +
         "  match o\n" +
         "  | #some(a) -> #some(f(a))\n" +
         "  | other -> other\n" +
@@ -235,10 +235,10 @@ let ``A def's type is resolved before it is generalised, so a use of it has the 
 [<Fact>]
 let ``A shorthand match lambda shows its own type, not that of the parameters it makes up`` () =
     let source =
-        "def mapOption = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
-        "def g = mapOption\n"
+        "def mapSome = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
+        "def g = mapSome\n"
     Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
-    Assert.Equal(Some "def mapOption: #some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapOption" 1 0))
+    Assert.Equal(Some "def mapSome: #some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapSome" 1 0))
 
 [<Fact>]
 let ``A lambda with a pattern parameter shows its own type, and the pattern what it takes apart`` () =
@@ -262,31 +262,31 @@ let ``A shorthand lambda shows its own type, and its operator the argument writt
 
 [<Fact>]
 let ``A rest variable nothing can add tags to is empty`` () =
-    // `#some(5)` has no other tags, so neither has what `mapOption` gives back.
+    // `#some(5)` has no other tags, so neither has what `mapSome` gives back.
     let source =
-        "def mapOption = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
+        "def mapSome = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
         "def main = {\n" +
-        "  def a = #some(5) \\mapOption { n -> \"{n}\" }\n" +
+        "  def a = #some(5) \\mapSome { n -> \"{n}\" }\n" +
         "  a\n" +
         "}\n"
     Assert.Equal(Some "a: #some(string)", hoverType source (offsetOf source "a\n}" 0 0))
-    Assert.Equal(Some "def mapOption: #some(int), (int -> string) -> #some(string)", hoverType source (offsetOf source "mapOption {" 0 0))
+    Assert.Equal(Some "def mapSome: #some(int), (int -> string) -> #some(string)", hoverType source (offsetOf source "mapSome {" 0 0))
     // A rest variable that the input still shares stays: what the function is given more of, it gives back.
     Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     // So does one shared with a parameter in scope, which a later use could still give tags to.
     let inLambda =
-        "def mapOption = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
+        "def mapSome = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
         "def g = { o ->\n" +
-        "  def a = o \\mapOption { n -> n }\n" +
+        "  def a = o \\mapSome { n -> n }\n" +
         "  a\n" +
         "}\n"
     Assert.Equal(Some "#some(α) | ω -> #some(α) | ω", hoverType inLambda (offsetOf inLambda "{ o" 0 0))
 
 [<Fact>]
 let ``A rest variable a closed union widened into is empty`` () =
-    // `getCustomer` gives out three tags and no more, so `mapOption` gives back those three and no more.
+    // `getCustomer` gives out three tags and no more, so `mapSome` gives back those three and no more.
     let source =
-        "def mapOption = { | #some(a), f -> #some(f(a))\n" +
+        "def mapSome = { | #some(a), f -> #some(f(a))\n" +
         "                  | other, _ -> other }\n" +
         "type Customer = (name: string)\n" +
         "def getCustomer = { name ->\n" +
@@ -295,7 +295,7 @@ let ``A rest variable a closed union widened into is empty`` () =
         "  else #err\n" +
         "}\n" +
         "def main: () -> () = {\n" +
-        "  def a = getCustomer(\"foo\") \\mapOption { c: Customer -> \"Mapped: {c.name}\" }\n" +
+        "  def a = getCustomer(\"foo\") \\mapSome { c: Customer -> \"Mapped: {c.name}\" }\n" +
         "  dbg(a)\n" +
         "  ()\n" +
         "}\n"
@@ -381,11 +381,11 @@ let ``Hover shows tags with their hash`` () =
     Assert.Equal(Some "#some(int)", hoverType source (offsetOf source "#some" 0 1))
     Assert.Equal(Some "#notFound", hoverType source (offsetOf source "#notFound" 0 1))
     let union =
-        "def mapOption: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
-        "def result = mapOption(#some(1), { n -> \"Mapped: {n}\" })"
+        "def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
+        "def result = mapSome(#some(1), { n -> \"Mapped: {n}\" })"
     Assert.Equal(
-        Some "def mapOption: #some(int), (int -> string) -> #some(string)",
-        hoverType union (offsetOf union "mapOption(" 0 0))
+        Some "def mapSome: #some(int), (int -> string) -> #some(string)",
+        hoverType union (offsetOf union "mapSome(" 0 0))
 
 [<Fact>]
 let ``Printed types have the fewest brackets the grammar allows`` () =
