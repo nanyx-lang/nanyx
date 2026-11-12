@@ -97,7 +97,7 @@ module Intrinsics =
     let private valueVar = { Id = -3; Name = Some "v" }
     let private entries = listOf (tuple [ TyVar keyVar; TyVar valueVar ])
     let private map = Maps.ofTypes (TyVar keyVar) (TyVar valueVar)
-    let private overEntries (ty: Ty) = { Quantified = set [ keyVar.Id; valueVar.Id ]; Type = ty; Symbol = None }
+    let private overEntries (ty: Ty) = { Quantified = set [ keyVar.Id; valueVar.Id ]; Type = ty; Symbol = None; ProvidedBy = None }
 
     /// Every intrinsic with its type scheme.
     let all : (string * TypeScheme) list =
@@ -115,19 +115,19 @@ module Intrinsics =
           floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy, []))
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy, []))
-          fromInt, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, element, []); Symbol = None }
-          wrappingAdd, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
-          wrappingSub, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
-          wrappingMul, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
-          intCast, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None }
-          toFloat, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None }
+          fromInt, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, element, []); Symbol = None; ProvidedBy = None }
+          wrappingAdd, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
+          wrappingSub, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
+          wrappingMul, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
+          intCast, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None; ProvidedBy = None }
+          toFloat, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None; ProvidedBy = None }
           mapOfEntries, overEntries (TyFunc(entries, map, []))
           mapEntries, overEntries (TyFunc(map, entries, []))
-          setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None }
-          setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element, []); Symbol = None }
-          listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None }
-          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None }
-          hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None } ]
+          setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None; ProvidedBy = None }
+          setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
+          listCons, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; listOf element ], listOf element, []); Symbol = None; ProvidedBy = None }
+          compare, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], intTy, []); Symbol = None; ProvidedBy = None }
+          hash, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, intTy, []); Symbol = None; ProvidedBy = None } ]
 
     let names : Set<string> = all |> List.map fst |> Set.ofList
 

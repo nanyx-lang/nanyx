@@ -13,12 +13,15 @@ type ContextScope =
     | DefScope of name: Identifier * inferring: bool
 
 /// A use of the unannotated top-level def `Callee`, whose contexts are only known once every def has been inferred:
-/// `Available` are the ambient contexts something nearer than the ambient instance supplies at `Span`.
+/// `Available` are the ambient contexts something nearer than the ambient instance supplies at `Span`. A call records,
+/// by its node `Call`, what provides each ambient context there (see `TypedModule.ContextProviders`).
 type DeferredContextUse =
     { Caller: ContextScope
       Callee: Identifier
       Span: SourceSpan
-      Available: Set<Identifier> }
+      Available: Set<Identifier>
+      Call: NodeId option
+      Providers: Map<Identifier, ContextProvider> }
 
 /// A call, in the unannotated top-level def `Def`, that requires the parameterised context `Context` at `ArgTys`,
 /// types the call alone does not settle and for which no instance is in scope: `Show(t)` where `t` is a parameter's
@@ -220,6 +223,9 @@ type InferState =
             /// Where each call to a function that requires a parameterised context finds its instances, by the call's
             /// node (see `TypedModule.ContextInstances`).
             ContextInstances: Map<NodeId, ContextInstance option list>;
+            /// What provides each context found by its members' names that a call requires, by the call's node (see
+            /// `TypedModule.ContextProviders`).
+            ContextProviders: Map<NodeId, ProvidedContext list>;
             /// The instances of parameterised contexts that `use` statements and the types of functions put in scope,
             /// as written there, by the name they are bound under in the environment (see `bindInstance`).
             InstanceContexts: Map<string, TypeExpr>;
@@ -323,6 +329,7 @@ let emptyState =
             BlockAliases = Map.empty;
             ImportSites = Map.empty;
             ContextInstances = Map.empty;
+            ContextProviders = Map.empty;
             InstanceContexts = Map.empty;
             UseContexts = Map.empty;
             FailedExprs = [];

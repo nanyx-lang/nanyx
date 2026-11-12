@@ -165,6 +165,21 @@ type ContextInstance =
     /// backend writes the value itself.
     | InstanceBuiltIn
 
+/// What provides a context that is not parameterised, such as `Console`, where a call requires it (see
+/// `TypedModule.ContextProviders`).
+type ContextProvider =
+    /// The type of the def around the call declares it: the context as the annotation writes it.
+    | FromSignature of SourceSpan
+    /// A `use` around the call loads it: the node of the value the `use` loads, as `TypedModule.UseContexts` has it.
+    | FromUse of NodeId
+    /// The def around the call does not write its type, and is inferred to require the context itself.
+    | FromInference
+    /// The runtime supplies it, at the top level of the module (see `TypedModule.AmbientContexts`).
+    | FromRuntime
+
+/// A context a call requires, as a type (`Console` is `TyApply("Console", [])`), and what provides it there.
+type ProvidedContext = { Context: Ty; Provider: ContextProvider }
+
 /// The module an import brings in: the file it is read from, as its spans name it (a full path, or a standard-library
 /// module's import path, `nanyx/text.nyx`), and the name its `module` line declares, if it has one.
 type ImportedFile = { File: string; Name: string option }
@@ -195,6 +210,13 @@ type ImportedFile = { File: string; Name: string option }
 /// `ContextInstances` says, by the node of each call (or pipe) to a function that requires a parameterised context,
 /// where the call finds each context the callee's type declares, in the order it declares them: `None` for one that is
 /// not parameterised, or whose instance is left to be found by its members' names.
+///
+/// `ContextProviders` says, by the node of each call (or pipe), what provides each context found by its members'
+/// names that the call requires: each such context the callee's type declares or was inferred to require, those a
+/// function value's type requires, and the context of a member the call calls (`println` is `Console`'s). A context
+/// whose members a `use` or the def's signature binds is provided by that; one the ambient instance supplies, by the
+/// runtime at the top level, or by inference in a def that does not write its type. A context written out as a record
+/// has no name to record it by, and is left out.
 ///
 /// `UseContexts` holds the instance of a parameterised context each `use` loads, by the node of the value it loads:
 /// `Sum(int)` for `use addInt`, where `def addInt: Sum(int) = (...)`. It is written as `InstanceInScope` writes it, so
@@ -231,6 +253,7 @@ type TypedModule =
       ModuleNames: Map<string, SymbolId>
       ImportedTypes: Map<SymbolId, Ty>
       ContextInstances: Map<NodeId, ContextInstance option list>
+      ContextProviders: Map<NodeId, ProvidedContext list>
       UseContexts: Map<NodeId, TypeExpr>
       InferredContextTypes: Map<SymbolId, Ty list>
       ContextTypes: Map<SymbolId, Ty list>

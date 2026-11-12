@@ -25,8 +25,8 @@ let internal readInlineContexts (state: InferState) (typeOpt: TypeExpr option) :
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
 /// declared, as in a def that declares the context, so a lambda that calls it requires the context (see
-/// `LambdaContexts.contextOfMember`).
-let internal extendEnvWithRecordFields (state: InferState) (env: TypeEnv) (ty: Ty) =
+/// `LambdaContexts.contextOfMember`). Each member is provided by `provider`, the `use`.
+let internal extendEnvWithRecordFields (provider: ContextProvider) (state: InferState) (env: TypeEnv) (ty: Ty) =
     let context =
         let plain (info: TypeDefInfo) = info.IsContext && info.Parameters.IsEmpty
         match resolveSoFar state ty with
@@ -39,7 +39,7 @@ let internal extendEnvWithRecordFields (state: InferState) (env: TypeEnv) (ty: T
         fields
         |> Map.fold (fun acc name fieldTy ->
             let symbol = context |> Option.bind (fun info -> info.Members |> Map.tryFind name)
-            TypeEnv.extend name { TypeEnv.mono fieldTy with Symbol = symbol } acc) env
+            TypeEnv.extend name { TypeEnv.mono fieldTy with Symbol = symbol; ProvidedBy = Some provider } acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
     | TyNominal(_, underlying, _) ->
@@ -127,12 +127,14 @@ let internal memberType (state: InferState) (ctxExpr: TypeExpr) (memberName: Ide
         | _ -> None
     | _ -> None
 
+/// `env` with the members of each of `contexts`, the contexts a def's type declares, each provided by the signature.
 let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
     let mutable current = state
     let mutable env' = env
     for ctx in contexts do
         let members, next = collectContextMembers current ctx
         current <- next
+        let memberScheme ty = { TypeEnv.mono ty with ProvidedBy = Some (FromSignature ctx.Span) }
         // A context named through an import's alias (`c.Console`) also supplies its members under the alias
         // (`c.println`), which would otherwise still be the ambient instance's.
         let qualifier =
@@ -143,9 +145,9 @@ let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts:
         env' <-
             members
             |> List.fold (fun acc (name, ty, symbol) ->
-                let acc = TypeEnv.declare name symbol (TypeEnv.mono ty) acc
+                let acc = TypeEnv.declare name symbol (memberScheme ty) acc
                 match qualifier with
-                | Some qualifier -> TypeEnv.declare $"{qualifier}.{name}" symbol (TypeEnv.mono ty) acc
+                | Some qualifier -> TypeEnv.declare $"{qualifier}.{name}" symbol (memberScheme ty) acc
                 | None -> acc) env'
     env', current
 
@@ -173,25 +175,95 @@ let private isAmbientMember (env: TypeEnv) (state: InferState) (name: Identifier
     | Some (symbol, _), Some scheme -> scheme.Symbol = Some symbol
     | _ -> false
 
+/// Whether something nearer than the ambient instance supplies the members `members` in `env`: each is in scope, and
+/// not as the instance's.
+let private suppliedNearer (env: TypeEnv) (state: InferState) (members: Identifier list) =
+    members |> List.forall (fun memberName -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName))
+
+/// The ambient contexts, each with the names of its members.
+let private ambientContextMembers (state: InferState) : (Identifier * Identifier list) list =
+    state.AmbientMembers
+    |> Map.toList
+    |> List.groupBy (fun (_, (_, ctxName)) -> ctxName)
+    |> List.map (fun (ctxName, members) -> ctxName, List.map fst members)
+
 /// The ambient contexts that code in `env` runs in: every one at the top level, else those something nearer
 /// supplies every member of.
 let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Identifier> =
-    let membersByContext =
-        state.AmbientMembers
-        |> Map.toList
-        |> List.groupBy (fun (_, (_, ctxName)) -> ctxName)
     let fromMembers =
-        membersByContext
+        ambientContextMembers state
         |> List.filter (fun (_, members) ->
             match state.ContextScope with
             | AmbientScope -> true
-            | DefScope _ ->
-                members |> List.forall (fun (memberName, _) -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName)))
+            | DefScope _ -> suppliedNearer env state members)
         |> List.map fst
         |> Set.ofList
     match state.ContextScope with
     | AmbientScope -> Set.union fromMembers state.CarriedAmbientContexts
     | DefScope _ -> fromMembers
+
+/// What provides an ambient context to code in `scope` where the ambient instance supplies it: the runtime at the top
+/// level, and inference in a def that does not write its type. None in a def that writes its type, where that is an
+/// error.
+let internal ambientProvider (scope: ContextScope) : ContextProvider option =
+    match scope with
+    | AmbientScope -> Some FromRuntime
+    | DefScope(_, true) -> Some FromInference
+    | DefScope(_, false) -> None
+
+/// What provides, to code in `env`, a context whose members are bound there by the names `members`: the ambient
+/// instance where it supplies them (`ambient`), else the `use` or the signature that binds them. None where nothing
+/// that provides contexts binds them.
+let private providerOf (env: TypeEnv) (state: InferState) (ambient: bool) (members: Identifier list) : ContextProvider option =
+    if ambient then ambientProvider state.ContextScope
+    else members |> List.tryPick (fun memberName -> TypeEnv.tryFind memberName env |> Option.bind _.ProvidedBy)
+
+/// `state` with `provider` recorded as what provides the context `ctxName` to the call at `call` (see
+/// `TypedModule.ContextProviders`), in place of what inferring the call before recorded for it.
+let internal recordProvider (call: NodeId) (ctxName: Identifier) (provider: ContextProvider) (state: InferState) =
+    let provided = { Context = TyApply(ctxName, []); Provider = provider }
+    let recorded = state.ContextProviders |> Map.tryFind call |> Option.defaultValue []
+    let updated =
+        if recorded |> List.exists (fun earlier -> earlier.Context = provided.Context) then
+            recorded |> List.map (fun earlier -> if earlier.Context = provided.Context then provided else earlier)
+        else recorded @ [ provided ]
+    { state with ContextProviders = state.ContextProviders |> Map.add call updated }
+
+/// `state` with what provides each ambient context to the calls of unannotated top-level defs among `uses` recorded,
+/// now that `required` says the contexts each such def requires.
+let internal recordDeferredProviders (required: Map<Identifier, Set<Identifier>>) (uses: DeferredContextUse list) (state: InferState) =
+    uses
+    |> List.fold (fun current used ->
+        match used.Call, required |> Map.tryFind used.Callee with
+        | Some call, Some contexts ->
+            contexts
+            |> Set.fold (fun current ctxName ->
+                match used.Providers |> Map.tryFind ctxName |> Option.orElse (ambientProvider used.Caller) with
+                | Some provider -> recordProvider call ctxName provider current
+                | None -> current) current
+        | _ -> current) state
+
+/// What provides each ambient context to code in `env` (see `providerOf`).
+let private ambientProviders (env: TypeEnv) (state: InferState) : Map<Identifier, ContextProvider> =
+    let ofMembers =
+        ambientContextMembers state
+        |> List.choose (fun (ctxName, members) ->
+            providerOf env state (not (suppliedNearer env state members)) members |> Option.map (fun provider -> ctxName, provider))
+    let carried =
+        state.CarriedAmbientContexts
+        |> Set.toList
+        |> List.choose (fun ctxName -> ambientProvider state.ContextScope |> Option.map (fun provider -> ctxName, provider))
+    Map.ofList (carried @ ofMembers)
+
+/// `state` with what provides its context recorded for `call`, a call of `name`, where `name` is a context's member as
+/// `env` binds it.
+let private recordMemberCall (call: NodeId option) (env: TypeEnv) (name: Identifier) (state: InferState) =
+    match call, LambdaContexts.contextOfMember env state name with
+    | Some call, Some ctxName ->
+        match providerOf env state (isAmbientMember env state name) [ name ] with
+        | Some provider -> recordProvider call ctxName provider state
+        | None -> state
+    | _ -> state
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the def `defName`, whose type does not
 /// declare it.
@@ -216,21 +288,26 @@ let internal canonicalName (env: TypeEnv) (state: InferState) (name: Identifier)
     | _ -> name
 
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
-/// of an unannotated top-level def is kept to check once its contexts are known.
-let internal checkContextUse (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+/// of an unannotated top-level def is kept to check once its contexts are known. Where the use is the call `call`, what
+/// provides the context of a member it calls is recorded, as is, once known, what provides each context of the def.
+let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     if isAmbientMember env state name then
         let _, ctxName = state.AmbientMembers.[name]
         needAmbientContext state ctxName $"'{name}' is a member of" span
+        |> Result.map (recordMemberCall call env name)
     else
         match state.UnannotatedDefs |> Map.tryFind name, TypeEnv.tryFind name env with
         | Some symbol, Some scheme when scheme.Symbol = Some symbol && not (state.AmbientMembers.IsEmpty && state.CarriedAmbientContexts.IsEmpty) ->
-            let deferred = { Caller = state.ContextScope; Callee = name; Span = span; Available = availableAmbientContexts env state }
+            let deferred =
+                { Caller = state.ContextScope; Callee = name; Span = span; Available = availableAmbientContexts env state
+                  Call = call; Providers = if call.IsSome then ambientProviders env state else Map.empty }
             Ok { state with DeferredContextUses = deferred :: state.DeferredContextUses }
-        | _ -> Ok state
+        | _ -> Ok (recordMemberCall call env name state)
 
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all
-/// is an error only when `reportMissing`.
-let internal ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+/// is an error only when `reportMissing`. Where they are required by the call `call`, what provides each that is not
+/// parameterised is recorded.
+let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     // A function imported under an alias (`c.println`), or a context named under one (`c.Console`), finds the
     // context's members under the alias too (`c.write`), as the ambient instance has them, when they are not in
     // scope by their own names.
@@ -264,8 +341,17 @@ let internal ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state:
         | _ -> false
     // A carried ambient context is supplied by something nearer only if its members are in scope and not the
     // instance's; otherwise it is needed from the ambient instance, as a context this module can name is.
-    let suppliedNearer members =
-        members |> List.forall (fun memberName -> TypeEnv.tryFind memberName env |> Option.isSome && not (isAmbientMember env state memberName))
+    let fromAmbient (ctx: TypeExpr) members =
+        (isCarried ctx && not (suppliedNearer env state members)) || members |> List.exists (isAmbientMember env state)
+    let recordProviders (current: InferState) =
+        match call with
+        | Some call ->
+            requiredMembers
+            |> List.fold (fun current (ctx, members) ->
+                match ctx.Kind, providerOf env current (fromAmbient ctx members) members with
+                | TypeName ctxName, Some provider -> recordProvider call ctxName provider current
+                | _ -> current) current
+        | None -> current
     // Each context with a member not in scope at all, with those members.
     let missing =
         requiredMembers
@@ -281,10 +367,11 @@ let internal ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state:
             result
             |> Result.bind (fun current ->
                 match ctx.Kind, members |> List.exists (isAmbientMember env current) with
-                | (TypeName ctxName | TypeApply(ctxName, _)), _ when isCarried ctx && not (suppliedNearer members) ->
+                | (TypeName ctxName | TypeApply(ctxName, _)), _ when isCarried ctx && not (suppliedNearer env current members) ->
                     needAmbientContext current ctxName $"'{name}' requires" span
                 | (TypeName ctxName | TypeApply(ctxName, _)), true -> needAmbientContext current ctxName $"'{name}' requires" span
                 | _ -> Ok current)) (Ok state)
+        |> Result.map recordProviders
     else
         // A context is named as it is written, as a type alias is; only one written out as a record has nothing to
         // name it by but its members.

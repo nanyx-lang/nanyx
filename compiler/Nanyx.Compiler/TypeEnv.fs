@@ -1,11 +1,13 @@
 namespace NyxCompiler
 
 /// A type scheme with generalized variables, and the declaration the name it is bound to refers to (none for a
-/// built-in, or a name the compiler made up).
+/// built-in, or a name the compiler made up). `ProvidedBy` is, for a name a `use` or a def's signature binds as a
+/// context's member, which of them binds it (see `TypedModule.ContextProviders`).
 type TypeScheme =
     { Quantified: Set<int>
       Type: Ty
-      Symbol: SymbolId option }
+      Symbol: SymbolId option
+      ProvidedBy: ContextProvider option }
 
 type TypeEnv = Map<string, TypeScheme>
 
@@ -25,7 +27,8 @@ module TypeEnv =
     let mono (ty: Ty) : TypeScheme =
         { Quantified = Set.empty
           Type = ty
-          Symbol = None }
+          Symbol = None
+          ProvidedBy = None }
 
     let rec freeTyVars (ty: Ty) : Set<int> =
         match ty with
@@ -66,4 +69,5 @@ module TypeEnv =
         let tyVars = freeTyVars ty
         { Quantified = Set.difference tyVars envVars
           Type = ty
-          Symbol = None }
+          Symbol = None
+          ProvidedBy = None }

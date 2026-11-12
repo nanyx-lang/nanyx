@@ -1343,6 +1343,7 @@ module Compiler =
                           ModuleNames = moduleNames
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                          ContextProviders = state.ContextProviders
                           UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
                           // Resolved for the root module only, by `compileWith`.
                           InferredContextTypes = state.InferredContextTypes
