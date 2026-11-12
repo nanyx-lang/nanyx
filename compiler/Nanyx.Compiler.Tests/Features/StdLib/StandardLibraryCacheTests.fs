@@ -9,21 +9,21 @@ open NyxCompiler
 
 let private withInts =
     "def name: #some(int) | #empty = #some(1)\n" +
-    "def called = mapOption(name, { n -> n + 1 })\n" +
+    "def called = mapSome(name, { n -> n + 1 })\n" +
     "def r: Result(int, string) = #error(\"x\")\n" +
     "def mapped = r \\ Result.map({ n -> 1.5 })\n" +
-    "def listed = name \\ toListOption"
+    "def listed = name \\ someToList"
 
 let private withStrings =
     "def name: #some(string) | #empty = #some(\"a\")\n" +
-    "def called = mapOption(name, { s -> true })\n" +
+    "def called = mapSome(name, { s -> true })\n" +
     "def r: Result(string, int) = #error(1)\n" +
     "def mapped = r \\ Result.map({ s -> [s] })\n" +
-    "def listed = name \\ toListOption"
+    "def listed = name \\ someToList"
 
 let private withAnError =
     "def name: #some(int) | #empty = #some(1)\n" +
-    "def called: #some(string) | #empty = mapOption(name, { n -> n + 1 })"
+    "def called: #some(string) | #empty = mapSome(name, { n -> n + 1 })"
 
 /// What a compilation found: its diagnostics, the type of each definition, and the type of each node of the
 /// program in the order they are written (node ids differ between compilations; their order does not).

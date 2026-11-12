@@ -35,8 +35,8 @@ let ``Typecheck accepts annotations the body proves`` () =
         "def id: a -> a = { x -> x }\n" +
         "def first: (a, b) -> a = { x, y -> x }\n" +
         "def apply: (a -> b), a -> b = { f, x -> f(x) }\n" +
-        "def mapOption: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
-        "def result = mapOption(#some(first(1, \"\")), { x -> apply(id, x) })"
+        "def mapSome: (#some(a) | r), (a -> b) -> (#some(b) | r) = { | #some(a), f -> #some(f(a)) | other, _ -> other }\n" +
+        "def result = mapSome(#some(first(1, \"\")), { x -> apply(id, x) })"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let typed = result.Typed.Value

@@ -131,15 +131,15 @@ let ``Typecheck rejects a lambda of several parameters whose signature's input i
 
 [<Fact>]
 let ``Typecheck gives a lambda argument's parameter a type solved from the arguments before it`` () =
-    // `a` in `mapOption`'s signature is only known from the first argument, a `#some(Customer)`.
+    // `a` in `mapSome`'s signature is only known from the first argument, a `#some(Customer)`.
     let source =
         "type Customer = (name: string)\n" +
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n" +
         "def c: #some(Customer) | #notFound = #notFound\n" +
-        "def name = c \\mapOption { c -> c.name }"
+        "def name = c \\mapSome { c -> c.name }"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     match result.Typed.Value.Types.["name"] with

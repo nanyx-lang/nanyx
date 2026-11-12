@@ -64,7 +64,7 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// resolved, as a parameter's `#some(a) | r` does, would be generalised as if nothing else had it.
 ///
 /// Every union rest variable that nothing can add tags to is solved to the empty union first:
-/// `#some(5) \mapOption f` is a `#some(string)`, not a `#some(string) | r`. Such a variable is in no function's
+/// `#some(5) \mapSome f` is a `#some(string)`, not a `#some(string) | r`. Such a variable is in no function's
 /// input (see `Unifier.outputOnlyRestVars`), was not named in an annotation, and is not shared with `env`, where a
 /// later constraint could still give it tags. The constraint solving it is added to the state, so the types
 /// recorded for the def's expressions lose it too. A rest the unifier made up, as it does when a closed union is

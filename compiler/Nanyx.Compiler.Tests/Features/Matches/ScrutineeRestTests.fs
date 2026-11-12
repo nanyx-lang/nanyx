@@ -17,7 +17,7 @@ let ``A match on a call that widened its argument's union needs no catch-all`` (
     compileClean (
         find +
         "def describe: int -> string = { n ->\n" +
-        "  match find(n) \\mapOption({ s -> s ++ \"!\" })\n" +
+        "  match find(n) \\mapSome({ s -> s ++ \"!\" })\n" +
         "    | #some(s) -> s\n" +
         "    | #notFound -> \"not found\"\n" +
         "}\n")
@@ -28,7 +28,7 @@ let ``A match on a call that widened its argument's union is checked against the
     let source =
         find +
         "def describe: int -> string = { n ->\n" +
-        "  match find(n) \\mapOption({ s -> s ++ \"!\" })\n" +
+        "  match find(n) \\mapSome({ s -> s ++ \"!\" })\n" +
         "    | #some(s) -> s\n" +
         "}\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)

@@ -21,35 +21,35 @@ let private tagsOf (ty: Ty) =
     | other -> [ Unifier.tyToString other ]
 
 [<Fact>]
-let ``bindOption keeps the other tags of both steps, piped or called`` () =
+let ``bindSome keeps the other tags of both steps, piped or called`` () =
     let typed =
         compileClean (
             steps +
-            "def piped = find(1) \\bindOption(parseDigit)\n" +
-            "def called = bindOption(find(1), parseDigit)\n" +
-            "def withLambda = bindOption(find(1), { s -> parseDigit(s) })\n")
+            "def piped = find(1) \\bindSome(parseDigit)\n" +
+            "def called = bindSome(find(1), parseDigit)\n" +
+            "def withLambda = bindSome(find(1), { s -> parseDigit(s) })\n")
     let expected = [ "#invalidInt"; "#notFound"; "#some(int)" ]
     Assert.Equal<string list>(expected, tagsOf typed.Types.["piped"])
     Assert.Equal<string list>(expected, tagsOf typed.Types.["called"])
     Assert.Equal<string list>(expected, tagsOf typed.Types.["withLambda"])
 
 [<Fact>]
-let ``The result of bindOption is matched on each step's tags with no catch-all`` () =
+let ``The result of bindSome is matched on each step's tags with no catch-all`` () =
     let arms =
         "    | #some(n) -> \"some\"\n" +
         "    | #notFound -> \"not found\"\n" +
         "    | #invalidInt -> \"invalid\"\n" +
         "}\n"
-    compileClean (steps + "def piped: int -> string = { n ->\n  match find(n) \\bindOption(parseDigit)\n" + arms) |> ignore
-    compileClean (steps + "def called: int -> string = { n ->\n  match bindOption(find(n), parseDigit)\n" + arms) |> ignore
-    compileClean (steps + "def viaLocal: int -> string = { n ->\n  def b = bindOption(find(n), parseDigit)\n  match b\n" + arms) |> ignore
+    compileClean (steps + "def piped: int -> string = { n ->\n  match find(n) \\bindSome(parseDigit)\n" + arms) |> ignore
+    compileClean (steps + "def called: int -> string = { n ->\n  match bindSome(find(n), parseDigit)\n" + arms) |> ignore
+    compileClean (steps + "def viaLocal: int -> string = { n ->\n  def b = bindSome(find(n), parseDigit)\n  match b\n" + arms) |> ignore
 
 [<Fact>]
-let ``A match on the result of bindOption that leaves out a step's tag says which`` () =
+let ``A match on the result of bindSome that leaves out a step's tag says which`` () =
     let source =
         steps +
         "def partial: int -> string = { n ->\n" +
-        "  def b = bindOption(find(n), parseDigit)\n" +
+        "  def b = bindSome(find(n), parseDigit)\n" +
         "  match b\n" +
         "    | #some(n) -> \"some\"\n" +
         "    | #notFound -> \"not found\"\n" +
@@ -62,7 +62,7 @@ let ``A match on the result of bindOption that leaves out a step's tag says whic
 let ``Result.bind of two steps with one error type keeps it`` () =
     let typed =
         compileClean (
-            "def read: string -> Result(int, string) = { s -> int.fromString(s) \\toResultOption(\"not a number\") }\n" +
+            "def read: string -> Result(int, string) = { s -> int.fromString(s) \\someToResult(\"not a number\") }\n" +
             "def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error(\"odd\") }\n" +
             "def piped = read(\"42\") \\Result.bind(half)\n" +
             "def called = Result.bind(read(\"42\"), half)\n")
