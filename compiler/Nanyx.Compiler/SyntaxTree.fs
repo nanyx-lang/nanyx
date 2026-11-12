@@ -172,3 +172,44 @@ module SyntaxTree =
         | WildcardPattern
         | UnitPattern
         | ElsePattern -> []
+
+    /// The names `expr` refers to that nothing within it binds, as `referencedNames` gives them but without those a
+    /// lambda's parameters, a match arm's patterns or a def of an enclosing block bind. A block's def is taken to bind
+    /// its name in its own value too, so this can only under-count.
+    let freeNames (expr: Expression) : string list =
+        let rec free (bound: Set<Identifier>) (expr: Expression) : string list =
+            let named name = if bound.Contains name then [] else [ name ]
+            let inArms (arms: MatchArm list) =
+                arms
+                |> List.collect (fun (patterns, body) ->
+                    let bound = patterns |> List.collect Pattern.boundNames |> List.fold (fun acc name -> Set.add name acc) bound
+                    (patterns |> List.collect Pattern.expressions |> List.collect (free bound)) @ free bound body)
+            match expr.Kind with
+            | IdentifierExpr name -> named name
+            | FunctionCall(name, _, args)
+            | ContextMemberCall(_, name, args) -> named name @ (args |> List.collect (free bound))
+            | Pipe(value, name, _, args) -> named name @ ((value :: args) |> List.collect (free bound))
+            | Lambda(parameters, body, _) -> free (parameters |> List.fold (fun acc (name, _) -> Set.add name acc) bound) body
+            | Match(values, arms) -> (values |> List.collect (free bound)) @ inArms arms
+            | Except(value, arms) -> free bound value @ inArms arms
+            | Block statements ->
+                statements
+                |> List.fold (fun (bound: Set<Identifier>, names) statement ->
+                    match statement.Kind with
+                    | DefStatement(_, name, _, value) ->
+                        let bound = bound.Add name
+                        bound, names @ free bound value
+                    | _ -> bound, names @ (ofStatement statement |> List.collect (free bound))) (bound, [])
+                |> snd
+            | MemberAccess(inner, _, _) ->
+                // `a.b.c` may name a definition `a.b.c` of a module block, unless `a` is bound here.
+                let rec dotted (current: Expression) =
+                    match current.Kind with
+                    | IdentifierExpr name -> Some(name, name)
+                    | MemberAccess(inner, memberName, _) -> dotted inner |> Option.map (fun (root, prefix) -> root, $"{prefix}.{memberName}")
+                    | _ -> None
+                match dotted expr with
+                | Some(root, path) when not (bound.Contains root) -> path :: free bound inner
+                | _ -> free bound inner
+            | _ -> childrenOf expr |> fst |> List.collect (free bound)
+        free Set.empty expr

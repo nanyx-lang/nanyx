@@ -61,6 +61,7 @@
     <Compile Include="SyntaxTree.fs" />
     <Compile Include="MatchArmFixes.fs" />
     <Compile Include="DefinitionOrder.fs" />
+    <Compile Include="InitialisationCycles.fs" />
     <Compile Include="EscapingLambdas.fs" />
     <Compile Include="MemoryCells.fs" />
     <Compile Include="PipeLookups.fs" />
