@@ -108,3 +108,27 @@ let ``Run - a user's own ToString context and the prelude's agree`` () =
         "  println(\"{Point(x = 3, y = 4)}\")\n" +
         "}\n"
     runSource source |> assertRan "(1, 2)(1, 2)\n(3, 4)\n"
+
+[<Fact>]
+let ``Run - a hole prints the result of a context's member`` () =
+    let source =
+        """
+import nanyx/console
+
+context Describe(a) = (size: a -> int, label: a -> string, parts: a -> (x: int, y: int))
+type Point = (x: int, y: int)
+
+def describe: [Describe(a)] a -> string = { value ->
+  "{Describe(a).size(value)} {Describe(a).label(value)} {Describe(a).parts(value)}"
+}
+def Point.size: Point -> int = { p -> 2 }
+def Point.label: Point -> string = { p -> "point" }
+def Point.parts: Point -> (x: int, y: int) = { p -> (x = p.x, y = p.y) }
+
+@entry
+def main = {
+  println(describe(Point(x = 1, y = 2)))
+}
+"""
+        |> _.ReplaceLineEndings("\n")
+    runSource source |> assertRan "2 point (x = 1, y = 2)\n"

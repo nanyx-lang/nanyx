@@ -1215,18 +1215,31 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         // For now, return a fresh type variable
         let ty, next = freshVar (recordContextMemberReference expr ctxType memberName state)
         Ok (mkTypedExpr expr ty None None None, next)
+    // `C(T).member(args)`: the arguments are checked against the member's type in the context's definition, and the
+    // call has its result type. A member the context does not have leaves the call's type to what uses it.
     | ContextMemberCall(ctxType, memberName, args) ->
-        // TODO: Look up the context, find the member function type, check args
-        // For now, infer args and return a fresh type variable
         let mutable current = recordContextMemberReference expr ctxType memberName state
         let mutable errors: Diagnostic list = []
+        let mutable argTys: Ty list = []
         for arg in args do
             match inferExpr env current arg with
-            | Ok (_, next) -> current <- next
+            | Ok (typedArg, next) ->
+                current <- next
+                argTys <- argTys @ [ typedArg.Type ]
             | Error err -> errors <- errors @ err
         if errors.IsEmpty then
-            let ty, next = freshVar current
-            Ok (mkTypedExpr expr ty None None None, next)
+            match Contexts.memberType current ctxType memberName with
+            | Some (memberTy, next) ->
+                match Unifier.unalias memberTy with
+                | TyFunc(input, ret, _) ->
+                    let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
+                    Ok (mkTypedExpr expr ret None None None, addAssignableConstraintAt inputSpan (inputTypeFromArgs argTys) input next)
+                | _ ->
+                    let ty, next = freshVar next
+                    Ok (mkTypedExpr expr ty None None None, next)
+            | None ->
+                let ty, next = freshVar current
+                Ok (mkTypedExpr expr ty None None None, next)
         else
             Error errors
 
