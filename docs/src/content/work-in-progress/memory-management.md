@@ -114,7 +114,7 @@ through a closure uses a function type of the values it passes (`Wat.indirectTyp
 
 **Implemented for the sized integers:** a `U64` is held as an `int` is. `I8`, `I16`, `I32`, `U8`, `U16` and `U32` are
 `i32`s, sign-extended or zero-extended from their width as they are signed or not, and still take 4 bytes in a field:
-storing them at their own width needs a variant of each storing helper for each width. An `F32` is boxed as a float
+storing them at their own width needs a variant of each storing helper for each width ([#981](https://github.com/nanyx-lang/nanyx/issues/981)). An `F32` is boxed as a float
 is, in a 4-byte box holding the `f32`.
 
 `int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`

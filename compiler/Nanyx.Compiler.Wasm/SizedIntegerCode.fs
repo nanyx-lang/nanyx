@@ -44,19 +44,42 @@ let binary (integer: SizedInteger) (op: string) : Operation option =
     | ">=" -> Some (Instruction $"{held}.ge_{signed}")
     | _ -> None
 
+/// The code that keeps the low bits of `integer` of the value on the stack, held as `integer` is held: sign-extended
+/// from them for a signed type, zero-extended for an unsigned one.
+let private narrowed (integer: SizedInteger) =
+    match integer with
+    | SizedInteger.I8 -> [ "i32.extend8_s" ]
+    | SizedInteger.I16 -> [ "i32.extend16_s" ]
+    | SizedInteger.U8 -> [ "i32.const 255"; "i32.and" ]
+    | SizedInteger.U16 -> [ "i32.const 65535"; "i32.and" ]
+    | SizedInteger.I32
+    | SizedInteger.U32
+    | SizedInteger.U64 -> []
+
 /// The operation `operation` (`add`, `sub` or `mul`) on two values of `integer` on the stack that keeps the low bits of
 /// the result, as the type holds them: wrapping around past its range rather than stopping the program.
 let wrapping (integer: SizedInteger) (operation: string) : string list =
-    let narrowed =
-        match integer with
-        | SizedInteger.I8 -> [ "i32.extend8_s" ]
-        | SizedInteger.I16 -> [ "i32.extend16_s" ]
-        | SizedInteger.U8 -> [ "i32.const 255"; "i32.and" ]
-        | SizedInteger.U16 -> [ "i32.const 65535"; "i32.and" ]
-        | SizedInteger.I32
-        | SizedInteger.U32
-        | SizedInteger.U64 -> []
-    $"{valueType integer}.{operation}" :: narrowed
+    $"{valueType integer}.{operation}" :: narrowed integer
+
+/// The code that turns an integer of the type `from` on the stack into one of the type `into`, where `None` is `int`:
+/// the source's value sign- or zero-extended as the source is signed or not, or its low bits, held as the target holds
+/// them. A conversion that may not keep the value checks that it fits first (see the prelude's).
+let cast (from: SizedInteger option) (into: SizedInteger option) : string list =
+    let held = Option.map valueType >> Option.defaultValue "i64"
+    let signed = Option.map SizedInteger.isSigned >> Option.defaultValue true
+    let resized =
+        match held from, held into with
+        | "i64", "i32" -> [ "i32.wrap_i64" ]
+        | "i32", "i64" -> [ $"""i64.extend_i32_{if signed from then "s" else "u"}""" ]
+        | _ -> []
+    resized @ (into |> Option.map narrowed |> Option.defaultValue [])
+
+/// The instruction that converts an integer of the type `from` on the stack, where `None` is `int`, to the nearest
+/// floating-point number of the WebAssembly type `floatType`.
+let toFloat (from: SizedInteger option) (floatType: string) =
+    let held = from |> Option.map valueType |> Option.defaultValue "i64"
+    let signed = from |> Option.map SizedInteger.isSigned |> Option.defaultValue true
+    $"""{floatType}.convert_{held}_{if signed then "s" else "u"}"""
 
 /// Stops the program as an int's overflow does: dividing the smallest int by -1 traps with "integer overflow".
 let private overflow = [ $"i64.const {System.Int64.MinValue}"; "i64.const -1"; "i64.div_s"; "drop" ]

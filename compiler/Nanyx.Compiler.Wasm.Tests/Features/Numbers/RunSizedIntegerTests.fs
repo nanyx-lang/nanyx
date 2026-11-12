@@ -146,3 +146,49 @@ def main = {
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "-128 255 24464 1\n-9223372036854775808 18446744073709551615 0 4294967295\n3199756825 127 12\n"
+
+[<Fact>]
+let ``Run - a number converts to another type, keeping its value or saying it is out of range`` () =
+    let source =
+        """
+import nanyx/console
+import nanyx/math as math
+
+@entry
+def main = {
+  def n: I32 = -5
+  def big = 300
+  def huge: U64 = 18_446_744_073_709_551_615
+  println("{I32.toInt(n)} {n \toInt} {int.toU8(big)} {int.toU8(200)} {I32.toU32(n)} {U64.toInt(huge)} {U64.toI8(huge)}")
+  println("{U8.toI8(255)} {I8.toU16(-1)} {I16.toI8(-128)} {U32.toInt(4_000_000_000)} {int.toU64(-1)} {I8.toU64(5)}")
+  println("{I64.toFloat(3)} {U64.toFloat(huge)} {I32.toF32(16_777_217)} {float.toF32(0.1)} {F32.toFloat(0.1)} {float.toF32(1.0e300)}")
+  println("{float.toInt(2.5, #round)} {float.toInt(-2.5, #round)} {float.toInt(2.7, #floor)} {float.toInt(-2.7, #ceil)} {float.toInt(-2.7, #truncate)}")
+  println("{float.tryToInt(1.0e19, #round)} {float.tryToInt(0.0 / 0.0, #round)} {float.tryToInt(42.4, #round)} {F32.toInt(3.5, #round)} {F32.tryToInt(1.0e30, #floor)}")
+  println("{math.round(2.5)} {math.floor(-0.5)} {math.ceil(0.1)} {math.truncate(-9.9)}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n")
+    |> assertRan (
+        """-5 -5 #outOfRange #some(200) #outOfRange #outOfRange #outOfRange
+#outOfRange #outOfRange #some(-128) 4000000000 #outOfRange #some(5)
+3.0 18446744073709552000.0 16777216.0 0.1 0.10000000149011612 Infinity
+3 -3 2 -2 -2
+#outOfRange #outOfRange #some(42) 4 #outOfRange
+3 -1 1 -9
+""".ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``Run - converting a float that is not a whole int stops the program`` () =
+    let source =
+        """
+import nanyx/console
+
+@entry
+def main = {
+  println("before")
+  println("{float.toInt(1.0e19, #round)}")
+}
+"""
+    let outcome = runSource (source.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)

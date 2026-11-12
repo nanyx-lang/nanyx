@@ -637,6 +637,350 @@ export def U64.wrappingMul: U64, U64 -> U64 = { x, y ->
   __nanyx_wrapping_mul(x, y)
 }
 
+-- Conversions ------------------------------------------------------------------------------------
+
+-- Each number type converts to each other one with a definition attached to it, named after the type
+-- it converts to: `I32.toInt`, `int.toU8`, `I64.toFloat`. One that keeps every value gives the value;
+-- one that may not, from an integer type to a narrower one or between signed and unsigned, gives
+-- `#some` of it or `#outOfRange`, and leaves the caller to decide.
+
+export def int.toI8: int -> #some(I8) | #outOfRange = { n ->
+  if n >= -128 and n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toI16: int -> #some(I16) | #outOfRange = { n ->
+  if n >= -32_768 and n <= 32_767 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toI32: int -> #some(I32) | #outOfRange = { n ->
+  if n >= -2_147_483_648 and n <= 2_147_483_647 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toU8: int -> #some(U8) | #outOfRange = { n ->
+  if n >= 0 and n <= 255 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toU16: int -> #some(U16) | #outOfRange = { n ->
+  if n >= 0 and n <= 65_535 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toU32: int -> #some(U32) | #outOfRange = { n ->
+  if n >= 0 and n <= 4_294_967_295 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toU64: int -> #some(U64) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def int.toF32: int -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def I8.toInt: I8 -> int = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def I8.toI16: I8 -> I16 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def I8.toI32: I8 -> I32 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def I8.toU8: I8 -> #some(U8) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I8.toU16: I8 -> #some(U16) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I8.toU32: I8 -> #some(U32) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I8.toU64: I8 -> #some(U64) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I8.toFloat: I8 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def I8.toF32: I8 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def I16.toInt: I16 -> int = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def I16.toI8: I16 -> #some(I8) | #outOfRange = { n ->
+  if n >= -128 and n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I16.toI32: I16 -> I32 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def I16.toU8: I16 -> #some(U8) | #outOfRange = { n ->
+  if n >= 0 and n <= 255 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I16.toU16: I16 -> #some(U16) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I16.toU32: I16 -> #some(U32) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I16.toU64: I16 -> #some(U64) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I16.toFloat: I16 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def I16.toF32: I16 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def I32.toInt: I32 -> int = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def I32.toI8: I32 -> #some(I8) | #outOfRange = { n ->
+  if n >= -128 and n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I32.toI16: I32 -> #some(I16) | #outOfRange = { n ->
+  if n >= -32_768 and n <= 32_767 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I32.toU8: I32 -> #some(U8) | #outOfRange = { n ->
+  if n >= 0 and n <= 255 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I32.toU16: I32 -> #some(U16) | #outOfRange = { n ->
+  if n >= 0 and n <= 65_535 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I32.toU32: I32 -> #some(U32) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I32.toU64: I32 -> #some(U64) | #outOfRange = { n ->
+  if n >= 0 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def I32.toFloat: I32 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def I32.toF32: I32 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U8.toInt: U8 -> int = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U8.toI8: U8 -> #some(I8) | #outOfRange = { n ->
+  if n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U8.toI16: U8 -> I16 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U8.toI32: U8 -> I32 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U8.toU16: U8 -> U16 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U8.toU32: U8 -> U32 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U8.toU64: U8 -> U64 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U8.toFloat: U8 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U8.toF32: U8 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U16.toInt: U16 -> int = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U16.toI8: U16 -> #some(I8) | #outOfRange = { n ->
+  if n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U16.toI16: U16 -> #some(I16) | #outOfRange = { n ->
+  if n <= 32_767 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U16.toI32: U16 -> I32 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U16.toU8: U16 -> #some(U8) | #outOfRange = { n ->
+  if n <= 255 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U16.toU32: U16 -> U32 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U16.toU64: U16 -> U64 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U16.toFloat: U16 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U16.toF32: U16 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U32.toInt: U32 -> int = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U32.toI8: U32 -> #some(I8) | #outOfRange = { n ->
+  if n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U32.toI16: U32 -> #some(I16) | #outOfRange = { n ->
+  if n <= 32_767 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U32.toI32: U32 -> #some(I32) | #outOfRange = { n ->
+  if n <= 2_147_483_647 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U32.toU8: U32 -> #some(U8) | #outOfRange = { n ->
+  if n <= 255 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U32.toU16: U32 -> #some(U16) | #outOfRange = { n ->
+  if n <= 65_535 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U32.toU64: U32 -> U64 = { n ->
+  __nanyx_int_cast(n)
+}
+
+export def U32.toFloat: U32 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U32.toF32: U32 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U64.toInt: U64 -> #some(int) | #outOfRange = { n ->
+  if n <= 9_223_372_036_854_775_807 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toI8: U64 -> #some(I8) | #outOfRange = { n ->
+  if n <= 127 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toI16: U64 -> #some(I16) | #outOfRange = { n ->
+  if n <= 32_767 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toI32: U64 -> #some(I32) | #outOfRange = { n ->
+  if n <= 2_147_483_647 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toU8: U64 -> #some(U8) | #outOfRange = { n ->
+  if n <= 255 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toU16: U64 -> #some(U16) | #outOfRange = { n ->
+  if n <= 65_535 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toU32: U64 -> #some(U32) | #outOfRange = { n ->
+  if n <= 4_294_967_295 then #some(__nanyx_int_cast(n)) else #outOfRange
+}
+
+export def U64.toFloat: U64 -> float = { n ->
+  __nanyx_to_float(n)
+}
+
+export def U64.toF32: U64 -> F32 = { n ->
+  __nanyx_to_float(n)
+}
+
+--| `x` as the nearest `F32`, or an infinity past the largest `F32`.
+export def float.toF32: float -> F32 = { x ->
+  __nanyx_to_float(x)
+}
+
+--| `x` as a `float`, which holds every `F32` exactly.
+export def F32.toFloat: F32 -> float = { x ->
+  __nanyx_to_float(x)
+}
+
+--| `x` made whole as `mode` says: dropping its fraction, to the nearest whole number with halves
+  away from zero, or down, or up.
+def wholeOf: float, (#truncate | #round | #floor | #ceil) -> float = { x, mode ->
+  match mode
+    | #truncate -> __nanyx_float_trunc(x)
+    | #floor -> __nanyx_float_floor(x)
+    | #ceil -> __nanyx_float_ceil(x)
+    | #round ->
+      def whole = __nanyx_float_trunc(x)
+
+      if x - whole >= 0.5 then whole + 1.0 else if whole - x >= 0.5 then whole - 1.0 else whole
+}
+
+--| `x` as an `int`, made whole as `mode` says: `float.toInt(2.5, #round)` is 3. A value that is
+  NaN, infinite or past the range of `int` stops the program; see [`float.tryToInt`].
+export def float.toInt: float, (#truncate | #round | #floor | #ceil) -> int = { x, mode ->
+  __nanyx_float_to_int(wholeOf(x, mode))
+}
+
+--| `x` as an `int`, made whole as `mode` says, or `#outOfRange` when it is NaN, infinite or past
+  the range of `int`.
+export def float.tryToInt
+  : float, (#truncate | #round | #floor | #ceil) -> #some(int) | #outOfRange
+  = { x, mode ->
+    def whole = wholeOf(x, mode)
+
+    if whole >= -9_223_372_036_854_775_808.0 and whole < 9_223_372_036_854_775_808.0
+      then #some(__nanyx_float_to_int(whole))
+      else #outOfRange
+  }
+
+--| `x` as an `int`, as [`float.toInt`] makes it one.
+export def F32.toInt: F32, (#truncate | #round | #floor | #ceil) -> int = { x, mode ->
+  float.toInt(F32.toFloat(x), mode)
+}
+
+--| `x` as an `int`, or `#outOfRange`, as [`float.tryToInt`] makes it one.
+export def F32.tryToInt
+  : F32, (#truncate | #round | #floor | #ceil) -> #some(int) | #outOfRange
+  = { x, mode ->
+    float.tryToInt(F32.toFloat(x), mode)
+  }
+
 -- Joining ---------------------------------------------------------------------------------------
 
 --| The values of type `a` that join, end to end. `x ++ y` is read through it:

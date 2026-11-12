@@ -43,7 +43,7 @@ def active: bool = true
 
 There is no separate `number` type. Generic code over numbers requires a [context](../advanced/contexts): `Add(a)` to add and subtract, or `Num(a)` to multiply and divide as well. `int` and `float` are the built-in types that have both.
 
-`int` is a 64-bit integer and `float` a 64-bit floating-point number, on every platform. Numbers of other fixed widths are types of their own: `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32`. A literal takes the type the code around it expects, `def small: U8 = 200`, and their arithmetic stops the program when the result does not fit; see [Sized numbers](../work-in-progress/sized-numbers).
+`int` is a 64-bit integer and `float` a 64-bit floating-point number, on every platform. Numbers of other fixed widths are types of their own: `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32`. A literal takes the type the code around it expects, `def small: U8 = 200`, their arithmetic stops the program when the result does not fit, and each converts to the others with a definition named after the target, `I32.toInt` or `int.toU8`, which gives `#outOfRange` when the value may not fit; see [Sized numbers](../work-in-progress/sized-numbers).
 
 # Built-in type names
 

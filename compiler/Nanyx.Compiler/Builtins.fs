@@ -64,6 +64,11 @@ module Intrinsics =
     let wrappingAdd = prefix + "wrapping_add"
     let wrappingSub = prefix + "wrapping_sub"
     let wrappingMul = prefix + "wrapping_mul"
+    /// An integer as one of the integer type it is taken as: its bits, sign- or zero-extended or cut to the target's.
+    /// The prelude's conversions check first that the value fits.
+    let intCast = prefix + "int_cast"
+    /// A number as the floating-point type it is taken as, `float` or `F32`: the nearest one.
+    let toFloat = prefix + "to_float"
     /// Two values of a type the compiler orders (see `WellKnownContexts.ordering`) put in order by their structure:
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
     /// total order, with NaN after every other float.
@@ -114,6 +119,8 @@ module Intrinsics =
           wrappingAdd, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
           wrappingSub, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
           wrappingMul, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
+          intCast, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None }
+          toFloat, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None }
           mapOfEntries, overEntries (TyFunc(entries, map, []))
           mapEntries, overEntries (TyFunc(map, entries, []))
           setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None }
