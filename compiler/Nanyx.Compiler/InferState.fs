@@ -11,6 +11,8 @@ type ContextScope =
     /// The body of the def `name`. One that writes its type has only the contexts the type declares; one that does
     /// not (`inferring`) needs whichever ambient contexts its body uses, which are inferred.
     | DefScope of name: Identifier * inferring: bool
+    /// The value of the top-level def `name` of a named module, which is built where there are no contexts (#956).
+    | ValueScope of name: Identifier
 
 /// A use of the unannotated top-level def `Callee`, whose contexts are only known once every def has been inferred:
 /// `Available` are the ambient contexts something nearer than the ambient instance supplies at `Span`. A call records,
