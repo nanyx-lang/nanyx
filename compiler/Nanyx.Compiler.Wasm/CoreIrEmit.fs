@@ -51,7 +51,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Field(atom, _)
     | Assign(_, atom)
     | SetField(_, _, atom)
-    | Dbg(atom, _)
+    | Dbg atom
     | If(atom, _, _) -> ofAtoms [ atom ]
     | ForEach loop -> ofAtoms (ForLoop.sourceAtoms loop)
     | Dup(_, body)
@@ -367,29 +367,7 @@ type private FunctionEmitter(context: EmitContext) =
             let call = if tail then "return_call" else "call"
             join "\n    " [ read; atomsAfter true args; read; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
         | Interpolate parts -> this.Interpolation parts
-        | Dbg(value, form) ->
-            match form with
-            | DbgNumber(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg\n    local.get ${scratch.Name}" ]
-            | DbgString(scratch, _) -> join "\n    " [ atoms [ value ]; $"local.tee ${scratch.Name}\n    call $dbg_str\n    local.get ${scratch.Name}" ]
-            | DbgFloat(scratch, _) ->
-                // The float is printed through a string of its own, dropped once printed.
-                let text = freshLocal "__dbg_text"
-                join "\n    " [
-                    atoms [ value ]
-                    $"local.tee ${scratch.Name}\n    call ${helper Helpers.floatToString}\n    local.tee ${text}\n    call $dbg_str"
-                    $"local.get ${text}\n    {dropValue IrString}\n    local.get ${scratch.Name}" ]
-            | DbgTag(name, scratch) ->
-                // The host has a function per tag that `dbg` prints.
-                $"i32.const {tagCode (context.TagId name)}\n    local.set ${scratch.Name}\n    call $dbg_tag_{sanitizeIdentifier name}\n    local.get ${scratch.Name}"
-            | DbgTagPayload(name, scratch) ->
-                join "\n    " [
-                    atoms [ value ]
-                    $"local.tee ${scratch.Name}\n    call $dbg_tag_payload_{sanitizeIdentifier name}\n    i32.const {tagCode (context.TagId name)}\n    local.get ${scratch.Name}\n    call ${helper Helpers.tagBox}" ]
-            | DbgTagValue(hole, holeType, _) ->
-                // Printed through the string `"{value}"` would build; the hole still holds the value to leave.
-                helper Helpers.alloc |> ignore
-                let text = freshLocal "__dbg_text"
-                $"{this.Interpolation [ Hole(hole, holeType) ]}\n    local.tee ${text}\n    call $dbg_str\n    local.get ${text}\n    {dropValue IrString}\n    local.get ${hole.Name}"
+        | Dbg text -> join "\n    " [ atoms [ text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
             $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
@@ -572,15 +550,12 @@ type private FunctionEmitter(context: EmitContext) =
 /// and its scratch locals.
 let private declaredLocals (body: Expr) : string list =
     let found = ResizeArray<Var>()
-    // The holes of the interpolated strings, and of the strings `dbg` would print a tag through, by depth and place.
+    // The holes of the interpolated strings, by depth and place.
     let holes = ResizeArray<int * int>()
     let interpolates = ref false
     // The locals of the `for` loops, in the order the old path declares them: each loop's, then those of the loops in
     // its body.
     let loops = ResizeArray<Var>()
-    let holeAt depth =
-        interpolates.Value <- true
-        holes.Add((depth, 0))
     let rec pattern (p: Pattern) =
         match p with
         | PBind var -> found.Add var
@@ -633,24 +608,13 @@ let private declaredLocals (body: Expr) : string list =
         | CallRuntime _
         | MakeClosure _
         | CallClosure _
+        | Dbg _
         | BoxFloat _
         | Panic _ -> ()
         | Interpolate _ -> interpolates.Value <- true
         | ForEach loop ->
             ForLoop.locals loop |> List.iter loops.Add
             walk loop.Body
-        | Dbg(_, form) ->
-            match form with
-            | DbgNumber(scratch, holeDepth)
-            | DbgString(scratch, holeDepth)
-            | DbgFloat(scratch, holeDepth) ->
-                found.Add scratch
-                holeDepth |> Option.iter holeAt
-            | DbgTag(_, scratch)
-            | DbgTagPayload(_, scratch) -> found.Add scratch
-            | DbgTagValue(_, _, scratch) ->
-                interpolates.Value <- true
-                found.Add scratch
     walk body
     let ofKind kind = found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq
     let interpolationLocals =

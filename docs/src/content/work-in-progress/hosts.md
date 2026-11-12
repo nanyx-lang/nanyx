@@ -137,7 +137,7 @@ A browser can be the embedder for two different hosts. Neither works today.
 
 ## `ConsoleHost` in a page
 
-A console program can run in a page unchanged, with the page standing in for the terminal. This is what a playground on the docs site needs. The host is still `ConsoleHost`; only the embedder differs. The module the backend emits is close to runnable there: it uses linear memory with its own allocator, and it imports only `fd_write`, `fd_read` and `proc_exit` from `wasi_snapshot_preview1`, plus `env.dbg_tag_*` for `dbg` of a tag. A page can provide all of those in a few lines of JavaScript. Four things stand in the way:
+A console program can run in a page unchanged, with the page standing in for the terminal. This is what a playground on the docs site needs. The host is still `ConsoleHost`; only the embedder differs. The module the backend emits is close to runnable there: it uses linear memory with its own allocator, and it imports only `fd_write`, `fd_read` and `proc_exit` from `wasi_snapshot_preview1`. A page can provide all of those in a few lines of JavaScript. Four things stand in the way:
 
 - **The toolchain writes WebAssembly text.** `nanyx wasm` and `nanyx build` produce `.wat`, and a browser loads only the binary format. The toolchain needs to write `.wasm`.
 - **The program runs in the module's start function.** A browser runs the start function while it instantiates the module, before the page can reach the exported memory, so the page's `fd_write` can't read the bytes it is asked to print. For a browser the module has to export its entry for the page to call, or import its memory.

@@ -4,7 +4,7 @@ description: "Which values can be interpolated into a string, and what dbg print
 order: 5
 ---
 
-> **Status: interpolation implemented, `dbg` proposed.** Interpolation goes through `ToString` as [Interpolation through a context](#interpolation-through-a-context) describes ([#330](https://github.com/nanyx-lang/nanyx/issues/330)); the user-facing description is on the [contexts page](../advanced/contexts#tostringa). `dbg` printing any value is not done yet ([#331](https://github.com/nanyx-lang/nanyx/issues/331)). See [Open questions](#open-questions) at the end for what remains open.
+> **Status: implemented.** Interpolation goes through `ToString` as [Interpolation through a context](#interpolation-through-a-context) describes ([#330](https://github.com/nanyx-lang/nanyx/issues/330)); the user-facing description is on the [contexts page](../advanced/contexts#tostringa). `dbg` prints any value ([#331](https://github.com/nanyx-lang/nanyx/issues/331)), as [its entry](../stdlib/io#dbg) describes. See [Open questions](#open-questions) at the end for what remains open.
 
 Nanyx turns values into text in two places: string interpolation, `"Total: {total}"`, and [`dbg`](../stdlib/io#dbg). They serve different readers, so they follow different rules.
 
@@ -15,7 +15,7 @@ This is the same split as Rust's `Display` and `Debug`, or Python's `__str__` an
 
 # How it works today
 
-Each interpolation hole is checked through `ToString`, as the rest of this page describes. `dbg` still prints only what the backend can print from a value's type: integers, floats, strings, booleans and tags whose payload is one of those. A function prints as `<function>`.
+Each interpolation hole is checked through `ToString`, as the rest of this page describes. `dbg` prints any value from its type, as [dbg prints any value](#dbg-prints-any-value) describes.
 
 # Interpolation through a context
 
@@ -92,24 +92,11 @@ Each hole is a call to a function the type checker has already chosen, so the ba
 
 # dbg prints any value
 
-`dbg` keeps its type, `[Console] a -> a`, and needs no `ToString`. After monomorphisation every call to it is at a concrete type, so the compiler generates a printer for each type it is used at, from the type checker's types.
+`dbg` keeps its type, `[Console] a -> a`, and needs no `ToString`. The backend lowers generic code at the concrete types it is used at, so every call to `dbg` is at a concrete type, and the backend generates a printer for each type `dbg` prints, from the type the type checker resolved (`Nanyx.Compiler.Wasm/CoreIrLowerDbg.fs`). Each part of a structure is written by the printer of its own type, so one type that holds itself is written by one printer that calls itself. What each type prints as is on [`dbg`'s entry](../stdlib/io#dbg).
 
-| Value | Printed |
-| --- | --- |
-| `42`, `1.5`, `true` | `42`, `1.5`, `true` |
-| `"Ada"` | `"Ada"`, quoted and escaped |
-| `#some(5)` | `#some(5)` |
-| `[1, 2]` | `[1, 2]` |
-| `(name = "Ada", age = 36)` | `(name = "Ada", age = 36)` |
-| `(1, "a")` | `(1, "a")` |
-| `()` | `()` |
-| a `$Money` | `$Money(250)` |
-| a function | `<function int -> string>` |
-
-`dbg` shows what a value is, not how its type chooses to present itself, so it ignores any `ToString`. That keeps its output predictable when chasing a bug.
+`dbg` shows what a value is, not how its type chooses to present itself, so it ignores any `ToString`. That keeps its output predictable when chasing a bug. For the same reason a protected type prints its shape, `$UserId(42)`, outside its home module as well as in it. That breaks no invariant, since invariants are about construction and no code can read what `dbg` prints, and `dbg` is a tool for the programmer.
 
 # Open questions
 
-- **Protected types in `dbg`.** Outside its home module, does `dbg` print a protected value's shape, `$UserId(42)`, or only its name, `$UserId(…)`? Printing the shape breaks no invariant, since invariants are about construction and no code can read what `dbg` prints, but it shows a structure the type means to hide. The current leaning is to print the shape, because `dbg` is a tool for the programmer.
 - **The name.** `ToString` matches its member and reads plainly. `Show` (Haskell) and `Display` (Rust) are the alternatives.
 - **Formatting.** Do precision and padding belong in the hole, as in `"{price:.2}"`, in separate functions such as `string.padStart`, or in a richer context than `ToString`?

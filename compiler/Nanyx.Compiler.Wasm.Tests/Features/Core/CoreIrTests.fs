@@ -43,11 +43,19 @@ let ``Every function goes through the core IR`` () =
     Assert.Equal<string list>([ "add"; "classify"; "size" ], report.Functions)
 
 [<Fact>]
-let ``Printing a record is a compile error`` () =
-    // `dbg` prints no record yet (#331).
+let ``A type that holds itself at other type arguments is a compile error`` () =
+    let source =
+        """
+type Nest(a) = #leaf(a) | #deeper(Nest(list(a)))
+
+def depth: Nest(int) -> int = { t -> 1 }
+"""
     Assert.Equal(
-        "The WebAssembly backend cannot compile `dbg` of a value of type (0: int, 1: int) yet",
-        backendError "def shout: (int, int) -> (int, int) = { t -> dbg(t) }\n")
+        "The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet",
+        backendError (source.ReplaceLineEndings "\n"))
+
+/// The functions in `report` but the printers `dbg` prints through.
+let private withoutPrinters (functions: string list) = functions |> List.filter (fun name -> not (name.StartsWith "__dbg_"))
 
 [<Fact>]
 let ``A generic function is emitted once per instantiation`` () =
@@ -178,10 +186,12 @@ let ``Interpolated strings and dbg go through the core IR`` () =
         "  n\n" +
         "}\n"
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "pick"; "describe"; "nested"; "debugs" ], report.Functions)
+    Assert.Equal<string list>([ "pick"; "describe"; "nested"; "debugs" ], withoutPrinters report.Functions)
     // A string inside another's hole keeps to its own hole locals.
     Assert.Contains("local.set $__interp_hole_1_0", wat)
-    Assert.Contains("call $dbg_tag_payload_some", wat)
+    // Each value is printed through the printer of its type.
+    for printer in [ "__dbg_show_int"; "__dbg_show_string"; "__dbg_show_tag_ok"; "__dbg_show_tag_some_int"; "__dbg_show_tags_yes_no" ] do
+        Assert.Contains(printer, report.Functions)
 
 [<Fact>]
 let ``Lambdas, closures and function values go through the core IR`` () =
@@ -258,7 +268,7 @@ let ``Floats, pipes, guards and for loops go through the core IR`` () =
         "  0\n" +
         "}\n"
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "area"; "size"; "double"; "total" ], report.Functions)
+    Assert.Equal<string list>([ "area"; "size"; "double"; "total" ], withoutPrinters report.Functions)
     Assert.Contains("loop $__for_next_0", wat)
     Assert.Contains("f64.mul\n    call $__nanyx_float_box", wat)
 
@@ -275,7 +285,7 @@ let ``The start function and errors deferred to run time go through the core IR`
         "dbg(broken(2))\n"
     let result = Compiler.compile source
     let wat, report = transpileTypedModuleWithReport result.Typed.Value
-    Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], report.Functions)
+    Assert.Equal<string list>([ "broken"; "fine"; "__nanyx_start" ], withoutPrinters report.Functions)
     Assert.Contains("call $proc_exit\n    unreachable", wat)
     Assert.Contains("(start $__nanyx_start)", wat)
 

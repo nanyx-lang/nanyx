@@ -29,7 +29,7 @@ let ``Run - dbg prints integers, strings and tags in order`` () =
         "}\n" +
         "\n" +
         "main()\n"
-    runSource source |> assertRan "dbg: 42\ndbg: -7\ndbg: text\ndbg: #ok\ndbg: #some(5)\ndone\n"
+    runSource source |> assertRan "dbg: 42\ndbg: -7\ndbg: \"text\"\ndbg: #ok\ndbg: #some(5)\ndone\n"
 
 [<Fact>]
 let ``Run - dbg prints a tag-typed value by its tag and payload`` () =

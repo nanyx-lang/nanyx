@@ -14,7 +14,7 @@ let rec storesBeforeValue (expr: Expression) =
     | ExpressionKind.Match _ -> true
     | IfExpr(cond, _, _) -> storesBeforeValue cond
     | BinaryOp(_, left, right) -> storesBeforeValue left || storesBeforeValue right
-    // `dbg` of a tag value stores it in a hole local, as an interpolated string does, and a loop stores its elements.
+    // `dbg` holds its value in a local while it prints it, and a loop stores its elements.
     | FunctionCall("dbg", _, _)
     | FunctionCall("__for", _, _) -> true
     // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).

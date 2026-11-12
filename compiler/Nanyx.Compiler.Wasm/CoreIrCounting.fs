@@ -52,8 +52,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     // table slot after the arguments, so the closure counts as used last.
     | CallClosure(closure, args) -> all Owned args @ [ AVar closure, Owned ]
     | Interpolate parts -> parts |> List.choose (function Hole(hole, _) -> Some(AVar hole, Borrowed) | Text _ -> None)
-    // `dbg` leaves the value it prints, or puts it in the cell of the tag it prints.
-    | Dbg(value, _) -> [ value, Owned ]
+    | Dbg text -> [ text, Borrowed ]
     | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
     | If(cond, _, _) -> [ cond, Borrowed ]
     | BoxFloat _

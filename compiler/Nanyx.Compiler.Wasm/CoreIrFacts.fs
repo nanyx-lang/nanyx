@@ -1,5 +1,5 @@
 /// What a module needs besides its functions, worked out from the core IR it is emitted from: the tags it numbers,
-/// the string literals in its data segment, and what `dbg` needs from the host.
+/// the string literals in its data segment, and whether `dbg` prints.
 module Transpiler.Wasm.CoreIrFacts
 
 open System.Collections.Generic
@@ -10,19 +10,13 @@ type ModuleFacts =
       Tags: string list
       /// Every string the emitter asks the data-segment offset of, in the order the functions' IR first names them.
       Strings: string list
-      /// Whether some `dbg` prints through `$dbg` or `$dbg_str`.
-      UsesDbgHelpers: bool
-      /// The tags a `dbg` of a tag literal without a payload prints, each through a host function, sorted by name.
-      DbgTags: string list
-      /// The tags a `dbg` of a tag literal with a payload prints, each through a host function, sorted by name.
-      DbgTagPayloads: string list }
+      /// Whether some `dbg` prints through `$dbg_str`.
+      UsesDbgHelpers: bool }
 
 /// The facts of a module made of `functions`.
 let collect (functions: Function list) : ModuleFacts =
     let tags = HashSet<string>()
     let strings = ResizeArray<string>()
-    let dbgTags = HashSet<string>()
-    let dbgTagPayloads = HashSet<string>()
     let usesDbgHelpers = ref false
 
     // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
@@ -90,21 +84,9 @@ let collect (functions: Function list) : ModuleFacts =
             updates |> List.iter (snd >> atom)
         | Interpolate parts ->
             parts |> List.iter (function Hole(_, ty) -> holeType ty | Text _ -> ())
-        | Dbg(value, form) ->
-            atom value
-            match form with
-            | DbgNumber _
-            | DbgString _
-            | DbgFloat _ -> usesDbgHelpers.Value <- true
-            | DbgTag(name, _) ->
-                tags.Add name |> ignore
-                dbgTags.Add name |> ignore
-            | DbgTagPayload(name, _) ->
-                tags.Add name |> ignore
-                dbgTagPayloads.Add name |> ignore
-            | DbgTagValue(_, ty, _) ->
-                holeType ty
-                usesDbgHelpers.Value <- true
+        | Dbg text ->
+            atom text
+            usesDbgHelpers.Value <- true
         | BoxFloat _ -> ()
         | Panic messages -> strings.AddRange messages
         | ForEach loop ->
@@ -136,9 +118,6 @@ let collect (functions: Function list) : ModuleFacts =
     for func in functions do
         expr func.Body
 
-    let sorted (names: HashSet<string>) = names |> Seq.sort |> List.ofSeq
-    { Tags = sorted tags
+    { Tags = tags |> Seq.sort |> List.ofSeq
       Strings = strings |> Seq.distinct |> List.ofSeq
-      UsesDbgHelpers = usesDbgHelpers.Value
-      DbgTags = sorted dbgTags
-      DbgTagPayloads = sorted dbgTagPayloads }
+      UsesDbgHelpers = usesDbgHelpers.Value }

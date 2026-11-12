@@ -16,7 +16,7 @@ type RunError =
 type ProgramIo =
     /// This process's own stdin, stdout and stderr.
     | Inherited
-    /// Stdin is the file `input`. What the program writes to stdout, `dbg` of a tag included, goes to `output`, and
+    /// Stdin is the file `input`. What the program writes to stdout goes to `output`, and
     /// what it writes to stderr goes to `error`, each in the order it was written. Tests use this to run a program in
     /// their own process.
     | Redirected of input: string * output: IO.Stream * error: IO.Stream
@@ -24,37 +24,9 @@ type ProgramIo =
 /// Runs WebAssembly text emitted by the Nanyx backend on an embedded Wasmtime engine.
 ///
 /// The backend turns top-level expressions into a WebAssembly start function, so instantiating the module
-/// runs the program. The program's output goes to its stdout (see `ProgramIo`): through WASI `fd_write` for
-/// `nanyx/console` (the `__nanyx_write_stdout` intrinsic) and `dbg` of strings and integers, and through
-/// host functions for the `env.dbg_tag_*` imports that `dbg(#tag)` emits.
+/// runs the program. The program's output goes to its stdout (see `ProgramIo`) through WASI `fd_write`, from
+/// `nanyx/console` (the `__nanyx_write_stdout` intrinsic) and from `dbg`.
 module WasmRunner =
-    let private stripImportPrefix (prefix: string) (name: string) = name.Substring prefix.Length
-
-    /// Writes `line` to the program's stdout, ended with a bare "\n" to match WASI's output byte for byte, never the
-    /// platform newline.
-    let private writeLine (io: ProgramIo) (line: string) =
-        match io with
-        | Inherited ->
-            Console.Out.Write(line + "\n")
-            Console.Out.Flush()
-        | Redirected(_, output, _) -> output.Write(Text.Encoding.UTF8.GetBytes(line + "\n"))
-
-    /// Defines a host function for each `env` import the module declares.
-    let private defineHostImports (io: ProgramIo) (linker: Linker) (module': Module) =
-        for import in module'.Imports do
-            match import with
-            | :? FunctionImport as fn when fn.ModuleName = "env" ->
-                let name = fn.Name
-                if name.StartsWith "dbg_tag_payload_" then
-                    let tag = stripImportPrefix "dbg_tag_payload_" name
-                    linker.DefineFunction(fn.ModuleName, name, Action<int>(fun payload -> writeLine io $"dbg: #{tag}({payload})"))
-                elif name.StartsWith "dbg_tag_" then
-                    let tag = stripImportPrefix "dbg_tag_" name
-                    linker.DefineFunction(fn.ModuleName, name, Action(fun () -> writeLine io $"dbg: #{tag}"))
-                else
-                    failwith $"The program imports an unknown host function: env.{name}"
-            | _ -> ()
-
     /// Writes the buffers of the `count` WASI iovecs at `iovecs` in `memory` to `stream`, and gives how many bytes that
     /// was.
     let private writeIovecs (memory: Memory) (iovecs: int) (count: int) (stream: IO.Stream) =
@@ -70,7 +42,7 @@ module WasmRunner =
     let private badFileDescriptor = 8
 
     /// Sets up the program's standard streams. Redirected output is written by a `fd_write` of our own, in place of
-    /// WASI's, so that it lands in the same stream as the `dbg` host functions' output and in the same order.
+    /// WASI's, so that it lands in the caller's streams.
     let private configureIo (io: ProgramIo) (linker: Linker) (store: Store) =
         match io with
         | Inherited ->
@@ -113,7 +85,6 @@ module WasmRunner =
             linker.DefineWasi()
             configureIo io linker store
             try
-                defineHostImports io linker module'
                 let instance = linker.Instantiate(store, module')
                 // A program with no top-level code has no start function to export.
                 match start |> Option.map instance.GetAction with
