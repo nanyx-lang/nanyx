@@ -94,3 +94,35 @@ let ``Counting - a loop over lists in step frees them`` () =
         "}\n" +
         loop
     assertRunsInConstantMemory source
+// `series` borrows `r`, which its tail call passes on unchanged, and owns `term`, which it gives up. A caller that
+// passes one variable as both, or reads it again in a later argument, keeps it alive until the call is done.
+let private series =
+    """def series: float, float, float, int -> float = { r, term, sum, k ->
+  if k > 20 then sum else series(r, term * r / int.toFloat(k + 1), sum + term, k + 1)
+}
+"""
+
+[<Fact>]
+let ``Counting - a variable passed to a borrowed and an owned parameter lives until the call is done`` () =
+    let callers =
+        """def withItself: float -> float = { z ->
+  def r = z - 0.5
+  series(r, r, 0.0, 1)
+}
+def withASquare: float -> float = { z ->
+  def r = z - 0.5
+  series(r, r * r / 2.0, 0.0, 2)
+}
+println("{withItself(1.0)} {withASquare(1.0)}")
+"""
+    runSource ("import nanyx/console\n" + series + callers) |> assertRan "0.6487212707001281 0.14872127070012814\n"
+
+[<Fact>]
+let ``Counting - a variable passed to a borrowed and an owned parameter is freed`` () =
+    let step =
+        """def step: int -> int = { i ->
+  def r = int.toFloat(i % 3) / 4.0
+  if series(r, r, 0.0, 1) + series(r, r * r / 2.0, 0.0, 2) > 0.5 then 1 else 0
+}
+"""
+    assertRunsInConstantMemory (series + step + loop)

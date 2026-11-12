@@ -6,9 +6,41 @@ order: 9
 
 The `math` module provides common numeric and floating-point operations.
 
-Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs` and `pow` accept either without conversion. `min`, `max` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
+Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs`, `sign` and `pow` accept either without conversion. `min`, `max` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
 
 `floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
+
+# pi
+
+```nanyx
+math.pi: float
+```
+
+The ratio of a circle's circumference to its diameter, as near as a `float` holds it.
+
+```nanyx
+math.pi
+-- 3.141592653589793
+
+def area: float -> float = { r -> math.pi * r * r }
+```
+
+---
+
+# e
+
+```nanyx
+math.e: float
+```
+
+The base of the natural logarithm, as near as a `float` holds it. `math.exp(1.0)` is exactly `math.e`.
+
+```nanyx
+math.e
+-- 2.718281828459045
+```
+
+---
 
 # abs
 
@@ -21,6 +53,25 @@ math.abs(-42)
 -- 42
 math.abs(-2.5)
 -- 2.5
+```
+
+---
+
+# sign
+
+```nanyx
+math.sign: [Num(a) & Ord(a)] a -> a
+```
+
+`-1`, `0` or `1`, of the argument's type, as the value is below zero, zero, or above it. Negative zero is zero, so `math.sign(-0.0)` is `0.0`.
+
+```nanyx
+math.sign(-7)
+-- -1
+math.sign(0)
+-- 0
+math.sign(2.5)
+-- 1.0
 ```
 
 ---
@@ -89,6 +140,46 @@ math.sqrt(81.0)
 
 ---
 
+# exp
+
+```nanyx
+math.exp: float -> float
+```
+
+`e ** x`. It is infinity above about 709.8, and `0.0` below about -745.2.
+
+```nanyx
+math.exp(0.0)
+-- 1.0
+math.exp(1.0)
+-- 2.718281828459045
+```
+
+---
+
+# ln
+
+```nanyx
+math.ln: float -> float
+```
+
+The natural logarithm: the power `e` is raised to to give the value. It is minus infinity at zero, and NaN below zero.
+
+```nanyx
+math.ln(1.0)
+-- 0.0
+math.ln(math.e)
+-- 1.0
+math.ln(0.0)
+-- -Infinity
+math.ln(-1.0)
+-- NaN
+```
+
+`exp` and `ln` are computed from their series, as WebAssembly has neither: a result can be one unit in the last place from the nearest `float`.
+
+---
+
 # pow
 
 ```nanyx
@@ -113,10 +204,10 @@ float.pow: (float, float) -> float
 
 ```nanyx
 float.pow(2.0, 0.5)
--- 1.414213562373095
+-- 1.4142135623730951
 ```
 
-A whole exponent gives exactly what `**` does; any other is computed as `e ** (y * ln(x))`, so a negative base gives NaN.
+A whole exponent gives exactly what `**` does; any other is computed as `math.exp(y * math.ln(x))`, so a negative base gives NaN.
 
 ---
 

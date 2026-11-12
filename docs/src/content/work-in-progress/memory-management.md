@@ -298,7 +298,11 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   arm does not use, and, inside a `for` loop's body or a guard, every variable from outside it. Each instruction
   either takes an operand over (a call that owns the parameter, a field of a new object, a value returned, `dbg`)
   or borrows it (a field read, an operator, a runtime helper): a variable is duplicated where it is taken over and
-  still used after, and dropped after the instruction that used it last if that one only borrowed it.
+  still used after, and dropped after the instruction that used it last if that one only borrowed it. An
+  instruction reads what it borrows when it runs, after all its operands are evaluated, so a variable it borrows
+  counts as used until then: an operand after it that takes it over (`f(x, x)` with the first parameter borrowed)
+  gets a reference of its own, a temporary after it (`f(x, x * x)`) does not drop it, and the variable is dropped
+  once the instruction is done.
 - **Temporaries are counted where they are used.** A temporary's value is computed where it is used (see Generating
   code), so its value is analysed there, in the order the operands are evaluated. A temporary an instruction only
   borrows is kept in a local as it is pushed (`local.tee`), and dropped after the instruction.

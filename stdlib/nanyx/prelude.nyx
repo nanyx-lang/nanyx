@@ -264,8 +264,8 @@ def expSeries: float, float, float, int -> float = { r, term, sum, k ->
   if k > 20 then sum else expSeries(r, term * r / int.toFloat(k + 1), sum + term, k + 1)
 }
 
---| `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`.
-def floatExp: float -> float = { z ->
+--| `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`. `nanyx/math` gives it as `math.exp`.
+export def __floatExp: float -> float = { z ->
   if z != z
     then z
     else if z > 709.8
@@ -275,9 +275,15 @@ def floatExp: float -> float = { z ->
         else expAround(z, __nanyx_float_floor(z / 0.6931471805599453 + 0.5))
 }
 
---| `e ** z`, for `n` the number of `ln(2)`s nearest `z`.
+--| `e ** z`, for `n` the number of `ln(2)`s nearest `z`. As in fdlibm, `r` is `z - n * ln(2)` held as
+  `hi - lo`, with `ln(2)` split so that `hi` is exact. `e ** r` is `(1 + hi) + (q - lo)`, with `q`
+  the series from `r ** 2 / 2` on: of the ways to add them up, it is the one most often the float
+  nearest, and `e ** 1.0` is the float nearest `e`.
 def expAround: float, float -> float = { z, n ->
-  scaleByTwos(expSeries(z - n * 0.6931471805599453, 1.0, 0.0, 0), __nanyx_float_to_int(n))
+  def hi = z - n * 0.6931471803691238
+  def lo = n * 0.00000000019082149292705877
+  def r = hi - lo
+  scaleByTwos(1.0 + hi + (expSeries(r, r * r / 2.0, 0.0, 2) - lo), __nanyx_float_to_int(n))
 }
 
 --| The sum of the series for `atanh(t)`, from the term `term` (which is `t ** (2k + 1)`) on, with
@@ -299,8 +305,8 @@ def lnOfReduced: float, int -> float = { m, k ->
   2.0 * atanhSeries(t, t * t, 0.0, 0) + int.toFloat(k) * 0.6931471805599453
 }
 
---| The natural logarithm of `x`: minus infinity at zero, and NaN below it.
-def floatLn: float -> float = { x ->
+--| The natural logarithm of `x`: minus infinity at zero, and NaN below it. `nanyx/math` gives it as `math.ln`.
+export def __floatLn: float -> float = { x ->
   if x != x or x < 0.0
     then 0.0 / 0.0
     else if x == 0.0 then -1.0 / 0.0 else if x == 1.0 / 0.0 then x else lnScaled(x, 0)
@@ -314,7 +320,7 @@ export def float.pow: float, float -> float = { x, y ->
 
   if whole == y and y < 2147483648.0 and y > -2147483648.0
     then x ** __nanyx_float_to_int(whole)
-    else floatExp(y * floatLn(x))
+    else __floatExp(y * __floatLn(x))
 }
 
 -- Reading floats --------------------------------------------------------------------------------

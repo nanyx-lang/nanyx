@@ -324,11 +324,21 @@ type private Counter(ownership: Ownership, func: Function) =
     member private this.Operands (owned: Set<int>) (after: Set<int>) (items: (Atom * Use) list) : Var list * Var list =
         let dups = ResizeArray<Var>()
         let drops = ResizeArray<Var>()
+        // The instruction reads what it borrows when it runs, after every operand is evaluated, so a variable it borrows
+        // lives until then: an operand evaluated after it (a temporary, or an owned use) cannot take its last reference.
+        let borrowedLater =
+            items
+            |> List.choose (function
+                | AVar var, Borrowed when var.Kind <> Temp && isHeapType var.Type -> Some var
+                | _ -> None)
+            |> List.distinctBy _.Id
+        let borrowedIds = borrowedLater |> List.map _.Id |> Set.ofList
         let rec go (owned: Set<int>) (remaining: (Atom * Use) list) =
             match remaining with
             | [] -> ()
             | (atom, how) :: rest ->
-                let afterThis = Set.union (rest |> List.map (fst >> this.FreeIn) |> Set.unionMany) after
+                let afterRest = Set.union (rest |> List.map (fst >> this.FreeIn) |> Set.unionMany) after
+                let afterThis = Set.union afterRest borrowedIds
                 match atom with
                 | AVar temp when temp.Kind = Temp ->
                     let value = temps.[temp.Id]
@@ -338,10 +348,18 @@ type private Counter(ownership: Ownership, func: Function) =
                     let diesHere = owned.Contains var.Id && not (afterThis.Contains var.Id)
                     match how with
                     | Owned -> if not diesHere then dups.Add var
-                    | Borrowed -> if diesHere then drops.Add var
+                    | Borrowed -> if owned.Contains var.Id && not (afterRest.Contains var.Id) then drops.Add var
                 | _ -> ()
                 go (Set.intersect owned afterThis) rest
         go owned items
+        // A variable borrowed, and last read by an operand evaluated after it (a temporary, or an owned use, which took
+        // a reference of its own), is dropped once the instruction is done.
+        for var in borrowedLater do
+            let droppedWhereRead =
+                match items |> List.findBack (fun (atom, _) -> this.FreeIn atom |> Set.contains var.Id) with
+                | AVar last, Borrowed -> last.Id = var.Id
+                | _ -> false
+            if not droppedWhereRead && owned.Contains var.Id && not (after.Contains var.Id) then drops.Add var
         List.ofSeq dups, List.ofSeq drops
 
     member private _.Wrap (dups: Var list) (drops: Var list) (e: Expr) : Expr =

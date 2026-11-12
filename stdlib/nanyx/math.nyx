@@ -2,20 +2,36 @@ module math
 
 -- nanyx/math: numeric utilities.
 --
--- `abs` and `pow` are generic over the `Num(a)` context, so they take an `int` or a `float`. `abs`, `min`,
--- `max` and `clamp` compare through `Ord(a)`, so the last three take a value of any type that has an order,
--- a `string` among them. `sqrt`, `floor`, `ceil`, `round` and `truncate`
--- take a `float`, and are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
--- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`.
+-- `abs`, `sign` and `pow` are generic over the `Num(a)` context, so they take an `int` or a `float`. `abs`,
+-- `sign`, `min`, `max` and `clamp` compare through `Ord(a)`, so the last three take a value of any type that
+-- has an order, a `string` among them. `sqrt`, `exp`, `ln`, `floor`, `ceil`, `round` and `truncate` take a
+-- `float`. `exp` and `ln` are the prelude's `__floatExp` and `__floatLn`, which `float.pow` is written with;
+-- the others are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
+-- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`. `pi` and `e` are constants.
 --
 -- Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified
 -- to call `abs(x)`.
+
+--| The ratio of a circle's circumference to its diameter, as near as a `float` holds it.
+export def pi: float = 3.141592653589793
+
+--| The base of the natural logarithm, as near as a `float` holds it, so `exp(1.0)` is `e`.
+export def e: float = 2.718281828459045
 
 --| `n` without its sign. A value that is neither below nor above `zero` is `zero`, so `abs(-0.0)` is `0.0`.
 export def abs: [Num(a) & Ord(a)] a -> a = { n ->
   match compare(n, zero)
     | #less -> -n
     | #greater -> n
+    | #equal -> zero
+}
+
+--| `-1`, `0` or `1`, of the type of `n`, as `n` is below, neither below nor above, or above `zero`:
+  `sign(-2.5)` is `-1.0` and `sign(-0.0)` is `0.0`.
+export def sign: [Num(a) & Ord(a)] a -> a = { n ->
+  match compare(n, zero)
+    | #less -> -fromInt(1)
+    | #greater -> fromInt(1)
     | #equal -> zero
 }
 
@@ -44,6 +60,18 @@ export def pow: [Num(a)] a, int -> a = { base, exponent ->
 --| The square root of `x` (NaN when `x` is negative).
 export def sqrt: float -> float = { x ->
   __nanyx_float_sqrt(x)
+}
+
+--| `e ** x`: `exp(0.0)` is `1.0` and `exp(1.0)` is `e`. It is infinity above about 709.8 and `0.0` below
+  about -745.2.
+export def exp: float -> float = { x ->
+  __floatExp(x)
+}
+
+--| The natural logarithm of `x`, the power `e` is raised to to give `x`: `ln(e)` is `1.0` and `ln(1.0)` is
+  `0.0`. It is minus infinity at zero, and NaN below it.
+export def ln: float -> float = { x ->
+  __floatLn(x)
 }
 
 -- The functions below give an `int`. A float that is NaN, infinite or out of the range of `int` stops the
