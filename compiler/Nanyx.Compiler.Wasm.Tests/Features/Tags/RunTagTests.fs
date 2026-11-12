@@ -53,7 +53,7 @@ let ``Run - a tag union rest passes the tags a match does not name through`` () 
     let source =
         "import nanyx/console\n" +
         "\n" +
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n" +
@@ -66,8 +66,8 @@ let ``Run - a tag union rest passes the tags a match does not name through`` () 
         "def main = {\n" +
         "  def x: (#some(int) | #notFound | #error) = #some(20)\n" +
         "  def y: (#some(int) | #notFound | #error) = #error\n" +
-        "  println(show(mapOption(x, { n -> \"{n + 1}\" })))\n" +
-        "  println(show(mapOption(y, { n -> \"{n + 1}\" })))\n" +
+        "  println(show(mapSome(x, { n -> \"{n + 1}\" })))\n" +
+        "  println(show(mapSome(y, { n -> \"{n + 1}\" })))\n" +
         "}\n"
     runSource source |> assertRan "21\nerror\n"
 

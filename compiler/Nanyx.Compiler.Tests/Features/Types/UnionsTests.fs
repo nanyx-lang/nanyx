@@ -38,12 +38,12 @@ let ``A function that takes a wider union can be given where one that takes a na
 [<Fact>]
 let ``Typecheck supports tag union rest parameter`` () =
     let source =
-        "def mapOption: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
+        "def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
         "  match o\n" +
         "  | #some(v) -> #some(f(v))\n" +
         "  | other -> other\n" +
         "}\n" +
-        "def result = mapOption(#some(1), { x -> x })"
+        "def result = mapSome(#some(1), { x -> x })"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -53,7 +53,7 @@ let ``Typecheck supports tag union rest parameter`` () =
 [<Fact>]
 let ``Typecheck requires catch-all for tag union rest`` () =
     let source =
-        "def mapOption: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
+        "def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
         "  match o\n" +
         "  | #some(v) -> #some(f(v))\n" +
         "}\n"
@@ -68,14 +68,14 @@ let ``Typecheck tag union width and rest regression`` () =
         "def u: #some(string) | #nil = #nil\n" +
         "def g: (#some(string) | #nil | #notFound) -> string = { o -> \"\" }\n" +
         "def _ = g(u)\n" +
-        "def mapOption: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
+        "def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->\n" +
         "  match o\n" +
         "  | #some(v) -> #some(f(v))\n" +
         "  | other -> other\n" +
         "}\n" +
         "def l: #some(string) | #nil = #some(\"\")\n" +
         "def mapper: string -> int = { s -> 1 }\n" +
-        "def l2 = l \\mapOption(mapper)"
+        "def l2 = l \\mapSome(mapper)"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
@@ -167,16 +167,16 @@ let ``A match arm whose type is an annotation's variable is not made a union`` (
 let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
     // `other` cannot be a `#some`, so it is the rest `r`: returning it does not force `a` and `b` together.
     let source =
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n" +
         "def x: #some(int) | #notFound | #error = #some(1)\n" +
-        "def y = mapOption(x, { n -> \"{n}\" })"
+        "def y = mapSome(x, { n -> \"{n}\" })"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typed = result.Typed.Value
-    match typed.Types.["mapOption"] with
+    match typed.Types.["mapSome"] with
     | TyFunc(TyRecord fields, TyUnion [ TyTag("some", Some (TyVar b)); TyVar resultRest ], _) ->
         match fields.["0"], fields.["1"] with
         | TyUnion [ TyTag("some", Some (TyVar a)); TyVar inputRest ], TyFunc(TyVar fa, TyVar fb, _) ->
@@ -184,25 +184,25 @@ let ``Typecheck binds a catch-all after a tag arm at the union's rest`` () =
             Assert.Equal(a.Id, fa.Id)
             Assert.Equal(b.Id, fb.Id)
             Assert.Equal(inputRest.Id, resultRest.Id)
-        | other -> Assert.True(false, $"Unexpected mapOption parameters: %A{other}")
-    | other -> Assert.True(false, $"Unexpected mapOption type: %A{other}")
+        | other -> Assert.True(false, $"Unexpected mapSome parameters: %A{other}")
+    | other -> Assert.True(false, $"Unexpected mapSome type: %A{other}")
     match typed.Types.["y"] with
     | TyUnion [ TyTag("some", Some (TyPrimitive "string")); TyTag("error", None); TyTag("notFound", None) ] -> ()
     | other -> Assert.True(false, $"Unexpected y type: %A{other}")
 
 [<Fact>]
 let ``Typecheck matches a call's result whose union rest is already solved`` () =
-    // `mapOption`'s result is `#some(b) | r`, but here `r` is `#notFound`, so naming both tags is exhaustive.
-    let mapOption =
-        "def mapOption\n" +
+    // `mapSome`'s result is `#some(b) | r`, but here `r` is `#notFound`, so naming both tags is exhaustive.
+    let mapSome =
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n" +
         "def x: #some(int) | #notFound = #notFound\n"
     let exhaustive =
-        mapOption +
+        mapSome +
         "def y = {\n" +
-        "  def a = x \\mapOption { n -> n + 1 }\n" +
+        "  def a = x \\mapSome { n -> n + 1 }\n" +
         "  match a\n" +
         "    | #some(n) -> n\n" +
         "    | #notFound -> 0\n" +
@@ -210,9 +210,9 @@ let ``Typecheck matches a call's result whose union rest is already solved`` () 
     let result = Compiler.compile exhaustive
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let missing =
-        mapOption +
+        mapSome +
         "def y = {\n" +
-        "  def a = x \\mapOption { n -> n + 1 }\n" +
+        "  def a = x \\mapSome { n -> n + 1 }\n" +
         "  match a\n" +
         "    | #some(n) -> n\n" +
         "}\n"
@@ -224,13 +224,13 @@ let ``Typecheck matches a call's result whose union rest is already solved`` () 
 let ``Typecheck rejects a tag union with a rest where a string is expected`` () =
     // The rest `r` stands for more tags, so it cannot make `#some(string) | r` a `string`.
     let source =
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n" +
         "def takesString: string -> string = { s -> s }\n" +
         "def x: #some(int) | #notFound = #notFound\n" +
-        "def y = takesString(x \\mapOption { n -> \"{n}\" })"
+        "def y = takesString(x \\mapSome { n -> \"{n}\" })"
     let result = Compiler.compile source
     Assert.False(result.Diagnostics.IsEmpty)
     Assert.Contains("mismatch", (List.head result.Diagnostics).Message)

@@ -560,7 +560,7 @@ module MatchHead =
     /// The head of the match `matchExpr` on `scrutinees`: what is reported for the match as a whole, rather than
     /// for one arm. That depends on how the match was written:
     /// - `match a | ...` is from `match` to the end of the last value matched on, so `match a`, or
-    ///   `match getData() \mapOption { ... }`.
+    ///   `match getData() \mapSome { ... }`.
     /// - `{ | pattern -> ... }`, and a `for` loop's arms, match on values made up over the whole match, arms and
     ///   all. Their head is the first character, the `{` or the first `|`.
     /// - A lambda's pattern parameters (`{ #some(n) -> n }`) match on values made up where the patterns are

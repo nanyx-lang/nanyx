@@ -43,7 +43,7 @@ export def verifyOptions: DecodingOptions -> #some(DecodingOptions) | #error(Opt
   if | options.beamSize != #none and options.bestOf != #none -> #error(#beamSizeAndBestOf)
      | options.temperature == 0.0 and options.bestOf != #none -> #error(#bestOfWithGreedySampling)
      | options.patience != #none and options.beamSize == #none -> #error(#patienceWithoutBeamSize)
-     | not (options.lengthPenalty \mapOrOption(true) { p -> p >= 0.0 and p <= 1.0 }) -> #error(#lengthPenaltyOutOfRange)
+     | not (options.lengthPenalty \mapSomeOr(true) { p -> p >= 0.0 and p <= 1.0 }) -> #error(#lengthPenaltyOutOfRange)
      | else -> #some(options)
 }
 

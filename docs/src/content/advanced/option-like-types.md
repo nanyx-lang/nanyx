@@ -13,7 +13,7 @@ Nanyx has a convention where any tag union that includes `#some(a)` is considere
 The function below accepts any union that contains `#some(a)` and transforms that value while leaving the rest of the union intact:
 
 ```nanyx
-def mapOption
+def mapSome
   : ((#some(a) | r), (a -> b)) -> (#some(b) | r)
   = { | #some(a), f -> #some(f(a))
       | other, _ -> other }
@@ -26,7 +26,7 @@ The type variable `r` represents all other tags in the union, allowing us to use
 ```nanyx
 def name: #some(string) | #none = ...
 
-def upper = name \mapOption { .toUpperCase }
+def upper = name \mapSome { .toUpperCase }
 ```
 
 # Works with results
@@ -34,7 +34,7 @@ def upper = name \mapOption { .toUpperCase }
 ```nanyx
 def value: #some(int) | #error(#notFound | #dbDown) = ...
 
-def doubled = value \mapOption { * 2 }
+def doubled = value \mapSome { * 2 }
 ```
 
 The error cases stay in the union, so you don’t lose information.

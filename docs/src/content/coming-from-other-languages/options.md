@@ -52,10 +52,10 @@ Code that already handles `#loading` and `#loaded` keeps working, and the new ca
 
 # Convention over a single type
 
-Nanyx still supports option-like values via the `#some` convention and functions like `mapOption` that preserve other tags:
+Nanyx still supports option-like values via the `#some` convention and functions like `mapSome` that preserve other tags:
 
 ```nanyx
-def mapOption
+def mapSome
   : ((#some(a) | r), (a -> b)) -> (#some(b) | r)
   = { | #some(a), f -> #some(f(a))
       | other, _ -> other }
