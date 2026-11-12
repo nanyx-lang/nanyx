@@ -37,6 +37,12 @@ need it first. This workstream fills it with content.
   that has one. A type mismatch is reported where the constraint that failed was made, which is not always where
   the conflicting types came from. A mismatch between two records or two tag unions names what only one of them
   has: `Tag union mismatch: only the first has #bad; only the second has #underflow.`
+- **A pipe that finds nothing to call says what it looked for** (`PipeLookups.fs`). On a value whose type is not
+  known yet, it names the attached definitions it could not choose between. On a known type, it says the type has
+  no such attached definition and no plain function has the name, and where the definition is if the pipe cannot
+  reach it: under an `as` alias (`'string.trim' is available as 't.string.trim'`), or in a standard library module
+  that is not imported (`'string.trim' is defined in 'nanyx/text'`). A definition two imports attach is
+  `NYX0106`, naming both modules.
 - **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
   and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
 - **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.

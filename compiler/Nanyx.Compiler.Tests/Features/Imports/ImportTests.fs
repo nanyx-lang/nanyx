@@ -160,7 +160,7 @@ let ``An attached name two imports define is ambiguous where it is used`` () =
           "two.nyx", "module two\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
     let result = compileImportingAll modules "module main\nimport one\nimport two\ndef a = \"x\" \\ shout"
     Assert.False(result.Diagnostics.IsEmpty)
-    Assert.Contains("'string.shout' is ambiguous between 'one.string.shout' and 'two.string.shout'", (result.Diagnostics |> List.head).Message)
+    Assert.Contains("'string.shout' is defined in 'one' and 'two'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Import does not bring private definitions into scope`` () =

@@ -1853,6 +1853,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             else
             match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
             | Ok (typedCall, finalState) ->
+                // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
+                // than one of, is the pipe's, which says what the pipe looked for.
+                let finalState =
+                    match finalState.FailedExprs with
+                    | (id, diagnostics) :: rest when id = expr.Id && rest.Length = nextState.FailedExprs.Length ->
+                        let isTypeName typeName =
+                            (nextState.TypeDefs.ContainsKey typeName && not (nextState.HiddenTypeNames.Contains typeName))
+                            || isBuiltInTypeName typeName
+                        let lookup : PipeLookups.Lookup =
+                            { PipedType = valueTy; AttachedUnder = attachedTypeNames valueTy; Written = name; Called = resolvedName; At = nameSpan spanOpt expr }
+                        { finalState with FailedExprs = (id, PipeLookups.explain env nextState isTypeName lookup diagnostics) :: rest }
+                    | _ -> finalState
                 Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
             | Error err -> Error err
     | UseIn(value, body) ->

@@ -1020,7 +1020,13 @@ module Compiler =
                 | StandardLibraryModule _ -> Intrinsics.typeEnv
                 | SourceFile _
                 | InMemory -> TypeEnv.empty
-            let mutable state = { NyxCompiler.Infer.emptyState with Declared = declared; ModuleBlocks = moduleBlocks; WorkflowZeros = zeros; Home = origin }
+            let mutable state =
+                { NyxCompiler.Infer.emptyState with
+                    Declared = declared
+                    ModuleBlocks = moduleBlocks
+                    WorkflowZeros = zeros
+                    Home = origin
+                    StandardLibraryExports = ImportFixes.standardLibraryExportPaths }
             let mutable errors: Diagnostic list = []
             let mutable inlined: TopLevelItem list = []
             // Kept apart and inlined last, so that where an explicit import defines the same name, its definition is kept.

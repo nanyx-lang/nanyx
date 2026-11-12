@@ -26,6 +26,10 @@ module ImportFixes =
             |> List.map (fun (name, pairs) -> name, pairs |> List.map snd |> List.distinct)
             |> Map.ofList)
 
+    /// `standardLibraryExports` with each module named by its import path, as `nanyx/text`.
+    let standardLibraryExportPaths : Lazy<Map<string, string list>> =
+        lazy (standardLibraryExports.Value |> Map.map (fun _ modules -> modules |> List.map ((+) StandardLibrary.importPrefix)))
+
     /// A name as it is written in source: identifiers joined by dots.
     let private writtenName = Regex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
