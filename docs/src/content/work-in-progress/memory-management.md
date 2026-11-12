@@ -6,7 +6,7 @@ order: 25
 
 > **Status: implemented** in the WebAssembly backend. This page designs how compiled Nanyx programs free memory. It
 > is part of the [compilation](./compilation) workstream, and its issues carry the `compilation` and `wasm backend`
-> labels. Tracked in [#296](https://github.com/nanyx-lang/nanyx/issues/296). The user-facing account is
+> labels. The user-facing account is
 > [Reference counting](../foundations/reference-counting).
 
 # Summary

@@ -8,10 +8,11 @@ The pages from here to the end of this section are the design of the compiler an
 what is decided and what is still open. They change as the work does, so they say where the code is as well as where
 it is going. Anyone who changes something one of them describes updates the page in the same pull request.
 
-Work on the compiler and its tools is split into workstreams. Each has a page here, a label on its issues, and a
-tracking issue with the plan as a checklist. The
-[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1) shows all of them on one board,
-with a Stream field. An issue that serves several workstreams is placed under the one that tracks it.
+Work on the compiler and its tools is split into workstreams. Each has a page here and a label on its issues.
+There are no tracking issues. The
+[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1) holds every open issue on one board.
+Its Stream field places an issue in the workstream it mostly serves. Its Priority field (Next, Soon, Later) orders
+the backlog: work is taken from Next first.
 
 | Workstream | Design | Label |
 |------------|--------|-------|
@@ -30,6 +31,5 @@ The compilation workstream has pages of its own for the larger pieces of its des
 [the standard library's implementation](./standard-library-implementation).
 [The `nanyx` command](./command-line) lists what the CLI does today.
 
-An issue that serves more than one workstream gets every label that applies, and appears in each tracking
-issue. The finer labels (`parser`, `type checker`, `wasm backend`) say which part of the compiler an issue is in,
+An issue that serves more than one workstream gets every label that applies. The finer labels (`parser`, `type checker`, `wasm backend`) say which part of the compiler an issue is in,
 and are used alongside the workstream label.

@@ -4,7 +4,7 @@ description: "Who can publish under a package name, what the lockfile records, a
 order: 6
 ---
 
-> **Status: proposal.** None of this is implemented. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work is tracked in [#207](https://github.com/nanyx-lang/nanyx/issues/207), and the package index in [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
+> **Status: proposal.** None of this is implemented. It fills in three parts of the [packaging design](./packaging) that are only sketched there: who owns a package name, what `nanyx.lock` holds, and whether a program can depend on one file rather than a package. The packaging work's issues carry the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) label, and the package index is [#209](https://github.com/nanyx-lang/nanyx/issues/209). See [Open questions](#open-questions) at the end.
 
 [Packages and projects](../tour/packages) describes what a user writes: a `.nyxpack` manifest, `[dependencies]` such as `acme.core = "2.1"`, and imports such as `acme.web/http`. This page is about what sits behind those names.
 

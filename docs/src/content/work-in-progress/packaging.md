@@ -36,7 +36,7 @@ are chosen, what a published package is, and where it lives.
 Out of scope here:
 
 - Distributing the compiler and the VS Code extension themselves (GitHub releases, Scoop, the Marketplace).
-- The standard library's contents: [Standard library](https://github.com/nanyx-lang/nanyx/issues/174). How it is
+- The standard library's contents: the [`stdlib`](https://github.com/nanyx-lang/nanyx/labels/stdlib) issues. How it is
   *packaged* is in scope.
 - Hosts and the contexts they provide: [Hosts](./hosts). Packaging has to
   carry a package's `[host]` table, but what a host is belongs to that design.

@@ -310,7 +310,7 @@ Range formatting comes later: formatting the smallest enclosing top-level items 
 
 # Plan
 
-Tracked in [#215](https://github.com/nanyx-lang/nanyx/issues/215). Items in order. Each produces something usable on
+Its issues carry the [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) label. Items in order. Each produces something usable on
 its own:
 
 1. **Keep comments and blank lines** ([#217](https://github.com/nanyx-lang/nanyx/issues/217)). The parser returns

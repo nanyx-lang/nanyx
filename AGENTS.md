@@ -3,8 +3,8 @@
 These rules are for anyone changing the compiler and its tools, whether a person or an agent. The compiler
 moves fast, with dozens of commits a day, and most of them land in the same few files. These rules keep
 those files workable. The reasoning behind them, and the current state of the code, are in
-[Code quality](docs/src/content/work-in-progress/code-quality.md). Issue
-[#379](https://github.com/nanyx-lang/nanyx/issues/379) tracks the work.
+[Code quality](docs/src/content/work-in-progress/code-quality.md), and its issues carry the `code quality`
+label.
 
 ## Where new code goes
 
@@ -110,5 +110,6 @@ those files workable. The reasoning behind them, and the current state of the co
 
 If you notice a code quality problem outside your change, file an issue. Give it the `code quality` label
 and the label for its area (`parser`, `type checker`, `wasm backend`, `formatting`, `lsp`). Include
-file:line evidence at a commit, and say what "done" looks like. Then add it to
-[#379](https://github.com/nanyx-lang/nanyx/issues/379). A daily review files whatever is left over.
+file:line evidence at a commit, and say what "done" looks like. Then add it to the
+[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1), whose Priority field orders the
+backlog. A daily review files whatever is left over.
