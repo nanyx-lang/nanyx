@@ -6,7 +6,7 @@ order: 5
 
 Mutation in Nanyx is available but bounded. Mutable values require the `$Memory` context, and `memory { ... }` is the helper that creates and scopes that context. This allows internal mutation while keeping external interfaces pure.
 
-`$Memory` is a [nominal context](./nominal-and-protected-types) owned by the standard library, so `memory { ... }` is the only way to obtain an instance of it; user code cannot construct one with `use`.
+`$Memory` is a [nominal context](./nominal-and-protected-types) owned by the standard library, so only the standard library can construct an instance of it, and `memory { ... }` is the only way to get one. As with any context, `use` loads an instance you already have; it can't make a new one.
 
 This page is about mutating values. For how Nanyx frees memory, and updates immutable values in place when nothing else refers to them, see [Reference counting](../foundations/reference-counting).
 

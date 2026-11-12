@@ -56,6 +56,8 @@ The example above is rejected because the result still requires `$Memory` and es
 
 In the standard library naming, `$Memory` is the context and `memory { ... }` is the helper that creates that context for a scope.
 
+Requiring `$Memory` isn't enough on its own, because every `memory` block supplies one. [Context escape](./context-escape) works out the rule that stops such a value leaving its block.
+
 Converting to a context-free value before returning is valid:
 
 ```nanyx
