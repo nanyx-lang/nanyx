@@ -236,6 +236,8 @@ A keyword whose continuation cannot be the rest of the block is an error:
 - **In the body of a `for` loop.** The body runs once per element. Handle the value with a `match` in the body instead.
 - **In a part of an expression that may not run.** That means a branch of an `if` or an arm of a `match` that is part of a larger expression, as in `1 + (if c then try f() else 0)`, or the right of `and` or `or`. Make the `if` or `match` a statement of its own.
 
+`try` and `return` are keywords of the language, so outside any builder block they are an error too, which says that each is a workflow keyword to use inside a builder block such as `proc { ... }`.
+
 # Query and DSL workflows
 
 Workflows are a natural fit for DSLs. A query builder can turn a block into a pipeline of filtering, joining, and projection steps.

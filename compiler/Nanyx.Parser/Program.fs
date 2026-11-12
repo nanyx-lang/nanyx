@@ -572,7 +572,7 @@ let workflowReturnExpr =
     let isIdentChar c = isLetter c || isDigit c || c = '_'
     attempt (
         spanned (
-            pstring "return"
+            pstring WorkflowSyntax.returnKeyword
             .>> notFollowedBy (satisfy isIdentChar)
             >>. ws
             >>. expression
@@ -585,8 +585,8 @@ let workflowReturnExpr =
 let workflowKeywordExpr =
     let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     spanned (
-        attempt (pstring "try" .>> keywordEnd) >>. wsInline >>. expression
-        |>> fun value -> WorkflowBindExpr("try", value))
+        attempt (pstring WorkflowSyntax.tryKeyword .>> keywordEnd) >>. wsInline >>. expression
+        |>> fun value -> WorkflowBindExpr(WorkflowSyntax.tryKeyword, value))
     <?> "workflow keyword"
 
 // The value a `use` loads: `use addInt`. `use C(T) = expr`, an older way to load an instance, fails at the context's

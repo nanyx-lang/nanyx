@@ -450,9 +450,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             | Block _ -> cat [ head; nest (cat [ hard; block body ]) ]
             | _ -> cat [ head; text " "; expr full body ]
         | WorkflowBindExpr(n, value) ->
-            let keyword = if n = "try" && not (startsWith e.Span "try!") then "try " else n + "! "
+            let keyword = if n = WorkflowSyntax.tryKeyword && not (startsWith e.Span (n + "!")) then n + " " else n + "! "
             cat [ text keyword; expr full value ]
-        | WorkflowReturnExpr value -> cat [ text "return "; expr full value ]
+        | WorkflowReturnExpr value -> cat [ text (WorkflowSyntax.returnKeyword + " "); expr full value ]
         | InterpolatedString parts ->
             // Each part of text starts after the opening quote or the hole before it.
             let part start p =

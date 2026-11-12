@@ -328,7 +328,7 @@ module Compiler =
     /// `return`: by the node of the made-up read of the builder's `zero` that is the block's value there, the place
     /// in the block to report a missing `zero` at.
     let desugarWithDiagnostics (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan> =
-        let isReturnKeyword keyword = keyword = "return"
+        let isReturnKeyword keyword = keyword = WorkflowSyntax.returnKeyword
         let diagnostics = ResizeArray<Diagnostic>()
         let mutable zeros: Map<NodeId, SourceSpan> = Map.empty
 
@@ -368,7 +368,8 @@ module Compiler =
 
         // `k(args)` for the workflow keyword `k`: a call to the member `k` of the builder the block was written
         // after, through a local of its own (`def m = proc.try` then `m(args)`), so that each use instantiates the
-        // builder's type afresh. Outside a builder's block it is a call to a function named `k`.
+        // builder's type afresh. Outside a builder's block it is a call to a function named `k`, and an error if `k`
+        // is one of the language's own keywords, `try` or `return`, which no function can be named.
         let workflowCall (source: Expression) (keyword: string) (args: Expression list) : Expression =
             match builder with
             | Some builderName ->
@@ -380,7 +381,13 @@ module Compiler =
                         Statement.from source (DefStatement(false, memberLocal, None, memberAccess))
                         Statement.from source (ExprStatement (Expression.from source (FunctionCall(memberLocal, None, args))))
                     ])
-            | None -> Expression.from source (FunctionCall(keyword, None, args))
+            | None ->
+                if keyword = WorkflowSyntax.tryKeyword || isReturnKeyword keyword then
+                    let keywordSpan = { source.Span with End = source.Span.Start + keyword.Length }
+                    diagnostics.Add(
+                        Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow keywordSpan
+                            $"`{keyword}` is a workflow keyword, so it can only be used inside a builder block, such as `proc {{ ... }}`")
+                Expression.from source (FunctionCall(keyword, None, args))
 
         // A workflow bind nested in an expression, as in `return R(a = try f())`, becomes a bind of a fresh name
         // just before its statement, and the expression refers to that name. Binds are lifted from the places an
@@ -613,15 +620,15 @@ module Compiler =
             | WorkflowBindExpr(keyword, value) ->
                 match builder, unreachable with
                 | Some builderName, Some place ->
-                    reportUnreachable expr (if isReturnKeyword keyword then "return" else keyword) builderName place
+                    reportUnreachable expr keyword builderName place
                     (desugarExpr value).Kind
                 | _ -> (workflowCall expr keyword [desugarExpr value]).Kind
             | WorkflowReturnExpr value ->
                 match builder, unreachable with
                 | Some builderName, Some place ->
-                    reportUnreachable expr "return" builderName place
+                    reportUnreachable expr WorkflowSyntax.returnKeyword builderName place
                     (desugarExpr value).Kind
-                | _ -> (workflowCall expr "return" [desugarExpr value]).Kind
+                | _ -> (workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr value]).Kind
             // Each hole calls the prelude's hole function, which converts the value through `ToString`.
             | InterpolatedString parts ->
                 let mappedParts =
@@ -639,7 +646,7 @@ module Compiler =
                 let expr' =
                     match expr.Kind with
                     | WorkflowBindExpr(keyword, value) when isReturnKeyword keyword ->
-                        workflowCall expr "return" [desugarExpr value]
+                        workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr value]
                     | _ -> desugarExpr expr
                 { stmt with Kind = DefStatement(isExport, name, typeOpt, expr') }
             | ExprStatement expr -> { stmt with Kind = ExprStatement (desugarExpr expr) }
@@ -675,7 +682,7 @@ module Compiler =
                 | DefStatement(isExport, name, typeOpt, expr) ->
                     match expr.Kind with
                     | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
-                        workflowCall expr "return" [desugarExpr bindExpr]
+                        workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr bindExpr]
                     | WorkflowBindExpr(keyword, bindExpr) ->
                         workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([name, None], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr (Some name) rest next
@@ -683,9 +690,9 @@ module Compiler =
                         chainBlock statement (restOfChain ()) { statement with Kind = DefStatement(isExport, name, typeOpt, desugarExpr expr) }
                 | ExprStatement expr ->
                     match expr.Kind with
-                    | WorkflowReturnExpr value -> workflowCall expr "return" [desugarExpr value]
+                    | WorkflowReturnExpr value -> workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr value]
                     | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
-                        workflowCall expr "return" [desugarExpr bindExpr]
+                        workflowCall expr WorkflowSyntax.returnKeyword [desugarExpr bindExpr]
                     // The last statement's bound value is the chain's value.
                     | WorkflowBindExpr(keyword, bindExpr) when rest.IsEmpty ->
                         let value = freshName "value"

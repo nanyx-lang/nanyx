@@ -429,6 +429,12 @@ module CellSyntax =
     let unbox = "__cell_unbox"
     let setBox = "__cell_set"
 
+/// The workflow keywords the language reserves (see the workflows page): `try x`, a `WorkflowBindExpr` of `tryKeyword`,
+/// and `return x`, a `WorkflowReturnExpr`. In a builder's block each calls the builder's member of the same name.
+module WorkflowSyntax =
+    let tryKeyword = "try"
+    let returnKeyword = "return"
+
 module TypeExpr =
     /// A type expression written at `span`.
     let at (span: SourceSpan) (kind: TypeExprKind) : TypeExpr =
