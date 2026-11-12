@@ -210,8 +210,14 @@ module Unifier =
             | _ -> ""
         $"Type mismatch: {tyToString left} vs {tyToString right}.{homes}"
 
-    let private tagUnionLengthMessage leftCount rightCount left right =
-        $"Tag union length mismatch: {leftCount} vs {rightCount}. {mismatchMessage left right}"
+    /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
+    /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`
+    let private tagUnionMessage (onlyLeft: Set<string>) (onlyRight: Set<string>) left right =
+        let onlyIn which tags =
+            if Set.isEmpty tags then None
+            else Some $"""only the {which} has {tags |> Set.toList |> List.sort |> List.map (sprintf "#%s") |> String.concat ", "}"""
+        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
+        $"Tag union mismatch: {differences}. {mismatchMessage left right}"
 
     /// Says which fields only one of two records has: `{a, x} vs {x, y}: only the first has a; only the second has y.`
     let private recordKeyMessage leftKeys rightKeys left right =
@@ -675,11 +681,14 @@ module Unifier =
                             if extraLeft.IsEmpty || extraRight.IsEmpty then
                                 loop subst (pairs @ rest)
                             else
-                                Error (tagUnionLengthMessage lMap.Count rMap.Count l r, origin)
+                                Error (tagUnionMessage extraLeft extraRight l r, origin)
                         else if (lRest.IsSome || extraRight.IsEmpty) && (rRest.IsSome || extraLeft.IsEmpty) then
                             loop subst (pairs @ restConstraints @ rest)
                         else
-                            Error (tagUnionLengthMessage lMap.Count rMap.Count l r, origin)
+                            // An open union can take the other's extra tags; only a closed one's are named.
+                            let onlyLeft = if rRest.IsNone then extraLeft else Set.empty
+                            let onlyRight = if lRest.IsNone then extraRight else Set.empty
+                            Error (tagUnionMessage onlyLeft onlyRight l r, origin)
                     | Error message, _ -> Error (message, origin)
                     | _, Error message -> Error (message, origin)
                 | TyUnion lItems, ty ->

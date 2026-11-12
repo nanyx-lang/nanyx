@@ -83,7 +83,10 @@ How it is built:
 - **A conflict among the constraints** is reported, and the constraints from where it was found are set aside
   before the rest are solved again (`Unifier.solve`). The constraints solved part-way through inference, to read a
   record's fields say, are solved the same way, so a conflict in one def does not leave the types in the next
-  unresolved. Conflicts do not yet bind anything to the error type: the expressions there are typed by their other
+  unresolved, and a later def's error does not hide it. A union that tries each of its members against the
+  constraints after it reports a failure from further on (`unionFailure`) rather than blaming itself, so the
+  conflict is reported in the def that made it, wherever the def is in the file
+  ([#170](https://github.com/nanyx-lang/nanyx/issues/170)). Conflicts do not yet bind anything to the error type: the expressions there are typed by their other
   constraints.
 - **The result.** A module with type or name errors is typed all the same, with what did check:
   `CompileResult.Typed` holds it beside the errors, and `CompileResult.TypeChecked` says whether there were any. The
