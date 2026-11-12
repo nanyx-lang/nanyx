@@ -4,6 +4,9 @@ description: "Seq vs gen and querying patterns"
 order: 6
 ---
 
+> **Being redesigned.** [Lazy sequences](../work-in-progress/lazy-sequences) proposes one lazy type, `seq(a)`, in
+> place of the `seq`/`gen` split this page describes.
+
 Nanyx has two enumerable abstractions: `seq(a)` and `gen(a)`.
 
 - A `seq` is known to be finite and safe to iterate.
