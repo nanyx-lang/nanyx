@@ -125,12 +125,6 @@ module Compiler =
             | Kind (Import _) -> false
             | _ -> true)
 
-    let private declaredModuleName (module': Module) =
-        module'
-        |> List.tryPick (function
-            | Kind (ModuleDecl name) -> Some name
-            | _ -> None)
-
     /// Renames every reference to a name in `renames` throughout an expression. Used when a module is
     /// inlined into its importer, so that its definitions keep pointing at each other under their new names.
     /// A name that inference resolved to a parameter, a local definition or a pattern variable of the module
@@ -1278,12 +1272,16 @@ module Compiler =
                 | None ->
                     match origin with
                     | SourceFile fullPath ->
-                        match resolveImportPath (Path.GetDirectoryName fullPath) item with
-                        | Error diag -> errors <- errors @ [ diag ]
-                        | Ok importPath ->
+                        match FileImports.missingAlias item, resolveImportPath (Path.GetDirectoryName fullPath) item with
+                        | Some diag, _
+                        | None, Error diag -> errors <- errors @ [ diag ]
+                        | None, Ok importPath ->
                             match checkImport (SourceFile importPath) (fun () -> File.ReadAllText importPath) with
                             | Error (_, diags) -> errors <- errors @ diags
-                            | Ok imported -> mergeImport (originKey (SourceFile importPath)) item imported
+                            | Ok imported ->
+                                match FileImports.importedFile item imported.Name imported.Syntax with
+                                | [] -> mergeImport (originKey (SourceFile importPath)) item imported
+                                | diags -> errors <- errors @ diags
                     | StandardLibraryModule name ->
                         errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{name}' may only import other standard library modules" ]
                     | InMemory ->
@@ -1403,7 +1401,7 @@ module Compiler =
                      Undeferred = undeferred
                      Own = own
                      Inlined = inlined
-                     Name = declaredModuleName desugared
+                     Name = FileImports.declaredName moduleBlocks desugared
                      Syntax = ast
                      Subst = subst
                      RawExprTypes = state.ExprTypes

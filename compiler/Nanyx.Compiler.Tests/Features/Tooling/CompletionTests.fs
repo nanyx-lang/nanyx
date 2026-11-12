@@ -80,10 +80,10 @@ let ``A qualified import is in scope by its alias, an unqualified one by the nam
             |> List.filter (fun (_, (_, file)) -> not (file.StartsWith "nanyx/"))
         Assert.Equal<(string * (SymbolKind * string)) list>(
             [ "m", (ImportedModule, mainPath); "value", (TopLevelValue, mainPath) ],
-            namesWith "module main\nimport \"mod.nyx\" as m\ndef value = m.foo")
+            namesWith "module main\nimport mod as m\ndef value = m.foo")
         Assert.Equal<(string * (SymbolKind * string)) list>(
             [ "foo", (TopLevelValue, modulePath); "value", (TopLevelValue, mainPath) ],
-            namesWith "module main\nimport \"mod.nyx\"\ndef value = foo"))
+            namesWith "module main\nimport mod\ndef value = foo"))
 
 [<Fact>]
 let ``The prelude's names are in scope until the module declares its own`` () =
@@ -163,7 +163,7 @@ let ``After an import's alias come its exports, and after a prefix the names und
         let modulePath = Path.Combine(dir, "mod.nyx")
         File.WriteAllText(modulePath, "module mod\nexport def foo = 1\nexport def twice = { n -> n * 2 }\ndef hidden = 2")
         let mainPath = Path.Combine(dir, "main.nyx")
-        let mainSource = "module main\nimport \"mod.nyx\" as m\ndef value = m.foo"
+        let mainSource = "module main\nimport mod as m\ndef value = m.foo"
         File.WriteAllText(mainPath, mainSource)
         Assert.Equal<(string * Completion.MemberKind * string option) list>(
             [ "foo", Completion.Definition, Some "int"; "twice", Completion.Definition, Some "int -> int" ],

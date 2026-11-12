@@ -270,7 +270,7 @@ let ``A context and the function that requires it can come from an import`` () =
         File.WriteAllText(
             mainPath,
             "module main\n" +
-            "import \"shows.nyx\"\n" +
+            "import shows\n" +
             "type Point = (x: int, y: int)\n" +
             "def Point.show: Point -> string = { p -> \"{p.x}\" }\n" +
             "def s = describe(Point(x = 1, y = 2))\n")

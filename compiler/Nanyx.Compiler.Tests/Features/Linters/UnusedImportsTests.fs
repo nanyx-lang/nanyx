@@ -72,12 +72,12 @@ let ``The prelude, the import entry adds, and aliases starting with an underscor
 [<Fact>]
 let ``An unused import in a file that imports it by path is reported`` () =
     withTempDir (fun dir ->
-        File.WriteAllText(Path.Combine(dir, "lib.nyx"), "module lib\nexport def helper = 1\n")
+        File.WriteAllText(Path.Combine(dir, "lib.nyx"), "export def helper = 1\n")
         let mainPath = Path.Combine(dir, "main.nyx")
-        let source = "import \"./lib.nyx\"\ndef answer = 2\n"
+        let source = "import \"./lib.nyx\" as lib\ndef answer = 2\n"
         File.WriteAllText(mainPath, source)
         let result = Compiler.compileFileWith Linters.everyLinter mainPath
-        Assert.Equal<(string * string) list>([ "`./lib.nyx` is imported but never used", "\"./lib.nyx\"" ], unusedImportsIn result source))
+        Assert.Equal<(string * string) list>([ "`lib` is imported but never used", "\"./lib.nyx\" as lib" ], unusedImportsIn result source))
 
 [<Fact>]
 let ``The rule's severity can be configured, or the rule turned off`` () =

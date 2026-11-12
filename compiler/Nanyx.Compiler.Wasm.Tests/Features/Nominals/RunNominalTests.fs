@@ -21,7 +21,7 @@ export def everyone: list($Person) = [ $Person(name = "Ada"), $Person(name = "Bo
         """
 module main
 
-import "./people" as p
+import people as p
 
 type $Person = (age: int, years: int)
 

@@ -56,7 +56,10 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 - **Imports resolve two ways only** (`resolveImportPath` and `StandardLibrary.tryModuleName` in `Library.fs`).
   A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file, with `.` and `/` treated
   alike. A name starting `nanyx/` comes from the standard library embedded in the compiler. There are no search
-  paths, and a module's declared name is not checked against the name it was imported by.
+  paths, and a module's declared name is not checked against the name it was imported by. An import by file path
+  must have an alias (`NYX0014`) and must name a script module, not one that declares `module name` (`NYX0015`),
+  and no import may name an entrypoint, a file with top-level statements (`NYX0016`), as the
+  [modules page](../tour/modules#importing-modules-by-file-path) says (`FileImports.fs`).
 - **The parser accepts only part of the documented import syntax.** `import x as m` and grouped imports work;
   `as (a, b)`, `as m & (a, b)` and re-exports (`export collections.list (map, filter)`) do not parse.
 - **A program compiles to one WebAssembly module.** Imported modules are type-checked separately and their items

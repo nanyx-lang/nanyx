@@ -240,13 +240,13 @@
 
   (data (i32.const 256) "\00\00\00\00\15\00\00\00Hello from other.nyx!\00\00\00")
 
-  (func $message (result i32)
+  (func $other_message (result i32)
     i32.const 264
   )
-  (export "message" (func $message))
+  (export "other.message" (func $other_message))
 
   (func $main (result i32) (local $msg i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_hole_0_0 i32) (local $__dbg_tmp i32)
-    call $message
+    call $other_message
     local.set $msg
     local.get $msg
     local.tee $__dbg_tmp

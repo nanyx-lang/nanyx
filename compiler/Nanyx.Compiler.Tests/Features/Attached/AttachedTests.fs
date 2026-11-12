@@ -200,9 +200,9 @@ let ``Typecheck pipe calls a plain function when the value's type attaches none`
 [<Fact>]
 let ``Typecheck pipe does not find attached functions of a module imported with as`` () =
     let modules = [ "one.nyx", "module one\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
-    let unqualified = compileImportingAll modules "module main\nimport \"one.nyx\" as t\ndef a = \"x\" \\ shout"
+    let unqualified = compileImportingAll modules "module main\nimport one as t\ndef a = \"x\" \\ shout"
     Assert.False(unqualified.Diagnostics.IsEmpty)
-    let qualified = compileImportingAll modules "module main\nimport \"one.nyx\" as t\ndef a = \"x\" \\ t.string.shout"
+    let qualified = compileImportingAll modules "module main\nimport one as t\ndef a = \"x\" \\ t.string.shout"
     Assert.True(qualified.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{qualified.Diagnostics}")
     Assert.Equal(TyPrimitive "string", qualified.Typed.Value.Types.["a"])
 

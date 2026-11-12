@@ -181,7 +181,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
             File.WriteAllText(imported, "module mod\nexport def value = missing\n");
             var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory, "main.nyx"));
 
-            Open(uri, "module main\nimport \"mod.nyx\"\ndef copy = value\n");
+            Open(uri, "module main\nimport mod\ndef copy = value\n");
 
             var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
             Assert.Equal("NYX0101", diagnostic.Code?.String);
@@ -671,7 +671,7 @@ public sealed class LanguageServerTests : IAsyncLifetime
             File.WriteAllText(modulePath, "module mod\nexport def foo = 1\n");
             var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory.FullName, "main.nyx"));
 
-            Open(uri, "module main\nimport \"mod.nyx\" as m\ndef value = m.foo\n");
+            Open(uri, "module main\nimport mod as m\ndef value = m.foo\n");
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
             Assert.Equal(

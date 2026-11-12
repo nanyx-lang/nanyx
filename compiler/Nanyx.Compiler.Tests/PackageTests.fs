@@ -132,7 +132,7 @@ let private greeterGotWrong (construct: string) =
       "module greetings\n\nexport def greet: $Person -> string = { p ->\n  \"Hello, \" ++ p.name ++ \"!\"\n}\n\n"
       + "export type $Person = (name: string)\n"
       "src/main.nyx",
-      $"module main\n\nimport \"./greetings\" as greetings\n\n@entry\ndef main = {{\n  println(greetings.greet({construct}(name = \"Ada\")))\n}}\n" ]
+      $"module main\n\nimport greetings as greetings\n\n@entry\ndef main = {{\n  println(greetings.greet({construct}(name = \"Ada\")))\n}}\n" ]
 
 [<Fact>]
 let ``A package that names an aliased import's nominal type without the alias does not build`` () =

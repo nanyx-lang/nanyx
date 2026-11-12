@@ -76,7 +76,7 @@ let ``Nominal types of the same name from different modules are different types`
     let ids =
         """
 module ids
-import "people.nyx" as p
+import people as p
 type $Person = (age: int)
 def mine: $Person = $Person(age = 3)
 def theirs: p.$Person = mine
@@ -92,7 +92,7 @@ let ``Each module's nominal type of a shared name is its own in its own module``
     let ids =
         """
 module ids
-import "people.nyx" as p
+import people as p
 type $Person = (age: int)
 def mine: $Person = $Person(age = 3)
 def age: int = mine.age
@@ -106,7 +106,7 @@ let ``A module cannot make another module's nominal type from its shape under a 
     let ids =
         """
 module ids
-import "people.nyx" as p
+import people as p
 type $Person = (name: string)
 def theirs: p.$Person = (name = "Ada")
 """

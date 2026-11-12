@@ -471,7 +471,7 @@ export context Show(a) = (show: a -> string)
 export def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
 """
     let main = """module main
-import "mod.nyx"
+import mod
 type Point = (x: int, y: int)
 def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
 def s = describe(Point(x = 1, y = 2))
