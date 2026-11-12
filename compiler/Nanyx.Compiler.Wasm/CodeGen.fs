@@ -411,7 +411,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // Closure conversion made a wrapper for each such function, so the member is a closure over it.
     // Lambda lifting made those wrappers only where something may need them.
     let ambientContextMembers =
-        LambdaLifting.ambientMemberDefinitions module'
+        AmbientMembers.ambientMemberDefinitions module'
         |> List.filter (fun (_, definition) -> not (functionContextRequirements.ContainsKey definition))
         |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> NamedMember memberName, wrapper))
         |> Map.ofList
