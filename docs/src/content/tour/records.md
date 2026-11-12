@@ -228,7 +228,7 @@ Nanyx also supports record spread using the `...` sigil (similar to JavaScript).
 
 Spread can combine any number of source objects, interleaved with explicit field definitions:
 
-```nanyx skip=#954
+```nanyx
 def defaults = (host = "localhost", port = 8080)
 def env = (port = 9000)
 def cli = (logLevel = "debug")
@@ -240,6 +240,8 @@ def config = (
   ...cli
 )
 ```
+
+The parts are evaluated in the order they are written, and a later part's field replaces an earlier one's: here `config.port` is `9000`. Each record spread must be one whose fields are known where it is spread; a lambda's parameter whose type nothing has fixed yet can't be spread. The other fields of a record with a spread are written by name.
 
 `with` and spread solve related but different problems:
 

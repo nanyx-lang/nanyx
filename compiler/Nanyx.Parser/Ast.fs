@@ -364,6 +364,30 @@ module ForSyntax =
             | _ -> None
         | _ -> None
 
+/// What a record literal with a spread is made of, in the order written.
+type SpreadPart =
+    /// `...r`: every field of the record `r`.
+    | SpreadRecord of Expression
+    /// `name = value`.
+    | SpreadField of Identifier * Expression
+
+/// `(...a, f = v, ...b)` (see the records page): a call to the built-in "__spread" with a record of its parts, in the
+/// order written: each spread record a positional field, each field written out a named one. A later part's field
+/// replaces an earlier one's.
+module SpreadSyntax =
+    let builtIn = "__spread"
+
+    /// The parts of a record literal with a spread.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ Kind (RecordExpr fields) ]) when name = builtIn ->
+            fields
+            |> List.map (function
+                | PositionalField record -> SpreadRecord record
+                | NamedField(field, value) -> SpreadField(field, value))
+            |> Some
+        | _ -> None
+
 /// `a..b` (see the ranges page): a call to the built-in "__range" with its bounds, or with only its start for the
 /// unbounded `a..`.
 module RangeSyntax =

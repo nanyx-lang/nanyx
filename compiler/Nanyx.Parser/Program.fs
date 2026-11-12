@@ -430,15 +430,24 @@ let unitExpr =
     spanned (between (pstring "(") (ws >>. pstring ")") (preturn ()) |>> fun _ -> UnitExpr)
 
 // Tuple/Record or parenthesized expression parser
-// Handles: (x), (x, y), (x = 1), (x = 1, y = 2), (x = 1, 2), etc.
+// Handles: (x), (x, y), (x = 1), (x = 1, y = 2), (x = 1, 2), etc. With a spread, `(...a, f = v, ...b)`, it is a call
+// to the built-in "__spread" (see `SpreadSyntax`), whose other fields are all named.
 let tupleOrParenExpr =
+    let part = (pstring "..." >>. ws >>. expression |>> Choice2Of2) <|> (recordField |>> Choice1Of2)
     (withSpan (
         noteFailureInside (
             between
                 (pstring "(")
                 (ws >>. pstring ")")
-                recordFields))
-    |>> fieldsToExpr)
+                (byCommaOrLine part)))
+    >>= fun (parts, span) ->
+        let fields = parts |> List.choose (function Choice1Of2 field -> Some field | Choice2Of2 _ -> None)
+        if fields.Length = parts.Length then preturn (fieldsToExpr (fields, span))
+        elif fields |> List.exists (function PositionalField _ -> true | NamedField _ -> false) then
+            fail "a record with a spread names each of its other fields, as `name = value`"
+        else
+            let parts = parts |> List.map (function Choice1Of2 field -> field | Choice2Of2 spread -> PositionalField spread)
+            preturn (Expression.at span (FunctionCall(SpreadSyntax.builtIn, None, [ Expression.at span (RecordExpr parts) ]))))
     <?> "tuple or record"
 
 // List expression parser. `...expr` splices a list in place: `[a, ...xs, b]` is desugared to

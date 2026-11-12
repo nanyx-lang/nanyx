@@ -15,6 +15,7 @@
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Expressions\ExpressionTests.fs" />
     <Compile Include="Features\Expressions\OperatorTests.fs" />
+    <Compile Include="Features\Expressions\RecordSpreadTests.fs" />
     <Compile Include="Features\Imports\ImportSortingTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Lambdas\LambdaBodyTests.fs" />

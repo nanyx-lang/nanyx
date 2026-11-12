@@ -161,5 +161,7 @@ offsets, so open records cost code size, not speed.
 
 # Open questions
 
-- **Spread of an open record.** `(...p, z = 1)` where `p` is `(x: int, ...r)` is `(x: int, z: int, ...r)`, unless
-  `r` has a `z`. Whether a spread may override a field that is only in a row needs deciding with the spread rules.
+- **Spread of an open record.** Record spread works today on records whose fields are all known where the spread is
+  checked (`RecordSpread.fs`); a spread of an open record, or of a value whose type is not known yet, is `NYX0231`.
+  `(...p, z = 1)` where `p` is `(x: int, ...r)` could be `(x: int, z: int, ...r)`, unless `r` has a `z`. Whether a
+  spread may override a field that is only in a row needs deciding.

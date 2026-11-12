@@ -44,6 +44,7 @@
     <Compile Include="Features\Pipes\PipeTests.fs" />
     <Compile Include="Features\Ranges\RangeTests.fs" />
     <Compile Include="Features\Records\RecordTests.fs" />
+    <Compile Include="Features\Records\RecordSpreadTests.fs" />
     <Compile Include="Features\Samples\SampleTests.fs" />
     <Compile Include="Features\Spans\SpanTests.fs" />
     <Compile Include="Features\Tags\TagTests.fs" />
