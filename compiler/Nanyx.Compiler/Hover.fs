@@ -120,12 +120,20 @@ let withContexts (written: string list) (typeWritten: string) =
     | [] -> typeWritten
     | _ -> $"""[{String.concat ", " written}] {typeWritten}"""
 
-/// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, the type variables
-/// named together with the contexts' and by `names`.
+/// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, and each of
+/// `others` written for a reader, the type variables of them all named together and by `names`, so that a variable of
+/// `ty` has the same name in `others`: a parameter's `α` is the `α` of its def's signature.
+let typesWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) (others: Ty list) : string * string list =
+    match contexts, others with
+    | [], [] -> Unifier.tyToDisplayString names ty, []
+    | _ ->
+        let written = Unifier.tysToDisplayStrings names (ty :: contexts @ others)
+        let contextsWritten, othersWritten = List.splitAt contexts.Length (List.tail written)
+        withContexts contextsWritten (List.head written), othersWritten
+
+/// `ty` written for a reader after the contexts `contexts` it requires, as `typesWithContexts` writes it.
 let typeWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
-    match contexts, Unifier.tysToDisplayStrings names (ty :: contexts) with
-    | _ :: _, typeWritten :: contextsWritten -> withContexts contextsWritten typeWritten
-    | _ -> Unifier.tyToDisplayString names ty
+    fst (typesWithContexts names ty contexts [])
 
 /// The span of a call's or pipe's function name, when it has one.
 let private calleeSpan (expr: Expression) =

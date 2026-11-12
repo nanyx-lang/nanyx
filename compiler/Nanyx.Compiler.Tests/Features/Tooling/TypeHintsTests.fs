@@ -100,6 +100,44 @@ let ``A def that writes only its contexts has its type shown after them`` () =
           "line", "string", None ],
         hints)
 
+/// A context that takes a type and a def that requires it, for a def that calls the one to be inferred to require it.
+let private showSource = """
+context Show(a) = (show: a -> string)
+def describe: [Show(a)] a -> string = { value -> Show(a).show(value) }
+"""
+
+[<Fact>]
+let ``A def's lens shows a plain context it was inferred to require`` () =
+    let source = "import nanyx/console\ndef greet = { println(\"hi\") }\n"
+    let expected = [ "greet", "[Console] () -> ()", offsetOf source "greet" 0 0 ]
+    Assert.Equal<(string * string * int) list>(expected, typeHints TypeHints.typeLenses source)
+    Assert.Equal<(string * string * int) list>(expected, typeHints TypeHints.inlayHintsWithTopLevel source)
+
+[<Fact>]
+let ``A def's lens shows a parameterised context it was inferred to require, named with its parameters`` () =
+    let source = (showSource + "def twice = { v -> describe(v) ++ describe(v) }\n").ReplaceLineEndings "\n"
+    Assert.Equal<(string * string * int) list>(
+        [ "twice", "[Show(α)] α -> string", offsetOf source "twice" 0 0 ], typeHints TypeHints.typeLenses source)
+    Assert.Equal<(string * string * int) list>(
+        [ "value", "a", offsetOf source "value ->" 0 0
+          "twice", "[Show(α)] α -> string", offsetOf source "twice" 0 0
+          "v", "α", offsetOf source "v ->" 0 0 ],
+        typeHints TypeHints.inlayHintsWithTopLevel source)
+
+[<Fact>]
+let ``A def's lens shows both kinds of context it was inferred to require, as hover does`` () =
+    let source = ("import nanyx/console\n" + showSource + "def loud = { v -> println(describe(v)) }\n").ReplaceLineEndings "\n"
+    let expected = "[Show(α), Console] α -> ()"
+    Assert.Equal<(string * string * int) list>(
+        [ "loud", expected, offsetOf source "loud" 0 0 ], typeHints TypeHints.typeLenses source)
+    Assert.Equal<(string * string * int) list>(
+        [ "value", "a", offsetOf source "value ->" 0 0
+          "loud", expected, offsetOf source "loud" 0 0
+          "v", "α", offsetOf source "v ->" 0 0 ],
+        typeHints TypeHints.inlayHintsWithTopLevel source)
+    let hovered = Hover.typeAt Unicode (Compiler.compile source) (offsetOf source "loud" 0 0) |> Option.map _.Type
+    Assert.Equal(Some $"def loud: {expected}", hovered)
+
 [<Fact>]
 let ``Hints name type variables as their top-level def's type does`` () =
     let source =
