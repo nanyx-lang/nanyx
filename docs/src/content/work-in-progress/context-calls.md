@@ -35,6 +35,25 @@ ordinary function, `[Console + ToString(a)] a -> ()`. Hello world compiles to th
 
 How members are passed is described under Monomorphisation in [Memory management](./memory-management).
 
+## Functions that require contexts as values
+
+A top-level function that requires contexts can be passed as a value where they are all available, as in
+`[1, 2] \list.map(println)` or `apply(say, "hi")`. It is passed as a closure over its wrapper that captures the members
+found where it is named, and the wrapper calls the function with its arguments and them
+(`Lowering.WrapperCalling` in `CoreIrLower.fs`). The members are found as a call finds them: the type checker records
+where a function named as an argument of a call finds each parameterised context, once that call has settled its
+type (`resolveReferenceInstances` in `Infer.fs`), so `println` at `int` is passed `ToString(int)`, and at a type
+variable `a` of a function that requires `ToString(a)`, that function's member. A context it requires at a type left
+open where it is named, with no instance in scope for it, cannot be compiled yet
+([#599](https://github.com/nanyx-lang/nanyx/issues/599)), nor can a function that requires a parameterised context
+named as a value anywhere other than an argument of a call, such as `def f = println`
+([#807](https://github.com/nanyx-lang/nanyx/issues/807)).
+
+When function types carry contexts ([#768](https://github.com/nanyx-lang/nanyx/issues/768)), a value of type
+`[c] a -> b` will be passed its members where it is called instead. Such a value can be a closure over a wrapper that
+takes the members as parameters after its others, rather than from its environment; a value of a type with no
+contexts stays a closure over the members where it is named, as now.
+
 # Design
 
 The three changes are independent, and each is worth doing without the others. They are listed in the order to do

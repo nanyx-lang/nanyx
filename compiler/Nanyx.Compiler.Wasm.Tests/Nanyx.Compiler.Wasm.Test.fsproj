@@ -26,6 +26,7 @@
     <Compile Include="Features\Commands\CheckCommandTests.fs" />
     <Compile Include="Features\Console\RunConsoleTests.fs" />
     <Compile Include="Features\Contexts\RunContextTests.fs" />
+    <Compile Include="Features\Contexts\RunContextFunctionValueTests.fs" />
     <Compile Include="Features\Contexts\RunOperatorContextTests.fs" />
     <Compile Include="Features\Contexts\RunStructuralInstanceTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />

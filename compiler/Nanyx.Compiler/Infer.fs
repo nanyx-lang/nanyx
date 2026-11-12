@@ -1081,13 +1081,14 @@ let private wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (o
 /// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`).
 let private orderingInstance (op: string) (span: SourceSpan) = wellKnownInstance WellKnownContexts.ordering op span
 
-/// Finds where `call`, a call to `name` that inference has just typed, finds each parameterised context the callee
-/// requires (see `TypedModule.ContextInstances`), once its arguments have settled what the context is for. A context
-/// for a type inference has not worked out yet is left to be found by its members' names, as one that is not
-/// parameterised is.
-let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
+/// Finds where `call`, the node where `name` is called at the type `calleeTy` (or, when `reference`, named as a value
+/// of that type), finds each parameterised context the callee requires (see `TypedModule.ContextInstances`), once its
+/// arguments have settled what the context is for. A context for a type inference has not worked out yet is left to
+/// be found by its members' names, as one that is not parameterised is. A function named as a value whose type is not
+/// settled there finds no instance, and is not an error (see `resolveReferenceInstances`).
+let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     let contexts = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
-    match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
+    match TypeEnv.tryFind name env, calleeTy with
     | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
         contexts
         |> List.fold (fun result ctx ->
@@ -1097,16 +1098,18 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
                     let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
                     let argTys, argTysAsRead, current = contextArgTysAtCall current signature scheme.Type calleeTy args
+                    let settled = argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
                     // A well-known context of a type with no member attached is the compiler's own (see
                     // `WellKnownContexts.resolveCall`). `Eq` of a structure with a part that has an `==` of its own
                     // is derived from its parts.
                     let wellKnown =
-                        wellKnownInstanceAtCall env ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
-                        |> Option.bind (fun (wellKnown, instance) ->
-                            match derivedEquality env current wellKnown instance call.Id calleeSpan argTys.Head with
-                            | Some (derived, next) -> Some (Ok (found @ [ Some derived ], next))
-                            | None -> WellKnownContexts.resolveCall wellKnown env current call name calleeSpan found contexts.Length argTys.Head instance)
-                    let settled = argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
+                        if reference && not settled then None
+                        else
+                            wellKnownInstanceAtCall env ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
+                            |> Option.bind (fun (wellKnown, instance) ->
+                                match derivedEquality env current wellKnown instance call.Id calleeSpan argTys.Head with
+                                | Some (derived, next) -> Some (Ok (found @ [ Some derived ], next))
+                                | None -> WellKnownContexts.resolveCall wellKnown env current call name calleeSpan found contexts.Length argTys.Head instance)
                     // A structure with nothing left to settle has the instance derived from its parts.
                     let derived () =
                         if settled then
@@ -1115,6 +1118,7 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
                         else None
                     match instanceInScope env current ctxName argTys, wellKnown |> Option.orElseWith derived with
                     | Some written, _ -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    | None, _ when reference && not settled -> Ok (found @ [ None ], current)
                     // A value that failed to check has every context, so that the call is not an error too. It has the
                     // compiler's own `ToString`, so the backend still has a member to pass. A hole of one is written by
                     // the backend, which reports the error where the hole is.
@@ -1163,6 +1167,26 @@ let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expre
         |> Result.map (fun (found, current) ->
             if found |> List.forall Option.isNone then current
             else { current with ContextInstances = current.ContextInstances |> Map.add call.Id found })
+    | _ -> Ok state
+
+/// `resolveInstancesAt` for `call`, a call to `name` that inference has just typed.
+let private resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
+    resolveInstancesAt false env state call name (state.CalleeTypes |> Map.tryFind call.Id) calleeSpan
+
+/// `resolveInstancesAt` for each argument of `call` that names a function as a value, once the call has settled its
+/// type: `apply(println, 7)` passes `println` with `ToString(int)`. The backend passes the function as a closure over
+/// the instances it finds here.
+let private resolveReferenceInstances (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
+    match call.Kind with
+    | FunctionCall(_, _, args) ->
+        match args with
+        | [ Kind (TupleExpr items) ] -> items
+        | _ -> args
+        |> List.fold (fun result arg ->
+            match arg.Kind with
+            | IdentifierExpr name ->
+                result |> Result.bind (fun current -> resolveInstancesAt true env current arg name (current.ExprTypes |> Map.tryFind arg.Id) arg.Span)
+            | _ -> result) (Ok state)
     | _ -> Ok state
 
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
@@ -1419,6 +1443,7 @@ let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) 
             // A call to a function that requires a parameterised context finds its instance once its arguments are typed.
             | FunctionCall(name, spanOpt, _) ->
                 resolveCallInstances env next expr name (nameSpan spanOpt expr)
+                |> Result.bind (fun next -> resolveReferenceInstances env next expr)
                 |> Result.bind (fun next -> checkLocalComparisons env next expr name (nameSpan spanOpt expr))
                 |> Result.bind (MemoryCells.checkCall env expr name)
                 |> Result.map (fun next -> typedExpr, next)
