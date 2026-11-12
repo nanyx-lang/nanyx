@@ -241,46 +241,64 @@
     i32.store8
     local.get $s
   )
-  (func $__nanyx_list_cons (param $head i32) (param $tail i32) (result i32)
+  (func $__nanyx_list_cons_i64 (param $head i64) (param $tail i32) (result i32)
     (local $cell i32)
-    i32.const 8
+    i32.const 12
     call $__nanyx_new_cell
-    local.set $cell
-    local.get $cell
+    local.tee $cell
     local.get $head
-    i32.store
+    i64.store
     local.get $cell
-    i32.const 4
-    i32.add
     local.get $tail
-    i32.store
+    i32.store offset=8
     local.get $cell
   )
+  (func $__nanyx_int_add (param $a i64) (param $b i64) (result i64)
+    (local $r i64)
+    local.get $a
+    local.get $b
+    i64.add
+    local.set $r
+    local.get $a
+    local.get $r
+    i64.xor
+    local.get $b
+    local.get $r
+    i64.xor
+    i64.and
+    i64.const 0
+    i64.lt_s
+    if
+      i64.const -9223372036854775808
+      i64.const -1
+      i64.div_s
+      drop
+    end
+    local.get $r
+  )
 
-  (func $sum (param $xs i32) (result i32) (local $__match_tmp_0 i32) (local $__payload_x i32) (local $__payload_rest i32)
+  (func $sum (param $xs i32) (result i64) (local $__match_tmp_0 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32)
     local.get $xs
     local.set $__match_tmp_0
     local.get $__match_tmp_0
       i32.eqz
-    (if (result i32)
+    (if (result i64)
       (then
         local.get $__match_tmp_0
     call $__nanyx_drop_list_int
-    i32.const 0
+    i64.const 0
       )
       (else
         local.get $__match_tmp_0
       i32.const 0
       i32.ne
-    (if (result i32)
+    (if (result i64)
       (then
         local.get $__match_tmp_0
-      i32.load
-        local.set $__payload_x
+      i64.load
+        local.set $__payload_x_i64
     local.get $__match_tmp_0
-      i32.const 4
-      i32.add
-      i32.load
+      i32.load offset=8
         local.set $__payload_rest
     local.get $__match_tmp_0
     i32.const 4
@@ -303,10 +321,10 @@
       call $__nanyx_release
       drop
     end
-    local.get $__payload_x
+    local.get $__payload_x_i64
     local.get $__payload_rest
     call $sum
-    i32.add
+    call $__nanyx_int_add
       )
       (else
         unreachable
@@ -317,17 +335,17 @@
   )
   (export "sum" (func $sum))
 
-  (func $main (result i32) (local $__dbg_value i32) (local $__owned_0 i32)
-    i32.const 1
-    i32.const 2
-    i32.const 3
+  (func $main (result i64) (local $__dbg_value_i64 i64) (local $__owned_0 i32)
+    i64.const 1
+    i64.const 2
+    i64.const 3
     i32.const 0
-    call $__nanyx_list_cons
-    call $__nanyx_list_cons
-    call $__nanyx_list_cons
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
+    call $__nanyx_list_cons_i64
     call $sum
-    local.set $__dbg_value
-    local.get $__dbg_value
+    local.set $__dbg_value_i64
+    local.get $__dbg_value_i64
     call $__dbg_show_int
     local.tee $__owned_0
     call $dbg_str
@@ -335,31 +353,30 @@
     local.get $__owned_0
     call $__nanyx_drop_string
     drop
-    local.get $__dbg_value
+    local.get $__dbg_value_i64
   )
   (export "main" (func $main))
 
-  (func $__dbg_show_int (param $__dbg_value i32) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_tmp i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32)
+  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_src i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
     i32.const 0
     local.set $__interp_len
-    local.get $__dbg_value
-    local.set $__interp_tmp
-    local.get $__interp_tmp
-    i32.const 0
-    i32.lt_s
+    local.get $__dbg_value_i64
+    local.set $__interp_int
+    local.get $__interp_int
+    i64.const 0
+    i64.lt_s
     if
       local.get $__interp_len
       i32.const 1
       i32.add
       local.set $__interp_len
-      local.get $__interp_tmp
-      i32.const -1
-      i32.mul
-      local.set $__interp_tmp
+      i64.const 0
+      local.get $__interp_int
+      i64.sub
+      local.set $__interp_int
     end
-    local.get $__interp_tmp
-    i32.const 0
-    i32.eq
+    local.get $__interp_int
+    i64.eqz
     if
       local.get $__interp_len
       i32.const 1
@@ -371,13 +388,13 @@
         i32.const 1
         i32.add
         local.set $__interp_len
-        local.get $__interp_tmp
-        i32.const 10
-        i32.div_u
-        local.set $__interp_tmp
-        local.get $__interp_tmp
-        i32.const 0
-        i32.ne
+        local.get $__interp_int
+        i64.const 10
+        i64.div_u
+        local.set $__interp_int
+        local.get $__interp_int
+        i64.const 0
+        i64.ne
         br_if $interp_int_len
       end
     end
@@ -385,11 +402,11 @@
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
-    local.get $__dbg_value
-    local.set $__interp_tmp
-    local.get $__interp_tmp
-    i32.const 0
-    i32.lt_s
+    local.get $__dbg_value_i64
+    local.set $__interp_int
+    local.get $__interp_int
+    i64.const 0
+    i64.lt_s
     if
       local.get $__interp_cursor
       i32.const 45
@@ -398,14 +415,13 @@
       i32.const 1
       i32.add
       local.set $__interp_cursor
-      local.get $__interp_tmp
-      i32.const -1
-      i32.mul
-      local.set $__interp_tmp
+      i64.const 0
+      local.get $__interp_int
+      i64.sub
+      local.set $__interp_int
     end
-    local.get $__interp_tmp
-    i32.const 0
-    i32.eq
+    local.get $__interp_int
+    i64.eqz
     if
       local.get $__interp_cursor
       i32.const 48
@@ -419,9 +435,10 @@
       local.set $__interp_start
       loop $interp_digits
         local.get $__interp_cursor
-        local.get $__interp_tmp
-        i32.const 10
-        i32.rem_u
+        local.get $__interp_int
+        i64.const 10
+        i64.rem_u
+        i32.wrap_i64
         i32.const 48
         i32.add
         i32.store8
@@ -429,13 +446,13 @@
         i32.const 1
         i32.add
         local.set $__interp_cursor
-        local.get $__interp_tmp
-        i32.const 10
-        i32.div_u
-        local.set $__interp_tmp
-        local.get $__interp_tmp
-        i32.const 0
-        i32.ne
+        local.get $__interp_int
+        i64.const 10
+        i64.div_u
+        local.set $__interp_int
+        local.get $__interp_int
+        i64.const 0
+        i64.ne
         br_if $interp_digits
       end
       local.get $__interp_start
@@ -490,7 +507,7 @@
         i32.eqz
         br_if $done
         local.get $p
-        i32.load offset=4
+        i32.load offset=8
         local.set $tail
         local.get $p
         i32.const 4

@@ -79,7 +79,7 @@ module NodeId =
 
 type Literal =
     | StringLit of string
-    | IntLit of int
+    | IntLit of int64
     | FloatLit of float
     | BoolLit of bool
 

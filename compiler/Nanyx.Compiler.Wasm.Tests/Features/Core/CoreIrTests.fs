@@ -217,7 +217,7 @@ let ``Lambdas, closures and function values go through the core IR`` () =
     for name in [ "compose__int__int__int"; "__lambda_0__int__int__int"; "__rec_loop_1"; "__lambda_2"; "__fn_double"; "main" ] do
         Assert.Contains(name, report.Functions)
     // Calls through function values, and closure blocks holding a table slot and what they capture.
-    Assert.Contains("call_indirect (type $ctx_fn_2)", wat)
+    Assert.Contains("call_indirect (type $ctx_fn_2_i32_i64_to_i64)", wat)
     Assert.Contains("call $__nanyx_alloc", wat)
 
 [<Fact>]
@@ -246,7 +246,7 @@ let ``Functions that require contexts, and their callers, go through the core IR
     for name in [ "twice"; "plain__rec_x_int_y_int"; "main"; "__fn_Point_show" ] do
         Assert.Contains(name, report.Functions)
     // Each member arrives in a parameter of its own, after the function's own parameters.
-    Assert.Contains("(func $twice (param $__ctx_ask i32) (result i32)", wat)
+    Assert.Contains("(func $twice (param $__ctx_ask i32) (result i64)", wat)
 
 [<Fact>]
 let ``Floats, pipes, guards and for loops go through the core IR`` () =
@@ -337,7 +337,7 @@ let ``A guard's predicate is inlined with the value matched in a local, in the c
         "}\n"
     let wat, report = compileWithReport source
     Assert.Contains("size", report.Functions)
-    Assert.Contains("local.set $__guard\n      local.get $__guard\n    call $limit\n    i32.const 2\n    i32.mul\n    i32.ge_s", wat)
+    Assert.Contains("local.set $__guard_i64\n      local.get $__guard_i64\n    call $limit\n    i64.const 2\n    call $__nanyx_int_mul\n    i64.ge_s", wat)
 
 [<Fact>]
 let ``A function that reads a field of any record is specialised for each layout it is given`` () =
@@ -352,8 +352,8 @@ let ``A function that reads a field of any record is specialised for each layout
     // One specialisation per layout, named by the record's other fields.
     Assert.Equal<string list>([ "nOf__int__rec_"; "nOf__int__rec_a_int"; "nOf__int__rec_a_int_b_int"; "main" ], report.Functions)
     // Each reads `n` from where its layout puts it, rather than looking the field up at run time.
-    for name, offset in [ "nOf__int__rec_", 0; "nOf__int__rec_a_int", 4; "nOf__int__rec_a_int_b_int", 8 ] do
-        Assert.Contains($"(func ${name} (param $r i32) (result i32)\n    local.get $r\n    i32.const {offset}\n    i32.add\n    i32.load\n  )", wat)
+    for name, load in [ "nOf__int__rec_", "i64.load"; "nOf__int__rec_a_int", "i64.load offset=8"; "nOf__int__rec_a_int_b_int", "i64.load offset=16" ] do
+        Assert.Contains($"(func ${name} (param $r i32) (result i64)\n    local.get $r\n    {load}\n  )", wat)
     let specialisations = wat.Substring(wat.IndexOf "(func $nOf__")
     Assert.DoesNotContain("call $__nanyx_open_field", specialisations)
 

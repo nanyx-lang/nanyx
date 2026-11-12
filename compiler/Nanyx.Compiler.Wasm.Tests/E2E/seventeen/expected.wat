@@ -167,52 +167,71 @@
       i32.store
     end
   )
-  (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)
+  (func $__nanyx_record_set_i64 (param $base i32) (param $value i64) (param $offset i32) (result i32)
     local.get $base
     local.get $offset
     i32.add
     local.get $value
-    i32.store
+    i64.store
     local.get $base
   )
+  (func $__nanyx_int_add (param $a i64) (param $b i64) (result i64)
+    (local $r i64)
+    local.get $a
+    local.get $b
+    i64.add
+    local.set $r
+    local.get $a
+    local.get $r
+    i64.xor
+    local.get $b
+    local.get $r
+    i64.xor
+    i64.and
+    i64.const 0
+    i64.lt_s
+    if
+      i64.const -9223372036854775808
+      i64.const -1
+      i64.div_s
+      drop
+    end
+    local.get $r
+  )
 
-  (func $f (param $x i32) (param $y i32) (result i32)
-    local.get $x
-    local.get $y
-    i32.add
+  (func $f (param $x_i64 i64) (param $y_i64 i64) (result i64)
+    local.get $x_i64
+    local.get $y_i64
+    call $__nanyx_int_add
   )
   (export "f" (func $f))
 
-  (func $main (result i32) (local $r1 i32) (local $args i32) (local $r2 i32)
-    i32.const 3
-    i32.const 4
+  (func $main (result i64) (local $r1_i64 i64) (local $args i32) (local $r2_i64 i64)
+    i64.const 3
+    i64.const 4
     call $f
-    local.set $r1
-    i32.const 8
+    local.set $r1_i64
+    i32.const 16
     i32.const 1
     call $__nanyx_new_object
-    i32.const 10
+    i64.const 10
     i32.const 0
-    call $__nanyx_record_set
-    i32.const 20
-    i32.const 4
-    call $__nanyx_record_set
+    call $__nanyx_record_set_i64
+    i64.const 20
+    i32.const 8
+    call $__nanyx_record_set_i64
     local.set $args
     local.get $args
-    i32.const 0
-    i32.add
-    i32.load
+    i64.load
     local.get $args
-    i32.const 4
-    i32.add
-    i32.load
+    i64.load offset=8
     local.get $args
     call $__nanyx_drop_rec_0_int_1_int
     call $f
-    local.set $r2
-    local.get $r1
-    local.get $r2
-    i32.add
+    local.set $r2_i64
+    local.get $r1_i64
+    local.get $r2_i64
+    call $__nanyx_int_add
   )
   (export "main" (func $main))
 

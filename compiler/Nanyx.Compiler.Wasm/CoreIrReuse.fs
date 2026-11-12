@@ -14,8 +14,9 @@ open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrDrop
 
 /// The fields of the one object `pattern` takes apart, a value of type `ty`, when it takes apart exactly one and binds
-/// or ignores each of its fields: where each is, what binds it, and its type.
-let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : (int * Var option * IrType) list option =
+/// or ignores each of its fields: where each is, what binds it, and its type; and the size of the object's block (its
+/// header and its fields).
+let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : ((int * Var option * IrType) list * int) option =
     let leaf (inner: Pattern) =
         match inner with
         | PBind var -> Some (Some var)
@@ -24,38 +25,32 @@ let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : (int * Var option
     match IrType.unfold ty, pattern with
     | IrList element, PList([ head ], Some rest) ->
         match leaf head, leaf rest with
-        | Some headVar, Some restVar -> Some [ 0, headVar, element; 4, restVar, ty ]
+        | Some headVar, Some restVar ->
+            Some([ 0, headVar, element; CoreIrLayout.tailOffset element, restVar, ty ], 4 + CoreIrLayout.listCellSize element)
         | _ -> None
     | IrTags tags, PTag(name, Some inner) ->
         match tags |> List.tryFind (fst >> (=) name), leaf inner with
-        | Some(_, Some payloadTy), Some payloadVar -> Some [ 4, payloadVar, payloadTy ]
+        | Some(_, Some payloadTy), Some payloadVar ->
+            Some([ CoreIrLayout.payloadOffset, payloadVar, payloadTy ], 4 + CoreIrLayout.tagCellSize payloadTy)
         | _ -> None
     | IrRecord fields, PFields matched ->
         let leaves = matched |> List.map (fun (slot, inner) -> slot, leaf inner)
         if leaves |> List.forall (snd >> Option.isSome) then
-            fields
-            |> List.mapi (fun slot (_, fieldTy) ->
-                let bound = leaves |> List.tryFind (fst >> (=) slot) |> Option.bind snd |> Option.flatten
-                slot * 4, bound, fieldTy)
-            |> Some
+            let taken =
+                fields
+                |> List.mapi (fun slot (_, fieldTy) ->
+                    let bound = leaves |> List.tryFind (fst >> (=) slot) |> Option.bind snd |> Option.flatten
+                    CoreIrLayout.fieldOffset fields slot, bound, fieldTy)
+            Some(taken, 8 + CoreIrLayout.recordSize fields)
         else None
     | _ -> None
-
-/// The size of the block an object of type `ty` that a pattern takes apart has (its header and its fields), or 0 for
-/// one that is not reused.
-let private blockSize (ty: IrType) =
-    match IrType.unfold ty with
-    | IrList _
-    | IrTags _ -> 12
-    | IrRecord fields -> 8 + 4 * fields.Length
-    | _ -> 0
 
 /// The size of the block `value` allocates, if it is an allocation that can write into a reused block.
 let private allocationSize (value: Expr) =
     match value.Kind with
-    | CallRuntime(name, _, _) when name = Helpers.listCons -> Some 12
-    | MakeTag _ -> Some 12
-    | MakeRecord fields -> Some(8 + 4 * fields.Length)
+    | CallRuntime(name, [ head; _ ], _) when name = Helpers.listCons -> Some(4 + CoreIrLayout.listCellSize (atomType head))
+    | MakeTag(_, payload) -> Some(4 + CoreIrLayout.tagCellSize (atomType payload))
+    | MakeRecord fields -> Some(8 + CoreIrLayout.totalSize (fields |> List.map (snd >> atomType)))
     | _ -> None
 
 let private mk (kind: ExprKind) (ty: IrType) = { Kind = kind; Type = ty }
@@ -86,7 +81,7 @@ type private Rewriter() =
 
     member _.NewToken() =
         tokens <- tokens + 1
-        { Id = -tokens; Name = $"__reuse_{tokens}"; Kind = Scratch; Type = IrInt }
+        { Id = -tokens; Name = $"__reuse_{tokens}"; Kind = Scratch; Type = IrWord }
 
     member this.Expr(e: Expr) : Expr =
         let recur = this.Expr
@@ -129,7 +124,7 @@ type private Rewriter() =
                     List.zip scrutinees arm.Patterns
                     |> List.choose (fun (scrutinee, pattern) ->
                         if deadIds.Contains scrutinee.Id then
-                            fieldsTakenApart scrutinee.Type pattern |> Option.map (fun fields -> scrutinee, fields)
+                            fieldsTakenApart scrutinee.Type pattern |> Option.map (fun taken -> scrutinee, taken)
                         else None)
                 if released.IsEmpty then this.Expr arm.Body
                 else
@@ -140,7 +135,7 @@ type private Rewriter() =
                     let ownedField (bound: Var option) = bound |> Option.filter (fun var -> dupped'.Contains var.Id)
                     let releases =
                         released
-                        |> List.map (fun (scrutinee, fields) ->
+                        |> List.map (fun (scrutinee, (fields, _)) ->
                             { Object = scrutinee
                               Fields = fields |> List.map (fun (offset, bound, fieldTy) -> offset, ownedField bound, fieldTy)
                               CountOffset = countOffset scrutinee.Type
@@ -157,12 +152,9 @@ type private Rewriter() =
                     let first = releases.Head
                     let token = this.NewToken()
                     let rest, firstRelease =
-                        match blockSize first.Object.Type with
-                        | 0 -> rest, first
-                        | size ->
-                            match reuseFirst token size rest with
-                            | Some reused -> reused, { first with Token = Some token }
-                            | None -> rest, first
+                        match reuseFirst token (snd (snd released.Head)) rest with
+                        | Some reused -> reused, { first with Token = Some token }
+                        | None -> rest, first
                     let body =
                         (firstRelease :: releases.Tail)
                         |> List.rev

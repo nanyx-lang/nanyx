@@ -88,6 +88,9 @@ let private adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType li
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
+    // The type arguments of the specialisation, and the variables of the generic locals lowered at the one use they have
+    // (see `Block`).
+    let mutable subst = subst
     let mutable nextId = 0
     let usedNames = System.Collections.Generic.HashSet<string>()
 
@@ -374,7 +377,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | other -> cannot $"a `for` loop over a value of type {IrType.show other}"
             let walkers =
                 iterables |> List.mapi (fun index _ ->
-                    newVar $"__for_cursor_{depth}{suffix index}" ForLoop IrInt, newVar $"__for_end_{depth}{suffix index}" ForLoop IrInt)
+                    newVar $"__for_cursor_{depth}{suffix index}" ForLoop IrWord, newVar $"__for_end_{depth}{suffix index}" ForLoop IrInt)
             let sources = iterables |> List.map source
             this.Atoms scope (sources |> List.collect fst) (fun atoms ->
                 let streams =
@@ -448,7 +451,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | PositionalField _ -> cannot "a positional field in a record update")
             this.Atoms scope (record :: List.map snd slotsAndValues) (fun atoms ->
                 let updated = List.zip (List.map fst slotsAndValues) atoms.Tail
-                k (mk (UpdateRecord(atoms.Head, fields.Length, updated)) ty))
+                k (mk (UpdateRecord(atoms.Head, updated)) ty))
         // The hole function called outside a string, at a built-in type: the value as a hole would write it.
         | FunctionCall(_, _, [ value ]) when input.BuiltInHoles.Contains expr.Id ->
             this.Complex scope { expr with Kind = InterpolatedString [ StringExpr value ] } k
@@ -1103,6 +1106,18 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 this.Complex scope (Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr environment), string field, None)))
             this.LocalInstancesAround scope name localTy (fields |> List.map (fun (typeArguments, field) -> typeArguments, read field)) None rest k
         | DefStatement(_, name, _, rhs) :: rest ->
+            // A local value generic in variables of its own, such as the builder's member a workflow keyword reads
+            // (`def m = proc.try`, then `m(args)`), is lowered once. Where it has one use, it is lowered at that use's
+            // type arguments, so that what it reads is specialised as it is used rather than with its variables unit.
+            // The contexts its function types require stay as they are: a member is passed them where it is called.
+            match input.ExprTypes |> Map.tryFind rhs.Id |> Option.map (substitute subst) with
+            | Some localTy when not (freeVars localTy).IsEmpty ->
+                match this.LocalUses Map.empty localTy name (Expression.synthetic (Block(rest |> List.map Statement.synthetic))) with
+                | [ (_, bindings) ] ->
+                    let values = freeVars localTy |> Set.ofList
+                    subst <- bindings |> Map.filter (fun id _ -> values.Contains id) |> Map.fold (fun acc id ty -> acc |> Map.add id ty) subst
+                | _ -> ()
+            | _ -> ()
             // The local is named before its value is lowered, so that locals are declared in the order they are
             // written. Its type is its value's, which a local lambda lifting made has as well.
             let localName = uniqueName name
@@ -1395,7 +1410,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match input.ExprTypes |> Map.tryFind lambda.Id with
                 | Some ty -> substitute subst ty
                 | None -> cannot "a lambda without a type"
-            let environment = IrRecord(("0", IrInt) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
+            let environment = IrRecord(("0", IrWord) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
             let parameterTys, resultTy = this.LiftedParameterTypes name lambdaTy
             let environmentParameter = parameterOf parameterNames.Head environment
             let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
@@ -1426,7 +1441,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // that the closure captured, and after its other parameters those its value's type requires; and calls the
             // function with the rest and them all, in the order it takes them.
             let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail instanceTy true
-            let environment = IrRecord(("0", IrInt) :: (captured |> List.mapi (fun index (_, ty) -> string (index + 1), ty)))
+            let environment = IrRecord(("0", IrWord) :: (captured |> List.mapi (fun index (_, ty) -> string (index + 1), ty)))
             let environmentParameter = parameterOf parameterNames.Head environment
             let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
             let passed =
@@ -1458,7 +1473,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | IrFunction(_, _, given), IrFunction(_, result, wanted) -> given, result, wanted
             | _ -> internalError $"an adapter from {IrType.show givenTy} to {IrType.show expectedTy}"
         let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
-        let environment = newVar ClosureSyntax.envParameter Param (IrRecord(("0", IrInt) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
+        let environment = newVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
         let valueTys = adaptedValueTypes givenTy expectedTy
         let values = valueTys |> List.mapi (fun index ty -> newVar $"__arg{index + 1}" Param ty)
         let passed = wanted |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty)

@@ -6,7 +6,7 @@ open Parser.Program
 [<Fact>]
 let ``mut is a call to __mut that takes the rest of the expression`` () =
     match parseModule "def a = mut 0\ndef b = mut x + 1" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__mut", None, [ Kind (LiteralExpr (IntLit 0)) ])))))
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__mut", None, [ Kind (LiteralExpr (IntLit 0L)) ])))))
                   Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__mut", None, [ Kind (BinaryOp ("+", _, _)) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

@@ -176,8 +176,8 @@ not a length, so a measured type cannot have a `` `*`: (a, a) -> a ``. Splitting
 
 `/` and `%` are members of `Num`, and mean what the type's own instance says:
 
-- on integer types, `/` truncates towards zero and `%` takes the sign of the left operand, as today (`i32.div_s`,
-  `i32.rem_s`). Division by zero stops the program, and so does the one overflowing case, the most negative value
+- on integer types, `/` truncates towards zero and `%` takes the sign of the left operand, as `int` does today
+  (`i64.div_s`, `i64.rem_s`). Division by zero stops the program, and so does the one overflowing case, the most negative value
   divided by `-1`, as [sized numbers](./sized-numbers#overflow) requires;
 - on floating-point types they follow IEEE 754, and `%` is the truncated remainder (C's `fmod`): `7.5 % 2.0` is
   `1.5`.
@@ -250,8 +250,8 @@ Like `Eq` and `Ord`, `Add` and `Num` are found by the usual lookup: a `use`, the
 synthesis from attached definitions, then the compiler's own.
 
 - **The compiler's own instances** cover `int`, `float` and each sized type (`I8` to `U64`, `F32`, `F64`; `int` is
-  `I64`). They are not calls: after monomorphisation a `+` at `I32` is the checked `i32` addition the backend emits
-  today. Each type's overflow rule is its instance's, so generic code inherits it.
+  `I64`). They are not calls: after monomorphisation a `+` at `I32` is a checked `i32` addition, as a `+` at `int` is
+  the checked `i64` addition the backend emits today (`Helpers.intAdd` in `WasmRuntime.fs`). Each type's overflow rule is its instance's, so generic code inherits it.
 - **Measured types** (`float(Length)`) get the compiler's own `Add`, and `Eq` and `Ord`, from the type they measure.
   They have no `Num`.
 - **User types** get `Add` by attaching `zero`, `` `+` ``, `` `-` `` and `negate`, and `Num` by attaching the rest,

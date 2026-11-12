@@ -180,7 +180,16 @@ let checkedOptions = { CheckMemory = true }
 type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmtime.Instance) =
     let memory = instance.GetMemory("memory")
     let counter (name: string) = instance.GetGlobal(name).GetValue() :?> int
-    member _.Call(name: string, argument: int) = instance.GetFunction<int, int>(name).Invoke argument
+    /// Calls the function `name` with `argument`, as the `i64` an int is held in where it takes an int, and gives what it
+    /// returns: a pointer, or an int's low 32 bits.
+    member _.Call(name: string, argument: int) : int =
+        let func = instance.GetFunction name
+        let value =
+            if func.Parameters.[0] = Wasmtime.ValueKind.Int64 then Wasmtime.ValueBox.op_Implicit (int64 argument)
+            else Wasmtime.ValueBox.op_Implicit argument
+        match func.Invoke value with
+        | :? int64 as result -> int result
+        | result -> result :?> int
     member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
         instance.GetAction<int>(Transpiler.Wasm.CoreIrDrop.dropName ty).Invoke value
     member _.HeapPointer = counter CheckedExports.heapPointer

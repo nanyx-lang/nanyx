@@ -55,6 +55,20 @@ module Helpers =
     let escapeByte = "__nanyx_escape_byte"
     /// WASI's `proc_exit`, imported rather than a helper of its own: asking for it declares the import.
     let procExit = "proc_exit"
+    /// `+`, `-` and `*` on ints, which stop the program when the result does not fit (see `checkedIntHelper`).
+    let intAdd = "__nanyx_int_add"
+    let intSub = "__nanyx_int_sub"
+    let intMul = "__nanyx_int_mul"
+    /// An int as an index into a string: itself when it fits an `i32`, else the nearest `i32`, which is past either
+    /// end of every string.
+    let intToIndex = "__nanyx_int_to_index"
+
+    /// The helpers that hold a value of the program's in memory, which have a variant for each WebAssembly type a value
+    /// can be held in (see `CoreIrLayout.valueType`).
+    let storingValues = [ listCons; listConsAt; tagBox; tagBoxAt; recordSet; listConcat ]
+
+    /// The helper `name`, one of `storingValues`, for a value held in `valueType`: the helper itself for an `i32`.
+    let forValueType (name: string) (valueType: string) = if valueType = "i32" then name else $"{name}_{valueType}"
 
 /// The lowest address the table of free-list heads starts at. A module whose string literals end past it puts the table
 /// after them instead (see `heapBaseAfter`).
@@ -100,6 +114,9 @@ module MemoryChecks =
     let freedMark = 1
 
 let private lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
+
+/// How many bytes a value held in the WebAssembly type `valueType` takes in memory.
+let private valueBytes (valueType: string) = if valueType = "i64" then 8 else 4
 
 // Leaves on the stack the address of the head of the free list for a block of `$size` bytes, in the table at
 // `heapBase`.
@@ -369,8 +386,10 @@ let memoryCheckFunctions (heapBase: int) (messageOffset: string -> int) =
 /// A function `name` for `a ++ b` on lists: it copies the cells of `a`, in order, in front of `b`, which it takes
 /// over and shares (lists being immutable). `copyHead` runs on each head before it goes into its copy, to take a
 /// reference to it when the elements are on the heap. It walks `a` in a loop, writing each new cell's tail once the
-/// next cell exists, so a long `a` does not run out of stack.
-let listConcatFunction (name: string) (copyHead: string list) =
+/// next cell exists, so a long `a` does not run out of stack. The elements are held in `valueType`, so each cell's tail is
+/// after a head of its size.
+let listConcatFunction (name: string) (copyHead: string list) (valueType: string) =
+    let tail = valueBytes valueType
     lines
         [ yield $"(func ${name} (param $a i32) (param $b i32) (result i32)"
           yield "  (local $result i32)"
@@ -384,16 +403,16 @@ let listConcatFunction (name: string) (copyHead: string list) =
           yield "      i32.eqz"
           yield "      br_if $done"
           yield "      local.get $a"
-          yield "      i32.load"
+          yield $"      {valueType}.load"
           yield! copyHead |> List.map (fun line -> "      " + line)
           yield "      i32.const 0"
-          yield $"      call ${Helpers.listCons}"
+          yield $"      call ${Helpers.forValueType Helpers.listCons valueType}"
           yield "      local.set $cell"
           yield "      local.get $last"
           yield "      if"
           yield "        local.get $last"
           yield "        local.get $cell"
-          yield "        i32.store offset=4"
+          yield $"        i32.store offset={tail}"
           yield "      else"
           yield "        local.get $cell"
           yield "        local.set $result"
@@ -401,7 +420,7 @@ let listConcatFunction (name: string) (copyHead: string list) =
           yield "      local.get $cell"
           yield "      local.set $last"
           yield "      local.get $a"
-          yield "      i32.load offset=4"
+          yield $"      i32.load offset={tail}"
           yield "      local.set $a"
           yield "      br $copy"
           yield "    end"
@@ -410,9 +429,127 @@ let listConcatFunction (name: string) (copyHead: string list) =
           yield "  if"
           yield "    local.get $last"
           yield "    local.get $b"
-          yield "    i32.store offset=4"
+          yield $"    i32.store offset={tail}"
           yield "  end"
           yield "  local.get $result"
+          yield ")" ]
+
+/// The helpers of `Helpers.storingValues` for values held in `valueType`, keyed by name.
+let private storingHelpers (valueType: string) =
+    let bytes = valueBytes valueType
+    let name helper = Helpers.forValueType helper valueType
+    [ // A list with `$head` in front of `$tail`: `head tail -> cell`.
+      name Helpers.listCons,
+      lines
+          [ $"(func ${name Helpers.listCons} (param $head {valueType}) (param $tail i32) (result i32)"
+            "  (local $cell i32)"
+            $"  i32.const {bytes + 4}"
+            $"  call ${Helpers.newCell}"
+            "  local.tee $cell"
+            "  local.get $head"
+            $"  {valueType}.store"
+            "  local.get $cell"
+            "  local.get $tail"
+            $"  i32.store offset={bytes}"
+            "  local.get $cell"
+            ")" ]
+      // `listCons` into the block of a reuse token, when it is not 0: `block head tail -> cell`.
+      name Helpers.listConsAt,
+      lines
+          [ $"(func ${name Helpers.listConsAt} (param $block i32) (param $head {valueType}) (param $tail i32) (result i32)"
+            "  (local $cell i32)"
+            "  local.get $block"
+            "  i32.eqz"
+            "  if"
+            "    local.get $head"
+            "    local.get $tail"
+            $"    call ${name Helpers.listCons}"
+            "    return"
+            "  end"
+            "  local.get $block"
+            "  i32.const 4"
+            "  i32.add"
+            "  local.tee $cell"
+            "  local.get $head"
+            $"  {valueType}.store"
+            "  local.get $cell"
+            "  local.get $tail"
+            $"  i32.store offset={bytes}"
+            "  local.get $cell"
+            ")" ]
+      // A tag with a payload: `code payload -> cell`.
+      name Helpers.tagBox,
+      lines
+          [ $"(func ${name Helpers.tagBox} (param $code i32) (param $payload {valueType}) (result i32)"
+            "  (local $cell i32)"
+            $"  i32.const {bytes + 4}"
+            $"  call ${Helpers.newCell}"
+            "  local.tee $cell"
+            "  local.get $code"
+            "  i32.store"
+            "  local.get $cell"
+            "  local.get $payload"
+            $"  {valueType}.store offset=4"
+            "  local.get $cell"
+            ")" ]
+      // `tagBox` into the block of a reuse token, when it is not 0: `block code payload -> cell`.
+      name Helpers.tagBoxAt,
+      lines
+          [ $"(func ${name Helpers.tagBoxAt} (param $block i32) (param $code i32) (param $payload {valueType}) (result i32)"
+            "  (local $cell i32)"
+            "  local.get $block"
+            "  i32.eqz"
+            "  if"
+            "    local.get $code"
+            "    local.get $payload"
+            $"    call ${name Helpers.tagBox}"
+            "    return"
+            "  end"
+            "  local.get $block"
+            "  i32.const 4"
+            "  i32.add"
+            "  local.tee $cell"
+            "  local.get $code"
+            "  i32.store"
+            "  local.get $cell"
+            "  local.get $payload"
+            $"  {valueType}.store offset=4"
+            "  local.get $cell"
+            ")" ]
+      // Stores one field of a freshly allocated record and hands the record pointer back, so a record
+      // literal is built entirely on the operand stack: `base value offset -> base`. That keeps nested
+      // literals safe, since an inner allocation can never disturb an outer one held on the stack.
+      name Helpers.recordSet,
+      lines
+          [ $"(func ${name Helpers.recordSet} (param $base i32) (param $value {valueType}) (param $offset i32) (result i32)"
+            "  local.get $base"
+            "  local.get $offset"
+            "  i32.add"
+            "  local.get $value"
+            $"  {valueType}.store"
+            "  local.get $base"
+            ")" ]
+      name Helpers.listConcat, listConcatFunction (name Helpers.listConcat) [] valueType ]
+
+/// `+`, `-` or `*` (`instruction`, such as `i64.add`) on two ints, which stops the program when the result does not fit
+/// an int: it divides the smallest int by -1, which traps with "integer overflow", as WebAssembly's own overflow does.
+/// `overflowed` leaves 1 when the result `$r` of `$a` and `$b` overflowed.
+let private checkedIntHelper (name: string) (instruction: string) (overflowed: string list) =
+    lines
+        [ yield $"(func ${name} (param $a i64) (param $b i64) (result i64)"
+          yield "  (local $r i64)"
+          yield "  local.get $a"
+          yield "  local.get $b"
+          yield $"  {instruction}"
+          yield "  local.set $r"
+          yield! overflowed |> List.map (fun line -> "  " + line)
+          yield "  if"
+          yield $"    i64.const {System.Int64.MinValue}"
+          yield "    i64.const -1"
+          yield "    i64.div_s"
+          yield "    drop"
+          yield "  end"
+          yield "  local.get $r"
           yield ")" ]
 
 /// The WebAssembly helper functions, keyed by name. The ones named after a compiler intrinsic implement
@@ -420,10 +557,11 @@ let listConcatFunction (name: string) (copyHead: string list) =
 /// and the allocator they share. Only the helpers a module uses are emitted.
 ///
 /// Memory model: a string is a pointer to its UTF-8 bytes, with its byte length in the 4 bytes before the
-/// pointer and a 0 byte after; a list is 0 (empty) or a pointer to an 8-byte cell of (head, tail); a record (or
-/// tuple) is a pointer to a 4-byte slot per field in field-name order, with its layout's number (see
-/// `RecordTable`) in the 4 bytes before the pointer. A tag without a payload is its code (see `tagCode`), which
-/// is odd; a tag with one is a pointer to an 8-byte cell of (code, payload).
+/// pointer and a 0 byte after; a list is 0 (empty) or a pointer to a cell of (head, tail); a record (or tuple) is a
+/// pointer to its fields in field-name order, with its layout's number (see `RecordTable`) in the 4 bytes before the
+/// pointer. A tag without a payload is its code (see `tagCode`), which is odd; a tag with one is a pointer to a cell of
+/// (code, payload). An int takes 8 bytes in a field, a head or a payload, and every other value 4 (see
+/// `CoreIrLayout`).
 ///
 /// Every object on the heap has a header: its reference count, then its info word if it has one (a string's length,
 /// a record's layout, a closure's drop function). So the count is at `p - 8` for strings, records and closures, made
@@ -500,54 +638,8 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.const 8"
             "  i32.add"
             ")" ]
-      // `listCons` into the block of a reuse token, when it is not 0: `block head tail -> cell`.
-      Helpers.listConsAt,
-      lines
-          [ $"(func ${Helpers.listConsAt} (param $block i32) (param $head i32) (param $tail i32) (result i32)"
-            "  (local $cell i32)"
-            "  local.get $block"
-            "  i32.eqz"
-            "  if"
-            "    local.get $head"
-            "    local.get $tail"
-            $"    call ${Helpers.listCons}"
-            "    return"
-            "  end"
-            "  local.get $block"
-            "  i32.const 4"
-            "  i32.add"
-            "  local.tee $cell"
-            "  local.get $head"
-            "  i32.store"
-            "  local.get $cell"
-            "  local.get $tail"
-            "  i32.store offset=4"
-            "  local.get $cell"
-            ")" ]
-      // `tagBox` into the block of a reuse token, when it is not 0: `block code payload -> cell`.
-      Helpers.tagBoxAt,
-      lines
-          [ $"(func ${Helpers.tagBoxAt} (param $block i32) (param $code i32) (param $payload i32) (result i32)"
-            "  (local $cell i32)"
-            "  local.get $block"
-            "  i32.eqz"
-            "  if"
-            "    local.get $code"
-            "    local.get $payload"
-            $"    call ${Helpers.tagBox}"
-            "    return"
-            "  end"
-            "  local.get $block"
-            "  i32.const 4"
-            "  i32.add"
-            "  local.tee $cell"
-            "  local.get $code"
-            "  i32.store"
-            "  local.get $cell"
-            "  local.get $payload"
-            "  i32.store offset=4"
-            "  local.get $cell"
-            ")" ]
+      yield! storingHelpers "i32"
+      yield! storingHelpers "i64"
       Helpers.retain, retainHelper checks
       Helpers.copyBytes,
       lines
@@ -821,19 +913,6 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "    end"
             "  end"
             ")" ]
-      // Stores one field of a freshly allocated record and hands the record pointer back, so a record
-      // literal is built entirely on the operand stack: `base value offset -> base`. That keeps nested
-      // literals safe, since an inner allocation can never disturb an outer one held on the stack.
-      Helpers.recordSet,
-      lines
-          [ $"(func ${Helpers.recordSet} (param $base i32) (param $value i32) (param $offset i32) (result i32)"
-            "  local.get $base"
-            "  local.get $offset"
-            "  i32.add"
-            "  local.get $value"
-            "  i32.store"
-            "  local.get $base"
-            ")" ]
       // A new record with the layout and the `$size` bytes of fields of the record `$src`: `src size -> record`.
       Helpers.recordCopy,
       lines
@@ -851,21 +930,6 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"  call ${Helpers.copyBytes}"
             "  local.get $dst"
             ")" ]
-      // A tag with a payload: `code payload -> cell`.
-      Helpers.tagBox,
-      lines
-          [ $"(func ${Helpers.tagBox} (param $code i32) (param $payload i32) (result i32)"
-            "  (local $cell i32)"
-            "  i32.const 8"
-            $"  call ${Helpers.newCell}"
-            "  local.tee $cell"
-            "  local.get $code"
-            "  i32.store"
-            "  local.get $cell"
-            "  local.get $payload"
-            "  i32.store offset=4"
-            "  local.get $cell"
-            ")" ]
       // Which tag a tag value is: the value itself when it is a code (odd), else the code in its cell.
       Helpers.tagCode,
       lines
@@ -880,8 +944,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "    i32.load"
             "  end"
             ")" ]
-      // A float is boxed: an 8-byte block holding the f64, passed around by pointer like every other
-      // value, so locals, record slots and calls stay 32-bit.
+      // A float is boxed: an 8-byte block holding the f64, passed around by pointer.
       Helpers.floatBox,
       lines
           [ $"(func ${Helpers.floatBox} (param $value f64) (result i32)"
@@ -918,13 +981,13 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
                     $"  {instruction}"
                     $"  call ${Helpers.floatBox}"
                     ")" ])
-      // A boxed float as an int: `i32.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
+      // A boxed float as an int: `i64.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
       Helpers.floatToInt,
       lines
-          [ $"(func ${Helpers.floatToInt} (param $box i32) (result i32)"
+          [ $"(func ${Helpers.floatToInt} (param $box i32) (result i64)"
             "  local.get $box"
             "  f64.load"
-            "  i32.trunc_f64_s"
+            "  i64.trunc_f64_s"
             ")" ]
       // Ends the program through WASI's `proc_exit`, which never returns. Its result, `undefined`, is an i32 like every
       // value, so a call stands wherever a value is expected; `unreachable` validates as one.
@@ -935,13 +998,42 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"  call ${Helpers.procExit}"
             "  unreachable"
             ")" ]
-      // An int as a boxed float: `f64.convert_i32_s` is exact for every `int`.
+      // An int as a boxed float: `f64.convert_i64_s` rounds to the nearest float, and is exact up to 2^53.
       Helpers.intToFloat,
       lines
-          [ $"(func ${Helpers.intToFloat} (param $value i32) (result i32)"
+          [ $"(func ${Helpers.intToFloat} (param $value i64) (result i32)"
             "  local.get $value"
-            "  f64.convert_i32_s"
+            "  f64.convert_i64_s"
             $"  call ${Helpers.floatBox}"
+            ")" ]
+      Helpers.intAdd, checkedIntHelper Helpers.intAdd "i64.add" [ "local.get $a"; "local.get $r"; "i64.xor"; "local.get $b"; "local.get $r"; "i64.xor"; "i64.and"; "i64.const 0"; "i64.lt_s" ]
+      Helpers.intSub, checkedIntHelper Helpers.intSub "i64.sub" [ "local.get $a"; "local.get $b"; "i64.xor"; "local.get $a"; "local.get $r"; "i64.xor"; "i64.and"; "i64.const 0"; "i64.lt_s" ]
+      // The product overflowed when dividing it by `$a` does not give `$b` back. Dividing the smallest int by -1 traps
+      // itself, which is what -1 times the smallest int should do.
+      Helpers.intMul,
+      checkedIntHelper
+          Helpers.intMul
+          "i64.mul"
+          [ "local.get $a"; "i64.eqz"; "if (result i32)"; "  i32.const 0"; "else"; "  local.get $r"; "  local.get $a"; "  i64.div_s"; "  local.get $b"; "  i64.ne"; "end" ]
+      Helpers.intToIndex,
+      lines
+          [ $"(func ${Helpers.intToIndex} (param $value i64) (result i32)"
+            "  local.get $value"
+            $"  i64.const {System.Int32.MinValue}"
+            "  i64.lt_s"
+            "  if"
+            $"    i32.const {System.Int32.MinValue}"
+            "    return"
+            "  end"
+            "  local.get $value"
+            $"  i64.const {System.Int32.MaxValue}"
+            "  i64.gt_s"
+            "  if"
+            $"    i32.const {System.Int32.MaxValue}"
+            "    return"
+            "  end"
+            "  local.get $value"
+            "  i32.wrap_i64"
             ")" ]
       // The truncated remainder, C's `fmod`, on unboxed floats: `a - trunc(a / b) * b`, with the sign of `a`. When `b`
       // is infinite the quotient is zero and `0 * b` NaN, so the remainder is `a` itself (NaN when `a` is infinite).
@@ -971,24 +1063,6 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  local.get $a"
             "  f64.copysign"
             ")" ]
-      Helpers.listCons,
-      lines
-          [ $"(func ${Helpers.listCons} (param $head i32) (param $tail i32) (result i32)"
-            "  (local $cell i32)"
-            "  i32.const 8"
-            $"  call ${Helpers.newCell}"
-            "  local.set $cell"
-            "  local.get $cell"
-            "  local.get $head"
-            "  i32.store"
-            "  local.get $cell"
-            "  i32.const 4"
-            "  i32.add"
-            "  local.get $tail"
-            "  i32.store"
-            "  local.get $cell"
-            ")" ]
-      Helpers.listConcat, listConcatFunction Helpers.listConcat []
       Helpers.escapeByte,
       lines
           [ yield $"(func ${Helpers.escapeByte} (param $c i32) (result i32)"
@@ -1135,9 +1209,12 @@ let helperDependencies =
       Helpers.readStdinByte, []
       Helpers.exit, [ Helpers.procExit ]
       Helpers.listCons, [ Helpers.newCell ]
+      Helpers.forValueType Helpers.listCons "i64", [ Helpers.newCell ]
       Helpers.recordSet, []
+      Helpers.forValueType Helpers.recordSet "i64", []
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
       Helpers.tagBox, [ Helpers.newCell ]
+      Helpers.forValueType Helpers.tagBox "i64", [ Helpers.newCell ]
       Helpers.tagCode, []
       Helpers.floatBox, [ Helpers.newCell ]
       Helpers.floatToString,
@@ -1158,9 +1235,12 @@ let helperDependencies =
       FloatText.bigSub, []
       FloatText.bigCompare, []
       Helpers.listConcat, [ Helpers.listCons ]
+      Helpers.forValueType Helpers.listConcat "i64", [ Helpers.forValueType Helpers.listCons "i64" ]
       Helpers.reuseObject, [ Helpers.newObject ]
       Helpers.listConsAt, [ Helpers.listCons ]
+      Helpers.forValueType Helpers.listConsAt "i64", [ Helpers.forValueType Helpers.listCons "i64" ]
       Helpers.tagBoxAt, [ Helpers.tagBox ]
+      Helpers.forValueType Helpers.tagBoxAt "i64", [ Helpers.forValueType Helpers.tagBox "i64" ]
       Helpers.floatSqrt, [ Helpers.floatBox ]
       Helpers.floatFloor, [ Helpers.floatBox ]
       Helpers.floatCeil, [ Helpers.floatBox ]
@@ -1169,7 +1249,11 @@ let helperDependencies =
       Helpers.intToFloat, [ Helpers.floatBox ]
       Helpers.floatRem, []
       Helpers.escapeByte, []
-      Helpers.stringQuote, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.escapeByte ] ]
+      Helpers.stringQuote, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.escapeByte ]
+      Helpers.intAdd, []
+      Helpers.intSub, []
+      Helpers.intMul, []
+      Helpers.intToIndex, [] ]
 let rec closeHelpers (acc: Set<string>) (pending: string list) =
     match pending with
     | [] -> acc

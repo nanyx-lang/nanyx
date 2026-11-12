@@ -35,8 +35,9 @@ type private FunctionTable =
       Values: System.Collections.Generic.Dictionary<string, ContextFn>
       /// The next free slot.
       mutable NextSlot: int
-      /// The arities of every indirect call made through a local, so a `$ctx_fn_N` type exists for each.
-      IndirectArities: System.Collections.Generic.HashSet<int> }
+      /// The parameters and result of every indirect call made through a local, so a type exists for each (see
+      /// `Wat.indirectTypeName`).
+      IndirectSignatures: System.Collections.Generic.HashSet<string list * string> }
 
 /// The record layouts the module allocates, each numbered as the functions are emitted. Every record carries its
 /// layout's number.
@@ -419,7 +420,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let functionTable: FunctionTable =
         { Values = System.Collections.Generic.Dictionary<string, ContextFn>()
           NextSlot = 0
-          IndirectArities = System.Collections.Generic.HashSet<int>() }
+          IndirectSignatures = System.Collections.Generic.HashSet<string list * string>() }
 
     let recordTable: RecordTable =
         { LayoutIds = System.Collections.Generic.Dictionary<string list, int>() }
@@ -563,7 +564,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           StringOffset = (fun _ -> 0)
           RecordLayoutId = (fun _ -> 0)
           FunctionSlot = (fun _ _ -> 0)
-          IndirectCall = ignore }
+          IndirectCall = ignore
+          Signature = (fun _ -> None) }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -643,6 +645,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let heapBase = heapBaseAfter (stringDataEnd stringLiteralData)
     let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
 
+    // The parameters and result of each function, which a call converts a value of no known type to and from.
+    let signatures =
+        definitionFunctions @ Option.toList startFunction
+        |> List.map (fun func -> func.Name, (func.Params |> List.map _.Type, func.Result))
+        |> Map.ofList
+
     let context: CoreIrEmit.EmitContext =
         { TagId =
             fun name ->
@@ -656,7 +664,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | None -> CoreIr.internalError $"missing string literal offset for {value}"
           RecordLayoutId = recordLayoutId recordTable
           FunctionSlot = functionValueSlot functionTable
-          IndirectCall = functionTable.IndirectArities.Add >> ignore }
+          IndirectCall = functionTable.IndirectSignatures.Add >> ignore
+          Signature = fun name -> signatures |> Map.tryFind name }
 
     /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
     let fromCoreIr (func: CoreIr.Function) =
@@ -686,7 +695,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     for helper in CoreIrDrop.helpersUsed drops do
         usedHelpers.Add helper |> ignore
     if drops.Types |> List.exists (function CoreIr.IrFunction _ -> true | _ -> false) then
-        functionTable.IndirectArities.Add 1 |> ignore
+        functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore
 
     // An equality function for each record, list and union of tags `==` compares, and for each of their parts that
     // needs one.
@@ -767,25 +776,23 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // Every function body has been rendered by now, so the function-value slots are final.
     let contextFnList = functionTable.Values.Values |> Seq.toList
 
+    // A type for every indirect call, and one of `i32`s for the arity of each function in the table.
     let contextTypeDefs =
-        (contextFnList |> List.map ctxFnArity) @ (functionTable.IndirectArities |> Seq.toList)
+        (contextFnList |> List.map (fun ctxFn -> List.replicate (ctxFnArity ctxFn) "i32", "i32")) @ (functionTable.IndirectSignatures |> Seq.toList)
         |> Set.ofList
         |> Set.toList
-        |> List.sort
-        |> List.map (fun arity ->
-            let paramSig =
-                [ for _ in 1 .. arity -> "i32" ]
-                |> String.concat " "
-            if String.IsNullOrWhiteSpace paramSig then
-                $"  (type $ctx_fn_{arity} (func (result i32)))"
-            else
-                $"  (type $ctx_fn_{arity} (func (param {paramSig}) (result i32)))")
+        |> List.sortBy (fun (parameters, result) -> parameters.Length, indirectTypeName parameters result)
+        |> List.map (fun (parameters, result) ->
+            let name = indirectTypeName parameters result
+            match parameters with
+            | [] -> $"  (type ${name} (func (result {result})))"
+            | _ -> $"""  (type ${name} (func (param {String.concat " " parameters}) (result {result})))""")
         |> String.concat "\n"
 
     // A `call_indirect` needs a table to validate, even in a module that never makes a closure to put in it
     // (a function that only calls the closures it is given).
     let contextTable =
-        if contextFnList.IsEmpty && Seq.isEmpty functionTable.IndirectArities then
+        if contextFnList.IsEmpty && Seq.isEmpty functionTable.IndirectSignatures then
             ""
         else
             $"  (table $ctx_table {contextFnList.Length} funcref)"

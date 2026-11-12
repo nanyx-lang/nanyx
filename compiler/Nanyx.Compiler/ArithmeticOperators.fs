@@ -136,7 +136,7 @@ module internal ArithmeticOperators =
         | LiteralExpr value, (TyVar v as var), DefScope(defName, false) when bound zero ->
             let tyText = Unifier.tyToDisplayString Ascii var
             match value with
-            | IntLit 0 -> Some (AsMember { literal with Kind = IdentifierExpr zero })
+            | IntLit 0L -> Some (AsMember { literal with Kind = IdentifierExpr zero })
             | IntLit n when bound fromInt ->
                 Some (AsMember { literal with Kind = FunctionCall(fromInt, None, [ Expression.at literal.Span (LiteralExpr(IntLit n)) ]) })
             | _ when v.Name.IsNone -> None

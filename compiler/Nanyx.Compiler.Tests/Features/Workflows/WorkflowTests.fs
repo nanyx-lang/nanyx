@@ -139,7 +139,7 @@ let ``Desugar workflow implicit return`` () =
     | Result.Ok ast ->
         let desugared = Compiler.desugar ast
         match desugared with
-        | [Kind (Def (ValueDef(_, "result", _, Kind (FunctionCall("async", _, [Kind (Lambda([], Kind (Block [Kind (ExprStatement (Kind (LiteralExpr (IntLit 1))))]), _))])))))] ->
+        | [Kind (Def (ValueDef(_, "result", _, Kind (FunctionCall("async", _, [Kind (Lambda([], Kind (Block [Kind (ExprStatement (Kind (LiteralExpr (IntLit 1L))))]), _))])))))] ->
             Assert.True(true)
         | other -> Assert.True(false, $"Unexpected desugared module: %A{other}")
 

@@ -17,6 +17,7 @@
     <Compile Include="Interpolation.fs" />
     <Compile Include="Wat.fs" />
     <Compile Include="CoreIr.fs" />
+    <Compile Include="CoreIrLayout.fs" />
     <Compile Include="CoreIrFacts.fs" />
     <Compile Include="CoreIrLowerTypes.fs" />
     <Compile Include="CoreIrLowerSyntax.fs" />

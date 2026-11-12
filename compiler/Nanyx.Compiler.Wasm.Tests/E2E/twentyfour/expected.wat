@@ -405,6 +405,47 @@
     i32.store offset=4
     local.get $cell
   )
+  (func $__nanyx_int_sub (param $a i64) (param $b i64) (result i64)
+    (local $r i64)
+    local.get $a
+    local.get $b
+    i64.sub
+    local.set $r
+    local.get $a
+    local.get $b
+    i64.xor
+    local.get $a
+    local.get $r
+    i64.xor
+    i64.and
+    i64.const 0
+    i64.lt_s
+    if
+      i64.const -9223372036854775808
+      i64.const -1
+      i64.div_s
+      drop
+    end
+    local.get $r
+  )
+  (func $__nanyx_int_to_index (param $value i64) (result i32)
+    local.get $value
+    i64.const -2147483648
+    i64.lt_s
+    if
+      i32.const -2147483648
+      return
+    end
+    local.get $value
+    i64.const 2147483647
+    i64.gt_s
+    if
+      i32.const 2147483647
+      return
+    end
+    local.get $value
+    i32.wrap_i64
+  )
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
@@ -455,35 +496,41 @@
     call_indirect (type $ctx_fn_2)
     drop
     local.get $__ctx_write
-    i32.const 10
+    i64.const 10
+    i32.wrap_i64
     call $__nanyx_string_from_byte
     local.get $__ctx_write
     i32.load
     return_call_indirect (type $ctx_fn_2)
   )
 
-  (func $console_withoutCarriageReturn (param $line i32) (result i32) (local $length i32)
+  (func $console_withoutCarriageReturn (param $line i32) (result i32) (local $length_i64 i64)
     local.get $line
     call $__nanyx_string_length
-    local.set $length
-    local.get $length
-    i32.const 0
-    i32.gt_s
+    i64.extend_i32_s
+    local.set $length_i64
+    local.get $length_i64
+    i64.const 0
+    i64.gt_s
     local.get $line
-    local.get $length
-    i32.const 1
-    i32.sub
+    local.get $length_i64
+    i64.const 1
+    call $__nanyx_int_sub
+    call $__nanyx_int_to_index
     call $__nanyx_string_byte_at
-    i32.const 13
-    i32.eq
+    i64.extend_i32_s
+    i64.const 13
+    i64.eq
     i32.and
     (if (result i32)
       (then
         local.get $line
-    i32.const 0
-    local.get $length
-    i32.const 1
-    i32.sub
+    i64.const 0
+    call $__nanyx_int_to_index
+    local.get $length_i64
+    i64.const 1
+    call $__nanyx_int_sub
+    call $__nanyx_int_to_index
     call $__nanyx_string_slice
     local.get $line
     call $__nanyx_drop_string
@@ -495,18 +542,20 @@
   )
   (export "console.withoutCarriageReturn" (func $console_withoutCarriageReturn))
 
-  (func $console_readLineAfter (param $acc i32) (result i32) (local $byte i32) (local $__owned_0 i32)
+  (func $console_readLineAfter (param $acc i32) (result i32) (local $byte_i64 i64) (local $__owned_0 i32)
     call $__nanyx_read_stdin_byte
-    local.set $byte
-    local.get $byte
-    i32.const 0
-    i32.lt_s
+    i64.extend_i32_s
+    local.set $byte_i64
+    local.get $byte_i64
+    i64.const 0
+    i64.lt_s
     (if (result i32)
       (then
         local.get $acc
     call $__nanyx_string_length
-    i32.const 0
-    i32.eq
+    i64.extend_i32_s
+    i64.const 0
+    i64.eq
     (if (result i32)
       (then
         local.get $acc
@@ -523,9 +572,9 @@
     )
       )
       (else
-        local.get $byte
-    i32.const 10
-    i32.eq
+        local.get $byte_i64
+    i64.const 10
+    i64.eq
     (if (result i32)
       (then
         i32.const 7
@@ -535,7 +584,8 @@
       )
       (else
         local.get $acc
-    local.get $byte
+    local.get $byte_i64
+    i32.wrap_i64
     call $__nanyx_string_from_byte
     local.tee $__owned_0
     call $__nanyx_string_concat
@@ -557,19 +607,21 @@
   )
   (export "readLine" (func $readLine))
 
-  (func $console_readToEndAfter (param $acc i32) (result i32) (local $byte i32) (local $__owned_0 i32)
+  (func $console_readToEndAfter (param $acc i32) (result i32) (local $byte_i64 i64) (local $__owned_0 i32)
     call $__nanyx_read_stdin_byte
-    local.set $byte
-    local.get $byte
-    i32.const 0
-    i32.lt_s
+    i64.extend_i32_s
+    local.set $byte_i64
+    local.get $byte_i64
+    i64.const 0
+    i64.lt_s
     (if (result i32)
       (then
         local.get $acc
       )
       (else
         local.get $acc
-    local.get $byte
+    local.get $byte_i64
+    i32.wrap_i64
     call $__nanyx_string_from_byte
     local.tee $__owned_0
     call $__nanyx_string_concat
@@ -645,7 +697,7 @@
 
   (func $__fn_write (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
-    call $__nanyx_drop_rec_0_int
+    call $__nanyx_drop_rec_0_word
     local.get $__arg1
     return_call $write
   )
@@ -653,7 +705,7 @@
 
   (func $__fn_writeError (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
-    call $__nanyx_drop_rec_0_int
+    call $__nanyx_drop_rec_0_word
     local.get $__arg1
     return_call $writeError
   )
@@ -661,7 +713,7 @@
 
   (func $__fn_readLine (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
-    call $__nanyx_drop_rec_0_int
+    call $__nanyx_drop_rec_0_word
     local.get $__arg1
     return_call $readLine
   )
@@ -669,7 +721,7 @@
 
   (func $__fn_readToEnd (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
-    call $__nanyx_drop_rec_0_int
+    call $__nanyx_drop_rec_0_word
     local.get $__arg1
     return_call $readToEnd
   )
@@ -677,7 +729,7 @@
 
   (func $__fn_flush (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
-    call $__nanyx_drop_rec_0_int
+    call $__nanyx_drop_rec_0_word
     local.get $__arg1
     return_call $flush
   )
@@ -685,7 +737,7 @@
 
   (func $__fn_string_toString (param $__env i32) (param $__arg1 i32) (result i32)
     local.get $__env
-    call $__nanyx_drop_rec_0_int
+    call $__nanyx_drop_rec_0_word
     local.get $__arg1
     return_call $string_toString
   )
@@ -953,8 +1005,8 @@
     local.get $p
   )
 
-  (func $__nanyx_drop_rec_0_int (param $p i32)
-    ;; (0: int)
+  (func $__nanyx_drop_rec_0_word (param $p i32)
+    ;; (0: word)
     local.get $p
     i32.const 8
     i32.sub
@@ -967,7 +1019,7 @@
     end
   )
 
-  (func $__nanyx_dup_rec_0_int (param $p i32) (result i32)
+  (func $__nanyx_dup_rec_0_word (param $p i32) (result i32)
     block $shared
       local.get $p
       i32.const 8

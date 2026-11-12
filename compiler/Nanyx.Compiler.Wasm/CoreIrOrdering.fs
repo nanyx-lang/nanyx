@@ -47,7 +47,7 @@ let private indent (lines: string list) = lines |> List.map (fun line -> "  " + 
 let private compareBody (ty: IrType) : string list * string list =
     let both instruction = [ "local.get $a"; "local.get $b"; instruction ]
     match ty with
-    | IrInt
+    | IrInt -> [], sign (both "i64.gt_s") (both "i64.lt_s")
     | IrBool
     | IrUnit -> [], sign (both "i32.gt_s") (both "i32.lt_s")
     | IrFloat ->
@@ -103,12 +103,13 @@ let private compareBody (ty: IrType) : string list * string list =
           "  end"
           "end"
           yield! sign [ "local.get $lena"; "local.get $lenb"; "i32.gt_s" ] [ "local.get $lena"; "local.get $lenb"; "i32.lt_s" ] ]
-    | IrRecord _ ->
+    | IrRecord fields ->
         [ "(local $order i32)" ],
         [ yield!
               orderedParts ty
               |> List.collect (fun (slot, fieldTy) ->
-                  [ yield! [ "local.get $a"; $"i32.load offset={slot * 4}"; "local.get $b"; $"i32.load offset={slot * 4}" ]
+                  let field = CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot)
+                  [ yield! [ "local.get $a"; field; "local.get $b"; field ]
                     $"call ${compareName fieldTy}"
                     yield! orReturnOrder ])
           "i32.const 0" ]
@@ -124,16 +125,16 @@ let private compareBody (ty: IrType) : string list * string list =
           "    i32.or"
           "    br_if $done"
           "    local.get $a"
-          "    i32.load"
+          $"    {CoreIrLayout.load element 0}"
           "    local.get $b"
-          "    i32.load"
+          $"    {CoreIrLayout.load element 0}"
           $"    call ${compareName element}"
           yield! orReturnOrder |> indent |> indent
           "    local.get $a"
-          "    i32.load offset=4"
+          $"    i32.load offset={CoreIrLayout.tailOffset element}"
           "    local.set $a"
           "    local.get $b"
-          "    i32.load offset=4"
+          $"    i32.load offset={CoreIrLayout.tailOffset element}"
           "    local.set $b"
           "    br $next"
           "  end"
@@ -144,7 +145,8 @@ let private compareBody (ty: IrType) : string list * string list =
     | IrFunction _
     | IrError
     | IrRecursive _
-    | IrSelf -> internalError $"an ordering function for {IrType.show ty}, which has no order"
+    | IrSelf
+    | IrWord -> internalError $"an ordering function for {IrType.show ty}, which has no order"
 
 /// The runtime helpers the ordering functions of `types` call.
 let helpersUsed (types: IrType list) : string list =
@@ -155,7 +157,8 @@ let render (types: IrType list) : string list =
     types
     |> List.map (fun ty ->
         let locals, body = compareBody ty
-        [ $"(func ${compareName ty} (param $a i32) (param $b i32) (result i32)"
+        let valueType = CoreIrLayout.valueType ty
+        [ $"(func ${compareName ty} (param $a {valueType}) (param $b {valueType}) (result i32)"
           $"  ;; {IrType.show ty}"
           yield! indent locals
           yield! indent body

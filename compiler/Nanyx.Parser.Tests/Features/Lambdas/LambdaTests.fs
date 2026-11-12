@@ -72,7 +72,7 @@ let ``Parse lambda with no parameters`` () =
             name |> should equal "f"
             parameters |> should haveLength 0
             match body.Kind with
-            | LiteralExpr (IntLit v) -> v |> should equal 42
+            | LiteralExpr (IntLit v) -> v |> should equal 42L
             | _ -> failwith "Expected int literal in lambda body"
         | _ -> failwith "Expected Def with Lambda"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -197,7 +197,7 @@ let ``Parse shorthand lambda with unary operation`` () =
             | BinaryOp (op, Kind (IdentifierExpr left), Kind (LiteralExpr (IntLit right))) ->
                 op |> should equal "*"
                 left |> should equal implicitArgument
-                right |> should equal 2
+                right |> should equal 2L
             | _ -> failwith "Expected binary operation with literal in shorthand lambda body"
         | _ -> failwith "Expected Def with Lambda"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -240,7 +240,7 @@ let ``Parse shorthand lambda with addition`` () =
             | BinaryOp (op, Kind (IdentifierExpr left), Kind (LiteralExpr (IntLit right))) ->
                 op |> should equal "+"
                 left |> should equal implicitArgument
-                right |> should equal 5
+                right |> should equal 5L
             | _ -> failwith "Expected addition operation in shorthand lambda body"
         | _ -> failwith "Expected Def with Lambda"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -267,7 +267,7 @@ let ``Parse shorthand lambda as function argument`` () =
                 | BinaryOp (op, Kind (IdentifierExpr left), Kind (LiteralExpr (IntLit right))) ->
                     op |> should equal "*"
                     left |> should equal implicitArgument
-                    right |> should equal 2
+                    right |> should equal 2L
                 | _ -> failwith "Expected multiplication in lambda"
             | _ -> failwith "Expected shorthand lambda as first argument"
         | _ -> failwith "Expected Def with FunctionCall"
@@ -286,14 +286,14 @@ let private implicit = IdentifierExpr implicitArgument
 let ``a shorthand lambda's body continues after its first operation`` () =
     // `{ % 2 == 0 }` is `{ x -> x % 2 == 0 }`: the argument is the left operand of the first operator.
     match (onlyValue "def isEven = { % 2 == 0 }").Kind with
-    | Lambda ([ (parameter, None) ], Kind (BinaryOp ("==", Kind (BinaryOp ("%", Kind left, Kind (LiteralExpr (IntLit 2)))), Kind (LiteralExpr (IntLit 0)))), _)
+    | Lambda ([ (parameter, None) ], Kind (BinaryOp ("==", Kind (BinaryOp ("%", Kind left, Kind (LiteralExpr (IntLit 2L)))), Kind (LiteralExpr (IntLit 0L)))), _)
         when parameter = implicitArgument && left = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``the rest of a shorthand lambda's body follows the operators' precedence`` () =
     match (onlyValue "def f = { * 2 + 1 }").Kind with
-    | Lambda ([ _ ], Kind (BinaryOp ("+", Kind (BinaryOp ("*", Kind left, _)), Kind (LiteralExpr (IntLit 1)))), _) when left = implicit -> ()
+    | Lambda ([ _ ], Kind (BinaryOp ("+", Kind (BinaryOp ("*", Kind left, _)), Kind (LiteralExpr (IntLit 1L)))), _) when left = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
@@ -322,7 +322,7 @@ let ``every operator may start a shorthand lambda`` () =
 [<Fact>]
 let ``a leading minus is subtraction from the argument, and an arrow keeps a negative body`` () =
     match (onlyValue "def f = { - 1 }").Kind with
-    | Lambda ([ _ ], Kind (BinaryOp ("-", Kind left, Kind (LiteralExpr (IntLit 1)))), _) when left = implicit -> ()
+    | Lambda ([ _ ], Kind (BinaryOp ("-", Kind left, Kind (LiteralExpr (IntLit 1L)))), _) when left = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     match (onlyValue "def f = { -> -1 }").Kind with
     | Lambda ([], _, _) -> ()
@@ -370,7 +370,7 @@ let ``a name, _ or a bracketed annotated name is an ordinary parameter, not a pa
 [<Fact>]
 let ``a unit pattern alone is a lambda without parameters that takes unit`` () =
     match (onlyValue "def f = { () -> 5 }").Kind with
-    | Lambda ([], Kind (LiteralExpr (IntLit 5)), true) -> ()
+    | Lambda ([], Kind (LiteralExpr (IntLit 5L)), true) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     // Without it, the lambda ignores a parameter its expected type gives it (#813).
     for source in [ "def f = { 5 }"; "def f = { -> 5 }"; "def f = { }" ] do

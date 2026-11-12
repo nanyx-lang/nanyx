@@ -13,10 +13,10 @@ let ``Transpile function with parameters`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("(func $add (param $x i32) (param $y i32) (result i32)", wat)
-    Assert.Contains("local.get $x", wat)
-    Assert.Contains("local.get $y", wat)
-    Assert.Contains("i32.add", wat)
+    Assert.Contains("(func $add (param $x_i64 i64) (param $y_i64 i64) (result i64)", wat)
+    Assert.Contains("local.get $x_i64", wat)
+    Assert.Contains("local.get $y_i64", wat)
+    Assert.Contains("call $__nanyx_int_add", wat)
 
 [<Fact>]
 let ``Transpile function call with arguments`` () =
@@ -27,9 +27,9 @@ let ``Transpile function call with arguments`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("(func $main (result i32)", wat)
-    Assert.Contains("i32.const 1", wat)
-    Assert.Contains("i32.const 2", wat)
+    Assert.Contains("(func $main (result i64)", wat)
+    Assert.Contains("i64.const 1", wat)
+    Assert.Contains("i64.const 2", wat)
     Assert.Contains("call $add", wat)
 
 [<Fact>]
@@ -43,7 +43,7 @@ let ``Transpile attached function on a built-in type`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let wat = Transpiler.Wasm.CodeGen.transpileTypedModuleToWat result.Typed.Value
 
-    Assert.Contains("i32.const 3", wat)
+    Assert.Contains("i64.const 3", wat)
     Assert.Contains("call $int_double", wat)
 
 /// What the backend reports for `source`, which type-checks but which it cannot compile: the diagnostic, and the line
@@ -92,9 +92,9 @@ let ``Transpile block local variable`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("(func $incTwice (param $x i32) (result i32) (local $y i32)", wat)
-    Assert.Contains("local.set $y", wat)
-    Assert.Contains("local.get $y", wat)
+    Assert.Contains("(func $incTwice (param $x_i64 i64) (result i64) (local $y_i64 i64)", wat)
+    Assert.Contains("local.set $y_i64", wat)
+    Assert.Contains("local.get $y_i64", wat)
 
 [<Fact>]
 let ``Transpile top-level constant def`` () =
@@ -104,8 +104,8 @@ let ``Transpile top-level constant def`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("(func $one (result i32)", wat)
-    Assert.Contains("i32.const 1", wat)
+    Assert.Contains("(func $one (result i64)", wat)
+    Assert.Contains("i64.const 1", wat)
     Assert.Contains("(export \"one\" (func $one))", wat)
 
 [<Fact>]
@@ -117,8 +117,8 @@ let ``Transpile magic dbg for int`` () =
     let wat = transpileWat source
 
     Assert.Contains("(import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write", wat)
-    Assert.Contains("(func $__dbg_show_int (param $__dbg_value i32)", wat)
-    Assert.Contains("i32.const 42", wat)
+    Assert.Contains("(func $__dbg_show_int (param $__dbg_value_i64 i64)", wat)
+    Assert.Contains("i64.const 42", wat)
     Assert.Contains("call $dbg_str", wat)
 
 [<Fact>]
@@ -164,8 +164,8 @@ let ``Transpile payload tag literal`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("i32.const 3\n    i32.const 42\n    call $__nanyx_tag_box", wat)
-    Assert.Contains("(func $__nanyx_tag_box", wat)
+    Assert.Contains("i32.const 3\n    i64.const 42\n    call $__nanyx_tag_box_i64", wat)
+    Assert.Contains("(func $__nanyx_tag_box_i64", wat)
 
 [<Fact>]
 let ``Transpile magic dbg for payload tag literal`` () =

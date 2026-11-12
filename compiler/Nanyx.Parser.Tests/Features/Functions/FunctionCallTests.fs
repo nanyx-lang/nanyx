@@ -76,8 +76,8 @@ let ``Parse function call with multiple arguments`` () =
             args |> should haveLength 1
             match args.[0].Kind with
             | TupleExpr [Kind (LiteralExpr (IntLit v1)); Kind (LiteralExpr (IntLit v2))] -> 
-                v1 |> should equal 1
-                v2 |> should equal 2
+                v1 |> should equal 1L
+                v2 |> should equal 2L
             | _ -> failwith "Expected tuple of int literal arguments"
         | _ -> failwith "Expected Def with FunctionCall"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -119,7 +119,7 @@ let ``Parse nested function calls`` () =
                 innerName |> should equal "inner"
                 innerArgs |> should haveLength 1
                 match innerArgs.[0].Kind with
-                | LiteralExpr (IntLit v) -> v |> should equal 42
+                | LiteralExpr (IntLit v) -> v |> should equal 42L
                 | _ -> failwith "Expected int literal in inner call"
             | _ -> failwith "Expected nested function call"
         | _ -> failwith "Expected Def with FunctionCall"

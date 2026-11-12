@@ -7,7 +7,7 @@ open ParserTestHelpers
 [<Fact>]
 let ``[k => v, ...] is a call to __map with a list of the entries as tuples`` () =
     match parseModule "def m = [\"a\" => 1, \"b\" => f(2)]" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "m", _, Kind (MapSyntax.Call [ (Kind (LiteralExpr (StringLit "a")), Kind (LiteralExpr (IntLit 1))); (Kind (LiteralExpr (StringLit "b")), Kind (FunctionCall ("f", _, _))) ])))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "m", _, Kind (MapSyntax.Call [ (Kind (LiteralExpr (StringLit "a")), Kind (LiteralExpr (IntLit 1L))); (Kind (LiteralExpr (StringLit "b")), Kind (FunctionCall ("f", _, _))) ])))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

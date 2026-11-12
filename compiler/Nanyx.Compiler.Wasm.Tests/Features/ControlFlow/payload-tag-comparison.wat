@@ -164,44 +164,44 @@
       i32.store
     end
   )
-  (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
+  (func $__nanyx_tag_box_i64 (param $code i32) (param $payload i64) (result i32)
     (local $cell i32)
-    i32.const 8
+    i32.const 12
     call $__nanyx_new_cell
     local.tee $cell
     local.get $code
     i32.store
     local.get $cell
     local.get $payload
-    i32.store offset=4
+    i64.store offset=4
     local.get $cell
   )
 
-  (func $classify__tags_ (param $value i32) (result i32) (local $__owned_0 i32)
+  (func $classify__tags_ (param $value i32) (result i64) (local $__owned_0 i32)
     local.get $value
     i32.const 3
-    i32.const 3
-    call $__nanyx_tag_box
+    i64.const 3
+    call $__nanyx_tag_box_i64
     local.tee $__owned_0
     call $__nanyx_equals_tags_some_int
     local.get $value
     call $__nanyx_drop_tags_some_int
     local.get $__owned_0
     call $__nanyx_drop_tags_some_int
-    (if (result i32)
+    (if (result i64)
       (then
-        i32.const 1
+        i64.const 1
       )
       (else
-        i32.const 0
+        i64.const 0
       )
     )
   )
 
-  (func $main (result i32)
+  (func $main (result i64)
     i32.const 3
-    i32.const 3
-    call $__nanyx_tag_box
+    i64.const 3
+    call $__nanyx_tag_box_i64
     return_call $classify__tags_
   )
   (export "main" (func $main))
@@ -263,9 +263,9 @@
       return
     end
     local.get $a
-    i32.load offset=4
+    i64.load offset=4
     local.get $b
-    i32.load offset=4
-    i32.eq
+    i64.load offset=4
+    i64.eq
   )
 )
