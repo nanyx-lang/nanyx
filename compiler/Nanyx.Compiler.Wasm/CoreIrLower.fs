@@ -446,7 +446,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrTags _ ->
                     // A bool or a tag value prints as `"{value}"` would: evaluated into a hole, a level deeper.
                     let holeType = this.HoleType scope value
-                    let hole = newVar (Interpolation.holeLocalName scope.InterpolationDepth 0) InterpolationHole (tyOf value)
+                    let hole = newVar (Interpolation.holeLocalName scope.InterpolationDepth 0) (InterpolationHole(scope.InterpolationDepth, 0)) (tyOf value)
                     this.Complex { scope with InterpolationDepth = scope.InterpolationDepth + 1 } value (fun lowered ->
                         let body = k (mk (Dbg(AVar hole, DbgTagValue(hole, holeType, scratch))) ty)
                         mk (Let(hole, lowered, body)) body.Type)
@@ -716,7 +716,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | hole :: rest ->
                     let holeType = this.HoleType scope hole
                     // A float is formatted to a string as its hole is evaluated, since that allocates.
-                    let local = newVar (Interpolation.holeLocalName depth index) InterpolationHole (if holeType = HoleFloat then IrString else tyOf hole)
+                    let local = newVar (Interpolation.holeLocalName depth index) (InterpolationHole(depth, index)) (if holeType = HoleFloat then IrString else tyOf hole)
                     let store (value: Expr) =
                         let body = evaluateHoles (index + 1) rest (Some (local, holeType) :: evaluated)
                         mk (Let(local, value, body)) body.Type

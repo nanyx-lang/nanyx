@@ -48,9 +48,9 @@ type VarKind =
     /// An intermediate value that the source does not name: an argument, an operand, a payload. It is used exactly
     /// once, by the next instruction to need it, so it never needs a local of its own: its value stays on the stack.
     | Temp
-    /// The local a hole of an interpolated string is evaluated into, named by how deeply the string is nested in
-    /// other strings' holes and by its place among the string's holes (see `Interpolation.holeLocalName`).
-    | InterpolationHole
+    /// The local a hole of an interpolated string is evaluated into: how deeply the string is nested in other strings'
+    /// holes, and the hole's place among the string's holes. Its name is `Interpolation.holeLocalName` of the two.
+    | InterpolationHole of depth: int * index: int
     /// A local some construct needs for its own use, such as the one `dbg` holds its value in.
     | Scratch
     /// A local of a `for` loop: where it is in its list, where its range ends, or its element. Loops that are never in
