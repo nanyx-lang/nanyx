@@ -183,15 +183,16 @@ what the compiler keeps: exact spans, resolved names and types.
   a use of a generic def its declared signature (`declared`), its type there (`at this use`) and the bindings of its
   type variables (`type variables`), each linking to the def; the
   locals, parameters and pattern variables in scope, nearest first; the top-level defs and imports in scope (less the
-  standard library's reserved `__` names); the contexts in scope with where each comes from; and the diagnostics on the position's line.
+  standard library's reserved `__` names); the contexts in scope with where each comes from; the contexts the call
+  around the position requires, with where it finds each; and the diagnostics on the position's line.
   Each item whose name or context has a doc comment carries it as Markdown, read with the `Documentation.Reader` hover
   uses ([#917](https://github.com/nanyx-lang/nanyx/issues/917)).
   `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the
   locals' types and the contexts are named together, so an `α` means the same in both. A context comes from a `use`
   before the position in a block around it, a def around it (its annotation, or what it was inferred to need), or, at
-  the top level, the runtime (`TypedModule.AmbientContexts`). The view lists what is in scope, not what a call uses:
-  what provides each context a call requires is recorded (`TypedModule.ContextProviders`), but not shown yet
-  ([#989](https://github.com/nanyx-lang/nanyx/issues/989)). The extension shows it in a webview view in the secondary side bar (see
+  the top level, the runtime (`TypedModule.AmbientContexts`). What the call uses is read from what the compiler
+  recorded for it (`TypedModule.ContextInstances` and `ContextProviders`,
+  [#989](https://github.com/nanyx-lang/nanyx/issues/989)). The extension shows it in a webview view in the secondary side bar (see
   [Info view and library browser](./info-view-and-library-browser)).
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers

@@ -23,7 +23,7 @@ public sealed record InfoViewResult
 
 /// <summary>
 /// A section of the info view. <see cref="Id"/> is one of <c>expression</c>, <c>inScope</c>, <c>topLevel</c>,
-/// <c>contexts</c> and <c>messages</c>; <see cref="Collapsed"/> says whether a client shows it closed at first.
+/// <c>contexts</c>, <c>call</c> and <c>messages</c>; <see cref="Collapsed"/> says whether a client shows it closed at first.
 /// </summary>
 public sealed record InfoViewSection
 {
@@ -52,7 +52,9 @@ public sealed record InfoViewItem
 /// its type, as hover shows it, and on a use of a generic def the def's declared signature and how the use fills in
 /// its type variables (see <see cref="ExpressionItems"/>); the locals, parameters and pattern variables in scope, nearest first; the top-level defs
 /// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
-/// that was inferred to require it, or the runtime); and the diagnostics on the position's line. Read from the
+/// that was inferred to require it, or the runtime); the contexts the innermost call around the position that requires
+/// any requires, each with where it finds it (one of those, or an instance the compiler builds: from attached
+/// definitions, derived from the type's parts, or its own); and the diagnostics on the position's line. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
 /// item whose name or context has a doc comment carries it, read as hover reads it (see
@@ -147,6 +149,20 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                         })
                         .ToList() ?? []
                 },
+                new InfoViewSection
+                {
+                    Id = "call",
+                    Title = "This call",
+                    Items = info?.Call
+                        .Select(context => new InfoViewItem
+                        {
+                            Text = context.Context,
+                            Detail = Describe(context.Source),
+                            Location = Locate(context.Span),
+                            Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
+                        })
+                        .ToList() ?? []
+                },
                 new InfoViewSection { Id = "messages", Title = "Messages", Items = messages }
             ]
         };
@@ -227,6 +243,15 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             InfoView.ContextSource.Tags.Use => "use",
             InfoView.ContextSource.Tags.Inferred => "inferred",
             _ => "runtime"
+        };
+
+    private static string Describe(InfoView.CallSource source) =>
+        source switch
+        {
+            InfoView.CallSource.Provided provided => Describe(provided.Item),
+            InfoView.CallSource.Attached attached => $"attached {string.Join(", ", attached.Item)}",
+            _ when source.IsDerived => "derived",
+            _ => "built in"
         };
 
     private static string Describe(DiagnosticSeverity? severity) =>

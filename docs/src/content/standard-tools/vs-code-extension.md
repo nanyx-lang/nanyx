@@ -96,6 +96,10 @@ It shows:
 - **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the
   definition around it, a definition that does not write its type and was inferred to need it, or, at the top level of
   the file, the runtime (`Console`, once `nanyx/console` is imported).
+- **This call**: on a call that requires contexts, the innermost one around the cursor, each context the call needs and
+  where it finds it: one of the sources above, linked to the `use` or the signature, or an instance the compiler builds,
+  from the definitions attached to the type (`attached Point.show`), derived from the type's parts, or its own
+  (`built in`).
 - **Messages**: the errors and warnings on the cursor's line.
 
 Under each item that has one comes its [doc comment](../getting-started/basics#doc-comments), as hover shows it: a name's own, an

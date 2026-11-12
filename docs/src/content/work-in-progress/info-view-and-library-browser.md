@@ -46,8 +46,8 @@ imports, not for the whole library.
 
 # 1. Info view
 
-The first cut is built ([#715](https://github.com/nanyx-lang/nanyx/issues/715)): everything below but "This call",
-the flow view, and types as trees. `NyxCompiler.InfoView.at` gathers it, `InfoViewHandler` answers the request, and
+The first cut is built ([#715](https://github.com/nanyx-lang/nanyx/issues/715)), and "This call" since
+([#989](https://github.com/nanyx-lang/nanyx/issues/989)): everything below but the flow view and types as trees. `NyxCompiler.InfoView.at` gathers it, `InfoViewHandler` answers the request, and
 `extension/src/infoView.ts` is the panel (see [VS Code extension](../standard-tools/vs-code-extension#info-view)).
 
 ## What it shows
@@ -70,9 +70,12 @@ The panel follows the cursor. It shows, from top to bottom:
   A `use` comes first, nearest first, then the signature or inferred contexts of each def around the cursor,
   innermost first. Each context is written as hover writes it, with its type variables named together with the
   types of the locals.
-- **This call.** On a call to a function that requires contexts, each context it requires and where it finds that
-  context: the provider from the list above, an instance built from attached definitions, or the compiler's own
-  (`InstanceBuiltIn`). Not shown yet ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
+- **This call.** On the innermost call or pipe around the cursor that requires contexts, each context it requires and
+  where it finds that context: the provider from the list above, linked, or an instance the compiler builds, from
+  attached definitions (named, `attached Point.show`), derived from the type's parts, or its own (`built in`)
+  ([#989](https://github.com/nanyx-lang/nanyx/issues/989)). `InfoView.callContextsAt` reads the contexts the callee's
+  type declares, at the types of the call, beside the call's `ContextInstances` in order, then the others
+  `ContextProviders` records for it (a member's context, or one a function value it runs requires).
 - **Messages.** The diagnostics at the cursor's line.
 
 Every span in the panel is a link: clicking a `use` or a signature jumps to it.
@@ -124,7 +127,7 @@ no provider, and has no entry in `ContextProviders`; "This call" shows those fro
 ## Protocol and client
 
 - **Request.** A custom request, `nanyx/infoView`, with a document and a position. It returns structured JSON:
-  sections (`expression`, `inScope`, `topLevel`, `contexts`, `messages`, always all of them, in that order), each
+  sections (`expression`, `inScope`, `topLevel`, `contexts`, `call`, `messages`, always all of them, in that order), each
   with a title, whether it starts collapsed, and items. An item has its text, a detail (`parameter`, `use`,
   `error NYX0101`), a location to link to, and the doc comment of what it names, as Markdown with its links written
   out, as hover shows it ([#917](https://github.com/nanyx-lang/nanyx/issues/917)): for an import, its module's.
@@ -252,9 +255,8 @@ In order. Each item is one PR:
    the expression, names in scope, contexts from the signature, a `use`, inference and the runtime, and messages; the
    webview panel with pinning.
 6. **Context providers** ([#716](https://github.com/nanyx-lang/nanyx/issues/716)). Record a `ContextProvider` for
-   every context at every call. Done (`ContextProviders`, and `InstanceInScope`'s provider). Then show "this call"
-   in the info view
-   ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
+   every context at every call. Done (`ContextProviders`, and `InstanceInScope`'s provider), and shown as "This
+   call" in the info view ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
 7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). The flow view of a function, and
    the editor highlights between a `use` and its calls.
 
