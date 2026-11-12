@@ -57,10 +57,10 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
   and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is
   (`PackageModules.resolveImport`). An unknown module is `NYX0003`, naming the package, the file named for the module
   if it declares another name, or close names. A source file must declare a module name and have no top-level
-  statements (`NYX0017`), and no two may declare the same module (`NYX0018`). `Package.build`, a single file of a
-  package compiled with `nanyx run`/`check`, and the language server (`Package.compileSourceWith`) all resolve this
-  way. The table maps each name to a list of files, so partial modules
-  ([#949](https://github.com/nanyx-lang/nanyx/issues/949)) can give a name several.
+  statements (`NYX0017`). Files that declare the same module are its fragments, each marked `@partial`, and are
+  assembled into one module before it is checked (`PartialModules.assemble`); without `@partial` on each, it is
+  `NYX0018`. `Package.build`, a single file of a package compiled with `nanyx run`/`check`, and the language server
+  (`Package.compileSourceWith`) all resolve this way.
 - **Outside a package, imports resolve two ways only** (`FileImports.resolvePath` and
   `StandardLibrary.tryModuleName`). A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file,
   with `.` and `/` treated alike. A name starting `nanyx/` comes from the standard library embedded in the compiler.

@@ -32,8 +32,7 @@ let private ofOtherFile (file: string) : FileDocComments option =
         else
             None
     elif file.StartsWith(prefix, StringComparison.Ordinal) && file.EndsWith(".nyx", StringComparison.Ordinal) then
-        let moduleName = file.Substring(prefix.Length, file.Length - prefix.Length - ".nyx".Length)
-        StandardLibrary.tryLoadSource moduleName
+        StandardLibrary.tryLoadFile file
         |> Option.map (fun source -> others.GetOrAdd(file, fun _ -> DateTime.MinValue, ofSource file source) |> snd)
     else
         None

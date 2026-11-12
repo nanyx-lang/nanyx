@@ -15,13 +15,15 @@ module ImportFixes =
         lazy (
             StandardLibrary.moduleNames
             |> List.collect (fun moduleName ->
-                match StandardLibrary.tryLoadSource moduleName |> Option.map (parseModuleFileWithNames "") with
-                | Some (Result.Ok (items, _, _)) ->
-                    items
-                    |> List.choose (function
-                        | Kind (Def (ValueDef(true, name, _, _))) -> Some (name, moduleName)
-                        | _ -> None)
-                | _ -> [])
+                StandardLibrary.moduleSources moduleName
+                |> List.collect (fun (_, source) ->
+                    match parseModuleFileWithNames "" source with
+                    | Result.Ok (items, _, _) ->
+                        items
+                        |> List.choose (function
+                            | Kind (Def (ValueDef(true, name, _, _))) -> Some (name, moduleName)
+                            | _ -> None)
+                    | Result.Error _ -> []))
             |> List.groupBy fst
             |> List.map (fun (name, pairs) -> name, pairs |> List.map snd |> List.distinct)
             |> Map.ofList)

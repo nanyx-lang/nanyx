@@ -330,7 +330,11 @@ A module can be split across multiple files by giving each file the same module 
 
 The compiler conceptually assembles all fragments of a partial module before doing name resolution or type checking, as if they had been concatenated into a single file — file order, like declaration order, carries no meaning.
 
-Because sharing a module name across files is easy to do by accident, each fragment must opt in explicitly with the `@partial` attribute; without it, declaring the same module name in two files is an error.
+Because sharing a module name across files is easy to do by accident, each fragment must opt in explicitly with the `@partial` attribute, written on the line of its `module` declaration; without it on every fragment, declaring the same module name in two files is an error naming the files. Declaring the same name in two fragments is an error too, as it would be in one file.
+
+The fragments are found by the module name they declare: among the source files of a [package](./packages), wherever they are in it, and among the files of the standard library. A script cannot be split, since it has no module name.
+
+The imports of each fragment apply to the whole module, as if they had all been written in one file. Below, `format.nyx` imports `nanyx/text` for `trim`, and `validation.nyx` could call `trim` too without importing it again.
 
 ```nanyx fragment
 -- validation.nyx
@@ -343,6 +347,8 @@ export def validate: string -> bool = { s -> s \isNonEmpty }
 ```nanyx fragment
 -- format.nyx
 @partial module utils
+
+import nanyx/text
 
 def isNonEmpty: string -> bool = { s -> s.length > 0 }
 

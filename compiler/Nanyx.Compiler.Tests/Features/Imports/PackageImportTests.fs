@@ -107,9 +107,11 @@ println("x")
 let ``Two files that declare the same module are an error in each`` () =
     let diagnostics = buildOf [ "src/a.nyx", greetings "greetings"; "src/b.nyx", greetings "greetings"; "src/main.nyx", main "greetings" ]
     let duplicates = diagnostics |> List.filter (fun (code, _, _) -> code = DiagnosticCodes.DuplicateModule.Code)
-    Assert.Equal<string option list>([ Some "src/a.nyx"; Some "src/b.nyx"; Some "src/main.nyx" ], duplicates |> List.map (fun (_, file, _) -> file) |> List.sort)
+    Assert.Equal<string option list>([ Some "src/a.nyx"; Some "src/b.nyx" ], duplicates |> List.map (fun (_, file, _) -> file) |> List.sort)
     let _, _, inA = duplicates |> List.find (fun (_, file, _) -> file = Some "src/a.nyx")
-    Assert.Equal("'src/a.nyx' declares the module 'greetings', which 'src/b.nyx' declares too: each module of a package is in a file of its own", inA)
+    Assert.Equal(
+        "'src/a.nyx' declares the module 'greetings', which 'src/b.nyx' declares too: to split a module across files, start each with @partial module greetings, which 'src/a.nyx', 'src/b.nyx' do not",
+        inA)
 
 [<Fact>]
 let ``A source file compiled on its own finds the package's modules`` () =
