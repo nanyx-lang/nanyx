@@ -59,10 +59,11 @@ def held: [Foo] string -> (run: [Foo] () -> string) = { s -> (run = { bar(s) }) 
     |> ignore
 
 [<Fact>]
-let ``A use may result in a lambda that uses a member it loads`` () =
-    compileClean (
-        foo
-        + """
+let ``A use may result in a lambda that uses a member it loads, which requires the context the use loads`` () =
+    let result =
+        compileClean (
+            foo
+            + """
 def viaUse = use Foo(bar = { s -> s }) in { bar("x") }
 
 def blockUse = {
@@ -72,8 +73,36 @@ def blockUse = {
 
 def viaRecord = use (shout = { s -> s ++ "!" }) in { n -> shout(n) }
 """
-    )
-    |> ignore
+            |> _.ReplaceLineEndings("\n")
+        )
+    let typeOf name = Unifier.tyToString result.Types.[name]
+    Assert.Equal("[Foo] () -> string", typeOf "viaUse")
+    Assert.Equal("() -> ([Foo] () -> string)", typeOf "blockUse")
+    Assert.Equal("string -> string", typeOf "viaRecord")
+
+[<Fact>]
+let ``A lambda that leaves the use that loads its context requires the context where it is called`` () =
+    let source =
+        foo
+        + """
+def viaUse = use Foo(bar = { s -> s }) in { bar("x") }
+
+def pure: () -> string = { viaUse() }
+"""
+    let diagnostic = (Compiler.compile (source.ReplaceLineEndings "\n")).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Equal("'viaUse' requires the context 'Foo', which is not available here", diagnostic.Message)
+
+[<Fact>]
+let ``A lambda that uses a member a use loads cannot be given where a pure function is expected`` () =
+    let source =
+        foo
+        + """
+def apply: (() -> string) -> string = { f -> f() }
+
+def main = use Foo(bar = { s -> s }) in apply({ bar("x") })
+"""
+    Assert.Equal((DiagnosticCodes.ContextsNotAllowed.Code, """{ bar("x") }"""), singleError (source.ReplaceLineEndings "\n"))
 
 [<Fact>]
 let ``A lambda that uses a context may be called, or passed on, inside the scope that supplies it`` () =

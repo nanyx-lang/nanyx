@@ -366,10 +366,24 @@ let private readInlineContexts (state: InferState) (typeOpt: TypeExpr option) : 
     | Some (Error errors) -> typeOpt, Error errors
     | None -> None, Ok ()
 
-let private extendEnvWithRecordFields (env: TypeEnv) (ty: Ty) =
+/// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
+/// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
+/// declared, as in a def that declares the context, so a lambda that calls it requires the context (see
+/// `LambdaContexts.contextOfMember`).
+let private extendEnvWithRecordFields (state: InferState) (env: TypeEnv) (ty: Ty) =
+    let context =
+        let plain (info: TypeDefInfo) = info.IsContext && info.Parameters.IsEmpty
+        match resolveSoFar state ty with
+        | TyNominal(id, _, _) ->
+            state.TypeDefs |> Map.tryPick (fun _ info -> if plain info && TypeDefInfo.nominalId info = id then Some info else None)
+        | TyAlias(name, [], _)
+        | TyApply(name, []) -> state.TypeDefs |> Map.tryFind name |> Option.filter plain
+        | _ -> None
     let addFields fields =
         fields
-        |> Map.fold (fun acc name fieldTy -> TypeEnv.extend name (TypeEnv.mono fieldTy) acc) env
+        |> Map.fold (fun acc name fieldTy ->
+            let symbol = context |> Option.bind (fun info -> info.Members |> Map.tryFind name)
+            TypeEnv.extend name { TypeEnv.mono fieldTy with Symbol = symbol } acc) env
     match Unifier.unalias ty with
     | TyRecord fields -> addFields fields
     | TyNominal(_, underlying, _) ->
@@ -1948,7 +1962,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match inferExpr env state value with
         | Error err -> Error err
         | Ok (typedValue, nextState) ->
-            let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedValue.Type) nextState value typedValue.Type
+            let envWithUse, nextState = useInstance (extendEnvWithRecordFields nextState env typedValue.Type) nextState value typedValue.Type
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) ->
                 Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
@@ -2714,7 +2728,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then
                     match inferExpr env' current value with
                     | Ok (typedExpr, next) ->
-                        let withUse, next = useInstance (extendEnvWithRecordFields env' typedExpr.Type) next value typedExpr.Type
+                        let withUse, next = useInstance (extendEnvWithRecordFields next env' typedExpr.Type) next value typedExpr.Type
                         current <- next
                         env' <- withUse
                         typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]
