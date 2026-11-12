@@ -278,6 +278,15 @@ let internal undeclaredContext (defName: Identifier) (ctxName: Identifier) (what
 let internal contextInValue (valueName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
     Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{valueName}' cannot have: a named module's top-level values are built without contexts, so make '{valueName}' a function"
 
+/// `infer` run on `state`, but at the top level's ambient contexts where `state` is in a named module's value: for a
+/// lambda written in the value, which building the value does not run. One passed to a call is not inferred this
+/// way, since the call may run it.
+let internal outsideValue (infer: InferState -> Result<'T * InferState, Diagnostic list>) (state: InferState) =
+    match state.ContextScope with
+    | ValueScope _ as valueScope ->
+        infer { state with ContextScope = AmbientScope } |> Result.map (fun (typed, next) -> typed, { next with ContextScope = valueScope })
+    | _ -> infer state
+
 /// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level, inferred for
 /// an unannotated def, and an error in a def whose type does not declare it or in a named module's value.
 let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: string) (span: SourceSpan) : Result<InferState, Diagnostic list> =
