@@ -1220,6 +1220,20 @@ export def list.indexOf: [Eq(a)] list(a), a -> #some(int) | #notFound = { xs, x 
   indexOfFrom(xs, x, 0)
 }
 
+--| The position of the first element of `xs` that `matches` holds for, counting `xs` as starting at
+  `index`.
+def findIndexFrom: [c] list(a), ([c] a -> bool), int -> #some(int) | #notFound = {
+  | [], _, _ -> #notFound
+  | [x, ...rest], matches, index -> if matches(x)
+    then #some(index)
+    else findIndexFrom(rest, matches, index + 1)
+}
+
+--| The position of the first element `matches` holds for, counting from 0, or `#notFound`.
+export def list.findIndex: [c] list(a), ([c] a -> bool) -> #some(int) | #notFound = { xs, matches ->
+  findIndexFrom(xs, matches, 0)
+}
+
 --| `xs` reversed, in front of `tail`. It takes `xs` apart in a match arm that builds a cell of the same
   size, so a list held only here has its cells rewritten in place rather than copied.
 def reverseOnto: list(a), list(a) -> list(a) = {
@@ -1409,6 +1423,25 @@ export def list.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
   )
 }
 
+--| The elements of `xs` whose key is not in `seen`, each the first with its key, last first, in front
+  of `acc`.
+def distinctByReversed: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), set(b), list(a) -> list(a) = {
+  | [], _, _, acc -> acc
+  | [x, ...rest], key, seen, acc ->
+    def k = key(x)
+
+    if set.contains(seen, k)
+      then distinctByReversed(rest, key, seen, acc)
+      else distinctByReversed(rest, key, set.insert(seen, k), [x, ...acc])
+}
+
+--| The elements without two of the same `key`, each kept where the first with its key appears:
+  `list.distinctBy(people, { p -> p.name })` keeps one person of each name. Stack-safe: it works on a
+  list of any length.
+export def list.distinctBy: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
+  reverseOnto(distinctByReversed(xs, key, set.empty, []), [])
+}
+
 --| `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
   elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
   same key, the one from `xs` comes first.
@@ -1467,6 +1500,41 @@ export def list.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
 export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
   | [] -> #emptyList
   | [x, ...rest] -> #some(greatestOf(rest, x))
+}
+
+--| Of `least`, whose key is `leastKey`, and the elements of `xs`, the one with the least key, the first
+  of them when several keys are least.
+def leastByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
+  | [], _, least, _ -> least
+  | [x, ...rest], key, least, leastKey ->
+    def k = key(x)
+    if k < leastKey then leastByOf(rest, key, x, k) else leastByOf(rest, key, least, leastKey)
+}
+
+--| Of `greatest`, whose key is `greatestKey`, and the elements of `xs`, the one with the greatest key,
+  the first of them when several keys are greatest.
+def greatestByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
+  | [], _, greatest, _ -> greatest
+  | [x, ...rest], key, greatest, greatestKey ->
+    def k = key(x)
+
+    if k > greatestKey
+      then greatestByOf(rest, key, x, k)
+      else greatestByOf(rest, key, greatest, greatestKey)
+}
+
+--| The element with the least `key`, or `#emptyList`. Of several elements with the least key, the
+  first. `key` is called once for each element.
+export def list.minBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
+  | [], _ -> #emptyList
+  | [x, ...rest], key -> #some(leastByOf(rest, key, x, key(x)))
+}
+
+--| The element with the greatest `key`, or `#emptyList`. Of several elements with the greatest key,
+  the first. `key` is called once for each element.
+export def list.maxBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
+  | [], _ -> #emptyList
+  | [x, ...rest], key -> #some(greatestByOf(rest, key, x, key(x)))
 }
 
 --| The elements `step` gives from `state` on, last first, in front of `acc`.

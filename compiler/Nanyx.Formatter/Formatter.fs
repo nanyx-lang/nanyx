@@ -18,7 +18,8 @@ module Options =
 /// Where an expression is printed, which decides whether it needs parentheses (the parser keeps none).
 type private Position =
     { /// On the spine of a statement, an arm's body or a top-level expression. The parser reads those without crossing
-      /// lines, with an operator table that has no `%`, `..`, `and`, `or` or `not`, so those need parentheses there.
+      /// lines, with an operator table that has no `..`, so a range needs parentheses there; `not` and the operators not in
+      /// `inlineOperators` are given them too.
       Inline: bool
       /// Nothing follows it in the enclosing construct, so a construct that takes everything after it (a `match`, an
       /// `if`, a `with`) needs no parentheses.
@@ -35,23 +36,19 @@ let private statementPosition = { Inline = true; Tail = true; Prec = 0 }
 /// An operand of `.` or `not`: a primary expression.
 let private operandPosition = { Inline = false; Tail = false; Prec = 9 }
 
+/// How tightly the operator the parser reads as `op` binds, as the parser has it (see `binaryOperators`).
 let private precedence op =
-    match op with
-    | "**" -> 8
-    | "*" | "/" | "%" -> 7
-    | "+" | "-" -> 6
-    | "++" -> 5
-    | "<" | ">" | "<=" | ">=" -> 4
-    | "==" | "!=" -> 3
-    | "and" -> 2
-    | "or" -> 1
-    | _ -> 6
+    match binaryOperatorNamed op with
+    | Some found -> found.Precedence
+    | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
 
-/// The operators the parser takes where it does not cross lines (see `Position.Inline`).
+/// The operators the formatter writes in a statement without parentheses (see `Position.Inline`). The parser takes
+/// every operator there but `..`; the rest are bracketed only because this set predates that (#960).
 let private inlineOperators = set [ "**"; "*"; "/"; "+"; "-"; "++"; "<"; ">"; "<="; ">="; "=="; "!=" ]
 
-/// The operators that group to the right: `a ++ b ++ c` is `a ++ (b ++ c)`, and `2 ** 3 ** 2` is `2 ** (3 ** 2)`.
-let private rightAssociative = set [ "++"; "**" ]
+/// Whether the operator `op` groups to the right: `a ++ b ++ c` is `a ++ (b ++ c)`.
+let private isRightAssociative op =
+    binaryOperatorNamed op |> Option.exists (fun found -> found.Associativity = RightAssociative)
 
 /// The name a destructuring def binds its whole value to (see `Syntax`).
 let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
@@ -489,13 +486,13 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// parser takes a line break after an operator, not before one), and the lines after the first indented once.
     and binary (position: Position) (op: string) (l: Expression) (r: Expression) : Doc =
         let p = precedence op
-        let isRight = rightAssociative.Contains op
+        let isRight = isRightAssociative op
         // A node of the chain: same precedence, needing no brackets where it is, and not a list with spreads.
         let continues (x: Expression) =
             match x.Kind with
             | BinaryOp(op', _, _, _) ->
                 precedence op' = p
-                && rightAssociative.Contains op' = isRight
+                && isRightAssociative op' = isRight
                 && not (position.Inline && not (inlineOperators.Contains op'))
                 && (spreadSegments x).IsNone
             | _ -> false

@@ -22,7 +22,7 @@ def biggerNumbers = numbers \map(add1)
 
 When the final argument is a function, Nanyx supports a trailing-lambda style. Use the full form when you want explicit types (see [Annotating lambda parameters](./functions#annotating-lambda-parameters)), and the inline form for short local transformations.
 
-```nanyx
+```nanyx fragment
 -- Full lambda
 
 def f = { (x: int): int -> x * 2 }
@@ -44,7 +44,7 @@ def sameTotal = list.fold([1, 2, 3], 0, { acc, x -> acc + x })
 
 The shorthand form omits the parameter and lifts members into scope:
 
-```nanyx
+```nanyx fragment
 def names = people \map { .name }
 
 def increment = numbers \map { + 1 }
@@ -54,7 +54,7 @@ def increment = numbers \map { + 1 }
 
 Lambdas can use pattern-matching syntax directly, which is useful when transforming tagged unions. This keeps branching logic close to the point where values are mapped.
 
-```nanyx
+```nanyx fragment
 things \map {
   | #none -> 0
   | #some(_) -> 1
@@ -63,7 +63,7 @@ things \map {
 
 A parameter can also be a pattern, which takes the argument apart as it is passed in:
 
-```nanyx
+```nanyx fragment
 def sums = pairs \map { (a, b) -> a + b }
 
 def address: $Email -> string = { $Email(s) -> s }
@@ -75,13 +75,13 @@ As with a [destructuring binding](./pattern-matching#destructuring-bindings), a 
 
 Higher-order functions can accept lambdas that require a context. This lets APIs parameterize the capability available inside the callback.
 
-```nanyx
+```nanyx fragment
 list.select: (list(a), [Yield(b)] (a -> ())) -> list(b)
 ```
 
 In the type above, the callback `(a -> ())` runs with a `Yield(b)` context, so it can call `yield` while processing each element.
 
-```nanyx
+```nanyx fragment
 def names: list(Person) -> list(string) = { people ->
   people \list.select { person ->
     if person.isActive then yield(person.name)
@@ -97,7 +97,7 @@ A function's type says which contexts it requires where it is called, and a lamb
 
 So what context does a function such as `list.map` run its callback in? It could be pure, but it could also print or change memory. To take all of these, `list.map` has a parametric context:
 
-```nanyx
+```nanyx fragment
 list.map: [c] list(a), ([c] a -> b) -> list(b)
 ```
 
@@ -105,7 +105,7 @@ list.map: [c] list(a), ([c] a -> b) -> list(b)
 
 ```nanyx
 def f: list(int) -> list(int) = { numbers ->
-  -- Error: the lambda calls `println`, which requires [Console], and `f` does not declare it
+  -- Error NYX0211: the lambda calls `println`, which requires [Console], and `f` does not declare it
   numbers \list.map { n ->
     println(n)
     n + 1
