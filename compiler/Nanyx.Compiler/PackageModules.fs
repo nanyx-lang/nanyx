@@ -15,14 +15,14 @@ type PackageModules =
       Root: string
       /// The full paths of the package's source files, in order.
       Files: string list
-      /// Each module name the package's files declare, with the files that declare it, in order. Two files that
-      /// declare the same name are an error for now; a module split into partial files (#949) will have several.
+      /// Each module name the package's files declare, with the files that declare it, in order: several for a module
+      /// split across files, each marked `@partial` (see `PartialModules`).
       Modules: Map<string, string list> }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
     /// may write a drive letter in lower case.
-    let private samePath (a: string) (b: string) =
+    let internal samePath (a: string) (b: string) =
         String.Equals(a, b, if OperatingSystem.IsLinux() then StringComparison.Ordinal else StringComparison.OrdinalIgnoreCase)
 
     /// The module name each file read so far declares, by full path, with the time it was written and its length
@@ -77,12 +77,10 @@ module PackageModules =
         | Some other when other <> modules.Package ->
             notFound $"there is no package '{other}': a package can only import the standard library and its own modules, as {modules.Package}/<module> or by the module's name alone"
         | _ ->
+            // A module in several files is checked from its first, which brings in the others.
             match modules.Modules |> Map.tryFind moduleName with
-            | Some [ file ] -> Ok file
-            | Some files ->
-                let shown = files |> List.map (fun file -> $"'{display modules file}'") |> String.concat ", "
-                Error (Diagnostics.at DiagnosticCodes.DuplicateModule item.Span $"The module '{moduleName}' of the package '{modules.Package}' is declared by more than one file: {shown}")
-            | None ->
+            | Some (file :: _) -> Ok file
+            | _ ->
                 // A file named for the module that declares another name, or none, is most likely the one meant.
                 let lastSegment = moduleName.Substring(moduleName.LastIndexOf '.' + 1)
                 let namedFor =
@@ -108,7 +106,8 @@ module PackageModules =
         | _ -> FileImports.resolvePath (Path.GetDirectoryName importer) item
 
     /// The errors in the source file at `filePath` of the package `modules`, whose text is `source`: a package's files
-    /// must be named modules, without top-level statements, and no two may declare the same module.
+    /// must be named modules, without top-level statements. (That files declaring one module are each marked
+    /// `@partial` is checked as the module is, by `PartialModules.assemble`.)
     let fileErrors (modules: PackageModules) (filePath: string) (source: string) : Diagnostic list =
         match parse filePath source with
         | None -> []
@@ -116,12 +115,7 @@ module PackageModules =
             let shown = display modules filePath
             let named =
                 match declaration with
-                | Some (name, span) ->
-                    match modules.Modules |> Map.tryFind name |> Option.defaultValue [] |> List.filter (samePath filePath >> not) with
-                    | [] -> []
-                    | others ->
-                        let otherFiles = others |> List.map (fun file -> $"'{display modules file}'") |> String.concat ", "
-                        [ Diagnostics.at DiagnosticCodes.DuplicateModule span $"'{shown}' declares the module '{name}', which {otherFiles} declares too: each module of a package is in a file of its own" ]
+                | Some _ -> []
                 | None ->
                     let firstLine = match source.IndexOf '\n' with -1 -> source.Length | newline -> newline
                     let span = { File = filePath; Start = 0; End = firstLine; StartLine = 0; StartColumn = 0 }

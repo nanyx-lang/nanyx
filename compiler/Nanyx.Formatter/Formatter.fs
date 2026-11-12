@@ -1370,14 +1370,17 @@ let format (options: Options) (parsed: SourceModule) : string =
             []
         |> List.rev
         |> List.map (fun (childStart, childEnd, first, build, _) -> childStart, childEnd, first, build)
-        // An attribute line belongs to the item after it, so nothing comes between them.
+        // An attribute line belongs to the item after it, so nothing comes between them. `@partial` is written on the
+        // line of the module declaration it marks.
         |> List.foldBack
             (fun (childStart, childEnd, first: TopLevelItem, build) children ->
                 match children with
-                | (_, nextEnd, nextIsImport, build') :: rest when isAttribute first ->
-                    (childStart, nextEnd, nextIsImport, fun () -> cat [ build (); hard; build' () ]) :: rest
-                | _ -> (childStart, childEnd, isImport first, build) :: children)
+                | (_, nextEnd, next: TopLevelItem, build') :: rest when isAttribute first ->
+                    let between = if TopLevelItem.isPartialDeclaration first next then text " " else hard
+                    (childStart, nextEnd, next, fun () -> cat [ build (); between; build' () ]) :: rest
+                | _ -> (childStart, childEnd, first, build) :: children)
             <| []
+        |> List.map (fun (childStart, childEnd, first, build) -> childStart, childEnd, isImport first, build)
         |> sequenceOf blankLines start finish
 
     and item (i: TopLevelItem) : Doc =

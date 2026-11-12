@@ -2,6 +2,7 @@ namespace NyxCompiler
 
 open System.IO
 open System.Reflection
+open System.Text.RegularExpressions
 open Parser.Program
 
 /// The compiler intrinsics: the few operations the standard library is written over because they cannot
@@ -154,36 +155,58 @@ module StandardLibrary =
 
     let private assembly = Assembly.GetExecutingAssembly()
 
-    /// The modules the library ships that a program imports by name, in alphabetical order. The prelude is left
-    /// out, since it is imported automatically.
-    let moduleNames : string list =
-        assembly.GetManifestResourceNames()
-        |> Array.choose (fun name ->
-            if name.StartsWith importPrefix && name.EndsWith ".nyx" then
-                Some (name.Substring(importPrefix.Length, name.Length - importPrefix.Length - ".nyx".Length))
-            else
-                None)
-        |> Array.filter (fun name -> name <> preludeModuleName)
-        |> Array.sort
-        |> Array.toList
-
-    /// Whether `file` holds one of the library's own modules: the file an imported one is checked as
-    /// (`nanyx/list.nyx`), or a file of its source on disk (`stdlib/nanyx/list.nyx`), as a checkout or the editor has it.
-    let isModuleFile (file: string) =
-        let moduleName = Path.GetFileNameWithoutExtension file
-        not (System.String.IsNullOrEmpty file)
-        && Path.GetExtension file = ".nyx"
-        && Path.GetFileName(Path.GetDirectoryName file) = packageName
-        && (moduleName = preludeModuleName || List.contains moduleName moduleNames)
-
-    /// The source of a standard-library module, or None when the library has no module of that name.
-    let tryLoadSource (moduleName: string) : string option =
-        use stream = assembly.GetManifestResourceStream(resourceName moduleName)
+    /// The text of the library's file `name` (its resource name, as `nanyx/list.nyx`), if it has one.
+    let tryLoadFile (name: string) : string option =
+        use stream = assembly.GetManifestResourceStream name
         if isNull stream then
             None
         else
             use reader = new StreamReader(stream)
             Some (reader.ReadToEnd())
+
+    /// A file's module declaration, `module list` or `@partial module list`: the first line that is one.
+    let private declaration = Regex(@"^(@partial\s+)?module\s+([A-Za-z_][A-Za-z0-9_.]*)\s*$", RegexOptions.Multiline)
+
+    /// The library's files, each as its resource name with the module it declares. A module is in the file named
+    /// for it (`nanyx/list.nyx`), and may have more files, each starting `@partial module list`.
+    let private files : Lazy<(string * string) list> =
+        lazy
+            (assembly.GetManifestResourceNames()
+             |> Array.filter (fun name -> name.StartsWith importPrefix && name.EndsWith ".nyx")
+             |> Array.sort
+             |> Array.toList
+             |> List.map (fun name ->
+                 let fileName = name.Substring(importPrefix.Length, name.Length - importPrefix.Length - ".nyx".Length)
+                 let declared = tryLoadFile name |> Option.map declaration.Match |> Option.filter _.Success
+                 name, declared |> Option.map (fun m -> m.Groups[2].Value) |> Option.defaultValue fileName))
+
+    /// The modules the library ships that a program imports by name, in alphabetical order. The prelude is left
+    /// out, since it is imported automatically.
+    let moduleNames : string list =
+        files.Value |> List.map snd |> List.distinct |> List.filter (fun name -> name <> preludeModuleName) |> List.sort
+
+    /// Whether `file` holds one of the library's own modules: the file an imported one is checked as
+    /// (`nanyx/list.nyx`), or a file of its source on disk (`stdlib/nanyx/list.nyx`), as a checkout or the editor has it.
+    let isModuleFile (file: string) =
+        not (System.String.IsNullOrEmpty file)
+        && Path.GetExtension file = ".nyx"
+        && Path.GetFileName(Path.GetDirectoryName file) = packageName
+        && files.Value |> List.exists (fun (name, _) -> name = importPrefix + Path.GetFileName file)
+
+    /// The source of a standard-library module, or None when the library has no module of that name.
+    let tryLoadSource (moduleName: string) : string option =
+        tryLoadFile (resourceName moduleName)
+
+    /// The module's files other than the one named for it, each as its resource name and its source.
+    let otherFragments (moduleName: string) : (string * string) list =
+        files.Value
+        |> List.filter (fun (name, declared) -> declared = moduleName && name <> resourceName moduleName)
+        |> List.choose (fun (name, _) -> tryLoadFile name |> Option.map (fun source -> name, source))
+
+    /// Every file of a standard-library module, the one named for it first, each as its resource name and its source.
+    let moduleSources (moduleName: string) : (string * string) list =
+        (tryLoadSource moduleName |> Option.map (fun source -> resourceName moduleName, source) |> Option.toList)
+        @ otherFragments moduleName
 
 /// The names the standard library keeps for itself: those that start with `__`, as the helpers syntax is desugared to
 /// (`__equals` for `==`, `__pow` for `**`, `__interpolate` for a hole in a string). The intrinsics (see `Intrinsics`)

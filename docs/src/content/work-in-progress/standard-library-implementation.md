@@ -16,8 +16,11 @@ program imports its modules like any other package's: `import nanyx/console`, `i
 `import nanyx/text as t` for qualified access.
 
 It ships inside the compiler. `NanyxCompiler.fsproj` embeds every `stdlib/nanyx/*.nyx` file as a
-resource named `nanyx/<module>.nyx`, so the published single-file `nanyx` binary carries the library
-and reads nothing from disk. `import nanyx/<module>` reads that resource (`StandardLibrary` in
+resource named `nanyx/<file>.nyx`, so the published single-file `nanyx` binary carries the library
+and reads nothing from disk. A module is in the file named for it, `nanyx/<module>.nyx`, and may have more
+files, each starting `@partial module <module>` (see [partial modules](../tour/modules#partial-modules)): the
+library's modules are the names its files declare (`StandardLibrary.moduleNames`, read from each file's first
+`module` line). `import nanyx/<module>` reads the module's files (`StandardLibrary` in
 `Nanyx.Compiler/Builtins.fs`), compiles the module together with the program, and inlines its
 definitions into the program the backend sees; importing a module the library does not have is a
 compile error that lists the ones it does.
@@ -64,7 +67,9 @@ Their names all start with `__nanyx_`.
 # Adding to it
 
 To add a module: create `stdlib/nanyx/<name>.nyx` declaring `module <name>`, mark what it offers with
-`export`, and rebuild; the glob picks it up and `import nanyx/<name>` resolves. Definitions inside a
+`export`, and rebuild; the glob picks it up and `import nanyx/<name>` resolves. To split a module, start
+`stdlib/nanyx/<name>.nyx` and each other file of it (`stdlib/nanyx/<name>.<part>.nyx`, say) with
+`@partial module <name>`. Definitions inside a
 module must be written before the definitions that use them (self-recursion is fine). Add an intrinsic
 only when a function genuinely cannot be written in Nanyx: give it a name and type in `Intrinsics`, and
 a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in

@@ -627,6 +627,16 @@ module TopLevelItem =
     /// A top-level item the compiler made up that has no source of its own.
     let synthetic (kind: TopLevelItemKind) = at SourceSpan.none kind
 
+    /// The attribute that makes a file's module declaration one fragment of a module split across files, written on
+    /// the declaration's line: `@partial module utils`.
+    let partialAttribute = "partial"
+
+    /// Whether `attribute` is `@partial` and `next`, the item after it, a module declaration.
+    let isPartialDeclaration (attribute: TopLevelItem) (next: TopLevelItem) =
+        match attribute.Kind, next.Kind with
+        | Attribute(name, None), ModuleDecl _ -> name = partialAttribute
+        | _ -> false
+
 /// How a node declares names. One node can declare in more than one way: `def f = { x -> x }` declares `f` by
 /// the lambda as a def's value, and `x` by the lambda's parameters.
 type Declarer =
