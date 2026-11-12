@@ -3,6 +3,7 @@ using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using InfoView = NyxCompiler.InfoView;
+using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using SymbolKind = NyxCompiler.SymbolKind;
 
 namespace Nanyx.LanguageServer.Handlers;
@@ -15,15 +16,30 @@ public sealed record InfoViewParams : IRequest<InfoViewResult?>
     public required Position Position { get; init; }
 }
 
-/// <summary>What <c>nanyx/infoView</c> returns: its sections, always all of them and in this order.</summary>
+/// <summary>
+/// What <c>nanyx/infoView</c> returns: its sections, always all of them and in this order, and the ranges of the
+/// document for the editor to highlight at the position (see <see cref="InfoViewHighlight"/>).
+/// </summary>
 public sealed record InfoViewResult
 {
     public required IReadOnlyList<InfoViewSection> Sections { get; init; }
+    public IReadOnlyList<InfoViewHighlight> Highlights { get; init; } = [];
+}
+
+/// <summary>
+/// A range of the document for the editor to highlight: a <c>provider</c> of contexts (a <c>use</c>, or a context of
+/// a signature) or a <c>call</c> it serves. On a provider, the calls it serves are highlighted; on a call, what
+/// provides its contexts (see <see cref="NyxCompiler.ContextFlow.highlightsAt"/>).
+/// </summary>
+public sealed record InfoViewHighlight
+{
+    public required Range Range { get; init; }
+    public required string Kind { get; init; }
 }
 
 /// <summary>
 /// A section of the info view. <see cref="Id"/> is one of <c>expression</c>, <c>inScope</c>, <c>topLevel</c>,
-/// <c>contexts</c>, <c>call</c> and <c>messages</c>; <see cref="Collapsed"/> says whether a client shows it closed at first.
+/// <c>contexts</c>, <c>call</c>, <c>flow</c> and <c>messages</c>; <see cref="Collapsed"/> says whether a client shows it closed at first.
 /// </summary>
 public sealed record InfoViewSection
 {
@@ -37,7 +53,7 @@ public sealed record InfoViewSection
 /// An item of a section: its text (<c>name: type</c>, a context, a message), what kind of thing it is or where it
 /// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), where it is, for a link, and the doc comment of
 /// what it names, as Markdown with its links written out, as hover shows it: for an import, that of the module it
-/// brings in.
+/// brings in. <see cref="Children"/> are the items under it: the calls a provider in the flow serves.
 /// </summary>
 public sealed record InfoViewItem
 {
@@ -45,6 +61,7 @@ public sealed record InfoViewItem
     public string? Detail { get; init; }
     public Location? Location { get; init; }
     public string? Documentation { get; init; }
+    public IReadOnlyList<InfoViewItem>? Children { get; init; }
 }
 
 /// <summary>
@@ -54,7 +71,10 @@ public sealed record InfoViewItem
 /// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
 /// that was inferred to require it, or the runtime); the contexts the innermost call around the position that requires
 /// any requires, each with where it finds it (one of those, or an instance the compiler builds: from attached
-/// definitions, derived from the type's parts, or its own); and the diagnostics on the position's line. Read from the
+/// definitions, derived from the type's parts, or its own); the flow of contexts through the def around the position,
+/// each provider with the calls it serves (see <see cref="NyxCompiler.ContextFlow"/>); and the diagnostics on the
+/// position's line. It also gives the ranges to highlight: a provider at the position and the calls it serves, or a
+/// call and what provides its contexts. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
 /// item whose name or context has a doc comment carries it, read as hover reads it (see
@@ -89,10 +109,14 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
 
         var offset = document.Positions.ToOffset(request.Position);
         InfoView.Info? info = null;
+        NyxCompiler.ContextFlow.Flow? flow = null;
+        NyxCompiler.ContextFlow.Highlights? highlights = null;
         NyxCompiler.Documentation.Reader? docs = null;
         if (document.LastGood is { Compiled: { } compiled } lastGood && document.NearestInLastGood(offset) is { } nearest)
         {
             info = InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest);
+            flow = NyxCompiler.ContextFlow.at(_settings.TypeNotation, compiled, nearest)?.Value;
+            highlights = NyxCompiler.ContextFlow.highlightsAt(compiled, nearest);
             docs = lastGood.DocReader(uri, nearest, _standardLibrary);
         }
 
@@ -163,10 +187,57 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                         })
                         .ToList() ?? []
                 },
+                new InfoViewSection
+                {
+                    Id = "flow",
+                    Title = flow is null ? "Context flow" : $"Context flow in {flow.Def}",
+                    Items = flow?.Entries.Select(entry => FlowItem(entry, Locate)).ToList() ?? []
+                },
                 new InfoViewSection { Id = "messages", Title = "Messages", Items = messages }
-            ]
+            ],
+            Highlights = highlights is null
+                ? []
+                :
+                [
+                    .. Highlighted(highlights.Providers, "provider", Locate, uri),
+                    .. Highlighted(highlights.Calls, "call", Locate, uri)
+                ]
         };
     }
+
+    /// <summary>
+    /// The item of a provider in the context flow: its context, its source with how many calls it serves (a
+    /// <c>use</c> that serves none is <c>unused</c>), linking to it, with an item under it for each call it serves.
+    /// </summary>
+    private static InfoViewItem FlowItem(NyxCompiler.ContextFlow.FlowEntry entry, Func<Parser.Program.SourceSpan, Location?> locate)
+    {
+        var source = Describe(entry.Source);
+        var serves = entry.Calls.Length switch
+        {
+            0 when entry.Source.IsUse => "unused",
+            0 => "no calls",
+            1 => "1 call",
+            var count => $"{count} calls"
+        };
+        return new InfoViewItem
+        {
+            Text = entry.Context,
+            Detail = $"{source} · {serves}",
+            Location = locate(entry.Span),
+            Children = entry.Calls.Select(call => new InfoViewItem { Text = call.Callee, Detail = "call", Location = locate(call.Span) }).ToList()
+        };
+    }
+
+    /// <summary>The highlights of kind <paramref name="kind"/> at <paramref name="spans"/> that are in this document.</summary>
+    private static IEnumerable<InfoViewHighlight> Highlighted(
+        IEnumerable<Parser.Program.SourceSpan> spans,
+        string kind,
+        Func<Parser.Program.SourceSpan, Location?> locate,
+        DocumentUri uri) =>
+        spans
+            .Select(locate)
+            .Where(location => location is not null && location.Uri == uri)
+            .Select(location => new InfoViewHighlight { Range = location!.Range, Kind = kind });
 
     /// <summary>
     /// The items of the expression section: the expression's type, as hover shows it, linking to the expression. On a

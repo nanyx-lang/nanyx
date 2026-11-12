@@ -184,7 +184,9 @@ what the compiler keeps: exact spans, resolved names and types.
   type variables (`type variables`), each linking to the def; the
   locals, parameters and pattern variables in scope, nearest first; the top-level defs and imports in scope (less the
   standard library's reserved `__` names); the contexts in scope with where each comes from; the contexts the call
-  around the position requires, with where it finds each; and the diagnostics on the position's line.
+  around the position requires, with where it finds each; the flow of contexts through the def around it, each
+  provider with the calls it serves (`NyxCompiler.ContextFlow`); and the diagnostics on the position's line. It also
+  gives the ranges for the editor to highlight between a provider and its calls.
   Each item whose name or context has a doc comment carries it as Markdown, read with the `Documentation.Reader` hover
   uses ([#917](https://github.com/nanyx-lang/nanyx/issues/917)).
   `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the

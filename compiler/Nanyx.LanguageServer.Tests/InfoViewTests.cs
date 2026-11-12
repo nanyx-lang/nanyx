@@ -380,4 +380,41 @@ public sealed class InfoViewTests : LanguageServerTestBase
             call.Items.Select(item => (item.Text, item.Detail, item.Location?.Range)));
         Assert.Empty(Section(await InfoViewAt(uri, 4, 5), "call").Items);
     }
+
+    [Fact]
+    public async Task Info_view_shows_the_flow_of_contexts_through_the_def_and_highlights_a_use_and_its_calls()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-12");
+
+        Open(uri, """
+            context Log = (log: string -> ())
+            def note: [Log] string -> () = { s -> log(s) }
+            def quiet: Log = (log = { s -> () })
+            def main: [Log] () -> () = {
+              note("a")
+              use quiet
+              note("b")
+              use quiet
+              ()
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 5, 3);
+        var flow = Section(view, "flow");
+
+        Assert.Equal("Context flow in main", flow.Title);
+        Assert.Equal(
+            [("Log", "signature · 1 call", new Range(3, 11, 3, 14)), ("Log", "use · 1 call", new Range(5, 6, 5, 11)), ("Log", "use · unused", new Range(7, 6, 7, 11))],
+            flow.Items.Select(item => (item.Text, item.Detail, item.Location?.Range)));
+        var served = Assert.Single(flow.Items[1].Children!);
+        Assert.Equal(("note", new Range(6, 2, 6, 6)), (served.Text, served.Location?.Range));
+        Assert.Equal(
+            [("provider", new Range(5, 6, 5, 11)), ("call", new Range(6, 2, 6, 6))],
+            view.Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
+        Assert.Equal(
+            [("provider", new Range(3, 11, 3, 14)), ("call", new Range(4, 2, 4, 6))],
+            (await InfoViewAt(uri, 4, 3)).Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
+    }
 }

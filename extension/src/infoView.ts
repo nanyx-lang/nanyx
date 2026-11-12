@@ -24,6 +24,8 @@ interface InfoViewItem {
   documentation?: string;
   /** `documentation` rendered to HTML by VS Code's Markdown renderer, filled in by the extension. */
   documentationHtml?: string;
+  /** The items under it: the calls a provider in the context flow serves. */
+  children?: InfoViewItem[];
 }
 
 interface InfoViewSection {
@@ -33,8 +35,15 @@ interface InfoViewSection {
   items: InfoViewItem[];
 }
 
+/** A range to highlight in the editor: a provider of contexts, or a call it serves. */
+interface InfoViewHighlight {
+  range: { start: LspPosition; end: LspPosition };
+  kind: "provider" | "call";
+}
+
 interface InfoViewResult {
   sections: InfoViewSection[];
+  highlights?: InfoViewHighlight[];
 }
 
 /** What the view shows, posted to its webview. */
@@ -54,7 +63,8 @@ interface Target {
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
  * the document does, once it has stayed put for a moment. Every item that has a place links to it, and shows the doc
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
- * while you edit elsewhere.
+ * while you edit elsewhere. While it is visible and not pinned, it highlights in the editor what the server says to: on
+ * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts.
  */
 export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = "nanyx.infoView";
@@ -66,6 +76,13 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   private requests = 0;
   private readonly listeners: vscode.Disposable[] = [];
   private readonly registration: vscode.Disposable;
+  /** How a provider of contexts, and a call it serves, are highlighted in the editor. */
+  private readonly providerHighlight = vscode.window.createTextEditorDecorationType({
+    backgroundColor: new vscode.ThemeColor("editor.wordHighlightStrongBackground")
+  });
+  private readonly callHighlight = vscode.window.createTextEditorDecorationType({
+    backgroundColor: new vscode.ThemeColor("editor.wordHighlightBackground")
+  });
 
   constructor(private readonly client: () => LanguageClient | undefined) {
     this.registration = vscode.window.registerWebviewViewProvider(InfoView.viewId, this, {
@@ -101,6 +118,8 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   dispose(): void {
     this.closed();
     this.registration.dispose();
+    this.providerHighlight.dispose();
+    this.callHighlight.dispose();
   }
 
   /** Asks again, after the language server has restarted say. */
@@ -113,6 +132,22 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
     this.pinned = undefined;
     clearTimeout(this.timer);
     this.listeners.splice(0).forEach((listener) => listener.dispose());
+    this.highlight(undefined, []);
+  }
+
+  /**
+   * Highlights `highlights` in each editor that shows `uri`, and nothing anywhere else: with no `uri`, nothing at all.
+   */
+  private highlight(uri: vscode.Uri | undefined, highlights: InfoViewHighlight[]): void {
+    const ranges = (kind: InfoViewHighlight["kind"]) =>
+      highlights
+        .filter((highlight) => highlight.kind === kind)
+        .map(({ range: { start, end } }) => new vscode.Range(start.line, start.character, end.line, end.character));
+    for (const editor of vscode.window.visibleTextEditors) {
+      const here = uri !== undefined && editor.document.uri.toString() === uri.toString();
+      editor.setDecorations(this.providerHighlight, here ? ranges("provider") : []);
+      editor.setDecorations(this.callHighlight, here ? ranges("call") : []);
+    }
   }
 
   private receive(message: { type: string; location?: LspLocation; href?: string }): void {
@@ -142,7 +177,11 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   private async update(): Promise<void> {
     const target = this.pinned ?? this.cursor();
     if (!this.view?.visible || !target) {
-      // Away from a Nanyx editor, the view keeps what it last showed. A hidden view catches up when it is shown.
+      // Away from a Nanyx editor, the view keeps what it last showed. A hidden view catches up when it is shown, and
+      // highlights nothing meanwhile.
+      if (!this.view?.visible) {
+        this.highlight(undefined, []);
+      }
       return;
     }
 
@@ -150,6 +189,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
     const where = `${vscode.workspace.asRelativePath(target.uri)}:${target.position.line + 1}:${target.position.character + 1}`;
     const pinned = this.pinned !== undefined;
     let shown: Shown;
+    let highlights: InfoViewHighlight[] = [];
     const client = this.client();
     if (!client) {
       shown = { kind: "message", where, pinned, text: "The Nanyx language server is not running." };
@@ -162,6 +202,8 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
         shown = result
           ? { kind: "info", where, pinned, sections: await withRenderedDocumentation(result.sections) }
           : { kind: "message", where, pinned, text: "The language server has not compiled this document yet." };
+        // A pinned position is elsewhere than the cursor, so it highlights nothing.
+        highlights = pinned ? [] : result?.highlights ?? [];
       } catch (error) {
         shown = {
           kind: "message",
@@ -174,6 +216,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
 
     if (request === this.requests) {
       void this.view?.webview.postMessage(shown);
+      this.highlight(target.uri, highlights);
     }
   }
 }
@@ -247,6 +290,7 @@ function page(webview: vscode.Webview): string {
   summary { font-weight: 600; cursor: pointer; }
   summary .count { font-weight: normal; color: var(--vscode-descriptionForeground); }
   ul { list-style: none; margin: 4px 0; padding-left: 12px; }
+  ul.children { flex-basis: 100%; margin: 0; }
   li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 1px 0; }
   .doc { flex-basis: 100%; color: var(--vscode-descriptionForeground); }
   .doc p { margin: 2px 0 4px; white-space: pre-wrap; }
@@ -310,6 +354,11 @@ function page(webview: vscode.Webview): string {
       const doc = element("div", "doc");
       entry.documentation.split(/\\n\\s*\\n/).forEach((paragraph) => doc.appendChild(element("p", "", paragraph)));
       li.appendChild(collapsible(doc));
+    }
+    if (entry.children && entry.children.length > 0) {
+      const children = element("ul", "children");
+      entry.children.forEach((child) => children.appendChild(item(child)));
+      li.appendChild(children);
     }
     return li;
   }

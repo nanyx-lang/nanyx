@@ -45,7 +45,8 @@ const DEBOUNCE_MILLISECONDS = 150;
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
  * the document does, once it has stayed put for a moment. Every item that has a place links to it, and shows the doc
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
- * while you edit elsewhere.
+ * while you edit elsewhere. While it is visible and not pinned, it highlights in the editor what the server says to: on
+ * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts.
  */
 class InfoView {
     constructor(client) {
@@ -53,6 +54,13 @@ class InfoView {
         /** Counts requests, so that an answer to one overtaken by a later one is dropped. */
         this.requests = 0;
         this.listeners = [];
+        /** How a provider of contexts, and a call it serves, are highlighted in the editor. */
+        this.providerHighlight = vscode.window.createTextEditorDecorationType({
+            backgroundColor: new vscode.ThemeColor("editor.wordHighlightStrongBackground")
+        });
+        this.callHighlight = vscode.window.createTextEditorDecorationType({
+            backgroundColor: new vscode.ThemeColor("editor.wordHighlightBackground")
+        });
         this.registration = vscode.window.registerWebviewViewProvider(InfoView.viewId, this, {
             webviewOptions: { retainContextWhenHidden: true }
         });
@@ -83,6 +91,8 @@ class InfoView {
     dispose() {
         this.closed();
         this.registration.dispose();
+        this.providerHighlight.dispose();
+        this.callHighlight.dispose();
     }
     /** Asks again, after the language server has restarted say. */
     refresh() {
@@ -93,6 +103,20 @@ class InfoView {
         this.pinned = undefined;
         clearTimeout(this.timer);
         this.listeners.splice(0).forEach((listener) => listener.dispose());
+        this.highlight(undefined, []);
+    }
+    /**
+     * Highlights `highlights` in each editor that shows `uri`, and nothing anywhere else: with no `uri`, nothing at all.
+     */
+    highlight(uri, highlights) {
+        const ranges = (kind) => highlights
+            .filter((highlight) => highlight.kind === kind)
+            .map(({ range: { start, end } }) => new vscode.Range(start.line, start.character, end.line, end.character));
+        for (const editor of vscode.window.visibleTextEditors) {
+            const here = uri !== undefined && editor.document.uri.toString() === uri.toString();
+            editor.setDecorations(this.providerHighlight, here ? ranges("provider") : []);
+            editor.setDecorations(this.callHighlight, here ? ranges("call") : []);
+        }
     }
     receive(message) {
         if (message.type === "pin") {
@@ -120,13 +144,18 @@ class InfoView {
     async update() {
         const target = this.pinned ?? this.cursor();
         if (!this.view?.visible || !target) {
-            // Away from a Nanyx editor, the view keeps what it last showed. A hidden view catches up when it is shown.
+            // Away from a Nanyx editor, the view keeps what it last showed. A hidden view catches up when it is shown, and
+            // highlights nothing meanwhile.
+            if (!this.view?.visible) {
+                this.highlight(undefined, []);
+            }
             return;
         }
         const request = ++this.requests;
         const where = `${vscode.workspace.asRelativePath(target.uri)}:${target.position.line + 1}:${target.position.character + 1}`;
         const pinned = this.pinned !== undefined;
         let shown;
+        let highlights = [];
         const client = this.client();
         if (!client) {
             shown = { kind: "message", where, pinned, text: "The Nanyx language server is not running." };
@@ -140,6 +169,8 @@ class InfoView {
                 shown = result
                     ? { kind: "info", where, pinned, sections: await withRenderedDocumentation(result.sections) }
                     : { kind: "message", where, pinned, text: "The language server has not compiled this document yet." };
+                // A pinned position is elsewhere than the cursor, so it highlights nothing.
+                highlights = pinned ? [] : result?.highlights ?? [];
             }
             catch (error) {
                 shown = {
@@ -152,6 +183,7 @@ class InfoView {
         }
         if (request === this.requests) {
             void this.view?.webview.postMessage(shown);
+            this.highlight(target.uri, highlights);
         }
     }
 }
@@ -225,6 +257,7 @@ function page(webview) {
   summary { font-weight: 600; cursor: pointer; }
   summary .count { font-weight: normal; color: var(--vscode-descriptionForeground); }
   ul { list-style: none; margin: 4px 0; padding-left: 12px; }
+  ul.children { flex-basis: 100%; margin: 0; }
   li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 1px 0; }
   .doc { flex-basis: 100%; color: var(--vscode-descriptionForeground); }
   .doc p { margin: 2px 0 4px; white-space: pre-wrap; }
@@ -288,6 +321,11 @@ function page(webview) {
       const doc = element("div", "doc");
       entry.documentation.split(/\\n\\s*\\n/).forEach((paragraph) => doc.appendChild(element("p", "", paragraph)));
       li.appendChild(collapsible(doc));
+    }
+    if (entry.children && entry.children.length > 0) {
+      const children = element("ul", "children");
+      entry.children.forEach((child) => children.appendChild(item(child)));
+      li.appendChild(children);
     }
     return li;
   }
