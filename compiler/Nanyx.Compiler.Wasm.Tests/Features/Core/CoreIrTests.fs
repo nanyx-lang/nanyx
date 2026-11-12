@@ -366,7 +366,7 @@ let private lowerInput (typed: TypedModule) : CoreIrLower.LowerInput =
 [<Fact>]
 let ``Every intermediate value in the core IR is named`` () =
     let input = lowerInput (typedModule "def f = { x, y -> (x + 1) * (y - 2) }\n")
-    let lowered = CoreIrLower.lowerModule input id
+    let lowered = CoreIrLowerModule.lowerModule input id
     let func, _ = lowered.Roots.["f"]
     let printed = CoreIr.Print.func func
     let expected =
@@ -380,7 +380,7 @@ let ``Every intermediate value in the core IR is named`` () =
 let ``A broken invariant in the emitter says Internal error once`` () =
     let input = lowerInput (typedModule "def f = { x -> x + 1 }\n")
     // An emitter that finds the core IR broken, as `CoreIrEmit` does when a temporary is never used.
-    let lowered = CoreIrLower.lowerModule input (fun _ -> CoreIr.internalError "a temporary in the core IR is never used")
+    let lowered = CoreIrLowerModule.lowerModule input (fun _ -> CoreIr.internalError "a temporary in the core IR is never used")
     match lowered.Failures with
     | [ "f", failure, _ ] ->
         Assert.Equal("Internal error: a temporary in the core IR is never used", lowerFailureMessage failure)
