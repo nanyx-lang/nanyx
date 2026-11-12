@@ -10,7 +10,10 @@ namespace Nanyx.LanguageServer;
 /// <param name="FileName">
 /// The file the compiler's spans name for this document: its full path, or empty for a document not on disk.
 /// </param>
-/// <param name="Compiled">What the compiler made of <paramref name="Text"/>; <c>null</c> if the compiler threw.</param>
+/// <param name="Compiled">
+/// What the compiler made of <paramref name="Text"/>; <c>null</c> if the compiler threw, or if it has not compiled the
+/// text yet (see <see cref="CompileScheduler"/>).
+/// </param>
 /// <param name="CompilerFailure">The exception the compiler threw, if it did.</param>
 /// <param name="PreviousGood">
 /// The last earlier text of this document that was typed, if this one was not: see <see cref="LastGood"/>.
@@ -142,7 +145,8 @@ public sealed record OpenDocument(
 
 /// <summary>
 /// Every document the client has open, keyed by URI, with the last compile of its text and the last one that was
-/// typed. A document is compiled once per change, and diagnostics, hover and type hints all read that result.
+/// typed. A document is compiled when it is opened, and after a change once the user pauses (see
+/// <see cref="CompileScheduler"/>); diagnostics, hover and type hints all read that result.
 /// </summary>
 public sealed class DocumentStore
 {
@@ -156,10 +160,15 @@ public sealed class DocumentStore
         _settings = settings;
     }
 
-    /// <summary>Compiles the full text of a document after it was opened or changed, and records both.</summary>
-    public OpenDocument Update(DocumentUri uri, string text)
+    /// <summary>
+    /// Records a document's new text before it is compiled, so that requests about it read positions in this text,
+    /// and what they need from a compile from the last text that was typed (see <see cref="OpenDocument.LastGood"/>).
+    /// </summary>
+    public void Edit(DocumentUri uri, string text) => Record(uri, new OpenDocument(text, FileNameOf(uri), null, null));
+
+    /// <summary>Records a compiled text of a document, as its latest.</summary>
+    public OpenDocument Record(DocumentUri uri, OpenDocument document)
     {
-        var document = Compile(uri, text);
         if (!document.Typed && TryGet(uri)?.LastGood is { } lastGood)
         {
             document = document with { PreviousGood = lastGood };
@@ -175,12 +184,18 @@ public sealed class DocumentStore
     /// <summary>An open document, or <c>null</c> if the client has not opened it.</summary>
     public OpenDocument? TryGet(DocumentUri uri) => _documents.TryGetValue(uri, out var document) ? document : null;
 
-    private OpenDocument Compile(DocumentUri uri, string text)
+    /// <summary>The file the compiler's spans name for a document: its full path, or empty if it is not on disk.</summary>
+    private static string FileNameOf(DocumentUri uri) =>
+        uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : string.Empty;
+
+    /// <summary>Compiles a text of a document, without recording it.</summary>
+    public OpenDocument Compile(DocumentUri uri, string text)
     {
+        _settings.CompileStarted?.Invoke(uri);
         // A file on disk gets its imports resolved through its package's modules if it is a source file of one, or
         // else relative to itself; anything else (an untitled buffer, say) can still import the standard library.
         // The compiler names a file by its full path.
-        var path = uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : null;
+        var path = uri.Scheme == "file" ? FileNameOf(uri) : null;
         try
         {
             var directives = Script.read(path ?? string.Empty, text);

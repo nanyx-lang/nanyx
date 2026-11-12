@@ -19,6 +19,11 @@ namespace Nanyx.LanguageServer;
 /// <param name="LocalTypeHints">Whether to show inlay hints for the inferred types of local defs.</param>
 /// <param name="ParameterTypeHints">Whether to show inlay hints for the inferred types of lambda parameters.</param>
 /// <param name="PatternVariableTypeHints">Whether to show inlay hints for the inferred types of pattern variables.</param>
+/// <param name="CompileDelay">
+/// How long a changed document must go unchanged before it is compiled (see <see cref="CompileScheduler"/>);
+/// <see cref="DefaultCompileDelay"/> when <c>null</c>.
+/// </param>
+/// <param name="CompileStarted">Called as each compile of a document starts. For tests, which count them.</param>
 public sealed record ServerSettings(
     TypeNotation TypeNotation,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
@@ -26,9 +31,14 @@ public sealed record ServerSettings(
     StandardLibrarySource? StandardLibrarySource = null,
     bool LocalTypeHints = true,
     bool ParameterTypeHints = true,
-    bool PatternVariableTypeHints = true)
+    bool PatternVariableTypeHints = true,
+    TimeSpan? CompileDelay = null,
+    Action<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri>? CompileStarted = null)
 {
     public static ServerSettings Default { get; } = new(TypeNotation.Unicode);
+
+    /// <summary>How long a changed document waits to be compiled, unless <see cref="CompileDelay"/> says otherwise.</summary>
+    public static readonly TimeSpan DefaultCompileDelay = TimeSpan.FromMilliseconds(150);
 
     /// <summary>Whether an inlay hint is shown for a declaration of <paramref name="kind"/>.</summary>
     public bool ShowsInlayHintFor(SymbolKind kind) =>
