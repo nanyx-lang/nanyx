@@ -70,6 +70,7 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// recorded for the def's expressions lose it too. A rest the unifier made up, as it does when a closed union is
 /// given where an open one is expected, may be numbered differently the next time the constraints are solved, so
 /// rather than it, each of inference's own variables solved to a type with it is constrained to that type without it.
+/// So is every context variable no caller can choose (see `Unifier.outputOnlyContextVars`) solved to no contexts.
 let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
     match Unifier.unify state.Constraints with
     | Error _ -> TypeEnv.generalize env ty, state
@@ -80,7 +81,7 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
             |> Seq.map (fun id -> TypeEnv.freeTyVars (Unifier.apply subst (TyVar { Id = id; Name = None })))
             |> Set.unionMany
         let closed =
-            Unifier.outputOnlyRestVars resolved
+            Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
             |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
         let bottom = TyUnion []
         let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList

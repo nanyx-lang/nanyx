@@ -561,6 +561,36 @@ module Unifier =
         |> List.choose (fun (v, isRest, _) -> if isRest && not (inInput.Contains v.Id) then Some v else None)
         |> List.distinctBy (fun v -> v.Id)
 
+    /// The context variables of `ty`'s function types that appear in no function's input, at any depth. No caller
+    /// chooses the contexts such a variable stands for, so it stands for none. In `int -> ([c] int -> int)`, `c` is;
+    /// in `[c] ([c] a -> b), a -> b` it is not, as the function given for the input chooses it. A nominal's variables
+    /// are taken to be in an input, as its underlying type is not shown.
+    let outputOnlyContextVars (ty: Ty) : TyVar list =
+        // Each variable once for each time it appears, with whether it is a function's context there and whether that
+        // is within a function's input.
+        let rec collect (inInput: bool) ty : (TyVar * bool * bool) list =
+            match ty with
+            | TyVar v -> [ v, false, inInput ]
+            | TyPrimitive _ -> []
+            | TyNominal(_, underlying, _) -> collect true underlying
+            | TyAlias(_, args, underlying) -> List.collect (collect inInput) (underlying :: args)
+            | TyFunc(arg, ret, contexts) ->
+                let ofContext context =
+                    match context with
+                    | TyVar v -> [ v, true, inInput ]
+                    | other -> collect inInput other
+                collect true arg @ collect inInput ret @ List.collect ofContext contexts
+            | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect inInput)
+            | TyOpenRecord(fields, row) -> collect inInput (TyRecord fields) @ [ row, false, inInput ]
+            | TyTag(_, payload) -> payload |> Option.map (collect inInput) |> Option.defaultValue []
+            | TyApply(_, items)
+            | TyUnion items -> items |> List.collect (collect inInput)
+        let occurrences = collect false ty
+        let inInput = occurrences |> List.choose (fun (v, _, input) -> if input then Some v.Id else None) |> Set.ofList
+        occurrences
+        |> List.choose (fun (v, isContext, _) -> if isContext && not (inInput.Contains v.Id) then Some v else None)
+        |> List.distinctBy (fun v -> v.Id)
+
     let rec occurs (varId: int) (ty: Ty) : bool =
         match ty with
         | TyVar v -> v.Id = varId
