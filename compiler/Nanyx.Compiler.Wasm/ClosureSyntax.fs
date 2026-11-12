@@ -35,7 +35,7 @@ let rec references (expr: Expression) : (string * Expression) list =
     | FunctionCall(name, _, args) -> (name, expr) :: (args |> List.collect references)
     | Pipe(value, name, _, args) -> (name, expr) :: references value @ (args |> List.collect references)
     | Lambda(_, body, _) -> references body
-    | BinaryOp(_, left, right) -> references left @ references right
+    | BinaryOp(_, _, left, right) -> references left @ references right
     | IfExpr(cond, thenExpr, elseExpr) -> references cond @ references thenExpr @ references elseExpr
     | Block statements -> statements |> List.collect referencesInStatement
     | Except(value, arms) -> references { expr with Kind = Match([ value ], arms) }

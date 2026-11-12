@@ -124,7 +124,7 @@ let ``use ... in takes a block indented on the lines after in, and the block end
     | [ DefStatement (_, "total", None, Kind (UseIn (Kind (IdentifierExpr "counter"), (Kind (Block body) as block))))
         ExprStatement (Kind (IdentifierExpr "total")) ] ->
         match body |> List.map (fun (statement: Statement) -> statement.Kind) with
-        | [ DefStatement (_, "a", None, _); ExprStatement (Kind (BinaryOp ("+", _, _))) ] -> ()
+        | [ DefStatement (_, "a", None, _); ExprStatement (Kind (BinaryOp ("+", _, _, _))) ] -> ()
         | other -> failwith $"Unexpected block: %A{other}"
         let text = (source.ReplaceLineEndings "\n").Substring(block.Span.Start, block.Span.End - block.Span.Start)
         Assert.Equal("""def a = counted(3)

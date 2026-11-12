@@ -193,8 +193,8 @@ module NonTailRecursion =
         | Pipe(_, name, _, _) -> $"its result is passed to `{name}`"
         | ContextMemberCall(_, name, _) -> $"its result is passed to `{name}`"
         // `[x, ...rest]` is parsed as `[x] ++ rest`.
-        | BinaryOp("++", Kind (ListExpr _), _) -> "its result goes into a list"
-        | BinaryOp(op, _, _) -> $"its result is an operand of `{op}`"
+        | BinaryOp("++", _, Kind (ListExpr _), _) -> "its result goes into a list"
+        | BinaryOp(op, _, _, _) -> $"its result is an operand of `{op}`"
         | IfExpr _ -> "the `if` decides on its result"
         | Match _ -> "the `match` matches on its result"
         | Except _ -> "the `except` matches on its result"
@@ -560,7 +560,7 @@ module NoTagInCommon =
         |> List.collect SyntaxTree.expressionsWithin
         |> List.choose (fun expr ->
             match expr.Kind with
-            | BinaryOp(op, left, right) when EqualityOperators.isOperator op ->
+            | BinaryOp(op, _, left, right) when EqualityOperators.isOperator op ->
                 match model.Types |> Map.tryFind left.Id, model.Types |> Map.tryFind right.Id with
                 | Some leftTy, Some rightTy ->
                     match closedTags leftTy, closedTags rightTy with

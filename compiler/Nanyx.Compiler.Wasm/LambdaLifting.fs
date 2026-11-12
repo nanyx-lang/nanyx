@@ -49,7 +49,7 @@ and private boundNames (expr: Expression) : string list =
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> args |> List.collect boundNames
     | Pipe(value, _, _, args) -> boundNames value @ (args |> List.collect boundNames)
-    | BinaryOp(_, left, right) -> boundNames left @ boundNames right
+    | BinaryOp(_, _, left, right) -> boundNames left @ boundNames right
     | IfExpr(cond, thenExpr, elseExpr) -> boundNames cond @ boundNames thenExpr @ boundNames elseExpr
     | TupleExpr items
     | ListExpr items -> items |> List.collect boundNames
@@ -85,7 +85,7 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
         recur (rebuild (FunctionCall(name, range, pipeCallArguments value args)))
     | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
     | Lambda(args, body, takesUnit) -> rebuild (Lambda(args, recur body, takesUnit))
-    | BinaryOp(op, left, right) -> rebuild (BinaryOp(op, recur left, recur right))
+    | BinaryOp(op, opSpan, left, right) -> rebuild (BinaryOp(op, opSpan, recur left, recur right))
     | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
     | Block statements ->
         statements
@@ -278,7 +278,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 | IdentifierExpr name
                 | FunctionCall(name, _, _)
                 | Pipe(_, name, _, _)
-                | BinaryOp(name, _, _)
+                | BinaryOp(name, _, _, _)
                 | ContextMemberCall(_, name, _)
                 | ContextMemberAccess(_, name) -> Some name
                 | _ -> None)
@@ -337,7 +337,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             closureOf expr (wrapperOf name) []
         | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
         | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
-        | BinaryOp(op, left, right) -> rebuild (BinaryOp(op, recur left, recur right))
+        | BinaryOp(op, opSpan, left, right) -> rebuild (BinaryOp(op, opSpan, recur left, recur right))
         | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
         | Block statements ->
             // The records defined in this block, for `use ctx` where `ctx` is one of them.

@@ -22,7 +22,7 @@ let rec private children (expr: Expression) : Expression list =
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> args
     | Lambda(_, body, _) -> [ body ]
-    | BinaryOp(_, left, right) -> [ left; right ]
+    | BinaryOp(_, _, left, right) -> [ left; right ]
     | Pipe(value, _, _, args) -> value :: args
     | Block statements -> statements |> List.collect statementExpressions
     | Match(values, arms) ->
@@ -82,10 +82,11 @@ let typeExprsAt (offset: int) (module': Module) : TypeExpr list =
         (module' |> List.collect SyntaxTree.topLevelTypes) @ (expressionsAt offset module' |> List.collect SyntaxTree.expressionTypes)
     written |> List.fold search []
 
-/// The span of a call's or pipe's function name, when it has one.
+/// The span of a call's or pipe's function name, or of an operator, when it has one.
 let private calleeSpan (expr: Expression) =
     match expr.Kind with
     | FunctionCall(_, nameSpan, _)
+    | BinaryOp(_, nameSpan, _, _)
     | Pipe(_, _, nameSpan, _) -> nameSpan
     | _ -> None
 
@@ -141,7 +142,8 @@ let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty 
         |> List.mapi (fun depth expr ->
             let callee =
                 match calleeSpan expr with
-                | Some nameSpan when contains offset nameSpan ->
+                // What syntax is desugared to (`__pow` for `**`) is not a name the user wrote: the expression is hovered.
+                | Some nameSpan when contains offset nameSpan && not (referenced expr |> Option.exists ReservedNames.isHidden) ->
                     typed.CalleeTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, referenced expr, nameSpan, depth, 0)
                 | _ -> None
             let name =
@@ -177,11 +179,12 @@ let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol
     (symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten), othersWritten
 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
-/// there that has one, or of the function itself on a call's function name, where it is instantiated at that
-/// call, or of what a declaration's own name declares (a def, a parameter, a pattern variable), or of what a `_` in
-/// a type was inferred to be, with made-up type variables named by `names`. On a name, the declaration's own or one
-/// that refers to it, the type comes after the name (see `declared`), and a def shows the contexts it requires too: a
-/// top-level def, the module's own or an imported one, and a local def that writes them. `None` when the module did not type-check or nothing typed is at `offset`.
+/// there that has one, or of the function itself on a call's function name or an operator, where it is
+/// instantiated at that call, or of what a declaration's own name declares (a def, a parameter, a pattern variable),
+/// or of what a `_` in a type was inferred to be, with made-up type variables named by `names`. On a name, the
+/// declaration's own or one that refers to it, the type comes after the name (see `declared`), and a def shows the
+/// contexts it requires too: a top-level def, the module's own or an imported one, and a local def that writes them.
+/// `None` when the module did not type-check or nothing typed is at `offset`.
 ///
 /// The narrowest span wins rather than the deepest node, because a made-up node can sit inside the syntax it
 /// stands for: a `for` loop's element is an identifier spanning all of the loop's arms. Of equal spans the

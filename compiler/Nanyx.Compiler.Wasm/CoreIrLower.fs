@@ -287,7 +287,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | TagExpr(name, Some payload) ->
             let ty = tyOf expr
             this.Atoms scope [ payload ] (fun atoms -> k (mk (MakeTag(name, atoms.Head)) ty))
-        | BinaryOp("++", Kind (ListExpr items), rest) when not items.IsEmpty ->
+        | BinaryOp("++", _, Kind (ListExpr items), rest) when not items.IsEmpty ->
             // `[a, b] ++ rest`, which is what `[a, b, ...rest]` is: a cell for each element, put in front of `rest`
             // rather than copied from a list of their own. The elements are evaluated first, then `rest`, as `++`
             // evaluates them.
@@ -301,7 +301,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | head :: others -> build others (fun inner -> bindTemp inner (fun cell -> k (cons head cell)))
                     | [] -> cannot "an empty list in front of ++"
                 build (List.take items.Length atoms) k)
-        | BinaryOp("++", left, right) ->
+        | BinaryOp("++", _, left, right) ->
             // Joining strings or lists: a runtime helper for each.
             let helper =
                 match tyOf left with
@@ -310,9 +310,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (CallRuntime(helper, atoms, true)) ty))
-        | BinaryOp(("==" | "!=") as op, left, right) when (match tyOf left with
-                                                           | IrString | IrTags _ | IrRecord _ | IrList _ | IrRecursive _ -> true
-                                                           | _ -> false) ->
+        | BinaryOp(("==" | "!=") as op, _, left, right) when (match tyOf left with
+                                                              | IrString | IrTags _ | IrRecord _ | IrList _ | IrRecursive _ -> true
+                                                              | _ -> false) ->
             // A string, a record, a list and a tag with a payload are pointers: equality compares what they point to,
             // by the operands' structure (see `CoreIrEquality`).
             let helper =
@@ -323,10 +323,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let equal = mk (CallRuntime(helper, atoms, true)) IrBool
                 if op = "==" then k equal
                 else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
-        | BinaryOp(("<" | "<=" | ">" | ">=") as op, left, right) when (match tyOf left with
-                                                                      | IrString | IrList _ -> true
-                                                                      | IrRecord fields -> IrType.isTuple fields
-                                                                      | _ -> false) ->
+        | BinaryOp(("<" | "<=" | ">" | ">=") as op, _, left, right) when (match tyOf left with
+                                                                         | IrString | IrList _ -> true
+                                                                         | IrRecord fields -> IrType.isTuple fields
+                                                                         | _ -> false) ->
             // A string, a tuple and a list are ordered by their structure (see `CoreIrOrdering`): their order, a
             // number, is compared with 0. Records, tags and functions have no order: a local function that orders them
             // is not supported. (A record inside a list or tuple is ordered field by field, only where a generic
@@ -335,13 +335,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope [ left; right ] (fun atoms ->
                 let order = mk (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (mk (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
-        | BinaryOp(op, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
+        | BinaryOp(op, _, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
             if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(FloatBinary op, atoms)) ty))
-        | BinaryOp(op, left, right) ->
+        | BinaryOp(op, _, left, right) ->
             if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
             for operand in [ left; right ] do
                 match tyOf operand with

@@ -13,7 +13,7 @@ let rec storesBeforeValue (expr: Expression) =
     | Block _
     | ExpressionKind.Match _ -> true
     | IfExpr(cond, _, _) -> storesBeforeValue cond
-    | BinaryOp(_, left, right) -> storesBeforeValue left || storesBeforeValue right
+    | BinaryOp(_, _, left, right) -> storesBeforeValue left || storesBeforeValue right
     // `dbg` holds its value in a local while it prints it, and a loop stores its elements.
     | FunctionCall("dbg", _, _)
     | FunctionCall("__for", _, _) -> true
@@ -53,7 +53,7 @@ let rec deferredMessages (expr: Expression) : string list =
             | ExprStatement value -> Some value
             | _ -> None)
         |> all
-    | BinaryOp(_, left, right) -> all [ left; right ]
+    | BinaryOp(_, _, left, right) -> all [ left; right ]
     | IfExpr(cond, ifTrue, ifFalse) -> all [ cond; ifTrue; ifFalse ]
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> all args

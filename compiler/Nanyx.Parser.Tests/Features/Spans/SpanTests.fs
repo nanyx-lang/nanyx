@@ -69,13 +69,59 @@ let ``a binary operator chain spans from its first operand to its last`` () =
     let value = parse source |> valueOf "x"
     textOf source value.Span |> should equal "a + b * c - d"
     match value.Kind with
-    | BinaryOp ("-", left, right) ->
+    | BinaryOp ("-", _, left, right) ->
         textOf source left.Span |> should equal "a + b * c"
         textOf source right.Span |> should equal "d"
         match left.Kind with
-        | BinaryOp ("+", _, product) -> textOf source product.Span |> should equal "b * c"
+        | BinaryOp ("+", _, _, product) -> textOf source product.Span |> should equal "b * c"
         | other -> failwith $"Expected an addition, got %A{other}"
     | other -> failwith $"Expected a subtraction, got %A{other}"
+
+/// Each operator in `expr` with the text of its own span and its column, outermost first, left before right.
+let rec private operatorSpans (source: string) (expr: Expression) =
+    match expr.Kind with
+    | BinaryOp (op, opSpan, left, right) ->
+        let span = someSpan opSpan
+        (op, textOf source span, span.StartLine, span.StartColumn) :: operatorSpans source left @ operatorSpans source right
+    | Lambda (_, body, _) -> operatorSpans source body
+    | Block statements ->
+        statements |> List.collect (function Kind (ExprStatement value) -> operatorSpans source value | _ -> [])
+    | _ -> []
+
+[<Fact>]
+let ``a binary operator records the span of the operator itself`` () =
+    let written =
+        """def x = a + b * c - d
+def y = a <= b and c && d
+def z = a ++
+  b"""
+    let source = written.ReplaceLineEndings "\n"
+    let module' = parse source
+    Assert.Equal<(string * string * int * int) list>(
+        [ "-", "-", 0, 18; "+", "+", 0, 10; "*", "*", 0, 14 ],
+        operatorSpans source (valueOf "x" module'))
+    // `&&` is read as `and`, and is reported where it is written.
+    Assert.Equal<(string * string * int * int) list>(
+        [ "and", "&&", 1, 21; "and", "and", 1, 15; "<=", "<=", 1, 10 ],
+        operatorSpans source (valueOf "y" module'))
+    // An operator at the end of its line.
+    Assert.Equal<(string * string * int * int) list>([ "++", "++", 2, 10 ], operatorSpans source (valueOf "z" module'))
+
+[<Fact>]
+let ``an operator in a block or a shorthand lambda records its span`` () =
+    let written =
+        """def f = {
+  a * 2
+}
+def g = { % 2 == 0 }
+def h = { + }"""
+    let source = written.ReplaceLineEndings "\n"
+    let module' = parse source
+    Assert.Equal<(string * string * int * int) list>([ "*", "*", 1, 4 ], operatorSpans source (valueOf "f" module'))
+    Assert.Equal<(string * string * int * int) list>(
+        [ "==", "==", 3, 14; "%", "%", 3, 10 ],
+        operatorSpans source (valueOf "g" module'))
+    Assert.Equal<(string * string * int * int) list>([ "+", "+", 4, 10 ], operatorSpans source (valueOf "h" module'))
 
 [<Fact>]
 let ``not spans from the keyword to its operand`` () =
@@ -86,7 +132,7 @@ let ``not spans from the keyword to its operand`` () =
     x.Span.StartColumn |> should equal 8
     let y = valueOf "y" module'
     match y.Kind with
-    | BinaryOp ("==", notA, _) ->
+    | BinaryOp ("==", _, notA, _) ->
         textOf source notA.Span |> should equal "not   a"
         notA.Span.StartLine |> should equal 1
         notA.Span.StartColumn |> should equal 8
@@ -172,7 +218,7 @@ let rec private expressionsOfKind (kind: ExpressionKind) : Expression list =
     | FunctionCall (_, _, args) -> args |> List.collect expressions
     | Lambda (parameters, body, _) ->
         (parameters |> List.collect (snd >> Option.toList >> List.collect expressionsOfType)) @ expressions body
-    | BinaryOp (_, left, right) -> expressions left @ expressions right
+    | BinaryOp (_, _, left, right) -> expressions left @ expressions right
     | Pipe (value, _, _, args) -> expressions value @ (args |> List.collect expressions)
     | Block statements -> statements |> List.collect expressionsOfStatement
     | Match (values, arms) ->
@@ -406,7 +452,7 @@ let ``an operator over parentheses or a lone spread spans the delimiters, and wh
     let x = valueOf "x" module'
     textOf source x.Span |> should equal "(1 + 2) * 3"
     match x.Kind with
-    | BinaryOp ("*", sum, _) -> textOf source sum.Span |> should equal "1 + 2"
+    | BinaryOp ("*", _, sum, _) -> textOf source sum.Span |> should equal "1 + 2"
     | other -> failwith $"Expected a product, got %A{other}"
     textOf source (valueOf "y" module').Span |> should equal "[...xs] ++ ys"
     let z = valueOf "z" module'

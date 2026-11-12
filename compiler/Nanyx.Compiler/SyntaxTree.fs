@@ -18,7 +18,7 @@ module SyntaxTree =
         | TupleExpr args
         | ListExpr args -> args, []
         | Lambda(_, body, _) -> [ body ], []
-        | BinaryOp(_, left, right) -> [ left; right ], []
+        | BinaryOp(_, _, left, right) -> [ left; right ], []
         | Pipe(value, _, _, args) -> value :: args, []
         | Block statements -> [], statements
         | Match(values, arms) -> values @ Pattern.armExpressions arms @ (arms |> List.map snd), []
@@ -123,7 +123,7 @@ module SyntaxTree =
         | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
         | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
         | Lambda(_, body, _) -> referencedNames body
-        | BinaryOp(_, left, right) -> referencedNames left @ referencedNames right
+        | BinaryOp(_, _, left, right) -> referencedNames left @ referencedNames right
         | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
         | Block statements -> statements |> List.collect referencedNamesInStatement
         | Match(values, arms) ->
