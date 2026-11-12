@@ -93,6 +93,8 @@ def greet: [Console] = {
 
 A function that writes its type runs only in the contexts the type declares, so calling `println` from a `def f: int -> int` is an error. A function that does not write its type needs whichever of the runtime's contexts its body uses, and so does any function that calls it. The top level of a module runs in the runtime's contexts.
 
+Passing a function as a value needs its contexts where it is named, as calling it does: the value is passed with the instances in scope there. Given `def useFoo: [Foo] string -> string`, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`.
+
 The same goes for a parameterised context. A function that does not write its type, and calls a function that requires `Show(a)` with a value of one of its own type variables, requires `Show` at that variable itself:
 
 ```nanyx

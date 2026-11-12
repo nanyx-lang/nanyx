@@ -1459,11 +1459,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
         | Some scheme ->
-            // A function that needs an ambient context can only be passed on where it runs in that context. One that
-            // needs a context nothing here supplies can be passed to code that loads it.
+            // A function passed as a value is passed with the contexts it requires, as they are where it is named, so
+            // it can only be named where they are available, as it can only be called there. A parameterised context
+            // is not checked here: a call finds it by type (see `resolveCallInstances`).
             let contextCheck =
                 match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
-                | Some contexts -> ensureContextAvailable false env state name contexts expr.Span
+                | Some contexts ->
+                    let parameterized, plain = contexts |> List.partition (isParameterizedContext state)
+                    ensureContextAvailable true env state name plain expr.Span
+                    |> Result.bind (fun current -> ensureContextAvailable false env current name parameterized expr.Span)
                 | None -> Ok state
                 |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) expr.Span)
             match contextCheck with
