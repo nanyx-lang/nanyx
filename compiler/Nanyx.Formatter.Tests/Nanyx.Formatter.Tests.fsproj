@@ -7,19 +7,31 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="DocTests.fs" />
-    <Compile Include="FormatterTests.fs" />
-    <Compile Include="TypeDefinitionTests.fs" />
-    <Compile Include="LambdaBodyTests.fs" />
-    <Compile Include="MemoryTests.fs" />
-    <Compile Include="LineWidthTests.fs" />
-    <Compile Include="LexicalTests.fs" />
-    <Compile Include="OperatorTests.fs" />
-    <Compile Include="DocCommentTests.fs" />
-    <Compile Include="ImportSortingTests.fs" />
-    <Compile Include="StringEscapeTests.fs" />
-    <Compile Include="CorpusTests.fs" />
-    <Compile Include="FormatCommandTests.fs" />
+    <Compile Include="TestHelpers.fs" />
+    <Compile Include="Features\Blocks\BlockTests.fs" />
+    <Compile Include="Features\Collections\CollectionTests.fs" />
+    <Compile Include="Features\Comments\DocCommentTests.fs" />
+    <Compile Include="Features\Doc\DocTests.fs" />
+    <Compile Include="Features\Except\ExceptTests.fs" />
+    <Compile Include="Features\Expressions\ExpressionTests.fs" />
+    <Compile Include="Features\Expressions\OperatorTests.fs" />
+    <Compile Include="Features\Imports\ImportSortingTests.fs" />
+    <Compile Include="Features\Imports\ImportTests.fs" />
+    <Compile Include="Features\Lambdas\LambdaBodyTests.fs" />
+    <Compile Include="Features\Lambdas\LambdaTests.fs" />
+    <Compile Include="Features\Layout\BlankLineTests.fs" />
+    <Compile Include="Features\Layout\LineWidthTests.fs" />
+    <Compile Include="Features\Lexical\LexicalTests.fs" />
+    <Compile Include="Features\Loops\LoopTests.fs" />
+    <Compile Include="Features\Matches\MatchTests.fs" />
+    <Compile Include="Features\Memory\MemoryTests.fs" />
+    <Compile Include="Features\Pipes\PipeTests.fs" />
+    <Compile Include="Features\Strings\StringEscapeTests.fs" />
+    <Compile Include="Features\TopLevel\TopLevelTests.fs" />
+    <Compile Include="Features\Types\TypeAnnotationTests.fs" />
+    <Compile Include="Features\Types\TypeDefinitionTests.fs" />
+    <Compile Include="Features\Corpus\CorpusTests.fs" />
+    <Compile Include="Features\Command\FormatCommandTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
