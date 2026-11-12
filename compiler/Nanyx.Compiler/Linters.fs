@@ -17,7 +17,9 @@ type Rule =
 /// it. Desugaring does not yet record which surface node each desugared node came from (#99), so the types of nodes
 /// only desugaring made (a workflow bind's call, say) cannot be looked up from the surface tree.
 type SemanticModel =
-    { /// The module as written: before desugaring, attributes included.
+    { /// The file the module was compiled as, as its spans name it: empty for source compiled directly.
+      File: string
+      /// The module as written: before desugaring, attributes included.
       Syntax: Module
       /// The module's text, with its line endings made `\n` as for the offsets of spans: what a fix's edits apply to.
       Source: string
@@ -46,7 +48,8 @@ module SemanticModel =
     /// text, the module as parsed, and what checking it found.
     let ofTyped (file: string) (source: string) (syntax: Module) (typed: TypedModule) =
         let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
-        { Syntax = syntax
+        { File = file
+          Syntax = syntax
           Source = source
           Types = typed.ExprTypes
           SymbolTypes = typed.SymbolTypes
@@ -842,6 +845,53 @@ module UnusedResults =
                 | _ -> None))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `shadowedPreludeNames` rule: a top-level def, a local def, a lambda's argument or a variable a
+/// pattern binds whose name is one the prelude brings into scope, which it hides wherever it is in scope itself. Only
+/// the prelude's unqualified definitions are in scope by name: one attached to a type (`list.map`) is reached through
+/// the type's name, and a context's member only in a def that requires the context. Left alone: the standard library's
+/// own modules, which define the names the prelude brings in. There is no fix, since a fix's edits cannot ask for the
+/// new name.
+module ShadowedPreludeNames =
+    let rule =
+        { Id = "shadowedPreludeNames"
+          Title = "Definition hides a prelude member"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "A def, a lambda's argument or a variable a pattern binds whose name is one the prelude brings into scope, such as `ignore` or `pow`, so the prelude's can't be named where it is in scope." }
+
+    let lint (model: SemanticModel) : Report list =
+        if StandardLibrary.isModuleFile model.File then
+            []
+        else
+            let preludeFile = StandardLibrary.resourceName StandardLibrary.preludeModuleName
+            let preludeNames =
+                model.Symbols
+                |> Map.values
+                |> Seq.filter (fun symbol ->
+                    symbol.Kind = TopLevelValue && symbol.IsExported && symbol.Declaration.File = preludeFile && not (symbol.Name.Contains '.'))
+                |> Seq.map _.Name
+                |> Set.ofSeq
+            model.Symbols
+            |> Map.values
+            |> Seq.filter (fun symbol ->
+                match symbol.Kind with
+                | TopLevelValue
+                | LocalValue
+                | Parameter
+                | PatternVariable -> symbol.Declaration.File = model.File && not (SourceSpan.isNone symbol.Declaration)
+                | ImportedModule
+                | TypeDefinition
+                | ContextMember -> false)
+            |> Seq.filter (fun symbol -> preludeNames.Contains symbol.Name)
+            |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
+            |> Seq.map (fun symbol ->
+                { Rule = rule.Id
+                  Span = symbol.Declaration
+                  Message = $"`{symbol.Name}` hides the prelude's `{symbol.Name}`, which can't be named where it is in scope"
+                  Related = []
+                  Fixes = [] })
+            |> List.ofSeq
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
@@ -849,13 +899,13 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule ]
+              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule; ShadowedPreludeNames.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model
-                @ UnusedResults.lint model }
+                @ UnusedResults.lint model @ ShadowedPreludeNames.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

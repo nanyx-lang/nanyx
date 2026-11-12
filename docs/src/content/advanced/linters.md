@@ -34,7 +34,7 @@ Because linters produce diagnostics through the same infrastructure as the compi
 
 # The default linter
 
-Nanyx ships with a **default linter** that is automatically included in the standard project template. This linter covers common checks that most projects will want, such as flagging unused bindings or warning about shadowed names.
+Nanyx ships with a **default linter** that is automatically included in the standard project template. This linter covers common checks that most projects will want, such as flagging unused bindings or warning about a name that hides one the prelude provides. Its rules are described on the [Official style linter](../standard-tools/official-linter) page.
 
 When you create a new project with `nanyx new`, the default linter is already configured and active. You do not need to install or enable it manually.
 
@@ -45,8 +45,8 @@ Linters are declared in the package manifest (the `.nyxp` file, see [Packages an
 ```toml
 [linters.default]
 unusedBindings = "warning"
-shadowedNames = "info"
-deprecatedUsage = "warning"
+shadowedPreludeNames = "info"
+unusedResults = "warning"
 ```
 
 A linter runs only if the manifest has a table for it, so removing `[linters.default]` uninstalls the default linter. An empty table runs every rule at its default severity:
@@ -72,7 +72,7 @@ The severities are `"error"`, `"warning"`, `"info"` and `"hint"`. A linter or ru
 
 ```toml
 [linters.default]
-shadowedNames = "none"
+shadowedPreludeNames = "none"
 ```
 
 Because severity is configured per project, a team that wants strictness can promote a linter rule to `"error"`, which then blocks a release build exactly as a compiler error would. This is how "warnings as errors" works in Nanyx: it is a project choice, not a compiler setting.

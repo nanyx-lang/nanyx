@@ -233,7 +233,12 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > with `&` as an annotation does. Its twelfth is `unusedResults`
 > ([#105](https://github.com/nanyx-lang/nanyx/issues/105)), an error by default: a statement of a block, other than
 > its last, whose type in `Types` is known and is neither `()` nor `undefined`. A workflow keyword's statement has no
-> type there yet (desugaring keeps no provenance, #99), and is left alone by its kind. The rules for unused and
+> type there yet (desugaring keeps no provenance, #99), and is left alone by its kind. Its thirteenth is
+> `shadowedPreludeNames` ([#942](https://github.com/nanyx-lang/nanyx/issues/942)): one of the module's own symbols
+> (the `SemanticModel` carries the module's `File`, which its symbols' declarations name) with the name of an
+> undotted, exported top-level symbol declared in the prelude's file. It leaves alone a module whose file
+> `StandardLibrary.isModuleFile` says is the library's own. It is the default linter's only rule about hiding a name:
+> a name that hides another of the module's own is not reported. The rules for unused and
 > unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:

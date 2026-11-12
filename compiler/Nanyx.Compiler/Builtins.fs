@@ -145,7 +145,8 @@ module StandardLibrary =
     /// The module every other module imports without saying so (`nanyx/prelude`): what is in scope with no imports.
     let preludeModuleName = "prelude"
 
-    let private resourceName (moduleName: string) = $"{packageName}/{moduleName}.nyx"
+    /// The name of a module's embedded resource, which is the file its declarations' spans name: `nanyx/list.nyx`.
+    let resourceName (moduleName: string) = $"{packageName}/{moduleName}.nyx"
 
     let private assembly = Assembly.GetExecutingAssembly()
 
@@ -161,6 +162,15 @@ module StandardLibrary =
         |> Array.filter (fun name -> name <> preludeModuleName)
         |> Array.sort
         |> Array.toList
+
+    /// Whether `file` holds one of the library's own modules: the file an imported one is checked as
+    /// (`nanyx/list.nyx`), or a file of its source on disk (`stdlib/nanyx/list.nyx`), as a checkout or the editor has it.
+    let isModuleFile (file: string) =
+        let moduleName = Path.GetFileNameWithoutExtension file
+        not (System.String.IsNullOrEmpty file)
+        && Path.GetExtension file = ".nyx"
+        && Path.GetFileName(Path.GetDirectoryName file) = packageName
+        && (moduleName = preludeModuleName || List.contains moduleName moduleNames)
 
     /// The source of a standard-library module, or None when the library has no module of that name.
     let tryLoadSource (moduleName: string) : string option =
