@@ -8,8 +8,8 @@ This workstream is about how the compiler and its tools are structured: file and
 code, dead code, and how the tests are laid out. It does not cover what the compiler does. The rules for
 day-to-day changes are in [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md); this document explains why they exist and records
 where the code stands. Issues carry the
-[`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label and are tracked in
-[#379](https://github.com/nanyx-lang/nanyx/issues/379).
+[`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label and are on the
+[Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1), ordered by its Priority field.
 
 # Why
 
@@ -69,7 +69,7 @@ it is. The chain can then be shortened by turning its long match arms into separ
 
 The large test files are now split into `Features/<Area>/` files.
 
-[#379](https://github.com/nanyx-lang/nanyx/issues/379) has the current list. The daily review refreshes it.
+The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review
 
@@ -78,7 +78,7 @@ A scheduled review runs once a day. It does five things:
 1. Measures file sizes on `main`.
 2. Reads the last day's commits to the compiler sources.
 3. Files new problems as `code quality` issues, after checking each one in the code.
-4. Updates the checklist in #379.
+4. Adds each new issue to the Nanyx workstreams project.
 5. Proposes a work session for each of up to three open issues that nobody has claimed, choosing issues
    that touch different files.
 
