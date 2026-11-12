@@ -1,0 +1,177 @@
+@partial module prelude
+
+-- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
+
+-- Results ---------------------------------------------------------------------------------------
+
+--| A success carrying an `a`, or an error carrying an `e`.
+export type Result(a, e) = #some(a) | #error(e)
+
+--| The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
+  gives back any `#error` as is without running the rest of the block, and `return x` wraps the
+  value in `#some`.
+
+  ```nanyx
+  def total = proc {
+    def customer = try getCustomer(5)
+    def order = try getLastOrder(customer)
+    return order.total
+  }
+  ```
+
+  A workflow builder is a record of keyword members. A block written after the builder's name
+  has each `try x` (and each `try x` nested inside an expression) turned into a call to the
+  builder's `try` member, with the rest of the block as its continuation, and each `return x`
+  into a call to its `return` member. A block that ends without `return` has `zero` as its
+  value, `#some()`, so a `proc` that is only run for what it does needs no `return`.
+
+  Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
+  `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
+  `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
+  `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
+export def proc
+  : (try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r)
+  = (
+    try = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    return = { value -> #some(value) }
+    zero = #some()
+  )
+
+--| Applies `f` to a success, and leaves an error as it is.
+export def Result.map: [c] Result(a, e), ([c] a -> b) -> Result(b, e) = {
+  | #some(value), f -> #some(f(value))
+  | #error(e), _ -> #error(e)
+}
+
+--| Applies `f` to an error, and leaves a success as it is.
+export def Result.mapError: [c] Result(a, e), ([c] e -> f) -> Result(a, f) = {
+  | #some(value), _ -> #some(value)
+  | #error(e), f -> #error(f(e))
+}
+
+--| Continues with `f` on a success. Both steps have the same error type.
+export def Result.bind: [c] Result(a, e), ([c] a -> Result(b, e)) -> Result(b, e) = {
+  | #some(value), f -> f(value)
+  | #error(e), _ -> #error(e)
+}
+
+--| The success, or `fallback` for an error.
+export def Result.defaultValue: Result(a, e), a -> a = {
+  | #some(value), _ -> value
+  | #error(_), fallback -> fallback
+}
+
+--| `f` applied to the success, or `default` for an error.
+export def Result.mapOr: [c] Result(a, e), b, ([c] a -> b) -> b = {
+  | #some(value), _, f -> f(value)
+  | #error(_), default, _ -> default
+}
+
+--| The success as it is, or `f` applied to the error.
+export def Result.orElse: [c] Result(a, e), ([c] e -> Result(a, f)) -> Result(a, f) = {
+  | #some(value), _ -> #some(value)
+  | #error(e), f -> f(e)
+}
+
+export def Result.isOk: Result(a, e) -> bool = {
+  | #some(_) -> true
+  | #error(_) -> false
+}
+
+export def Result.isError: Result(a, e) -> bool = {
+  | #some(_) -> false
+  | #error(_) -> true
+}
+
+-- Options ---------------------------------------------------------------------------------------
+--
+-- There is no `Option` type: any union with a `#some(a)` tag is option-like, and these helpers
+-- keep every other tag as it is. They are plain functions named for the `#some` tag they act on,
+-- such as `mapSome`, `someOr` and `somes`, called as `mapSome(x, f)` or `x \mapSome(f)`.
+
+--| Applies `f` to the value of `#some`.
+export def mapSome: [c] (#some(a) | r), ([c] a -> b) -> #some(b) | r = {
+  | #some(value), f -> #some(f(value))
+  | other, _ -> other
+}
+
+--| Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
+  and a step given with other tags adds them to it.
+export def bindSome: [c] (#some(a) | r), ([c] a -> #some(b) | r) -> #some(b) | r = {
+  | #some(value), f -> f(value)
+  | other, _ -> other
+}
+
+--| The value of `#some`, or `fallback` for any other tag.
+export def someOr: (#some(a) | r), a -> a = {
+  | #some(value), _ -> value
+  | _, fallback -> fallback
+}
+
+--| What `option ?? fallback` is: the value of `#some`, or the result of calling `fallback` for any
+  other tag. `fallback` runs only when it is needed.
+export def __someOrElse: [c] (#some(a) | r), ([c] () -> a) -> a = {
+  | #some(value), _ -> value
+  | _, fallback -> fallback()
+}
+
+--| The value of `#some`, or the result of calling `fallback` for any other tag, as `??` gives it.
+  `fallback` runs only when it is needed.
+export def someOrElse: [c] (#some(a) | r), ([c] () -> a) -> a = { option, fallback -> option ??
+    fallback()
+}
+
+export def isSome: (#some(a) | r) -> bool = {
+  | #some(_) -> true
+  | _ -> false
+}
+
+export def isNone: (#some(a) | r) -> bool = {
+  | #some(_) -> false
+  | _ -> true
+}
+
+--| The value of `#some` as a success, or `error` for any other tag.
+export def someToResult: (#some(a) | r), e -> Result(a, e) = {
+  | #some(value), _ -> #some(value)
+  | _, error -> #error(error)
+}
+
+--| `f` applied to the value of `#some`, or `default` for any other tag.
+export def mapSomeOr: [c] (#some(a) | r), b, ([c] a -> b) -> b = {
+  | #some(value), _, f -> f(value)
+  | _, default, _ -> default
+}
+
+--| `f` applied to the value of `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
+  when it is needed.
+export def mapSomeOrElse: [c] (#some(a) | r), ([c] () -> b), ([c] a -> b) -> b = {
+  | #some(value), _, f -> f(value)
+  | _, fallback, _ -> fallback()
+}
+
+--| The option as it is if it is `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
+  when it is needed.
+export def orElseSome: [c] (#some(a) | r), ([c] () -> #some(a) | s) -> #some(a) | s = {
+  | #some(value), _ -> #some(value)
+  | _, fallback -> fallback()
+}
+
+--| The value of `#some` as a one-element list, or the empty list for any other tag.
+export def someToList: (#some(a) | r) -> list(a) = {
+  | #some(value) -> [value]
+  | _ -> []
+}
+
+--| The values of the `#some`s in `options`, in order. The other tags are dropped.
+export def somes: list(#some(a) | r) -> list(a) = { options ->
+  def keep = {
+    | acc, #some(value) -> [value, ...acc]
+    | acc, _ -> acc
+  }
+
+  options \list.fold([], keep) \list.reverse
+}

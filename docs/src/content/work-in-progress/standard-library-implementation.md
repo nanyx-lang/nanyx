@@ -34,6 +34,12 @@ One module, `nanyx/prelude`, is never imported by name: the compiler imports it,
 other module, so its definitions are what a file sees with no imports at all. A module's own definitions
 and its explicit imports take precedence over the prelude's, so a module can define its own `proc`.
 
+The prelude is split by topic across `prelude.nyx` and the files beside it that start `@partial module prelude`:
+`prelude-contexts.nyx` (equality, ordering, hashing, joining and text), `prelude-numbers.nyx` (`int` and `float`,
+`Add`, `Num` and powers), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
+options and `proc`), `prelude-lists.nyx` and `prelude-maps.nyx` (maps and sets). `prelude.nyx` keeps the module's doc
+comment and what fits no topic: `panic`, `ignore`, booleans and memory blocks.
+
 # What is written
 
 | Module          | What it holds                                                                                     |

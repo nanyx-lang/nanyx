@@ -184,7 +184,7 @@ built from a type's structure (see [structural context synthesis](./type-members
 - **Type checking.** `==` and `!=` unify their two operands and return `bool`; nothing else is checked
   (`Infer.fs:1381-1382`). In effect `==` has the type `a, a -> bool` for *every* `a`, functions included, and adds
   no requirement to a generic function. `list.distinct: list(a) -> list(a)` relies on this
-  (`stdlib/nanyx/prelude.nyx:281-288`).
+  (`stdlib/nanyx/prelude-lists.nyx`).
 - **Lowering.** After monomorphisation the backend picks an implementation from the operand's concrete type
   (`CoreIrLower.fs:479-504`): `i64.eq` for int; `i32.eq` for bool and unit; `f64.eq` for float; a byte comparison for strings;
   `__nanyx_tag_equals` for tags. Anything else, records, tuples, lists and functions, type-checks and then fails in
@@ -200,7 +200,7 @@ built from a type's structure (see [structural context synthesis](./type-members
 
 `<`, `<=`, `>` and `>=` constrain both operands to a numeric type (`Infer.fs:1376-1380`). Strings, tuples and type
 variables cannot be ordered ([#476](https://github.com/nanyx-lang/nanyx/issues/476)), which is why `list.sortBy`
-takes `(a -> int)` keys (`prelude.nyx:301-302`) and there is no `list.sort`
+takes `(a -> int)` keys (`prelude-lists.nyx`) and there is no `list.sort`
 ([#475](https://github.com/nanyx-lang/nanyx/issues/475), [#191](https://github.com/nanyx-lang/nanyx/issues/191)).
 *Since fixed:* `Ord` exists, and `list.sort` and `list.sortBy` take any ordered type.
 

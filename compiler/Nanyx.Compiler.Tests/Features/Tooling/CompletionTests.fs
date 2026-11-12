@@ -90,7 +90,7 @@ let ``The prelude's names are in scope until the module declares its own`` () =
     let proc (source: string) (offset: int) =
         namesIn (Compiler.compile source) offset |> List.filter (fun (name, _) -> name = "proc")
     let fromPrelude = proc "def value = 1\n" 0
-    Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (TopLevelValue, "nanyx/prelude.nyx") ], fromPrelude)
+    Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (TopLevelValue, "nanyx/prelude-results.nyx") ], fromPrelude)
     Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (TopLevelValue, "") ], proc "def proc = 1\n" 0)
     let source = "def value = {\n  def proc = 2\n  proc\n}\n"
     Assert.Equal<(string * (SymbolKind * string)) list>([ "proc", (LocalValue, "") ], proc source (offsetOf source "  proc\n" 0 2))

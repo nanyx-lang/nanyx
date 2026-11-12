@@ -863,12 +863,12 @@ module ShadowedPreludeNames =
         if StandardLibrary.isModuleFile model.File then
             []
         else
-            let preludeFile = StandardLibrary.resourceName StandardLibrary.preludeModuleName
+            let preludeFiles = StandardLibrary.moduleFiles StandardLibrary.preludeModuleName |> Set.ofList
             let preludeNames =
                 model.Symbols
                 |> Map.values
                 |> Seq.filter (fun symbol ->
-                    symbol.Kind = TopLevelValue && symbol.IsExported && symbol.Declaration.File = preludeFile && not (symbol.Name.Contains '.'))
+                    symbol.Kind = TopLevelValue && symbol.IsExported && preludeFiles.Contains symbol.Declaration.File && not (symbol.Name.Contains '.'))
                 |> Seq.map _.Name
                 |> Set.ofSeq
             model.Symbols

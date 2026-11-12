@@ -100,7 +100,7 @@ Not done yet:
 - **Generic code.** Where an operator's name is bound, as `` `+` `` is in a function that requires a user's
   `[Sum(a)]`, and its left operand is not of a built-in type, the operator calls that binding
   (`OperatorCalls.fs:37-43`). That is how [contexts.md](../advanced/contexts#contexts-as-typeclasses)'s `Sum(a)` and
-  `Add(a)` work. Context members named in backticks parse (`prelude.nyx:61`), and so do attached definitions
+  `Add(a)` work. Context members named in backticks parse (`Eq` in `prelude-contexts.nyx`), and so do attached definitions
   named in backticks. *Since step 2:* an operator on a type that attaches it, `` def $Vector.`+` = ... ``, calls
   that definition ([#527](https://github.com/nanyx-lang/nanyx/issues/527)).
 - **`Num(a)` does not exist.** The docs use it: [math.md](../stdlib/math)'s `abs`, `min`, `max`, `clamp` and `pow`

@@ -1,0 +1,415 @@
+@partial module prelude
+
+-- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
+
+-- Lists -----------------------------------------------------------------------------------------
+--
+-- Attached to `list`, so they are called as `list.map(xs, f)`, or as `xs \map(f)` when `xs` is
+-- known to be a list. Lists are immutable: every function gives back a new list.
+--
+-- Every function here that walks a list is stack-safe: it calls itself only in tail position, so it
+-- works on a list of any length. Those that build a list build it in reverse and reverse it at the
+-- end, until tail recursion modulo cons exists (see docs/src/content/work-in-progress/tail-calls.md).
+
+--| `step` applied to `initial` and the first element, then to that result and the second, and so on.
+export def list.fold: [c] list(a), b, ([c] b, a -> b) -> b = {
+  | [], acc, _ -> acc
+  | [x, ...rest], acc, step -> list.fold(rest, step(acc, x), step)
+}
+
+--| The elements in reverse order.
+export def list.reverse: list(a) -> list(a) = { xs ->
+  list.fold(xs, [], { acc, x -> [x, ...acc] })
+}
+
+--| The number of elements.
+export def list.length: list(a) -> int = { xs ->
+  list.fold(xs, 0, { count, _ -> count + 1 })
+}
+
+--| The elements added together: `[1, 2, 3] \list.sum` is 6, and the sum of no elements is `zero`.
+export def list.sum: [Add(a)] list(a) -> a = { xs ->
+  list.fold(xs, zero, { total, x -> total + x })
+}
+
+--| Whether there are no elements.
+export def list.isEmpty: list(a) -> bool = {
+  | [] -> true
+  | _ -> false
+}
+
+--| The number of elements `test` holds for.
+export def list.count: [c] list(a), ([c] a -> bool) -> int = { xs, test ->
+  list.fold(xs, 0, { count, x -> if test(x) then count + 1 else count })
+}
+
+--| The first element, or `#emptyList`.
+export def list.head: list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ..._] -> #some(x)
+}
+
+--| The last element, or `#emptyList`.
+export def list.last: list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x] -> #some(x)
+  | [_, ...rest] -> list.last(rest)
+}
+
+--| The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
+  the end.
+export def list.get: list(a), int -> #some(a) | #outOfRange = {
+  | [], _ -> #outOfRange
+  | [x, ...rest], index -> if index < 0
+    then #outOfRange
+    else if index == 0 then #some(x) else list.get(rest, index - 1)
+}
+
+--| Whether any element is equal to `x`. Elements are compared with `==`, by their structure.
+export def list.contains: [Eq(a)] list(a), a -> bool = { xs, x ->
+  list.any(xs, { y -> y == x })
+}
+
+--| The position of the first element of `xs` equal to `x`, counting `xs` as starting at `index`.
+def indexOfFrom: [Eq(a)] list(a), a, int -> #some(int) | #notFound = {
+  | [], _, _ -> #notFound
+  | [y, ...rest], x, index -> if y == x then #some(index) else indexOfFrom(rest, x, index + 1)
+}
+
+--| The position of the first element equal to `x`, counting from 0, or `#notFound`. Elements are
+  compared with `==`, by their structure.
+export def list.indexOf: [Eq(a)] list(a), a -> #some(int) | #notFound = { xs, x ->
+  indexOfFrom(xs, x, 0)
+}
+
+--| The position of the first element of `xs` that `matches` holds for, counting `xs` as starting at
+  `index`.
+def findIndexFrom: [c] list(a), ([c] a -> bool), int -> #some(int) | #notFound = {
+  | [], _, _ -> #notFound
+  | [x, ...rest], matches, index -> if matches(x)
+    then #some(index)
+    else findIndexFrom(rest, matches, index + 1)
+}
+
+--| The position of the first element `matches` holds for, counting from 0, or `#notFound`.
+export def list.findIndex: [c] list(a), ([c] a -> bool) -> #some(int) | #notFound = { xs, matches ->
+  findIndexFrom(xs, matches, 0)
+}
+
+--| `xs` reversed, in front of `tail`. It takes `xs` apart in a match arm that builds a cell of the same
+  size, so a list held only here has its cells rewritten in place rather than copied.
+def reverseOnto: list(a), list(a) -> list(a) = {
+  | [], tail -> tail
+  | [x, ...rest], tail -> reverseOnto(rest, [x, ...tail])
+}
+
+--| `f` applied to each element of `xs`, last first, in front of `acc`.
+def mapReversed: [c] list(a), ([c] a -> b), list(b) -> list(b) = {
+  | [], _, acc -> acc
+  | [x, ...rest], f, acc -> mapReversed(rest, f, [f(x), ...acc])
+}
+
+--| `f` applied to each element, in order. Stack-safe: it works on a list of any length.
+export def list.map: [c] list(a), ([c] a -> b) -> list(b) = { xs, f ->
+  reverseOnto(mapReversed(xs, f, []), [])
+}
+
+--| `f` applied to each element of `xs` and its position, counting `xs` as starting at `index`, last
+  first, in front of `acc`.
+def mapIndexedReversed: [c] list(a), int, ([c] int, a -> b), list(b) -> list(b) = {
+  | [], _, _, acc -> acc
+  | [x, ...rest], index, f, acc -> mapIndexedReversed(rest, index + 1, f, [f(index, x), ...acc])
+}
+
+--| `f` applied to each element's position, counting from 0, and the element, in order. Stack-safe:
+  it works on a list of any length.
+export def list.mapIndexed: [c] list(a), ([c] int, a -> b) -> list(b) = { xs, f ->
+  reverseOnto(mapIndexedReversed(xs, 0, f, []), [])
+}
+
+--| The lists `f` gives for each element, joined end to end. Stack-safe: it works however long the
+  lists are.
+export def list.flatMap: [c] list(a), ([c] a -> list(b)) -> list(b) = { xs, f ->
+  reverseOnto(list.fold(xs, [], { acc, x -> reverseOnto(f(x), acc) }), [])
+}
+
+--| The elements of `xs` that `keep` holds for, last first, in front of `acc`.
+def filterReversed: [c] list(a), ([c] a -> bool), list(a) -> list(a) = {
+  | [], _, acc -> acc
+  | [x, ...rest], keep, acc -> filterReversed(rest, keep, if keep(x) then [x, ...acc] else acc)
+}
+
+--| The elements `keep` holds for, in order. Stack-safe: it works on a list of any length.
+export def list.filter: [c] list(a), ([c] a -> bool) -> list(a) = { xs, keep ->
+  reverseOnto(filterReversed(xs, keep, []), [])
+}
+
+--| The values `f` gives as `#some` for the elements of `xs`, last first, in front of `acc`.
+def filterMapReversed: [c] list(a), ([c] a -> #some(b) | #skip), list(b) -> list(b) = {
+  | [], _, acc -> acc
+  | [x, ...rest], f, acc -> match f(x)
+    | #some(y) -> filterMapReversed(rest, f, [y, ...acc])
+    | #skip -> filterMapReversed(rest, f, acc)
+}
+
+--| The values `f` gives as `#some`, in order, leaving out the elements it gives `#skip` for: a `map`
+  and a `filter` in one walk. Stack-safe: it works on a list of any length.
+export def list.filterMap: [c] list(a), ([c] a -> #some(b) | #skip) -> list(b) = { xs, f ->
+  reverseOnto(filterMapReversed(xs, f, []), [])
+}
+
+--| The elements of `xs` that `test` holds for and those it fails for, `xs` taken last first: each in
+  front of `passed` or `failed`.
+def partitionOnto: [c] list(a), ([c] a -> bool), list(a), list(a) -> (list(a), list(a)) = {
+  | [], _, passed, failed -> (passed, failed)
+  | [x, ...rest], test, passed, failed -> if test(x)
+    then partitionOnto(rest, test, [x, ...passed], failed)
+    else partitionOnto(rest, test, passed, [x, ...failed])
+}
+
+--| The elements `test` holds for and the elements it fails for, each in order. Stack-safe: it works on
+  a list of any length.
+export def list.partition: [c] list(a), ([c] a -> bool) -> (list(a), list(a)) = { xs, test ->
+  partitionOnto(reverseOnto(xs, []), test, [], [])
+}
+
+--| The first element `matches` holds for, or `#notFound`.
+export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
+  | [], _ -> #notFound
+  | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
+}
+
+--| Whether `test` holds for every element (so `true` for an empty list).
+export def list.all: [c] list(a), ([c] a -> bool) -> bool = {
+  | [], _ -> true
+  | [x, ...rest], test -> if test(x) then list.all(rest, test) else false
+}
+
+--| Whether `test` holds for any element (so `false` for an empty list).
+export def list.any: [c] list(a), ([c] a -> bool) -> bool = {
+  | [], _ -> false
+  | [x, ...rest], test -> if test(x) then true else list.any(rest, test)
+}
+
+--| [`list.fold`] from the last element to the first.
+export def list.foldBack: [c] list(a), b, ([c] b, a -> b) -> b = { xs, initial, step ->
+  list.fold(list.reverse(xs), initial, step)
+}
+
+--| `xs` with `x` added at the end.
+export def list.append: list(a), a -> list(a) = { xs, x ->
+  -- Not written `xs ++ [x]`, since `++` copies its left operand by recursing once per element (#558).
+  reverseOnto(reverseOnto(xs, []), [x])
+}
+
+--| The lists of `xss` joined end to end. Stack-safe: it works however long the lists are.
+export def list.flatten: list(list(a)) -> list(a) = { xss ->
+  reverseOnto(list.fold(xss, [], { acc, xs -> reverseOnto(xs, acc) }), [])
+}
+
+--| The first `count` elements of `xs`, last first, in front of `acc`.
+def takeReversed: list(a), int, list(a) -> list(a) = {
+  | [], _, acc -> acc
+  | [x, ...rest], count, acc -> if count <= 0
+    then acc
+    else takeReversed(rest, count - 1, [x, ...acc])
+}
+
+--| The first `count` elements (all of them when there are fewer). Stack-safe: it works on a list of
+  any length.
+export def list.take: list(a), int -> list(a) = { xs, count ->
+  reverseOnto(takeReversed(xs, count, []), [])
+}
+
+--| The elements of `xs` before the first one `keep` fails for, last first, in front of `acc`.
+def takeWhileReversed: [c] list(a), ([c] a -> bool), list(a) -> list(a) = {
+  | [], _, acc -> acc
+  | [x, ...rest], keep, acc -> if keep(x) then takeWhileReversed(rest, keep, [x, ...acc]) else acc
+}
+
+--| The elements before the first one `keep` fails for. Stack-safe: it works on a list of any length.
+export def list.takeWhile: [c] list(a), ([c] a -> bool) -> list(a) = { xs, keep ->
+  reverseOnto(takeWhileReversed(xs, keep, []), [])
+}
+
+--| All the elements but the last (no elements for an empty list). Stack-safe: it works on a list of
+  any length.
+export def list.dropLast: list(a) -> list(a) = { xs ->
+  match reverseOnto(xs, [])
+    | [] -> []
+    | [_, ...rest] -> reverseOnto(rest, [])
+}
+
+--| The elements after the first `count`.
+export def list.skip: list(a), int -> list(a) = {
+  | [], _ -> []
+  | [x, ...rest], count -> if count <= 0 then [x, ...rest] else list.skip(rest, count - 1)
+}
+
+--| The elements from the first one `test` fails for, so `list.takeWhile(xs, f) ++ list.skipWhile(xs, f)`
+  is `xs`.
+export def list.skipWhile: [c] list(a), ([c] a -> bool) -> list(a) = {
+  | [], _ -> []
+  | [x, ...rest], test -> if test(x) then list.skipWhile(rest, test) else [x, ...rest]
+}
+
+--| Pairs of the elements of `xs` and `ys` at the same position, last first, in front of `acc`.
+def zipReversed: list(a), list(b), list((a, b)) -> list((a, b)) = {
+  | [x, ...xs], [y, ...ys], acc -> zipReversed(xs, ys, [(x, y), ...acc])
+  | _, _, acc -> acc
+}
+
+--| Pairs of the elements at the same position, as long as the shorter list. Stack-safe: it works on
+  lists of any length.
+export def list.zip: list(a), list(b) -> list((a, b)) = { xs, ys ->
+  reverseOnto(zipReversed(xs, ys, []), [])
+}
+
+--| The first and second parts of `pairs`, taken last first: each in front of `xs` or `ys`.
+def unzipOnto: list((a, b)), list(a), list(b) -> (list(a), list(b)) = {
+  | [], xs, ys -> (xs, ys)
+  | [(x, y), ...rest], xs, ys -> unzipOnto(rest, [x, ...xs], [y, ...ys])
+}
+
+--| The first parts of the pairs and their second parts, each in order: the inverse of [`list.zip`] for
+  lists of equal length. Stack-safe: it works on a list of any length.
+export def list.unzip: list((a, b)) -> (list(a), list(b)) = { pairs ->
+  unzipOnto(reverseOnto(pairs, []), [], [])
+}
+
+--| The elements without repeats, each kept where it first appears. Elements are compared with `==`,
+  by their structure, so this works for lists of anything but functions.
+export def list.distinct: [Eq(a)] list(a) -> list(a) = { xs ->
+  list.reverse(
+    list.fold(xs, [], { seen, x -> if list.any(seen, { y -> y == x }) then seen else [x, ...seen] })
+  )
+}
+
+--| The elements of `xs` whose key is not in `seen`, each the first with its key, last first, in front
+  of `acc`.
+def distinctByReversed: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), set(b), list(a) -> list(a) = {
+  | [], _, _, acc -> acc
+  | [x, ...rest], key, seen, acc ->
+    def k = key(x)
+
+    if set.contains(seen, k)
+      then distinctByReversed(rest, key, seen, acc)
+      else distinctByReversed(rest, key, set.insert(seen, k), [x, ...acc])
+}
+
+--| The elements without two of the same `key`, each kept where the first with its key appears:
+  `list.distinctBy(people, { p -> p.name })` keeps one person of each name. Stack-safe: it works on a
+  list of any length.
+export def list.distinctBy: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
+  reverseOnto(distinctByReversed(xs, key, set.empty, []), [])
+}
+
+--| `xs` and `ys`, each already in order of `key`, merged into one list in that order, after the
+  elements of `acc` (which holds the merged elements so far, last first). Of two elements with the
+  same key, the one from `xs` comes first.
+def mergeBy: [Ord(b) & c] list(a), list(a), ([c] a -> b), list(a) -> list(a) = {
+  | [], ys, _, acc -> reverseOnto(acc, ys)
+  | xs, [], _, acc -> reverseOnto(acc, xs)
+  | [x, ...xs], [y, ...ys], key, acc -> if key(y) < key(x)
+    then mergeBy([x, ...xs], ys, key, [y, ...acc])
+    else mergeBy(xs, [y, ...ys], key, [x, ...acc])
+}
+
+--| `runs` with each pair of neighbouring runs merged into one, in order, after the reversed `acc`.
+def mergePairs: [Ord(b) & c] list(list(a)), ([c] a -> b), list(list(a)) -> list(list(a)) = {
+  | [xs, ys, ...rest], key, acc -> mergePairs(rest, key, [mergeBy(xs, ys, key, []), ...acc])
+  | rest, _, acc -> reverseOnto(acc, rest)
+}
+
+--| The elements of `runs`, each run already in order of `key`, merged into one list in that order.
+def mergeRuns: [Ord(b) & c] list(list(a)), ([c] a -> b) -> list(a) = {
+  | [], _ -> []
+  | [run], _ -> run
+  | runs, key -> mergeRuns(mergePairs(runs, key, []), key)
+}
+
+--| The elements in ascending order of `key`. The sort is stable: elements with the same key keep
+  their order. A key can be of any type with an order: `list.sortBy(people, { p -> p.name })`.
+  Stack-safe: it works on a list of any length.
+export def list.sortBy: [Ord(b) & c] list(a), ([c] a -> b) -> list(a) = { xs, key ->
+  mergeRuns(list.map(xs, { x -> [x] }), key)
+}
+
+--| The elements in ascending order. The sort is stable. Stack-safe: it works on a list of any length.
+export def list.sort: [Ord(a)] list(a) -> list(a) = { xs ->
+  list.sortBy(xs, { x -> x })
+}
+
+--| The least of `least` and the elements of `xs`, the first of them when several are least.
+def leastOf: [Ord(a)] list(a), a -> a = {
+  | [], least -> least
+  | [x, ...rest], least -> leastOf(rest, if x < least then x else least)
+}
+
+--| The greatest of `greatest` and the elements of `xs`, the first of them when several are greatest.
+def greatestOf: [Ord(a)] list(a), a -> a = {
+  | [], greatest -> greatest
+  | [x, ...rest], greatest -> greatestOf(rest, if x > greatest then x else greatest)
+}
+
+--| The least element, or `#emptyList`. Of several least elements, the first.
+export def list.min: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ...rest] -> #some(leastOf(rest, x))
+}
+
+--| The greatest element, or `#emptyList`. Of several greatest elements, the first.
+export def list.max: [Ord(a)] list(a) -> #some(a) | #emptyList = {
+  | [] -> #emptyList
+  | [x, ...rest] -> #some(greatestOf(rest, x))
+}
+
+--| Of `least`, whose key is `leastKey`, and the elements of `xs`, the one with the least key, the first
+  of them when several keys are least.
+def leastByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
+  | [], _, least, _ -> least
+  | [x, ...rest], key, least, leastKey ->
+    def k = key(x)
+    if k < leastKey then leastByOf(rest, key, x, k) else leastByOf(rest, key, least, leastKey)
+}
+
+--| Of `greatest`, whose key is `greatestKey`, and the elements of `xs`, the one with the greatest key,
+  the first of them when several keys are greatest.
+def greatestByOf: [Ord(b) & c] list(a), ([c] a -> b), a, b -> a = {
+  | [], _, greatest, _ -> greatest
+  | [x, ...rest], key, greatest, greatestKey ->
+    def k = key(x)
+
+    if k > greatestKey
+      then greatestByOf(rest, key, x, k)
+      else greatestByOf(rest, key, greatest, greatestKey)
+}
+
+--| The element with the least `key`, or `#emptyList`. Of several elements with the least key, the
+  first. `key` is called once for each element.
+export def list.minBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
+  | [], _ -> #emptyList
+  | [x, ...rest], key -> #some(leastByOf(rest, key, x, key(x)))
+}
+
+--| The element with the greatest `key`, or `#emptyList`. Of several elements with the greatest key,
+  the first. `key` is called once for each element.
+export def list.maxBy: [Ord(b) & c] list(a), ([c] a -> b) -> #some(a) | #emptyList = {
+  | [], _ -> #emptyList
+  | [x, ...rest], key -> #some(greatestByOf(rest, key, x, key(x)))
+}
+
+--| The elements `step` gives from `state` on, last first, in front of `acc`.
+def unfoldReversed
+  : [c] b, ([c] b -> #some(a, b) | #done), list(a) -> list(a)
+  = { state, step, acc ->
+    match step(state)
+      | #some(x, next) -> unfoldReversed(next, step, [x, ...acc])
+      | #done -> acc
+  }
+
+--| The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from
+  `next`, and `#done` ends the list. Stack-safe: it works however many elements `step` gives.
+export def list.unfold: [c] b, ([c] b -> #some(a, b) | #done) -> list(a) = { state, step ->
+  reverseOnto(unfoldReversed(state, step, []), [])
+}

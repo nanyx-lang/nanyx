@@ -1,0 +1,268 @@
+@partial module prelude
+
+-- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
+
+-- Maps ------------------------------------------------------------------------------------------
+--
+-- A `map(k, v)` holds one value for each of its keys. It is written `["a" => 1, "b" => 2]`, and
+-- calling it looks a key up: `m("a")` is `map.get(m, "a")`. Keys are compared with `==`, so a map
+-- needs an `Eq` of its key type. Attached to `map`, so they are called as `map.insert(m, k, v)`, or
+-- as `m \insert(k, v)` when `m` is known to be a map. Maps are immutable: every function gives back
+-- a new map.
+--
+-- For now a map holds a list of its entries, each key once, in the order the keys were first added,
+-- so a lookup walks the list (see docs/src/content/work-in-progress/maps-and-sets.md).
+
+--| The value `entries` holds for `key`, or `#notFound`.
+def findEntry: [Eq(k)] list((k, v)), k -> #some(v) | #notFound = {
+  | [], _ -> #notFound
+  | [(entryKey, value), ...rest], key -> if entryKey == key
+    then #some(value)
+    else findEntry(rest, key)
+}
+
+--| `entries` with `key` holding `value`: in its place if `entries` has it, else at the end. `acc`
+  holds the entries before, last first.
+def insertEntry: [Eq(k)] list((k, v)), k, v, list((k, v)) -> list((k, v)) = {
+  | [], key, value, acc -> reverseOnto(acc, [(key, value)])
+  | [(entryKey, entryValue), ...rest], key, value, acc -> if entryKey == key
+    then reverseOnto(acc, [(key, value), ...rest])
+    else insertEntry(rest, key, value, [(entryKey, entryValue), ...acc])
+}
+
+--| `entries` without `key`. `acc` holds the entries before, last first.
+def removeEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
+  | [], _, acc -> reverseOnto(acc, [])
+  | [(entryKey, value), ...rest], key, acc -> if entryKey == key
+    then reverseOnto(acc, rest)
+    else removeEntry(rest, key, [(entryKey, value), ...acc])
+}
+
+--| `m` with each of `entries` inserted in turn.
+def insertAll: [Eq(k) & Hash(k)] map(k, v), list((k, v)) -> map(k, v) = {
+  | m, [] -> m
+  | m, [(key, value), ...rest] -> insertAll(map.insert(m, key, value), rest)
+}
+
+--| The map with no keys. A map literal has at least one entry, since [] is the empty list.
+export def map.empty: map(k, v) = __nanyx_map_of_entries([])
+
+--| What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
+  `__map([("a", 1), ("b", 2)])`. A key written twice holds the value written last.
+export def __map: [Eq(k) & Hash(k)] list((k, v)) -> map(k, v) = { entries ->
+  insertAll(map.empty, entries)
+}
+
+--| The map holding each of `entries`, in order: of two entries with the same key, the later wins.
+export def map.fromList: [Eq(k) & Hash(k)] list((k, v)) -> map(k, v) = { entries ->
+  insertAll(map.empty, entries)
+}
+
+--| The entries of `m`, each a key and its value, in the order the keys were first added.
+export def map.toList: map(k, v) -> list((k, v)) = { m ->
+  __nanyx_map_entries(m)
+}
+
+--| The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
+export def map.get: [Eq(k) & Hash(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
+  findEntry(__nanyx_map_entries(m), key)
+}
+
+--| Whether `m` holds a value for `key`.
+export def map.containsKey: [Eq(k) & Hash(k)] map(k, v), k -> bool = { m, key ->
+  isSome(findEntry(__nanyx_map_entries(m), key))
+}
+
+--| `m` with `key` holding `value`, in place of any value it held before.
+export def map.insert: [Eq(k) & Hash(k)] map(k, v), k, v -> map(k, v) = { m, key, value ->
+  __nanyx_map_of_entries(insertEntry(__nanyx_map_entries(m), key, value, []))
+}
+
+--| `m` without `key` or its value. A map that has no `key` is given back as it is.
+export def map.remove: [Eq(k) & Hash(k)] map(k, v), k -> map(k, v) = { m, key ->
+  __nanyx_map_of_entries(removeEntry(__nanyx_map_entries(m), key, []))
+}
+
+--| The number of keys.
+export def map.count: map(k, v) -> int = { m ->
+  list.length(__nanyx_map_entries(m))
+}
+
+--| `groups` with the elements of `xs` added, each to the front of the group of its key.
+def groupInto: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), map(b, list(a)) -> map(b, list(a)) = {
+  | [], _, groups -> groups
+  | [x, ...rest], key, groups ->
+    def group = someOr(map.get(groups, key(x)), [])
+    groupInto(rest, key, map.insert(groups, key(x), [x, ...group]))
+}
+
+--| The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
+  order. The keys are in the order they first appear.
+export def list.groupBy
+  : [Eq(b) & Hash(b) & c] list(a), ([c] a -> b) -> map(b, list(a))
+  = { xs, key ->
+    def groups = __nanyx_map_entries(groupInto(xs, key, map.empty))
+    __nanyx_map_of_entries(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
+  }
+
+--| The keys of `m`, in the order they were first added.
+export def map.keys: map(k, v) -> list(k) = { m ->
+  list.map(__nanyx_map_entries(m), { entry -> entry.0 })
+}
+
+--| The values of `m`, in the order their keys were first added.
+export def map.values: map(k, v) -> list(v) = { m ->
+  list.map(__nanyx_map_entries(m), { entry -> entry.1 })
+}
+
+--| Whether `m` has no keys.
+export def map.isEmpty: map(k, v) -> bool = { m ->
+  list.isEmpty(__nanyx_map_entries(m))
+}
+
+--| `step` applied to `acc` and each key and value of `m` in turn, in the order of [`map.toList`].
+export def map.fold: [c] map(k, v), b, ([c] b, k, v -> b) -> b = { m, acc, step ->
+  list.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
+}
+
+--| `m` with `f` applied to each value. The keys stay as they are, in the same order.
+export def map.map: [c] map(k, v), ([c] v -> w) -> map(k, w) = { m, f ->
+  __nanyx_map_of_entries(list.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
+}
+
+--| The entries of `m` whose key and value pass `keep`, in the same order.
+export def map.filter: [c] map(k, v), ([c] k, v -> bool) -> map(k, v) = { m, keep ->
+  __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
+}
+
+--| Whether the maps `m` and `n` hold the same keys, compared with `==`, and equal values for each,
+  as `same` compares two values, whatever order their keys were added in. The `==` the compiler
+  derives for a map calls it.
+export def __mapEqualsBy
+  : [Eq(k) & c] map(k, v), map(k, v), ([c] v, v -> bool) -> bool
+  = { m, n, same ->
+    def theirs = __nanyx_map_entries(n)
+
+    if list.length(__nanyx_map_entries(m)) != list.length(theirs)
+      then false
+      else list.all(
+        __nanyx_map_entries(m)
+        { entry ->
+          match findEntry(theirs, entry.0)
+            | #some(value) -> same(entry.1, value)
+            | #notFound -> false
+        }
+      )
+  }
+
+--| `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
+  does not have is added at the end.
+export def map.update
+  : [Eq(k) & Hash(k) & c] map(k, v), k, ([c] (#some(v) | #notFound) -> v) -> map(k, v)
+  = { m, key, f ->
+    map.insert(m, key, f(map.get(m, key)))
+  }
+
+-- Sets ------------------------------------------------------------------------------------------
+--
+-- A `set(a)` holds each of its elements once. It is made with `set.fromList([1, 2, 2, 3])`, or
+-- from `set.empty` with `set.insert`. Its elements need an `Eq` and a `Hash`, as a map's keys do.
+-- Attached to `set`, so they are called as `set.contains(s, x)`, or as `s \contains(x)` when `s` is
+-- known to be a set. Sets are immutable: every function gives back a new set.
+--
+-- For now a set holds a list of its elements, each once, in the order they were first added, so
+-- `contains` walks the list (see docs/src/content/work-in-progress/maps-and-sets.md).
+
+--| The set with no elements.
+export def set.empty: set(a) = __nanyx_set_of_elements([])
+
+--| The set of the elements of `xs`, each once, in the order they first appear.
+export def set.fromList: [Eq(a) & Hash(a)] list(a) -> set(a) = { xs ->
+  __nanyx_set_of_elements(list.distinct(xs))
+}
+
+--| The elements of `s`, in the order they were first added.
+export def set.toList: set(a) -> list(a) = { s ->
+  __nanyx_set_elements(s)
+}
+
+--| Whether `s` holds `x`.
+export def set.contains: [Eq(a) & Hash(a)] set(a), a -> bool = { s, x ->
+  list.any(__nanyx_set_elements(s), { y -> y == x })
+}
+
+--| `s` with `x` added at the end. A set that holds `x` is given back as it is.
+export def set.insert: [Eq(a) & Hash(a)] set(a), a -> set(a) = { s, x ->
+  if set.contains(s, x) then s else __nanyx_set_of_elements(list.append(__nanyx_set_elements(s), x))
+}
+
+--| `s` without `x`. A set that does not hold `x` is given back as it is.
+export def set.remove: [Eq(a) & Hash(a)] set(a), a -> set(a) = { s, x ->
+  __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), { y -> y != x }))
+}
+
+--| The number of elements.
+export def set.count: set(a) -> int = { s ->
+  list.length(__nanyx_set_elements(s))
+}
+
+--| Whether `s` has no elements.
+export def set.isEmpty: set(a) -> bool = { s ->
+  list.isEmpty(__nanyx_set_elements(s))
+}
+
+--| `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`].
+export def set.fold: [c] set(a), b, ([c] b, a -> b) -> b = { s, acc, step ->
+  list.fold(__nanyx_set_elements(s), acc, step)
+}
+
+--| The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
+  first of them was.
+export def set.map: [Eq(b) & Hash(b) & c] set(a), ([c] a -> b) -> set(b) = { s, f ->
+  set.fromList(list.map(__nanyx_set_elements(s), f))
+}
+
+--| The elements of `s` that pass `keep`, in the same order.
+export def set.filter: [c] set(a), ([c] a -> bool) -> set(a) = { s, keep ->
+  __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), keep))
+}
+
+--| Whether `t` holds every element of `s`.
+export def set.isSubset: [Eq(a) & Hash(a)] set(a), set(a) -> bool = { s, t ->
+  list.all(__nanyx_set_elements(s), { x -> set.contains(t, x) })
+}
+
+--| Whether the sets `s` and `t` hold the same elements, as `same` compares two, whatever order they
+  were added in. The `==` the compiler derives for a set calls it.
+export def __setEqualsBy: [c] set(a), set(a), ([c] a, a -> bool) -> bool = { s, t, same ->
+  def theirs = __nanyx_set_elements(t)
+
+  if list.length(__nanyx_set_elements(s)) != list.length(theirs)
+    then false
+    else list.all(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> same(x, y) }) })
+}
+
+--| The elements of `s`, then those of `t` that `s` does not hold.
+export def set.union: [Eq(a) & Hash(a)] set(a), set(a) -> set(a) = { s, t ->
+  def ours = __nanyx_set_elements(s)
+  def theirs = list.filter(__nanyx_set_elements(t), { x -> not list.any(ours, { y -> y == x }) })
+  __nanyx_set_of_elements(reverseOnto(reverseOnto(ours, []), theirs))
+}
+
+--| The elements of `s` that `t` holds too, in the order of `s`.
+export def set.intersection: [Eq(a) & Hash(a)] set(a), set(a) -> set(a) = { s, t ->
+  def theirs = __nanyx_set_elements(t)
+
+  __nanyx_set_of_elements(
+    list.filter(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> y == x }) })
+  )
+}
+
+--| The elements of `s` that `t` does not hold, in the order of `s`.
+export def set.difference: [Eq(a) & Hash(a)] set(a), set(a) -> set(a) = { s, t ->
+  def theirs = __nanyx_set_elements(t)
+
+  __nanyx_set_of_elements(
+    list.filter(__nanyx_set_elements(s), { x -> not list.any(theirs, { y -> y == x }) })
+  )
+}
