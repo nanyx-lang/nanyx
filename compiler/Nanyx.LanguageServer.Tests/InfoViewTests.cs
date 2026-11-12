@@ -7,7 +7,8 @@ using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary><c>nanyx/infoView</c>, the request behind the extension's info view.</summary>
-public sealed partial class LanguageServerTests
+[Collection(LanguageServerTestBase.Collection)]
+public sealed class InfoViewTests : LanguageServerTestBase
 {
     [Fact]
     public async Task Info_view_shows_the_expression_and_the_names_in_scope_nearest_first()
@@ -351,20 +352,4 @@ public sealed partial class LanguageServerTests
         var declared = Section(await InfoViewAt(uri, 1, 17), "expression").Items[0];
         Assert.Equal("The larger of `a` and `b`.", declared.Documentation);
     }
-
-    private async Task<InfoViewResult> InfoViewAt(DocumentUri uri, int line, int character)
-    {
-        var result = await _client
-            .SendRequest(InfoViewHandler.Method, new InfoViewParams
-            {
-                TextDocument = new TextDocumentIdentifier(uri),
-                Position = new Position(line, character)
-            })
-            .Returning<InfoViewResult?>(_cancellation.Token);
-        Assert.NotNull(result);
-        Assert.Equal(["expression", "inScope", "topLevel", "contexts", "messages"], result.Sections.Select(section => section.Id));
-        return result;
-    }
-
-    private static InfoViewSection Section(InfoViewResult view, string id) => view.Sections.Single(section => section.Id == id);
 }

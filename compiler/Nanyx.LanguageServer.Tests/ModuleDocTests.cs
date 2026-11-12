@@ -6,7 +6,8 @@ using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Nanyx.LanguageServer.Tests;
 
 /// <summary>A module's doc comment, the <c>--|</c> comment before its <c>module</c> line, wherever the module is named.</summary>
-public sealed partial class LanguageServerTests
+[Collection(LanguageServerTestBase.Collection)]
+public sealed class ModuleDocTests : LanguageServerTestBase
 {
     [Fact]
     public async Task Hover_on_a_module_line_shows_the_modules_doc_comment()
