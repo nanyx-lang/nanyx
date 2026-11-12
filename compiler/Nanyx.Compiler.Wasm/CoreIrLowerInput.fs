@@ -17,9 +17,8 @@ type LiftedFunction =
 
 /// A member of a context a function requires, which it takes as a parameter of its own after its others.
 type ContextParameter =
-    { /// The member's key (see `Identifiers.contextMemberKey`): its name, or `<context key>_<name>` for a member of a
-      /// parameterised context.
-      Key: string
+    { /// The member's key (see `Identifiers.contextMemberKey`).
+      Key: ContextMemberKey
       /// The parameter's name in WebAssembly text.
       Name: string
       /// The member's type, in the function's own type variables; none when it cannot be worked out from the
@@ -29,7 +28,7 @@ type ContextParameter =
 /// Where a call finds a member of a context its callee requires.
 type ContextArgument =
     /// The member in scope under this key: a parameter of the function, or a `use` binding.
-    | MemberInScope of string
+    | MemberInScope of ContextMemberKey
     /// A closure over this wrapper of a top-level function: a member of the ambient instance (the runtime's
     /// `Console`), or of an instance the compiler built from attached definitions.
     | ClosureOverWrapper of string
@@ -56,15 +55,18 @@ type LowerInput =
       /// The context members each definition that requires contexts takes, in order, and the other names it can call
       /// them by (a member of a parameterised context, by its own name, when no other context it requires has one of
       /// that name).
-      ContextParameters: Map<string, ContextParameter list * Map<string, string>>
+      ContextParameters: Map<string, ContextParameter list * Map<string, ContextMemberKey>>
       /// Where a call to the definition of this name, at this node, finds each context member it requires, given the
       /// keys of the members in scope there and of those its callers pass instead (`PassedByCaller`); or why it cannot.
-      ContextArguments: string -> NodeId -> Set<string> -> Set<string> -> Result<ContextArgument list, string>
+      ContextArguments: string -> NodeId -> Set<ContextMemberKey> -> Set<ContextMemberKey> -> Result<ContextArgument list, string>
       /// The members of each context without parameters (see `CoreIrLowerTypes.ContextLayouts`).
-      ContextLayouts: Map<string, (string * Ty) list>
+      ContextLayouts: Map<string, (ContextMemberKey * Ty) list>
       /// The wrapper of the ambient instance's member of each key (the runtime's `Console`), which stands in for it where
       /// nothing in scope supplies it.
-      AmbientMembers: Map<string, string>
+      AmbientMembers: Map<ContextMemberKey, string>
+      /// The key of each name a `use` lambda lifting left behind binds a member of a parameterised context by (see
+      /// `LambdaLifting.lift`). Any other name a `use` binds is a named member's.
+      UseKeys: Map<string, ContextMemberKey>
       /// The calls of interpolation holes that use the compiler's own `ToString` (see `InterpolationHoles`), by node: the
       /// value is written into the string as it is.
       BuiltInHoles: Set<NodeId>

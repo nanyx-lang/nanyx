@@ -88,9 +88,9 @@ let private unwrapContextType (typeExpr: TypeExpr option) : TypeExpr option =
 
 
 /// The keys of the members of the contexts each definition in `defs` requires, by the definition's name, from the
-/// members of each context in `typeLayouts`. For a parameterised context the key is qualified (`ToString_a_toString`),
-/// and for a plain one it is the member's name (`println`).
-let private contextMemberKeys (defs: (string * TypeExpr option * Expression) list) (typeLayouts: Map<string, string list>) : Map<string, string list> =
+/// members of each context in `typeLayouts`. For a parameterised context the key is the instance's member (`toString`
+/// of `ToString(a)`), and for a plain one it is the member's name (`println`).
+let private contextMemberKeys (defs: (string * TypeExpr option * Expression) list) (typeLayouts: Map<string, string list>) : Map<string, ContextMemberKey list> =
     defs
     |> List.choose (fun (name, typeOpt, _) ->
         let keys =
@@ -211,44 +211,35 @@ let private recordLayoutId (table: RecordTable) (fieldNames: string list) =
 /// compatible one (the same context and member, at other type arguments), or else the ambient instance's member. One of
 /// the keys in `passed` is not found: the callers of the function's value pass it.
 let private contextArguments
-    (requirements: Map<string, string list>)
+    (requirements: Map<string, ContextMemberKey list>)
     (contextTypes: Map<string, TypeExpr list>)
     (typeLayouts: Map<string, string list>)
     (contextInstances: Map<NodeId, ContextInstance option list>)
     (functionWrappers: Map<string, string>)
-    (ambientMembers: Map<string, string>)
-    (scopeKeys: Set<string>)
-    (passed: Set<string>)
+    (ambientMembers: Map<ContextMemberKey, string>)
+    (scopeKeys: Set<ContextMemberKey>)
+    (passed: Set<ContextMemberKey>)
     (name: string)
     (callId: NodeId)
     : CoreIrLowerInput.ContextArgument list =
     let required = requirements |> Map.tryFind name |> Option.defaultValue []
 
-    // A member of the same context at other type arguments, not already passed: a required `ToString_a_toString`
-    // can be an available `ToString_int_toString`.
-    let findCompatible (used: Set<string>) (requiredKey: string) : string option =
-        let parts = requiredKey.Split('_')
-        if parts.Length < 2 then None
-        else
-            let baseName = parts.[0]
-            let memberName = parts.[parts.Length - 1]
-            scopeKeys
-            |> Seq.tryFind (fun availableKey ->
-                not (used.Contains availableKey) &&
-                let availableParts = availableKey.Split('_')
-                availableParts.Length >= 2 &&
-                availableParts.[0] = baseName &&
-                availableParts.[availableParts.Length - 1] = memberName)
+    // A member of the same context at other type arguments, not already passed: a required `toString` of
+    // `ToString(a)` can be an available one of `ToString(int)`. The first by its key's text is taken.
+    let findCompatible (used: Set<ContextMemberKey>) (requiredKey: ContextMemberKey) : ContextMemberKey option =
+        scopeKeys
+        |> Seq.sortBy ContextMemberKey.text
+        |> Seq.tryFind (fun availableKey -> not (used.Contains availableKey) && ContextMemberKey.sameMember requiredKey availableKey)
 
     // The member in scope, else the ambient instance's.
-    let memberFor (requiredKey: string) (resolvedKey: string) =
+    let memberFor (requiredKey: ContextMemberKey) (resolvedKey: ContextMemberKey) =
         if scopeKeys.Contains resolvedKey then CoreIrLowerInput.MemberInScope resolvedKey
         else
             match ambientMembers |> Map.tryFind resolvedKey with
             | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
             | None ->
-                let available = (List.ofSeq scopeKeys) @ (ambientMembers |> Map.toList |> List.map fst) |> String.concat ", "
-                failwith $"Context function {requiredKey} not available in current scope. Available: [{available}]"
+                let available = (List.ofSeq scopeKeys) @ (ambientMembers |> Map.toList |> List.map fst) |> List.map ContextMemberKey.text |> String.concat ", "
+                failwith $"Context function {ContextMemberKey.text requiredKey} not available in current scope. Available: [{available}]"
 
     // Where the type checker found each context the callee requires, as each required member's instance, in the order
     // of `required`: none for a call it found nothing for. A function that does not write its type may also require
@@ -265,7 +256,7 @@ let private contextArguments
 
     required
     |> List.mapi (fun index requiredKey -> requiredKey, instances |> Option.map (fun perMember -> perMember.[index]))
-    |> List.fold (fun (acc: CoreIrLowerInput.ContextArgument list, used: Set<string>) (requiredKey, instance) ->
+    |> List.fold (fun (acc: CoreIrLowerInput.ContextArgument list, used: Set<ContextMemberKey>) (requiredKey, instance) ->
         match instance with
         // A member its value's callers pass.
         | _ when passed.Contains requiredKey -> acc @ [ CoreIrLowerInput.PassedByCaller ], used
@@ -274,7 +265,7 @@ let private contextArguments
         // its members by their names alone.
         | Some (memberName, Some (InstanceInScope written)) ->
             let writtenKey = contextMemberKey (Some written) memberName
-            let key = if not (scopeKeys.Contains writtenKey) && scopeKeys.Contains memberName then memberName else writtenKey
+            let key = if not (scopeKeys.Contains writtenKey) && scopeKeys.Contains (NamedMember memberName) then NamedMember memberName else writtenKey
             acc @ [ memberFor requiredKey key ], used.Add key
         // An instance built from the attached definitions: each member is one of them, a function passed as a closure
         // over its wrapper, or a value passed as it is.
@@ -382,7 +373,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | CoreIr.IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
             | _ -> Set.empty
         | _ -> Set.empty
-    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures passedMembers typed.UseContexts module'
+    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures passedMembers typed.UseContexts module'
     let defs =
         module'
         |> List.choose (function
@@ -404,9 +395,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | _ -> None)
         |> Set.ofList
 
-    // Calculate context requirements for each function based on TypeWithContext annotations
-    // For parameterized contexts like ToString(a), generate qualified keys like "ToString_a_toString"
-    // For simple contexts like Println, keep simple member names like "println"
+    // The contexts each function's annotation requires (`TypeWithContext`), and the keys of their members (see
+    // `contextMemberKeys`).
     let functionContextTypes =
         defs
         |> List.choose (fun (name, typeOpt, _) ->
@@ -425,7 +415,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let ambientContextMembers =
         LambdaLifting.ambientMemberDefinitions module'
         |> List.filter (fun (_, definition) -> not (functionContextRequirements.ContainsKey definition))
-        |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> memberName, wrapper))
+        |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> NamedMember memberName, wrapper))
         |> Map.ofList
 
     let functionTable: FunctionTable =
@@ -439,9 +429,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let usedHelpers = System.Collections.Generic.HashSet<string>()
 
     /// The other names a function can call the members of the contexts it requires by, each with the key it stands
-    /// for: a member of a parameterised context (`Show_a_show`) by its own name (`show`), as the type checker allows,
-    /// when no other context the function declares has a member of that name.
-    let contextMemberAliases (name: string) : (string * string) list =
+    /// for: a member of a parameterised context (`show` of `Show(a)`) by its own name (`show`), as the type checker
+    /// allows, when no other context the function declares has a member of that name.
+    let contextMemberAliases (name: string) : (string * ContextMemberKey) list =
         let keys = functionContextRequirements |> Map.tryFind name |> Option.defaultValue []
         functionContextTypes
         |> Map.tryFind name
@@ -455,7 +445,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.groupBy fst
         |> List.choose (fun (memberName, aliased) ->
             match aliased with
-            | [ (_, key) ] when List.contains key keys && not (List.contains memberName keys) -> Some (memberName, key)
+            | [ (_, key) ] when List.contains key keys && not (List.contains (NamedMember memberName) keys) -> Some (memberName, key)
             | _ -> None)
 
     /// The members of the contexts `name` requires, as the core IR takes them: each with its type, from the context's
@@ -594,6 +584,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     with Failure message -> Error message
               ContextLayouts = contextLayouts
               AmbientMembers = ambientContextMembers
+              UseKeys = useKeys
               BuiltInHoles =
                 contextInstances |> Map.filter (fun _ found -> found = [ Some InstanceBuiltIn ]) |> Map.keys |> Set.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq

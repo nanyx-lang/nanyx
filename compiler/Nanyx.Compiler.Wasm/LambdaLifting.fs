@@ -279,17 +279,19 @@ let ambientMemberDefinitions (module': Module) : (string * string) list =
 /// `passedMembers` gives for it, by key: those of the contexts its type requires, which each call passes it instead.
 ///
 /// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
-/// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one.
-let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (passedMembers: Expression -> Set<string>) (useContexts: Map<NodeId, TypeExpr>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> =
+/// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one. A `use` left behind
+/// binds such a member by its key's text, and the key of each such name is returned too.
+let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
+    let useKeys = System.Collections.Generic.Dictionary<string, ContextMemberKey>()
     let mutable owner = ""
     // The names the context members of `owner` are captured by.
     let mutable ownerMembers: string list = []
-    // The context members the `use`s in scope load: each local a binding is evaluated into, with the names the
-    // member is in scope by (its key and its own name), oldest first.
-    let mutable useMembers: (string * string list) list = []
+    // The context members the `use`s in scope load: each local a binding is evaluated into, with the keys the
+    // member is in scope by (its own, and its name), oldest first.
+    let mutable useMembers: (string * ContextMemberKey list) list = []
     let mutable counter = 0
     // Whether some lambda is passed the members of contexts where it is called, which may be the ambient instance's.
     let mutable passesMembers = false
@@ -362,11 +364,21 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             wrappers.[name] <- wrapperName
             wrapperName
 
+    /// The name a `use` left behind binds the member of `key` by: a named member's name, or an instance's member's key's
+    /// text, noted in `useKeys`.
+    let fieldName (key: ContextMemberKey) =
+        match key with
+        | NamedMember name -> name
+        | InstanceMember _ ->
+            let name = ContextMemberKey.text key
+            useKeys.[name] <- key
+            name
+
     /// `captured` with the context members of `owner` after it, and those of the `use`s in scope that `body` may call,
     /// those it does not capture already. `body` may call a member a `use` loads when it names it (as a call, a value
     /// or an operator), names a function that requires contexts, or makes a closure that captures it. The members of
     /// the keys in `passed`, which each call passes the lambda (see `passedMembers`), are not among them.
-    let withMembers (passed: Set<string>) (body: Expression) (captured: string list) =
+    let withMembers (passed: Set<ContextMemberKey>) (body: Expression) (captured: string list) =
         let mentioned =
             SyntaxTree.expressionsWithin body
             |> List.choose (fun expr ->
@@ -382,8 +394,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         let callsContexts = mentioned |> Set.exists memberCaptures.ContainsKey
         let usedMembers =
             useMembers
-            |> List.filter (fun (local, names) -> callsContexts || mentioned.Contains local || names |> List.exists mentioned.Contains)
-            |> List.filter (fun (_, names) -> not (names |> List.exists passed.Contains))
+            |> List.filter (fun (local, keys) ->
+                callsContexts || mentioned.Contains local || keys |> List.exists (function NamedMember name -> mentioned.Contains name | InstanceMember _ -> false))
+            |> List.filter (fun (_, keys) -> not (keys |> List.exists passed.Contains))
             |> List.map fst
         let ownerMembers = ownerMembers |> List.filter (fun name -> not (passed |> Set.exists (fun key -> contextMemberParameter key = name)))
         captured @ (ownerMembers @ usedMembers |> List.filter (fun name -> not (List.contains name captured)))
@@ -406,8 +419,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         let useBinding =
             useMembers
             |> List.filter (fun (local, _) -> List.contains local captured)
-            |> List.collect (fun (local, names) ->
-                names |> List.filter (passed.Contains >> not) |> List.map (fun name -> NamedField(name, Expression.synthetic (IdentifierExpr local))))
+            |> List.collect (fun (local, keys) ->
+                keys |> List.filter (passed.Contains >> not) |> List.map (fun key -> NamedField(fieldName key, Expression.synthetic (IdentifierExpr local))))
             |> function
                 | [] -> []
                 | fields -> [ Statement.synthetic (UseStatement(Expression.synthetic (RecordExpr fields))) ]
@@ -540,15 +553,15 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                             bindings
                             |> List.map (fun (memberName, value) ->
                                 let key = contextMemberKey contextType memberName
-                                let local = $"__use_{sanitizeIdentifier key}_{counter}"
+                                let local = $"__use_{sanitizeIdentifier (ContextMemberKey.text key)}_{counter}"
                                 counter <- counter + 1
                                 memberName, key, local, liftMember contextType memberName value)
                         // Each member by its key, and by its own name too, as the block can call it by that (`a == b`
                         // after `use ignoringCase` calls its `==`).
-                        let names = locals |> List.map (fun (memberName, key, local, _) -> local, [ key; memberName ] |> List.distinct)
+                        let names = locals |> List.map (fun (memberName, key, local, _) -> local, [ key; NamedMember memberName ] |> List.distinct)
                         let fields =
                             names
-                            |> List.collect (fun (local, names) -> names |> List.map (fun name -> NamedField(name, Expression.synthetic (IdentifierExpr local))))
+                            |> List.collect (fun (local, keys) -> keys |> List.map (fun key -> NamedField(fieldName key, Expression.synthetic (IdentifierExpr local))))
                         // A lambda below captures the members, to load them again (see `liftedLambda`).
                         useMembers <- useMembers @ names
                         [ yield! evaluated
@@ -661,4 +674,5 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
 
     items @ List.ofSeq lifted,
     origins |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
-    wrappers |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
+    wrappers |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq,
+    useKeys |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
