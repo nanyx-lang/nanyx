@@ -53,7 +53,7 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
   configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, source files need not
   be named modules yet, and there is no `.nyxproj` or `restore`.
   The formatter still reads its `[formatter]` table itself.
-- **Imports resolve two ways only** (`resolveImportPath` and `StandardLibrary.tryModuleName` in `Library.fs`).
+- **Imports resolve two ways only** (`FileImports.resolvePath` and `StandardLibrary.tryModuleName`).
   A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file, with `.` and `/` treated
   alike. A name starting `nanyx/` comes from the standard library embedded in the compiler. There are no search
   paths, and a module's declared name is not checked against the name it was imported by. An import by file path
