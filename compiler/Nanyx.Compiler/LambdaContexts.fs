@@ -54,7 +54,8 @@ let recordWritten (written: TypeExpr list) (state: InferState) : InferState =
     record plain state
 
 /// The context whose member `name`, as `env` binds it, is: of the ambient instance, of one a def around declares, or of
-/// one a `use` loads. `None` for any other name, and for a member of a parameterised context.
+/// one a `use` of a value of the context's type loads (`use Foo(bar = ...)`). `None` for any other name, including a
+/// member of a record written out that a `use` loads, and for a member of a parameterised context.
 let contextOfMember (env: TypeEnv) (state: InferState) (name: Identifier) : Identifier option =
     match TypeEnv.tryFind name env |> Option.bind _.Symbol with
     | None -> None

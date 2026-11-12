@@ -104,6 +104,43 @@ main()
     runSource source |> assertRan "second x\n"
 
 [<Fact>]
+let ``Run - a lambda written inside a use and called under another uses the second`` () =
+    let source = """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def main = {
+  def f = use Foo(bar = { s -> s ++ "?" }) in { bar("x") }
+  use Foo(bar = { s -> s ++ "!" }) in println(f())
+}
+
+main()
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "x!\n"
+
+[<Fact>]
+let ``Run - a lambda written after a use statement and returned out of its block uses the instance where it is called`` () =
+    let source = """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def make = {
+  use Foo(bar = { s -> "first " ++ s })
+  def f = { bar("x") }
+  println(f())
+  f
+}
+
+def main = {
+  def f = make()
+  use Foo(bar = { s -> "second " ++ s }) in println(f())
+}
+
+main()
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "first x\nsecond x\n"
+
+[<Fact>]
 let ``Run - a function named as a value where its context is not available, and called where it is`` () =
     let source = """import nanyx/console
 
