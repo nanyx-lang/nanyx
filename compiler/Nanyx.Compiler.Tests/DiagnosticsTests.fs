@@ -333,7 +333,7 @@ let ``Built-in types, type variables, type parameters and types defined anywhere
         "def id: a -> a = { x -> x }\n" +
         "def t: Tree = #leaf\n" +
         "type Tree = #leaf | #node(Tree, Tree)\n" +
-        "type Box(item) = (value: item)\n" +
+        "type Box(t) = (value: t)\n" +
         "type Pair(a, b) = (first: a, second: b)\n" +
         "def g = { (p: Pair(int, Tree)), (b: Box(string)) -> (p.first, b.value) }\n"
     Assert.Empty(compiled source)

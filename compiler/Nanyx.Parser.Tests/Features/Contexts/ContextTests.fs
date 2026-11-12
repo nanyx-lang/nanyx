@@ -43,6 +43,30 @@ let ``use C(T) = expr does not parse, and the error says to write use <expr> whe
         | Result.Ok _ -> failwith $"Expected '{line.Trim()}' not to parse"
 
 [<Fact>]
+let ``A context's or a type's parameter is a single lowercase letter, and a longer name is an error where it is written`` () =
+    match parseModule "context Store(a, b) = (put: (a, b) -> a)\ntype Box(t) = (value: t)" with
+    | Result.Ok [ Kind (Def (TypeDef ("Store", _, [ "a", None; "b", None ], _))); Kind (Def (TypeDef ("Box", _, [ "t", None ], _))) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+    let longer = "longer lowercase names are reserved for associated types"
+    let cases =
+        [ "context Store(item) = (put: item -> item)", "item", Some longer
+          "context Pair(a, bb) = (first: a, second: bb)", "bb", Some longer
+          "type Box(item) = (value: item)", "item", Some longer
+          "type Box(T) = (value: T)", "T", None
+          "def main = {\n  type Box(item) = (value: item)\n  1\n}", "item", Some longer ]
+    for source, name, reason in cases do
+        match parseModuleFileWithNames "t.nyx" source with
+        | Result.Error err ->
+            // FParsec wraps a long message onto several lines.
+            let message = err.Message.Replace("\r\n", " ").Replace("\n", " ")
+            Assert.Contains($"A type parameter is a single lowercase letter, such as 'a', so '{name}' cannot be one", message)
+            match reason with
+            | Some reason -> Assert.Contains(reason, message)
+            | None -> Assert.DoesNotContain(longer, message)
+            Assert.Equal(source.IndexOf $"{name})", err.Span.Start)
+        | Result.Ok _ -> failwith $"Expected '{source}' not to parse"
+
+[<Fact>]
 let ``An operator is required by the member it reads, among a def's contexts`` () =
     let contextsOf source =
         match parseModule source with

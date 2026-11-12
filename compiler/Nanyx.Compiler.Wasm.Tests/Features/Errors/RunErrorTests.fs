@@ -31,6 +31,26 @@ def main = { println(depth(#leaf(1))) }
         outcome.StandardError)
 
 [<Fact>]
+let ``Run - a context's type parameter longer than one letter is reported where it is declared, and nothing runs`` () =
+    let source =
+        """import nanyx/console
+
+context ToText(ab) = (totext: ab -> string)
+type Point = (x: int, y: int)
+
+def describe: [ToText(a)] a -> string = { value -> ToText(a).totext(value) }
+def Point.totext: Point -> string = { p -> "p" }
+
+println(describe(Point(x = 1, y = 2)))
+"""
+    let outcome = runSource (source.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Contains(":3:16: error NYX0001: ", outcome.StandardError)
+    Assert.Contains("'ab' cannot be", outcome.StandardError)
+    Assert.DoesNotContain("NYX0301", outcome.StandardError)
+
+[<Fact>]
 let ``Run - importing an unknown standard library module is a diagnostic`` () =
     let outcome = runSource "import nanyx/sockets\n\ndbg(1)\n"
     Assert.Equal(1, outcome.ExitCode)
