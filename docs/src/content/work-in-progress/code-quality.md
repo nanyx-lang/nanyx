@@ -80,6 +80,12 @@ What is left in `Infer.fs` is a few small helpers and the recursive chain, from 
 the chain is `inferExprKind`, a single match of about 1,000 lines; its long arms can become `and` functions of their
 own.
 
+**2026-11-12.** `Program.fs` (parser) had grown back to the limit, at 1,498 lines:
+
+| File | Lines | What changed |
+|---|---|---|
+| `Program.fs` (parser) | 1,420 | `SourceTrivia.fs` (the parse error, the comments and blank lines the formatter puts back) moved out |
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review
