@@ -56,10 +56,7 @@ let commentsOf (parsed: SourceModule) =
         |> List.partition (snd >> onImportLine)
     List.map fst kept, List.sort (List.map fst moved)
 
-/// Formats `text`, the source of the file at `path`, keeping its line endings: CRLF if its first line break is one,
-/// otherwise LF. The result is parsed again and compared with the original, and only returned if it says the same
-/// thing with the same comments.
-let formatText (options: Formatter.Options) (path: string) (text: string) : Formatting =
+let private formatTextOnThisThread (options: Formatter.Options) (path: string) (text: string) : Formatting =
     match parseModuleWithTrivia path text with
     | Result.Error error -> NotParsed error
     | Result.Ok parsed ->
@@ -71,6 +68,13 @@ let formatText (options: Formatter.Options) (path: string) (text: string) : Form
         | Result.Ok _ ->
             let firstBreak = text.IndexOf '\n'
             if firstBreak > 0 && text[firstBreak - 1] = '\r' then Formatted(formatted.Replace("\n", "\r\n")) else Formatted formatted
+
+/// Formats `text`, the source of the file at `path`, keeping its line endings: CRLF if its first line break is one,
+/// otherwise LF. The result is parsed again and compared with the original, and only returned if it says the same
+/// thing with the same comments. It runs on a large stack: formatting and the comparison recurse once per level of the
+/// code, and a long operator chain is thousands of levels deep.
+let formatText (options: Formatter.Options) (path: string) (text: string) : Formatting =
+    Nanyx.LargeStack.run (fun () -> formatTextOnThisThread options path text)
 
 /// Directories never searched for files: build output, packages and hidden directories.
 let private isSkipped (directory: string) =
