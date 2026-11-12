@@ -18,7 +18,7 @@ Once a value is bound, it cannot be reassigned:
 
 ```nanyx
 def x = 10
-x = 20  -- ✗ Compile error: cannot reassign a value
+x = 20  -- ✗ error NYX0001: cannot reassign a value
 ```
 
 > **Mutation:** In Nanyx mutation is considered an advanced topic and makes use of a context called `$Memory`. Inside a `memory { ... }` block, `def total = mut 0` makes a cell, and `total := total + 1` changes what it holds; a `def` without `mut` still cannot be reassigned. See [Memory](../advanced/memory) for more on how mutation works and how to use it safely.
@@ -56,6 +56,7 @@ The defs in a block are only in scope inside it.
 To start a block of your own in the middle of another, write `do` and put the block's statements on the lines after it, indented. The defs in it are gone once the block ends, so a `do` block keeps names that are only needed for a moment out of the code after it. A def in it can also reuse a name from outside, without changing what that name means after the block:
 
 ```nanyx
+@entry
 def main = {
   def total = 10
 

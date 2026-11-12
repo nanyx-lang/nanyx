@@ -77,6 +77,31 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
 A construct the backend cannot lower yet is reported as an `UnsupportedByBackend` error where it is written (see
 [Memory management](./memory-management#core-ir)).
 
+## Tour examples
+
+Every ` ```nanyx ` block in the [language tour](../tour/variables) is a test case: `RunTourExampleTests.fs` in
+`Nanyx.Compiler.Wasm.Tests` reads the tour's pages, and compiles and runs each block in the test process, as
+`nanyx run` would run it as a script. The words after `nanyx` on a block's opening fence say what kind of example it
+is:
+
+| Fence | What the test does |
+|-------|--------------------|
+| ` ```nanyx ` | The block is a whole program. It must compile with no errors, and run with exit code 0 and nothing on standard error. |
+| ` ```nanyx fragment ` | The block is part of a program: it uses names defined elsewhere, stands for code with `...`, or is one file of several. It is not compiled. |
+| ` ```nanyx skip=#123 ` | The block is a program the compiler gets wrong, until issue #123 is fixed. It is not compiled. When the issue is fixed, remove the tag. |
+
+A whole program is checked further by what its comments say:
+
+- **Errors.** A block with a comment that names an error, such as `-- error NYX0201: ...` or `-- Error NYX0227: ...`,
+  shows that error. It is compiled and not run, and the errors it reports must have exactly the codes its comments
+  name.
+- **Output.** A block that prints something and ends with comment lines prints those lines, without their `--`.
+  Comments that give a value, such as `def result = add5(10)  -- 15`, are not checked.
+
+The tour's examples print and use strings without importing `nanyx/console` or `nanyx/text`, as though they had
+the imports the [Hello world](../getting-started/hello-world) page shows, so the test adds those two imports to
+every block that doesn't have them. Anything else a block uses, such as `nanyx/math`, it imports itself.
+
 # Goals
 
 - Every example in the language tour compiles and runs, and a test keeps it that way.
@@ -87,7 +112,9 @@ A construct the backend cannot lower yet is reported as an `UnsupportedByBackend
 
 _To do._ Candidate items, not yet filed:
 
-1. **Docs coverage.** Run every tour example through `nanyx run` in a test, and file what fails.
+1. **Docs coverage.** Run every tour example through `nanyx run` in a test, and file what fails. **Done**: see
+   [Tour examples](#tour-examples). The blocks marked `skip=` wait on the issues they name. The other docs
+   sections, such as the standard library pages, are not covered yet.
 2. **Parser error recovery.** Keep parsing after a syntax error so later errors (and later analysis) are not
    lost. Shared with the language server.
 3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts.
@@ -103,5 +130,4 @@ _To do._ Candidate items, not yet filed:
 
 # Open questions
 
-- Should the tour examples become compiler fixtures directly, or be extracted from the docs at test time?
 - How far should parser recovery go before the AST needs explicit error nodes?

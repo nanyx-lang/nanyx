@@ -42,7 +42,7 @@ for names, ages | name, age -> println("{name} is {age}")
 
 The loop stops as soon as the shortest collection runs out, so nothing is left over and nothing is read past the end. Arms match the elements together, as a `match` on several values does:
 
-```nanyx
+```nanyx fragment
 for names, ages | "Sam", _   -> println("Found Sam")
                 | name, age -> println("{name}, {age}")
 ```
@@ -76,7 +76,7 @@ for dict | key, value -> print("{key} => {value}")
 
 Use `_` to ignore unused variables:
 
-```nanyx
+```nanyx fragment
 for dict | _, value ->
   print("Only care about {value}")
 ```
@@ -85,7 +85,7 @@ for dict | _, value ->
 
 `for` iterates over a collection that already exists. When the number of iterations depends on state that changes as the loop runs, use `while`, which repeats its body for as long as the condition is `true`:
 
-```nanyx
+```nanyx skip=#957
 memory {
   def remaining = mut 3
 

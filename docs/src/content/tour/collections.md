@@ -10,7 +10,7 @@ Collections are typically immutable in Nanyx, although [it is possible to use an
 
 Immutable collections are persistent data structures, while mutable collections are optimized for in-place updates.
 
-```nanyx
+```nanyx skip=#870
 -- Immutable list
 
 def numbers = [1, 2, 3]
@@ -64,7 +64,7 @@ Associated types for constrained collection capabilities are a work in progress;
 
 Nanyx is to support a generalisable literal syntax for all collection types; the square bracket form will be available to any target type that implements the correct builder context:
 
-```nanyx
+```nanyx fragment
 context ListBuilder(a) = (
   yield: a -> ()
 )
@@ -85,7 +85,7 @@ def MyList.apply: ([ListBuilder(a)] () -> ()) -> MyList(a) = { f ->
 def myList: MyList(int) = [1, 2, 3]
 ```
 
-```nanyx
+```nanyx fragment
 context MapBuilder(k, v) = (
   `=>`: (k, v) -> ()
 )
@@ -108,7 +108,7 @@ def myMap: MyMap(string, int) = ["a" => 1, "b" => 2]
 
 This works because the square bracket syntax desugars to a call to the `apply` function on the target type, which provides the builder context that defines how the literal should be constructed:
 
-```nanyx
+```nanyx fragment
 def myList: MyList(int) = [1, 2, 3]
 -- Desugars to:
 def myList: MyList(int) = MyList.apply {

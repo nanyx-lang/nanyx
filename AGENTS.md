@@ -51,6 +51,10 @@ label.
 - **Keep the VS Code extension page up to date.** A change to the extension in `extension/` (a setting, a
   command, a feature, how it finds `nanyx`) updates
   [VS Code extension](docs/src/content/standard-tools/vs-code-extension.md) in the same PR.
+- **The tour's examples are tests.** Every ` ```nanyx ` block in `docs/src/content/tour` is compiled and run by
+  `RunTourExampleTests.fs`. Mark a block that isn't a whole program ` ```nanyx fragment `, and one the compiler
+  gets wrong ` ```nanyx skip=#<issue> `; the rules are in
+  [Compilation](docs/src/content/work-in-progress/compilation.md#tour-examples).
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 

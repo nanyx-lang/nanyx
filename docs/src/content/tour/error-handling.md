@@ -16,7 +16,7 @@ def half: int -> int = { n -> if n % 2 == 0 then n / 2 else panic("{n} is odd") 
 
 In Nanyx, functions that can fail return a result type using tag unions:
 
-```nanyx
+```nanyx fragment
 -- A function that might fail
 def getCustomer: CustomerId -> #some(Customer) | #error(#notFound | #databaseError)
   = { id -> ... }
@@ -24,7 +24,7 @@ def getCustomer: CustomerId -> #some(Customer) | #error(#notFound | #databaseErr
 
 Handle the result with pattern matching:
 
-```nanyx
+```nanyx fragment
 match getCustomer(someId)
   | #some(customer) -> println("Found: {customer.name}")
   | #error(#notFound) -> println("Customer not found")
@@ -35,7 +35,7 @@ match getCustomer(someId)
 
 `proc` is the standard library's result [workflow](../advanced/workflows). Inside a `proc` block, `try` short-circuits on errors and `return` wraps the final value in `#some`:
 
-```nanyx
+```nanyx fragment
 def result = proc {
   def customer = try getCustomer("someid")
   def latestOrder = try getLatestOrder(customer)
@@ -48,7 +48,7 @@ If any step returns an error, the function immediately returns that error.
 
 A `proc` block that is only run for what it does doesn't need a `return`. A block that ends without one is `#some()`, the `proc` workflow's `zero`:
 
-```nanyx
+```nanyx fragment
 def greet: [Console] string -> #some() | #invalidName = { name -> proc {
   def person = try Person.new(name)
   println("Hello, {person.name}!")
@@ -61,7 +61,7 @@ Every way out of a block must agree, so a block that returns a value on one path
 
 For values that might not exist, use the `#some` / `#none` pattern:
 
-```nanyx
+```nanyx fragment
 def findUser: int -> #some(User) | #none = { id ->
   match id
     | 1 -> #some(User(name = "Alice"))
@@ -83,7 +83,7 @@ def parseNumber = { s ->
 
 To handle several cases, write the arms on the lines after `except`, as a `match` has them. An arm may bind the parts of what it matches, and may list alternatives:
 
-```nanyx
+```nanyx fragment
 def load: string -> #some(Config) | #error(#notFound | #unreadable(string) | #denied) = ...
 
 def config = load(path) except
@@ -96,7 +96,7 @@ A pattern can reach inside a tag. Handling `#error(#notFound)` takes `#notFound`
 
 Because the narrowed type often has a single case left, `except` combines naturally with a destructuring binding, which requires its pattern to be total:
 
-```nanyx
+```nanyx fragment
 def g = {
   def f: () -> #some(int) | #error(#notFound) = ...
 
@@ -110,7 +110,7 @@ def g = {
 
 `except` binds more loosely than every operator and pipe, so it applies to the whole expression before it:
 
-```nanyx
+```nanyx fragment
 def #some(shift) = scores \indexOf(scores \max) except #notFound -> #some(0)
 ```
 

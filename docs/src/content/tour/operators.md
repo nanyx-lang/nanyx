@@ -10,7 +10,7 @@ Operators are ordinary functions with special names. They can be used infix, pre
 
 You define operators by naming a function with a valid operator name, encased in backticks:
 
-```nanyx
+```nanyx skip=#735
 def `+++`: string, string -> string = { a, b -> a + b }
 
 def r = "one" +++ "two"
@@ -18,7 +18,7 @@ def r = "one" +++ "two"
 
 Operators can take more than two arguments. Extra arguments are passed as a record, [in the same way as piping](../tour/piping#piping-with-extra-arguments):
 
-```nanyx
+```nanyx skip=#735
 def `<+>` = { a, b, c -> ... }
 
 def r = a <+> (b, c)
@@ -28,7 +28,7 @@ def r = a <+> (b, c)
 
 Since operators are just specially-named functions, you can also use them in a non-operator way:
 
-```nanyx
+```nanyx skip=#735
 def r1 = "one" +++ "two"
 def r2 = `+++`("one", "two")
 def f = `+++`
@@ -44,7 +44,7 @@ Also, lambda syntax supports an [operator-based shorthand](../tour/functions#sho
 
 Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` and `x - y` read through [`Add`](../advanced/contexts#adda), `x == y` through [`Eq`](../advanced/contexts#eqa), and `x < y` through [`Ord`](../advanced/contexts#orda). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
 
-```nanyx
+```nanyx fragment
 def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
 
 def c = a + b   -- resolves to Vector.`+` because `a` is a Vector
@@ -64,7 +64,7 @@ Comparison is read through the standard library's contexts instead: `==` and `!=
 
 Piping uses `\`, and composition uses `>>` and `<<`:
 
-```nanyx
+```nanyx skip=#735
 def normalize = trim >> toLowerCase
 
 def result = data
