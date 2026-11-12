@@ -75,6 +75,20 @@ The `Result` alias exists for the equally common success/error shape:
 type Result(a, e) = #some(a) | #error(e)
 ```
 
+# Discarding a value
+
+`ignore`, in the prelude, takes a value of any type, throws it away and gives back `()`:
+
+```nanyx
+ignore: a -> ()
+```
+
+It is for a result you don't need, without binding it to a name you never use, and reads well at the end of a pipeline:
+
+```nanyx
+items \list.map(process) \ignore
+```
+
 # Converting to text
 
 `int`, `float`, `bool` and `string` each have an attached `toString`. They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
