@@ -189,9 +189,10 @@ what the compiler keeps: exact spans, resolved names and types.
   `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the
   locals' types and the contexts are named together, so an `α` means the same in both. A context comes from a `use`
   before the position in a block around it, a def around it (its annotation, or what it was inferred to need), or, at
-  the top level, the runtime (`TypedModule.AmbientContexts`). Where each call finds its contexts is not recorded yet
-  ([#716](https://github.com/nanyx-lang/nanyx/issues/716)), so the view lists what is in scope, not what a call
-  uses. The extension shows it in a webview view in the secondary side bar (see
+  the top level, the runtime (`TypedModule.AmbientContexts`). The view lists what is in scope, not what a call uses:
+  what provides each context a call finds by its members' names is recorded (`TypedModule.ContextProviders`), but not
+  shown yet ([#989](https://github.com/nanyx-lang/nanyx/issues/989)), and which `use` or signature provides a
+  parameterised one is not recorded yet ([#716](https://github.com/nanyx-lang/nanyx/issues/716)). The extension shows it in a webview view in the secondary side bar (see
   [Info view and library browser](./info-view-and-library-browser)).
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers

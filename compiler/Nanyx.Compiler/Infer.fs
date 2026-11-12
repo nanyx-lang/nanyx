@@ -99,7 +99,8 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                     else Some (TyVar var, Unifier.apply closing solved))
         { Quantified = Set.difference (TypeEnv.freeTyVars closedTy) envVars
           Type = closedTy
-          Symbol = None },
+          Symbol = None
+          ProvidedBy = None },
         (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
         |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
 
@@ -232,9 +233,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
                 | Some contexts ->
                     let parameterized = contexts |> List.filter (isParameterizedContext state)
-                    ensureContextAvailable false env state name parameterized expr.Span
+                    ensureContextAvailable None false env state name parameterized expr.Span
                 | None -> Ok state
-                |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) expr.Span)
+                |> Result.bind (fun current -> checkContextUse None env current (canonicalName env state name) expr.Span)
             match contextCheck with
             | Error err -> Error err
             | Ok state ->
@@ -361,9 +362,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         let contextCheck =
             match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
             // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
-            | Some contexts -> ensureContextAvailable true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
+            | Some contexts -> ensureContextAvailable (Some expr.Id) true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
             | None -> Ok state
-            |> Result.bind (fun current -> checkContextUse env current (canonicalName env state name) calleeSpan)
+            |> Result.bind (fun current -> checkContextUse (Some expr.Id) env current (canonicalName env state name) calleeSpan)
         match contextCheck with
         | Error err -> Error err
         | Ok state ->
@@ -489,7 +490,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 | _ -> []
                             let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
                             let used = ofVariables @ ofValue |> List.distinct
-                            let requirePlain current ctx = ensureContextAvailable true env current name [ ctx ] calleeSpan
+                            let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current name [ ctx ] calleeSpan
                             ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.record used next)
                         // When the callee's type is already a function (an annotated or already-inferred
                         // def), its return type is the call's type directly, so a member access or match on
@@ -689,7 +690,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match inferExpr env state value with
         | Error err -> Error err
         | Ok (typedValue, nextState) ->
-            let envWithUse, nextState = useInstance (extendEnvWithRecordFields nextState env typedValue.Type) nextState value typedValue.Type
+            let envWithUse, nextState = useInstance (extendEnvWithRecordFields (FromUse value.Id) nextState env typedValue.Type) nextState value typedValue.Type
             match inferExpr envWithUse nextState body with
             | Ok (typedBody, finalState) ->
                 Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
@@ -1473,7 +1474,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then
                     match inferExpr env' current value with
                     | Ok (typedExpr, next) ->
-                        let withUse, next = useInstance (extendEnvWithRecordFields next env' typedExpr.Type) next value typedExpr.Type
+                        let withUse, next = useInstance (extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type) next value typedExpr.Type
                         current <- next
                         env' <- withUse
                         typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]

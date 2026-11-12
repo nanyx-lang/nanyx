@@ -492,7 +492,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
                     | None, None ->
-                        match ensureContextAvailable true env current name [ ctx ] calleeSpan, current.ContextScope with
+                        match ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
                         // In an unannotated def, a type the call leaves open may be settled by the rest of the body,
                         // or be one of the def's own variables, which the def then requires the context at.

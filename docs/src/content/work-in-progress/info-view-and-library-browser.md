@@ -33,6 +33,7 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Names in scope at the cursor | `Scopes`, read by `Completion.namesInScope` |
 | Contexts an unannotated def needs | `InferredContextTypes` |
 | Where a call finds a parameterised context | `ContextInstances`: in scope (from a `use` or the signature), built from attached definitions, or built in |
+| What provides each context a call finds by its members' names | `ContextProviders`: the signature, a `use`, inference, or the runtime |
 | What each `use` loads | `UseContexts` (parameterised contexts only); the type of the value it loads, in `ExprTypes` |
 | The contexts the runtime supplies at the top level | `AmbientContexts` |
 | The library's modules and their doc comments | `StandardLibrary.moduleNames`, `Documentation.ofModule` |
@@ -42,9 +43,9 @@ These features mostly read tables the server already has in `TypedModule` (see `
 
 Some things are not recorded yet:
 
-- **Unparameterised contexts.** `ContextInstances` has `None` for a context such as `Console`, whose instance is
-  found by its members' names. Nothing records which `use` (or which part of the signature, or the runtime)
-  provides a call's `Console`.
+- **Which `use` or signature provides a parameterised context.** `ContextInstances` says a call's `Show(Point)` is
+  in scope, as written there, but not whether a `use` or the signature put it there
+  ([#716](https://github.com/nanyx-lang/nanyx/issues/716)).
 - **Types of exports by symbol, for search.** These are in `ImportedTypes` only for what a module imports, not for
   the whole library.
 
@@ -76,7 +77,7 @@ The panel follows the cursor. It shows, from top to bottom:
   types of the locals.
 - **This call.** On a call to a function that requires contexts, each context it requires and where it finds that
   context: the provider from the list above, an instance built from attached definitions, or the compiler's own
-  (`InstanceBuiltIn`). Not shown yet: it needs [#716](https://github.com/nanyx-lang/nanyx/issues/716).
+  (`InstanceBuiltIn`). Not shown yet ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
 - **Messages.** The diagnostics at the cursor's line.
 
 Every span in the panel is a link: clicking a `use` or a signature jumps to it.
@@ -88,22 +89,35 @@ panel can switch to a flow view of the def that contains the cursor. It lists ea
 signature, and under each one, the calls it serves. A `use` that serves no call is shown as unused. The same data
 can decorate the editor: when the cursor is on a `use`, highlight the calls it serves, and the reverse.
 
-This needs the compiler to record, for each call, the provider of every context the callee requires, not just the
-parameterised ones. A provider would be a new union, recorded by the call's node (in place of, or next to,
-`ContextInstances`):
+This needs the compiler to record, for each call, the provider of every context the callee requires. For a context
+found by its members' names, such as `Console`, it does: `TypedModule.ContextProviders` holds, by the node of each
+call or pipe, each such context the call requires, as a type (`Console` is `TyApply("Console", [])`), with what
+provides it there:
 
 ```fsharp
 type ContextProvider =
     | FromSignature of SourceSpan        // the context as the def's annotation writes it
-    | FromUse of NodeId                  // the `use` that loads it
+    | FromUse of NodeId                  // the value the `use` loads, as `UseContexts` is keyed
     | FromInference                      // an unannotated def, which now requires it itself
     | FromRuntime                        // the top level of a module
-    | Synthesized of (string * string) list
-    | BuiltIn
 ```
 
-Inference already resolves each requirement at the call, so this records what it decides; it does not decide
-anything new.
+A call records the contexts its callee's type declares or was inferred to require, those a function value it runs
+requires (through a context variable, see `ContextVariables`), and, for a call of a context's member (`println`),
+that member's context. A context written out as a record has no name to record it by, and is left out.
+
+It records what inference decides; it does not decide anything new. A member that a `use` or a def's signature
+binds carries which of them binds it, in its `TypeScheme`'s `ProvidedBy` (`extendEnvWithRecordFields`,
+`extendEnvWithContexts`), so the provider is that of the members the check in `Contexts.ensureContextAvailable`
+finds. Where they are the ambient instance's, the provider is the runtime at the top level and inference in an
+unannotated def (`Contexts.ambientProvider`). A call of an unannotated top-level def keeps what provides each ambient
+context where it is (`DeferredContextUse.Providers`), and records the def's contexts once every def is inferred
+(`Contexts.recordDeferredProviders`).
+
+Parameterised contexts are still recorded only in `ContextInstances`, which says an instance in scope is
+`InstanceInScope` but not which `use` or signature put it there. Recording that, and an instance built from attached
+definitions, derived from a type's parts or the compiler's own, as providers too, is the rest of
+[#716](https://github.com/nanyx-lang/nanyx/issues/716).
 
 ## Protocol and client
 
@@ -236,7 +250,9 @@ In order. Each item is one PR:
    the expression, names in scope, contexts from the signature, a `use`, inference and the runtime, and messages; the
    webview panel with pinning.
 6. **Context providers** ([#716](https://github.com/nanyx-lang/nanyx/issues/716)). Record a `ContextProvider` for
-   every context at every call, unparameterised ones included, and show "this call" in the info view.
+   every context at every call. Done for the contexts found by their members' names (`ContextProviders`); the
+   parameterised ones are still to do. Then show "this call" in the info view
+   ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
 7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). The flow view of a function, and
    the editor highlights between a `use` and its calls.
 
