@@ -54,15 +54,18 @@ let private compareBody (ty: IrType) : string list * string list =
         [], sign (both $"{valueType}.gt_{signed}") (both $"{valueType}.lt_{signed}")
     | IrBool
     | IrUnit -> [], sign (both "i32.gt_s") (both "i32.lt_s")
-    | IrFloat ->
-        let isNaN var = [ $"local.get ${var}"; $"local.get ${var}"; "f64.ne" ]
+    | IrFloat
+    | IrF32 ->
+        // An `F32` is ordered as a float is, as an `f32`.
+        let width = if ty = IrF32 then "f32" else "f64"
+        let isNaN var = [ $"local.get ${var}"; $"local.get ${var}"; $"{width}.ne" ]
         let floats instruction = [ "local.get $x"; "local.get $y"; instruction ]
-        [ "(local $x f64)"; "(local $y f64)" ],
+        [ $"(local $x {width})"; $"(local $y {width})" ],
         [ "local.get $a"
-          "f64.load"
+          $"{width}.load"
           "local.set $x"
           "local.get $b"
-          "f64.load"
+          $"{width}.load"
           "local.set $y"
           // NaN comes after every other float, and is equal to itself.
           yield! isNaN "x"
@@ -80,7 +83,7 @@ let private compareBody (ty: IrType) : string list * string list =
           "  i32.const -1"
           "  return"
           "end"
-          yield! sign (floats "f64.gt") (floats "f64.lt") ]
+          yield! sign (floats $"{width}.gt") (floats $"{width}.lt") ]
     | IrString ->
         // Byte by byte, unsigned, which is the order of the code points UTF-8 encodes; a prefix comes first.
         let length var = [ $"local.get ${var}"; $"call ${Helpers.stringLength}"; $"local.set $len{var}" ]

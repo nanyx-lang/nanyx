@@ -24,6 +24,9 @@ module Helpers =
     let valueHash = NyxCompiler.Intrinsics.hash
     let floatBox = "__nanyx_float_box"
     let floatToString = "__nanyx_float_to_string"
+    /// An `F32` is boxed as a float is, in a block of 4 bytes, and written as text by a helper of its own.
+    let f32Box = "__nanyx_f32_box"
+    let f32ToString = "__nanyx_f32_to_string"
     /// `%` on floats, which WebAssembly has no instruction for.
     let floatRem = "__nanyx_float_rem"
     let writeStdout = NyxCompiler.Intrinsics.writeStdout
@@ -958,10 +961,24 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  f64.store"
             "  local.get $box"
             ")" ]
-      // Formats a boxed float as the shortest decimal that reads back as the same float (see `FloatText`).
+      Helpers.f32Box,
+      lines
+          [ $"(func ${Helpers.f32Box} (param $value f32) (result i32)"
+            "  (local $box i32)"
+            "  i32.const 4"
+            $"  call ${Helpers.newCell}"
+            "  local.set $box"
+            "  local.get $box"
+            "  local.get $value"
+            "  f32.store"
+            "  local.get $box"
+            ")" ]
+      // Formats a boxed float, or a boxed `F32`, as the shortest decimal that reads back as the same value (see
+      // `FloatText`).
       yield!
           FloatText.helpers
               Helpers.floatToString
+              Helpers.f32ToString
               { NewObject = Helpers.newObject
                 Alloc = Helpers.alloc
                 Free = Helpers.free
@@ -1189,6 +1206,19 @@ let dbgDataBaseOffset = 128
 
 let dbgStrNewlineOffset = dbgDataBaseOffset + 96  // the newline byte, at 224
 
+/// What the helpers that write a float or an `F32` as text call.
+let private floatTextDependencies =
+    [ Helpers.newObject
+      Helpers.alloc
+      Helpers.free
+      Helpers.copyBytes
+      FloatText.bigSet
+      FloatText.bigMulSmall
+      FloatText.bigMulPow10
+      FloatText.bigAdd
+      FloatText.bigSub
+      FloatText.bigCompare ]
+
 // The runtime helpers the lowered code asked for, closed over what they call themselves.
 let helperDependencies =
     [ Helpers.alloc, []
@@ -1218,17 +1248,9 @@ let helperDependencies =
       Helpers.forValueType Helpers.tagBox "i64", [ Helpers.newCell ]
       Helpers.tagCode, []
       Helpers.floatBox, [ Helpers.newCell ]
-      Helpers.floatToString,
-      [ Helpers.newObject
-        Helpers.alloc
-        Helpers.free
-        Helpers.copyBytes
-        FloatText.bigSet
-        FloatText.bigMulSmall
-        FloatText.bigMulPow10
-        FloatText.bigAdd
-        FloatText.bigSub
-        FloatText.bigCompare ]
+      Helpers.floatToString, floatTextDependencies
+      Helpers.f32Box, [ Helpers.newCell ]
+      Helpers.f32ToString, floatTextDependencies
       FloatText.bigSet, []
       FloatText.bigMulSmall, []
       FloatText.bigMulPow10, [ FloatText.bigMulSmall ]

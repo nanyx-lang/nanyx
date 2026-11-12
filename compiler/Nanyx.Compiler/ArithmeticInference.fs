@@ -23,13 +23,13 @@ module internal ArithmeticInference =
         | TopLevelDef of Identifier
 
     /// `state` with the operands of `pending`, now of the type `ty`, numbers: `int`, unless they are already `float` or
-    /// a sized integer. The operands of `++` are left as they are: what they are joined as is up to whatever else
+    /// a sized number. The operands of `++` are left as they are: what they are joined as is up to whatever else
     /// settles their type.
     let private asNumbers (pending: PendingArithmetic) (ty: Ty) (state: InferState) : InferState =
         match Unifier.unalias ty with
         | _ when pending.MemberName = AppendOperator.operator -> state
         | TyPrimitive("int" | "float")
-        | SizedIntegerType _ -> state
+        | SizedNumberType _ -> state
         | _ -> addConstraintAt pending.At pending.OperandTy (TyPrimitive "int") state
 
     /// Whether the module writes the top-level def `name` as a value of its own, as `add` is in `fold(0, add)`: a

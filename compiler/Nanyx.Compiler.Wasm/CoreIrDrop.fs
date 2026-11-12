@@ -18,6 +18,7 @@ let rec isHeapType (ty: IrType) =
     | IrSelf -> internalError "a recursive type's own type outside it"
     | IrString
     | IrFloat
+    | IrF32
     | IrList _
     | IrRecord _
     | IrFunction _ -> true
@@ -188,7 +189,8 @@ let private releaseThen (ty: IrType) (fields: string list) =
 let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     match IrType.unfold ty with
     | IrString
-    | IrFloat -> releaseThen ty []
+    | IrFloat
+    | IrF32 -> releaseThen ty []
     | IrRecord fields ->
         fields
         |> List.mapi (fun slot (_, fieldTy) -> dropField fieldTy [ "local.get $p"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ])

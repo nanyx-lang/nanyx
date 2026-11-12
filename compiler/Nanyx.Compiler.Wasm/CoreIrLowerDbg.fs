@@ -202,6 +202,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | SizedIntegerType integer -> text [ Hole(value, HoleSized integer) ]
             | TyPrimitive "bool" -> text [ Hole(value, HoleBool) ]
             | TyPrimitive "float" -> mk (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
+            | TyPrimitive "F32" -> mk (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString
             | TyPrimitive "string" -> mk (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString
             | TyTag _
             | TyUnion _ as union ->

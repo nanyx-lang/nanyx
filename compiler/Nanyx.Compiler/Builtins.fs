@@ -56,7 +56,7 @@ module Intrinsics =
     /// An int as a float: the nearest one, which is exact up to 2^53. It never fails.
     let intToFloat = prefix + "int_to_float"
     /// An int as a value of the sized integer type it is taken as (see `SizedInteger`), which stops the program when it
-    /// does not fit that type.
+    /// does not fit that type, or as the nearest `F32`.
     let fromInt = prefix + "from_int"
     /// Two values of a type the compiler orders (see `WellKnownContexts.ordering`) put in order by their structure:
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a

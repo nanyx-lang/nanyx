@@ -179,6 +179,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "unit" -> IrUnit
     | TyPrimitive "string" -> IrString
     | TyPrimitive "float" -> IrFloat
+    | TyPrimitive "F32" -> IrF32
     | TyPrimitive "?error" -> IrError
     | TyTag _
     | TyUnion _ as tags ->

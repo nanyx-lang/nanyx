@@ -1,7 +1,8 @@
 /// How the WebAssembly runtime writes a float as text (`__nanyx_float_to_string`), and the arithmetic on big
 /// unsigned integers it needs to do that exactly.
 ///
-/// A finite float is written as the shortest decimal that reads back as the same `f64`, found by Burger and
+/// A finite float is written as the shortest decimal that reads back as the same `f64` (and an `F32` as the same
+/// `f32`, `__nanyx_f32_to_string`), found by Burger and
 /// Dybvig's free-format algorithm ("Printing Floating-Point Numbers Quickly and Accurately", 1996) on exact
 /// integers. Those integers are as large as 2^1080, so they are kept as fixed-size big integers in a scratch block
 /// the helper allocates and frees again.
@@ -296,17 +297,51 @@ let private storeDigit =
       "i32.add"
       "local.set $n" ]
 
-// Sets r, s, m+ and m- for the positive finite float `$bits`, so that the float is r / s and the floats either side
-// of it are (r - m-) / s and (r + m+) / s, all times 2, and sets `$even` and `$k`, an estimate of where the decimal
-// point goes that is never too high.
-let private setUp =
+/// How a floating-point format lays a value out in its bits, which the helper that writes it as text reads them by.
+type private Format =
+    { /// The instruction that loads a value's bits from its box, as an `i64`.
+      Load: string
+      /// The code that leaves 1 when the value in `$bits` is negative.
+      Negative: string list
+      /// The bits of every magnitude: all but the sign.
+      Magnitude: string
+      /// The bits of an infinity. A magnitude above them is NaN.
+      Infinity: string
+      /// How many bits the mantissa has, below the exponent.
+      MantissaBits: int
+      /// What is taken from the biased exponent to give the power of two that the mantissa, read as an integer, is
+      /// multiplied by: the bias and the mantissa's bits.
+      ExponentOffset: int }
+
+/// A float, an `f64`.
+let private f64 =
+    { Load = "i64.load"
+      Negative = [ "local.get $bits"; "i64.const 0"; "i64.lt_s" ]
+      Magnitude = "0x7fffffffffffffff"
+      Infinity = "0x7ff0000000000000"
+      MantissaBits = 52
+      ExponentOffset = 1075 }
+
+/// An `F32`, an `f32`, whose bits are loaded into the low half of `$bits`.
+let private f32 =
+    { Load = "i64.load32_u"
+      Negative = [ "local.get $bits"; "i64.const 0x80000000"; "i64.and"; "i64.eqz"; "i32.eqz" ]
+      Magnitude = "0x7fffffff"
+      Infinity = "0x7f800000"
+      MantissaBits = 23
+      ExponentOffset = 150 }
+
+// Sets r, s, m+ and m- for the positive finite value `$bits` of `format`, so that it is r / s and the values either
+// side of it are (r - m-) / s and (r + m+) / s, all times 2, and sets `$even` and `$k`, an estimate of where the
+// decimal point goes that is never too high.
+let private setUp (format: Format) =
     [ "local.get $bits"
-      "i64.const 52"
+      $"i64.const {format.MantissaBits}"
       "i64.shr_u"
       "i32.wrap_i64"
       "local.set $biased"
       "local.get $bits"
-      "i64.const 0xfffffffffffff"
+      $"i64.const 0x{(1L <<< format.MantissaBits) - 1L:x}"
       "i64.and"
       "local.set $f"
       ";; $u is 1 for a power of two above the smallest normal, whose gap to the float below is half the one above"
@@ -320,15 +355,15 @@ let private setUp =
       "local.get $biased"
       "if"
       "  local.get $f"
-      "  i64.const 0x10000000000000"
+      $"  i64.const 0x{1L <<< format.MantissaBits:x}"
       "  i64.or"
       "  local.set $f"
       "  local.get $biased"
-      "  i32.const 1075"
+      $"  i32.const {format.ExponentOffset}"
       "  i32.sub"
       "  local.set $e"
       "else"
-      "  i32.const -1074"
+      $"  i32.const {1 - format.ExponentOffset}"
       "  local.set $e"
       "end"
       ";; the float is $f * 2^$e; a reader rounds a tie to the even mantissa, so its ends are in range when it is even"
@@ -614,7 +649,7 @@ let private layOut (calls: Calls) =
 // Formats a boxed float as the shortest decimal that reads back as the same float, always with a point: 6.28, 4.0,
 // -1.5, 0.30000000000000004, 1.0e-7, 1.0e21. NaN, the infinities and the zeros are NaN, Infinity, -Infinity, 0.0
 // and -0.0.
-let private floatToStringHelper (floatToString: string) (calls: Calls) =
+let private floatToStringHelper (format: Format) (floatToString: string) (calls: Calls) =
     [ $"(func ${floatToString} (param $box i32) (result i32)"
       yield!
           [ "bits i64"; "f i64"; "biased i32"; "e i32"; "es i32"; "u i32"; "even i32"; "k i32"; "scratch i32"
@@ -622,7 +657,7 @@ let private floatToStringHelper (floatToString: string) (calls: Calls) =
             "exp i32"; "base i32"; "cursor i32" ]
           |> List.map (fun local -> $"  (local ${local})")
       "  local.get $box"
-      "  i64.load"
+      $"  {format.Load}"
       "  local.set $bits"
       "  ;; a string of a sign and up to 24 characters with a terminator; $base is its length"
       "  i32.const 32"
@@ -638,26 +673,24 @@ let private floatToStringHelper (floatToString: string) (calls: Calls) =
       "  block $written"
       "    ;; NaN, whatever its sign"
       "    local.get $bits"
-      "    i64.const 0x7fffffffffffffff"
+      $"    i64.const {format.Magnitude}"
       "    i64.and"
-      "    i64.const 0x7ff0000000000000"
+      $"    i64.const {format.Infinity}"
       "    i64.gt_u"
       "    if"
       yield! indent "      " (putWord "i32.store" "i32.const 0x4e614e" 3)
       "      br $written"
       "    end"
-      "    local.get $bits"
-      "    i64.const 0"
-      "    i64.lt_s"
+      yield! indent "    " format.Negative
       "    if"
       yield! indent "      " (putChar '-')
       "      local.get $bits"
-      "      i64.const 0x7fffffffffffffff"
+      $"      i64.const {format.Magnitude}"
       "      i64.and"
       "      local.set $bits"
       "    end"
       "    local.get $bits"
-      "    i64.const 0x7ff0000000000000"
+      $"    i64.const {format.Infinity}"
       "    i64.eq"
       "    if"
       yield! indent "      " (putWord "i64.store" "i64.const 0x7974696e69666e49" 8)
@@ -681,7 +714,7 @@ let private floatToStringHelper (floatToString: string) (calls: Calls) =
       $"    i32.const {digitsOffset}"
       "    i32.add"
       "    local.set $digits"
-      yield! indent "    " setUp
+      yield! indent "    " (setUp format)
       yield! indent "    " (scale calls)
       yield! indent "    " (generateDigits calls)
       yield! indent "    " (layOut calls)
@@ -703,9 +736,11 @@ let private floatToStringHelper (floatToString: string) (calls: Calls) =
       "  i32.add"
       ")" ]
 
-/// The float-to-text helper, named `floatToString`, and the big-integer helpers it calls, each as its lines.
-let helpers (floatToString: string) (calls: Calls) =
-    [ floatToString, floatToStringHelper floatToString calls
+/// The float-to-text helper, named `floatToString`, the `F32`-to-text one, named `f32ToString`, and the big-integer
+/// helpers they call, each as its lines.
+let helpers (floatToString: string) (f32ToString: string) (calls: Calls) =
+    [ floatToString, floatToStringHelper f64 floatToString calls
+      f32ToString, floatToStringHelper f32 f32ToString calls
       bigSet, setHelper
       bigMulSmall, mulSmallHelper
       bigMulPow10, mulPow10Helper

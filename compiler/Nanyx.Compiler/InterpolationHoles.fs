@@ -10,10 +10,10 @@ open NyxCompiler.InferState
 /// that does not write its type and interpolates one of its own type variables requires `ToString` of it.
 ///
 /// The built-in types have the compiler's own instance (`InstanceBuiltIn`), which the backend writes itself: int,
-/// the sized integers, float, bool, string, and tags without a payload. The prelude's `int.toString` and the others are written with a
-/// hole, which is how they avoid calling themselves. A function that requires `ToString` of a tag is passed the
-/// prelude's `__toString` (`builtInFunction`), which writes it the same way. A tag with a payload, a tuple, a record
-/// and a list have one the compiler derives from their parts (see `StructuralInstances`).
+/// the sized numbers, float, bool, string, and tags without a payload. The prelude's `int.toString` and the others
+/// are written with a hole, which is how they avoid calling themselves. A function that requires `ToString` of a tag
+/// is passed the prelude's `__toString` (`builtInFunction`), which writes it the same way. A tag with a payload, a
+/// tuple, a record and a list have one the compiler derives from their parts (see `StructuralInstances`).
 module InterpolationHoles =
     /// The context a hole requires of its value's type.
     let context = "ToString"
@@ -41,7 +41,7 @@ module InterpolationHoles =
             | _ -> false
         match Unifier.unalias ty with
         | TyPrimitive("int" | "float" | "bool" | "string" | "?error") -> true
-        | SizedIntegerType _ -> true
+        | SizedNumberType _ -> true
         | TyTag(_, None) -> true
         | TyUnion items -> items |> List.forall isPlainTag
         | _ -> false
