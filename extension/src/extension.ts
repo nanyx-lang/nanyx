@@ -12,11 +12,13 @@ import {
   versionToDownload
 } from "./compiler";
 import { copyBuild, removeOldCopies, watchBuild } from "./developmentMode";
+import { InfoView } from "./infoView";
 import { runFile } from "./run";
 
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
 const COMMAND_RUN = "nanyx.runFile";
+const COMMAND_INFO_VIEW = "nanyx.showInfoView";
 
 /** When the extension last asked GitHub for a newer compiler release (milliseconds since the epoch). */
 const LAST_UPDATE_CHECK = "nanyx.lastUpdateCheck";
@@ -28,14 +30,19 @@ let compiler: string | undefined;
 /** In development mode, watches the `nanyx.path` build for changes. */
 let buildWatcher: vscode.Disposable | undefined;
 let outputChannel: vscode.OutputChannel;
+let infoView: InfoView | undefined;
 let declinedDownload = false;
 let declinedUpdate = false;
 
 export async function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel("Nanyx");
   context.subscriptions.push(outputChannel);
+  const view = new InfoView(() => client);
+  infoView = view;
 
   context.subscriptions.push(
+    view,
+    vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()),
     vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
       declinedDownload = false;
       const settings = readSettings();
@@ -306,6 +313,7 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
 
   try {
     await client.start();
+    infoView?.refresh();
   } catch (error) {
     void vscode.window.showErrorMessage(`Nanyx: the language server failed to start (${messageOf(error)}). See the Nanyx output channel.`);
     client = undefined;

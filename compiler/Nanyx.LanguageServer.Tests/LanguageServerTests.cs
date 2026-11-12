@@ -23,7 +23,7 @@ namespace Nanyx.LanguageServer.Tests;
 /// Drives the server in-process through a real LSP client over a pair of pipes, so what is tested is the
 /// same wire protocol an editor speaks.
 /// </summary>
-public sealed class LanguageServerTests : IAsyncLifetime
+public sealed partial class LanguageServerTests : IAsyncLifetime
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 

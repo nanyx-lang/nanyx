@@ -8,7 +8,8 @@ open Parser.Program
 /// span of the syntax it describes.
 type HoverInfo = { Type: string; Span: SourceSpan }
 
-let private contains (offset: int) (span: SourceSpan) =
+/// Whether `span`, a real one, covers the character at `offset`.
+let internal contains (offset: int) (span: SourceSpan) =
     not (SourceSpan.isNone span) && span.Start <= offset && offset < span.End
 
 /// The expressions directly inside `expr`, including those in its statements, match arms and patterns.

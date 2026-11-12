@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -59,6 +59,18 @@
         "title": "Nanyx: Run the current file",
         "icon": "$(play)",
         "enablement": "editorLangId == nanyx || resourceLangId == nanyx"
+      },
+      {
+        "command": "nanyx.showInfoView",
+        "title": "Nanyx: Show info view"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "nanyx.showInfoView",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "editorTextFocus && editorLangId == nanyx"
       }
     ],
     "menus": {
