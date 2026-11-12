@@ -80,6 +80,8 @@ public sealed partial class LanguageServerTests
         Assert.Equal(("Console", "inferred", new Range(2, 4, 2, 9)), (inDef.Text, inDef.Detail, inDef.Location?.Range));
         var atTopLevel = Assert.Single(Section(await InfoViewAt(uri, 3, 2), "contexts").Items);
         Assert.Equal(("Console", "runtime", null), (atTopLevel.Text, atTopLevel.Detail, atTopLevel.Location));
+        // A standard-library context shows its doc comment.
+        Assert.StartsWith("The terminal: standard output", atTopLevel.Documentation);
     }
 
     [Fact]
@@ -260,6 +262,94 @@ public sealed partial class LanguageServerTests
                 ("a = int", "type variables")
             ],
             Section(await InfoViewAt(uri, 1, 17), "expression").Items.Select(item => (item.Text, item.Detail)));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_doc_comments_of_the_names_and_contexts_in_the_module()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "info-view-docs.nyx"));
+
+        Open(uri, """
+            --| Writes lines somewhere.
+            context Logger = (log: string -> ())
+            --| Tells the time.
+            context Clock = (now: () -> int)
+            --| A logger that writes nothing.
+
+              It drops every line.
+            def quiet: Logger = (log = { s -> () })
+            --| Stamps `message`, as [`quiet`] logs it.
+            def stamp: [Clock] string -> () = { message ->
+              --| The message, shouted.
+              def loud = message
+              use quiet
+              log(loud)
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 13, 7);
+
+        Assert.Equal("The message, shouted.", Assert.Single(Section(view, "expression").Items).Documentation);
+        Assert.Equal(
+            [("loud: string", "The message, shouted."), ("message: string", null)],
+            Section(view, "inScope").Items.Select(item => (item.Text, item.Documentation)));
+        var stamp = Section(view, "topLevel").Items.Single(item => item.Text.StartsWith("stamp"));
+        Assert.Equal($"Stamps `message`, as [`quiet`]({uri}#L8,5) logs it.", stamp.Documentation);
+        // A use shows the doc comment of the def it names, and a signature's context the context's own.
+        Assert.Equal(
+            [("Logger", "A logger that writes nothing.\n\nIt drops every line."), ("Clock", "Tells the time.")],
+            Section(view, "contexts").Items.Select(item => (item.Text, item.Documentation)));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_doc_comment_of_a_def_from_an_imported_module()
+    {
+        var directory = Directory.CreateTempSubdirectory("nanyx-info-view-");
+        try
+        {
+            File.WriteAllText(Path.Combine(directory.FullName, "mod.nyx"), """
+                module mod
+                --| Wraps `x` in a `#some`.
+                export def wrap: a -> #some(a) | #nothing = { x -> #some(x) }
+
+                """.ReplaceLineEndings("\n"));
+            var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory.FullName, "main.nyx"));
+
+            Open(uri, """
+                module main
+                import mod as m
+                def w = m.wrap("hi")
+
+                """.ReplaceLineEndings("\n"));
+            Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+            var items = Section(await InfoViewAt(uri, 2, 11), "expression").Items;
+            Assert.Equal(
+                [("declared", "Wraps `x` in a `#some`."), ("at this use", null), ("type variables", null)],
+                items.Select(item => (item.Detail, item.Documentation)));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_doc_comment_of_a_standard_library_def()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-10");
+
+        Open(uri, """
+            import nanyx/math as m
+            def biggest = m.max(1, 2)
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var declared = Section(await InfoViewAt(uri, 1, 17), "expression").Items[0];
+        Assert.Equal("The larger of `a` and `b`.", declared.Documentation);
     }
 
     private async Task<InfoViewResult> InfoViewAt(DocumentUri uri, int line, int character)

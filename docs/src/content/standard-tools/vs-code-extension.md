@@ -92,12 +92,16 @@ It shows:
   at this use, then what this use fills in each type variable with, such as `a = string, b = #some(int) | #nothing`.
   Each links to the function's definition. A function that is not generic is shown once.
 - **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
-- **Top level**: the top-level definitions and imports in scope, the file's own first, each import with the doc comment
-  of the module it brings in. It starts closed.
+- **Top level**: the top-level definitions and imports in scope, the file's own first. It starts closed.
 - **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the
   definition around it, a definition that does not write its type and was inferred to need it, or, at the top level of
   the file, the runtime (`Console`, once `nanyx/console` is imported).
 - **Messages**: the errors and warnings on the cursor's line.
+
+Under each item that has one comes its [doc comment](../getting-started/basics#doc-comments), as hover shows it: a name's own, an
+import's module's, a context's own, or, for a context a `use` gives, that of the definition the `use` names if it has one. A doc comment of
+more than one paragraph shows its first; click it to show the rest, and again to cut it back. Its links go where the
+names they name are declared.
 
 Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor

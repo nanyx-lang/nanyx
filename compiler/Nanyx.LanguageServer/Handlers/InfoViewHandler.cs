@@ -35,8 +35,9 @@ public sealed record InfoViewSection
 
 /// <summary>
 /// An item of a section: its text (<c>name: type</c>, a context, a message), what kind of thing it is or where it
-/// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), where it is, for a link, and its documentation,
-/// as Markdown: for an import, the doc comment of the module it brings in.
+/// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), where it is, for a link, and the doc comment of
+/// what it names, as Markdown with its links written out, as hover shows it: for an import, that of the module it
+/// brings in.
 /// </summary>
 public sealed record InfoViewItem
 {
@@ -50,10 +51,13 @@ public sealed record InfoViewItem
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel. The expression there with
 /// its type, as hover shows it, and on a use of a generic def the def's declared signature and how the use fills in
 /// its type variables (see <see cref="ExpressionItems"/>); the locals, parameters and pattern variables in scope, nearest first; the top-level defs
-/// and imports in scope, an import with its module's doc comment; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
+/// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
 /// that was inferred to require it, or the runtime); and the diagnostics on the position's line. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
-/// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it.
+/// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
+/// item whose name or context has a doc comment carries it, read as hover reads it (see
+/// <see cref="NyxCompiler.Documentation.Reader"/>): a context's is that of the def a <c>use</c> names, if it has
+/// one, or else the context's own.
 /// </summary>
 public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, InfoViewResult?>
 {
@@ -91,10 +95,11 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         }
 
         Location? Locate(Parser.Program.SourceSpan span) => LocationOf(uri, document, span);
+        string? DocOf(NyxCompiler.Symbol symbol) => docs?.ForSymbol(symbol)?.Value;
 
         // The expression's type is only shown where the text has not been edited since it was typed.
         var expression = info?.Expression?.Value is { } hover && document.ToLastGood(offset) is not null
-            ? ExpressionItems(hover, info.Instantiation?.Value, Locate)
+            ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value is { } symbol ? DocOf(symbol) : null)
             : [];
         var line = request.Position.Line;
         var messages = DiagnosticsPublisher.Compute(uri, document)
@@ -112,7 +117,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             Text = name.Type?.Value is { } type ? $"{name.Name}: {type}" : name.Name,
             Detail = Describe(name.Kind),
             Location = Locate(name.Declaration),
-            Documentation = name.Module?.Value is { } module ? docs?.ForModule(module)?.Value : null
+            Documentation = DocOf(name.Symbol)
         };
 
         return new InfoViewResult
@@ -137,7 +142,8 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                         {
                             Text = context.Context,
                             Detail = Describe(context.Source),
-                            Location = Locate(context.Span)
+                            Location = Locate(context.Span),
+                            Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
                         })
                         .ToList() ?? []
                 },
@@ -150,22 +156,24 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
     /// The items of the expression section: the expression's type, as hover shows it, linking to the expression. On a
     /// use of a generic def, the def's declared signature (<c>declared</c>) comes first, then the type at this use
     /// (<c>at this use</c>), then what the use fills each of the signature's type variables with
-    /// (<c>a = string, b = int</c>), each linking to the def.
+    /// (<c>a = string, b = int</c>), each linking to the def. The first carries <paramref name="documentation"/>, the
+    /// doc comment of the name there.
     /// </summary>
     private static IReadOnlyList<InfoViewItem> ExpressionItems(
         NyxCompiler.Hover.HoverInfo hover,
         NyxCompiler.Hover.Instantiation? instantiation,
-        Func<Parser.Program.SourceSpan, Location?> locate)
+        Func<Parser.Program.SourceSpan, Location?> locate,
+        string? documentation)
     {
         if (instantiation is null)
         {
-            return [new InfoViewItem { Text = hover.Type, Location = locate(hover.Span) }];
+            return [new InfoViewItem { Text = hover.Type, Location = locate(hover.Span), Documentation = documentation }];
         }
 
         var definition = locate(instantiation.Definition);
         var items = new List<InfoViewItem>
         {
-            new() { Text = instantiation.Declared, Detail = "declared", Location = definition },
+            new() { Text = instantiation.Declared, Detail = "declared", Location = definition, Documentation = documentation },
             new() { Text = hover.Type, Detail = "at this use", Location = definition }
         };
         if (!instantiation.Bindings.IsEmpty)

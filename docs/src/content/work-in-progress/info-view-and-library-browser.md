@@ -110,8 +110,11 @@ anything new.
 - **Request.** A custom request, `nanyx/infoView`, with a document and a position. It returns structured JSON:
   sections (`expression`, `inScope`, `topLevel`, `contexts`, `messages`, always all of them, in that order), each
   with a title, whether it starts collapsed, and items. An item has its text, a detail (`parameter`, `use`,
-  `error NYX0101`), a location to link to and, for an import, its module's doc comment as Markdown, which the client
-  renders with VS Code's Markdown renderer (`markdown.api.render`). It returns data, not rendered text, so the client can lay it out and
+  `error NYX0101`), a location to link to, and the doc comment of what it names, as Markdown with its links written
+  out, as hover shows it ([#917](https://github.com/nanyx-lang/nanyx/issues/917)): for an import, its module's.
+  `InfoView.at` gives each item's symbol and `InfoViewHandler` reads its doc with `Documentation.Reader.ForSymbol`. A
+  context's doc is that of the def a `use` names, if it has one, or else the context's own. The client renders it with
+  VS Code's Markdown renderer (`markdown.api.render`). It returns data, not rendered text, so the client can lay it out and
   link the spans. The server reads the same cached compile as hover (`DocumentStore`), and the last good compile
   while the text does not parse; the expression is left out where the text has been edited since.
 - **Client.** A webview view in `extension/`, in a view container of its own in VS Code's secondary side bar
@@ -119,7 +122,9 @@ anything new.
   VS Code 1.106), revealed by *Nanyx: Show info view* (Ctrl+Shift+Enter, as in Lean). It sends the request when the
   selection or the document changes, debounced, while the view is visible, and drops an answer a later request has
   overtaken. It can pin a position, so the view keeps showing that position while you edit elsewhere; the pinned
-  position does not move with edits above it yet. Plain TypeScript and HTML; no framework.
+  position does not move with edits above it yet. It shows each doc comment under its item, cut to its first
+  paragraph until clicked. Plain TypeScript and
+  HTML; no framework.
 - **Other editors.** The request is plain LSP, so another client can show the same thing. A text rendering in an
   output buffer would do for Neovim.
 
