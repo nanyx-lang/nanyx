@@ -274,15 +274,16 @@ let defNameAndType (lineStartCol: int64) (identParser: Parser<Identifier * TypeE
             |>> fun continuationType -> (name, continuationType)
 
 /// Fails, at the operator, when `name`, a def's name written from `start`, defines an operator Nanyx does not have:
-/// `` def `+++` = ... `` or `` def $Money.`+++` = ... `` (see `binaryOperators`).
+/// `` def `+++` = ... `` or `` def $Money.`+++` = ... `` (see `binaryOperators`), or `??`, which is syntax.
 let definableName (start: Position) (name: Identifier) : Parser<unit, ParseState> =
     let last = name.Substring(name.LastIndexOf '.' + 1)
-    if Names.isOperator last && not (isDefinableOperator last) then
-        let offset = int64 ((Names.written name).Length - (Names.written last).Length)
+    let offset = int64 ((Names.written name).Length - (Names.written last).Length)
+    let reportAtOperator message = reportFocused (Position(start.StreamName, start.Index + offset, start.Line, start.Column + offset)) message
+    if last = coalesceOperator then
+        reportAtOperator $"`{last}` is built in, so it cannot be defined: `a ?? b` is the value inside `a`'s `#some`, or else `b`"
+    elif Names.isOperator last && not (isDefinableOperator last) then
         let operators = binaryOperators |> List.filter (fun op -> isDefinableOperator op.Text) |> List.map (fun op -> $"`{op.Text}`")
-        reportFocused
-            (Position(start.StreamName, start.Index + offset, start.Line, start.Column + offset))
-            $"""`{last}` is not one of Nanyx's operators, so it cannot be defined. The operators are {String.concat ", " operators}"""
+        reportAtOperator $"""`{last}` is not one of Nanyx's operators, so it cannot be defined. The operators are {String.concat ", " operators}"""
     else
         preturn ()
 

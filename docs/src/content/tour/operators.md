@@ -82,7 +82,7 @@ def main = {
 
 # The operators
 
-These are all of Nanyx's operators, tightest first. An operator binds tighter than those below it, so `a + b * c` is `a + (b * c)`, and `f >> g == h` is `(f >> g) == h`.
+These are all of Nanyx's operators, tightest first. An operator binds tighter than those below it, so `a + b * c` is `a + (b * c)`, `f >> g == h` is `(f >> g) == h`, and `a ?? 0 < n` is `(a ?? 0) < n`.
 
 | Operators | Groups | Meaning |
 |---|---|---|
@@ -96,6 +96,7 @@ These are all of Nanyx's operators, tightest first. An operator binds tighter th
 | `<>` | right | spare |
 | `>>` | left | forward composition |
 | `<<` | right | backward composition |
+| `??` | right | [unwrapping with a fallback](../tour/error-handling#falling-back-with-): `a ?? b` |
 | `<` `<=` `>` `>=` | none | ordering (`Ord`) |
 | `~` | none | spare |
 | `..` | none | [range](../tour/ranges) |
@@ -111,7 +112,7 @@ An operator that groups to the left reads `a - b - c` as `(a - b) - c`, and one 
 
 Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not operators, and neither is a prefix `!`: the compiler tells you to write the keyword instead. `<<` and `>>` are composition only; bitwise operations on integers are named functions. Likewise, testing a value against a pattern in an `if` condition uses the keyword `is` (`if x is #some(v) then ...`), not an operator.
 
-The characters `|`, `&`, `?`, `#`, `@`, `$`, `:` and `\` are not operator characters; they are syntax (see below).
+The characters `|`, `&`, `?`, `#`, `@`, `$`, `:` and `\` are not operator characters; they are syntax (see below). `??` is built in, like `and` and `or`: its right operand runs only when it is needed, so it is not a function, and it cannot be defined or attached to a type.
 
 ## Reserved spellings
 

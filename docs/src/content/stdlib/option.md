@@ -8,7 +8,7 @@ The option helpers work on [**option-like** unions](../advanced/option-like-type
 
 In Nanyx, any union that includes `#some(a)` is considered option-like. There is no `Option(a)` alias; `#some(a) | #none` is just the most common option-like union, and these helpers are written to preserve all non-`#some` tags, whatever they are. They are plain functions rather than definitions attached to a type, because there is no `Option` type for them to be attached to, and they are named for the `#some` tag they act on, as in `mapSome`, `someOr` and `somes`.
 
-# map
+# mapSome
 
 ```nanyx
 mapSome: [c] ((#some(a) | r), ([c] a -> b)) -> (#some(b) | r)
@@ -27,7 +27,7 @@ value \mapSome { .length }
 
 ---
 
-# bind
+# bindSome
 
 ```nanyx
 bindSome: [c] ((#some(a) | r), ([c] a -> (#some(b) | r))) -> (#some(b) | r)
@@ -49,7 +49,7 @@ A function that is itself generic in both steps cannot say so yet: a union has o
 
 ---
 
-# defaultValue
+# someOr
 
 ```nanyx
 someOr: ((#some(a) | r), a) -> a
@@ -60,6 +60,24 @@ Returns the wrapped value or a fallback.
 ```nanyx
 someOr(#none, 0)
 -- 0
+```
+
+---
+
+# someOrElse
+
+```nanyx
+someOrElse: [c] ((#some(a) | r), ([c] () -> a)) -> a
+```
+
+Returns the wrapped value, or calls the fallback for any other tag. The fallback is called only when it is needed. It is what the [`??` operator](../tour/error-handling#falling-back-with-) does: `option ?? fallback` is `someOrElse(option, { fallback })`.
+
+```nanyx
+someOrElse(#none, { 0 })
+-- 0
+
+#some(3) ?? expensiveFallback()
+-- 3, and expensiveFallback is not called
 ```
 
 ---
@@ -90,7 +108,7 @@ isNone(#none)
 
 ---
 
-# toResult
+# someToResult
 
 ```nanyx
 someToResult: ((#some(a) | r), e) -> #some(a) | #error(e)
@@ -105,7 +123,7 @@ someToResult(#none, "missing user")
 
 ---
 
-# mapOr
+# mapSomeOr
 
 ```nanyx
 mapSomeOr: [c] ((#some(a) | r), b, ([c] a -> b)) -> b
@@ -123,7 +141,7 @@ mapSomeOr(#none, 0) { .length }
 
 ---
 
-# toList
+# someToList
 
 ```nanyx
 someToList: (#some(a) | r) -> list(a)
@@ -142,7 +160,7 @@ def identity: #some(string) | #notFound = #notFound
 
 ---
 
-# values
+# somes
 
 ```nanyx
 somes: list(#some(a) | r) -> list(a)
@@ -157,7 +175,7 @@ The values of the `#some`s in a list, in order. The other tags are dropped.
 
 ---
 
-# mapOrElse
+# mapSomeOrElse
 
 ```nanyx
 mapSomeOrElse: [c] ((#some(a) | r), ([c] () -> b), ([c] a -> b)) -> b
@@ -171,7 +189,7 @@ mapSomeOrElse(#none, { expensiveFallback() }) { .length }
 
 ---
 
-# orElse
+# orElseSome
 
 ```nanyx
 orElseSome: [c] ((#some(a) | r), ([c] () -> (#some(a) | s))) -> #some(a) | s

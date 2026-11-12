@@ -69,6 +69,36 @@ def findUser: int -> #some(User) | #none = { id ->
 }
 ```
 
+# Falling back with `??`
+
+`a ?? b` unwraps an option-like value: it is the value inside `a`'s `#some`, or `b` for any other tag. `b` is only evaluated when it is needed, so it can be a call that does work:
+
+```nanyx
+def port: string -> #some(int) | #invalidInt = { text -> int.fromString(text) }
+
+def defaultPort: [Console] () -> int = {
+  println("using the default port")
+  8080
+}
+
+@entry
+def main = {
+  println(port("3000") ?? defaultPort())
+  println(port("http") ?? defaultPort())
+}
+-- 3000
+-- using the default port
+-- 8080
+```
+
+`??` binds tighter than the comparisons and `and`, and looser than arithmetic: `a ?? b == c` is `(a ?? b) == c`, `a ?? 0 < n` is `(a ?? 0) < n`, `x and y ?? z` is `x and (y ?? z)`, and `a ?? b + 1` is `a ?? (b + 1)`. It groups to the right, so `a ?? b ?? c` tries `a`, then `b`, and then settles for `c`. In such a chain every operand but the last is option-like, and the last is a plain value.
+
+`??` only unwraps: its right operand is the value itself, not another option. To fall back to another option, keeping the result option-like, use [`orElseSome`](../stdlib/option#orelsesome):
+
+```nanyx fragment
+cached(key) \orElseSome { lookup(key) }
+```
+
 # The `except` keyword
 
 `value except pattern -> replacement` handles some of the cases of `value` and lets the rest through. A case the pattern matches becomes the replacement, and every other case passes through unchanged. It's a `match` that doesn't have to handle every case.

@@ -48,6 +48,7 @@
     <Compile Include="ArithmeticOperators.fs" />
     <Compile Include="AppendOperator.fs" />
     <Compile Include="CompositionOperators.fs" />
+    <Compile Include="CoalesceOperator.fs" />
     <Compile Include="ContextShapes.fs" />
     <Compile Include="ContextInference.fs" />
     <Compile Include="ArithmeticInference.fs" />

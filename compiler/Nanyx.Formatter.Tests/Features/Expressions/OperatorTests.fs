@@ -31,3 +31,12 @@ let ``Formatting keeps how operators group`` (source: string) =
     Assert.Equal(valueOf source, valueOf formatted)
     // And the formatted source is formatted.
     Assert.Equal(formatted, format formatted)
+
+[<Theory>]
+[<InlineData("def x = a??b", "def x = a ?? b\n")>]
+[<InlineData("def x = a ?? (b ?? c)", "def x = a ?? b ?? c\n")>]
+[<InlineData("def x = (a ?? b) ?? c", "def x = (a ?? b) ?? c\n")>]
+[<InlineData("def x = (a ?? b) == c", "def x = a ?? b == c\n")>]
+[<InlineData("def x = a ?? (b == c)", "def x = a ?? (b == c)\n")>]
+let ``?? is spaced, and bracketed only where it does not group as written`` (source: string) (expected: string) =
+    Assert.Equal(expected, format source)

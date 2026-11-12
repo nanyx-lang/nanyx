@@ -16,39 +16,50 @@ type OperatorAssociativity =
 
 /// A binary operator. `Text` is how it is written and the name it is defined by (`` def $Money.`+` = ... ``). The
 /// higher its `Precedence`, the tighter it binds. A spare operator has no built-in meaning: it means only what a type
-/// attaches to it.
+/// attaches to it. An operator that short-circuits runs its right operand only when its left one does not settle the
+/// result; it is syntax rather than a function, so no definition can be given it.
 type BinaryOperator =
     { Text: string
       Precedence: int
       Associativity: OperatorAssociativity
-      IsSpare: bool }
+      IsSpare: bool
+      ShortCircuits: bool }
 
 let private operator text precedence associativity =
-    { Text = text; Precedence = precedence; Associativity = associativity; IsSpare = false }
+    { Text = text; Precedence = precedence; Associativity = associativity; IsSpare = false; ShortCircuits = false }
 
 let private spare text precedence associativity =
     { operator text precedence associativity with IsSpare = true }
+
+let private shortCircuit text precedence associativity =
+    { operator text precedence associativity with ShortCircuits = true }
+
+/// `a ?? b`: the value inside `a`'s `#some`, or else `b`, which runs only when it is needed.
+let coalesceOperator = "??"
 
 /// Every binary operator, tightest first. Both of the parser's tables take all of them: the full one and the one for a
 /// statement or a match arm's body, which does not cross lines. `..` is not among them: it is range syntax (see
 /// `rangePrecedence`). Prefix `-` and `not` bind tighter than all of them (see `prefixPrecedence`).
 let binaryOperators =
     [ // Powers group to the right: `2 ** 3 ** 2` is `2 ** (3 ** 2)`.
-      operator "**" 10 RightAssociative
-      operator "*" 9 LeftAssociative
-      operator "/" 9 LeftAssociative
-      operator "%" 9 LeftAssociative
-      spare "^" 9 LeftAssociative
-      spare "<*>" 9 LeftAssociative
-      operator "+" 8 LeftAssociative
-      operator "-" 8 LeftAssociative
-      spare "<+>" 8 LeftAssociative
+      operator "**" 11 RightAssociative
+      operator "*" 10 LeftAssociative
+      operator "/" 10 LeftAssociative
+      operator "%" 10 LeftAssociative
+      spare "^" 10 LeftAssociative
+      spare "<*>" 10 LeftAssociative
+      operator "+" 9 LeftAssociative
+      operator "-" 9 LeftAssociative
+      spare "<+>" 9 LeftAssociative
       // Concatenation, of strings and lists: looser than arithmetic, tighter than comparison.
-      operator "++" 7 RightAssociative
-      spare "<>" 7 RightAssociative
+      operator "++" 8 RightAssociative
+      spare "<>" 8 RightAssociative
       // Composition: `f >> g` is `f` and then `g`, `g << f` the same function.
-      operator ">>" 6 LeftAssociative
-      operator "<<" 6 RightAssociative
+      operator ">>" 7 LeftAssociative
+      operator "<<" 7 RightAssociative
+      // Unwrapping an option-like value: tighter than comparison, so `a ?? b == c` is `(a ?? b) == c`, and grouping to
+      // the right, so `a ?? b ?? c` tries each in turn.
+      shortCircuit coalesceOperator 6 RightAssociative
       operator "<" 5 NonAssociative
       operator ">" 5 NonAssociative
       operator "<=" 5 NonAssociative
@@ -59,8 +70,8 @@ let binaryOperators =
       spare ">>=" 3 LeftAssociative
       spare "=<<" 3 RightAssociative
       // Boolean operations are the keywords `and` and `or`, the loosest operators.
-      operator "and" 2 LeftAssociative
-      operator "or" 1 LeftAssociative ]
+      shortCircuit "and" 2 LeftAssociative
+      shortCircuit "or" 1 LeftAssociative ]
 
 /// The precedence of a range, `a..b`, which does not group either: `a..b..c` is an error.
 let rangePrecedence = 5
@@ -74,7 +85,12 @@ let binaryOperatorNamed (text: string) : BinaryOperator option =
 
 /// Whether `text` is one of Nanyx's operators, which a type can be given by attaching a definition of that name.
 let isDefinableOperator (text: string) =
-    binaryOperatorNamed text |> Option.exists (fun op -> not (System.Char.IsLetter op.Text[0]))
+    binaryOperatorNamed text |> Option.exists (fun op -> not op.ShortCircuits)
+
+/// Whether `text` is an operator that short-circuits, whose right operand runs only when it is needed: `and`, `or`
+/// and `??`.
+let isShortCircuit (text: string) =
+    binaryOperatorNamed text |> Option.exists _.ShortCircuits
 
 /// Whether `text` is a spare operator, which means only what a definition gives it, on a built-in type too.
 let isSpareOperator (text: string) =

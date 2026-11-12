@@ -42,7 +42,7 @@ Transforms error values.
 Result.bind: [c] (#some(a) | #error(e), ([c] a -> (#some(b) | #error(e)))) -> #some(b) | #error(e)
 ```
 
-Chains result-producing operations. Both steps must have the same error type; to chain a step whose errors differ, bring them to one type with `mapError` first. That holds for errors that are tags too: unlike the other tags of [`bindSome`](../stdlib/option#bind), which are a union's rest and take the tags of both steps, the error is one type, so `#error(#notFound)` and `#error(#invalidInt)` do not chain ([#679](https://github.com/nanyx-lang/nanyx/issues/679)).
+Chains result-producing operations. Both steps must have the same error type; to chain a step whose errors differ, bring them to one type with `mapError` first. That holds for errors that are tags too: unlike the other tags of [`bindSome`](../stdlib/option#bindsome), which are a union's rest and take the tags of both steps, the error is one type, so `#error(#notFound)` and `#error(#invalidInt)` do not chain ([#679](https://github.com/nanyx-lang/nanyx/issues/679)).
 
 ```nanyx
 def parse: string -> Result(int, string) = { s ->
