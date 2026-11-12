@@ -57,13 +57,13 @@ Each built-in type has a capitalised name, which is the type, and a lowercase al
 | `seq` | `Seq` |
 | `map` | `Map` |
 | `set` | `Set` |
-| `int` | `I64` (planned) |
-| `float` | `F64` (planned) |
-| `bool` | `Boolean` (planned) |
+| `int` | `I64` |
+| `float` | `F64` |
+| `bool` | `Boolean` |
 
 The two are the same type everywhere, so `List(int)` and `list(int)` are one type, and so are `def String.trim` and `def string.trim` (see [Attached definitions](../advanced/attached-definitions#attaching-to-a-built-in-type)). The compiler prints the alias: an error message or a hover says `list(string)`.
 
-`int`, `float` and `bool` will be aliases of `I64`, `F64` and `Boolean` once [sized numbers](../work-in-progress/sized-numbers) come. `Int`, `Float` and `Bool` are not types at all: writing one is the error `NYX0114`, with a fix that writes `int`, `float` or `bool`.
+`Int`, `Float` and `Bool` are not types at all: writing one is the error `NYX0114`, with a fix that writes `int`, `float` or `bool`.
 
 # Record types
 

@@ -3,11 +3,12 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.ExpressionRewrites
 
-/// The names of the built-in types. `String`, `List`, `Unit`, `Seq`, `Map` and `Set` are the types, and `string`,
-/// `list` and the rest are keyword aliases that mean exactly them, before the dot of an attached definition
-/// (`def String.trim` is `def string.trim`) as in a type (`List(int)` is `list(int)`). The compiler works with the
-/// alias, so it prints `list(string)`: this pass writes each type's name as its alias before inference (#692).
-/// `Int`, `Float` and `Bool` are not types, and are an error with a fix that writes `int`, `float` and `bool`.
+/// The names of the built-in types. `String`, `List`, `Unit`, `Seq`, `Map`, `Set`, `I64`, `F64` and `Boolean` are the
+/// types, and `string`, `list` and the rest (`int`, `float` and `bool` for the last three) are keyword aliases that
+/// mean exactly them, before the dot of an attached definition (`def String.trim` is `def string.trim`) as in a type
+/// (`List(I64)` is `list(int)`). The compiler works with the alias, so it prints `list(string)`: this pass writes each
+/// type's name as its alias before inference (#692). `Int`, `Float` and `Bool` are not types, and are an error with a
+/// fix that writes `int`, `float` and `bool`.
 module internal BuiltinTypeNames =
     /// Each built-in type's name and the alias the compiler works with.
     let private aliases =
@@ -17,7 +18,10 @@ module internal BuiltinTypeNames =
               "List", "list"
               "Seq", "seq"
               "Map", Maps.typeName
-              "Set", Sets.typeName ]
+              "Set", Sets.typeName
+              "I64", "int"
+              "F64", "float"
+              "Boolean", "bool" ]
 
     /// Each spelling that is not a type and the alias to write instead.
     let private notTypes = Map.ofList [ "Int", "int"; "Float", "float"; "Bool", "bool" ]
