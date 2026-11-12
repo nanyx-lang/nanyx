@@ -16,6 +16,7 @@
     <Compile Include="Diagnostics.fs" />
     <Compile Include="NameSuggestions.fs" />
     <Compile Include="TypedAst.fs" />
+    <Compile Include="SizedIntegers.fs" />
     <Compile Include="RecursiveAliases.fs" />
     <Compile Include="TypeEnv.fs" />
     <Compile Include="Constraints.fs" />

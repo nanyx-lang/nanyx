@@ -506,7 +506,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         let argumentTy (argument: TypeExpr) =
             match argument.Kind with
             | TypeName ("int" | "string" | "bool" | "unit" | "float" as primitive) -> Some (TyPrimitive primitive)
-            | TypeName varName
+            | TypeName varName ->
+                vars |> Map.tryFind varName |> Option.orElse (SizedInteger.tryOfName varName |> Option.map SizedInteger.ty)
             | TypeVar varName -> vars |> Map.tryFind varName
             | _ -> None
         let memberTypes =

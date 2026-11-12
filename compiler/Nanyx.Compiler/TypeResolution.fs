@@ -34,7 +34,7 @@ let private lookupPrimitive (name: string) =
     | "string"
     | "unit" -> Some (primitiveType name)
     | "undefined" -> Some Unifier.bottomType
-    | _ -> None
+    | _ -> SizedInteger.tryOfName name |> Option.map SizedInteger.ty
 
 /// Whether `name` is a type the compiler provides, such as `int` or `list`, rather than one the program defines.
 /// A type's capitalised name, `List`, is written as its alias, `list`, by `BuiltinTypeNames` before inference.

@@ -12,7 +12,10 @@ label.
   project's `.fsproj` lists its files in compile order. Read that list before adding a function.
 - **Don't grow a file past 1,500 lines.** If your change would take a file over that limit, or the file is
   already over it, put the new part in a new file or a smaller existing one. If what you need to extend sits
-  in the middle of a big file, move it out first, in its own PR.
+  in the middle of a big file, move it out first, in its own PR. The limit is for the compiler's F# and C#
+  sources. It does not apply to the standard library's `.nyx` files: the prelude is one module, which every
+  module imports without saying so, and it grows with the language until it can be split into partial
+  modules ([#950](https://github.com/nanyx-lang/nanyx/issues/950)).
 - **One concern per function.** A match arm longer than about 50 lines becomes a named function. A closure
   that changes several captured `mutable`s becomes a function that takes state and returns state.
 - **Search before writing a helper.** Look for the function you are about to write, in your project and in

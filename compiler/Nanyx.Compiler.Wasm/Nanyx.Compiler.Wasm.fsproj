@@ -13,6 +13,7 @@
     <Compile Include="AmbientMembers.fs" />
     <Compile Include="LambdaLifting.fs" />
     <Compile Include="FloatText.fs" />
+    <Compile Include="SizedIntegerCode.fs" />
     <Compile Include="WasmRuntime.fs" />
     <Compile Include="Interpolation.fs" />
     <Compile Include="Wat.fs" />

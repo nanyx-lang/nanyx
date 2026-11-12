@@ -345,20 +345,21 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
             for operand in [ left; right ] do
                 match tyOf operand with
-                | IrInt | IrBool | IrUnit | IrError -> ()
+                | IrInt | IrSized _ | IrBool | IrUnit | IrError -> ()
                 | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
         | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
         | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
-            // `-x` on a built-in number (on any other type it calls a `negate`). An int is `0 - x`, and a float
+            // `-x` on a built-in number (on any other type it calls a `negate`). An integer is `0 - x`, and a float
             // `-0.0 - x`, which is IEEE 754's negation: `-0.0 - 0.0` is `-0.0`, and `-0.0 - -0.0` is `0.0`.
             let ty = tyOf expr
             this.Atoms scope [ operand ] (fun atoms ->
                 match ty with
                 | IrFloat -> bindTemp (mk (BoxFloat -0.0) IrFloat) (fun zero -> k (mk (Prim(FloatBinary "-", zero :: atoms)) ty))
                 | IrInt -> k (mk (Prim(Binary "-", AInt 0L :: atoms)) ty)
+                | IrSized integer -> k (mk (Prim(Binary "-", ASized(integer, 0L) :: atoms)) ty)
                 | other -> cannot $"the operator - on a value of type {IrType.show other}")
         | ForSyntax.Call(iterables, _, parameters, body) when parameters.Length = iterables.Length ->
             // `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body
@@ -991,6 +992,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match this.TypeIn scope hole with
         | IrString -> HoleString
         | IrInt -> HoleInt
+        | IrSized integer -> HoleSized integer
         | IrBool -> HoleBool
         | IrFloat -> HoleFloat
         | IrTags tags ->

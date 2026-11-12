@@ -27,7 +27,7 @@ and a drop function for its type (see Object header below), and the compiler ins
 Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
 apart and holds the only reference to for a new one of the same size.
 
-An `int` is an `i64`, and every other value an `i32` (see Value representation below). On the heap, after each object's
+An `int` and a `U64` are `i64`s, and every other value an `i32` (see Value representation below). On the heap, after each object's
 header:
 
 | Value | Layout |
@@ -111,6 +111,10 @@ cell's head, a tag's payload and a closure's captures, with every other value in
 `int` is named with `_i64` after the variable's name, since variables of the same kind and name share a local. The
 runtime helpers that store a value (`listCons`, `tagBox`, `recordSet` and the rest) have an `_i64` variant, and a call
 through a closure uses a function type of the values it passes (`Wat.indirectTypeName`). Floats are still boxed.
+
+**Implemented for the sized integers:** a `U64` is held as an `int` is. `I8`, `I16`, `I32`, `U8`, `U16` and `U32` are
+`i32`s, sign-extended or zero-extended from their width as they are signed or not, and still take 4 bytes in a field:
+storing them at their own width needs a variant of each storing helper for each width.
 
 `int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`
 and so on; see [Sized numbers](./sized-numbers)). Each maps to the Wasm

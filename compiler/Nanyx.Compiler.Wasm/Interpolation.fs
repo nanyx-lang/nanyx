@@ -15,6 +15,8 @@ open Transpiler.Wasm.WasmRuntime
 type HoleKind =
     | StringHole
     | IntHole
+    /// A `U64`, written as an int is but read unsigned, so it never has a sign.
+    | UnsignedHole
     | BoolHole
     /// A float, formatted to a string when the hole is evaluated (formatting allocates, which the length and write
     /// passes must not), and from then on a string.
@@ -52,11 +54,20 @@ let staticBytes (bytes: byte array) =
 /// declares besides `scratchLocals`. The smallest int is its own negation: read unsigned, its magnitude is right.
 let intLocal = "__interp_int"
 
-let intLength exprCode =
-    $"{exprCode}\n    local.set ${intLocal}\n    local.get ${intLocal}\n    i64.const 0\n    i64.lt_s\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n      i64.const 0\n      local.get ${intLocal}\n      i64.sub\n      local.set ${intLocal}\n    end\n    local.get ${intLocal}\n    i64.eqz\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n    else\n      loop $interp_int_len\n        local.get $__interp_len\n        i32.const 1\n        i32.add\n        local.set $__interp_len\n        local.get ${intLocal}\n        i64.const 10\n        i64.div_u\n        local.set ${intLocal}\n        local.get ${intLocal}\n        i64.const 0\n        i64.ne\n        br_if $interp_int_len\n      end\n    end"
+/// The code that adds the length of the int `exprCode` leaves to `$__interp_len`: read signed, with a `-` before a
+/// negative one, or unsigned (a `U64`).
+let private numberLength (signed: bool) exprCode =
+    let sign = if signed then $"local.get ${intLocal}\n    i64.const 0\n    i64.lt_s\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n      i64.const 0\n      local.get ${intLocal}\n      i64.sub\n      local.set ${intLocal}\n    end\n    " else ""
+    $"{exprCode}\n    local.set ${intLocal}\n    {sign}local.get ${intLocal}\n    i64.eqz\n    if\n      local.get $__interp_len\n      i32.const 1\n      i32.add\n      local.set $__interp_len\n    else\n      loop $interp_int_len\n        local.get $__interp_len\n        i32.const 1\n        i32.add\n        local.set $__interp_len\n        local.get ${intLocal}\n        i64.const 10\n        i64.div_u\n        local.set ${intLocal}\n        local.get ${intLocal}\n        i64.const 0\n        i64.ne\n        br_if $interp_int_len\n      end\n    end"
 
-let intWrite exprCode =
-    $"{exprCode}\n    local.set ${intLocal}\n    local.get ${intLocal}\n    i64.const 0\n    i64.lt_s\n    if\n      local.get $__interp_cursor\n      i32.const 45\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n      i64.const 0\n      local.get ${intLocal}\n      i64.sub\n      local.set ${intLocal}\n    end\n    local.get ${intLocal}\n    i64.eqz\n    if\n      local.get $__interp_cursor\n      i32.const 48\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n    else\n      local.get $__interp_cursor\n      local.set $__interp_start\n      loop $interp_digits\n        local.get $__interp_cursor\n        local.get ${intLocal}\n        i64.const 10\n        i64.rem_u\n        i32.wrap_i64\n        i32.const 48\n        i32.add\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get ${intLocal}\n        i64.const 10\n        i64.div_u\n        local.set ${intLocal}\n        local.get ${intLocal}\n        i64.const 0\n        i64.ne\n        br_if $interp_digits\n      end\n      local.get $__interp_start\n      local.set $__interp_lo\n      local.get $__interp_cursor\n      i32.const 1\n      i32.sub\n      local.set $__interp_hi\n      block $interp_rev_done\n        loop $interp_rev\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.ge_u\n          br_if $interp_rev_done\n          local.get $__interp_lo\n          i32.load8_u\n          local.set $__interp_swap\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.load8_u\n          i32.store8\n          local.get $__interp_hi\n          local.get $__interp_swap\n          i32.store8\n          local.get $__interp_lo\n          i32.const 1\n          i32.add\n          local.set $__interp_lo\n          local.get $__interp_hi\n          i32.const 1\n          i32.sub\n          local.set $__interp_hi\n          br $interp_rev\n        end\n      end\n    end"
+let intLength exprCode = numberLength true exprCode
+
+/// The code that writes the int `exprCode` leaves at `$__interp_cursor`, read as `numberLength` reads it.
+let private numberWrite (signed: bool) exprCode =
+    let sign = if signed then $"local.get ${intLocal}\n    i64.const 0\n    i64.lt_s\n    if\n      local.get $__interp_cursor\n      i32.const 45\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n      i64.const 0\n      local.get ${intLocal}\n      i64.sub\n      local.set ${intLocal}\n    end\n    " else ""
+    $"{exprCode}\n    local.set ${intLocal}\n    {sign}local.get ${intLocal}\n    i64.eqz\n    if\n      local.get $__interp_cursor\n      i32.const 48\n      i32.store8\n      local.get $__interp_cursor\n      i32.const 1\n      i32.add\n      local.set $__interp_cursor\n    else\n      local.get $__interp_cursor\n      local.set $__interp_start\n      loop $interp_digits\n        local.get $__interp_cursor\n        local.get ${intLocal}\n        i64.const 10\n        i64.rem_u\n        i32.wrap_i64\n        i32.const 48\n        i32.add\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get ${intLocal}\n        i64.const 10\n        i64.div_u\n        local.set ${intLocal}\n        local.get ${intLocal}\n        i64.const 0\n        i64.ne\n        br_if $interp_digits\n      end\n      local.get $__interp_start\n      local.set $__interp_lo\n      local.get $__interp_cursor\n      i32.const 1\n      i32.sub\n      local.set $__interp_hi\n      block $interp_rev_done\n        loop $interp_rev\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.ge_u\n          br_if $interp_rev_done\n          local.get $__interp_lo\n          i32.load8_u\n          local.set $__interp_swap\n          local.get $__interp_lo\n          local.get $__interp_hi\n          i32.load8_u\n          i32.store8\n          local.get $__interp_hi\n          local.get $__interp_swap\n          i32.store8\n          local.get $__interp_lo\n          i32.const 1\n          i32.add\n          local.set $__interp_lo\n          local.get $__interp_hi\n          i32.const 1\n          i32.sub\n          local.set $__interp_hi\n          br $interp_rev\n        end\n      end\n    end"
+
+let intWrite exprCode = numberWrite true exprCode
 
 let stringCopy exprCode =
     $"{exprCode}\n    local.set $__interp_ptr\n    local.get $__interp_ptr\n    i32.const 4\n    i32.sub\n    i32.load\n    local.set $__interp_copy_len\n    local.get $__interp_ptr\n    local.set $__interp_src\n    block $interp_copy_done\n      loop $interp_copy\n        local.get $__interp_copy_len\n        i32.const 0\n        i32.eq\n        br_if $interp_copy_done\n        local.get $__interp_cursor\n        local.get $__interp_src\n        i32.load8_u\n        i32.store8\n        local.get $__interp_cursor\n        i32.const 1\n        i32.add\n        local.set $__interp_cursor\n        local.get $__interp_src\n        i32.const 1\n        i32.add\n        local.set $__interp_src\n        local.get $__interp_copy_len\n        i32.const 1\n        i32.sub\n        local.set $__interp_copy_len\n        br $interp_copy\n      end\n    end"
@@ -115,6 +126,7 @@ let holeLength (kind: HoleKind) (valueCode: string) =
     | StringHole
     | FloatHole -> stringLength valueCode
     | IntHole -> intLength valueCode
+    | UnsignedHole -> numberLength false valueCode
     | TagHole cases -> tagHole valueCode cases textLength tagPayloadLength
     | BoolHole -> boolLength valueCode
 
@@ -124,6 +136,7 @@ let holeWrite (kind: HoleKind) (valueCode: string) =
     | StringHole
     | FloatHole -> stringCopy valueCode
     | IntHole -> intWrite valueCode
+    | UnsignedHole -> numberWrite false valueCode
     | TagHole cases -> tagHole valueCode cases textWrite tagPayloadWrite
     | BoolHole -> boolWrite valueCode
 

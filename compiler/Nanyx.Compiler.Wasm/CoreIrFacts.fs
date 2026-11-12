@@ -28,6 +28,7 @@ let collect (functions: Function list) : ModuleFacts =
         | HoleTag cases -> cases |> List.iter (fst >> tags.Add >> ignore)
         | HoleString
         | HoleInt
+        | HoleSized _
         | HoleBool
         | HoleFloat -> ()
 
@@ -43,6 +44,7 @@ let collect (functions: Function list) : ModuleFacts =
             | _ -> ()
         | AVar _
         | AInt _
+        | ASized _
         | ABool _
         | AUnit -> ()
 

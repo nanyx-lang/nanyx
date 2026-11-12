@@ -1,21 +1,24 @@
 /// How the values of the core IR are held in WebAssembly (see "Value representation" in
 /// `docs/src/content/work-in-progress/memory-management.md`): the value type each type is held in, in locals and on the
-/// stack, and where each part of an object on the heap is. An int is an `i64`, stored in 8 bytes; every other value is
-/// an `i32` (a pointer, a code, a bool, a boxed float), stored in 4.
+/// stack, and where each part of an object on the heap is. An int and a `U64` are `i64`s, stored in 8 bytes; every
+/// other value is an `i32` (a pointer, a code, a bool, a boxed float, a narrower sized integer), stored in 4.
 module Transpiler.Wasm.CoreIrLayout
 
+open NyxCompiler
 open Transpiler.Wasm.CoreIr
 
 /// The WebAssembly value type a value of `ty` is held in.
 let valueType (ty: IrType) =
     match ty with
-    | IrInt -> "i64"
+    | IrInt
+    | IrSized SizedInteger.U64 -> "i64"
     | _ -> "i32"
 
 /// How many bytes a value of `ty` takes in a field, a payload or a list cell.
 let size (ty: IrType) =
     match ty with
-    | IrInt -> 8
+    | IrInt
+    | IrSized SizedInteger.U64 -> 8
     | _ -> 4
 
 /// The instruction that reads a value of `ty` at `offset` past the address on the stack.

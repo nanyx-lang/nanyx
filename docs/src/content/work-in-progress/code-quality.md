@@ -95,7 +95,7 @@ A scheduled review runs once a day. It does five things:
 
 It looks for the problems the rules in AGENTS.md are meant to prevent:
 
-- files growing past 1,500 lines
+- compiler source files growing past 1,500 lines (the standard library's `.nyx` files are exempt)
 - new copies of existing helpers
 - new string matches on desugared names
 - new `failwith` calls in the backend

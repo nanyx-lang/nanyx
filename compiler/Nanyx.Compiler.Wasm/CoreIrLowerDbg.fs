@@ -199,6 +199,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | _ ->
             match Unifier.unalias ty with
             | TyPrimitive "int" -> text [ Hole(value, HoleInt) ]
+            | SizedIntegerType integer -> text [ Hole(value, HoleSized integer) ]
             | TyPrimitive "bool" -> text [ Hole(value, HoleBool) ]
             | TyPrimitive "float" -> mk (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
             | TyPrimitive "string" -> mk (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString

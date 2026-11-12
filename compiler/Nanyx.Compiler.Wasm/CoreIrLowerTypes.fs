@@ -174,6 +174,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | None ->
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt
+    | SizedIntegerType integer -> IrSized integer
     | TyPrimitive "bool" -> IrBool
     | TyPrimitive "unit" -> IrUnit
     | TyPrimitive "string" -> IrString

@@ -9,6 +9,7 @@
 module Transpiler.Wasm.CoreIrEmit
 
 open System.Collections.Generic
+open NyxCompiler
 open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
@@ -49,6 +50,9 @@ let private localName (var: Var) =
 /// The helpers whose parameters and results of type int are `i64`s. The others take and give `i32`s, which the
 /// emitter converts an int to and from.
 let private takesInts = set [ Helpers.intToFloat; Helpers.floatToInt ]
+
+/// The operators that give a number, where the others on numbers give a bool.
+let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
 
 /// The code that converts a value of `from` on the stack to one of `into`, when they are held differently: only a
 /// value of no known type (see `IrError`) is held differently from a value it is taken as. It is an `i32`, and an int
@@ -166,6 +170,8 @@ type private FunctionEmitter(context: EmitContext) =
         match holeType with
         | HoleString -> Interpolation.StringHole
         | HoleInt -> Interpolation.IntHole
+        | HoleSized SizedInteger.U64 -> Interpolation.UnsignedHole
+        | HoleSized _ -> Interpolation.IntHole
         | HoleBool -> Interpolation.BoolHole
         | HoleFloat -> Interpolation.FloatHole
         | HoleTag cases ->
@@ -183,17 +189,24 @@ type private FunctionEmitter(context: EmitContext) =
 
     /// The string built from `parts`, whose holes are already in their locals.
     member this.Interpolation (parts: InterpolationPart list) =
+        // A hole's value, read as an `i64` where it is an integer held in an `i32`.
+        let holeValue (var: Var) (holeType: HoleType) =
+            match holeType with
+            | HoleSized integer when CoreIrLayout.valueType (IrSized integer) = "i32" ->
+                let signedness = if SizedInteger.isSigned integer then "s" else "u"
+                $"local.get ${localName var}\n    i64.extend_i32_{signedness}"
+            | _ -> $"local.get ${localName var}"
         let lengthCode =
             parts
             |> List.map (function
                 | Text text -> Interpolation.textLength text
-                | Hole(var, holeType) -> Interpolation.holeLength (this.HoleKind holeType) $"local.get ${localName var}")
+                | Hole(var, holeType) -> Interpolation.holeLength (this.HoleKind holeType) (holeValue var holeType))
             |> String.concat "\n    "
         let writeCode =
             parts
             |> List.map (function
                 | Text text -> Interpolation.textWrite text
-                | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) $"local.get ${localName var}")
+                | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) (holeValue var holeType))
             |> String.concat "\n    "
         helper Helpers.stringAlloc |> ignore
         Interpolation.measureAndWrite lengthCode writeCode
@@ -309,8 +322,10 @@ type private FunctionEmitter(context: EmitContext) =
                     | Some instruction -> instruction
                     | None -> internalError $"no instruction for the operator {op} on ints"
             // Arithmetic gives an int and a comparison a bool, taken as the type the expression has.
-            let given = if [ "+"; "-"; "*"; "/"; "%" ] |> List.contains op then IrInt else IrBool
+            let given = if arithmetic.Contains op then IrInt else IrBool
             join "\n    " [ operandCode; instruction; conversion given expr.Type ]
+        | Prim(Binary op, operands) when operands |> List.exists (atomType >> function IrSized _ -> true | _ -> false) ->
+            this.SizedBinary op operands atomsAfter expr.Type
         | Prim(Binary op, operands) ->
             match wasmBinaryInstruction op with
             | Some instruction -> join "\n    " [ atoms operands; instruction ]
@@ -430,6 +445,11 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [ atoms args; $"call ${CoreIrOrdering.compareName (atomType first)}"; "i64.extend_i32_s" ]
         | CallRuntime(name, ([ first ] as args), _) when name = Helpers.valueHash ->
             join "\n    " [ atoms args; $"call ${CoreIrHashing.hashName (atomType first)}"; "i64.extend_i32_s" ]
+        | CallRuntime(name, [ arg ], _) when name = Intrinsics.fromInt ->
+            // An int as a sized integer, by the helper of the type it is taken as.
+            match expr.Type with
+            | IrSized integer -> join "\n    " [ atoms [ arg ]; $"call ${helper (SizedIntegerCode.fromIntHelper integer)}" ]
+            | other -> internalError $"{Intrinsics.fromInt} at {IrType.show other}, which is not a sized integer"
         | CallRuntime(name, args, returnsValue) ->
             // An int argument and an int result are converted where the helper holds them in `i32`s, and a helper that
             // returns nothing leaves unit, 0.
@@ -503,6 +523,22 @@ type private FunctionEmitter(context: EmitContext) =
         | Let _
         | Do _ -> this.Sequence tail expr
 
+    /// The code of the operator `op` on `operands`, one of them at least a sized integer, written by `atomsAfter`, taken
+    /// as a value of `ty`. An operand of no known type (see `IrError`) beside a sized integer is taken as one.
+    member _.SizedBinary (op: string) (operands: Atom list) (atomsAfter: bool -> Atom list -> string) (ty: IrType) =
+        let integer = operands |> List.pick (atomType >> function IrSized integer -> Some integer | _ -> None)
+        let sized = IrSized integer
+        let operandCode =
+            operands
+            |> List.mapi (fun index operand -> join "\n    " [ atomsAfter (index > 0) [ operand ]; conversion (atomType operand) sized ])
+            |> join "\n    "
+        let instruction =
+            match SizedIntegerCode.binary integer op with
+            | Some (SizedIntegerCode.Instruction instruction) -> instruction
+            | Some (SizedIntegerCode.CallHelper name) -> $"call ${helper name}"
+            | None -> internalError $"no instruction for the operator {op} on {IrType.show sized}"
+        join "\n    " [ operandCode; instruction; conversion (if arithmetic.Contains op then sized else IrBool) ty ]
+
     member this.Atom (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (atom: Atom) : string =
         match atom with
         | AVar v when v.Kind = Temp ->
@@ -515,6 +551,7 @@ type private FunctionEmitter(context: EmitContext) =
             | _ -> internalError "a temporary in the core IR is used twice"
         | AVar v -> $"local.get ${localName v}"
         | AInt value -> $"i64.const {value}"
+        | ASized(integer, value) -> $"{CoreIrLayout.valueType (IrSized integer)}.const {value}"
         | ABool value -> if value then "i32.const 1" else "i32.const 0"
         | AUnit -> "i32.const 0"
         | AString value -> $"i32.const {context.StringOffset value}"
