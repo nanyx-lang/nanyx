@@ -23,8 +23,10 @@ type IrType =
     /// A list of values of this type: 0 when empty, else a pointer to a cell of (head, tail).
     | IrList of IrType
     /// A function value: a closure block holding the function's table slot and what it captures. The input is a
-    /// record of the parameters when there are several, as a function's type has it.
-    | IrFunction of IrType * IrType
+    /// record of the parameters when there are several, as a function's type has it. The members are those of the
+    /// contexts the function requires where it is called, by key, each with its type: a call passes the ones in scope
+    /// there after its arguments, in this order (contexts by name, and each context's members in its layout's order).
+    | IrFunction of IrType * IrType * members: (string * IrType) list
 
 /// What a variable is, which decides how it is stored. The lowering names every variable as it is to be written in
 /// WebAssembly text; variables of the same kind and name share a local.
@@ -267,14 +269,21 @@ module IrType =
         | _ -> None
 
     /// How many parameters the lifted function `parameterNames` (its environment first) takes as a function value of
-    /// type `ty`: a lone parameter whose type is a tuple takes the tuple's elements (see `tupleElements`).
+    /// type `ty`: a lone parameter whose type is a tuple takes the tuple's elements (see `tupleElements`), and the
+    /// members of the contexts the function requires follow.
     let closureArity (parameterNames: string list) (ty: IrType) =
-        match parameterNames, ty with
-        | [ _; _ ], IrFunction(input, _) ->
-            match tupleElements input with
-            | Some elements -> 1 + elements.Length
-            | None -> 2
-        | _ -> parameterNames.Length
+        let members =
+            match ty with
+            | IrFunction(_, _, members) -> members.Length
+            | _ -> 0
+        let values =
+            match parameterNames, ty with
+            | [ _; _ ], IrFunction(input, _, _) ->
+                match tupleElements input with
+                | Some elements -> 1 + elements.Length
+                | None -> 2
+            | _ -> parameterNames.Length
+        values + members
 
     /// Whether a value of `ty` is, or holds, a tag or a function, which have no order.
     let rec holdsUnordered (ty: IrType) =
@@ -309,7 +318,10 @@ module IrType =
             let shown = fields |> List.map (fun (name, fieldTy) -> $"{name}: {show fieldTy}") |> String.concat ", "
             $"({shown})"
         | IrList element -> $"list({show element})"
-        | IrFunction(input, output) -> $"({show input} -> {show output})"
+        | IrFunction(input, output, []) -> $"({show input} -> {show output})"
+        | IrFunction(input, output, members) ->
+            let keys = members |> List.map fst |> String.concat ", "
+            $"([{keys}] {show input} -> {show output})"
 
     /// The type as part of a WebAssembly name, such as `list_string` in `id__list_string`.
     let rec mangle (ty: IrType) =
@@ -328,7 +340,10 @@ module IrType =
             |> String.concat "_"
             |> sprintf "rec_%s"
         | IrList element -> $"list_{mangle element}"
-        | IrFunction(input, output) -> $"fn_{mangle input}_to_{mangle output}"
+        | IrFunction(input, output, []) -> $"fn_{mangle input}_to_{mangle output}"
+        | IrFunction(input, output, members) ->
+            let keys = members |> List.map fst |> String.concat "_"
+            $"fn_{mangle input}_to_{mangle output}_ctx_{keys}"
         | _ -> show ty
 
 /// The type of an atom's value.

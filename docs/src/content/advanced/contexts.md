@@ -95,13 +95,25 @@ def greet: [Console] = {
 
 A function that writes its type runs only in the contexts the type declares, so calling `println` from a `def f: int -> int` is an error. A function that does not write its type needs whichever of the runtime's contexts its body uses, and so does any function that calls it. The top level of a module runs in the runtime's contexts.
 
-Passing a function as a value needs its contexts where it is named, as calling it does: the value is passed with the instances in scope there. Given `def useFoo: [Foo] string -> string`, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`.
+For now, passing a function as a value needs its contexts where it is named, as calling it does. Given `def useFoo: [Foo] string -> string`, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`.
 
 A function's type says which contexts it requires, and a lambda's type says which ones it uses: `{ s -> bar(s) }` is a `[Foo] string -> string`. Calling it requires `Foo`, as calling a function that declares `[Foo]` does, and it can't be given where a pure function is expected (`NYX0227`). A higher-order function takes such a lambda with a context variable, as `list.map` does (see [Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts)). A function named as a value, such as `useFoo` above, has its contexts in its type too.
 
-The contexts a function value requires are the ones in scope where it is called: calling a `[Foo] () -> string` inside a `use Foo(...)` is meant to use that `Foo`. The WebAssembly backend doesn't do this yet. A lambda still runs with the members of the scope it was made in, until [#836](https://github.com/nanyx-lang/nanyx/issues/836) passes the caller's instead, so for now don't rely on a different instance where a function value is called.
+The contexts a function value requires are the ones in scope where it is called: calling a `[Foo] () -> string` inside a `use Foo(...)` uses that `Foo`, whichever `Foo` was in scope where the function was made or named. Each call passes the function the instances in scope there:
 
-For now, too, a lambda that uses a context can't leave the scope that supplies it, because the lambda takes the context's members from that scope. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
+```nanyx
+context Foo = (bar: string -> string)
+
+def run: [c] ([c] () -> string) -> string = { f ->
+  use Foo(bar = { s -> "inner " ++ s }) in f()
+}
+
+def main: [Foo] () -> string = { run({ bar("x") }) }   // "inner x"
+```
+
+A function value given where one requiring other contexts is expected, such as a lambda that prints given for a context's member whose type doesn't require `Console`, keeps the instances of those other contexts that are in scope where it is given.
+
+For now, too, a lambda that uses a context can't leave the scope that supplies it. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
 
 ```nanyx
 context Foo = (bar: string -> string)

@@ -208,7 +208,8 @@ let private recordLayoutId (table: RecordTable) (fieldNames: string list) =
 /// order it requires them, given the keys of the members in scope there (`scopeKeys`). Each is found where the type
 /// checker found its context: an instance in scope (a `use`, or a context the caller's type declares), or one built
 /// from attached definitions. One the type checker left to be found by name is the member of that key in scope, or a
-/// compatible one (the same context and member, at other type arguments), or else the ambient instance's member.
+/// compatible one (the same context and member, at other type arguments), or else the ambient instance's member. One of
+/// the keys in `passed` is not found: the callers of the function's value pass it.
 let private contextArguments
     (requirements: Map<string, string list>)
     (contextTypes: Map<string, TypeExpr list>)
@@ -217,6 +218,7 @@ let private contextArguments
     (functionWrappers: Map<string, string>)
     (ambientMembers: Map<string, string>)
     (scopeKeys: Set<string>)
+    (passed: Set<string>)
     (name: string)
     (callId: NodeId)
     : CoreIrLowerInput.ContextArgument list =
@@ -265,6 +267,8 @@ let private contextArguments
     |> List.mapi (fun index requiredKey -> requiredKey, instances |> Option.map (fun perMember -> perMember.[index]))
     |> List.fold (fun (acc: CoreIrLowerInput.ContextArgument list, used: Set<string>) (requiredKey, instance) ->
         match instance with
+        // A member its value's callers pass.
+        | _ when passed.Contains requiredKey -> acc @ [ CoreIrLowerInput.PassedByCaller ], used
         // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
         // declares. A `use` of a record value, which the type checker found to be the instance by its shape, binds
         // its members by their names alone.
@@ -323,6 +327,19 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
     let fieldTypes = results |> List.map (fun (n, _, types) -> (n, types)) |> Map.ofList
     layouts, fieldTypes
 
+/// The members of each context without parameters in `typeDefs`, each with its key and declared type, in the order
+/// `typeLayouts` stores them (see `CoreIrLowerTypes.ContextLayouts`).
+let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: Map<string, string list>) : CoreIrLowerTypes.ContextLayouts =
+    typeDefs
+    |> Map.filter (fun _ info -> info.IsContext && info.Parameters.IsEmpty)
+    |> Map.toList
+    |> List.choose (fun (name, info) ->
+        match Unifier.unalias info.Underlying, typeLayouts |> Map.tryFind name with
+        | TyRecord members, Some layout ->
+            Some (name, layout |> List.choose (fun memberName -> members |> Map.tryFind memberName |> Option.map (fun ty -> contextMemberKey None memberName, ty)))
+        | _ -> None)
+    |> Map.ofList
+
 /// The functions a module was compiled into, from the core IR (see "Core IR" in `docs/src/content/work-in-progress/memory-management.md`).
 type BackendReport =
     { /// The functions, by their names in WebAssembly text, specialisations and the start function included.
@@ -347,7 +364,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
         contextMemberKeys defs (fst (extractTypeLayouts module')) |> Map.map (fun _ keys -> keys |> List.map contextMemberParameter)
-    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures typed.UseContexts module'
+    // The members of each context without parameters, as a function value that requires the context takes them.
+    let contextLayouts: CoreIrLowerTypes.ContextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
+    // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
+    let passedMembers (lambda: Expression) =
+        match checkedTypes |> Map.tryFind lambda.Id with
+        | Some (TyFunc(_, _, contexts)) ->
+            match CoreIrLowerTypes.toIrTypeIn contextLayouts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
+            | CoreIr.IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
+            | _ -> Set.empty
+        | _ -> Set.empty
+    let module', liftedOrigins, functionWrappers = LambdaLifting.lift synthesizedMembers memberCaptures passedMembers typed.UseContexts module'
     let defs =
         module'
         |> List.choose (function
@@ -386,13 +413,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // in for that member whenever a callee requires the context and the caller has nothing else to supply.
     // This is how the runtime-provided `Console` (the functions `nanyx/console` exports) reaches `@entry`.
     // Closure conversion made a wrapper for each such function, so the member is a closure over it.
+    // Lambda lifting made those wrappers only where something may need them.
     let ambientContextMembers =
-        if functionContextRequirements.IsEmpty then Map.empty
-        else
-            LambdaLifting.ambientMemberDefinitions module'
-            |> List.filter (fun (_, definition) -> not (functionContextRequirements.ContainsKey definition))
-            |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> memberName, wrapper))
-            |> Map.ofList
+        LambdaLifting.ambientMemberDefinitions module'
+        |> List.filter (fun (_, definition) -> not (functionContextRequirements.ContainsKey definition))
+        |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> memberName, wrapper))
+        |> Map.ofList
 
     let functionTable: FunctionTable =
         { Values = System.Collections.Generic.Dictionary<string, ContextFn>()
@@ -505,7 +531,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                             let rec bind (ty: Ty) =
                                 match ty with
                                 | TyVar v when parameters.ContainsKey v.Id -> parameters.[v.Id]
-                                | TyFunc(input, output, _) -> TyFunc(bind input, bind output, [])
+                                | TyFunc(input, output, contexts) -> TyFunc(bind input, bind output, contexts)
                                 | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> bind))
                                 | TyTag(tag, payload) -> TyTag(tag, payload |> Option.map bind)
                                 | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)
@@ -552,12 +578,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 functionContextRequirements
                 |> Map.map (fun name _ -> coreIrContextParameters typed.TypeDefs typed.Types name)
               ContextArguments =
-                fun name callId scopeKeys ->
+                fun name callId scopeKeys passed ->
                     try
                         Ok (contextArguments
                                 functionContextRequirements functionContextTypes typeLayouts contextInstances functionWrappers
-                                ambientContextMembers scopeKeys name callId)
+                                ambientContextMembers scopeKeys passed name callId)
                     with Failure message -> Error message
+              ContextLayouts = contextLayouts
+              AmbientMembers = ambientContextMembers
               BuiltInHoles =
                 contextInstances |> Map.filter (fun _ found -> found = [ Some InstanceBuiltIn ]) |> Map.keys |> Set.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
@@ -583,11 +611,19 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     | [] -> ()
 
     // Each definition that is not generic, followed by the specialisations of it: a generic definition has only those.
+    // Then the adapters between function types that require different contexts (see `FunctionLowering.Coerce` in `CoreIrLower.fs`).
     let definitionFunctions =
-        defs
-        |> List.collect (fun (name, _, _) ->
-            [ yield! lowered.Roots |> Map.tryFind name |> Option.map fst |> Option.toList
-              yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map fst ])
+        let definitionNames = defs |> List.map (fun (name, _, _) -> name) |> Set.ofList
+        [ yield!
+              defs
+              |> List.collect (fun (name, _, _) ->
+                  [ yield! lowered.Roots |> Map.tryFind name |> Option.map fst |> Option.toList
+                    yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map fst ])
+          yield!
+              lowered.Roots
+              |> Map.filter (fun name _ -> not (definitionNames.Contains name) && name <> CoreIrLowerInput.startFunctionName)
+              |> Map.values
+              |> Seq.map fst ]
 
     let startFunction = lowered.Roots |> Map.tryFind CoreIrLowerInput.startFunctionName |> Option.map fst
 
