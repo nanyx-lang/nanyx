@@ -64,7 +64,7 @@ let ``Every problem with a manifest is reported, naming the key`` () =
     Assert.Contains("[package] version must be a string, not 1", errors)
     Assert.Contains("unknown key [package] colour; the keys are 'name', 'version', 'sources', 'public-modules'", errors)
     Assert.Contains("[linters.default] unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"", errors)
-    Assert.Contains("unknown rule [linters.default] noSuchRule; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'linterFailed'", errors)
+    Assert.Contains("unknown rule [linters.default] noSuchRule; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'shadowedPreludeNames', 'linterFailed'", errors)
     Assert.Contains("unknown linter [linters.other]; the linters are 'default'", errors)
     Assert.Contains("[dependencies] is not supported yet: a package can only use the standard library and its own files", errors)
     Assert.Contains("unknown table [extras]; the tables are 'package', 'dependencies', 'project-references', 'linters', 'formatter'", errors)

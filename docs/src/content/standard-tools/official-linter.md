@@ -170,6 +170,21 @@ The rule (`unusedResults`) reports a statement of a block, other than its last, 
 
 It leaves alone a statement whose type is `()`, such as a call to `println`; the last statement of a block, which is the block's value; a `for` loop, whose value is `()` whatever its body gives; a workflow keyword's statement, such as `try check(args)` in a `proc` block, whose value the workflow takes; and a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), which `unreachableCode` is about.
 
+## Name that hides a prelude member
+
+```nanyx
+def pow = { x: int -> x * x } -- Linter warning: `pow` hides the prelude's `pow`, which can't be named where it is in scope
+
+def total: list(int) -> int = { xs ->
+  def ignore = 0 -- Linter warning: `ignore` hides the prelude's `ignore`, which can't be named where it is in scope
+  list.sum(xs) + ignore
+}
+```
+
+The rule (`shadowedPreludeNames`) reports a top-level def, a local def, a lambda's argument or a variable a pattern binds whose name is one the prelude brings into scope, such as `ignore`, `panic`, `pow` or `memory`. Wherever the new name is in scope, the prelude's can't be named, so a later reader who expects the prelude's gets yours. It is a warning by default, and has no fix: rename the definition.
+
+Only the names the prelude brings into scope unqualified count. A definition attached to a type, such as `list.map`, is named through the type, so a `def map` of your own hides nothing; nor does a `def toString` outside a def that requires `ToString`, where the context's member isn't in scope. The standard library's own modules, which define the prelude's names, are not reported.
+
 # Learn more
 
 For the full linter model (diagnostic levels, configuration, and custom linters), see [Linters](../advanced/linters).
