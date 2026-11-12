@@ -1474,12 +1474,12 @@ module Compiler =
 
     /// The module from `origin`, in no package, checked and compiled (see `compileChecked`).
     let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        let checkedModules = CheckedModules None in compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty)
+        let checkedModules = CheckedModules None in Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
 
     /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules.
     let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules (Some package)
-        compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty)
+        Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
 
     /// `compileFile` with the linters and severities `options` gives.
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
