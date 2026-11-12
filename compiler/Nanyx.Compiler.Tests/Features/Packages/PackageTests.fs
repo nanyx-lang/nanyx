@@ -1,4 +1,4 @@
-module Nanyx.Compiler.PackageTests
+module Nanyx.Compiler.Tests.Features.Packages.Packages
 
 open System
 open System.IO
@@ -6,7 +6,7 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
+let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
 let private manifest extra = $"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n{extra}"
 

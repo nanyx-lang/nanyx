@@ -37,8 +37,12 @@
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />
     <Compile Include="Features\Contexts\UnderscoreContextNameTests.fs" />
     <Compile Include="Features\Contexts\ContextTypeParameterTests.fs" />
+    <Compile Include="Features\Contexts\UndeclaredContextTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
+    <Compile Include="Features\Definitions\ModuleBlockTests.fs" />
+    <Compile Include="Features\Diagnostics\DiagnosticCodeTests.fs" />
+    <Compile Include="Features\Diagnostics\DiagnosticSpanTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
     <Compile Include="Features\Equality\UnionRestEqualityTests.fs" />
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
@@ -49,11 +53,16 @@
     <Compile Include="Features\Imports\NameSuggestionTests.fs" />
     <Compile Include="Features\Imports\PackageImportTests.fs" />
     <Compile Include="Features\Imports\PartialModuleTests.fs" />
+    <Compile Include="Features\Imports\ImportedTypeTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
     <Compile Include="Features\Inference\InferenceTests.fs" />
     <Compile Include="Features\Inference\TypedAstTests.fs" />
     <Compile Include="Features\Inference\UnifierTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
+    <Compile Include="Features\Linters\LinterTests.fs" />
+    <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
+    <Compile Include="Features\Linters\NonTailRecursionTests.fs" />
+    <Compile Include="Features\Linters\UnreachableArmsTests.fs" />
     <Compile Include="Features\Linters\UnusedImportsTests.fs" />
     <Compile Include="Features\Linters\NoTagInCommonTests.fs" />
     <Compile Include="Features\Linters\UnusedPrivateDefinitionsTests.fs" />
@@ -73,7 +82,10 @@
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
     <Compile Include="Features\Matches\NestedTagPatternTests.fs" />
     <Compile Include="Features\Matches\ScrutineeRestTests.fs" />
+    <Compile Include="Features\Matches\UnitPatternTests.fs" />
     <Compile Include="Features\Ordering\OrderingTests.fs" />
+    <Compile Include="Features\Packages\PackageTests.fs" />
+    <Compile Include="Features\Scripts\ScriptTests.fs" />
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\BindTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />
@@ -93,12 +105,9 @@
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />
     <Compile Include="Features\Types\TypeHoleTests.fs" />
     <Compile Include="Features\Types\TypeOfTests.fs" />
+    <Compile Include="Features\Types\UnknownTypeNameTests.fs" />
     <Compile Include="Features\Types\UnionsTests.fs" />
     <Compile Include="Features\Workflows\WorkflowTests.fs" />
-    <Compile Include="DiagnosticsTests.fs" />
-    <Compile Include="LinterTests.fs" />
-    <Compile Include="PackageTests.fs" />
-    <Compile Include="ScriptTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
