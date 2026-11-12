@@ -285,6 +285,48 @@
     call $__nanyx_copy_bytes
     local.get $out
   )
+  (func $__nanyx_string_equals (param $a i32) (param $b i32) (result i32)
+    (local $len i32)
+    (local $i i32)
+    local.get $a
+    call $__nanyx_string_length
+    local.set $len
+    local.get $len
+    local.get $b
+    call $__nanyx_string_length
+    i32.ne
+    if
+      i32.const 0
+      return
+    end
+    block $done
+      loop $compare
+        local.get $i
+        local.get $len
+        i32.ge_s
+        br_if $done
+        local.get $a
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.get $b
+        local.get $i
+        i32.add
+        i32.load8_u
+        i32.ne
+        if
+          i32.const 0
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $compare
+      end
+    end
+    i32.const 1
+  )
   (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)
     local.get $base
     local.get $offset
@@ -473,7 +515,11 @@
     call $__nanyx_drop_string
     local.get $xString
     local.get $yString
-    i32.eq
+    call $__nanyx_string_equals
+    local.get $xString
+    call $__nanyx_drop_string
+    local.get $yString
+    call $__nanyx_drop_string
   )
 
   (func $main (result i32) (local $fakeInt i32) (local $__use_ToString_int_toString_1 i32) (local $plainString i32) (local $__use_ToString_string_toString_3 i32)

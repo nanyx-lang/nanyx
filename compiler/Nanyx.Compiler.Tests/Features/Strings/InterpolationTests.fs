@@ -97,3 +97,46 @@ let ``An attached toString of the wrong type is reported at the hole`` () =
     Assert.Equal(
         "Interpolating a value of type 'Point' requires the context 'ToString(Point)', but 'Point.toString' has the type 'Point -> int', where 'toString' must be 'Point -> string'",
         message)
+
+/// The types of the context member calls that are holes of `source`, in the order they are written.
+let private holeCallTypes (source: string) =
+    let typed = compileClean source
+    typed.Module
+    |> List.collect SyntaxTree.ofItem
+    |> List.collect SyntaxTree.expressionsWithin
+    |> List.collect (function
+        | Kind (InterpolatedString parts) ->
+            parts |> List.choose (function StringExpr (Kind (FunctionCall(_, _, [ Kind (ContextMemberCall _) as call ]))) -> Some call | _ -> None)
+        | _ -> [])
+    |> List.map (fun call -> Unifier.tyToString typed.ExprTypes.[call.Id])
+
+[<Fact>]
+let ``A hole that calls a context's member has the member's result type`` () =
+    let source =
+        """
+context Describe(a) = (size: a -> int, label: a -> string, parts: a -> (x: int, y: int))
+type Point = (x: int, y: int)
+
+def describe: [Describe(a)] a -> string = { value ->
+  "{Describe(a).size(value)} {Describe(a).label(value)} {Describe(a).parts(value)}"
+}
+def Point.size: Point -> int = { p -> 2 }
+def Point.label: Point -> string = { p -> "point" }
+def Point.parts: Point -> (x: int, y: int) = { p -> (x = p.x, y = p.y) }
+def s = describe(Point(x = 1, y = 2))
+"""
+        |> _.ReplaceLineEndings("\n")
+    Assert.Equal<string list>([ "int"; "string"; "(x: int, y: int)" ], holeCallTypes source)
+
+[<Fact>]
+let ``A context member call is checked against the member's parameter`` () =
+    let source =
+        """
+context ToText(a) = (textlen: a -> int)
+
+def describe: [ToText(int)] int -> string = { value -> "{ToText(int).textlen(true)}" }
+"""
+        |> _.ReplaceLineEndings("\n")
+    let code, at = singleError source
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("true", at)

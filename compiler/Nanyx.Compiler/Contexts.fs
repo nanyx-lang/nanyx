@@ -108,6 +108,25 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
             | None -> [], state
     | _ -> [], state
 
+/// The type of the member `memberName` of the context `ctxExpr` names, `C(T)` as `C(T).member` writes it: the member's
+/// type in the context's definition, with the context's parameters the types it is applied to. None if the context
+/// has no such member.
+let internal memberType (state: InferState) (ctxExpr: TypeExpr) (memberName: Identifier) : (Ty * InferState) option =
+    match ctxExpr.Kind with
+    | TypeApply(name, args) ->
+        match tryFindTypeDef name state with
+        | Some info when info.IsContext && args.Length = info.Parameters.Length ->
+            match Unifier.unalias info.Underlying with
+            | TyRecord fields ->
+                fields
+                |> Map.tryFind memberName
+                |> Option.map (fun ty ->
+                    let argTys, next = args |> List.mapFold typeExprToTy state
+                    Unifier.applyToParameters info.Parameters argTys ty, next)
+            | _ -> None
+        | _ -> None
+    | _ -> None
+
 let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
     let mutable current = state
     let mutable env' = env
