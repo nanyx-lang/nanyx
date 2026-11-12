@@ -1228,10 +1228,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 Ok (mkTypedExpr expr ty None None None, next)
             | None -> readMember env state expr baseExpr (Some baseName) memberName memberSpan
         | _ -> readMember env state expr baseExpr None memberName memberSpan
+    // `C(T).member` as a value has the member's type in the context's definition, as a call of it does. A member the
+    // context does not have leaves the value's type to what uses it.
     | ContextMemberAccess(ctxType, memberName) ->
-        // TODO: Look up the context type and find the member's type
-        // For now, return a fresh type variable
-        let ty, next = freshVar (recordContextMemberReference expr ctxType memberName state)
+        let state = recordContextMemberReference expr ctxType memberName state
+        let ty, next =
+            match Contexts.memberType state ctxType memberName with
+            | Some (memberTy, next) -> memberTy, next
+            | None -> freshVar state
         Ok (mkTypedExpr expr ty None None None, next)
     // `C(T).member(args)`: the arguments are checked against the member's type in the context's definition, and the
     // call has its result type. A member the context does not have leaves the call's type to what uses it.
