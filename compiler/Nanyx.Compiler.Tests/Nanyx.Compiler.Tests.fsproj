@@ -61,6 +61,7 @@
     <Compile Include="Features\Inference\InferenceTests.fs" />
     <Compile Include="Features\Inference\TypedAstTests.fs" />
     <Compile Include="Features\Inference\UnifierTests.fs" />
+    <Compile Include="Features\Lambdas\ArmsAfterParametersTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
     <Compile Include="Features\Linters\LinterTests.fs" />
     <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
