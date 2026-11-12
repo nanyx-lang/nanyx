@@ -273,11 +273,25 @@ let defNameAndType (lineStartCol: int64) (identParser: Parser<Identifier * TypeE
             opt (attempt (newlineIndentedContinuation lineStartCol >>. pstring ":" >>. ws >>. typeSignature .>> wsNoNl()))
             |>> fun continuationType -> (name, continuationType)
 
+/// Fails, at the operator, when `name`, a def's name written from `start`, defines an operator Nanyx does not have:
+/// `` def `+++` = ... `` or `` def $Money.`+++` = ... `` (see `binaryOperators`).
+let definableName (start: Position) (name: Identifier) : Parser<unit, ParseState> =
+    let last = name.Substring(name.LastIndexOf '.' + 1)
+    if Names.isOperator last && not (isDefinableOperator last) then
+        let offset = int64 ((Names.written name).Length - (Names.written last).Length)
+        let operators = binaryOperators |> List.filter (fun op -> isDefinableOperator op.Text) |> List.map (fun op -> $"`{op.Text}`")
+        reportFocused
+            (Position(start.StreamName, start.Index + offset, start.Line, start.Column + offset))
+            $"""`{last}` is not one of Nanyx's operators, so it cannot be defined. The operators are {String.concat ", " operators}"""
+    else
+        preturn ()
+
 /// `def name = value`. The def's name is declared by its value.
 let parseDefWith (lineStartCol: int64) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
     (pstring "def" >>. ws >>. getPosition .>>. defNameAndType lineStartCol identParser)
     >>= fun (start, (name, typeOpt)) ->
-        defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser
+        definableName start name
+        >>. defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser
         >>= fun expr -> declare DefValue expr.Id [ name, nameSpan start name ] >>% (name, typeOpt, expr)
 
 /// A type's or a context's parameter, with an optional bound: `a`, `a :: Shape`. It is a type variable in the

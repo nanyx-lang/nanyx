@@ -24,7 +24,8 @@ type private Position =
       /// Nothing follows it in the enclosing construct, so a construct that takes everything after it (a `match`, an
       /// `if`, a `with`) needs no parentheses.
       Tail: bool
-      /// The loosest operator it may be without parentheses: 0 takes a pipe, 9 only an operand of `.` or `not`.
+      /// The loosest operator it may be without parentheses: 0 takes a pipe, `prefixPrecedence`
+      /// only an operand of `.` or `not`.
       Prec: int }
 
 /// Inside brackets, where anything goes.
@@ -34,7 +35,7 @@ let private full = { Inline = false; Tail = true; Prec = 0 }
 let private statementPosition = { Inline = true; Tail = true; Prec = 0 }
 
 /// An operand of `.` or `not`: a primary expression.
-let private operandPosition = { Inline = false; Tail = false; Prec = 9 }
+let private operandPosition = { Inline = false; Tail = false; Prec = prefixPrecedence }
 
 /// How tightly the operator the parser reads as `op` binds, as the parser has it (see `binaryOperators`).
 let private precedence op =
@@ -44,11 +45,14 @@ let private precedence op =
 
 /// The operators the formatter writes in a statement without parentheses (see `Position.Inline`). The parser takes
 /// every operator there but `..`; the rest are bracketed only because this set predates that (#960).
-let private inlineOperators = set [ "**"; "*"; "/"; "+"; "-"; "++"; "<"; ">"; "<="; ">="; "=="; "!=" ]
+let private inlineOperators =
+    set [ "**"; "*"; "/"; "^"; "<*>"; "+"; "-"; "<+>"; "++"; "<>"; ">>"; "<<"; "<"; ">"; "<="; ">="; "~"; "=="; "!="; ">>="; "=<<" ]
 
-/// Whether the operator `op` groups to the right: `a ++ b ++ c` is `a ++ (b ++ c)`.
-let private isRightAssociative op =
-    binaryOperatorNamed op |> Option.exists (fun found -> found.Associativity = RightAssociative)
+/// Which way the operator `op` groups, as the parser has it.
+let private associativity op =
+    match binaryOperatorNamed op with
+    | Some found -> found.Associativity
+    | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
 
 /// The name a destructuring def binds its whole value to (see `Syntax`).
 let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
@@ -348,13 +352,13 @@ let format (options: Options) (parsed: SourceModule) : string =
     and needsParentheses (position: Position) (e: Expression) =
         match e.Kind with
         | BinaryOp(op, _, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
-        | RangeSyntax.Call _ -> 4 < position.Prec || position.Inline
-        | FunctionCall("not", _, [ _ ]) -> 8 < position.Prec || position.Inline
-        | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> 8 < position.Prec
+        | RangeSyntax.Call _ -> rangePrecedence < position.Prec || position.Inline
+        | FunctionCall("not", _, [ _ ]) -> position.Prec >= prefixPrecedence || position.Inline
+        | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> position.Prec >= prefixPrecedence
         | Pipe _ -> 0 < position.Prec
         // `(r with (x = 1)).x`: nothing follows a `with` but an operator, though its updates are bracketed.
-        | FunctionCall("__with", _, [ _; updates ]) when startsWith updates.Span "(" -> 8 < position.Prec
-        | _ when isOpenEnded e -> not position.Tail || position.Prec > 8
+        | FunctionCall("__with", _, [ _; updates ]) when startsWith updates.Span "(" -> position.Prec >= prefixPrecedence
+        | _ when isOpenEnded e -> not position.Tail || position.Prec >= prefixPrecedence
         | _ -> false
 
     /// Whether the construct takes everything after it, as the last arm of a `match` takes the rest of the line.
@@ -394,8 +398,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | _ -> false
             cat [ text "-"; (if joinsTheMinus then parens (exprBare full operand) else expr operandPosition operand) ]
         | RangeSyntax.Call(a, Some b) ->
-            cat [ expr { position with Tail = false; Prec = 4 } a; text ".."; expr { position with Prec = 5 } b ]
-        | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = 4 } a; text ".." ]
+            cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".."; expr { position with Prec = rangePrecedence + 1 } b ]
+        | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".." ]
         // Updates written in parentheses, `record with (x = 1, y = 2)`, stay there, laid out as a record's fields are.
         | FunctionCall("__with", _, [ record; updates ]) when startsWith updates.Span "(" ->
             cat [ expr operandPosition record; text " with "; exprBare full updates ]
@@ -469,30 +473,22 @@ let format (options: Options) (parsed: SourceModule) : string =
             | FloatLit f -> text (f.ToString("R", CultureInfo.InvariantCulture))
             | BoolLit b -> text (if b then "true" else "false")
 
-    /// An operator as written: `&&` and `||` build the same tree as `and` and `or`, and the source says which it was.
-    and writtenOperator (op: string) (l: Expression) (r: Expression) =
-        let between =
-            if valid l.Span && valid r.Span && l.Span.End <= r.Span.Start then
-                source.Substring(l.Span.End, r.Span.Start - l.Span.End).Trim(' ', '\t', '\n', '(', ')')
-            else
-                ""
-        match op with
-        | "and" when between = "&&" -> "&&"
-        | "or" when between = "||" -> "||"
-        | _ -> op
 
     /// A chain of operators of one precedence, `a ++ b ++ c`, as its operands and the operators between them. In a
     /// position that may cross lines, as many operands go on a line as fit, each line ending in an operator (the
     /// parser takes a line break after an operator, not before one), and the lines after the first indented once.
     and binary (position: Position) (op: string) (l: Expression) (r: Expression) : Doc =
         let p = precedence op
-        let isRight = isRightAssociative op
-        // A node of the chain: same precedence, needing no brackets where it is, and not a list with spreads.
+        let grouping = associativity op
+        let isRight = grouping = RightAssociative
+        // A node of the chain: same precedence and grouping, which groups at all, needing no brackets where it is, and
+        // not a list with spreads.
         let continues (x: Expression) =
             match x.Kind with
             | BinaryOp(op', _, _, _) ->
-                precedence op' = p
-                && isRightAssociative op' = isRight
+                grouping <> NonAssociative
+                && precedence op' = p
+                && associativity op' = grouping
                 && not (position.Inline && not (inlineOperators.Contains op'))
                 && (spreadSegments x).IsNone
             | _ -> false
@@ -500,27 +496,35 @@ let format (options: Options) (parsed: SourceModule) : string =
             match x.Kind with
             | BinaryOp(op', _, a, b) when continues x ->
                 let operands, operators = flattenLeft a
-                operands @ [ b ], operators @ [ writtenOperator op' a b ]
+                operands @ [ b ], operators @ [ op' ]
             | _ -> [ x ], []
         let rec flattenRight (x: Expression) =
             match x.Kind with
             | BinaryOp(op', _, a, b) when continues x ->
                 let operands, operators = flattenRight b
-                a :: operands, writtenOperator op' a b :: operators
+                a :: operands, op' :: operators
             | _ -> [ x ], []
         let operands, operators =
             if isRight then
                 let rest, operators = flattenRight r
-                l :: rest, writtenOperator op l r :: operators
+                l :: rest, op :: operators
             else
                 let first, operators = flattenLeft l
-                first @ [ r ], operators @ [ writtenOperator op l r ]
+                first @ [ r ], operators @ [ op ]
         let count = operands.Length
         let operandDoc index operand =
             let isLast = index = count - 1
+            // An operand of the same precedence that groups another way is bracketed: `(f >> g) << h`.
+            let groupsAnotherWay =
+                match operand.Kind with
+                | BinaryOp(op', _, _, _) -> precedence op' = p && associativity op' <> grouping
+                | _ -> false
             let prec =
-                if isRight then (if isLast then p else p + 1)
-                else (if index = 0 then p else p + 1)
+                match grouping with
+                | _ when groupsAnotherWay -> p + 1
+                | RightAssociative -> if isLast then p else p + 1
+                | LeftAssociative -> if index = 0 then p else p + 1
+                | NonAssociative -> p + 1
             expr { position with Tail = isLast && position.Tail; Prec = prec } operand
         let docs = List.mapi operandDoc operands
         // A shorthand lambda's implicit argument, the first operand, is printed as nothing, and so is the space after it.

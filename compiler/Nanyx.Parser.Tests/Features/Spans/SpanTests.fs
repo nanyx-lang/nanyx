@@ -92,7 +92,7 @@ let rec private operatorSpans (source: string) (expr: Expression) =
 let ``a binary operator records the span of the operator itself`` () =
     let written =
         """def x = a + b * c - d
-def y = a <= b and c && d
+def y = a <= b and c or d
 def z = a ++
   b"""
     let source = written.ReplaceLineEndings "\n"
@@ -100,9 +100,8 @@ def z = a ++
     Assert.Equal<(string * string * int * int) list>(
         [ "-", "-", 0, 18; "+", "+", 0, 10; "*", "*", 0, 14 ],
         operatorSpans source (valueOf "x" module'))
-    // `&&` is read as `and`, and is reported where it is written.
     Assert.Equal<(string * string * int * int) list>(
-        [ "and", "&&", 1, 21; "and", "and", 1, 15; "<=", "<=", 1, 10 ],
+        [ "or", "or", 1, 21; "and", "and", 1, 15; "<=", "<=", 1, 10 ],
         operatorSpans source (valueOf "y" module'))
     // An operator at the end of its line.
     Assert.Equal<(string * string * int * int) list>([ "++", "++", 2, 10 ], operatorSpans source (valueOf "z" module'))

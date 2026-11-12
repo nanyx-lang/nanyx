@@ -4,7 +4,7 @@ description: "Installing and configuring the Nanyx extension for Visual Studio C
 order: 3
 ---
 
-The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, and a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines) and runs the compiler as a language server (`nanyx lsp`), which gives you:
+The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines, and only [Nanyx's operators](../tour/operators#the-operators) are coloured as operators) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type
 - the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line
