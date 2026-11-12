@@ -26,7 +26,7 @@ type IrType =
     /// record of the parameters when there are several, as a function's type has it. The members are those of the
     /// contexts the function requires where it is called, by key, each with its type: a call passes the ones in scope
     /// there after its arguments, in this order (contexts by name, and each context's members in its layout's order).
-    | IrFunction of IrType * IrType * members: (string * IrType) list
+    | IrFunction of IrType * IrType * members: (ContextMemberKey * IrType) list
     /// A type that holds itself, as a type alias that names itself in the payload of one of its tags does
     /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`): the type is its body, with each `IrSelf` in it the whole
     /// type again. Code that reads what the type is made of reads `IrType.unfold` of it.
@@ -351,7 +351,7 @@ module IrType =
         | IrList element -> $"list({show element})"
         | IrFunction(input, output, []) -> $"({show input} -> {show output})"
         | IrFunction(input, output, members) ->
-            let keys = members |> List.map fst |> String.concat ", "
+            let keys = members |> List.map (fst >> ContextMemberKey.text) |> String.concat ", "
             $"([{keys}] {show input} -> {show output})"
         | IrRecursive body -> $"rec self. {show body}"
         | IrSelf -> "self"
@@ -375,7 +375,7 @@ module IrType =
         | IrList element -> $"list_{mangle element}"
         | IrFunction(input, output, []) -> $"fn_{mangle input}_to_{mangle output}"
         | IrFunction(input, output, members) ->
-            let keys = members |> List.map fst |> String.concat "_"
+            let keys = members |> List.map (fst >> ContextMemberKey.text) |> String.concat "_"
             $"fn_{mangle input}_to_{mangle output}_ctx_{keys}"
         | IrRecursive body -> $"mu_{mangle body}"
         | _ -> show ty

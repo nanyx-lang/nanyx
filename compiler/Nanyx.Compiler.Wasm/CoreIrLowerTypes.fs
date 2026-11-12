@@ -150,7 +150,7 @@ let sortFields (fields: (string * 'a) list) =
 
 /// The members of each context without parameters, by the context's name: each member's key and declared type, in
 /// the order the context's layout stores them.
-type ContextLayouts = Map<string, (string * Ty) list>
+type ContextLayouts = Map<string, (ContextMemberKey * Ty) list>
 
 /// The IR type of `ty`, once `subst` is applied. A type variable nothing constrains (the element of `[]`, the rest of
 /// an open union that no use closes) has no value of its own at run time, since nothing can make or inspect one, so it

@@ -32,7 +32,7 @@ type internal Lowering =
     /// As the wrapper of a top-level function, which it calls at this type, with the members of the contexts it
     /// requires: those of these keys and types, which the closure captures, and those its value's type requires, which
     /// each call passes.
-    | WrapperCalling of string * Ty * (string * IrType) list
+    | WrapperCalling of string * Ty * (ContextMemberKey * IrType) list
     /// As a function value of the second type that calls one of the first, which its closure holds, with the members
     /// the first requires: each passed to it, or captured after the value where it was made (see `Coerce`).
     | Adapting of IrType * IrType
@@ -56,10 +56,10 @@ type internal Scope =
       InterpolationDepth: int
       /// The context members in scope, by key (and by the other names they can be called by): each a variable holding
       /// the member's closure.
-      Members: Map<string, Var>
+      Members: Map<ContextMemberKey, Var>
       /// In a lifted lambda, the captured locals that hold context members (`__ctx_<key>`), each with the keys and other
       /// names the member is in scope by once the local is bound.
-      CapturedMembers: Map<string, string list>
+      CapturedMembers: Map<string, ContextMemberKey list>
       /// How many `for` loops enclose the expression, which names a loop's locals.
       ForDepth: int
       /// The closures of each local function generic in type variables of its own, by the variable its name is bound
@@ -237,7 +237,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The members the function being lowered takes after its other parameters, when it is a lifted lambda, which a
     /// `rec` local function passes on when it calls itself.
-    let mutable selfMembers: (string * IrType) list = []
+    let mutable selfMembers: (ContextMemberKey * IrType) list = []
 
     let bindTemp (value: Expr) (k: Atom -> Expr) : Expr =
         let temp = newTemp value.Type
@@ -267,8 +267,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let var = this.LocalAt scope var (input.ExprTypes |> Map.tryFind expr.Id)
                 k (mk (Atom(AVar var)) var.Type)
             // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
-            | None when scope.Members.ContainsKey name ->
-                let memberVar = scope.Members.[name]
+            | None when scope.Members.ContainsKey (NamedMember name) ->
+                let memberVar = scope.Members.[NamedMember name]
                 k (mk (Atom(AVar memberVar)) memberVar.Type)
             | None when definitions.ContainsKey name && not (isFunction name) ->
                 // A top-level value is compiled to a function of no parameters: evaluate it.
@@ -482,10 +482,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
             | _ -> cannot $"the type constructor {name} without a record of its fields"
-        | FunctionCall(name, _, args) when scope.Members.ContainsKey name ->
+        | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
-            this.CallValue scope scope.Members.[name] args ty k
+            this.CallValue scope scope.Members.[NamedMember name] args ty k
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
@@ -652,13 +652,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> this.CallValue scope memberVar args ty k
-            | None -> cannot $"the context member {key}, which is not in scope"
+            | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
         | ContextMemberAccess(contextType, memberName) ->
             // `C(T).m`: the member of that instance of the context as a value.
             let key = contextMemberKey (Some contextType) memberName
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> k (mk (Atom(AVar memberVar)) memberVar.Type)
-            | None -> cannot $"the context member {key}, which is not in scope"
+            | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
         // A hole the compiler writes itself holds its value, not a call to convert it.
@@ -720,7 +720,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// it (see `LowerInput.ContextArguments`), then those of the contexts its context variables stand for, found in
     /// scope. They are passed on to `k` in the order the function takes them, but for those of the keys in `passed`,
     /// which the callers of the function's value pass instead.
-    member private this.ContextMembers (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) (passed: Set<string>) (k: (string * Atom) list -> Expr) : Expr =
+    member private this.ContextMembers (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) (passed: Set<ContextMemberKey>) (k: (ContextMemberKey * Atom) list -> Expr) : Expr =
         let contextParameters = input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
         let bindings = bindingsAt name instanceTy
         // The type of each member here, where the function's type gives it.
@@ -730,7 +730,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match input.ContextArguments name node (scope.Members |> Map.keys |> Set.ofSeq) passed with
         | Error reason -> cannot reason
         | Ok arguments ->
-            let rec pass (remaining: (string * ContextArgument * Ty option) list) (acc: (string * Atom) list) =
+            let rec pass (remaining: (ContextMemberKey * ContextArgument * Ty option) list) (acc: (ContextMemberKey * Atom) list) =
                 let next key (atom: Atom) (memberTy: Ty option) rest =
                     match memberTy with
                     | Some ty -> this.Coerce scope atom (toIrType ty) (fun atom -> pass rest ((key, atom) :: acc))
@@ -756,8 +756,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The member of each of `members` (a key and the type the member is wanted at), as the scope has it, or else the
     /// ambient instance's, each adapted to its type (see `Coerce`).
-    member this.MemberAtoms (scope: Scope) (members: (string * IrType) list) (k: Atom list -> Expr) : Expr =
-        let rec go (remaining: (string * IrType) list) (acc: Atom list) =
+    member this.MemberAtoms (scope: Scope) (members: (ContextMemberKey * IrType) list) (k: Atom list -> Expr) : Expr =
+        let rec go (remaining: (ContextMemberKey * IrType) list) (acc: Atom list) =
             match remaining with
             | [] -> k (List.rev acc)
             | (key, ty) :: rest ->
@@ -765,7 +765,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match scope.Members |> Map.tryFind key, input.AmbientMembers |> Map.tryFind key with
                 | Some var, _ -> found (AVar var)
                 | None, Some wrapper -> bindTemp (this.WrapperClosure wrapper None) found
-                | None, None -> cannot $"the context member {key}, which is not in scope"
+                | None, None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
         go members []
 
     /// `atoms`, each adapted to the type in `tys` in its place (see `Coerce`); as they are when `tys` is empty.
@@ -1118,13 +1118,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let bindings =
                 fields
                 |> List.map (function
-                    | NamedField(key, Kind (IdentifierExpr local)) when scope.Vars.ContainsKey local -> key, local
-                    | NamedField(key, _) -> cannot $"the `use` binding of '{key}'"
+                    | NamedField(name, Kind (IdentifierExpr local)) when scope.Vars.ContainsKey local ->
+                        input.UseKeys |> Map.tryFind name |> Option.defaultValue (NamedMember name), local
+                    | NamedField(name, _) -> cannot $"the `use` binding of '{name}'"
                     | PositionalField _ -> cannot "a `use` binding without a name")
-            let rec adapt (remaining: (string * string) list) (vars: Map<string, Var>) =
+            let rec adapt (remaining: (ContextMemberKey * string) list) (vars: Map<string, Var>) =
                 match remaining with
                 | [] ->
-                    let members = bindings |> List.fold (fun (acc: Map<string, Var>) (key, local) -> acc |> Map.add key vars.[local]) scope.Members
+                    let members = bindings |> List.fold (fun (acc: Map<ContextMemberKey, Var>) (key, local) -> acc |> Map.add key vars.[local]) scope.Members
                     this.Block { scope with Members = members; Vars = vars } rest k
                 | (key, local) :: others ->
                     match declaredMemberTypes |> Map.tryFind key with
@@ -1357,13 +1358,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 |> List.map (fun parameter ->
                     match parameter.Type with
                     | Some ty -> parameter.Key, newVar parameter.Name Param (toIrType (substitute subst ty))
-                    | None -> cannot $"the context member {parameter.Key}, whose type is not known")
+                    | None -> cannot $"the context member {ContextMemberKey.text parameter.Key}, whose type is not known")
             // Then those of the contexts its context variables stand for here.
             let members =
                 members @ (variableMembers name subst |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty))
             let memberScope =
                 aliases
-                |> Map.fold (fun acc alias key -> acc |> Map.add alias (Map.ofList members).[key]) (Map.ofList members)
+                |> Map.fold (fun acc alias key -> acc |> Map.add (NamedMember alias) (Map.ofList members).[key]) (Map.ofList members)
             // A lambda lifted out of the function captures each member by its parameter's name.
             let parameterVars = members |> List.map (fun (_, var) -> var.Name, var)
             let scope = scopeOf parameters
@@ -1395,7 +1396,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let contextParameters, aliases = input.ContextParameters |> Map.tryFind owner |> Option.defaultValue ([], Map.empty)
                 contextParameters
                 |> List.map (fun parameter ->
-                    let otherNames = aliases |> Map.filter (fun _ key -> key = parameter.Key) |> Map.keys |> List.ofSeq
+                    let otherNames = aliases |> Map.filter (fun _ key -> key = parameter.Key) |> Map.keys |> Seq.map NamedMember |> List.ofSeq
                     parameter.Name, parameter.Key :: otherNames)
                 |> Map.ofList
             // The members of the contexts the lambda requires where it is called follow its other parameters.
@@ -1426,7 +1427,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | _ -> []
             let declared = input.ContextParameters |> Map.tryFind wrapped |> Option.map (fst >> List.map _.Key) |> Option.defaultValue []
             let order = declared @ (variableMembers wrapped (bindingsAt wrapped instanceTy) |> List.map fst)
-            let rec call (remaining: string list) (members: Atom list) =
+            let rec call (remaining: ContextMemberKey list) (members: Atom list) =
                 match remaining with
                 | [] -> mk (Call(callee wrapped instanceTy, (named |> List.map AVar) @ List.rev members)) (toIrType resultTy)
                 | key :: rest ->
@@ -1434,7 +1435,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | Some index, _ ->
                         bindTemp (mk (Field(AVar environmentParameter, index + 1)) (snd captured.[index])) (fun atom -> call rest (atom :: members))
                     | None, Some (_, var) -> call rest (AVar var :: members)
-                    | None, None -> internalError $"the context member {key} of '{wrapped}' is neither captured nor passed"
+                    | None, None -> internalError $"the context member {ContextMemberKey.text key} of '{wrapped}' is neither captured nor passed"
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
         | Adapting _ -> internalError "an adapter lowered as a definition"
 
@@ -1454,7 +1455,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let passed = wanted |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty)
         let scope = { emptyScope with Members = passed |> Map.ofList }
         let adapted = newVar "__adapted" Local givenTy
-        let rec call (remaining: (string * IrType) list) (members: Atom list) =
+        let rec call (remaining: (ContextMemberKey * IrType) list) (members: Atom list) =
             match remaining with
             | [] -> mk (CallClosure(adapted, (values |> List.map AVar) @ List.rev members)) result
             | (key, ty) :: rest ->

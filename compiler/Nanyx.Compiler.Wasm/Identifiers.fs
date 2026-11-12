@@ -4,22 +4,20 @@ module internal Transpiler.Wasm.Identifiers
 open System
 open Parser.Program
 
-// Convert a TypeExpr to a string key (e.g., TypeApply("ToString", [TypeVar "a"]) -> "ToString_a")
-let rec typeExprToKey (t: TypeExpr) =
+/// `t` as a type key: `ToString(a)` is `TypeKey("ToString", [ TypeKey("a", []) ])`.
+let rec private typeKeyOf (t: TypeExpr) =
     match t.Kind with
-    | TypeName name -> name
-    | TypeVar name -> name
-    | TypeApply(name, typeArgs) -> 
-        let argsStr = typeArgs |> List.map typeExprToKey |> String.concat "_"
-        $"{name}_{argsStr}"
-    | _ -> "unknown"
+    | TypeName name
+    | TypeVar name -> TypeKey(name, [])
+    | TypeApply(name, typeArgs) -> TypeKey(name, typeArgs |> List.map typeKeyOf)
+    | _ -> TypeKey("unknown", [])
 
-/// The key a context member is known by in the backend: the member's name for a plain context, and
-/// `<context key>_<member>` for an instance of a parameterised one (`ToString_int_toString`).
+/// The key a context member is known by in the backend: the member's name for a plain context, and the instance's
+/// member for an instance of a parameterised one (`toString` of `ToString(int)`).
 let contextMemberKey (contextType: TypeExpr option) (memberName: string) =
     match contextType with
-    | Some ({ TypeExpr.Kind = TypeApply _ } as applied) -> $"{typeExprToKey applied}_{memberName}"
-    | _ -> memberName
+    | Some ({ TypeExpr.Kind = TypeApply _ } as applied) -> InstanceMember(typeKeyOf applied, memberName)
+    | _ -> NamedMember memberName
 
 /// `name` as a WebAssembly identifier. ASCII letters, digits, `_` and `-` are kept, and a `.` becomes `_`. Any other
 /// character becomes its code in hex between dashes, `-20-` for a space, so that names that differ only there, such
@@ -39,4 +37,4 @@ let sanitizeIdentifier (name: string) =
 
 /// The name of the parameter a function that requires a context takes one of its members in, by the member's key.
 /// A lambda lifted out of the function captures the member under the same name.
-let contextMemberParameter (key: string) = $"__ctx_{sanitizeIdentifier key}"
+let contextMemberParameter (key: ContextMemberKey) = $"__ctx_{sanitizeIdentifier (ContextMemberKey.text key)}"
