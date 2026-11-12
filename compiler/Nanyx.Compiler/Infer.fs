@@ -2545,7 +2545,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 ty, st, TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx, true
                         let nextStateWithReq =
                             match contextOpt with
-                            | Some contexts -> registerContextRequirement preboundState name contexts declaredTypeExprOpt
+                            | Some contexts -> registerLocalContextRequirement preboundState symbol name contexts declaredTypeExprOpt
                             | None -> preboundState
                         // A local function that writes its type runs in the contexts the type declares; one that does
                         // not runs in those of the def around it.

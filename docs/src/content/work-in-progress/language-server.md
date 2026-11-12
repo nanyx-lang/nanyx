@@ -41,8 +41,9 @@ what the compiler keeps: exact spans, resolved names and types.
   used, the type comes after the name, as the declaration would write it
   ([#765](https://github.com/nanyx-lang/nanyx/issues/765)): `def takeOrder: [Console] string, list(string) -> ()`
   for a top-level def, `half: int` for a local def, a parameter or a pattern variable. A top-level def shows the
-  contexts it requires, written or inferred, instantiated where it is called as its type is
-  (`[Show(Point)] Point -> string`). The module's own defs' contexts are in `TypedModule.ContextTypes`; an imported
+  contexts it requires, written or inferred, and a local def the contexts it writes, instantiated where it is called
+  as its type is (`[Show(Point)] Point -> string`). A local def that does not write its type shows none, as a generic
+  local def has no contexts inferred yet. The module's own defs' contexts are in `TypedModule.ContextTypes`; an imported
   def's, the standard library's among them, are in `ImportedContextTypes` with the def's type, carried over from the
   module that declares it (both filled in by `RequiredContexts`). A desugared workflow bind or return gets a node id of its own, so the bind as
   written has no type rather than that of the rest of the workflow. Each document
