@@ -489,7 +489,7 @@ let ``Hover on a use of a standard library def shows the contexts it requires`` 
 def main = { println("hello") }
 """
     let source = source.ReplaceLineEndings "\n"
-    Assert.Equal(Some "def println: [Console, ToString(string)] string -> ()", hoverType source (offsetOf source "println" 0 0))
+    Assert.Equal(Some "def println: [Console & ToString(string)] string -> ()", hoverType source (offsetOf source "println" 0 0))
 
 [<Fact>]
 let ``An imported def's contexts name their variables together with its type`` () =

@@ -226,7 +226,11 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > `SemanticModel` carries the module's doc comments, which it parses for again only when a rule asks and the text has
 > a `--|`. Its tenth is `plusBetweenContexts` ([#645](https://github.com/nanyx-lang/nanyx/issues/645)): a `+` between
 > a function's contexts, which an earlier spec of the language wrote where it now writes `&`. The parser still reads
-> it, and the rule finds it in the module's text between two contexts' spans. The rules for unused and
+> it, and the rule finds it in the module's text between two contexts' spans. Its eleventh is `unannotatedExports`
+> ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an exported top-level def whose `ValueDef` writes no
+> type. Its fix writes the def's type from `SymbolTypes` after the contexts it requires, which the `SemanticModel`
+> carries as `ContextTypes`, printed by `Signatures`: the printer hover and the type lenses use, which joins contexts
+> with `&` as an annotation does. The rules for unused and
 > unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
@@ -288,7 +292,7 @@ different parts of the model:
 | Unused local, argument and pattern variable | symbols and references |
 | Unused import | import symbols, qualified references |
 | Unreachable match branch | types and the pattern-space code behind the exhaustiveness check |
-| Exported definition without an annotation | the surface tree (annotations as written) |
+| Exported definition without an annotation | the surface tree (annotations as written), and types printed as Nanyx syntax |
 | Unused return value | types of expression statements |
 
 ## 5. The public contract (later)

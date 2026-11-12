@@ -113,7 +113,7 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
                                 if (contextOf annotations symbol.Declaration).IsSome then typed.InferredContextTypes
                                 else typed.ContextTypes
                             required |> Map.tryFind symbol.Id |> Option.defaultValue []
-                        let defWritten, membersWritten = Hover.typesWithContexts names defType contexts memberTypes
+                        let defWritten, membersWritten = Signatures.typesWithContexts names defType contexts memberTypes
                         (if isInferred symbol then [ hint symbol defWritten ] else []), membersWritten
                     | None -> [], Unifier.tysToDisplayStrings names memberTypes
                 lens, List.map2 hint members membersWritten)
@@ -152,7 +152,7 @@ let topLevelTypes (names: TypeNotation) (file: string) (result: CompileResult) :
             |> Option.map (fun ty ->
                 let contexts = typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
                 { Name = symbol.Name
-                  Type = Hover.typeWithContexts names ty contexts
+                  Type = Signatures.typeWithContexts names ty contexts
                   Span = symbol.Declaration
                   Kind = symbol.Kind
                   Context = None }))

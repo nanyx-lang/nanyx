@@ -89,7 +89,7 @@ what the compiler keeps: exact spans, resolved names and types.
   inlay hint after its name (`: int`). The types are the declarations' `SymbolTypes`, less those inference
   records as writing their own (`AnnotatedSymbols`), and the types in one top-level def are named together, so a parameter's `α` is
   the `α` in its def's lens (see `NyxCompiler.TypeHints`). The lens shows every context the def was
-  inferred to require before its type, parameterised and plain (`[Show(α), Console] α -> ()`, from
+  inferred to require before its type, parameterised and plain (`[Show(α) & Console] α -> ()`, from
   `TypedModule.ContextTypes`), written by `Hover.typesWithContexts` as hover on the def's name and `nanyx check` write
   it. A def that writes only its contexts
   (`def greet: [Log] = ...`) has the rest of its annotation inferred, so its inlay hint goes after the contexts,

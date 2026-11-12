@@ -60,6 +60,7 @@
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />
+    <Compile Include="Signatures.fs" />
     <Compile Include="Linters.fs" />
     <Compile Include="ImportFixes.fs" />
     <Compile Include="ExpressionRewrites.fs" />
