@@ -33,7 +33,7 @@ public sealed class FormattingTests : LanguageServerTestBase
     public async Task Formatting_a_document_replaces_all_of_it_with_the_formatted_text()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-format");
-        Open(uri, "def add={a,b->a+b}\n\ndef two = add(1,1)");
+        Open(uri, "def add={a,b->a +  b}\n\ndef two = add(1,1)");
         await NextPublished(uri);
 
         var edit = Assert.Single(await FormattingEdits(uri));

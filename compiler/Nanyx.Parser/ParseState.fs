@@ -27,6 +27,11 @@ type ParseState =
       /// The furthest failure inside brackets, `[...]` or `(...)`, after the opening one: where it is and what FParsec
       /// expected there. A cell shared by every copy of the state, as `FocusedError` is (see `noteFailureInside`).
       FailureInBrackets: (Position * ErrorMessageList) option ref
+      /// The first operator written without a space on each side, where it is and what to say about it (see
+      /// `noteMisspacedOperator`). A cell shared by every copy of the state, as `FocusedError` is: the operator is
+      /// parsed as if it were spaced, and the parse fails with this afterwards, so that no other reading of the text,
+      /// tried when this one is backtracked over, hides it.
+      MisspacedOperator: (Position * string) option ref
       /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
       /// line break, or to the end of a block comment's closing line or a doc comment's last line), most recent first.
       /// For the formatter, which puts them back (see `parseModuleWithTrivia`), and for doc comments (see `DocComments`).
@@ -44,6 +49,7 @@ module ParseState =
           ModuleBlocks = []
           FocusedError = ref None
           FailureInBrackets = ref None
+          MisspacedOperator = ref None
           Comments = []
           StringTexts = [] }
 

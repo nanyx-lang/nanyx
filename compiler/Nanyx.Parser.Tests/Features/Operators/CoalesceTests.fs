@@ -21,7 +21,6 @@ let private grouped (source: string) =
 
 [<Theory>]
 [<InlineData("def x = a ?? b", "(a ?? b)")>]
-[<InlineData("def x = a??b", "(a ?? b)")>]
 [<InlineData("def x = a ?? b ?? c", "(a ?? (b ?? c))")>]
 [<InlineData("def x = a ?? b == c", "((a ?? b) == c)")>]
 [<InlineData("def x = a ?? 0 < n", "((a ?? 0) < n)")>]

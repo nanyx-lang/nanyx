@@ -6,7 +6,7 @@ order: 2
 
 Nanyx includes a standard formatter for producing consistent code layout across teams and projects.
 
-The formatter focuses on whitespace, indentation, line wrapping, and other presentational concerns. It does not change program behavior.
+The formatter focuses on whitespace, indentation, line wrapping, and other presentational concerns. It does not change program behavior. It only formats code that parses, so it can't add the spaces an operator needs: `x+y` is an error to fix by hand, though `x  +   y` becomes `x + y` ([Operators](../tour/operators#the-operators)).
 
 The formatter is available as a command line tool and can be integrated into editor workflows.
 

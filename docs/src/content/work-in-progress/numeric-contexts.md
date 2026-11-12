@@ -32,7 +32,7 @@ prelude declares `Add(a)` and `Num(a)`.
 - **Prefix `-x`** parses, as a call to the reserved `__negate` (`NegateSyntax`). On `int` it is `0 - x`, and on
   `float` `-0.0 - x`, which is IEEE 754's negation. On any other type it calls that type's attached `negate`, or the
   `negate` of the `Add` the function requires. In a shorthand lambda's body a leading `-` stays the infix operator,
-  so `{ -x }` is `{ n -> n - x }`.
+  so `{ - x }` is `{ n -> n - x }` (and `{ -x }` is an error: operators are spaced).
 - **`0` reads as `zero`** where it is an operand of an arithmetic operator, a comparison (`<`, `<=`, `>`, `>=`), `==`
   or `!=`, and the other operand is of a variable of the type the function writes, in a function that requires `Add`
   of it: `x + 0`, `n < 0` (`ArithmeticOperators.readLiterals`,

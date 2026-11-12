@@ -1388,7 +1388,16 @@ let internal runModuleParser (filePath: string) (normalized: string) : Result<To
     let errorAt (position: Position) message =
         { Message = message
           Span = spanOf position (min normalized.Length (int position.Index + 1)) }
+    let reportAt position messages =
+        use stream = new CharStream<unit>(normalized, 0, normalized.Length)
+        stream.Name <- filePath
+        Result.Error (errorAt position (ParserError(position, null, messages).ToString stream))
     match runParserOnString moduleParser initialState filePath (Directives.blank normalized) with
+    // An operator written without a space on each side is parsed as if it were spaced, and reported once the parse is
+    // done (see `ParseState.MisspacedOperator`), so that no other reading of the text hides it.
+    | _ when initialState.MisspacedOperator.Value.IsSome ->
+        let position, message = initialState.MisspacedOperator.Value.Value
+        reportAt position (ErrorMessageList(ErrorMessage.Message message))
     | ParserResult.Success(result, state, _) -> Result.Ok (result, state)
     // A directive after the code has started is not skipped, and fails where it starts.
     | ParserResult.Failure(_, error, _) when error.Position.Column = 1L && String.CompareOrdinal(normalized, int error.Position.Index, "::", 0, 2) = 0 ->
@@ -1397,10 +1406,6 @@ let internal runModuleParser (filePath: string) (normalized: string) : Result<To
         // A mistake the parser recognised is backtracked over, and FParsec reports some enclosing construct
         // instead (often the whole def), so it is reported where it happened (see `reportFocused`). So is a failure
         // inside brackets that FParsec backtracked out of (see `noteFailureInside`).
-        let reportAt position messages =
-            use stream = new CharStream<unit>(normalized, 0, normalized.Length)
-            stream.Name <- filePath
-            Result.Error (errorAt position (ParserError(position, null, messages).ToString stream))
         match initialState.FocusedError.Value, initialState.FailureInBrackets.Value with
         | Some (position, message), _ -> reportAt position (ErrorMessageList(ErrorMessage.Message message))
         | None, Some (position, messages) when position.Index > error.Position.Index -> reportAt position messages

@@ -33,7 +33,7 @@ let ``Formatting keeps how operators group`` (source: string) =
     Assert.Equal(formatted, format formatted)
 
 [<Theory>]
-[<InlineData("def x = a??b", "def x = a ?? b\n")>]
+[<InlineData("def x = a  ??   b", "def x = a ?? b\n")>]
 [<InlineData("def x = a ?? (b ?? c)", "def x = a ?? b ?? c\n")>]
 [<InlineData("def x = (a ?? b) ?? c", "def x = (a ?? b) ?? c\n")>]
 [<InlineData("def x = (a ?? b) == c", "def x = a ?? b == c\n")>]

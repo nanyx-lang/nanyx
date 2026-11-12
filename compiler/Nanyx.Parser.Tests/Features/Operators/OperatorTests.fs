@@ -232,12 +232,11 @@ let ``Prefix minus negates its operand, tighter than every infix operator`` () =
         | FunctionCall(name, None, [ Kind inner ]) -> name = NegateSyntax.builtIn && operand inner
         | _ -> false
     let isName name = function IdentifierExpr n -> n = name | _ -> false
-    match parseModule "def a = -x * y\ndef b = 3 - -x\ndef c = -f(x)\ndef d = -5\ndef e = a -b\n" with
+    match parseModule "def a = -x * y\ndef b = 3 - -x\ndef c = -f(x)\ndef d = -5\n" with
     | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (BinaryOp ("*", _, Kind left, _)))))
                   Kind (Def (ValueDef (_, "b", _, Kind (BinaryOp ("-", _, _, Kind right)))))
                   Kind (Def (ValueDef (_, "c", _, Kind call)))
-                  Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (IntLit64 -5L)))))
-                  Kind (Def (ValueDef (_, "e", _, Kind (BinaryOp ("-", _, _, _))))) ] ->
+                  Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (IntLit64 -5L))))) ] ->
         Assert.True(negated (isName "x") left, $"%A{left}")
         Assert.True(negated (isName "x") right, $"%A{right}")
         Assert.True(negated (function FunctionCall("f", _, _) -> true | _ -> false) call, $"%A{call}")
@@ -246,7 +245,7 @@ let ``Prefix minus negates its operand, tighter than every infix operator`` () =
 
 [<Fact>]
 let ``A shorthand lambda that starts with minus still subtracts from its argument`` () =
-    match parseModule "def f = { -x }\n" with
+    match parseModule "def f = { - x }\n" with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ _ ], Kind (BinaryOp ("-", _, _, Kind (IdentifierExpr "x"))), _)))))] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

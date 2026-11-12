@@ -38,6 +38,7 @@
     <Compile Include="Features\Operators\OperatorTests.fs" />
     <Compile Include="Features\Operators\OperatorNameTests.fs" />
     <Compile Include="Features\Operators\CoalesceTests.fs" />
+    <Compile Include="Features\Operators\OperatorSpacingTests.fs" />
     <Compile Include="Features\Phases\PhaseTests.fs" />
     <Compile Include="Features\Pipes\PipeTests.fs" />
     <Compile Include="Features\Ranges\RangeTests.fs" />

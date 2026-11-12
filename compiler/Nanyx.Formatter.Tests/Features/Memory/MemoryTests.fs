@@ -29,8 +29,8 @@ def sum: list(int) -> int = { xs ->
 let ``Spacing around mut and := is made regular`` () =
     let source = """
 def f = {
-  def a = mut   x+1
-  a:=a*2
+  def a = mut   x +  1
+  a:=a  *  2
   a
 }
 """
