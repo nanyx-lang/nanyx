@@ -68,6 +68,39 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
     Assert.Empty((Compiler.compile nested).Diagnostics)
 
 [<Fact>]
+let ``try and return outside a builder block are reported as workflow keywords`` () =
+    // They used to be calls to functions named `try` and `return`, reported as unknown functions (#350).
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let reported (keyword: string) (definition: string) =
+        let source = halve + definition
+        let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+        Assert.Equal(DiagnosticCodes.WorkflowKeywordOutsideWorkflow.Code, diagnostic.Code)
+        let span = diagnostic.Span.Value
+        Assert.Equal(keyword, source.Substring(span.Start, span.End - span.Start))
+        Assert.Equal(source.IndexOf(keyword, halve.Length), span.Start)
+        diagnostic.Message
+    let message (keyword: string) =
+        $"`{keyword}` is a workflow keyword, so it can only be used inside a builder block, such as `proc {{ ... }}`"
+    Assert.Equal(message "try", reported "try" "def a = try halve(4)")
+    Assert.Equal(message "return", reported "return" "def a = return 4")
+    let inFunction =
+        """def f = { n ->
+  def h = try halve(n)
+  h + 1
+}"""
+    Assert.Equal(message "try", reported "try" (inFunction.ReplaceLineEndings "\n"))
+    Assert.Equal(message "return", reported "return" "def f = { n -> return n }")
+    // Inside a builder block they are the builder's keywords, as before.
+    let inProc =
+        """def f = { n -> proc {
+  def h = try halve(n)
+  return h + 1
+} }"""
+    let result = Compiler.compile (halve + inProc.ReplaceLineEndings "\n")
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("int -> #some(int) | #odd", Unifier.tyToString result.Typed.Value.Types.["f"])
+
+[<Fact>]
 let ``Desugar workflow bind and return`` () =
     let source =
         "def result = async {\n" +
