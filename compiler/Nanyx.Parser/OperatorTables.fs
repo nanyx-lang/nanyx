@@ -68,6 +68,26 @@ let private minusEnd = notFollowedBy (anyOf ">-")
 // `??` must not take the start of the placeholder `???`.
 let private coalesceEnd = notFollowedBy (pchar '?')
 
+/// An operator is written with a space on each side, `x + y`, not `x+y`, so that the characters it is made of stay free
+/// for other uses. A line break counts as a space, and so does the `{` of a shorthand lambda whose body starts with the
+/// operator, as in `{ + 1 }`. Run just after `op`, it notes the operator when either side is not spaced, and the parse
+/// fails there once it is done (see `ParseState.MisspacedOperator`).
+let private spacedAround (op: string) : Parser<unit, ParseState> =
+    fun stream ->
+        let isSpace (c: char) = c = ' ' || c = '\t' || c = '\r' || c = '\n'
+        let before = stream.Peek(-(op.Length + 1))
+        let after = stream.Peek()
+        let spacedBefore = isSpace before || before = '{'
+        let spacedAfter = isSpace after || after = CharStream.EndOfStreamChar
+        let misspaced = stream.UserState.MisspacedOperator
+        if not (spacedBefore && spacedAfter) then
+            let start = stream.Position
+            let position = Position(start.StreamName, start.Index - int64 op.Length, start.Line, start.Column - int64 op.Length)
+            match misspaced.Value with
+            | Some (first, _) when first.Index <= position.Index -> ()
+            | _ -> misspaced.Value <- Some (position, $"Operators are written with a space on each side: `x {op} y`, not `x{op}y`")
+        Reply(())
+
 /// Adds every operator in `binaryOperators` to `table`, each taking `space` after it and building its term with
 /// `binary`, and the message for two operators that cannot be written side by side. A keyword operator must not swallow
 /// the start of an identifier such as `order` or `android`.
@@ -82,7 +102,7 @@ let addBinaryOperators
             elif op.Text = "-" then minusEnd
             elif op.Text = coalesceOperator then coalesceEnd
             else preturn ()
-        table.AddOperator(InfixOperator(op.Text, operatorSpan op.Text (operatorEnd >>. space), op.Precedence, associativity op.Associativity, (), binary op.Text))
+        table.AddOperator(InfixOperator(op.Text, operatorSpan op.Text (operatorEnd >>. spacedAround op.Text >>. space),op.Precedence, associativity op.Associativity, (), binary op.Text))
     table.OperatorConflictErrorFormatter <-
         fun (_, first: Operator<_, _, _>, _) (_, second: Operator<_, _, _>, _) ->
             let first, second = first.String, second.String

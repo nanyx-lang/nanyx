@@ -54,7 +54,7 @@ def c = a + b   -- resolves to Vector.`+` because `a` is a Vector
 
 The operator is found by the type of its left operand, exactly as any other attached function is resolved by the type of its first argument.
 
-`-x` negates: it binds tighter than every infix operator, so `-x * y` is `(-x) * y`, and it is written against its operand. `-5` is a literal. On an `int` or a `float` it is the built-in negation (`-0.0` is negative zero); on any other type it is that type's `negate`, the member of `Add`. In a [shorthand lambda](../tour/functions#shorthand-lambdas), a leading `-` is still the infix operator, so `{ -x }` is `{ n -> n - x }`.
+`-x` negates: it binds tighter than every infix operator, so `-x * y` is `(-x) * y`, and it is written against its operand. `-5` is a literal. On an `int` or a `float` it is the built-in negation (`-0.0` is negative zero); on any other type it is that type's `negate`, the member of `Add`. In a [shorthand lambda](../tour/functions#shorthand-lambdas), a leading `-` is still the infix operator, so `{ - x }` is `{ n -> n - x }`, and `{ -x }` is an error, as `n -x` would be.
 
 `x ** n` is `x` to the power `n`: it binds tighter than every other infix operator and groups to the right, so `2 * 3 ** 2` is `2 * 9` and `2 ** 3 ** 2` is `2 ** 9`, 512. As prefix `-` binds tighter still, `-x ** 2` is `(-x) ** 2`. It is not a member of a context: `x ** n` is the prelude's `pow(x, n)`, `[Num(a)] (a, int) -> a`, so it works on any number type, and the exponent is an `int`. A negative exponent is `1 / x ** -n`, which truncates on an `int`. For a fractional exponent, use `float.pow(x, y)`.
 
@@ -81,6 +81,8 @@ def main = {
 ```
 
 # The operators
+
+An operator is written with a space on each side: `x + y`, not `x+y` or `x +y`. Without the spaces it is an error, which shows where the space is missing. A line break counts as a space, and so does the `{` of a shorthand lambda that starts with the operator, as in `{+ 1}` (which the formatter writes `{ + 1 }`). Prefix `-` and `not` are not binary operators: `-x` is written against its operand. Keeping operators apart from what is around them leaves their characters free for other uses later, such as a `?` at the end of a name.
 
 These are all of Nanyx's operators, tightest first. An operator binds tighter than those below it, so `a + b * c` is `a + (b * c)`, `f >> g == h` is `(f >> g) == h`, and `a ?? 0 < n` is `(a ?? 0) < n`.
 

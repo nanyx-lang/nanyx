@@ -38,7 +38,7 @@ let ``Guard patterns are printed as written`` () =
     unchanged (lines [ "def g = {"; "  | (0, { .length > 5 }) -> 1"; "  | #some({ >= 2 }) -> 2"; "  | [{ % 2 == 0 }, ...] -> 3"; "  | _ -> 4"; "}" ])
     Assert.Equal(
         lines [ "def h = {"; "  | { .length > 5 } -> 1"; "  | >= 2 -> 2"; "  | _ -> 3"; "}" ],
-        format (lines [ "def h = {"; "  | {.length>5} -> 1"; "  | >=   2 -> 2"; "  | _ -> 3"; "}" ]))
+        format (lines [ "def h = {"; "  | {.length > 5} -> 1"; "  | >=   2 -> 2"; "  | _ -> 3"; "}" ]))
 
 [<Fact>]
 let ``And-patterns are printed as written`` () =
