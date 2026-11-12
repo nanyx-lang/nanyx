@@ -641,7 +641,10 @@ type private FunctionEmitter(context: EmitContext) =
             match pattern with
             | PWildcard
             | PBind _ -> "i32.const 1"
-            | PInt value -> $"{valueCode}\n      i64.const {value}\n      i64.eq"
+            | PInt value ->
+                // An int, or a sized integer held as its type is.
+                let held = match ty with IrSized _ -> CoreIrLayout.valueType ty | _ -> "i64"
+                $"{valueCode}\n      {held}.const {value}\n      {held}.eq"
             | PBool value ->
                 let flag = if value then 1 else 0
                 $"{valueCode}\n      i32.const {flag}\n      i32.eq"

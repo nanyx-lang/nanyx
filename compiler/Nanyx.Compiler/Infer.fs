@@ -199,7 +199,8 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
 and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     match expr.Kind with
     | LiteralExpr literal ->
-        Ok (mkTypedExpr expr (literalType literal) None None None, state)
+        let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
+        Ok (mkTypedExpr expr ty None None None, next)
     | InterpolatedString parts ->
         let mutable current = state
         let mutable errors: Diagnostic list = []
@@ -583,7 +584,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match inferExpr env next right |> Result.bind (fun (rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
             | Error err -> Error err
             | Ok (leftExpr, rightExpr, nextState) ->
-                let constrained = addConstraint leftExpr.Type rightExpr.Type nextState
+                // An operand that failed to check says nothing of the other: a literal there is of its default type.
+                let constrained =
+                    if [ leftExpr; rightExpr ] |> List.exists (fun operand -> Unifier.isError (resolveSoFar nextState operand.Type)) then
+                        NumericLiterals.settleWithin [ leftExpr.Type; rightExpr.Type ] nextState
+                    else addConstraint leftExpr.Type rightExpr.Type nextState
+                // Only arithmetic leaves a literal to be whatever number the code around it settles (see NumericLiterals).
+                let constrained =
+                    match expr.Kind with
+                    | BinaryOp(op, _, _, _) when not (ArithmeticOperators.isOperator op) -> NumericLiterals.settleWithin [ leftExpr.Type ] constrained
+                    | _ -> constrained
                 let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
                 // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
                 let attached (name: Identifier) =
@@ -627,7 +637,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Error err -> Error err
         | Ok (typedValue, nextState) ->
             // A pipe resolves left to right: the value's type as the code before the pipe settles it picks the
-            // attached function, even where that type is still a variable waiting on the module's constraints.
+            // attached function, even where that type is still a variable waiting on the module's constraints. A
+            // number literal the code before it has not settled is of its default type, `3 \toFloat` an int's.
+            let nextState = NumericLiterals.settleWithin [ typedValue.Type ] nextState
             let valueTy = resolveSoFar nextState typedValue.Type
             let resolvedName =
                 tryResolveAttachedFunction env valueTy name
@@ -861,7 +873,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let symbol, declared = declareSymbol ArmBody armBody.Id name PatternVariable false (Some armBody.Span.End) state'
                     Ok (TypeEnv.declare name symbol (TypeEnv.mono scrutineeTy) env', recordSymbolType symbol scrutineeTy declared, mkTypedPattern pattern scrutineeTy)
                 | LiteralPattern literal ->
-                    let constrained = addConstraint scrutineeTy (literalType literal) state'
+                    let ty, recorded = NumericLiterals.typeOf state' pattern.Span None literal
+                    let constrained = addConstraint scrutineeTy ty recorded
                     Ok (env', constrained, mkTypedPattern pattern scrutineeTy)
                 // A predicate on the value matched. It sees what is in scope at the match, not what its own arm binds:
                 // an arm's names are bound only once all its patterns have matched.
@@ -1345,7 +1358,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
     | _ ->
         let mutable current = state
         let mutable env' = env
-        let mutable lastExpr = mkTypedExpr (Expression.synthetic (LiteralExpr (IntLit 0))) (TyPrimitive "unit") None None None
+        let mutable lastExpr = mkTypedExpr (Expression.synthetic (LiteralExpr (IntLit 0I))) (TyPrimitive "unit") None None None
         let mutable typedStatements: TypedStatement list = []
         let mutable errors: Diagnostic list = []
         for statement in statements do
@@ -1431,7 +1444,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let scheme, generalizedState =
                                 if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
                                 // A cell holds values of one type: its own, not one for each use.
-                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell symbol current
+                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell symbol (NumericLiterals.settleWithin [ declaredTy ] current)
                                 else ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
                             current <-
                                 let used =

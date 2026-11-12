@@ -11,13 +11,14 @@ module internal LambdaArguments =
     /// it is passed as, resolved against the constraints of `state`. None when its parameters are annotated, or the
     /// parameter is not a function, or its input does not say enough to give the lambda's parameters their types. A
     /// lambda written without parameters, `{ ... }`, takes the parameter's input when it is known, and ignores it; when
-    /// it is a type variable still, the lambda takes unit, as it does with no expected type.
+    /// it is a type variable still, the lambda takes unit, as it does with no expected type. A number literal's own
+    /// variable is known to be a number, as `list.map([1, 2], { 0 })` has it.
     let expectedInput (state: InferState) (paramTy: Ty option) (lambda: Expression) (lambdaArgs: (Identifier * TypeExpr option) list) : Ty option =
         let unannotated = lambdaArgs |> List.forall (fun (_, typeOpt: TypeExpr option) -> typeOpt.IsNone)
         match paramTy |> Option.map Unifier.unalias with
         | Some (TyFunc(lambdaInput, _, _)) when (match lambda.Kind with Lambda([], _, false) -> true | _ -> false) ->
             match Unifier.unify state.Constraints |> Result.map (fun subst -> Unifier.apply subst lambdaInput) with
-            | Ok resolved when (match Unifier.unalias resolved with TyVar _ -> true | _ -> false) -> None
+            | Ok resolved when (match Unifier.unalias resolved with TyVar _ -> true | _ -> false) && not (NumericLiterals.isOpen state resolved) -> None
             | Ok resolved -> Some resolved
             | Error _ -> None
         | Some (TyFunc(lambdaInput, _, _)) when unannotated && not (List.isEmpty lambdaArgs) ->

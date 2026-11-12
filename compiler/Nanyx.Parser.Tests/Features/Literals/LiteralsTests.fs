@@ -8,9 +8,9 @@ open ParserTestHelpers
 [<Fact>]
 let ``list spread desugars to concatenation`` () =
     match parseModule "def x = [1, ...xs, 2, 3, ...ys]" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (BinaryOp ("++", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 1L)) ]),
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (BinaryOp ("++", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit64 1L)) ]),
                                                                  Kind (BinaryOp ("++", _, Kind (IdentifierExpr "xs"),
-                                                                    Kind (BinaryOp ("++", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 2L)); Kind (LiteralExpr (IntLit 3L)) ]),
+                                                                    Kind (BinaryOp ("++", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit64 2L)); Kind (LiteralExpr (IntLit64 3L)) ]),
                                                                                           Kind (IdentifierExpr "ys")))))))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
@@ -131,8 +131,8 @@ let ``Parse dotted def name`` () =
 [<Fact>]
 let ``a name that starts with true or false is a name, not a boolean`` () =
     match parseModule "def trueish = 1\ndef falsey = 2\ndef total = trueish + falsey" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "trueish", _, Kind (LiteralExpr (IntLit 1L)))))
-                  Kind (Def (ValueDef (_, "falsey", _, Kind (LiteralExpr (IntLit 2L)))))
+    | Result.Ok [ Kind (Def (ValueDef (_, "trueish", _, Kind (LiteralExpr (IntLit64 1L)))))
+                  Kind (Def (ValueDef (_, "falsey", _, Kind (LiteralExpr (IntLit64 2L)))))
                   Kind (Def (ValueDef (_, "total", _, Kind (BinaryOp ("+", _, Kind (IdentifierExpr "trueish"),
                                                                         Kind (IdentifierExpr "falsey")))))) ] -> ()
     | other -> failwith $"Unexpected: %A{other}"
@@ -145,11 +145,11 @@ let ``a name that starts with true or false is a name, not a boolean`` () =
 [<InlineData("Infinity")>]
 let ``nan, inf and infinity are names, not floats`` (name: string) =
     match parseModule $"def {name} = 3\ndef x = {name}\ndef scale = {{ {name} -> {name} * 2 }}" with
-    | Result.Ok [ Kind (Def (ValueDef (_, defName, _, Kind (LiteralExpr (IntLit 3L)))))
+    | Result.Ok [ Kind (Def (ValueDef (_, defName, _, Kind (LiteralExpr (IntLit64 3L)))))
                   Kind (Def (ValueDef (_, "x", _, Kind (IdentifierExpr used))))
                   Kind (Def (ValueDef (_, "scale", _, Kind (Lambda ([ (param, None) ],
                                                                     Kind (BinaryOp ("*", _, Kind (IdentifierExpr body),
-                                                                                    Kind (LiteralExpr (IntLit 2L)))), _))))) ] ->
+                                                                                    Kind (LiteralExpr (IntLit64 2L)))), _))))) ] ->
         Assert.Equal(name, defName)
         Assert.Equal(name, used)
         Assert.Equal(name, param)
@@ -178,15 +178,15 @@ def e = 0x1F"""
                   Kind (Def (ValueDef (_, "c", _, Kind (LiteralExpr (IntLit c)))))
                   Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (FloatLit d)))))
                   Kind (Def (ValueDef (_, "e", _, Kind (LiteralExpr (IntLit e))))) ] ->
-        Assert.Equal(1_000_000L, a)
+        Assert.Equal(1_000_000I, a)
         Assert.Equal(3.141592, b)
-        Assert.Equal(-1000L, c)
+        Assert.Equal(-1000I, c)
         Assert.Equal(1000.5e10, d)
-        Assert.Equal(31L, e)
+        Assert.Equal(31I, e)
     | other -> failwith $"Unexpected: %A{other}"
 
 [<Fact>]
-let ``An int literal holds 64 bits`` () =
+let ``An integer literal holds the largest and smallest ints`` () =
     let source =
         """def big = 9_223_372_036_854_775_807
 def small = -9_223_372_036_854_775_808
@@ -195,9 +195,16 @@ def hex = 0x7FFFFFFFFFFF"""
     | Result.Ok [ Kind (Def (ValueDef (_, "big", _, Kind (LiteralExpr (IntLit big)))))
                   Kind (Def (ValueDef (_, "small", _, Kind (LiteralExpr (IntLit small)))))
                   Kind (Def (ValueDef (_, "hex", _, Kind (LiteralExpr (IntLit hex))))) ] ->
-        Assert.Equal(System.Int64.MaxValue, big)
-        Assert.Equal(System.Int64.MinValue, small)
-        Assert.Equal(0x7FFF_FFFF_FFFFL, hex)
+        Assert.Equal(bigint System.Int64.MaxValue, big)
+        Assert.Equal(bigint System.Int64.MinValue, small)
+        Assert.Equal(bigint 0x7FFF_FFFF_FFFFL, hex)
+    | other -> failwith $"Unexpected: %A{other}"
+
+[<Fact>]
+let ``An integer literal past 64 bits is still an integer`` () =
+    // #343: the type checker says whether it fits; it used to be read as a float.
+    match parseModule "def big = 18_446_744_073_709_551_616" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "big", _, Kind (LiteralExpr (IntLit big))))) ] -> Assert.Equal(18_446_744_073_709_551_616I, big)
     | other -> failwith $"Unexpected: %A{other}"
 
 [<Theory>]
@@ -216,7 +223,7 @@ let ``A name that starts with _ after a number is still a name`` () =
     let source = """def _1 = 2
 def x = [1, _1]"""
     match parseModule source with
-    | Result.Ok [ _; Kind (Def (ValueDef (_, "x", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit 1L)); Kind (IdentifierExpr "_1") ])))) ] -> ()
+    | Result.Ok [ _; Kind (Def (ValueDef (_, "x", _, Kind (ListExpr [ Kind (LiteralExpr (IntLit64 1L)); Kind (IdentifierExpr "_1") ])))) ] -> ()
     | other -> failwith $"Unexpected: %A{other}"
 
 // Literal Tests
@@ -246,7 +253,7 @@ let ``Parse integer literal`` () =
         match module'.[0] with
         | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (IntLit value))))) ->
             name |> should equal "count"
-            value |> should equal 42L
+            value |> should equal 42I
         | _ -> failwith "Expected Def with IntLit"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
 

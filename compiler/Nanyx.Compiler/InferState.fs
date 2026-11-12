@@ -51,6 +51,16 @@ type PendingArithmetic =
       OperandTy: Ty
       At: SourceSpan }
 
+/// A number literal, whose type is a variable of its own until the code around it settles it (see `NumericLiterals`).
+type NumericLiteral =
+    { /// The literal's type: its variable, until the constraints are solved.
+      Type: Ty
+      /// The literal, an `IntLit` or a `FloatLit`.
+      Value: Literal
+      At: SourceSpan
+      /// The expression the literal is, where it is not a pattern.
+      Node: NodeId option }
+
 /// An import of a `module name =` block written in the same file (`import money`), rather than of another file.
 type BlockImport =
     { Import: ImportItem
@@ -101,6 +111,11 @@ type InferState =
             PendingContextInstances: PendingContextInstance list;
             /// The arithmetic operators left to be read once the def around them is inferred (see `PendingArithmetic`).
             PendingArithmetic: PendingArithmetic list;
+            /// The number literals of the module so far, the latest first, to be checked against their types once those
+            /// are known (see `NumericLiterals`).
+            NumericLiterals: NumericLiteral list;
+            /// The number literals no def's generalising has settled yet, the latest first.
+            UnsettledLiterals: NumericLiteral list;
             /// The names of the prelude's contexts, as they are in `TypeDefs`: the only ones an operator on a value of
             /// a type variable is read through (see `OperatorContexts`). A module checked without the prelude has none.
             PreludeContexts: Set<Identifier>;
@@ -271,6 +286,8 @@ let emptyState =
             DeferredContextUses = [];
             PendingContextInstances = [];
             PendingArithmetic = [];
+            NumericLiterals = [];
+            UnsettledLiterals = [];
             PreludeContexts = Set.empty;
             NamedAsValues = Set.empty;
             HoleScopes = Map.empty;

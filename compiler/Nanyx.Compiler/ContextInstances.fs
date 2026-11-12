@@ -250,8 +250,10 @@ let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
 /// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
 /// context: a value whose type is the context applied to types, as `def addInt: Sum(int) = (...)` makes `addInt`
 /// (recorded by the node of `value`, see `TypedModule.UseContexts`), or else a record of a context's shape (see
-/// `contextsOfValue`).
+/// `contextsOfValue`). A number literal in it that nothing has settled is of its default type, as in
+/// `use (`+` = { x, y -> x * 100 + y })`, an `Add(int)` (see `NumericLiterals`).
 let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) (valueTy: Ty) : TypeEnv * InferState =
+    let state = NumericLiterals.settleWithin [ valueTy ] state
     match resolveSoFar state valueTy with
     | TyAlias(ctxName, (_ :: _ as argTys), _)
     | TyApply(ctxName, (_ :: _ as argTys)) when isContextName state ctxName ->
@@ -414,6 +416,11 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
                     let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
                     let argTys, argTysAsRead, current = contextArgTysAtCall current signature scheme.Type calleeTy args
+                    // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`).
+                    let argTys, argTysAsRead, current =
+                        match NumericLiterals.settleIn argTys current with
+                        | Some literalsSettled -> contextArgTysAtCall literalsSettled signature scheme.Type calleeTy args
+                        | None -> argTys, argTysAsRead, current
                     let settled = argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
                     // A well-known context of a type with no member attached is the compiler's own (see
                     // `WellKnownContexts.resolveCall`). `Eq` of a structure with a part that has an `==` of its own
@@ -616,6 +623,8 @@ let internal checkCalledComparisons (env: TypeEnv) (state: InferState) (call: Ex
             |> Seq.fold (fun result ty ->
                 result
                 |> Result.bind (fun (current: InferState) ->
+                    // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`).
+                    let current = NumericLiterals.settleWithin [ ty ] current
                     let ty = resolveSoFar current ty
                     let hasInstance ty = (instanceInScope env current ctxName [ ty ]).IsSome
                     match wellKnownInstanceAtCall env ctxName [ ty ] hasInstance with

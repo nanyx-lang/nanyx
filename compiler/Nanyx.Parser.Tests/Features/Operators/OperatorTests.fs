@@ -97,8 +97,8 @@ let ``Parse addition`` () =
             op |> should equal "+"
             match left.Kind, right.Kind with
             | LiteralExpr (IntLit v1), LiteralExpr (IntLit v2) ->
-                v1 |> should equal 1L
-                v2 |> should equal 2L
+                v1 |> should equal 1I
+                v2 |> should equal 2I
             | _ -> failwith "Expected int literals"
         | _ -> failwith "Expected Def with BinaryOp"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -124,7 +124,7 @@ let ``Parse operator precedence - multiplication before addition`` () =
     match result with
     | Result.Ok module' ->
         match module'.[0] with
-        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("+", _, Kind (LiteralExpr (IntLit 1L)), Kind (BinaryOp ("*", _, Kind (LiteralExpr (IntLit 2L)), Kind (LiteralExpr (IntLit 3L))))))))) ->
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("+", _, Kind (LiteralExpr (IntLit64 1L)), Kind (BinaryOp ("*", _, Kind (LiteralExpr (IntLit64 2L)), Kind (LiteralExpr (IntLit64 3L))))))))) ->
             () // Correct precedence: 1 + (2 * 3)
         | _ -> failwith "Expected correct precedence: 1 + (2 * 3)"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -137,7 +137,7 @@ let ``Parse parenthesized expression`` () =
     match result with
     | Result.Ok module' ->
         match module'.[0] with
-        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("*", _, Kind (BinaryOp ("+", _, Kind (LiteralExpr (IntLit 1L)), Kind (LiteralExpr (IntLit 2L)))), Kind (LiteralExpr (IntLit 3L))))))) ->
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp ("*", _, Kind (BinaryOp ("+", _, Kind (LiteralExpr (IntLit64 1L)), Kind (LiteralExpr (IntLit64 2L)))), Kind (LiteralExpr (IntLit64 3L))))))) ->
             () // Correct: (1 + 2) * 3
         | _ -> failwith "Expected correct precedence: (1 + 2) * 3"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -150,7 +150,7 @@ let ``Parse comparison operators`` () =
     match result with
     | Result.Ok module' ->
         match module'.[0] with
-        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp (">", _, Kind (LiteralExpr (IntLit 5L)), Kind (LiteralExpr (IntLit 3L))))))) ->
+        | Kind (Def (ValueDef (_, _, _, Kind (BinaryOp (">", _, Kind (LiteralExpr (IntLit64 5L)), Kind (LiteralExpr (IntLit64 3L))))))) ->
             ()
         | _ -> failwith "Expected comparison operator"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
@@ -179,7 +179,7 @@ let ``Prefix minus negates its operand, tighter than every infix operator`` () =
     | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (BinaryOp ("*", _, Kind left, _)))))
                   Kind (Def (ValueDef (_, "b", _, Kind (BinaryOp ("-", _, _, Kind right)))))
                   Kind (Def (ValueDef (_, "c", _, Kind call)))
-                  Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (IntLit -5L)))))
+                  Kind (Def (ValueDef (_, "d", _, Kind (LiteralExpr (IntLit64 -5L)))))
                   Kind (Def (ValueDef (_, "e", _, Kind (BinaryOp ("-", _, _, _))))) ] ->
         Assert.True(negated (isName "x") left, $"%A{left}")
         Assert.True(negated (isName "x") right, $"%A{right}")
@@ -197,7 +197,7 @@ let ``A shorthand lambda that starts with minus still subtracts from its argumen
 [<Fact>]
 let ``** binds tighter than * and groups to the right`` () =
     match parseModule "def a = 2 ** 3 ** 2\ndef b = 2 * 3 ** 2\ndef c = -x ** 2\n" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (BinaryOp ("**", _, Kind (LiteralExpr (IntLit 2L)), Kind (BinaryOp ("**", _, _, _)))))))
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (BinaryOp ("**", _, Kind (LiteralExpr (IntLit64 2L)), Kind (BinaryOp ("**", _, _, _)))))))
                   Kind (Def (ValueDef (_, "b", _, Kind (BinaryOp ("*", _, _, Kind (BinaryOp ("**", _, _, _)))))))
                   Kind (Def (ValueDef (_, "c", _, Kind (BinaryOp ("**", _, Kind (FunctionCall (name, _, _)), _))))) ] ->
         Assert.Equal(NegateSyntax.builtIn, name)

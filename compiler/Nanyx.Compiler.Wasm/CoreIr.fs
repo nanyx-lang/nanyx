@@ -214,6 +214,7 @@ and Arm =
 
 and Pattern =
     | PWildcard
+    /// An integer equal to this one, in the bits it is held in (see `intBits`).
     | PInt of int64
     | PBool of bool
     /// A tag, and the pattern its payload must match if it has one.
@@ -389,6 +390,15 @@ module IrType =
             $"fn_{mangle input}_to_{mangle output}_ctx_{keys}"
         | IrRecursive body -> $"mu_{mangle body}"
         | _ -> show ty
+
+/// The bits an integer constant is held in: its low 64, so that a `U64` past the largest `int` is negative.
+let intBits (value: bigint) : int64 = int64 (uint64 (value &&& ((1I <<< 64) - 1I)))
+
+/// The integer constant `value` as an atom of the type `ty` it is written at: a sized integer's, or else an int's.
+let intAtom (value: bigint) (ty: IrType) =
+    match ty with
+    | IrSized integer -> ASized(integer, intBits value)
+    | _ -> AInt(intBits value)
 
 /// The type of an atom's value.
 let atomType (atom: Atom) =

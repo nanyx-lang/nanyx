@@ -6,6 +6,12 @@ open Xunit
 open NyxCompiler
 open Parser.Program
 
+/// Matches an `IntLit` whose value fits an `int64`, which a pattern can name: F# has no `bigint` constant patterns.
+let (|IntLit64|_|) (literal: Literal) =
+    match literal with
+    | IntLit value when value >= bigint System.Int64.MinValue && value <= bigint System.Int64.MaxValue -> Some (int64 value)
+    | _ -> None
+
 let withTempDir (action: string -> unit) =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
     Directory.CreateDirectory dir |> ignore

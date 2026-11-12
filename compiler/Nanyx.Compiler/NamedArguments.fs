@@ -29,14 +29,14 @@ module internal NamedArguments =
 
     let private isPositional (key: string) = key |> Seq.forall System.Char.IsDigit
 
-    /// Pairs each extra positional argument, in order, with the one named parameter left whose type is its type.
-    /// None when an argument's type fits no parameter, or more than one.
-    let rec private pair (extras: (Expression * Ty) list) (named: (string * Ty) list) : (Expression * string) list option =
+    /// Pairs each extra positional argument, in order, with the one named parameter left whose type it can be (see
+    /// `NumericLiterals.canBe`). None when an argument's type fits no parameter, or more than one.
+    let rec private pair (state: InferState) (extras: (Expression * Ty) list) (named: (string * Ty) list) : (Expression * string) list option =
         match extras with
         | [] -> Some []
         | (arg, argTy) :: rest ->
-            match named |> List.filter (fun (_, paramTy) -> paramTy = argTy) with
-            | [ (name, _) ] -> pair rest (named |> List.filter (fun (other, _) -> other <> name)) |> Option.map (fun paired -> (arg, name) :: paired)
+            match named |> List.filter (fun (_, paramTy) -> NumericLiterals.canBe state argTy paramTy) with
+            | [ (name, _) ] -> pair state rest (named |> List.filter (fun (other, _) -> other <> name)) |> Option.map (fun paired -> (arg, name) :: paired)
             | _ -> None
 
     /// A diagnostic, at the call `expr`, when it passes by position arguments that `callee`, whose input is `input`,
@@ -56,7 +56,7 @@ module internal NamedArguments =
             let extraCount = positional.Length - positionalCount
             if extraCount > 0 && extraCount <= unnamed.Length then
                 let extras = List.zip positional (positionalTypes state args typedArgs) |> List.skip positionalCount
-                let paired = pair extras unnamed
+                let paired = pair state extras unnamed
                 let names =
                     match paired with
                     | Some paired ->

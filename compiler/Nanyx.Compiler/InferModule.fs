@@ -279,6 +279,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         match expectedDeclaredOpt, preboundFreshVars |> Map.tryFind name with
                         | Some _, Some preboundTy -> addConstraintAt expr.Span preboundTy declaredTy finalState
                         | _ -> finalState
+                    // The def's number literals that nothing has settled are of their default types before its
+                    // annotation is checked against its value (see `NumericLiterals`).
+                    let finalState = NumericLiterals.settle (fun _ -> true) finalState
                     state <-
                         finalState
                         |> recordSymbolType symbol declaredTy
@@ -424,6 +427,11 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     |> Map.fold (fun acc name contexts ->
                         let parameterized = acc |> Map.tryFind name |> Option.defaultValue []
                         acc |> Map.add name (parameterized @ (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic)))) state.ContextRequirements }
+
+    // Each number literal is checked against its type, now that every type is known (see `NumericLiterals`).
+    let checkedLiterals, literalErrors = NumericLiterals.check state
+    state <- checkedLiterals
+    errors <- errors @ literalErrors
 
     // The defs that failed and the expressions that failed inside the others, in the order they are in the source. An
     // expression inferred more than once (a lambda checked again against its expected type) is reported once.

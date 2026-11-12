@@ -97,8 +97,9 @@ module internal ArithmeticOperators =
     /// of it: had it, the operator would have called its member. That one fails to check, and the def around it
     /// carries on, so that the variable is not also reported as having to be a number. In a function that does not
     /// write its type, operands of a type still a variable are left until the function is inferred, which then requires
-    /// the context of the variable if it is one of its own (see `ArithmeticInference`). Otherwise the operands are the
-    /// number `numberTy`, `int` or `float`.
+    /// the context of the variable if it is one of its own (see `ArithmeticInference`). Operands of a number literal's
+    /// own variable, as in `1.0 / 0.0`, are whatever number the code around them settles (see `NumericLiterals`).
+    /// Otherwise the operands are the number `numberTy`, `int` or `float`.
     let check (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (rightTy: Ty) (numberTy: Ty) : Result<InferState, Diagnostic list> =
         let tys = [ leftTy; rightTy ] |> List.map (resolveSoFar state)
         let declaredVar = tys |> List.tryPick (function TyVar({ Name = Some _ } as v) -> Some v | _ -> None)
@@ -114,6 +115,7 @@ module internal ArithmeticOperators =
         | None, Some _, None, DefScope(defName, true) when areVariables ->
             let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; At = expr.Span }
             Ok { state with PendingArithmetic = pending :: state.PendingArithmetic }
+        | _ when NumericLiterals.isOpen state leftTy -> Ok state
         | _ -> Ok (addConstraint leftTy numberTy state)
 
     /// What a literal operand of an arithmetic operator or a comparison is, where it is not the literal it would be
@@ -131,13 +133,16 @@ module internal ArithmeticOperators =
     ///
     /// The other operand may be of a variable the constraints so far have put in place of the type's own, as the
     /// result of `x * x` is: the operator calls the member there all the same. Only an error needs to name the type's.
+    /// One whose type is still a literal's own variable, as `1 + 2` is, is a number the literal takes the type of (see
+    /// `NumericLiterals`).
     let private literalReading (env: TypeEnv) (state: InferState) (literal: Expression) (otherTy: Ty) : LiteralReading option =
         let bound (name: Identifier) = (TypeEnv.tryFind name env).IsSome
+        let isLiteralVar (v: TyVar) = state.UnsettledLiterals |> List.exists (fun other -> resolveSoFar state other.Type = TyVar v)
         match literal.Kind, Unifier.unalias (resolveSoFar state otherTy), state.ContextScope with
-        | LiteralExpr value, (TyVar v as var), DefScope(defName, false) when bound zero ->
+        | LiteralExpr value, (TyVar v as var), DefScope(defName, false) when bound zero && not (isLiteralVar v) ->
             let tyText = Unifier.tyToDisplayString Ascii var
             match value with
-            | IntLit 0L -> Some (AsMember { literal with Kind = IdentifierExpr zero })
+            | IntLit n when n.IsZero -> Some (AsMember { literal with Kind = IdentifierExpr zero })
             | IntLit n when bound fromInt ->
                 Some (AsMember { literal with Kind = FunctionCall(fromInt, None, [ Expression.at literal.Span (LiteralExpr(IntLit n)) ]) })
             | _ when v.Name.IsNone -> None

@@ -211,7 +211,7 @@ export def float.fromInt: int -> float = { n ->
 -- `toString`, as `int` has them. Arithmetic that does not fit the type stops the program, and so
 -- does `fromInt` of an `int` outside its range.
 
-export def I8.zero: I8 = __nanyx_from_int(0)
+export def I8.zero: I8 = 0
 
 export def I8.`+`: I8, I8 -> I8 = { x, y ->
   x + y
@@ -251,7 +251,7 @@ export def I8.toString: I8 -> string = { n ->
   "{n}"
 }
 
-export def I16.zero: I16 = __nanyx_from_int(0)
+export def I16.zero: I16 = 0
 
 export def I16.`+`: I16, I16 -> I16 = { x, y ->
   x + y
@@ -291,7 +291,7 @@ export def I16.toString: I16 -> string = { n ->
   "{n}"
 }
 
-export def I32.zero: I32 = __nanyx_from_int(0)
+export def I32.zero: I32 = 0
 
 export def I32.`+`: I32, I32 -> I32 = { x, y ->
   x + y
@@ -331,7 +331,7 @@ export def I32.toString: I32 -> string = { n ->
   "{n}"
 }
 
-export def U8.zero: U8 = __nanyx_from_int(0)
+export def U8.zero: U8 = 0
 
 export def U8.`+`: U8, U8 -> U8 = { x, y ->
   x + y
@@ -371,7 +371,7 @@ export def U8.toString: U8 -> string = { n ->
   "{n}"
 }
 
-export def U16.zero: U16 = __nanyx_from_int(0)
+export def U16.zero: U16 = 0
 
 export def U16.`+`: U16, U16 -> U16 = { x, y ->
   x + y
@@ -411,7 +411,7 @@ export def U16.toString: U16 -> string = { n ->
   "{n}"
 }
 
-export def U32.zero: U32 = __nanyx_from_int(0)
+export def U32.zero: U32 = 0
 
 export def U32.`+`: U32, U32 -> U32 = { x, y ->
   x + y
@@ -451,7 +451,7 @@ export def U32.toString: U32 -> string = { n ->
   "{n}"
 }
 
-export def U64.zero: U64 = __nanyx_from_int(0)
+export def U64.zero: U64 = 0
 
 export def U64.`+`: U64, U64 -> U64 = { x, y ->
   x + y
@@ -494,7 +494,7 @@ export def U64.toString: U64 -> string = { n ->
 -- The compiler's own `Add` and `Num` of `F32`, and its `compare`, `hash` and `toString`, as `float`
 -- has them. `fromInt` gives the nearest `F32`.
 
-export def F32.zero: F32 = __nanyx_from_int(0)
+export def F32.zero: F32 = 0.0
 
 export def F32.`+`: F32, F32 -> F32 = { x, y ->
   x + y

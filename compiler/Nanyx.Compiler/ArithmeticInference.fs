@@ -39,6 +39,18 @@ module internal ArithmeticInference =
         state.NamedAsValues.Contains name
         || (name.Contains '.' && state.NamedAsValues.Contains (name.Substring(name.LastIndexOf '.' + 1)))
 
+    /// `state` with the number literals the def about to be generalised settles made their default types, where nothing
+    /// else has settled them (see `NumericLiterals`): every one so far for a top-level def, and for a local def those of
+    /// a variable it would be generalised over, since a literal is not of every type. The def's operators are then
+    /// read on what the literals are.
+    let private settleLiterals (generalizeDef: InferState -> TypeScheme * InferState) (generalising: Generalising) (state: InferState) =
+        match generalising with
+        | _ when state.UnsettledLiterals.IsEmpty -> state
+        | TopLevelDef _ -> NumericLiterals.settle (fun _ -> true) state
+        | LocalDef ->
+            let tentative, _ = generalizeDef state
+            NumericLiterals.settle (function TyVar v -> tentative.Quantified.Contains v.Id | _ -> false) state
+
     /// The type of the def about to be generalised, by `generalizeDef`, once the arithmetic operators left pending that
     /// the def settles (see `Generalising`) are read. An operator found to be on numbers constrains its operands, so
     /// the def is generalised again with them.
@@ -46,6 +58,7 @@ module internal ArithmeticInference =
     /// A top-level def requires the contexts of each of its type variables its operators are on. The operators of a
     /// def the module names as a value are all on numbers (see `namedAsValue`).
     let generalize (generalizeDef: InferState -> TypeScheme * InferState) (generalising: Generalising) (state: InferState) : TypeScheme * InferState =
+        let state = settleLiterals generalizeDef generalising state
         if state.PendingArithmetic.IsEmpty then generalizeDef state
         else
             let tentative, generalized = generalizeDef state
