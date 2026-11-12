@@ -99,7 +99,7 @@ let private derivedInstances (typed: TypedModule) =
 /// Whether `instance` is the one the function around a call requires of its variable `a`, `ctxName(a)`.
 let private isRequired (ctxName: string) (instance: ContextInstance option) =
     match instance with
-    | Some (InstanceInScope (Kind (TypeApply(name, [ Kind (TypeVar "a") ])))) -> name = ctxName
+    | Some (InstanceInScope(Kind (TypeApply(name, [ Kind (TypeVar "a") ])), _)) -> name = ctxName
     | _ -> false
 
 [<Fact>]
@@ -164,7 +164,7 @@ def s = {
         |> Map.values
         |> Seq.concat
         |> Seq.exists (function
-            | Some (InstanceInScope (Kind (TypeApply("ToString", [ Kind (TypeName "int") ])))) -> true
+            | Some (InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "int") ])), _)) -> true
             | _ -> false)
     Assert.True(loaded, "The derived toString is not passed the ToString(int) in scope")
 

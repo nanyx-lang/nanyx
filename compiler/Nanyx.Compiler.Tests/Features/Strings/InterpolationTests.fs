@@ -39,7 +39,7 @@ let ``A hole uses an instance loaded with use ahead of the compiler's own`` () =
             "}\n")
     let loaded =
         instancesOf typed
-        |> List.choose (function InstanceInScope (Kind (TypeApply("ToString", [ Kind (TypeName "int") ]))) -> Some () | _ -> None)
+        |> List.choose (function InstanceInScope(Kind (TypeApply("ToString", [ Kind (TypeName "int") ])), _) -> Some () | _ -> None)
     Assert.Equal(1, loaded.Length)
 
 [<Fact>]

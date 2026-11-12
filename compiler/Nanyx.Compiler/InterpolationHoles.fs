@@ -185,7 +185,7 @@ module InterpolationHoles =
     /// the backend writes the value at each type the function is specialised at, as it does a built-in type's. A type
     /// with more to it than a variable, such as a function's, has no `ToString` whatever its variables turn out to be.
     let resolvePending
-        (instanceInScope: TypeEnv -> Identifier -> Ty list -> TypeExpr option)
+        (instanceInScope: TypeEnv -> Identifier -> Ty list -> (TypeExpr * ContextProvider) option)
         (synthesize: TypeEnv -> Result<ContextInstance * InferState, Diagnostic list> option)
         (defScheme: Identifier -> TypeScheme option)
         (state: InferState)
@@ -197,7 +197,7 @@ module InterpolationHoles =
         let declaredVars = annotatedDef |> Option.bind defScheme |> Option.map _.Quantified |> Option.defaultValue Set.empty
         let found =
             match instanceInScope env pending.Context argTys with
-            | Some written -> Ok (InstanceInScope written, state)
+            | Some inScope -> Ok (InstanceInScope inScope, state)
             | None when argTys |> List.forall hasBuiltInInstance -> Ok (InstanceBuiltIn, state)
             | None ->
                 match synthesize env with

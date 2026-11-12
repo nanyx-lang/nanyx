@@ -27,7 +27,7 @@ def loaded = {
     let typed = compileClean (source.ReplaceLineEndings "\n")
     match ownContextInstances typed |> Map.toList |> List.sortBy fst |> List.map snd |> List.filter ((<>) [ Some InstanceBuiltIn ]) with
     | [ [ Some (InstanceSynthesized members) ]
-        [ Some (InstanceInScope (Kind (TypeApply ("To_Text", [ Kind (TypeName "My_Point") ])))) ] ] ->
+        [ Some (InstanceInScope(Kind (TypeApply ("To_Text", [ Kind (TypeName "My_Point") ])), _)) ] ] ->
         Assert.Equal<(string * string) list>([ "text_tag", "My_Point.text_tag"; "to_text", "My_Point.to_text" ], List.sort members)
     | other -> failwith $"Unexpected instances: %A{other}"
 
