@@ -359,13 +359,13 @@ export def format: string -> string = { s -> s \trim }
 
 Top-level definitions in a named module must be context-free: they cannot require a context such as `[Console]` or `[Random]`, since a top-level initializer has no place to declare — or receive — a context requirement of its own.
 
-```nanyx skip=#956
+```nanyx
 module config
 
 def maxRetries = 3              -- Ok: context-free
 def timeout = maxRetries * 10   -- Ok: context-free, and free to reference other definitions in any order
 
-def greeting = println("Hi")    -- Error: `println` requires [Console], which a top-level initializer cannot have
+def greeting = println("Hi")    -- Error NYX0211: `println` requires [Console], which a top-level initializer cannot have
 ```
 
 Because ordinary effectful initialization isn't permitted, named modules have no observable source-order initialization semantics: there's no effectful step whose order could ever be seen, which is what makes the order-independence described in [Declaration order](#declaration-order) sound rather than just convenient.

@@ -249,10 +249,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some contexts -> registerContextRequirement written name contexts declaredTypeExprOpt
                     | None -> written
                 // A function runs in the contexts its type declares, or infers them. A value is computed at the top
-                // level, in the ambient ones.
+                // level: in a script, in the ambient contexts; in a named module, or a block, in none.
                 let bodyState =
                     match expr.Kind with
                     | Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, typeOpt.IsNone) } |> LambdaContexts.markBody expr
+                    | _ when currentModule.IsSome || (blockAround state.ModuleBlocks expr.Span).IsSome ->
+                        { nextStateWithReq with ContextScope = ValueScope name }
                     | _ -> nextStateWithReq
                 let inferResult =
                     match expr.Kind with
@@ -416,6 +418,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             | DefScope(caller, false) ->
                 for ctxName in Set.difference required.[used.Callee] used.Available do
                     errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span |> ContextFixes.withAddToType state caller ctxName ]
+            | ValueScope caller ->
+                for ctxName in Set.difference required.[used.Callee] used.Available do
+                    errors <- errors @ [ contextInModuleValue caller ctxName $"'{used.Callee}' requires" used.Span ]
             | _ -> ()
         state <- recordDeferredProviders required uses state |> recordInstanceProviders
         // What an unannotated function needs is part of its type, as a context written in its type is. They come after

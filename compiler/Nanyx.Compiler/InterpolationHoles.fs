@@ -165,7 +165,7 @@ module InterpolationHoles =
                 match state.ContextScope with
                 | DefScope(name, true) -> name, None
                 | DefScope(name, false) -> moduleEnd, Some name
-                | AmbientScope -> moduleEnd, None
+                | AmbientScope | ValueScope _ -> moduleEnd, None
             let pending =
                 { Def = def; Call = call.Id; Callee = holeFunction; Index = found.Length; Count = count
                   Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared ty annotatedDef) |> List.map (addToStringFix state ty annotatedDef); ChecksOnly = false }

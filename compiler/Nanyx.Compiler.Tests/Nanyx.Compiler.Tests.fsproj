@@ -37,6 +37,7 @@
     <Compile Include="Features\Contexts\ContextVariableTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />
+    <Compile Include="Features\Contexts\ModuleValueContextTests.fs" />
     <Compile Include="Features\Contexts\UnderscoreContextNameTests.fs" />
     <Compile Include="Features\Contexts\ContextTypeParameterTests.fs" />
     <Compile Include="Features\Contexts\UndeclaredContextTests.fs" />

@@ -473,7 +473,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 match scope with
                                 | DefScope(defName, true) -> defName, None
                                 | DefScope(defName, false) -> InterpolationHoles.moduleEnd, Some defName
-                                | AmbientScope -> InterpolationHoles.moduleEnd, None
+                                | AmbientScope | ValueScope _ -> InterpolationHoles.moduleEnd, None
                             let errors =
                                 ContextInference.varsInOrder argTys.Head
                                 |> List.truncate 1

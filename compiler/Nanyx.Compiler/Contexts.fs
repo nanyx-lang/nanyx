@@ -195,21 +195,24 @@ let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Id
         |> List.filter (fun (_, members) ->
             match state.ContextScope with
             | AmbientScope -> true
-            | DefScope _ -> suppliedNearer env state members)
+            | DefScope _
+            | ValueScope _ -> suppliedNearer env state members)
         |> List.map fst
         |> Set.ofList
     match state.ContextScope with
     | AmbientScope -> Set.union fromMembers state.CarriedAmbientContexts
-    | DefScope _ -> fromMembers
+    | DefScope _
+    | ValueScope _ -> fromMembers
 
 /// What provides an ambient context to code in `scope` where the ambient instance supplies it: the runtime at the top
-/// level, and inference in a def that does not write its type. None in a def that writes its type, where that is an
-/// error.
+/// level, and inference in a def that does not write its type. None in a def that writes its type, or a top-level value
+/// of a named module, where that is an error.
 let internal ambientProvider (scope: ContextScope) : ContextProvider option =
     match scope with
     | AmbientScope -> Some FromRuntime
     | DefScope(_, true) -> Some FromInference
-    | DefScope(_, false) -> None
+    | DefScope(_, false)
+    | ValueScope _ -> None
 
 /// What provides, to code in `env`, a context whose members are bound there by the names `members`: the ambient
 /// instance where it supplies them (`ambient`), else the `use` or the signature that binds them. None where nothing
@@ -270,8 +273,13 @@ let private recordMemberCall (call: NodeId option) (env: TypeEnv) (name: Identif
 let internal undeclaredContext (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
     Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{defName}' does not declare: add [{ctxName}] to the type of '{defName}', or load an instance with `use`"
 
-/// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level, inferred for
-/// an unannotated def, and an error in a def whose type does not declare it.
+/// `what` (which ends "requires", say) the context `ctxName` at `span`, in the value of the top-level def `defName` of
+/// a named module, which runs in no context.
+let internal contextInModuleValue (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
+    Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{defName}' cannot have: a top-level value of a named module runs in no context. Make '{defName}' a function, or do this in the @entry function"
+
+/// `what` needs the ambient context `ctxName` where nothing nearer supplies it: fine at the top level of a script,
+/// inferred for an unannotated def, and an error in a def whose type does not declare it or a named module's value.
 let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: string) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     match state.ContextScope with
     | AmbientScope -> Ok state
@@ -279,6 +287,7 @@ let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: 
         let contexts = state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
         Ok { state with InferredContexts = state.InferredContexts |> Map.add defName (contexts.Add ctxName) }
     | DefScope(defName, false) -> Error [ undeclaredContext defName ctxName what span |> ContextFixes.withAddToType state defName ctxName ]
+    | ValueScope defName -> Error [ contextInModuleValue defName ctxName what span ]
 
 /// The name the definition `name` names is declared under: a block import's name (`zero`) stands for the qualified
 /// one (`money.zero`), unless something nearer binds it.
