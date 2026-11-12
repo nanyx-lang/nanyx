@@ -63,7 +63,7 @@ let ``A use cannot result in a lambda that uses a member it loads`` () =
         diagnostic.Message
     )
     let related, label = List.exactlyOne diagnostic.Related
-    Assert.Equal("use Foo(bar = { s -> s })", source.Substring(related.Start, related.End - related.Start))
+    Assert.Equal("use Foo(bar = { s -> s })", source.ReplaceLineEndings("\n").Substring(related.Start, related.End - related.Start))
     Assert.Equal("the `use`", label)
 
 [<Fact>]
