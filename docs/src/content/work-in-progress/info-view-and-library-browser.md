@@ -13,7 +13,7 @@ order: 30
 
 Three editor features, each built on what the language server already knows:
 
-1. **An info view.** A panel beside the editor that follows the cursor, modelled on the infoview in Lean 4's VS
+1. **An info view.** A view in the side bar beside the editor that follows the cursor, modelled on the infoview in Lean 4's VS
    Code extension. It shows the type of the expression at the cursor and the names in scope with their types. It
    also shows the contexts in scope and where each comes from. In a long function, that last part shows which
    `use` or which part of the signature each call's contexts come from.
@@ -109,9 +109,11 @@ anything new.
   `error NYX0101`) and a location to link to. It returns data, not rendered text, so the client can lay it out and
   link the spans. The server reads the same cached compile as hover (`DocumentStore`), and the last good compile
   while the text does not parse; the expression is left out where the text has been edited since.
-- **Client.** A webview panel in `extension/`, opened by *Nanyx: Show info view* (Ctrl+Shift+Enter, as in Lean). It
-  sends the request when the selection or the document changes, debounced, and drops an answer a later request has
-  overtaken. It can pin a position, so the panel keeps showing that position while you edit elsewhere; the pinned
+- **Client.** A webview view in `extension/`, in a view container of its own in VS Code's secondary side bar
+  ([#921](https://github.com/nanyx-lang/nanyx/issues/921); `contributes.viewsContainers.secondarySidebar` needs
+  VS Code 1.106), revealed by *Nanyx: Show info view* (Ctrl+Shift+Enter, as in Lean). It sends the request when the
+  selection or the document changes, debounced, while the view is visible, and drops an answer a later request has
+  overtaken. It can pin a position, so the view keeps showing that position while you edit elsewhere; the pinned
   position does not move with edits above it yet. Plain TypeScript and HTML; no framework.
 - **Other editors.** The request is plain LSP, so another client can show the same thing. A text rendering in an
   output buffer would do for Neovim.

@@ -37,13 +37,14 @@ exports.InfoView = void 0;
 const vscode = __importStar(require("vscode"));
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
 const INFO_VIEW_REQUEST = "nanyx/infoView";
-/** How long the selection must stay put before the panel asks the server about it. */
+/** How long the selection must stay put before the view asks the server about it. */
 const DEBOUNCE_MILLISECONDS = 150;
 /**
- * The info view: a panel beside the editor that shows what the compiler knows at the cursor, as Lean's infoview does.
- * It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or the document does,
- * once it has stayed put for a moment. Every item that has a place links to it. Pinning keeps the panel on one
- * position while you edit elsewhere.
+ * The info view: a view in the secondary side bar that shows what the compiler knows at the cursor, as Lean's infoview
+ * does. It is the webview view `nanyx.infoView`, in the `nanyx` view container that `package.json` contributes to the
+ * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
+ * the document does, once it has stayed put for a moment. Every item that has a place links to it. Pinning keeps the
+ * view on one position while you edit elsewhere.
  */
 class InfoView {
     constructor(client) {
@@ -51,39 +52,43 @@ class InfoView {
         /** Counts requests, so that an answer to one overtaken by a later one is dropped. */
         this.requests = 0;
         this.listeners = [];
+        this.registration = vscode.window.registerWebviewViewProvider(InfoView.viewId, this, {
+            webviewOptions: { retainContextWhenHidden: true }
+        });
     }
-    /** Opens the panel beside the active editor, or brings it forward, and shows the cursor's position. */
-    show() {
-        if (this.panel) {
-            this.panel.reveal(vscode.ViewColumn.Beside, true);
-        }
-        else {
-            this.panel = vscode.window.createWebviewPanel("nanyx.infoView", "Nanyx info view", { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }, { enableScripts: true, retainContextWhenHidden: true });
-            this.panel.webview.html = page(this.panel.webview);
-            this.panel.webview.onDidReceiveMessage((message) => this.receive(message), undefined, this.listeners);
-            this.panel.onDidDispose(() => this.closed(), undefined, this.listeners);
-            vscode.window.onDidChangeTextEditorSelection(() => this.schedule(), undefined, this.listeners);
-            vscode.window.onDidChangeActiveTextEditor(() => this.schedule(), undefined, this.listeners);
-            vscode.workspace.onDidChangeTextDocument((event) => {
-                if (event.document.languageId === "nanyx") {
-                    this.schedule();
-                }
-            }, undefined, this.listeners);
-        }
+    /** Called by VS Code the first time the view is shown, and again if it is shown after being closed. */
+    resolveWebviewView(view) {
+        this.closed();
+        this.view = view;
+        view.webview.options = { enableScripts: true };
+        view.webview.html = page(view.webview);
+        view.webview.onDidReceiveMessage((message) => this.receive(message), undefined, this.listeners);
+        view.onDidDispose(() => this.closed(), undefined, this.listeners);
+        view.onDidChangeVisibility(() => this.schedule(), undefined, this.listeners);
+        vscode.window.onDidChangeTextEditorSelection(() => this.schedule(), undefined, this.listeners);
+        vscode.window.onDidChangeActiveTextEditor(() => this.schedule(), undefined, this.listeners);
+        vscode.workspace.onDidChangeTextDocument((event) => {
+            if (event.document.languageId === "nanyx") {
+                this.schedule();
+            }
+        }, undefined, this.listeners);
+        this.schedule();
+    }
+    /** Reveals the view, opening the secondary side bar if need be, and focuses it. */
+    async show() {
+        await vscode.commands.executeCommand(`${InfoView.viewId}.focus`);
         this.schedule();
     }
     dispose() {
-        this.panel?.dispose();
         this.closed();
+        this.registration.dispose();
     }
     /** Asks again, after the language server has restarted say. */
     refresh() {
-        if (this.panel) {
-            this.schedule();
-        }
+        this.schedule();
     }
     closed() {
-        this.panel = undefined;
+        this.view = undefined;
         this.pinned = undefined;
         clearTimeout(this.timer);
         this.listeners.splice(0).forEach((listener) => listener.dispose());
@@ -110,8 +115,8 @@ class InfoView {
     }
     async update() {
         const target = this.pinned ?? this.cursor();
-        if (!this.panel || !target) {
-            // Away from a Nanyx editor, the panel keeps what it last showed.
+        if (!this.view?.visible || !target) {
+            // Away from a Nanyx editor, the view keeps what it last showed. A hidden view catches up when it is shown.
             return;
         }
         const request = ++this.requests;
@@ -142,12 +147,13 @@ class InfoView {
             }
         }
         if (request === this.requests) {
-            void this.panel?.webview.postMessage(shown);
+            void this.view?.webview.postMessage(shown);
         }
     }
 }
 exports.InfoView = InfoView;
-/** Opens a location an item links to, in the editor beside the panel. */
+InfoView.viewId = "nanyx.infoView";
+/** Opens a location an item links to, in the editor that already shows its document, or else the first one. */
 async function open(location) {
     const { start, end } = location.range;
     const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(location.uri));
@@ -157,7 +163,7 @@ async function open(location) {
         selection: new vscode.Range(start.line, start.character, end.line, end.character)
     });
 }
-/** The panel's page: it draws what the extension posts to it, and posts back pins and clicks on links. */
+/** The view's page: it draws what the extension posts to it, and posts back pins and clicks on links. */
 function page(webview) {
     const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
     return `<!DOCTYPE html>
