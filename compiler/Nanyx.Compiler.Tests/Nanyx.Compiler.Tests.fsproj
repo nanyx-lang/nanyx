@@ -102,6 +102,7 @@
     <Compile Include="Features\Tooling\CompletionTests.fs" />
     <Compile Include="Features\Tooling\DocumentationTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
+    <Compile Include="Features\Tooling\InfoViewCallTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />

@@ -1,5 +1,6 @@
 /// What the info view shows at a position in the compiled root module: the type of the expression there, the names in
-/// scope with their types, and the contexts in scope with where each comes from. Positions are character offsets into
+/// scope with their types, the contexts in scope with where each comes from, and the contexts the call there requires
+/// with where it finds each. Positions are character offsets into
 /// the source as the parser saw it, as for `Hover`.
 module NyxCompiler.InfoView
 
@@ -26,18 +27,36 @@ type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declara
 /// comment describes it, the first that has one first: for a `use`, the def it names or calls, then the context itself.
 type ScopedContext = { Context: string; Source: ContextSource; Span: SourceSpan; Documented: Symbol list }
 
+/// Where a call finds a context its callee requires (see `TypedModule.ContextInstances` and
+/// `TypedModule.ContextProviders`).
+type CallSource =
+    /// What provides it where the call is: a def's signature, a `use`, inference, or the runtime.
+    | Provided of ContextSource
+    /// An instance the compiler builds from the definitions attached to the type, named as written: `Point.show`.
+    | Attached of string list
+    /// An instance the compiler derives from the parts of the type (see `StructuralInstances`).
+    | Derived
+    /// The compiler's own instance, of a built-in type.
+    | BuiltIn
+
+/// A context the call at the position requires, written as hover writes it, with where the call finds it, and the span
+/// and documented symbols of what provides it, as `ScopedContext` has them. An instance the compiler builds has no span.
+type CallContext = { Context: string; Source: CallSource; Span: SourceSpan; Documented: Symbol list }
+
 /// What the info view shows. `Expression` is what hover shows at the position, and `ExpressionSymbol` the name there
 /// that hover shows the doc comment of; `Instantiation`, on a name that refers to a generic def, the def's own
 /// signature and how this use fills in its type variables. `Locals` are the locals, parameters and pattern variables
 /// in scope, nearest first; `TopLevel` the top-level defs and imports in scope, the module's own first, then by name,
-/// less intrinsics.
+/// less intrinsics. `Call` holds the contexts the innermost call or pipe around the position that requires any
+/// requires, each with where it finds it.
 type Info =
     { Expression: Hover.HoverInfo option
       ExpressionSymbol: Symbol option
       Instantiation: Hover.Instantiation option
       Locals: ScopedName list
       TopLevel: ScopedName list
-      Contexts: ScopedContext list }
+      Contexts: ScopedContext list
+      Call: CallContext list }
 
 /// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation and the span
 /// of its statement.
@@ -130,6 +149,88 @@ let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty
         else []
     fromUses @ fromDefs @ fromRuntime
 
+/// The name of the context `context` is.
+let private contextName (context: Ty) : Identifier option =
+    match context with
+    | TyApply(name, _)
+    | TyAlias(name, _, _) -> Some name
+    | _ -> None
+
+/// Where an instance of `ctxName` the compiler builds from `members` (each member's name and the definition it is)
+/// comes from: the compiler's own, a definition derived from the type's parts, or definitions attached to the type,
+/// which are named `Type.member`.
+let private builtSource (ctxName: Identifier) (members: (string * string) list) : CallSource =
+    let definitions = members |> List.map snd
+    let isCompilersOwn (definition: string) =
+        definition = InterpolationHoles.builtInFunction
+        || WellKnownContexts.tryFind ctxName |> Option.exists (fun wellKnown -> wellKnown.BuiltInFunction = definition)
+    if definitions |> List.forall isCompilersOwn then BuiltIn
+    elif definitions |> List.forall (fun definition -> definition.Contains '.') then Attached definitions
+    else Derived
+
+/// The contexts `symbol`, called at `call`, requires, as its type declares them, at the types of the call.
+let private contextsAtCall (typed: TypedModule) (symbol: Symbol) (call: Expression) : Ty list =
+    match Hover.declaredType typed symbol, typed.CalleeTypes |> Map.tryFind call.Id with
+    | Some (general, contexts), Some calleeTy ->
+        match Unifier.unify [ general, calleeTy, Equal, SourceSpan.none ] with
+        | Ok subst -> contexts |> List.map (Unifier.apply subst)
+        | Error _ -> []
+    | _ -> []
+
+/// The contexts the innermost call or pipe around `offset` that requires any requires, each with where it finds it, the
+/// span of what provides it and the symbol of the def a `use` of it names: first those its callee's type declares, in
+/// order, at the types of the call (see `TypedModule.ContextInstances`), then the others `TypedModule.ContextProviders`
+/// records for it, a member's context or one a function value it runs requires.
+let private callContextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * CallSource * SourceSpan * Symbol option) list =
+    let expressions = lazy (Hover.allExpressions syntax |> List.map (fun expr -> expr.Id, expr) |> Map.ofList)
+    let provided (call: Expression) (context: Ty) (provider: ContextProvider) =
+        match provider with
+        | FromSignature span -> context, Provided Signature, span, None
+        | FromUse value ->
+            match expressions.Value |> Map.tryFind value with
+            | Some value -> context, Provided Use, value.Span, referenced typed value
+            | None -> context, Provided Use, SourceSpan.none, None
+        | FromInference ->
+            let def = defsAround syntax call.Span.Start |> List.tryPick (defSymbol typed)
+            context, Provided Inferred, def |> Option.map _.Declaration |> Option.defaultValue SourceSpan.none, None
+        | FromRuntime -> context, Provided Runtime, SourceSpan.none, None
+    let ofCall (call: Expression) =
+        let providers = typed.ContextProviders |> Map.tryFind call.Id |> Option.defaultValue []
+        let instances = typed.ContextInstances |> Map.tryFind call.Id |> Option.defaultValue []
+        let declared =
+            referenced typed call
+            |> Option.map (fun symbol -> contextsAtCall typed symbol call)
+            |> Option.defaultValue []
+            |> List.mapi (fun index context ->
+                match List.tryItem index instances |> Option.flatten, contextName context with
+                | Some (InstanceInScope(_, provider)), _ -> Some (provided call context provider)
+                | Some (InstanceSynthesized members), Some ctxName -> Some (context, builtSource ctxName members, SourceSpan.none, None)
+                | Some (InstanceDerived _), _ -> Some (context, Derived, SourceSpan.none, None)
+                | Some InstanceBuiltIn, _ -> Some (context, BuiltIn, SourceSpan.none, None)
+                | None, Some ctxName ->
+                    providers
+                    |> List.tryFind (fun p -> contextName p.Context = Some ctxName)
+                    |> Option.map (fun p -> provided call context p.Provider)
+                | _ -> None)
+            |> List.choose id
+        let covered = declared |> List.choose (fun (context, _, _, _) -> contextName context) |> Set.ofList
+        let others =
+            providers
+            |> List.filter (fun p -> contextName p.Context |> Option.forall (covered.Contains >> not))
+            |> List.map (fun p -> provided call p.Context p.Provider)
+        declared @ others
+    Hover.expressionsAt offset syntax
+    |> List.filter (fun expr ->
+        match expr.Kind with
+        | FunctionCall _
+        | Pipe _ -> true
+        | _ -> false)
+    |> List.tryPick (fun call ->
+        match ofCall call with
+        | [] -> None
+        | found -> Some found)
+    |> Option.defaultValue []
+
 let private isLocal (symbol: Symbol) =
     match symbol.Kind with
     | LocalValue
@@ -176,10 +277,14 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                 Completion.symbolType typed symbol,
                 typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue [] |> Unifier.writtenContexts)
         let contexts = contextsAt typed syntax offset
+        let callContexts = callContextsAt typed syntax offset
         let localGroups = localTypes |> List.map (fun (ty, required) -> Option.toList ty @ required)
         let contextGroups = contexts |> List.map (fun (ty, _, _, _) -> [ ty ])
-        let written = splitAs (localGroups @ contextGroups) (Unifier.tysToDisplayStrings names (List.concat (localGroups @ contextGroups)))
-        let localsWritten, contextsWritten = List.splitAt locals.Length written
+        let callGroups = callContexts |> List.map (fun (ty, _, _, _) -> [ ty ])
+        let groups = localGroups @ contextGroups @ callGroups
+        let written = splitAs groups (Unifier.tysToDisplayStrings names (List.concat groups))
+        let localsWritten, written = List.splitAt locals.Length written
+        let contextsWritten, callWritten = List.splitAt contexts.Length written
         let scoped (symbol: Symbol) typeWritten =
             { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration; Symbol = symbol }
         { Expression = expression
@@ -206,5 +311,14 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                       Span = span
                       Documented = Option.toList instance @ Option.toList (contextSymbol typed ty) })
                 contexts
-                contextsWritten }
-    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Locals = []; TopLevel = []; Contexts = [] }
+                contextsWritten
+          Call =
+            List.map2
+                (fun (ty, source, span, instance) contextWritten ->
+                    { Context = List.exactlyOne contextWritten
+                      Source = source
+                      Span = span
+                      Documented = Option.toList instance @ Option.toList (contextSymbol typed ty) })
+                callContexts
+                callWritten }
+    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Locals = []; TopLevel = []; Contexts = []; Call = [] }

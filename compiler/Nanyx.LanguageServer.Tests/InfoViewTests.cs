@@ -352,4 +352,32 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var declared = Section(await InfoViewAt(uri, 1, 17), "expression").Items[0];
         Assert.Equal("The larger of `a` and `b`.", declared.Documentation);
     }
+
+    [Fact]
+    public async Task Info_view_shows_where_the_call_at_the_position_finds_each_context()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-11");
+
+        Open(uri, """
+            context Show(a) = (show: a -> string)
+            context Log = (log: string -> ())
+            type Point = (x: int, y: int)
+            def describe: [Log & Show(a)] a -> string = { x -> show(x) }
+            def showPoint: Show(Point) = (show = { p -> "p" })
+            def main: [Log] () -> string = {
+              use showPoint
+              describe(Point(x = 1, y = 2))
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var call = Section(await InfoViewAt(uri, 7, 4), "call");
+
+        Assert.Equal("This call", call.Title);
+        Assert.Equal(
+            [("Log", "signature", new Range(5, 11, 5, 14)), ("Show(Point)", "use", new Range(6, 6, 6, 15))],
+            call.Items.Select(item => (item.Text, item.Detail, item.Location?.Range)));
+        Assert.Empty(Section(await InfoViewAt(uri, 4, 5), "call").Items);
+    }
 }
