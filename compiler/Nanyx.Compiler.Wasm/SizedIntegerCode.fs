@@ -44,6 +44,20 @@ let binary (integer: SizedInteger) (op: string) : Operation option =
     | ">=" -> Some (Instruction $"{held}.ge_{signed}")
     | _ -> None
 
+/// The operation `operation` (`add`, `sub` or `mul`) on two values of `integer` on the stack that keeps the low bits of
+/// the result, as the type holds them: wrapping around past its range rather than stopping the program.
+let wrapping (integer: SizedInteger) (operation: string) : string list =
+    let narrowed =
+        match integer with
+        | SizedInteger.I8 -> [ "i32.extend8_s" ]
+        | SizedInteger.I16 -> [ "i32.extend16_s" ]
+        | SizedInteger.U8 -> [ "i32.const 255"; "i32.and" ]
+        | SizedInteger.U16 -> [ "i32.const 65535"; "i32.and" ]
+        | SizedInteger.I32
+        | SizedInteger.U32
+        | SizedInteger.U64 -> []
+    $"{valueType integer}.{operation}" :: narrowed
+
 /// Stops the program as an int's overflow does: dividing the smallest int by -1 traps with "integer overflow".
 let private overflow = [ $"i64.const {System.Int64.MinValue}"; "i64.const -1"; "i64.div_s"; "drop" ]
 

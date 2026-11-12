@@ -8,8 +8,8 @@ order: 6
 > the program on overflow ([#342](https://github.com/nanyx-lang/nanyx/issues/342)). `I64`, `F64` and `Boolean` are the
 > types `int`, `float` and `bool` name. `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32` are types with the
 > compiler's own `Add` and `Num`, and integer arithmetic stops the program when the result does not fit. Literals take
-> the expected type, and one that does not fit it is an error. The wrapping operations and the conversions do not exist
-> yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
+> the expected type, and one that does not fit it is an error. Each integer type has `wrappingAdd`, `wrappingSub` and
+> `wrappingMul`. The conversions do not exist yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
 `list`. Numbers also come in fixed widths, for binary data, compact records and talking to hosts, as ordinary named
@@ -94,7 +94,8 @@ first.
 
 Code that wants arithmetic that wraps on purpose, such as a hash function, asks for it by name: `I32.wrappingAdd`,
 `I32.wrappingSub` and `I32.wrappingMul`, on each integer type. That is the only way to get it, so a wrap is always
-visible in the code.
+visible in the code. They are the prelude's, over three intrinsics the backend compiles at the type they are used at:
+the `i64` or `i32` instruction, then the low bits the type holds (`i32.extend8_s` for an `I8`, a mask for a `U16`).
 
 Swift checks every operation in the same way; Rust checks in debug builds and wraps in release builds. Nanyx checks
 in every build, so a program behaves the same however it was compiled. Checking costs a compare and a branch per

@@ -58,3 +58,15 @@ def I32.halve = { (n: I32) -> n / I32.fromInt(2) }
 def half = { (n: I32) -> n \halve }
 """
     Assert.Equal("I32 -> I32", typeOf "half" source)
+
+[<Theory>]
+[<InlineData("int")>]
+[<InlineData("I8")>]
+[<InlineData("U32")>]
+[<InlineData("U64")>]
+let ``Each integer type has arithmetic that wraps around`` (name: string) =
+    let source =
+        $"""
+def hash = {{ (a: {name}), (b: {name}) -> {name}.wrappingMul({name}.wrappingAdd(a, b), {name}.wrappingSub(a, b)) }}
+"""
+    Assert.Equal($"{name}, {name} -> {name}", typeOf "hash" source)

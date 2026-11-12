@@ -59,6 +59,11 @@ module Intrinsics =
     /// An int as a value of the sized integer type it is taken as (see `SizedInteger`), which stops the program when it
     /// does not fit that type, or as the nearest `F32`.
     let fromInt = prefix + "from_int"
+    /// `+`, `-` and `*` on two integers of the type they are taken at that keep the low bits of the result: they wrap
+    /// around past the type's range rather than stop the program.
+    let wrappingAdd = prefix + "wrapping_add"
+    let wrappingSub = prefix + "wrapping_sub"
+    let wrappingMul = prefix + "wrapping_mul"
     /// Two values of a type the compiler orders (see `WellKnownContexts.ordering`) put in order by their structure:
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
     /// total order, with NaN after every other float.
@@ -106,6 +111,9 @@ module Intrinsics =
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy, []))
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy, []))
           fromInt, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, element, []); Symbol = None }
+          wrappingAdd, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
+          wrappingSub, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
+          wrappingMul, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None }
           mapOfEntries, overEntries (TyFunc(entries, map, []))
           mapEntries, overEntries (TyFunc(map, entries, []))
           setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None }

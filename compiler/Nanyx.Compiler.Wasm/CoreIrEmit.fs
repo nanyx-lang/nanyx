@@ -51,6 +51,10 @@ let private localName (var: Var) =
 /// emitter converts an int to and from.
 let private takesInts = set [ Helpers.intToFloat; Helpers.floatToInt ]
 
+/// The intrinsics that add, subtract and multiply integers wrapping around, each with its instruction's operation.
+let private wrappingOperations =
+    Map.ofList [ Intrinsics.wrappingAdd, "add"; Intrinsics.wrappingSub, "sub"; Intrinsics.wrappingMul, "mul" ]
+
 /// The operators that give a number, where the others on numbers give a bool.
 let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
 
@@ -454,6 +458,15 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [ atoms args; $"call ${CoreIrOrdering.compareName (atomType first)}"; "i64.extend_i32_s" ]
         | CallRuntime(name, ([ first ] as args), _) when name = Helpers.valueHash ->
             join "\n    " [ atoms args; $"call ${CoreIrHashing.hashName (atomType first)}"; "i64.extend_i32_s" ]
+        | CallRuntime(name, args, _) when wrappingOperations.ContainsKey name ->
+            // The instruction on the type it is taken at, keeping the bits that type holds.
+            let operation = wrappingOperations.[name]
+            let code =
+                match expr.Type with
+                | IrInt -> [ $"i64.{operation}" ]
+                | IrSized integer -> SizedIntegerCode.wrapping integer operation
+                | other -> internalError $"{name} at {IrType.show other}, which is not an integer"
+            join "\n    " [ atoms args; yield! code ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.fromInt ->
             // An int as a sized integer, by the helper of the type it is taken as, or as the nearest `F32`.
             match expr.Type with

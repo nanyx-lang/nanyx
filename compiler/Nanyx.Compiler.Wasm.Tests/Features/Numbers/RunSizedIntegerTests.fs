@@ -123,3 +123,26 @@ def main = {
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "127 -128 255\n4294967295 -2147483648\n18446744073709551615\n"
+
+[<Fact>]
+let ``Run - the wrapping operations keep the low bits of the result`` () =
+    let source =
+        """
+import nanyx/console
+
+def fnv: list(U32) -> U32 = {
+  | [] -> 2_166_136_261
+  | [x, ...rest] -> U32.wrappingMul(fnv(rest), 16_777_619) \U32.wrappingAdd(x)
+}
+
+@entry
+def main = {
+  def big: I8 = 127
+  def zero: U8 = 0
+  println("{I8.wrappingAdd(big, 1)} {U8.wrappingSub(zero, 1)} {I16.wrappingMul(300, 300)} {U16.wrappingAdd(65535, 2)}")
+  println("{int.wrappingAdd(9_223_372_036_854_775_807, 1)} {U64.wrappingSub(0, 1)} {I32.wrappingMul(65536, 65536)} {U32.wrappingSub(0, 1)}")
+  println("{fnv([1, 2, 3])} {I8.wrappingSub(-128, 1)} {I64.wrappingMul(3, 4)}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n")
+    |> assertRan "-128 255 24464 1\n-9223372036854775808 18446744073709551615 0 4294967295\n3199756825 127 12\n"
