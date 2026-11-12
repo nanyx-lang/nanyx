@@ -103,6 +103,17 @@ let ``Hover shows the type of literals, locals, parameters, calls and lambdas`` 
     Assert.Equal(Some "def double: int -> int", hoverType source (offsetOf source "double(" 0 1))
 
 [<Fact>]
+let ``Hover on a value passed to dbg shows the value's type`` () =
+    // Not a triple-quoted string: a checkout with CRLF line endings would move the offsets the parser sees.
+    let source =
+        "def main = {\n" +
+        "  def x: #some(int) | #none = #none\n" +
+        "  dbg(x)\n" +
+        "  ()\n" +
+        "}\n"
+    Assert.Equal(Some "x: #some(int) | #none", hoverType source (offsetOf source "x)" 0 0))
+
+[<Fact>]
 let ``Hover inside a guard pattern shows the predicate's types`` () =
     let source =
         "def size: string -> int = { s ->\n" +
