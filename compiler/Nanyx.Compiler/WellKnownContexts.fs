@@ -251,7 +251,7 @@ module internal WellKnownContexts =
                 | Some instance, next ->
                     Some
                         { next with
-                            CalleeTypes = next.CalleeTypes |> Map.add expr.Id (TyFunc(input, TyPrimitive "bool"))
+                            CalleeTypes = next.CalleeTypes |> Map.add expr.Id (TyFunc(input, TyPrimitive "bool", []))
                             OperatorCalls = next.OperatorCalls |> Map.add expr.Id helper
                             ContextInstances = next.ContextInstances |> Map.add expr.Id [ Some instance ] }
                 | None, _ -> None)
@@ -330,7 +330,7 @@ module internal WellKnownContexts =
         |> List.fold (fun (current: InferState) pending ->
             match current.ContextInstances |> Map.tryFind pending.Call with
             | Some [ Some instance ] when calls instance ->
-                let calleeTy = TyFunc(inputOf (List.head pending.ArgTys), TyPrimitive "bool")
+                let calleeTy = TyFunc(inputOf (List.head pending.ArgTys), TyPrimitive "bool", [])
                 let operatorInstances =
                     match instance with
                     | InstanceInScope written when not keepInstance -> current.OperatorInstances |> Map.add pending.Call written

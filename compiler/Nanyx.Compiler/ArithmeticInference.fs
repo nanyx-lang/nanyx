@@ -127,7 +127,7 @@ module internal ArithmeticInference =
                 let input = if pending.MemberName = ArithmeticOperators.negate then ty else inputOf ty
                 { current with
                     ContextInstances = current.ContextInstances |> Map.remove pending.Operator
-                    CalleeTypes = current.CalleeTypes |> Map.add pending.Operator (TyFunc(input, ty))
+                    CalleeTypes = current.CalleeTypes |> Map.add pending.Operator (TyFunc(input, ty, []))
                     OperatorCalls = current.OperatorCalls |> Map.add pending.Operator pending.MemberName
                     OperatorInstances = current.OperatorInstances |> Map.add pending.Operator written }
             | _ -> current) state

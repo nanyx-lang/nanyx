@@ -56,7 +56,7 @@ let ``except passes through what a function is given more of`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     match result.Typed.Value.Types.["recover"] with
-    | TyFunc(TyUnion [ TyTag("notFound", None); TyVar input ], TyUnion output) ->
+    | TyFunc(TyUnion [ TyTag("notFound", None); TyVar input ], TyUnion output, []) ->
         Assert.Contains(TyTag("none", None), output)
         Assert.Contains(TyVar input, output)
     | other -> failwith $"Unexpected type: {Unifier.tyToString other}"

@@ -29,7 +29,7 @@ let ``A lone record type argument in the application's own brackets is the same 
         "def n: int = count([(name = \"Ada\")])\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Assert.Equal(TyFunc(TyApply("list", [ TyRecord(Map.ofList [ "name", TyPrimitive "string" ]) ]), TyPrimitive "int"), result.Typed.Value.Types.["count"])
+    Assert.Equal(TyFunc(TyApply("list", [ TyRecord(Map.ofList [ "name", TyPrimitive "string" ]) ]), TyPrimitive "int", []), result.Typed.Value.Types.["count"])
 
 [<Fact>]
 let ``Typecheck supports mixed positional and named records`` () =

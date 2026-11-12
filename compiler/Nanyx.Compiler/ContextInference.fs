@@ -20,7 +20,7 @@ module internal ContextInference =
             | TyAlias(_, args, _)
             | TyApply(_, args)
             | TyUnion args -> args |> List.collect collect
-            | TyFunc(arg, ret) -> collect arg @ collect ret
+            | TyFunc(arg, ret, contexts) -> (Unifier.writtenContexts contexts |> List.collect collect) @ collect arg @ collect ret
             | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.collect (snd >> collect)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
@@ -50,9 +50,18 @@ module internal ContextInference =
             | TyAlias(name, [], _) -> Some (TypeName name)
             | TyAlias(name, args, _)
             | TyApply(name, args) -> all args |> Option.map (fun args -> TypeApply(name, args))
-            | TyFunc(arg, ret) ->
+            | TyFunc(arg, ret, contexts) ->
+                // A context is written by its name alone when it has no arguments: `Console`, not `Console()`.
+                let context ty =
+                    match ty with
+                    | TyApply(name, []) -> Some (TypeExpr.synthetic (TypeName name))
+                    | _ -> typeExprOf names ty
+                let written = Unifier.writtenContexts contexts |> List.map context
                 match typeExprOf names arg, typeExprOf names ret with
-                | Some arg, Some ret -> Some (TypeFunc(arg, ret))
+                | Some arg, Some ret when written |> List.forall Option.isSome ->
+                    match written |> List.map Option.get with
+                    | [] -> Some (TypeFunc(arg, ret))
+                    | contexts -> Some (TypeWithContext(contexts, TypeExpr.synthetic (TypeFunc(arg, ret))))
                 | _ -> None
             // A tuple, such as a function's several parameters, is a record of the fields `0`, `1`, ...
             | TyRecord fields when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->

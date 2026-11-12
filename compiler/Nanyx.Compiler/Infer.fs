@@ -272,7 +272,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
     | TypeFunc(arg, ret) ->
         let argTy, next = typeExprToTy state arg
         let retTy, nextState = typeExprToTy next ret
-        TyFunc(argTy, retTy), nextState
+        TyFunc(argTy, retTy, []), nextState
     | TypeTag(name, payloadOpt) ->
         match payloadOpt with
         | Some payload ->
@@ -311,8 +311,9 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
     | TypeContext _ ->
         let ty, next = freshVar state
         ty, next
-    | TypeWithContext(_, inner) ->
-        typeExprToTy state inner
+    | TypeWithContext(contexts, inner) ->
+        let innerTy, next = typeExprToTy state inner
+        WrittenContexts.withContexts typeExprToTy next contexts innerTy
     | TypeConstraint(_, baseType, _) ->
         typeExprToTy state baseType
     | TypeWhere(baseType, _) ->
@@ -782,7 +783,7 @@ let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
     | TyPrimitive _ -> ty
     | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, recur underlying, isPrivate)
     | TyAlias(name, args, underlying) -> TyAlias(name, List.map recur args, recur underlying)
-    | TyFunc(arg, ret) -> TyFunc(recur arg, recur ret)
+    | TyFunc(arg, ret, contexts) -> TyFunc(recur arg, recur ret, contexts |> List.map recur |> FunctionContexts.flatten)
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy))
     | TyOpenRecord(fields, row) -> TyOpenRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy), row)
     | TyTag(name, payload) -> TyTag(name, Option.map recur payload)
@@ -802,7 +803,7 @@ let rec private varsIn (keyOf: TyVar -> 'key option) (general: Ty) (specific: Ty
             | None -> () ]
     match general, specific with
     | TyVar v, _ -> keyOf v |> Option.map (fun key -> Map.ofList [ key, specific ]) |> Option.defaultValue Map.empty
-    | TyFunc(ga, gr), TyFunc(sa, sr) -> all [ ga, sa; gr, sr ]
+    | TyFunc(ga, gr, _), TyFunc(sa, sr, _) -> all [ ga, sa; gr, sr ]
     | TyApply(_, gs), TyApply(_, ss) when gs.Length = ss.Length -> all (List.zip gs ss)
     | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
     | TyNominal(_, gu, _), TyNominal(_, su, _) -> recur gu su
@@ -1021,7 +1022,7 @@ let private comparesOwnParts (env: TypeEnv) (rigid: Set<int>) (hasInstance: TyVa
 let private derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyVar -> TypeExpr option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : InferState option =
     let calling (callee: Identifier, next: InferState) =
         { next with
-            CalleeTypes = next.CalleeTypes |> Map.add call (TyFunc(inputTypeFromArgs [ ty; ty ], TyPrimitive "bool"))
+            CalleeTypes = next.CalleeTypes |> Map.add call (TyFunc(inputTypeFromArgs [ ty; ty ], TyPrimitive "bool", []))
             OperatorCalls = next.OperatorCalls |> Map.add call callee }
     match tryResolveAttachedFunction env ty EqualityOperators.equals, state.ContextScope with
     | Some attached, DefScope(name, _) when name = attached -> None
@@ -1650,7 +1651,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (typedLambda, next) ->
                             let returnTy =
                                 match Unifier.unalias typedLambda.Type with
-                                | TyFunc(_, ret) -> ret
+                                | TyFunc(_, ret, _) -> ret
                                 | other -> other
                             Ok (mkTypedExpr expr returnTy None None None, { next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
                         | Error err -> Error err
@@ -1662,8 +1663,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     // `c.name` is checked.
                     let paramTys =
                         match Unifier.unalias funcTy, args with
-                        | TyFunc(declaredInput, _), [ _ ] -> Some [ declaredInput ]
-                        | TyFunc(declaredInput, _), _ ->
+                        | TyFunc(declaredInput, _, _), [ _ ] -> Some [ declaredInput ]
+                        | TyFunc(declaredInput, _, _), _ ->
                             match Unifier.unalias declaredInput with
                             | TyRecord fields when fields.Count = args.Length ->
                                 let tys = args |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
@@ -1714,7 +1715,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
                         let positionalForNamed =
                             match Unifier.unalias (resolveSoFar current funcTy) with
-                            | TyFunc(input, _) -> NamedArguments.check current expr name input args typedArgs
+                            | TyFunc(input, _, _) -> NamedArguments.check current expr name input args typedArgs
                             | _ -> None
                         match positionalForNamed with
                         | Some diagnostic -> Error [ diagnostic ]
@@ -1727,26 +1728,30 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         // Each argument was checked against its parameter above, which is all a known signature
                         // asks; constraining several arguments together as well, as one record, would make each
                         // equal to its parameter, and undo an argument union's widening into its parameter's.
-                        | TyFunc(_, declaredRet), Some _ when args.Length > 1 ->
+                        | TyFunc(_, declaredRet, _), Some _ when args.Length > 1 ->
                             Ok ({ mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, current)
                         | _ ->
                         let retTy, nextState =
                             match Unifier.unalias funcTy with
-                            | TyFunc(_, declaredRet) -> declaredRet, current
+                            | TyFunc(_, declaredRet, _) -> declaredRet, current
                             | _ -> freshVar current
                         // A known input is what the argument must be assignable to. A fresh variable in its place
                         // would be bound to the argument's own type first (constraints are solved newest first),
                         // and a nominal argument would then have to equal its parameter's shape.
                         let expectedInput, nextState2 =
                             match Unifier.unalias funcTy with
-                            | TyFunc(declaredInput, _) -> declaredInput, nextState
+                            | TyFunc(declaredInput, _, _) -> declaredInput, nextState
                             | _ -> freshVar nextState
                         let inputTy = inputTypeFromArgs argTys
                         // A single argument is the call's input: a mismatch is that argument's. So is one with the
                         // callee's type when that is known to be a function, whose result is the call's already.
                         let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
                         let funcSpan = if paramTys.IsSome then inputSpan else SourceSpan.none
-                        let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy)) nextState2
+                        let calleeContexts =
+                            match Unifier.unalias funcTy with
+                            | TyFunc(_, _, contexts) -> contexts
+                            | _ -> []
+                        let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy, calleeContexts)) nextState2
                         let withAssignable = addAssignableConstraintAt inputSpan inputTy expectedInput withFuncConstraint
                         Ok ({ mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, withAssignable)
                     else
@@ -2531,7 +2536,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
             match expectedInputOpt with
             | Some expectedInput -> expectedInput
             | None -> inputTypeFromArgs argTys
-        Ok (mkTypedExpr lambda (TyFunc(inputTy, bodyExpr.Type)) (Some bodyExpr) None None, withReturnConstraint)
+        Ok (mkTypedExpr lambda (TyFunc(inputTy, bodyExpr.Type, [])) (Some bodyExpr) None None, withReturnConstraint)
         // Called directly for a lambda whose input is known, not only through `inferExpr`.
         |> recordExprType
     | Error err -> Error err
@@ -2572,7 +2577,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | Some declaredExpr ->
                                 let ty, st = typeExprToTy nextState declaredExpr
                                 match Unifier.unalias ty with
-                                | TyFunc(inputTy, returnTy) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
+                                | TyFunc(inputTy, returnTy, _) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
                                 | _ -> None, None, Some ty, st
                             | None -> None, None, None, nextState
                         let effectiveExpectedInputOpt =
@@ -2887,7 +2892,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some declaredExpr ->
                         let ty, st = typeExprToTy nextState declaredExpr
                         match Unifier.unalias ty with
-                        | TyFunc(inputTy, returnTy) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
+                        | TyFunc(inputTy, returnTy, _) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
                         | _ -> None, None, Some ty, st
                     | None -> None, None, None, nextState
                 let effectiveExpectedInputOpt =

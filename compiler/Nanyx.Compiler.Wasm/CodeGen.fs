@@ -433,7 +433,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | TyVar { Name = Some varName } -> [ varName, ty ]
             | TyVar _ | TyPrimitive _ -> []
             | TyNominal(_, underlying, _) -> namedVars underlying
-            | TyFunc(input, output) -> namedVars input @ namedVars output
+            | TyFunc(input, output, _) -> namedVars input @ namedVars output
             | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> namedVars)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> namedVars)
             | TyTag(_, payload) -> payload |> Option.map namedVars |> Option.defaultValue []
@@ -445,7 +445,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         let rec matchAnnotation (annotation: TypeExpr) (ty: Ty) : (string * Ty) list =
             match annotation.Kind, Unifier.unalias ty with
             | (TypeName varName | TypeVar varName), TyVar _ -> [ varName, ty ]
-            | TypeFunc(input, output), TyFunc(input', output') -> matchAnnotation input input' @ matchAnnotation output output'
+            | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
             | TypeTuple items, TyRecord fields ->
                 items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
             | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
@@ -503,7 +503,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                             let rec bind (ty: Ty) =
                                 match ty with
                                 | TyVar v when parameters.ContainsKey v.Id -> parameters.[v.Id]
-                                | TyFunc(input, output) -> TyFunc(bind input, bind output)
+                                | TyFunc(input, output, _) -> TyFunc(bind input, bind output, [])
                                 | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> bind))
                                 | TyTag(tag, payload) -> TyTag(tag, payload |> Option.map bind)
                                 | TyApply(applied, args) -> TyApply(applied, args |> List.map bind)

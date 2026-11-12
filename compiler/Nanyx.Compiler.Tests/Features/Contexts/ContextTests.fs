@@ -72,7 +72,7 @@ let ``Typecheck supports unit literal`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
-    Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "unit"), typed.Types.["f"])
+    Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "unit", []), typed.Types.["f"])
 
 [<Fact>]
 let ``Typecheck rejects missing context on call`` () =

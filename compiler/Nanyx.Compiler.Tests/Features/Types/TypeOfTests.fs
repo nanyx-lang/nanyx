@@ -73,7 +73,7 @@ let ``typeof works in a function type, a lambda parameter and a local def`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal("(host: string, port: int) -> int", Unifier.tyToString result.Typed.Value.Types.["portOf"])
     Assert.Equal("(host: string, port: int), int -> int", Unifier.tyToString result.Typed.Value.Types.["add"])
-    Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "int"), result.Typed.Value.Types.["local"])
+    Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "int", []), result.Typed.Value.Types.["local"])
 
 [<Fact>]
 let ``typeof reports a name that is not in scope`` () =

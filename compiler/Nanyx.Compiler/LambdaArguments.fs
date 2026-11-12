@@ -13,7 +13,7 @@ module internal LambdaArguments =
     let expectedInput (state: InferState) (paramTy: Ty option) (lambdaArgs: (Identifier * TypeExpr option) list) : Ty option =
         let unannotated = lambdaArgs |> List.forall (fun (_, typeOpt: TypeExpr option) -> typeOpt.IsNone)
         match paramTy |> Option.map Unifier.unalias with
-        | Some (TyFunc(lambdaInput, _)) when unannotated && not (List.isEmpty lambdaArgs) ->
+        | Some (TyFunc(lambdaInput, _, _)) when unannotated && not (List.isEmpty lambdaArgs) ->
             match Unifier.unify state.Constraints with
             | Ok subst ->
                 match Unifier.apply subst lambdaInput with

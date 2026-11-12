@@ -41,6 +41,16 @@ module Unifier =
     /// Whether `ty` is `bottomType`.
     let isBottom (ty: Ty) = unalias ty = bottomType
 
+    /// Whether `var` is a rest variable `unify` made up when widening a union, or to keep room for more contexts in a
+    /// context variable (see `FunctionContexts`). Its number depends on the constraints it was given, so a later
+    /// `unify` of more constraints may give the same rest another, and a constraint naming it may name nothing then.
+    let isMadeUpRest (var: TyVar) = var.Id >= 1_000_000_000
+
+    /// The contexts of a function type that are written: not a made-up variable, which only keeps room for more
+    /// contexts (see `FunctionContexts.fit`).
+    let writtenContexts (contexts: Ty list) =
+        contexts |> List.filter (function TyVar v -> not (isMadeUpRest v) | _ -> true)
+
     let private tryTupleLikeRecord (fields: Map<string, Ty>) : Ty list option * (string * Ty) list =
         let tupleFields, namedFields =
             fields
@@ -109,12 +119,22 @@ module Unifier =
         | TyAlias(name, [], _) -> name
         | TyAlias(name, [ arg ], _) -> $"{name}({soleArgument arg})"
         | TyAlias(name, args, _) -> $"{name}({items args})"
-        | TyFunc(arg, ret) ->
+        | TyFunc(arg, ret, contexts) ->
             let argText =
                 match bareTuple arg with
                 | Some bare when signature -> bare
                 | _ -> grouped arg
-            $"{argText} -> {printTy spread false ret}"
+            // A result that requires contexts is bracketed, so that its contexts read as its own.
+            let retText =
+                match ret with
+                | TyFunc(_, _, _ :: _) -> $"({printTy spread false ret})"
+                | _ -> printTy spread false ret
+            match writtenContexts contexts with
+            | [] -> $"{argText} -> {retText}"
+            | written ->
+                // A context is written by its name alone when it has no arguments: `Console`, not `Console()`.
+                let context = function TyApply(name, []) -> name | ctx -> printTy spread false ctx
+                $"""[{written |> List.map context |> String.concat ", "}] {argText} -> {retText}"""
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
@@ -177,7 +197,7 @@ module Unifier =
             | TyPrimitive _
             | TyNominal _ -> []
             | TyAlias(_, args, _) -> args |> List.collect collect
-            | TyFunc(arg, ret) -> collect arg @ collect ret
+            | TyFunc(arg, ret, contexts) -> (writtenContexts contexts |> List.collect collect) @ collect arg @ collect ret
             | TyRecord fields ->
                 match tryTupleLikeRecord fields with
                 | Some tupleItems, namedFields ->
@@ -209,6 +229,17 @@ module Unifier =
                 $" They are different types: the first is defined in {moduleText l.Home}, the second in {moduleText r.Home}."
             | _ -> ""
         $"Type mismatch: {tyToString left} vs {tyToString right}.{homes}"
+
+    /// Says which contexts make two function types differ: `onlyLeft` are those the first requires that the second has
+    /// no room for, and `onlyRight` the reverse.
+    let private contextsMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
+        let contextText context = match context with TyApply(name, []) -> name | _ -> tyToString context
+        let onlyIn which contexts =
+            match contexts with
+            | [] -> None
+            | _ -> Some $"""only the {which} requires {contexts |> List.map (fun c -> $"'{contextText c}'") |> String.concat ", "}"""
+        let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
+        $"Context mismatch: {differences}. {mismatchMessage left right}"
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`
@@ -306,7 +337,8 @@ module Unifier =
             | None -> ty
         | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, apply subst underlying, isPrivate)
         | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map (apply subst), apply subst underlying)
-        | TyFunc(arg, ret) -> TyFunc(apply subst arg, apply subst ret)
+        | TyFunc(arg, ret, contexts) ->
+            TyFunc(apply subst arg, apply subst ret, contexts |> List.map (apply subst) |> FunctionContexts.flatten)
         | TyRecord fields ->
             fields |> Map.map (fun _ v -> apply subst v) |> TyRecord
         // A solved row adds its fields: to a record when it was solved to one, still open when to an open one.
@@ -375,7 +407,7 @@ module Unifier =
             | TyPrimitive _
             | TyNominal _ -> Set.empty
             | TyAlias(_, args, _) -> args |> List.map collect |> Set.unionMany
-            | TyFunc(arg, ret) -> Set.union (collect arg) (collect ret)
+            | TyFunc(arg, ret, contexts) -> (collect arg :: collect ret :: List.map collect contexts) |> Set.unionMany
             | TyRecord fields -> fields |> Map.toList |> List.map (snd >> collect) |> Set.unionMany
             | TyOpenRecord(fields, row) -> collect (TyRecord fields) |> Set.add row.Id
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue Set.empty
@@ -485,7 +517,7 @@ module Unifier =
             | TyPrimitive _ -> []
             | TyNominal(_, underlying, _) -> collect true underlying
             | TyAlias(_, _, underlying) -> collect input underlying
-            | TyFunc(arg, ret) -> collect (not input) arg @ collect input ret
+            | TyFunc(arg, ret, contexts) -> collect (not input) arg @ collect input ret @ List.collect (collect input) contexts
             | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect input)
             // A record's row is not a union's rest: it is never solved to the empty union.
             | TyOpenRecord(fields, row) -> collect input (TyRecord fields) @ [ row, false, input ]
@@ -507,18 +539,13 @@ module Unifier =
         | TyVar v -> v.Id = varId
         | TyNominal(_, underlying, _) -> occurs varId underlying
         | TyAlias(_, _, underlying) -> occurs varId underlying
-        | TyFunc(arg, ret) -> occurs varId arg || occurs varId ret
+        | TyFunc(arg, ret, contexts) -> occurs varId arg || occurs varId ret || contexts |> List.exists (occurs varId)
         | TyRecord fields -> fields |> Map.exists (fun _ v -> occurs varId v)
         | TyOpenRecord(fields, row) -> row.Id = varId || fields |> Map.exists (fun _ v -> occurs varId v)
         | TyTag(_, payload) -> payload |> Option.exists (occurs varId)
         | TyApply(_, args) -> args |> List.exists (occurs varId)
         | TyUnion items -> items |> List.exists (occurs varId)
         | TyPrimitive _ -> false
-
-    /// Whether `var` is a rest variable `unify` made up when widening a union. Its number depends on the
-    /// constraints it was given, so a later `unify` of more constraints may give the same rest another, and a
-    /// constraint naming it may name nothing then.
-    let isMadeUpRest (var: TyVar) = var.Id >= 1_000_000_000
 
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
         // Widening a union (below) makes up rest variables. They are numbered past every variable in the
@@ -530,7 +557,7 @@ module Unifier =
                 | TyPrimitive _ -> 0
                 | TyNominal(_, underlying, _) -> maxId underlying
                 | TyAlias(_, args, underlying) -> List.fold (fun acc arg -> max acc (maxId arg)) (maxId underlying) args
-                | TyFunc(arg, ret) -> max (maxId arg) (maxId ret)
+                | TyFunc(arg, ret, contexts) -> List.fold (fun acc context -> max acc (maxId context)) (max (maxId arg) (maxId ret)) contexts
                 | TyRecord fields -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) 0
                 | TyOpenRecord(fields, row) -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) row.Id
                 | TyTag(_, payload) -> payload |> Option.map maxId |> Option.defaultValue 0
@@ -605,8 +632,10 @@ module Unifier =
                 | TyNominal _, _
                 | _, TyNominal _ ->
                     Error (mismatchMessage l r, origin)
-                | TyFunc(lArg, lRet), TyFunc(rArg, rRet) ->
-                    loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: rest)
+                | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
+                    match FunctionContexts.agree freshRest origin lContexts rContexts with
+                    | Ok contexts -> loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: contexts @ rest)
+                    | Error (onlyLeft, onlyRight) -> Error (contextsMessage onlyLeft onlyRight l r, origin)
                 | TyRecord lFields, TyRecord rFields ->
                     unifyRecordFields origin lFields rFields rest l r
                 // An open record is a record with at least its fields: the record must have each of them, and the
@@ -741,7 +770,7 @@ module Unifier =
                 // result take the error type, so that a function the result is passed to finds it has every context.
                 elif (isError l || isError r) && not (match l, r with TyVar _, _ | _, TyVar _ -> true | _ -> false) then
                     match (if isError l then r else l) with
-                    | TyFunc(_, output) ->
+                    | TyFunc(_, output, _) ->
                         let resultVars = varOccurrences output |> List.distinct |> List.map (fun v -> TyVar v, errorType, Equal, origin)
                         loop subst (resultVars @ rest)
                     | _ -> loop subst rest
@@ -819,8 +848,11 @@ module Unifier =
                             loop subst (pairs @ rest)
                         | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->
                             loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Assignable, origin)) lArgs rArgs) @ rest)
-                        | TyFunc(lArg, lRet), TyFunc(rArg, rRet) ->
-                            loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: rest)
+                        // A function that requires fewer contexts fits where one that requires more is expected.
+                        | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
+                            match FunctionContexts.fit freshRest origin lContexts rContexts with
+                            | Ok contexts -> loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: contexts @ rest)
+                            | Error extra -> Error (contextsMessage extra [] l r, origin)
                         | _ ->
                         match l, r with
                         | TyNominal(lNominal, _, _), TyNominal(rNominal, _, _) when lNominal = rNominal ->

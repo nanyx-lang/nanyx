@@ -154,7 +154,7 @@ let implicitArgumentMembersAt (names: TypeNotation) (result: CompileResult) (off
         |> Option.bind (fun lambda -> typed.ExprTypes |> Map.tryFind lambda.Id)
         |> Option.map (fun ty ->
             match Unifier.unalias ty with
-            | TyFunc(argument, _) -> valueMembers names (Some argument)
+            | TyFunc(argument, _, _) -> valueMembers names (Some argument)
             | _ -> [])
         |> Option.defaultValue []
     | _ -> []

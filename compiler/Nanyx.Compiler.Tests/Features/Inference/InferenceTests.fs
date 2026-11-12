@@ -89,7 +89,7 @@ let ``Typecheck uses tuple input for multi-arg functions`` () =
     let result = Compiler.compile source
     let typed = result.Typed.Value
     match typed.Types.["f"] with
-    | TyFunc(TyRecord fields, TyVar _) when fields.ContainsKey("0") && fields.ContainsKey("1") ->
+    | TyFunc(TyRecord fields, TyVar _, _) when fields.ContainsKey("0") && fields.ContainsKey("1") ->
         Assert.True(true)
     | other -> Assert.True(false, $"Unexpected function type: %A{other}")
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
@@ -101,7 +101,7 @@ let ``Typecheck uses unit input for zero-arg functions`` () =
         "def result = f()"
     let result = Compiler.compile source
     let typed = result.Typed.Value
-    Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "int"), typed.Types.["f"])
+    Assert.Equal(TyFunc(TyPrimitive "unit", TyPrimitive "int", []), typed.Types.["f"])
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
 
 [<Fact>]
@@ -216,7 +216,7 @@ let ``Typecheck allows a forward reference to an unannotated def`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["result"])
-    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int"), result.Typed.Value.Types.["addOne"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int", []), result.Typed.Value.Types.["addOne"])
 
 [<Fact>]
 let ``Typecheck still generalizes a def used after its definition`` () =
