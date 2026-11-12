@@ -29,6 +29,17 @@ let ``Run - List.map works on 20,000 elements`` () =
     runSource (withList "println(show(list.map(xs, { x -> x * 2 })))\n") |> assertRan "20000 2 40000\n"
 
 [<Fact>]
+let ``Run - List.minBy, maxBy, distinctBy and findIndex work on 20,000 elements`` () =
+    let body = """
+println(show(list.distinctBy(xs, { x -> x % 10 })))
+def index = { found -> found \match | #some(i) -> i | #notFound -> -1 }
+def element = { found -> found \match | #some(x) -> x | #emptyList -> -1 }
+println("{element(list.minBy(xs, { x -> 0 - x }))} {element(list.maxBy(xs, { x -> 0 - x }))}")
+println("{index(list.findIndex(xs, { x -> x == 20000 }))}")
+"""
+    runSource (withList (body.ReplaceLineEndings "\n")) |> assertRan "10 1 10\n20000 1\n19999\n"
+
+[<Fact>]
 let ``Run - List.filter works on 20,000 elements`` () =
     runSource (withList "println(show(list.filter(xs, { x -> x > 1 })))\n") |> assertRan "19999 2 20000\n"
 
