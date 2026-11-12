@@ -62,7 +62,7 @@ def main = {
 }
 ```
 
-Don't put the block in braces: `{ ... }` is a function of no arguments, so `use Counter(...) in { ... }` makes a function instead of running the statements. The official linter's [`useInBraces`](../standard-tools/official-linter#use--in-with-a-body-in-braces) rule warns about it.
+Don't put the block in braces: `{ ... }` is a function of no arguments, so `use Counter(...) in { ... }` makes a function instead of running the statements. If the function uses the context, that is an error, as the next section says; if it doesn't, the official linter's [`useInBraces`](../standard-tools/official-linter#use--in-with-a-body-in-braces) rule warns about it.
 
 `use` loads the value of any expression. An instance of a parameterised context is a value whose type is the context applied to a type, so define it with `def` and load it by name:
 
@@ -94,6 +94,22 @@ def greet: [Console] = {
 A function that writes its type runs only in the contexts the type declares, so calling `println` from a `def f: int -> int` is an error. A function that does not write its type needs whichever of the runtime's contexts its body uses, and so does any function that calls it. The top level of a module runs in the runtime's contexts.
 
 Passing a function as a value needs its contexts where it is named, as calling it does: the value is passed with the instances in scope there. Given `def useFoo: [Foo] string -> string`, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`.
+
+A lambda that uses a context can't leave the scope that supplies it. Function types don't yet say which contexts a function requires, so once the lambda is out, nothing would supply `Foo` where it is called. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
+
+```nanyx
+context Foo = (bar: string -> string)
+
+// The def supplies Foo only inside itself.
+def fooEscapes: [Foo] string -> () -> string = { s ->
+  { bar(s) }
+}
+
+// The use loads Foo only for its body.
+def loaded = use Foo(bar = { s -> s }) in { bar("hi") }
+```
+
+So is a block whose result is such a lambda after `use Foo(...)`, and a result that holds one, such as a record with the lambda in a field. Inside the scope, the lambda is fine: call it there, or pass it to a function such as `list.map`. A lambda that uses only a value computed with the context can leave, so `def t = bar(s)` followed by `{ t }` is not an error.
 
 The same goes for a parameterised context. A function that does not write its type, and calls a function that requires `Show(a)` with a value of one of its own type variables, requires `Show` at that variable itself:
 

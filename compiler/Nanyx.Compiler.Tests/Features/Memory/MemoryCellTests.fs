@@ -11,14 +11,6 @@ let private typesOf (source: string) =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value.Types
 
-/// The code of the one diagnostic `source` compiles to, and the text it is reported at.
-let private singleError (source: string) =
-    let result = Compiler.compile source
-    Assert.True(1 = result.Diagnostics.Length, $"Expected one diagnostic: %A{result.Diagnostics}")
-    let diagnostic = result.Diagnostics.Head
-    let span = diagnostic.Span.Value
-    diagnostic.Code, source.ReplaceLineEndings("\n").Substring(span.Start, span.End - span.Start)
-
 [<Fact>]
 let ``A memory block's cells are read by name and changed with :=`` () =
     let types = typesOf """

@@ -1860,7 +1860,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Ok (typedValue, nextState) ->
             let envWithUse, nextState = useInstance (extendEnvWithRecordFields env typedValue.Type) nextState value typedValue.Type
             match inferExpr envWithUse nextState body with
-            | Ok (typedBody, finalState) -> Ok (mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
+            | Ok (typedBody, finalState) ->
+                ContextEscapes.checkUseIn finalState expr value body
+                |> Result.map (fun () -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, finalState)
             | Error err -> Error err
     | WorkflowBindExpr _ ->
         Error [ Diagnostics.at DiagnosticCodes.WorkflowKeywordOutsideWorkflow expr.Span "Workflow bind used outside of a workflow block" ]
@@ -2563,6 +2565,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | Lambda(args, body) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                                 inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                             | _ -> inferExpr envWithRec bodyState expr
+                            |> Result.bind (fun (typedExpr, next) -> ContextEscapes.checkDef next name contextOpt expr |> Result.map (fun () -> typedExpr, next))
                             |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = outerScope })
                         match inferResult with
                         | Ok (typedExpr, next) ->
@@ -2627,6 +2630,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         lastExpr <- typedExpr
                     | Error err -> errors <- err
         if errors.IsEmpty then errors <- BlockResult.check statements
+        if errors.IsEmpty then errors <- (match ContextEscapes.checkBlock current statements with Ok () -> [] | Error err -> err)
         if errors.IsEmpty then
             let blockExpr = mkTypedExpr block lastExpr.Type (Some lastExpr) (Some typedStatements) None
             Ok (blockExpr, current)
@@ -2874,6 +2878,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Lambda(args, body) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                         inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                     | _ -> inferExpr envWithRec bodyState expr
+                    |> Result.bind (fun (typedExpr, next) -> ContextEscapes.checkDef next name contextOpt expr |> Result.map (fun () -> typedExpr, next))
                     |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = AmbientScope })
                 match inferResult with
                 | Ok (typedExpr, next) ->

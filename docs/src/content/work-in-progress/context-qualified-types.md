@@ -106,7 +106,7 @@ Function types don't carry contexts yet. Until they do:
 
 - A named function passed as a value needs its contexts where it is named, as a call to it does ([#773](https://github.com/nanyx-lang/nanyx/pull/773)).
 - A lambda that uses a context's members is checked where it is written, against the def around it.
-- Returning such a lambda out of the scope that supplies the context type-checks but is wrong: [#774](https://github.com/nanyx-lang/nanyx/issues/774) proposes rejecting it with an escape check, as `memory` blocks reject a lambda over one of their cells.
+- Such a lambda can't leave the scope that supplies the context, as `memory` blocks reject a lambda over one of their cells ([#774](https://github.com/nanyx-lang/nanyx/issues/774)). A def whose type requires a context can't return, or return something holding, a lambda that uses it, and a `use ... in`, or a block with `use`, can't result in one. A lambda uses a context when it names one of its members, a function that requires it, or a local function that does either. The error is `NYX0225`, at the lambda, with the def or `use` as a related span. The runtime's ambient contexts, which the top level always has, are left out. `ContextEscapes.fs` holds the check, and `EscapingLambdas.fs` the walk it shares with `MemoryCells.checkEscape`. It is a stopgap: once function types carry contexts, the lambda's type says it requires `Foo`, and calling it where `Foo` isn't available is the error instead.
 
 # Design notes
 

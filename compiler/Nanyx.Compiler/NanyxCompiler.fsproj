@@ -47,7 +47,9 @@
     <Compile Include="LambdaArguments.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
+    <Compile Include="EscapingLambdas.fs" />
     <Compile Include="MemoryCells.fs" />
+    <Compile Include="ContextEscapes.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
