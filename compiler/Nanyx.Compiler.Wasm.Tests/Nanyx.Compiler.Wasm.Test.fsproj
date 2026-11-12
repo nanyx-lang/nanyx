@@ -66,6 +66,7 @@
     <Compile Include="Features\Numbers\RunF32Tests.fs" />
     <Compile Include="Features\Operators\RunOperatorTests.fs" />
     <Compile Include="Features\Operators\RunCompositionTests.fs" />
+    <Compile Include="Features\Operators\RunCoalesceTests.fs" />
     <Compile Include="Features\Operators\RunComparisonLiteralTests.fs" />
     <Compile Include="Features\Ordering\RunOrderingTests.fs" />
     <Compile Include="Features\Packages\PackageCommandTests.fs" />

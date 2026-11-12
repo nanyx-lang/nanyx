@@ -399,7 +399,7 @@ module Compiler =
             | ContextMemberCall(ctxType, field, args) ->
                 let prefix, args' = liftAll args
                 prefix, rebuild (ContextMemberCall(ctxType, field, args'))
-            | BinaryOp(("and" | "or") as op, opSpan, left, right) ->
+            | BinaryOp(op, opSpan, left, right) when isShortCircuit op ->
                 let prefix, left' = liftBinds left
                 prefix, rebuild (BinaryOp(op, opSpan, left', right))
             | BinaryOp(op, opSpan, left, right) ->
@@ -558,8 +558,8 @@ module Compiler =
                 FunctionCall(name, rangeOpt, args |> List.map desugarExpr)
             | Lambda(args, body, takesUnit) ->
                 Lambda(args, within InLambda (fun () -> desugarExpr body), takesUnit)
-            // The right of `and` and `or` only runs when the left does not settle the result.
-            | BinaryOp(("and" | "or") as op, opSpan, left, right) ->
+            // The right of `and`, `or` and `??` only runs when the left does not settle the result.
+            | BinaryOp(op, opSpan, left, right) when isShortCircuit op ->
                 BinaryOp(op, opSpan, desugarExpr left, within InConditionalPart (fun () -> desugarExpr right))
             | BinaryOp(op, opSpan, left, right) ->
                 BinaryOp(op, opSpan, desugarExpr left, desugarExpr right)

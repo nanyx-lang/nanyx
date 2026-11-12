@@ -65,6 +65,9 @@ let private associativity (associativity: OperatorAssociativity) =
 // `-` must not take the start of a `->` (as in `for 1..2 -> ...`) or of a `--` comment.
 let private minusEnd = notFollowedBy (anyOf ">-")
 
+// `??` must not take the start of the placeholder `???`.
+let private coalesceEnd = notFollowedBy (pchar '?')
+
 /// Adds every operator in `binaryOperators` to `table`, each taking `space` after it and building its term with
 /// `binary`, and the message for two operators that cannot be written side by side. A keyword operator must not swallow
 /// the start of an identifier such as `order` or `android`.
@@ -77,6 +80,7 @@ let addBinaryOperators
         let operatorEnd =
             if Char.IsLetter op.Text[0] then keywordEnd
             elif op.Text = "-" then minusEnd
+            elif op.Text = coalesceOperator then coalesceEnd
             else preturn ()
         table.AddOperator(InfixOperator(op.Text, operatorSpan op.Text (operatorEnd >>. space), op.Precedence, associativity op.Associativity, (), binary op.Text))
     table.OperatorConflictErrorFormatter <-

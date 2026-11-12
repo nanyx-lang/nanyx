@@ -1092,6 +1092,19 @@ export def someOr: (#some(a) | r), a -> a = {
   | _, fallback -> fallback
 }
 
+--| What `option ?? fallback` is: the value of `#some`, or the result of calling `fallback` for any
+  other tag. `fallback` runs only when it is needed.
+export def __someOrElse: [c] (#some(a) | r), ([c] () -> a) -> a = {
+  | #some(value), _ -> value
+  | _, fallback -> fallback()
+}
+
+--| The value of `#some`, or the result of calling `fallback` for any other tag, as `??` gives it.
+  `fallback` runs only when it is needed.
+export def someOrElse: [c] (#some(a) | r), ([c] () -> a) -> a = { option, fallback -> option ??
+    fallback()
+}
+
 export def isSome: (#some(a) | r) -> bool = {
   | #some(_) -> true
   | _ -> false
