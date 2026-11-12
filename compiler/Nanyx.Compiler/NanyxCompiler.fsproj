@@ -60,6 +60,7 @@
     <Compile Include="Contexts.fs" />
     <Compile Include="ContextInstances.fs" />
     <Compile Include="Infer.fs" />
+    <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="TailPosition.fs" />

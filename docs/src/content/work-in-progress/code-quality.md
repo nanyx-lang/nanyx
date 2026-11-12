@@ -74,7 +74,11 @@ The large test files are now split into `Features/<Area>/` files.
 
 | File | Lines | What changed |
 |---|---|---|
-| `Infer.fs` | 1,887 | `TypeResolution.fs`, `Contexts.fs` and `ContextInstances.fs` moved out |
+| `Infer.fs` | 1,462 | `TypeResolution.fs`, `Contexts.fs` and `ContextInstances.fs` moved out before the chain, `InferModule.fs` after it |
+
+What is left in `Infer.fs` is a few small helpers and the recursive chain, from `inferExpr` to `inferBlock`. Most of
+the chain is `inferExprKind`, a single match of about 1,000 lines; its long arms can become `and` functions of their
+own.
 
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
