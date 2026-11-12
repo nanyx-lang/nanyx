@@ -32,6 +32,7 @@
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />
     <Compile Include="Features\Contexts\UnderscoreContextNameTests.fs" />
+    <Compile Include="Features\Contexts\ContextTypeParameterTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />

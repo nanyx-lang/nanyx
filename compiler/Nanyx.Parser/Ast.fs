@@ -30,6 +30,10 @@ module Names =
         && (System.Char.IsLetter name[0] || name[0] = '_')
         && String.forall (fun c -> System.Char.IsLetterOrDigit c || c = '_') name
 
+    /// Whether `name`, written in a type, is a type variable: a single lowercase letter. Longer lowercase names are
+    /// reserved for associated types (see the types page).
+    let isTypeVariable (name: string) = name.Length = 1 && System.Char.IsLower name[0]
+
     /// `name` as it is written where a name goes: an identifier or a nominal type's name (`$Email`) as it is, and
     /// anything else, such as an operator or a sentence, in backticks. A keyword is an identifier here: it is a name
     /// where a name is expected, as a workflow builder's `try` and `return` fields are. Each part of a qualified name

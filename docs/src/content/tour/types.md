@@ -205,7 +205,7 @@ Type variables are automatically created when used in a function definition.
 The first letter of a name in a type says what kind of name it is:
 
 - **A capital letter starts a type's name**, such as `Shape`, `UserId` or `Result(a, e)`. The compiler requires every type you define with `type` to start with a capital letter.
-- **A single lowercase letter**, such as `a`, `b` or `c`, is a type variable.
+- **A single lowercase letter**, such as `a`, `b` or `c`, is a type variable. The parameters of a type or a [context](../advanced/contexts) are type variables, so each of them is a single lowercase letter too: `type Pair(a, b)`, `context Store(c, i)`. A longer name, `type Box(item)`, is an error where it is written.
 - **Longer lowercase names** are reserved for [associated types](../work-in-progress/type-members-and-reflection#associated-types), which are not implemented yet.
 
 The exceptions are the built-in types whose names are lowercase keywords for convenience: `int`, `float`, `string`, `bool`, `list`, `map`, `any` and `undefined`. These names are reserved by the language, so none of them can be the name of a type variable, an associated type or a type you define.

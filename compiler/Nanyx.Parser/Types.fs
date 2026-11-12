@@ -21,14 +21,8 @@ let internal fillTypeRefs () =
         spannedType (
             qualifiedTypeName |>> fun name ->
                 if name = "_" then TypeHole
-                elif name.Length = 1 && Char.IsLower name.[0] then TypeVar name
+                elif Names.isTypeVariable name then TypeVar name
                 else TypeName name)
-
-    let typeParam =
-        pipe2
-            identifierNoWs
-            (opt (attempt (ws >>. pstring "::" >>. ws >>. typeExpr)))
-            (fun name typeOpt -> (name, typeOpt))
 
     let typeMemberField =
         pipe2
@@ -286,8 +280,19 @@ let parseDefWith (lineStartCol: int64) (identParser: Parser<Identifier * TypeExp
         defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser
         >>= fun expr -> declare DefValue expr.Id [ name, nameSpan start name ] >>% (name, typeOpt, expr)
 
+/// A type's or a context's parameter, with an optional bound: `a`, `a :: Shape`. It is a type variable in the
+/// definition's body, so it is a single lowercase letter, as any type variable is.
 let typeParam: Parser<Identifier * TypeExpr option, ParseState> =
+    let name =
+        getPosition .>>. identifierNoWs >>= fun (start, name) ->
+            if Names.isTypeVariable name then
+                preturn name
+            elif Char.IsLower name[0] then
+                reportFocused start
+                    $"A type parameter is a single lowercase letter, such as 'a', so '{name}' cannot be one: longer lowercase names are reserved for associated types"
+            else
+                reportFocused start $"A type parameter is a single lowercase letter, such as 'a', so '{name}' cannot be one"
     pipe2
-        identifierNoWs
+        name
         (opt (attempt (ws >>. pstring "::" >>. ws >>. typeExpr)))
         (fun name typeOpt -> (name, typeOpt))
