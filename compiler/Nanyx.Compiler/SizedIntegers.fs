@@ -63,10 +63,27 @@ module SizedInteger =
     /// The type as the checker has it.
     let ty (integer: SizedInteger) = TyPrimitive(name integer)
 
-/// Matches the type of a sized integer.
+/// `F32`, the floating-point type of 32 bits: a primitive type of its name. `float` is `F64`.
+module F32 =
+    let name = "F32"
+
+    let ty = TyPrimitive name
+
+/// Whether `typeName` names a sized number type other than `int` and `float`: a sized integer or `F32`.
+module SizedNumber =
+    let isName (typeName: string) = typeName = F32.name || (SizedInteger.tryOfName typeName).IsSome
+
+/// Matches the types of the sized numbers.
 [<AutoOpen>]
 module SizedIntegerPatterns =
+    /// The type of a sized integer.
     let (|SizedIntegerType|_|) (ty: Ty) =
         match ty with
         | TyPrimitive name -> SizedInteger.tryOfName name
+        | _ -> None
+
+    /// The type of a sized number other than `int` and `float`: a sized integer or `F32`.
+    let (|SizedNumberType|_|) (ty: Ty) =
+        match ty with
+        | TyPrimitive name when SizedNumber.isName name -> Some ty
         | _ -> None

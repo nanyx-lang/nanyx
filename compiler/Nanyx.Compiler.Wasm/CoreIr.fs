@@ -17,6 +17,8 @@ type IrType =
     | IrString
     /// A float, in a box of its own: the value is a pointer to the `f64`.
     | IrFloat
+    /// An `F32`, in a box of its own as a float is: the value is a pointer to the `f32`.
+    | IrF32
     /// A value of no known type, because of an error deferred to run time (a debug build of a module with errors).
     | IrError
     /// A value that is one of these tags, each with the type of its payload if it has one, sorted by name. A single
@@ -87,7 +89,7 @@ type Atom =
 type PrimOp =
     /// An operator on ints or booleans: `+`, `==`, `and`, ...
     | Binary of string
-    /// An operator on floats: each operand is unboxed, and an arithmetic result boxed.
+    /// An operator on floats or on `F32`s: each operand is unboxed, and an arithmetic result boxed.
     | FloatBinary of string
     | Not
 
@@ -146,7 +148,7 @@ and ExprKind =
     | Interpolate of InterpolationPart list
     /// What `dbg(value)` prints: the string, the value's text (see `CoreIrLowerDbg`), after `dbg: `. It is unit.
     | Dbg of Atom
-    /// Boxes a float constant.
+    /// Boxes a float constant: as an `f64`, or as an `f32` where the expression is an `F32`.
     | BoxFloat of float
     /// An error deferred to run time: writes these messages to stderr and ends the program.
     | Panic of string list
@@ -270,11 +272,15 @@ module IrType =
             | IrUnit
             | IrString
             | IrFloat
+            | IrF32
             | IrError
             | IrWord -> inner
         match ty with
         | IrRecursive body -> replace body
         | _ -> ty
+
+    /// Whether a value of `ty` is a floating-point number: a float or an `F32`.
+    let isFloat (ty: IrType) = ty = IrFloat || ty = IrF32
 
     /// Whether a record's fields are a tuple's: its positions, `0`, `1`, ...
     let isTuple (fields: (string * IrType) list) =
@@ -328,6 +334,7 @@ module IrType =
         | IrUnit
         | IrString
         | IrFloat
+        | IrF32
         | IrWord -> false
 
     let rec show (ty: IrType) =
@@ -339,6 +346,7 @@ module IrType =
         | IrUnit -> "unit"
         | IrString -> "string"
         | IrFloat -> "float"
+        | IrF32 -> "F32"
         | IrError -> "?error"
         | IrTags tags ->
             tags

@@ -34,7 +34,8 @@ module internal AttachedOperators =
         | None ->
             match typeName with
             | "int" | "float" | "bool" | "string" | "unit" | "list" -> Some (BuiltIn typeName)
-            | _ -> SizedInteger.tryOfName typeName |> Option.map (fun _ -> BuiltIn typeName)
+            | _ when SizedNumber.isName typeName -> Some (BuiltIn typeName)
+            | _ -> None
 
     /// The error for the definition `name`, attached to a type and written at `span`, if that type may not attach it.
     let check (state: InferState) (name: Identifier) (span: SourceSpan) : Result<unit, Diagnostic list> =

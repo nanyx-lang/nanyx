@@ -80,6 +80,20 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
           "i64.shr_u"
           "i64.xor"
           "i32.wrap_i64" ]
+    | IrF32 ->
+        // By its bits, as a float is, with `-0.0` as `0.0`.
+        [ "(local $x f32)" ],
+        [ "local.get $a"
+          "f32.load"
+          "local.tee $x"
+          "f32.const 0"
+          "f32.eq"
+          "if"
+          "  i32.const 0"
+          "  return"
+          "end"
+          "local.get $x"
+          "i32.reinterpret_f32" ]
     | IrString ->
         // FNV-1a over the bytes.
         [ "(local $len i32)"; "(local $i i32)"; "(local $h i32)" ],

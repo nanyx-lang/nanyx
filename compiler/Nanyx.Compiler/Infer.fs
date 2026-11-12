@@ -103,14 +103,14 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
         (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
         |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
 
-/// The built-in operators work on `int`, `float` and the sized integers. An operation is on the type of whichever
+/// The built-in operators work on `int`, `float` and the sized numbers. An operation is on the type of whichever
 /// operand is already known to be one of the others, and defaults to `int` otherwise. (Ordering is
 /// `OrderingOperators`'.)
 let private numericOperandType (state: InferState) (leftTy: Ty) (rightTy: Ty) =
     let known ty =
         match Unifier.unalias (resolveSoFar state ty) with
         | TyPrimitive "float"
-        | SizedIntegerType _ as number -> Some number
+        | SizedNumberType _ as number -> Some number
         | _ -> None
     known leftTy |> Option.orElse (known rightTy) |> Option.defaultValue numericType
 

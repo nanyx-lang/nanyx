@@ -46,7 +46,7 @@ module internal ArithmeticOperators =
         match Unifier.unalias ty with
         | ty when Unifier.isError ty -> false
         | TyPrimitive("int" | "float")
-        | SizedIntegerType _
+        | SizedNumberType _
         | TyVar _
         | TyOpenRecord _
         | TyNominal _ -> false

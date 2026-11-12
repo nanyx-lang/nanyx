@@ -491,6 +491,49 @@ export def U64.toString: U64 -> string = { n ->
   "{n}"
 }
 
+-- The compiler's own `Add` and `Num` of `F32`, and its `compare`, `hash` and `toString`, as `float`
+-- has them. `fromInt` gives the nearest `F32`.
+
+export def F32.zero: F32 = __nanyx_from_int(0)
+
+export def F32.`+`: F32, F32 -> F32 = { x, y ->
+  x + y
+}
+
+export def F32.`-`: F32, F32 -> F32 = { x, y ->
+  x - y
+}
+
+export def F32.negate: F32 -> F32 = { x ->
+  -x
+}
+
+export def F32.`*`: F32, F32 -> F32 = { x, y ->
+  x * y
+}
+
+export def F32.`/`: F32, F32 -> F32 = { x, y ->
+  x / y
+}
+
+export def F32.`%`: F32, F32 -> F32 = { x, y -> x % y }
+
+export def F32.fromInt: int -> F32 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def F32.compare: F32, F32 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def F32.hash: F32 -> int = { x ->
+  __hash(x)
+}
+
+export def F32.toString: F32 -> string = { x ->
+  "{x}"
+}
+
 -- Joining ---------------------------------------------------------------------------------------
 
 --| The values of type `a` that join, end to end. `x ++ y` is read through it:

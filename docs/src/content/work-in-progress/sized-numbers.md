@@ -6,11 +6,11 @@ order: 6
 
 > **Status: partly implemented.** `int` is a 64-bit integer in the compiled program, and `+`, `-` and `*` on it stop
 > the program on overflow ([#342](https://github.com/nanyx-lang/nanyx/issues/342)). `I64`, `F64` and `Boolean` are the
-> types `int`, `float` and `bool` name. `I8`, `I16`, `I32`, `U8`, `U16`, `U32` and `U64` are types with the
-> compiler's own `Add` and `Num`, and their arithmetic stops the program when the result does not fit. Until literals
+> types `int`, `float` and `bool` name. `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32` are types with the
+> compiler's own `Add` and `Num`, and integer arithmetic stops the program when the result does not fit. Until literals
 > take the expected type, a value of one is made with `fromInt`: `U8.fromInt(200)`, which stops the program when the
-> `int` does not fit. `F32`, literals of the expected type, the wrapping operations and the conversions do not exist
-> yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
+> `int` does not fit an integer type. Literals of the expected type, the wrapping operations and the conversions do not
+> exist yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
 `list`. Numbers also come in fixed widths, for binary data, compact records and talking to hosts, as ordinary named

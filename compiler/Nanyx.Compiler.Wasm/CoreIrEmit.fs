@@ -332,16 +332,25 @@ type private FunctionEmitter(context: EmitContext) =
             | None -> internalError $"no instruction for the operator {op}"
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
         | Prim(FloatBinary op, [ left; right ]) ->
-            // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves.
+            // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves. An `F32` is
+            // an `f32`, whose remainder is taken as a float's, which is exact, and narrowed back.
+            let isF32 = atomType left = IrF32
+            let load = if isF32 then "f32.load" else "f64.load"
+            let widen = if isF32 && op = "%" then "f64.promote_f32" else ""
             let instruction =
-                if op = "%" then Some $"call ${helper Helpers.floatRem}" else wasmFloatInstruction op
+                if op = "%" then Some (join "\n    " [ $"call ${helper Helpers.floatRem}"; (if isF32 then "f32.demote_f64" else "") ])
+                elif isF32 then wasmFloatInstruction op |> Option.map (fun instruction -> instruction.Replace("f64.", "f32."))
+                else wasmFloatInstruction op
             match instruction with
             | Some instruction ->
-                let compute = join "\n    " [ atoms [ left ]; "f64.load"; atomsAfter true [ right ]; "f64.load"; instruction ]
+                let compute = join "\n    " [ atoms [ left ]; load; widen; atomsAfter true [ right ]; load; widen; instruction ]
                 if [ "eq"; "ne"; "lt"; "le"; "gt"; "ge" ] |> List.exists instruction.EndsWith then compute
-                else $"{compute}\n    call ${helper Helpers.floatBox}"
+                else
+                    let box = if isF32 then Helpers.f32Box else Helpers.floatBox
+                    $"{compute}\n    call ${helper box}"
             | None -> internalError $"no instruction for the operator {op} on floats"
         | Prim(FloatBinary op, _) -> internalError $"the operator {op} on floats with other than two operands"
+        | BoxFloat value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}\n    call ${helper Helpers.f32Box}"
         | BoxFloat value -> $"f64.const {wasmFloatConst value}\n    call ${helper Helpers.floatBox}"
         | Panic messages ->
             // Writes each message to stderr and exits with 1. `unreachable` after the exit, which never returns, lets
@@ -446,9 +455,10 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, ([ first ] as args), _) when name = Helpers.valueHash ->
             join "\n    " [ atoms args; $"call ${CoreIrHashing.hashName (atomType first)}"; "i64.extend_i32_s" ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.fromInt ->
-            // An int as a sized integer, by the helper of the type it is taken as.
+            // An int as a sized integer, by the helper of the type it is taken as, or as the nearest `F32`.
             match expr.Type with
             | IrSized integer -> join "\n    " [ atoms [ arg ]; $"call ${helper (SizedIntegerCode.fromIntHelper integer)}" ]
+            | IrF32 -> join "\n    " [ atoms [ arg ]; "f32.convert_i64_s"; $"call ${helper Helpers.f32Box}" ]
             | other -> internalError $"{Intrinsics.fromInt} at {IrType.show other}, which is not a sized integer"
         | CallRuntime(name, args, returnsValue) ->
             // An int argument and an int result are converted where the helper holds them in `i32`s, and a helper that

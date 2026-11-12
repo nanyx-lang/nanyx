@@ -335,7 +335,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope [ left; right ] (fun atoms ->
                 let order = mk (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (mk (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
-        | BinaryOp(op, _, left, right) when tyOf left = IrFloat || tyOf right = IrFloat ->
+        | BinaryOp(op, _, left, right) when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
             if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
@@ -357,7 +357,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope [ operand ] (fun atoms ->
                 match ty with
-                | IrFloat -> bindTemp (mk (BoxFloat -0.0) IrFloat) (fun zero -> k (mk (Prim(FloatBinary "-", zero :: atoms)) ty))
+                | IrFloat | IrF32 -> bindTemp (mk (BoxFloat -0.0) ty) (fun zero -> k (mk (Prim(FloatBinary "-", zero :: atoms)) ty))
                 | IrInt -> k (mk (Prim(Binary "-", AInt 0L :: atoms)) ty)
                 | IrSized integer -> k (mk (Prim(Binary "-", ASized(integer, 0L) :: atoms)) ty)
                 | other -> cannot $"the operator - on a value of type {IrType.show other}")
@@ -693,13 +693,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     this.Complex insideHole hole (fun value -> mk (Do(value, body)) body.Type)
                 | hole :: rest ->
                     let holeType = this.HoleType scope hole
-                    // A float is formatted to a string as its hole is evaluated, since that allocates.
+                    // A float or an `F32` is formatted to a string as its hole is evaluated, since that allocates.
                     let local = newVar (Interpolation.holeLocalName depth index) (InterpolationHole(depth, index)) (if holeType = HoleFloat then IrString else tyOf hole)
                     let store (value: Expr) =
                         let body = evaluateHoles (index + 1) rest (Some (local, holeType) :: evaluated)
                         mk (Let(local, value, body)) body.Type
                     if holeType = HoleFloat then
-                        this.Atoms insideHole [ hole ] (fun atoms -> store (mk (CallRuntime(Helpers.floatToString, atoms, true)) IrString))
+                        let format = if tyOf hole = IrF32 then Helpers.f32ToString else Helpers.floatToString
+                        this.Atoms insideHole [ hole ] (fun atoms -> store (mk (CallRuntime(format, atoms, true)) IrString))
                     else this.Complex insideHole hole store
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
@@ -994,7 +995,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | IrInt -> HoleInt
         | IrSized integer -> HoleSized integer
         | IrBool -> HoleBool
-        | IrFloat -> HoleFloat
+        | IrFloat | IrF32 -> HoleFloat
         | IrTags tags ->
             // In the order the hole's type names them, where the type checker gave the hole one.
             let rec cases (ty: Ty) =
