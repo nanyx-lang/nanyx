@@ -58,7 +58,7 @@ let ``A piped value goes in front of named arguments, in the same record`` () =
 /// The one expression statement of the lambda in `def f = { n -> <body> }`.
 let private lambdaStatementOf (body: string) =
     match parseModule ("def f = { n ->\n" + body + "\n}") with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement expr) ])))))) ] -> expr.Kind
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement expr) ]), _))))) ] -> expr.Kind
     | other -> failwith $"Expected a lambda of one expression statement, got: %A{other}"
 
 [<Fact>]
@@ -223,7 +223,7 @@ let ``Parse pipe with lambda argument`` () =
             funcName |> should equal "map"
             args |> should haveLength 1
             match args.[0].Kind with
-            | Lambda (parameters, _) ->
+            | Lambda (parameters, _, _) ->
                 parameters |> should haveLength 1
                 parameters.[0] |> fst |> should equal "x"
             | _ -> failwith "Expected lambda argument"

@@ -149,7 +149,7 @@ let implicitArgumentMembersAt (names: TypeNotation) (result: CompileResult) (off
         Hover.expressionsAt offset syntax
         |> List.tryFind (fun expr ->
             match expr.Kind with
-            | Lambda([ (name, _) ], _) -> name = implicitArgument
+            | Lambda([ (name, _) ], _, _) -> name = implicitArgument
             | _ -> false)
         |> Option.bind (fun lambda -> typed.ExprTypes |> Map.tryFind lambda.Id)
         |> Option.map (fun ty ->

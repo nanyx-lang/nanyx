@@ -79,7 +79,7 @@ let rec private localItems (declared: DeclaredNames) (value: Expression) : Outli
     let statements =
         match value.Kind with
         | Block statements
-        | Lambda(_, Kind (Block statements)) -> statements
+        | Lambda(_, Kind (Block statements), _) -> statements
         | _ -> []
     statements
     |> List.choose (fun statement ->

@@ -345,15 +345,6 @@ let format (options: Options) (parsed: SourceModule) : string =
             if taken.Count = scrutinees.Length && (List.choose snd written).Length = taken.Count then written, inner else plain ()
         | _ -> plain ()
 
-    /// Whether the lambda `e`, which has no parameters, was written with a unit pattern for them, `{ () -> ... }`.
-    let writtenWithUnit (e: Expression) =
-        if not (valid e.Span) || source[e.Span.Start] <> '{' then
-            false
-        else
-            let afterBrace = source.Substring(e.Span.Start + 1, e.Span.End - e.Span.Start - 1).TrimStart()
-            afterBrace.StartsWith "(" && afterBrace.Substring(1).TrimStart().StartsWith ")"
-            && afterBrace.Substring(1).TrimStart().Substring(1).TrimStart().StartsWith "->"
-
     let rec expr (position: Position) (e: Expression) : Doc =
         if needsParentheses position e then parens (exprBare full e) else exprBare position e
 
@@ -422,7 +413,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | FunctionCall(n, nameSpan, args) ->
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
-        | Lambda(parameters, body) -> lambdaDoc e parameters body false
+        | Lambda(parameters, body, _) -> lambdaDoc e parameters body false
         | Pipe _ -> pipeChain position e
         // A block where a def's value, an arm's body or a branch would not take one is a `do` block.
         | Block _ -> cat [ text "do"; nest (cat [ hard; block e ]) ]
@@ -698,9 +689,10 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | Some p, _ -> pattern p
                 | None, Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
                 | None, None -> text n
+            let takesUnit = match e.Kind with Lambda(_, _, takesUnit) -> takesUnit | _ -> false
             let head =
                 match parameters with
-                | [] when writtenWithUnit e -> text "{ () ->"
+                | [] when takesUnit -> text "{ () ->"
                 | [] -> text "{"
                 | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); text " ->" ]
             // A body on its own line is read as a statement, which can't take every operator (`b == 1 or b == 2` is
@@ -722,7 +714,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
                 let head =
                     let first = (Doc.render Int32.MaxValue bodyDoc).TrimStart()
-                    if List.isEmpty parameters && not (writtenWithUnit e) && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
+                    if List.isEmpty parameters && not takesUnit && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
                 // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
                 // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
                 Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
@@ -927,7 +919,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     and forDoc (iterables: Expression list) (loop: Expression) : Doc =
         let head = cat [ text "for "; commaJoin (iterables |> List.map (expr { full with Tail = false })) ]
         match loop.Kind with
-        | Lambda(parameters, body) ->
+        | Lambda(parameters, body, _) ->
             match body.Kind with
             | Match(elements, arms) when elements |> List.map _.Kind = (parameters |> List.map (fst >> IdentifierExpr)) && body.Span = loop.Span ->
                 match singleArm arms with
@@ -1008,7 +1000,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | _ -> false
         match value.Kind with
         | Block _ -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
-        | Lambda(parameters, body) when typeOpt.IsSome && not (isTrivial (snd (writtenLambda value parameters body))) ->
+        | Lambda(parameters, body, _) when typeOpt.IsSome && not (isTrivial (snd (writtenLambda value parameters body))) ->
             cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
         | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]
 
@@ -1047,7 +1039,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text "["; commaJoin (List.map pattern before @ [ text "..." ] @ List.map pattern after); text "]" ]
         | RangePattern(a, b) -> cat [ expr full a; text ".."; expr full b ]
         // The bare `> 5` is kept bare: it is the shorthand lambda `{ > 5 }` without its braces.
-        | GuardPattern(Kind (Lambda([ (only, None) ], body))) when
+        | GuardPattern(Kind (Lambda([ (only, None) ], body, _))) when
             only = implicitArgument && valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' ->
             expr full body
         | GuardPattern predicate -> expr full predicate

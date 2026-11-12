@@ -36,13 +36,13 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | UnitExpr -> e.Kind
             | IdentifierExpr n -> IdentifierExpr(name n)
             | FunctionCall(n, span, args) -> FunctionCall(n, span, List.map expr args)
-            | Lambda(parameters, body) ->
+            | Lambda(parameters, body, takesUnit) ->
                 // `{ x -> e }` and `{ x ->` / `e` / `}` (a block of the one statement `e`) are the same lambda.
                 let body =
                     match body.Kind with
                     | Block [ { Kind = ExprStatement single } ] -> single
                     | _ -> body
-                Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr body)
+                Lambda(parameters |> List.map (fun (n, t) -> n, Option.map typeExpr t), expr body, takesUnit)
             | BinaryOp(op, l, r) -> BinaryOp(op, expr l, expr r)
             | Pipe(value, n, span, args) -> Pipe(expr value, n, span, List.map expr args)
             | Block statements -> Block(List.map statement statements)

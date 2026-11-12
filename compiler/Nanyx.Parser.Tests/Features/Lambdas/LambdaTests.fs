@@ -54,7 +54,7 @@ let ``Parse shorthand-lambdas.nyx file`` () =
 [<Fact>]
 let ``an empty block is a lambda returning unit`` () =
     match parseModule "def main = {\n}\ndef noop = { }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind UnitExpr))))); Kind (Def (ValueDef (_, "noop", None, Kind (Lambda ([], Kind UnitExpr))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind UnitExpr, _))))); Kind (Def (ValueDef (_, "noop", None, Kind (Lambda ([], Kind UnitExpr, _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -68,7 +68,7 @@ let ``Parse lambda with no parameters`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "f"
             parameters |> should haveLength 0
             match body.Kind with
@@ -86,7 +86,7 @@ let ``Parse lambda with one parameter`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "f"
             parameters |> should haveLength 1
             parameters.[0] |> fst |> should equal "x"
@@ -105,7 +105,7 @@ let ``Parse lambda with multiple parameters`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "add"
             parameters |> should haveLength 2
             parameters.[0] |> fst |> should equal "x"
@@ -122,7 +122,7 @@ let ``Parse lambda with function call in body`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "f"
             parameters |> should haveLength 1
             parameters.[0] |> fst |> should equal "x"
@@ -149,7 +149,7 @@ let ``Parse lambda as function argument`` () =
             // With comma operator, f(x, y) creates a single tuple argument
             args |> should haveLength 1
             match args.[0].Kind with
-            | TupleExpr [Kind (Lambda (parameters, _)); Kind (IdentifierExpr "items")] ->
+            | TupleExpr [Kind (Lambda (parameters, _, _)); Kind (IdentifierExpr "items")] ->
                 parameters |> should haveLength 1
                 parameters.[0] |> fst |> should equal "x"
             | _ -> failwith "Expected tuple with lambda and identifier"
@@ -166,7 +166,7 @@ let ``Parse shorthand lambda with binary operator`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "multiply"
             parameters |> should haveLength 2
             parameters.[0] |> fst |> should equal implicitArgument
@@ -189,7 +189,7 @@ let ``Parse shorthand lambda with unary operation`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "double"
             parameters |> should haveLength 1
             parameters.[0] |> fst |> should equal implicitArgument
@@ -211,7 +211,7 @@ let ``Parse shorthand lambda with property access`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "getName"
             parameters |> should haveLength 1
             parameters.[0] |> fst |> should equal implicitArgument
@@ -232,7 +232,7 @@ let ``Parse shorthand lambda with addition`` () =
     | Result.Ok module' ->
         module' |> should haveLength 1
         match module'.[0] with
-        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body))))) ->
+        | Kind (Def (ValueDef (_, name, _, Kind (Lambda (parameters, body, _))))) ->
             name |> should equal "addFive"
             parameters |> should haveLength 1
             parameters.[0] |> fst |> should equal implicitArgument
@@ -260,7 +260,7 @@ let ``Parse shorthand lambda as function argument`` () =
             // With comma operator, f(x, y) creates a single tuple argument
             args |> should haveLength 1
             match args.[0].Kind with
-            | TupleExpr [Kind (Lambda (parameters, body)); Kind (IdentifierExpr "numbers")] ->
+            | TupleExpr [Kind (Lambda (parameters, body, _)); Kind (IdentifierExpr "numbers")] ->
                 parameters |> should haveLength 1
                 parameters.[0] |> fst |> should equal implicitArgument
                 match body.Kind with
@@ -286,26 +286,26 @@ let private implicit = IdentifierExpr implicitArgument
 let ``a shorthand lambda's body continues after its first operation`` () =
     // `{ % 2 == 0 }` is `{ x -> x % 2 == 0 }`: the argument is the left operand of the first operator.
     match (onlyValue "def isEven = { % 2 == 0 }").Kind with
-    | Lambda ([ (parameter, None) ], Kind (BinaryOp ("==", Kind (BinaryOp ("%", Kind left, Kind (LiteralExpr (IntLit 2)))), Kind (LiteralExpr (IntLit 0)))))
+    | Lambda ([ (parameter, None) ], Kind (BinaryOp ("==", Kind (BinaryOp ("%", Kind left, Kind (LiteralExpr (IntLit 2)))), Kind (LiteralExpr (IntLit 0)))), _)
         when parameter = implicitArgument && left = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``the rest of a shorthand lambda's body follows the operators' precedence`` () =
     match (onlyValue "def f = { * 2 + 1 }").Kind with
-    | Lambda ([ _ ], Kind (BinaryOp ("+", Kind (BinaryOp ("*", Kind left, _)), Kind (LiteralExpr (IntLit 1))))) when left = implicit -> ()
+    | Lambda ([ _ ], Kind (BinaryOp ("+", Kind (BinaryOp ("*", Kind left, _)), Kind (LiteralExpr (IntLit 1)))), _) when left = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``a shorthand lambda's body may continue after a member access`` () =
     match (onlyValue "def adults = { .age > 18 }").Kind with
-    | Lambda ([ _ ], Kind (BinaryOp (">", Kind (MemberAccess (Kind target, "age", _)), _))) when target = implicit -> ()
+    | Lambda ([ _ ], Kind (BinaryOp (">", Kind (MemberAccess (Kind target, "age", _)), _)), _) when target = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``a member access shorthand compared with a string is a pipe's trailing lambda`` () =
     match (onlyValue "def bs = ps \\list.filter { .name == \"b\" }").Kind with
-    | Pipe (Kind (IdentifierExpr "ps"), "list.filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", Kind (MemberAccess (Kind target, "name", _)), Kind (LiteralExpr (StringLit "b")))))) ])
+    | Pipe (Kind (IdentifierExpr "ps"), "list.filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", Kind (MemberAccess (Kind target, "name", _)), Kind (LiteralExpr (StringLit "b")))), _)) ])
         when target = implicit -> ()
     | other -> failwith $"Unexpected pipe: %A{other}"
 
@@ -313,39 +313,39 @@ let ``a member access shorthand compared with a string is a pipe's trailing lamb
 let ``every operator may start a shorthand lambda`` () =
     for op in [ "+"; "-"; "*"; "/"; "%"; "++"; "<"; ">"; "<="; ">="; "=="; "!=" ] do
         match (onlyValue $"def f = {{ {op} y }}").Kind with
-        | Lambda ([ _ ], Kind (BinaryOp (parsed, Kind left, Kind (IdentifierExpr "y")))) when parsed = op && left = implicit -> ()
+        | Lambda ([ _ ], Kind (BinaryOp (parsed, Kind left, Kind (IdentifierExpr "y"))), _) when parsed = op && left = implicit -> ()
         | other -> failwith $"Unexpected lambda for {op}: %A{other}"
         match (onlyValue $"def f = {{ {op} }}").Kind with
-        | Lambda ([ _; _ ], Kind (BinaryOp (parsed, _, _))) when parsed = op -> ()
+        | Lambda ([ _; _ ], Kind (BinaryOp (parsed, _, _)), _) when parsed = op -> ()
         | other -> failwith $"Unexpected two-argument lambda for {op}: %A{other}"
 
 [<Fact>]
 let ``a leading minus is subtraction from the argument, and an arrow keeps a negative body`` () =
     match (onlyValue "def f = { - 1 }").Kind with
-    | Lambda ([ _ ], Kind (BinaryOp ("-", Kind left, Kind (LiteralExpr (IntLit 1))))) when left = implicit -> ()
+    | Lambda ([ _ ], Kind (BinaryOp ("-", Kind left, Kind (LiteralExpr (IntLit 1)))), _) when left = implicit -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     match (onlyValue "def f = { -> -1 }").Kind with
-    | Lambda ([], _) -> ()
+    | Lambda ([], _, _) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``a shorthand lambda's argument cannot capture a name written in it`` () =
     // The argument is a name no code can write, so `x` here is the `x` around the lambda.
     match (onlyValue "def f = { * x }").Kind with
-    | Lambda ([ (parameter, None) ], Kind (BinaryOp ("*", _, Kind (IdentifierExpr "x")))) -> parameter |> should not' (equal "x")
+    | Lambda ([ (parameter, None) ], Kind (BinaryOp ("*", _, Kind (IdentifierExpr "x"))), _) -> parameter |> should not' (equal "x")
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``a shorthand lambda is a pipe's trailing lambda`` () =
     match (onlyValue "def evens = items \\filter { % 2 == 0 }").Kind with
-    | Pipe (Kind (IdentifierExpr "items"), "filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", _, _)))) ]) -> ()
+    | Pipe (Kind (IdentifierExpr "items"), "filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", _, _)), _)) ]) -> ()
     | other -> failwith $"Unexpected pipe: %A{other}"
 
 [<Fact>]
 let ``a pattern parameter is taken apart by a match at the top of the body`` () =
     let source = "def f = { $Email(s) -> s }"
     match (onlyValue source).Kind with
-    | Lambda ([ (parameter, None) ], Kind (Match ([ scrutinee ], [ [ Kind (RecordPattern ("$Email", [ Kind (IdentifierPattern "s") ])) ], Kind (IdentifierExpr "s") ])))
+    | Lambda ([ (parameter, None) ], Kind (Match ([ scrutinee ], [ [ Kind (RecordPattern ("$Email", [ Kind (IdentifierPattern "s") ])) ], Kind (IdentifierExpr "s") ])), _)
         when parameter = patternArgument 1 && scrutinee.Kind = IdentifierExpr parameter ->
         // The scrutinee is made up where the pattern is written.
         source.Substring(scrutinee.Span.Start, scrutinee.Span.End - scrutinee.Span.Start) |> should equal "$Email(s)"
@@ -354,43 +354,48 @@ let ``a pattern parameter is taken apart by a match at the top of the body`` () 
 [<Fact>]
 let ``pattern parameters and named ones may be mixed, and one match takes every pattern apart`` () =
     match (onlyValue "def f = { (a, b), c, [x, ...rest] -> a }").Kind with
-    | Lambda ([ (first, None); ("c", None); (third, None) ], Kind (Match ([ Kind (IdentifierExpr s1); Kind (IdentifierExpr s3) ], [ [ Kind (TuplePattern _); Kind (ListPattern _) ], _ ])))
+    | Lambda ([ (first, None); ("c", None); (third, None) ], Kind (Match ([ Kind (IdentifierExpr s1); Kind (IdentifierExpr s3) ], [ [ Kind (TuplePattern _); Kind (ListPattern _) ], _ ])), _)
         when first = patternArgument 1 && third = patternArgument 3 && s1 = first && s3 = third -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``a name, _ or a bracketed annotated name is an ordinary parameter, not a pattern`` () =
     match (onlyValue "def f = { x, _, (y: int) -> x }").Kind with
-    | Lambda ([ ("x", None); ("_", None); ("y", Some _) ], Kind (IdentifierExpr "x")) -> ()
+    | Lambda ([ ("x", None); ("_", None); ("y", Some _) ], Kind (IdentifierExpr "x"), _) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     match (onlyValue "def f = { (x) -> x }").Kind with
-    | Lambda ([ ("x", None) ], Kind (IdentifierExpr "x")) -> ()
+    | Lambda ([ ("x", None) ], Kind (IdentifierExpr "x"), _) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
-let ``a unit pattern alone is a lambda without parameters`` () =
+let ``a unit pattern alone is a lambda without parameters that takes unit`` () =
     match (onlyValue "def f = { () -> 5 }").Kind with
-    | Lambda ([], Kind (LiteralExpr (IntLit 5))) -> ()
+    | Lambda ([], Kind (LiteralExpr (IntLit 5)), true) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
+    // Without it, the lambda ignores a parameter its expected type gives it (#813).
+    for source in [ "def f = { 5 }"; "def f = { -> 5 }"; "def f = { }" ] do
+        match (onlyValue source).Kind with
+        | Lambda ([], _, false) -> ()
+        | other -> failwith $"Unexpected lambda for {source}: %A{other}"
     // Beside other parameters, it is a pattern like any other.
     match (onlyValue "def f = { (), n -> n }").Kind with
-    | Lambda ([ (unit, None); ("n", None) ], Kind (Match ([ _ ], [ [ Kind UnitPattern ], _ ]))) when unit = patternArgument 1 -> ()
+    | Lambda ([ (unit, None); ("n", None) ], Kind (Match ([ _ ], [ [ Kind UnitPattern ], _ ])), _) when unit = patternArgument 1 -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``a body that only looks like a pattern is still a body`` () =
     match (onlyValue "def f = { (1, 2) }").Kind with
-    | Lambda ([], Kind (TupleExpr _)) -> ()
+    | Lambda ([], Kind (TupleExpr _), _) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     match (onlyValue "def f = { #some(1) }").Kind with
-    | Lambda ([], Kind (TagExpr _)) -> ()
+    | Lambda ([], Kind (TagExpr _), _) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
 let ``the implicit argument is made up at the operator written in its place`` () =
     let source = "def f = { % 2 == 0 }"
     match (onlyValue source).Kind with
-    | Lambda (_, Kind (BinaryOp ("==", (Kind (BinaryOp ("%", argument, _)) as remainder), _))) ->
+    | Lambda (_, Kind (BinaryOp ("==", (Kind (BinaryOp ("%", argument, _)) as remainder), _)), _) ->
         source.Substring(argument.Span.Start, argument.Span.End - argument.Span.Start) |> should equal "%"
         source.Substring(remainder.Span.Start, remainder.Span.End - remainder.Span.Start) |> should equal "% 2"
     | other -> failwith $"Unexpected lambda: %A{other}"

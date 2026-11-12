@@ -127,7 +127,7 @@ module internal BuiltinTypeNames =
                 | MemberAccess({ Kind = IdentifierExpr written } as typeName, memberName, rangeOpt) ->
                     let renamed = qualified typeName.Span $"{written}.{memberName}"
                     MemberAccess({ typeName with Kind = IdentifierExpr(renamed.Substring(0, renamed.LastIndexOf '.')) }, memberName, rangeOpt)
-                | Lambda(parameters, body) -> Lambda(parameters |> List.map (fun (name, typeOpt) -> name, typeOpt |> Option.map typeExpr), body)
+                | Lambda(parameters, body, takesUnit) -> Lambda(parameters |> List.map (fun (name, typeOpt) -> name, typeOpt |> Option.map typeExpr), body, takesUnit)
                 | ContextMemberAccess(ctxType, memberName) -> ContextMemberAccess(typeExpr ctxType, memberName)
                 | ContextMemberCall(ctxType, memberName, args) -> ContextMemberCall(typeExpr ctxType, memberName, args)
                 | Block statements ->

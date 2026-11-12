@@ -46,7 +46,7 @@ let ``A failed expression is compiled to a trap with its error`` () =
     let panics =
         result.Typed.Value.Module
         |> List.choose (function
-            | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ]))))))) -> Some message
+            | Kind (Def (ValueDef(_, "f", _, Kind (Lambda(_, Kind (FunctionCall("__panic", _, [ Kind (LiteralExpr (StringLit message)) ])), _))))) -> Some message
             | _ -> None)
     Assert.Equal<string list>([ "1:16: error NYX0102: Unknown function 'missing' (deferred from compile time)\n" ], panics)
 

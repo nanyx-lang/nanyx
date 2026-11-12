@@ -71,7 +71,7 @@ let ``except works as a statement and inside a lambda`` () =
         "  n\n" +
         "}\n"
     match valueOf source with
-    | Kind (Lambda (_, Kind (Block [ Kind (DefStatement (_, "n", _, Kind (Except _))); _ ]))) -> ()
+    | Kind (Lambda (_, Kind (Block [ Kind (DefStatement (_, "n", _, Kind (Except _))); _ ]), _)) -> ()
     | other -> failwith $"Unexpected value: %A{other}"
 
 [<Fact>]
@@ -85,5 +85,5 @@ let ``except spans from its value to its last arm`` () =
 let ``except is not a name a workflow keyword can be applied to`` () =
     // `x except ...` inside a lambda is not `x` applied to the value `except ...`.
     match valueOf "def f = { x -> x except #a -> #b }" with
-    | Kind (Lambda (_, Kind (Except (Kind (IdentifierExpr "x"), _)))) -> ()
+    | Kind (Lambda (_, Kind (Except (Kind (IdentifierExpr "x"), _)), _)) -> ()
     | other -> failwith $"Unexpected value: %A{other}"

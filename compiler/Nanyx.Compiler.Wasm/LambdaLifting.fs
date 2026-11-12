@@ -14,7 +14,7 @@ let rec references (expr: Expression) : (string * Expression) list =
     | IdentifierExpr name -> [ name, expr ]
     | FunctionCall(name, _, args) -> (name, expr) :: (args |> List.collect references)
     | Pipe(value, name, _, args) -> (name, expr) :: references value @ (args |> List.collect references)
-    | Lambda(_, body) -> references body
+    | Lambda(_, body, _) -> references body
     | BinaryOp(_, left, right) -> references left @ references right
     | IfExpr(cond, thenExpr, elseExpr) -> references cond @ references thenExpr @ references elseExpr
     | Block statements -> statements |> List.collect referencesInStatement
@@ -109,7 +109,7 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
 /// (An over-approximation of what a nested lambda could capture, which errs on the side of not lifting.)
 and private boundNames (expr: Expression) : string list =
     match expr.Kind with
-    | Lambda(args, body) -> (args |> List.map fst) @ boundNames body
+    | Lambda(args, body, _) -> (args |> List.map fst) @ boundNames body
     | Block statements ->
         statements |> List.map _.Kind
         |> List.collect (function
@@ -163,7 +163,7 @@ let rec private redirectSelfReferences (from: string) (to': string) (expr: Expre
     | Pipe(value, name, range, args) when name = from ->
         recur (rebuild (FunctionCall(name, range, pipeCallArguments value args)))
     | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
-    | Lambda(args, body) -> rebuild (Lambda(args, recur body))
+    | Lambda(args, body, takesUnit) -> rebuild (Lambda(args, recur body, takesUnit))
     | BinaryOp(op, left, right) -> rebuild (BinaryOp(op, recur left, recur right))
     | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
     | Block statements ->
@@ -296,7 +296,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
     let topLevelArities =
         module'
         |> List.choose (function
-            | Kind (Def (ValueDef(_, name, _, Kind (Lambda(args, _))))) -> Some (name, args.Length)
+            | Kind (Def (ValueDef(_, name, _, Kind (Lambda(args, _, _))))) -> Some (name, args.Length)
             | _ -> None)
         |> Map.ofList
     let topLevelFunctions = topLevelArities |> Map.filter (fun _ arity -> arity > 0)
@@ -355,7 +355,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 | [] -> []
                 | _ -> [ Expression.synthetic (TupleExpr (parameters |> List.map (fun p -> Expression.synthetic (IdentifierExpr p)))) ]
             let call = Expression.synthetic (FunctionCall(name, None, arguments))
-            lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, wrapperName, None, Expression.synthetic (Lambda((envParameter, None) :: (parameters |> List.map (fun p -> p, None)), call))))))
+            lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, wrapperName, None, Expression.synthetic (Lambda((envParameter, None) :: (parameters |> List.map (fun p -> p, None)), call, false))))))
             wrappers.[name] <- wrapperName
             wrapperName
 
@@ -413,7 +413,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             | [], _ -> body
             | _, Block statements -> { body with Kind = Block (captureBindings @ statements) }
             | _, _ -> Expression.from body (Block (captureBindings @ [ Statement.from body (ExprStatement body) ]))
-        Expression.from lambda (Lambda((envParameter, None) :: args, bodyWithCaptures))
+        Expression.from lambda (Lambda((envParameter, None) :: args, bodyWithCaptures, false))
 
     // `scope` is every name the enclosing function binds; a lambda referring to one of them captures it.
     let rec liftExpr (scope: Set<string>) (expr: Expression) : Expression =
@@ -423,8 +423,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         // A `for` loop's lambda is inlined as the loop body by the backend, never lifted; lift inside it.
         | ForSyntax.Call(iterables, lambda, args, body) ->
             let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
-            rebuild (FunctionCall(ForSyntax.builtIn, None, List.map recur iterables @ [ { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) } ]))
-        | Lambda(args, body) -> liftLambda scope expr args body
+            rebuild (FunctionCall(ForSyntax.builtIn, None, List.map recur iterables @ [ { lambda with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body, false) } ]))
+        | Lambda(args, body, _) -> liftLambda scope expr args body
         // A top-level function used as a value: a closure over a wrapper that takes an environment.
         | IdentifierExpr name when topLevelArities.ContainsKey name && not (scope.Contains name) ->
             closureOf expr (wrapperOf name) []
@@ -451,7 +451,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             // A lambda bound to a context member takes the types of its parameters from the member's declared type.
             let liftMember contextType memberName (value: Expression) =
                 match value.Kind with
-                | Lambda(args, body) -> liftLambda scope value (annotateFromMemberType (memberType contextType memberName) args) body
+                | Lambda(args, body, _) -> liftLambda scope value (annotateFromMemberType (memberType contextType memberName) args) body
                 | _ -> recur value
             // What a `use` in the block loads is in scope until the block ends.
             let outerUseMembers = useMembers
@@ -465,7 +465,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 // `rec name = { ... }`: a local function that calls itself. It is lifted under a fresh
                 // name with its self-references redirected there (a self-call passes the environment on),
                 // and the local is bound to its closure.
-                | DefStatement(isExport, name, _, Kind (FunctionCall("__rec", _, [ Kind (Lambda(args, body)) as lambda ]))) when not args.IsEmpty ->
+                | DefStatement(isExport, name, _, Kind (FunctionCall("__rec", _, [ Kind (Lambda(args, body, _)) as lambda ]))) when not args.IsEmpty ->
                     let liftedName = $"__rec_{sanitizeIdentifier name}_{counter}"
                     counter <- counter + 1
                     let parameterNames = args |> List.map fst |> Set.ofList
@@ -556,9 +556,9 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
             // never lifted; lift inside it.
             let liftGuard (predicate: Expression) =
                 match predicate.Kind with
-                | Lambda(args, body) ->
+                | Lambda(args, body, takesUnit) ->
                     let innerScope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList)
-                    { predicate with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body) }
+                    { predicate with Kind = Lambda(args, liftExpr (Set.union scope innerScope) body, takesUnit) }
                 | _ -> recur predicate
             let liftArm (patterns, body) = patterns |> List.map (Pattern.mapExpressions liftGuard), recur body
             rebuild (Match(values |> List.map recur, arms |> List.map liftArm))
@@ -616,11 +616,11 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
     let liftItem (item: TopLevelItem) : TopLevelItem =
         match item.Kind with
         // A definition's own lambda is the function being defined; lift inside its body only.
-        | Def (ValueDef(isExport, name, typeOpt, (Kind (Lambda(args, body)) as lambda))) ->
+        | Def (ValueDef(isExport, name, typeOpt, (Kind (Lambda(args, body, takesUnit)) as lambda))) ->
             owner <- name
             ownerMembers <- memberCaptures |> Map.tryFind name |> Option.defaultValue []
             let scope = Set.union (args |> List.map fst |> Set.ofList) (boundNames body |> Set.ofList) |> Set.union (Set.ofList ownerMembers)
-            { item with Kind = Def (ValueDef(isExport, name, typeOpt, { lambda with Kind = Lambda(args, liftExpr scope body) })) }
+            { item with Kind = Def (ValueDef(isExport, name, typeOpt, { lambda with Kind = Lambda(args, liftExpr scope body, takesUnit) })) }
         | Def (ValueDef(isExport, name, typeOpt, rhs)) ->
             owner <- name
             ownerMembers <- []

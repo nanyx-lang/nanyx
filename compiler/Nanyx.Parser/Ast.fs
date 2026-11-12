@@ -280,7 +280,10 @@ and ExpressionKind =
     | UnitExpr
     | IdentifierExpr of Identifier
     | FunctionCall of Identifier * SourceSpan option * Expression list
-    | Lambda of (Identifier * TypeExpr option) list * Expression
+    /// `takesUnit` is true for a lambda written `{ () -> ... }`, which takes unit, and false for one written without
+    /// parameters, `{ ... }`, which ignores a parameter the type it is checked against gives it (both have no
+    /// parameters here).
+    | Lambda of parameters: (Identifier * TypeExpr option) list * body: Expression * takesUnit: bool
     | BinaryOp of string * Expression * Expression
     | Pipe of Expression * Identifier * SourceSpan option * Expression list  // expr \func or expr \func(args)
     | Block of Statement list
@@ -352,7 +355,7 @@ module ForSyntax =
         match kind with
         | FunctionCall(name, _, args) when name = builtIn && args.Length >= 2 ->
             match List.last args with
-            | { Kind = Lambda(parameters, body) } as loop -> Some (List.take (args.Length - 1) args, loop, parameters, body)
+            | { Kind = Lambda(parameters, body, _) } as loop -> Some (List.take (args.Length - 1) args, loop, parameters, body)
             | _ -> None
         | _ -> None
 

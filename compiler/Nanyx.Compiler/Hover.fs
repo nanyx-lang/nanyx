@@ -20,7 +20,7 @@ let rec private children (expr: Expression) : Expression list =
     | ContextMemberAccess _ -> []
     | FunctionCall(_, _, args)
     | ContextMemberCall(_, _, args) -> args
-    | Lambda(_, body) -> [ body ]
+    | Lambda(_, body, _) -> [ body ]
     | BinaryOp(_, left, right) -> [ left; right ]
     | Pipe(value, _, _, args) -> value :: args
     | Block statements -> statements |> List.collect statementExpressions
@@ -82,7 +82,7 @@ let private definitionTypes (definition: Definition) : TypeExpr list =
 /// its block's defs' annotations and type definitions, the context it names.
 let expressionTypes (expr: Expression) : TypeExpr list =
     match expr.Kind with
-    | Lambda(parameters, _) -> parameters |> List.choose snd
+    | Lambda(parameters, _, _) -> parameters |> List.choose snd
     | Block statements ->
         statements
         |> List.collect (fun statement ->

@@ -27,7 +27,7 @@ let ``An operator can be attached to a type`` () =
 [<Fact>]
 let ``A local definition can be named by an operator`` () =
     match parsed "def f = {\n  def `++++` = { a, b -> a }\n  `++++`(1, 2)\n}" with
-    | [ Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "++++", _, _)); Kind (ExprStatement (Kind (FunctionCall ("++++", _, _)))) ]))))) ] -> ()
+    | [ Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "++++", _, _)); Kind (ExprStatement (Kind (FunctionCall ("++++", _, _)))) ]), _)))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
@@ -36,7 +36,7 @@ let ``A context member and a record field can be named by an operator`` () =
     | [ Def (TypeDef ("Eq", _, _, Kind (TypeRecord [ TypeField ("==", false, false, Some _, None) ]))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
     match parsed "def main = {\n  def eqInt: Eq(int) = (`==` = { a, b -> true })\n  1\n}" with
-    | [ Def (ValueDef (_, "main", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "eqInt", Some _, Kind (RecordExpr [ NamedField ("==", _) ]))); _ ]))))) ] -> ()
+    | [ Def (ValueDef (_, "main", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "eqInt", Some _, Kind (RecordExpr [ NamedField ("==", _) ]))); _ ]), _)))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

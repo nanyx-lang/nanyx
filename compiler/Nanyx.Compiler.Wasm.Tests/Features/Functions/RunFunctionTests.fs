@@ -482,6 +482,27 @@ def main = {
     runSource source |> assertRan "7 8\ndbg: 2\n0 2\n7\n"
 
 [<Fact>]
+let ``Run - a lambda of no parameters checked against a one-parameter type ignores the parameter (#813)`` () =
+    let source = """import nanyx/console
+
+def apply: (int -> string) -> string = { f -> f(1) }
+def top: int -> string = { "top" }
+def run: (() -> a) -> a = { f -> f() }
+
+@entry
+def main = {
+  def suffix = "!"
+  def local: int -> string = { "local" }
+  println(apply { "ignored" })
+  println(apply { "captured{suffix}" })
+  println("{top(5)} {local(6)} {apply(top)} {apply(local)}")
+  println("{run { 1 }} {run { () -> 2 }}")
+  println("{[1, 2, 3] \list.map { 0 }}")
+}
+"""
+    runSource source |> assertRan "ignored\ncaptured!\ntop local top local\n1 2\n[0, 0, 0]\n"
+
+[<Fact>]
 let ``Run - a lambda of no parameters can be stored in a record field or returned from a function (#182)`` () =
     let source = """import nanyx/console
 

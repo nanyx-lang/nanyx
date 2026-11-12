@@ -71,7 +71,7 @@ let private escapes (escaping: Expression) (used: Identifier list) (members: Ide
 /// returns must not be, or hold, a lambda that uses one of them.
 let checkDef (state: InferState) (name: Identifier) (contexts: TypeExpr list option) (value: Expression) : Result<unit, Diagnostic list> =
     match contexts, value.Kind with
-    | Some contexts, Lambda(_, body) ->
+    | Some contexts, Lambda(_, body, _) ->
         let supplied = namesOf contexts
         match tryFindEscaping state supplied (fun _ -> None) (SyntaxTree.blocksWithin body) (EscapingLambdas.resultOf body) with
         | Some (escaping, used, members) ->
@@ -163,7 +163,7 @@ let private resultOfUse = "it is the result of the `use` that loads it"
 let checkUseIn (state: InferState) (expr: Expression) (value: Expression) (body: Expression) : Result<unit, Diagnostic list> =
     let where (escaping: Expression) =
         match body.Kind with
-        | Lambda([], _) when escaping.Id = body.Id ->
+        | Lambda([], _, _) when escaping.Id = body.Id ->
             $"{resultOfUse}. The braces make it a function of no arguments: to run the statements with the context loaded, put them on the lines after `in`, indented"
         | _ -> resultOfUse
     checkUse state (SourceSpan.between expr.Span value.Span) value [ body ] (SyntaxTree.blocksWithin body) (EscapingLambdas.resultOf body) where

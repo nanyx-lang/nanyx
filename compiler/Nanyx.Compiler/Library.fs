@@ -499,7 +499,7 @@ module Compiler =
             | WorkflowBindExpr _
             | WorkflowReturnExpr _ -> true
             | Lambda _ -> false
-            | FunctionCall(name, _, [ Kind (Lambda([], _)) ]) when not (name.StartsWith "__") -> false
+            | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (name.StartsWith "__") -> false
             | FunctionCall(_, _, args)
             | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
             | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
@@ -543,7 +543,7 @@ module Compiler =
             // A block written after a builder's name, `proc { ... }`: when the block uses a workflow keyword, it
             // is the block itself, with its keywords calling the builder's members (see `workflowCall`). The
             // documented `proc.apply({ ... })` around it is not made yet: the block runs where it is written.
-            | FunctionCall(name, rangeOpt, [ Kind (Lambda([], body)) as lambda ]) when not (name.StartsWith "__") ->
+            | FunctionCall(name, rangeOpt, [ Kind (Lambda([], body, takesUnit)) as lambda ]) when not (name.StartsWith "__") ->
                 let outerBuilder, outerUsed, outerUnreachable = builder, builderUsed, unreachable
                 builder <- Some name
                 builderUsed <- false
@@ -554,15 +554,15 @@ module Compiler =
                 builderUsed <- outerUsed
                 unreachable <- outerUnreachable
                 if used then body'.Kind
-                else FunctionCall(name, rangeOpt, [ { lambda with Kind = Lambda([], body') } ])
+                else FunctionCall(name, rangeOpt, [ { lambda with Kind = Lambda([], body', takesUnit) } ])
             // A `for` loop's body is a lambda of the elements, which the loop runs once per step.
             | ForSyntax.Call(iterables, loop, parameters, body) ->
                 let body' = within InLoopBody (fun () -> desugarExpr body)
-                FunctionCall(ForSyntax.builtIn, None, List.map desugarExpr iterables @ [ { loop with Kind = Lambda(parameters, body') } ])
+                FunctionCall(ForSyntax.builtIn, None, List.map desugarExpr iterables @ [ { loop with Kind = Lambda(parameters, body', false) } ])
             | FunctionCall(name, rangeOpt, args) ->
                 FunctionCall(name, rangeOpt, args |> List.map desugarExpr)
-            | Lambda(args, body) ->
-                Lambda(args, within InLambda (fun () -> desugarExpr body))
+            | Lambda(args, body, takesUnit) ->
+                Lambda(args, within InLambda (fun () -> desugarExpr body), takesUnit)
             // The right of `and` and `or` only runs when the left does not settle the result.
             | BinaryOp(("and" | "or") as op, left, right) ->
                 BinaryOp(op, desugarExpr left, within InConditionalPart (fun () -> desugarExpr right))
@@ -672,7 +672,7 @@ module Compiler =
                     | WorkflowBindExpr(keyword, bindExpr) when isReturnKeyword keyword ->
                         workflowCall expr "return" [desugarExpr bindExpr]
                     | WorkflowBindExpr(keyword, bindExpr) ->
-                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([name, None], restOfChain ()))]
+                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([name, None], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr (Some name) rest next
                     | _ ->
                         chainBlock statement (restOfChain ()) { statement with Kind = DefStatement(isExport, name, typeOpt, desugarExpr expr) }
@@ -685,9 +685,9 @@ module Compiler =
                     | WorkflowBindExpr(keyword, bindExpr) when rest.IsEmpty ->
                         let value = freshName "value"
                         let continuation = next (Some (Expression.from expr (IdentifierExpr value)))
-                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([value, None], continuation))]
+                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([value, None], continuation, false))]
                     | WorkflowBindExpr(keyword, bindExpr) ->
-                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([("_", None)], restOfChain ()))]
+                        workflowCall expr keyword [desugarExpr bindExpr; Expression.from expr (Lambda([("_", None)], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr None rest next
                     | _ when rest.IsEmpty -> next (Some (desugarExpr expr))
                     | _ ->
@@ -707,7 +707,7 @@ module Compiler =
             freshNames <- freshNames + 1
             let restName = $"{NyxCompiler.Infer.workflowRestPrefix}{freshNames}"
             let parameter = name |> Option.defaultValue "_"
-            let restFunction = Expression.from expr (Lambda([ parameter, None ], desugarChain rest next))
+            let restFunction = Expression.from expr (Lambda([ parameter, None ], desugarChain rest next, false))
             // A branch goes on to the rest with its value when a `def` binds it, and with `()` otherwise, so that
             // branches of different types can still be a statement.
             let goOn (last: Expression option) =
@@ -892,7 +892,7 @@ module Compiler =
             expr
             |> mapExpressionKinds (fun current kind ->
                 match kind with
-                | FunctionCall(_, _, [ Kind (Lambda([], body)) ]) when blocks.Contains current.Id -> body.Kind
+                | FunctionCall(_, _, [ Kind (Lambda([], body, _)) ]) when blocks.Contains current.Id -> body.Kind
                 | other -> other)
 
     /// Where `span` is, as `nanyx` prints a diagnostic's place: `file:line:column: `.
@@ -1267,7 +1267,7 @@ module Compiler =
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state |> writeCells state
+                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)

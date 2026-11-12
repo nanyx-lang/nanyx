@@ -166,7 +166,7 @@ let private tryFindTypeDef (name: string) (state: InferState) : TypeDefInfo opti
 
 let private tryInferAttachedLambdaInput (state: InferState) (name: Identifier) (expr: Expression) : Ty option =
     match expr.Kind with
-    | Lambda(args, _) when name.Contains(".") && args.Length = 1 ->
+    | Lambda(args, _, _) when name.Contains(".") && args.Length = 1 ->
         let dotIndex = name.LastIndexOf(".")
         let typeName = name.Substring(0, dotIndex)
         match tryFindTypeDef typeName state with
@@ -1636,7 +1636,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
 
                 let isWorkflowCall =
                     match args with
-                    | [Kind (Lambda(lambdaArgs, _))] when lambdaArgs.IsEmpty -> recordFieldsOpt
+                    | [Kind (Lambda(lambdaArgs, _, _))] when lambdaArgs.IsEmpty -> recordFieldsOpt
                     | _ -> None
 
                 match isWorkflowCall with
@@ -1646,7 +1646,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     // trailing lambda, but a builder is a record. The block runs where it is written, as a block
                     // with keywords does, and its value is the block's.
                     match args with
-                    | [Kind (Lambda(lambdaArgs, lambdaBody)) as lambdaExpr] ->
+                    | [Kind (Lambda(lambdaArgs, lambdaBody, _)) as lambdaExpr] ->
                         match inferLambdaWithExpected env current lambdaExpr lambdaArgs lambdaBody (Some (TyPrimitive "unit")) None with
                         | Ok (typedLambda, next) ->
                             let returnTy =
@@ -1689,8 +1689,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         |> List.mapi (fun index arg ->
                             let inferred =
                                 match arg with
-                                | Kind (Lambda(lambdaArgs, lambdaBody)) ->
-                                    match LambdaArguments.expectedInput current (paramTys |> Option.bind (List.tryItem index)) lambdaArgs with
+                                | Kind (Lambda(lambdaArgs, lambdaBody, _)) ->
+                                    match LambdaArguments.expectedInput current (paramTys |> Option.bind (List.tryItem index)) arg lambdaArgs with
                                     | Some expectedInput -> inferLambda current arg lambdaArgs lambdaBody expectedInput
                                     | None -> inferExpr env current arg
                                 | Kind (TupleExpr items) ->
@@ -1817,7 +1817,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
                         Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
                     | _ -> Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" ]
-    | Lambda(args, body) ->
+    | Lambda(args, body, _) ->
         inferLambdaWithExpected env state expr args body None None
     | BinaryOp(op, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
     | BinaryOp(_, left, right) ->
@@ -2102,7 +2102,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 // an arm's names are bound only once all its patterns have matched.
                 | GuardPattern predicate ->
                     match predicate.Kind with
-                    | Lambda([ argument ], body) ->
+                    | Lambda([ argument ], body, _) ->
                         inferLambdaWithExpected env state' predicate [ argument ] body (Some scrutineeTy) (Some (primitiveType "bool"))
                         |> recordExprType
                         |> Result.map (fun (_, nextState) -> env', nextState, mkTypedPattern pattern scrutineeTy)
@@ -2521,6 +2521,10 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
         | Some expectedInput ->
             let tys, next = argTypesFromExpected current lambda.Span args expectedInput
             current <- next
+            // `{ ... }` ignores the parameter its expected type gives it, but `{ () -> ... }` says it takes unit.
+            match lambda.Kind with
+            | Lambda([], _, true) -> current <- addConstraintAt lambda.Span (TyPrimitive "unit") expectedInput current
+            | _ -> ()
             tys
         | None ->
             args
@@ -2615,7 +2619,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | _ -> nextStateWithReq
                         let inferResult =
                             match expr.Kind with
-                            | Lambda(args, body) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
+                            | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                                 inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                             | _ -> inferExpr envWithRec bodyState expr
                             |> Result.bind (fun (typedExpr, next) -> ContextEscapes.checkDef next name contextOpt expr |> Result.map (fun () -> typedExpr, next))
@@ -2865,7 +2869,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let abandon isExport (name: string) (expr: Expression) (diagnostics: Diagnostic list) =
         let failedNode =
             match expr.Kind with
-            | Lambda(_, body) -> body
+            | Lambda(_, body, _) -> body
             | _ -> expr
         state <- { state with FailedExprs = (failedNode.Id, diagnostics) :: state.FailedExprs }
         types <- types |> Map.add name Unifier.errorType
@@ -2932,7 +2936,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | _ -> nextStateWithReq
                 let inferResult =
                     match expr.Kind with
-                    | Lambda(args, body) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
+                    | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
                         inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
                     | _ -> inferExpr envWithRec bodyState expr
                     |> Result.bind (fun (typedExpr, next) -> ContextEscapes.checkDef next name contextOpt expr |> Result.map (fun () -> typedExpr, next))

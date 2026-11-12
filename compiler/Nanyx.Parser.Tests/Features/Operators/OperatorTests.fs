@@ -77,7 +77,7 @@ let ``&& and || are aliases for and and or`` () =
 [<Fact>]
 let ``++ shorthand lambda is the two-argument concatenation`` () =
     match parseModule "def f = { ++ }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ (a, None); (b, None) ], Kind (BinaryOp ("++", _, _))))))) ]
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ (a, None); (b, None) ], Kind (BinaryOp ("++", _, _)), _))))) ]
         when a = implicitArgument && b = implicitSecondArgument -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
@@ -190,7 +190,7 @@ let ``Prefix minus negates its operand, tighter than every infix operator`` () =
 [<Fact>]
 let ``A shorthand lambda that starts with minus still subtracts from its argument`` () =
     match parseModule "def f = { -x }\n" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ _ ], Kind (BinaryOp ("-", _, Kind (IdentifierExpr "x"))))))))] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ _ ], Kind (BinaryOp ("-", _, Kind (IdentifierExpr "x"))), _)))))] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -211,15 +211,15 @@ let ``** binds tighter than * and groups to the right`` () =
 let private blockStatementOf (source: string) =
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Block [ Kind (ExprStatement expr) ])))) ]
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement expr) ])))))) ] -> expr.Kind
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement expr) ]), _))))) ] -> expr.Kind
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 /// The body of each arm of the match that is the body of `source`'s one def, a lambda.
 let private armBodiesOf (source: string) =
     match parseModule source with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms))))))) ]
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ])))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms)), _))))) ]
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ]), _))))) ] ->
         arms |> List.map (fun (_, body) -> body.Kind)
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

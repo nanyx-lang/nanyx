@@ -46,7 +46,7 @@ def f = { s ->
 }
 """
     match parse source with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, [ [ Kind (LiteralPattern (StringLit "a\tb")) ], _; _ ])))) ])))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, [ [ Kind (LiteralPattern (StringLit "a\tb")) ], _; _ ])))) ]), _))))) ] -> ()
     | other -> Assert.Fail $"Unexpected parse: %A{other}"
 
 [<Theory>]

@@ -264,7 +264,7 @@ module NonTailRecursion =
         functionsIn model.Syntax expressions
         |> List.collect (fun (declaration, lambda) ->
             match lambda.Kind with
-            | Lambda(_, body) ->
+            | Lambda(_, body, _) ->
                 let tailCalls = TailPosition.callsIn body
                 // A call to the function itself: one to the symbol declared by the def, and not by anything within
                 // the lambda (a local def that hides its name).
@@ -625,17 +625,13 @@ module UseInBraces =
           Description =
             "`use X in { ... }`, whose body is a function of no arguments, not a block run with `X` loaded. Put the statements on the lines after `in`, indented." }
 
-    let private writtenWithUnitArgument (model: SemanticModel) (lambda: Expression) =
-        let text = model.Source.Substring(lambda.Span.Start, lambda.Span.End - lambda.Span.Start)
-        Text.RegularExpressions.Regex.IsMatch(text, @"^\{\s*\(\s*\)\s*->")
-
     let lint (model: SemanticModel) : Report list =
         model.Syntax
         |> List.collect SyntaxTree.ofItem
         |> List.collect SyntaxTree.expressionsWithin
         |> List.choose (fun expr ->
             match expr.Kind with
-            | UseIn(_, (Kind (Lambda([], _)) as body)) when not (writtenWithUnitArgument model body) ->
+            | UseIn(_, (Kind (Lambda([], _, false)) as body)) ->
                 Some
                     { Rule = rule.Id
                       Span = body.Span

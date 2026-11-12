@@ -207,7 +207,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
 
     let parameterNames (name: string) =
         match definitions.[name].Kind with
-        | Lambda(parameters, _) -> parameters |> List.map fst
+        | Lambda(parameters, _, _) -> parameters |> List.map fst
         | _ -> []
 
     /// The name to call `name` by at the instance type `instanceTy`: its own, or a specialisation's.
@@ -1092,7 +1092,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
                 | LiteralPattern(StringLit value) -> PString value
                 // `| { % 2 == 0 } ->`: the predicate is inlined, its parameter a local the value matched here is put
                 // in each time the arm is tested. It sees what is in scope at the match, not what the arm binds.
-                | GuardPattern(Kind (Lambda([ (parameter, _) ], predicateBody))) ->
+                | GuardPattern(Kind (Lambda([ (parameter, _) ], predicateBody, _))) ->
                     let var = newVar (uniqueName "__guard") Scratch valueTy
                     PGuard(var, this.Tail { armScope with Vars = armScope.Vars |> Map.add parameter var } predicateBody)
                 | ListPattern(elements, rest) ->
@@ -1218,7 +1218,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
     member this.LiftedParameterTypes (name: string) (lambdaTy: Ty) : Ty list * Ty =
         let parameters =
             match definitions.[name].Kind with
-            | Lambda(parameters, _) -> parameters.Tail
+            | Lambda(parameters, _, _) -> parameters.Tail
             | _ -> []
         let parameterTys, resultTy = this.ParameterTypes (List.map fst parameters) lambdaTy true
         let annotated =

@@ -7,12 +7,19 @@ open NyxCompiler.InferState
 /// as, and from the arguments before it: in `list.map(["a"], { s -> s.length })`, `s` is already a string when
 /// `s.length` is checked, so it reads the string's length, not a record's field.
 module internal LambdaArguments =
-    /// The input type a lambda with the parameters `lambdaArgs` takes from `paramTy`, the callee's parameter it is
-    /// passed as, resolved against the constraints of `state`. None when its parameters are annotated, or the
-    /// parameter is not a function, or its input does not say enough to give the lambda's parameters their types.
-    let expectedInput (state: InferState) (paramTy: Ty option) (lambdaArgs: (Identifier * TypeExpr option) list) : Ty option =
+    /// The input type `lambda`, a lambda with the parameters `lambdaArgs`, takes from `paramTy`, the callee's parameter
+    /// it is passed as, resolved against the constraints of `state`. None when its parameters are annotated, or the
+    /// parameter is not a function, or its input does not say enough to give the lambda's parameters their types. A
+    /// lambda written without parameters, `{ ... }`, takes the parameter's input when it is known, and ignores it; when
+    /// it is a type variable still, the lambda takes unit, as it does with no expected type.
+    let expectedInput (state: InferState) (paramTy: Ty option) (lambda: Expression) (lambdaArgs: (Identifier * TypeExpr option) list) : Ty option =
         let unannotated = lambdaArgs |> List.forall (fun (_, typeOpt: TypeExpr option) -> typeOpt.IsNone)
         match paramTy |> Option.map Unifier.unalias with
+        | Some (TyFunc(lambdaInput, _, _)) when (match lambda.Kind with Lambda([], _, false) -> true | _ -> false) ->
+            match Unifier.unify state.Constraints |> Result.map (fun subst -> Unifier.apply subst lambdaInput) with
+            | Ok resolved when (match Unifier.unalias resolved with TyVar _ -> true | _ -> false) -> None
+            | Ok resolved -> Some resolved
+            | Error _ -> None
         | Some (TyFunc(lambdaInput, _, _)) when unannotated && not (List.isEmpty lambdaArgs) ->
             match Unifier.unify state.Constraints with
             | Ok subst ->
@@ -44,12 +51,12 @@ module internal LambdaArguments =
         : Result<TypedExpr list * InferState, Diagnostic list> =
         let inferAt (inferred: (TypedExpr * Ty) list) (current: InferState) (item: Expression) (paramTy: Ty) =
             match item with
-            | Kind (Lambda(lambdaArgs, body)) ->
+            | Kind (Lambda(lambdaArgs, body, _)) ->
                 let earlier =
                     inferred
                     |> List.rev
                     |> List.fold (fun scratch (typed: TypedExpr, earlierTy) -> addAssignableConstraintAt typed.Expr.Span typed.Type earlierTy scratch) current
-                match expectedInput earlier (Some paramTy) lambdaArgs with
+                match expectedInput earlier (Some paramTy) item lambdaArgs with
                 | Some input -> inferLambda current item lambdaArgs body input
                 | None -> inferItem current item
             | _ -> inferItem current item

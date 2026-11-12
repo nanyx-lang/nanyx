@@ -195,7 +195,7 @@ module internal StructuralInstances =
         | RecordShape fields -> bracketed "(" (named value fields)
         | ListShape _ ->
             let element = partName 0
-            let write = expr (Lambda([ element, None ], text [ StringExpr (expr (FunctionCall(InterpolationHoles.holeFunction, None, [ name element ]))) ]))
+            let write = expr (Lambda([ element, None ], text [ StringExpr (expr (FunctionCall(InterpolationHoles.holeFunction, None, [ name element ]))) ], false))
             expr (FunctionCall(InterpolationHoles.listFunction, None, [ value; write ]))
 
     let private otherName = "__w"
@@ -236,7 +236,7 @@ module internal StructuralInstances =
             expr (Match([ value; other ], [ [ positions partName items.Length; positions otherPartName items.Length ], all parts ]))
         | RecordShape fields -> fields |> List.map (fun (fieldName, _) -> same (field value fieldName) (field other fieldName)) |> all
         | ListShape _ ->
-            let compare = expr (Lambda([ partName 0, None; otherPartName 0, None ], same (name (partName 0)) (name (otherPartName 0))))
+            let compare = expr (Lambda([ partName 0, None; otherPartName 0, None ], same (name (partName 0)) (name (otherPartName 0)), false))
             expr (FunctionCall(EqualityOperators.listFunction, None, [ value; other; compare ]))
 
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
@@ -247,9 +247,9 @@ module internal StructuralInstances =
         let signature, body =
             if ctxName = EqualityOperators.context then
                 typeExpr (TypeFunc(typeExpr (TypeTuple [ written; written ]), typeExpr (TypeName "bool"))),
-                expr (Lambda([ valueName, None; otherName, None ], equalsBody span shape))
+                expr (Lambda([ valueName, None; otherName, None ], equalsBody span shape, false))
             else
-                typeExpr (TypeFunc(written, typeExpr (TypeName "string"))), expr (Lambda([ valueName, None ], toStringBody span shape))
+                typeExpr (TypeFunc(written, typeExpr (TypeName "string"))), expr (Lambda([ valueName, None ], toStringBody span shape, false))
         let annotation =
             match varNames with
             | [] -> signature
