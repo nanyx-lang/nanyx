@@ -214,3 +214,49 @@ let ``Run - records, tuples and nominal values through the core IR`` () =
         "\n" +
         "main()\n"
     runSource source |> assertRan "Ada\n37\n6\n250\n2\n"
+
+[<Fact>]
+let ``Run - a field read on a lambda's parameter uses the record type from the type checker`` () =
+    // Regression for #250: the backend had no record layout for `p`.
+    let source =
+        """
+import nanyx/console
+
+type P = (x: int)
+
+def big: list(P) -> list(P) = { ps -> list.filter(ps, { p -> p.x > 1 }) }
+
+println("{list.length(big([P(x = 1), P(x = 2)]))}")
+"""
+    runSource source |> assertRan "1\n"
+
+[<Fact>]
+let ``Run - field reads on the parameters of lambdas passed to list functions`` () =
+    let source =
+        """
+import nanyx/console
+import nanyx/text
+
+type Product = (name: string, price: int, stock: int)
+
+def products = [Product(name = "a", price = 2, stock = 3), Product(name = "b", price = 5, stock = 1)]
+
+println(string.join(list.map(products, { p -> p.name }), ","))
+println("{list.length(products \list.filter({ p -> p.price < 3 }))}")
+println("{list.fold(products, 0, { total, p -> total + p.price * p.stock })}")
+println(string.join(list.map([1, 2], { n -> "{n}" }), ", "))
+"""
+    runSource source |> assertRan "a,b\n1\n11\n1, 2\n"
+
+[<Fact>]
+let ``Run - a field read on a for loop's element inside an interpolation`` () =
+    let source =
+        """
+import nanyx/console
+
+type Product = (name: string, price: int)
+
+for [Product(name = "a", price = 2), Product(name = "b", price = 5)] | p ->
+  println("{p.name}: {p.price}")
+"""
+    runSource source |> assertRan "a: 2\nb: 5\n"
