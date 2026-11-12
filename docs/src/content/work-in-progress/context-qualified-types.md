@@ -75,6 +75,39 @@ This mechanism is intentionally generic and applies to any context, not only `$M
 - transaction or resource capabilities,
 - user-defined contexts.
 
+# Function types and lambdas
+
+A function type carries the contexts its function requires, as a def's signature does: `[Console] int -> int`. Issue [#768](https://github.com/nanyx-lang/nanyx/issues/768) tracks the work. These points are settled:
+
+- **A lambda requires the contexts it uses where it is called.** It doesn't capture them where it is made. A lambda that calls `bar`, a member of `Foo`, has a type like `[Foo] () -> string`, wherever it is made, even inside a def that declares `[Foo]` or a `use` that loads it. Using any member of a context requires the whole context, as it does for a def.
+- **So a context cannot escape the scope that supplies it.** A `use` block that returns such a lambda returns a value that still requires `Foo`, and calling it outside needs `Foo` again:
+
+  ```nanyx
+  context Foo = (bar: string -> string)
+
+  def fooEscapes: [Foo] string -> ([Foo] () -> string) = { s ->
+    { bar(s) }
+  }
+
+  def escaped = use (bar = { s -> s }) in fooEscapes("hi")
+
+  escaped()   // error: requires 'Foo'
+  ```
+
+- **A function that requires fewer contexts fits where one requiring more is expected.** A pure lambda can be passed to a parameter of type `[Console] a -> b`.
+- **Higher-order functions take a context variable.** A single lowercase letter in a context list stands for any contexts: `list.map: [c] (list(a), [c] a -> b) -> list(b)`. A call with an argument that requires `Console` requires `Console` itself. An unannotated higher-order function infers its context variables, and the prelude's higher-order functions get `[c]`. See [Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts).
+- **A parameterised context at a concrete type is settled where the lambda is made.** `{ p -> describe(p) }` with `p: Point` finds its `Show(Point)` there, as a call does, and its type doesn't carry it. Only a context at a type variable, or a plain context such as `Foo`, stays in the lambda's type.
+
+These rules land together. A lambda's type carrying `[Console]` without context variables would stop it being passed to `list.map` at all.
+
+## What is implemented
+
+Function types don't carry contexts yet. Until they do:
+
+- A named function passed as a value needs its contexts where it is named, as a call to it does ([#773](https://github.com/nanyx-lang/nanyx/pull/773)).
+- A lambda that uses a context's members is checked where it is written, against the def around it.
+- Returning such a lambda out of the scope that supplies the context type-checks but is wrong: [#774](https://github.com/nanyx-lang/nanyx/issues/774) proposes rejecting it with an escape check, as `memory` blocks reject a lambda over one of their cells.
+
 # Design notes
 
 - Prefer wording like "requires context" over "can only exist".
