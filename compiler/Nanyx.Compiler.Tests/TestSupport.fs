@@ -55,6 +55,14 @@ let compileClean (source: string) =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value
 
+/// The code of the one diagnostic `source` compiles to, and the text it is reported at.
+let singleError (source: string) =
+    let result = Compiler.compile source
+    Assert.True(1 = result.Diagnostics.Length, $"Expected one diagnostic: %A{result.Diagnostics}")
+    let diagnostic = result.Diagnostics.Head
+    let span = diagnostic.Span.Value
+    diagnostic.Code, source.ReplaceLineEndings("\n").Substring(span.Start, span.End - span.Start)
+
 /// The one diagnostic `source` has, which must be a missing context: its message, and the text it is reported at.
 let missingContext (source: string) =
     match (Compiler.compile source).Diagnostics with

@@ -551,3 +551,20 @@ def main = { println(describe(Point(x = 1, y = 2))) }
     let mainPath = Path.Combine(directory.Path, "main.nyx")
     File.WriteAllText(mainPath, main)
     runFile mainPath |> assertRan "(1, 2)\n"
+
+[<Fact>]
+let ``Run - a lambda that uses a context runs inside the def that supplies it (#774)`` () =
+    let source =
+        """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def inside: [Foo] string -> string = { s ->
+  def f = { bar(s) }
+  def twice = { x -> bar(bar(x)) }
+  f() ++ " " ++ twice("y") ++ " " ++ ([1, 2] \list.map { _ -> bar("z") } \list.length \int.toString)
+}
+
+println(use Foo(bar = { s -> s ++ "!" }) in inside("ok"))
+"""
+    runSource source |> assertRan "ok! y!! 2\n"

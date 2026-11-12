@@ -69,67 +69,25 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
 let mismatchCode (state: InferState) (span: SourceSpan) =
     if state.CellAssignments.Contains span then DiagnosticCodes.CellAssignmentMismatch else DiagnosticCodes.TypeMismatch
 
-let rec private holdsFunction (ty: Ty) =
-    match ty with
-    | TyFunc _ -> true
-    | TyAlias(_, _, underlying)
-    | TyNominal(_, underlying, _) -> holdsFunction underlying
-    | TyRecord fields
-    | TyOpenRecord(fields, _) -> fields |> Map.exists (fun _ field -> holdsFunction field)
-    | TyTag(_, payload) -> payload |> Option.exists holdsFunction
-    | TyApply(_, args)
-    | TyUnion args -> args |> List.exists holdsFunction
-    | TyVar _
-    | TyPrimitive _ -> false
-
 /// The error, if any, for the `memory` block at `call`, whose block is `block`: its result must not be, or hold, a
 /// lambda that uses one of its cells, which would let the cell outlive the block. A lambda uses a cell when it names
-/// one from outside itself, or a local function that uses one.
+/// one from outside itself, or a local function that uses one (see `EscapingLambdas.tryFind`).
 let checkEscape (state: InferState) (call: Expression) (block: Expression) : Diagnostic list =
-    let body =
-        match block.Kind with
-        | Lambda([], body) -> Some body
-        | _ -> None
-    let result =
-        body
-        |> Option.map (fun body ->
-            match body.Kind with
-            | Block statements -> statements |> List.tryLast |> Option.bind (fun last -> Statement.finalExpression last.Kind) |> Option.defaultValue body
-            | _ -> body)
-    match body, result with
-    | Some body, Some result when state.ExprTypes.TryFind result.Id |> Option.exists (resolveSoFar state >> holdsFunction) ->
-        let symbolOf (node: Expression) = state.References |> Map.tryFind node.Id
+    match block.Kind with
+    | Lambda([], body) ->
+        let result = EscapingLambdas.resultOf body
         let declaredWithin (span: SourceSpan) (symbol: SymbolId) =
             state.Symbols |> Map.tryFind symbol |> Option.exists (fun declared -> SourceSpan.contains span declared.Declaration)
-        let usesCell (users: Set<SymbolId>) (lambda: Expression) =
-            SyntaxTree.expressionsWithin lambda
-            |> List.exists (fun node ->
-                match symbolOf node with
-                | Some symbol -> users.Contains symbol || (state.Cells.Contains symbol && not (declaredWithin lambda.Span symbol))
-                | None -> false)
-        let holdsUser (users: Set<SymbolId>) (expr: Expression) =
-            SyntaxTree.expressionsWithin expr
-            |> List.exists (fun node ->
-                match node.Kind with
-                | Lambda _ -> usesCell users node
-                | IdentifierExpr _ -> symbolOf node |> Option.exists users.Contains
-                | _ -> false)
-        // The local functions in the block that use its cells, in the order they are defined.
-        let users =
-            SyntaxTree.blocksWithin body
-            |> List.concat
-            |> List.fold (fun users (statement: Statement) ->
-                match statement.Kind with
-                | DefStatement(_, name, _, value) when holdsUser users value ->
-                    match state.DeclarationSymbols |> Map.tryFind (value.Id, DefValue, name) with
-                    | Some symbol -> users.Add symbol
-                    | None -> users
-                | _ -> users) Set.empty
-        if holdsUser users result then
+        let usesCell (lambda: Expression) (node: Expression) =
+            match state.References |> Map.tryFind node.Id with
+            | Some symbol -> state.Cells.Contains symbol && not (declaredWithin lambda.Span symbol)
+            | None -> false
+        match EscapingLambdas.tryFind state usesCell (SyntaxTree.blocksWithin body) result with
+        | Some _ ->
             let message =
                 $"The result of this `{memoryFunction}` block holds a lambda that uses its cells, which needs '{context}' and so cannot leave the block: return what the cells hold instead"
             [ Diagnostics.at DiagnosticCodes.CellEscapesMemory result.Span message |> Diagnostics.withRelated call.Span "the block" ]
-        else []
+        | None -> []
     | _ -> []
 
 /// `state` once the call `call` to `name` is checked, or the error if it is a `memory` block whose cells escape it

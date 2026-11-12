@@ -108,6 +108,7 @@ module DiagnosticCodes =
     let NotACell = code 222 "Assignment to a non-cell" Severity.Error
     let CellAssignmentMismatch = code 223 "Cell assignment type mismatch" Severity.Error
     let CellEscapesMemory = code 224 "Cell escapes its memory block" Severity.Error
+    let ContextEscapesScope = code 225 "Context escapes its scope" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -125,7 +126,7 @@ module DiagnosticCodes =
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
-          CellEscapesMemory
+          CellEscapesMemory; ContextEscapesScope
           UnsupportedByBackend ]
 
 module Diagnostics =
