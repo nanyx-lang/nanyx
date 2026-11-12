@@ -249,7 +249,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | FunctionCall(name, spanOpt, args) ->
         let calleeSpan = nameSpan spanOpt expr
-        if name = "dbg" then
+        if name = DbgSyntax.builtIn && (TypeEnv.tryFind name env).IsNone then
             match args with
             | [single] ->
                 match inferExpr env state single with

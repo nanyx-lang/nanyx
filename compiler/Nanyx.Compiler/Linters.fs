@@ -794,7 +794,8 @@ module UnannotatedExports =
 /// though it is not `()`: `readLine()` on a line of its own. Left alone: a statement whose type is `()`, a type variable
 /// (it may be `()`) or `undefined` (it never gives a value, which `unreachableCode` is about); a workflow keyword's
 /// statement, whose value the workflow takes; and a block's last statement, which is the block's value. A `for` loop
-/// is `()`, so what its body gives is not reported either. Its fix passes the value to `ignore`.
+/// is `()`, so what its body gives is not reported either. Nor is a call of the built-in `dbg`, written on a line of
+/// its own to print a value. Its fix passes the value to `ignore`.
 module UnusedResults =
     let rule =
         { Id = "unusedResults"
@@ -803,11 +804,20 @@ module UnusedResults =
           Description =
             "A statement of a block, other than its last, whose value is not `()` and is thrown away. Bind it to a name, or pass it to `ignore` to say it is not needed." }
 
+    /// Whether `expr` calls the built-in `dbg` (`dbg(x)` or `x \dbg`), which gives back the value it prints: a call of
+    /// a def of that name refers to the def, and the built-in to nothing.
+    let private callsBuiltInDbg (model: SemanticModel) (expr: Expression) =
+        match expr.Kind with
+        | FunctionCall(name, _, _)
+        | Pipe(_, name, _, _) -> name = DbgSyntax.builtIn && not (model.References.ContainsKey expr.Id)
+        | _ -> false
+
     /// The type of `expr` if it is a value that a statement throws away: known, and neither `()` nor `undefined`.
     let private discardedType (model: SemanticModel) (expr: Expression) : Ty option =
         match expr.Kind with
         | WorkflowBindExpr _
         | WorkflowReturnExpr _ -> None
+        | _ when callsBuiltInDbg model expr -> None
         | _ ->
             model.Types
             |> Map.tryFind expr.Id
