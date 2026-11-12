@@ -161,10 +161,14 @@ nonTailRecursion = "warning"
 
 ```nanyx
 def compute: [Console] int -> int = { n ->
-  readLine() -- Linter warning: the result of `readLine` is computed but never used
+  readLine() -- Linter error: The result of `readLine`, of type 'string', is never used
   42
 }
 ```
+
+The rule (`unusedResults`) reports a statement of a block, other than its last, whose value is thrown away though it is not `()`: a call made for a result nobody reads, or a value such as `n + 2` that does nothing on a line of its own. It is an error by default. Bind the value to a name, or pass it to [`ignore`](../stdlib/standard-library#discarding-a-value) to say you don't need it, which is what its fix does: `ignore(readLine())`.
+
+It leaves alone a statement whose type is `()`, such as a call to `println`; the last statement of a block, which is the block's value; a `for` loop, whose value is `()` whatever its body gives; a workflow keyword's statement, such as `try check(args)` in a `proc` block, whose value the workflow takes; and a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), which `unreachableCode` is about.
 
 # Learn more
 
