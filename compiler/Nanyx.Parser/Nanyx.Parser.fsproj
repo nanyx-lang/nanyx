@@ -18,6 +18,7 @@
     <Compile Include="ModuleBlocks.fs" />
     <Compile Include="Mutation.fs" />
     <Compile Include="OperatorTables.fs" />
+    <Compile Include="SourceTrivia.fs" />
     <Compile Include="Program.fs" />
     <Compile Include="DocComments.fs" />
   </ItemGroup>
