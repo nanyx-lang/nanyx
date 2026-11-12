@@ -38,7 +38,7 @@ let ``Run - an operator required by its member is passed the instance of the pre
         "import nanyx/console\n" +
         "\n" +
         "def add: [`+`: a, a -> a] = { + }\n" +
-        "def scale: [`+`: a, a -> a & `*`: a, a -> a] a, a -> a = { x, k -> x * k + x }\n" +
+        "def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a = { x, k -> x * k + x }\n" +
         "@entry\n" +
         "def main = {\n" +
         "  println(\"{add(1, 2)} {add(1.5, 2.25)} {scale(3, 2)} {scale(1.5, 2.0)}\")\n" +

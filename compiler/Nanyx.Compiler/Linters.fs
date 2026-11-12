@@ -684,8 +684,10 @@ module PlusBetweenContexts =
           DefaultSeverity = Severity.Warning
           Description = "Contexts joined with `+`, as in `[Eq(a) + Hash(a)]`. Join them with `&`: `[Eq(a) & Hash(a)]`." }
 
-    /// The span of each `+` that joins two of `contexts`, as written in `source`.
-    let private plusesBetween (source: string) (contexts: TypeExpr list) : SourceSpan list =
+    /// The span of each `+` that joins two of `contexts`, as written in `source`, with the edit that writes `&` for
+    /// it. A member's type runs to the end of the set once `&` joins it, so the edit brackets an unbracketed member
+    /// before the `+`: `` [`+`: a, a -> a + Eq(a)] `` becomes `` [(`+`: a, a -> a) & Eq(a)] ``.
+    let private plusesBetween (source: string) (contexts: TypeExpr list) : (SourceSpan * TextEdit) list =
         contexts
         |> List.pairwise
         |> List.choose (fun (left, right) ->
@@ -696,7 +698,15 @@ module PlusBetweenContexts =
                 match between.Trim() with
                 | "+" ->
                     let plus = left.Span.End + between.IndexOf '+'
-                    Some (TextEdit.spanBetween source left.Span plus (plus + 1))
+                    let span = TextEdit.spanBetween source left.Span plus (plus + 1)
+                    let edit =
+                        match left.Kind with
+                        | TypeRecord [ TypeField _ ] when source.[left.Span.Start] <> '(' ->
+                            let written = source.Substring(left.Span.Start, left.Span.End - left.Span.Start)
+                            { Span = TextEdit.spanBetween source left.Span left.Span.Start (plus + 1)
+                              NewText = $"({written}){source.Substring(left.Span.End, plus - left.Span.End)}&" }
+                        | _ -> { Span = span; NewText = "&" }
+                    Some (span, edit)
                 | _ -> None)
 
     let lint (model: SemanticModel) : Report list =
@@ -709,14 +719,14 @@ module PlusBetweenContexts =
             | TypeContext contexts
             | TypeWithContext(contexts, _) -> plusesBetween model.Source contexts
             | _ -> [])
-        |> List.distinct
-        |> List.sortBy (fun span -> span.Start)
-        |> List.map (fun span ->
+        |> List.distinctBy fst
+        |> List.sortBy (fun (span, _) -> span.Start)
+        |> List.map (fun (span, edit) ->
             { Rule = rule.Id
               Span = span
               Message = "Join contexts with `&`: `+` is what an earlier spec of the language wrote"
               Related = []
-              Fixes = [ { Title = "Replace `+` with `&`"; Edits = [ { Span = span; NewText = "&" } ] } ] })
+              Fixes = [ { Title = "Replace `+` with `&`"; Edits = [ edit ] } ] })
 
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.

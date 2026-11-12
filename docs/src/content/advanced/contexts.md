@@ -183,9 +183,11 @@ A function's type can also require an operator by its member instead of by the c
 
 ```nanyx
 def add: [`+`: a, a -> a] = { + }                           -- [Add(a)] a, a -> a
-def scale: [`+`: a, a -> a & `*`: a, a -> a] a, a -> a      -- [Num(a)] a, a -> a
+def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a  -- [Num(a)] a, a -> a
   = { x, k -> x * k + x }
 ```
+
+A member's type runs to the end of the brackets, a `&` in it being an intersection of types, so a member among other contexts goes in brackets of its own: `` [(`+`: a, a -> a) & Eq(a)] ``.
 
 Only an operator that is a member of one of the prelude's contexts can be required this way; any other member is required by naming its context, as `[ToString(a)]`.
 

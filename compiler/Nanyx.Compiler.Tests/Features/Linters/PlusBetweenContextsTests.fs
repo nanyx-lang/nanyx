@@ -44,6 +44,19 @@ def g = {
     Assert.Equal<string list>([ "+"; "+"; "+" ], reported source |> List.map snd)
 
 [<Fact>]
+let ``The fix brackets a member before the +, whose type would otherwise run on past the &`` () =
+    let source =
+        """def f: [`+`: a, a -> a + Eq(a)] a -> a = { x -> if x == x then x + x else x }
+"""
+    match reported source with
+    | [ diagnostic, "+" ] ->
+        Assert.Equal(
+            """def f: [(`+`: a, a -> a) & Eq(a)] a -> a = { x -> if x == x then x + x else x }
+""".ReplaceLineEndings "\n",
+            applyFix (source.ReplaceLineEndings "\n") diagnostic.Fixes.Head)
+    | other -> failwith $"Expected one report, got %A{other}"
+
+[<Fact>]
 let ``Contexts joined with & are not reported`` () =
     let source =
         """def both: [Eq(a) & Hash(a)] a, a -> bool = { x, y -> x == y and hash(x) == hash(y) }
