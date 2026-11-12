@@ -17,20 +17,23 @@ type ContextSource =
     /// The runtime supplies it, at the top level of the module (see `TypedModule.AmbientContexts`).
     | Runtime
 
-/// A name in scope, with its type as hover writes it, if it has one. An import has the file of the module it brings
-/// in as `Module` (see `ImportedFile`).
-type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declaration: SourceSpan; Module: string option }
+/// A name in scope, with its type as hover writes it, if it has one. `Symbol` is what it names, whose doc comment the
+/// info view shows (for an import, its module's).
+type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declaration: SourceSpan; Symbol: Symbol }
 
 /// A context in scope, written as hover writes it, and the span of what provides it: the annotation, the `use`, or the
-/// name of the def that was inferred to require it. The runtime's has none.
-type ScopedContext = { Context: string; Source: ContextSource; Span: SourceSpan }
+/// name of the def that was inferred to require it. The runtime's has none. `Documented` are the symbols whose doc
+/// comment describes it, the first that has one first: for a `use`, the def it names or calls, then the context itself.
+type ScopedContext = { Context: string; Source: ContextSource; Span: SourceSpan; Documented: Symbol list }
 
-/// What the info view shows. `Expression` is what hover shows at the position; `Instantiation`, on a name that refers
-/// to a generic def, the def's own signature and how this use fills in its type variables. `Locals` are the locals,
-/// parameters and pattern variables in scope, nearest first; `TopLevel` the top-level defs and imports in scope, the
-/// module's own first, then by name, less intrinsics.
+/// What the info view shows. `Expression` is what hover shows at the position, and `ExpressionSymbol` the name there
+/// that hover shows the doc comment of; `Instantiation`, on a name that refers to a generic def, the def's own
+/// signature and how this use fills in its type variables. `Locals` are the locals, parameters and pattern variables
+/// in scope, nearest first; `TopLevel` the top-level defs and imports in scope, the module's own first, then by name,
+/// less intrinsics.
 type Info =
     { Expression: Hover.HoverInfo option
+      ExpressionSymbol: Symbol option
       Instantiation: Hover.Instantiation option
       Locals: ScopedName list
       TopLevel: ScopedName list
@@ -85,13 +88,31 @@ let private usesAround (syntax: Module) (offset: int) : (Expression * SourceSpan
         | UseIn(value, body) when Hover.contains offset body.Span -> [ value, expr.Span ]
         | _ -> [])
 
-/// The contexts in scope at `offset`, nearest first, as types: those the `use`s around it load, then those each def
-/// around it requires, innermost first, or the runtime's where no def is around it.
-let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * ContextSource * SourceSpan) list =
+/// The symbol `expr` refers to, if it is a name or a call of one.
+let private referenced (typed: TypedModule) (expr: Expression) : Symbol option =
+    typed.References |> Map.tryFind expr.Id |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
+
+/// The symbol of the context `context` is, whose doc comment describes it.
+let private contextSymbol (typed: TypedModule) (context: Ty) : Symbol option =
+    match context with
+    | TyApply(name, _)
+    | TyAlias(name, _, _) ->
+        typed.TypeDefs
+        |> Map.tryFind name
+        |> Option.filter (fun info -> info.IsContext)
+        |> Option.bind (fun info -> info.Symbol)
+        |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
+    | _ -> None
+
+/// The contexts in scope at `offset`, nearest first, as types: those the `use`s around it load, each with the def the
+/// `use` names or calls, then those each def around it requires, innermost first, or the runtime's where no def is
+/// around it.
+let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * ContextSource * SourceSpan * Symbol option) list =
     let defs = defsAround syntax offset |> List.choose (fun def -> defSymbol typed def |> Option.map (fun symbol -> symbol, def))
     let fromUses =
         usesAround syntax offset
-        |> List.choose (fun (value, span) -> typed.ExprTypes |> Map.tryFind value.Id |> Option.map (fun ty -> ty, Use, span))
+        |> List.choose (fun (value, span) ->
+            typed.ExprTypes |> Map.tryFind value.Id |> Option.map (fun ty -> ty, Use, span, referenced typed value))
     let fromDefs =
         defs
         |> List.collect (fun (symbol, (_, annotation, _)) ->
@@ -102,10 +123,10 @@ let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty
             |> Unifier.writtenContexts
             |> List.map (fun context ->
                 match annotation with
-                | Some annotation when not (List.contains context inferred) -> context, Signature, annotation.Span
-                | _ -> context, Inferred, symbol.Declaration))
+                | Some annotation when not (List.contains context inferred) -> context, Signature, annotation.Span, None
+                | _ -> context, Inferred, symbol.Declaration, None))
     let fromRuntime =
-        if defs.IsEmpty then typed.AmbientContexts |> List.map (fun name -> TyApply(name, []), Runtime, SourceSpan.none)
+        if defs.IsEmpty then typed.AmbientContexts |> List.map (fun name -> TyApply(name, []), Runtime, SourceSpan.none, None)
         else []
     fromUses @ fromDefs @ fromRuntime
 
@@ -156,16 +177,13 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                 typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue [] |> Unifier.writtenContexts)
         let contexts = contextsAt typed syntax offset
         let localGroups = localTypes |> List.map (fun (ty, required) -> Option.toList ty @ required)
-        let contextGroups = contexts |> List.map (fun (ty, _, _) -> [ ty ])
+        let contextGroups = contexts |> List.map (fun (ty, _, _, _) -> [ ty ])
         let written = splitAs (localGroups @ contextGroups) (Unifier.tysToDisplayStrings names (List.concat (localGroups @ contextGroups)))
         let localsWritten, contextsWritten = List.splitAt locals.Length written
         let scoped (symbol: Symbol) typeWritten =
-            { Name = symbol.Name
-              Type = typeWritten
-              Kind = symbol.Kind
-              Declaration = symbol.Declaration
-              Module = typed.ImportedFiles |> Map.tryFind symbol.Id |> Option.map _.File }
+            { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration; Symbol = symbol }
         { Expression = expression
+          ExpressionSymbol = expression |> Option.bind (fun _ -> Definition.symbolAt file result offset)
           Instantiation = instantiation
           Locals =
             List.map2
@@ -181,5 +199,12 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             |> List.sortBy (fun symbol -> symbol.Declaration.File <> file, symbol.Name)
             |> List.map (fun symbol -> scoped symbol (topLevelType names typed symbol))
           Contexts =
-            List.map2 (fun (_, source, span) contextWritten -> { Context = List.exactlyOne contextWritten; Source = source; Span = span }) contexts contextsWritten }
-    | _ -> { Expression = None; Instantiation = None; Locals = []; TopLevel = []; Contexts = [] }
+            List.map2
+                (fun (ty, source, span, instance) contextWritten ->
+                    { Context = List.exactlyOne contextWritten
+                      Source = source
+                      Span = span
+                      Documented = Option.toList instance @ Option.toList (contextSymbol typed ty) })
+                contexts
+                contextsWritten }
+    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Locals = []; TopLevel = []; Contexts = [] }

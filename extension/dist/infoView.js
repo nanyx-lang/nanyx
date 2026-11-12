@@ -43,8 +43,9 @@ const DEBOUNCE_MILLISECONDS = 150;
  * The info view: a view in the secondary side bar that shows what the compiler knows at the cursor, as Lean's infoview
  * does. It is the webview view `nanyx.infoView`, in the `nanyx` view container that `package.json` contributes to the
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
- * the document does, once it has stayed put for a moment. Every item that has a place links to it. Pinning keeps the
- * view on one position while you edit elsewhere.
+ * the document does, once it has stayed put for a moment. Every item that has a place links to it, and shows the doc
+ * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
+ * while you edit elsewhere.
  */
 class InfoView {
     constructor(client) {
@@ -227,6 +228,9 @@ function page(webview) {
   li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 1px 0; }
   .doc { flex-basis: 100%; color: var(--vscode-descriptionForeground); }
   .doc p { margin: 2px 0 4px; white-space: pre-wrap; }
+  .doc[title] { cursor: pointer; }
+  .doc.collapsed > :not(:first-child) { display: none; }
+  .doc .more { color: var(--vscode-textLink-foreground); }
   code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); white-space: pre-wrap; word-break: break-word; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover { text-decoration: underline; }
@@ -275,16 +279,33 @@ function page(webview) {
         const link = event.target.closest("a");
         if (link && link.getAttribute("href")) {
           event.preventDefault();
+          event.stopPropagation();
           vscode.postMessage({ type: "openLink", href: link.getAttribute("href") });
         }
       });
-      li.appendChild(doc);
+      li.appendChild(collapsible(doc));
     } else if (entry.documentation) {
       const doc = element("div", "doc");
-      doc.appendChild(element("p", "", entry.documentation));
-      li.appendChild(doc);
+      entry.documentation.split(/\\n\\s*\\n/).forEach((paragraph) => doc.appendChild(element("p", "", paragraph)));
+      li.appendChild(collapsible(doc));
     }
     return li;
+  }
+
+  // A doc comment of more than one paragraph (or other block) shows its first until it is clicked, which shows all of
+  // it; a second click cuts it back.
+  function collapsible(doc) {
+    if (doc.children.length < 2) return doc;
+    const more = element("span", "more", " …");
+    doc.firstElementChild.appendChild(more);
+    doc.classList.add("collapsed");
+    doc.title = "Show all of the doc comment";
+    doc.addEventListener("click", () => {
+      const collapsed = doc.classList.toggle("collapsed");
+      more.hidden = !collapsed;
+      doc.title = collapsed ? "Show all of the doc comment" : "Show only its first paragraph";
+    });
+    return doc;
   }
 
   function section(data) {
