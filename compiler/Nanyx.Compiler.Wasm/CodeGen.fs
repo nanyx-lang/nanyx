@@ -121,8 +121,6 @@ let private functionValueSlot (table: FunctionTable) (name: string) (arity: int)
         table.Values.[name] <- (sanitizeIdentifier name, slot, arity)
         slot
 
-let private sanitizeImportSuffix (name: string) = sanitizeIdentifier name
-
 
 let private escapeWasmData (bytes: byte array) =
     let sb = StringBuilder()
@@ -805,18 +803,6 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.filter (fun line -> not (String.IsNullOrWhiteSpace line))
         |> String.concat "\n"
 
-    let dbgTagImports =
-        facts.DbgTags
-        |> List.map (fun tagName ->
-            let importName = $"dbg_tag_{sanitizeImportSuffix tagName}"
-            $"  (import \"env\" \"{importName}\" (func ${importName}))")
-
-    let dbgTagPayloadImports =
-        facts.DbgTagPayloads
-        |> List.map (fun tagName ->
-            let importName = $"dbg_tag_payload_{sanitizeImportSuffix tagName}"
-            $"  (import \"env\" \"{importName}\" (func ${importName} (param i32)))")
-
     let dataSegments = renderDataSegments stringLiteralData
 
     // Add memory if we have string literals or any emitted function touches memory, but no dbg helpers (dbgPrelude
@@ -839,12 +825,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         else
             ""
 
-    // Imports must precede every function definition in a WebAssembly module, so the host imports for
-    // `dbg(#tag)` come before the prelude (which defines $dbg and friends).
+    // Imports must precede every function definition in a WebAssembly module, so the prelude, which imports WASI's
+    // functions, comes first.
     let allImports =
-        [ yield! dbgTagImports
-          yield! dbgTagPayloadImports
-          if not (String.IsNullOrWhiteSpace dbgPrelude) then dbgPrelude
+        [ if not (String.IsNullOrWhiteSpace dbgPrelude) then dbgPrelude
           if not (String.IsNullOrWhiteSpace memorySection) then memorySection
           if not (String.IsNullOrWhiteSpace heapSection) then heapSection
           if not (String.IsNullOrWhiteSpace renderedHelpers) then renderedHelpers

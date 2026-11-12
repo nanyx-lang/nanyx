@@ -67,14 +67,19 @@ let private placeOf (text: string) (source: string) =
 [<Fact>]
 let ``What the backend cannot compile is reported where it is written`` () =
     // An expression it cannot compile is reported at that expression, not the ones inside it, and named.
-    let printed =
-        "def shout: (int, int) -> int = { t ->\n" +
-        "  def u = dbg(t)\n" +
-        "  u.0\n" +
-        "}\n"
-    let message, line, column = backendFailure printed
-    Assert.Equal("The WebAssembly backend cannot compile `dbg` of a value of type (0: int, 1: int) yet", message)
-    Assert.Equal(placeOf "dbg(t)" printed, (line, column))
+    let written =
+        """
+type Nest(a) = #leaf(a) | #deeper(Nest(list(a)))
+
+def depth: Nest(int) -> int = { t ->
+  def u = t
+  1
+}
+"""
+    let source = written.ReplaceLineEndings "\n"
+    let message, line, column = backendFailure source
+    Assert.Equal("The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet", message)
+    Assert.Equal(placeOf "{ t ->" source, (line, column))
 
 [<Fact>]
 let ``Transpile block local variable`` () =
@@ -112,9 +117,9 @@ let ``Transpile magic dbg for int`` () =
     let wat = transpileWat source
 
     Assert.Contains("(import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write", wat)
-    Assert.Contains("(func $dbg (param $x i32)", wat)
+    Assert.Contains("(func $__dbg_show_int (param $__dbg_value i32)", wat)
     Assert.Contains("i32.const 42", wat)
-    Assert.Contains("call $dbg", wat)
+    Assert.Contains("call $dbg_str", wat)
 
 [<Fact>]
 let ``Transpile magic dbg for string literal`` () =
@@ -147,9 +152,9 @@ let ``Transpile magic dbg for bare tag literal`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("(import \"env\" \"dbg_tag_test\" (func $dbg_tag_test))", wat)
-    Assert.Contains("call $dbg_tag_test", wat)
-    Assert.DoesNotContain("(import \"env\" \"dbg\" (func $dbg (param i32)))", wat)
+    // Printed through a printer of its type, which needs nothing from the host.
+    Assert.Contains("call $__dbg_show_tag_test", wat)
+    Assert.DoesNotContain("(import \"env\"", wat)
 
 [<Fact>]
 let ``Transpile payload tag literal`` () =
@@ -170,8 +175,9 @@ let ``Transpile magic dbg for payload tag literal`` () =
 
     let wat = transpileWat source
 
-    Assert.Contains("(import \"env\" \"dbg_tag_payload_some\" (func $dbg_tag_payload_some (param i32)))", wat)
-    Assert.Contains("call $dbg_tag_payload_some", wat)
+    Assert.Contains("call $__dbg_show_tag_some_int", wat)
+    Assert.Contains("call $__dbg_show_int", wat)
+    Assert.DoesNotContain("(import \"env\"", wat)
 
 [<Fact>]
 let ``Transpile interpolated dbg string from file`` () =

@@ -99,14 +99,31 @@ Writes a string to stderr exactly as it is. It is a member of `Console`.
 dbg: [Console] a -> a
 ```
 
-Prints a debug representation of any value and returns it. Useful for inspecting values in pipelines.
+Prints any value, after `dbg: `, and returns it. Useful for inspecting values in pipelines.
 
 ```nanyx
 [1, 2, 3]
   \map { * 2 }
   \dbg
--- Prints: [2, 4, 6]
+-- Prints: dbg: [2, 4, 6]
 ```
+
+A value is printed as you would write it in code, from its type, whatever `toString` the type has:
+
+| Value | Printed |
+| --- | --- |
+| `42`, `1.5`, `true` | `42`, `1.5`, `true` |
+| `"Ada"` | `"Ada"`, in quotes and escaped |
+| `#some(5)`, `#pair(1, "a")` | `#some(5)`, `#pair(1, "a")` |
+| `(1, "a")`, `(name = "Ada", age = 36)` | `(1, "a")`, `(age = 36, name = "Ada")` |
+| `[1, 2]` | `[1, 2]` |
+| `["tea" => 3]`, an empty map | `["tea" => 3]`, `map.empty` |
+| `set.fromList([1, 2])` | `set.fromList([1, 2])` |
+| `$Money(250)` | `$Money(250)` |
+| `()` | `()` |
+| `{ n -> n + 1 }` | `<function int -> int>` |
+
+A record's fields are printed in alphabetical order. A nominal type is printed by its name around its shape, in its own module or any other.
 
 ---
 

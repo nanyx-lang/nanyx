@@ -36,6 +36,8 @@ type internal Lowering =
     /// As a function value of the second type that calls one of the first, which its closure holds, with the members
     /// the first requires: each passed to it, or captured after the value where it was made (see `Coerce`).
     | Adapting of IrType * IrType
+    /// As a function that writes values as text for `dbg` (see `CoreIrLowerDbg`).
+    | Printing of CoreIrLowerDbg.Printer
     /// As the start function, from the module's top-level expressions.
     | AsStart
 
@@ -108,17 +110,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let var = newVar "" Temp ty
         { var with Name = $"__t{var.Id}" }
 
-    /// The local every `dbg` in the function holds its value in, made when the first needs it.
-    let mutable dbgScratch: Var option = None
-    let dbgLocal () =
-        match dbgScratch with
-        | Some var -> var
-        | None ->
-            let var = newVar (uniqueName "__dbg_tmp") Scratch IrInt
-            dbgScratch <- Some var
-            var
-
     let toIrType = toIrTypeIn input.ContextLayouts
+
+    /// What a `dbg` printer needs from this function's lowering (see `CoreIrLowerDbg`).
+    let printerTools: CoreIrLowerDbg.PrinterTools =
+        { NewVar = fun name kind ty -> newVar (uniqueName name) kind ty
+          NewTemp = newTemp
+          PrinterOf = fun printer -> request (CoreIrLowerDbg.key printer, []) Map.empty (Printing printer)
+          ToIrType = toIrType }
 
     /// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in
     /// the instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
@@ -418,45 +417,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
             k (mk (Panic [ message ]) ty)
         | FunctionCall("dbg", _, args) when not (scope.Vars.ContainsKey "dbg") && not (definitions.ContainsKey "dbg") ->
-            // Prints its value and leaves it, by how the value is printed.
+            // Prints the value's text, which the printer of its type writes, and leaves the value.
+            // The one argument, which may be a tuple, as the type checker has it.
             let value =
-                match flattenCallArgs args with
+                match args with
                 | [ single ] -> single
                 | _ -> cannot "`dbg` of more than one value"
-            let ty = tyOf expr
-            let scratch = dbgLocal ()
-            match value.Kind with
-            | TagExpr(name, None) -> k (mk (Dbg(ATag name, DbgTag(name, scratch))) ty)
-            | TagExpr(name, Some payload) when this.TypeIn scope payload = IrInt ->
-                // The host function prints the payload as an int, so only an int payload goes this way.
-                this.Atoms scope [ payload ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgTagPayload(name, scratch))) ty))
-            | _ ->
-                // For any value but a literal, the old path declares the locals it would print a tag with.
-                let holeDepth =
-                    match value.Kind with
-                    | LiteralExpr _
-                    | InterpolatedString _ -> None
-                    | _ -> Some scope.InterpolationDepth
-                match this.TypeIn scope value with
-                | IrString -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgString(scratch, holeDepth))) ty))
-                | IrFloat -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgFloat(scratch, holeDepth))) ty))
-                | IrInt
-                | IrUnit -> this.Atoms scope [ value ] (fun atoms -> k (mk (Dbg(atoms.Head, DbgNumber(scratch, holeDepth))) ty))
-                | IrBool
-                | IrTags _ ->
-                    // A bool or a tag value prints as `"{value}"` would: evaluated into a hole, a level deeper.
-                    let holeType = this.HoleType scope value
-                    let hole = newVar (Interpolation.holeLocalName scope.InterpolationDepth 0) (InterpolationHole(scope.InterpolationDepth, 0)) (tyOf value)
-                    this.Complex { scope with InterpolationDepth = scope.InterpolationDepth + 1 } value (fun lowered ->
-                        let body = k (mk (Dbg(AVar hole, DbgTagValue(hole, holeType, scratch))) ty)
-                        mk (Let(hole, lowered, body)) body.Type)
-                | IrFunction _ ->
-                    // A function has nothing to show but that it is one, so that is printed, and then the value is
-                    // the function's own.
-                    let printed = mk (Dbg(AString "<function>", DbgString(scratch, None))) IrString
-                    let rest = this.Complex scope value k
-                    mk (Do(printed, rest)) rest.Type
-                | other -> cannot $"`dbg` of a value of type {IrType.show other}"
+            let valueTy = unconstrainedAsUnit (substitute subst input.ExprTypes.[expr.Id])
+            let printer = printerTools.PrinterOf (CoreIrLowerDbg.Showing valueTy)
+            this.Complex scope value (fun lowered ->
+                let held = newVar (uniqueName "__dbg_value") Local lowered.Type
+                let text = newTemp IrString
+                let rest = k (mk (Atom(AVar held)) held.Type)
+                let printed = mk (Let(text, mk (Call(printer, [ AVar held ])) IrString, mk (Dbg(AVar text)) IrUnit)) IrUnit
+                mk (Let(held, lowered, mk (Do(printed, rest)) rest.Type)) rest.Type)
         | FunctionCall("__with", _, [ record; Kind (RecordExpr updates) ]) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.
             let ty = tyOf expr
@@ -1361,6 +1335,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match lowering with
         | AsStart -> this.StartFunction ()
         | Adapting(givenTy, expectedTy) -> this.Adapter functionName givenTy expectedTy
+        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
         | _ ->
         let expr = definitions.[name]
         let parameterNames, body = parametersAndBody expr
@@ -1471,6 +1446,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | None, None -> internalError $"the context member {ContextMemberKey.text key} of '{wrapped}' is neither captured nor passed"
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
         | Adapting _ -> internalError "an adapter lowered as a definition"
+        | Printing _ -> internalError "a printer lowered as a definition"
 
     /// The adapter `functionName` that lets a function value of type `givenTy` be called as one of `expectedTy` (see
     /// `Coerce`): it takes an environment that holds the value, then the members `givenTy` requires that `expectedTy`

@@ -97,22 +97,6 @@ type InterpolationPart =
     /// A hole, already evaluated into its local.
     | Hole of Var * HoleType
 
-/// How `dbg` prints its value, which it then leaves. Each holds the value in a scratch local meanwhile.
-type DbgForm =
-    /// An int or unit, printed as a number. `Some depth` when the value is not a literal: the old path then
-    /// declares the locals it would print a tag through (an interpolated string at that depth), whatever the type.
-    | DbgNumber of Var * int option
-    /// A string, printed as it is. `Some depth` as for a number.
-    | DbgString of Var * int option
-    /// A float, formatted and printed. `Some depth` as for a number.
-    | DbgFloat of Var * int option
-    /// A tag literal without a payload, printed by a host function of its own.
-    | DbgTag of string * Var
-    /// A tag literal with an int payload (the atom), printed by a host function of its own.
-    | DbgTagPayload of string * Var
-    /// A bool, or a value of a union of tags, printed as `"{value}"` would print it: the hole is already evaluated.
-    | DbgTagValue of Var * HoleType * Var
-
 type Expr =
     { Kind: ExprKind
       Type: IrType }
@@ -148,8 +132,8 @@ and ExprKind =
     | CallClosure of Var * Atom list
     /// Builds an interpolated string from its text and its holes, which are already evaluated into their locals.
     | Interpolate of InterpolationPart list
-    /// `dbg(value)`: prints the value (the atom, unless the form says otherwise) and leaves it.
-    | Dbg of Atom * DbgForm
+    /// What `dbg(value)` prints: the string, the value's text (see `CoreIrLowerDbg`), after `dbg: `. It is unit.
+    | Dbg of Atom
     /// Boxes a float constant.
     | BoxFloat of float
     /// An error deferred to run time: writes these messages to stderr and ends the program.
@@ -464,7 +448,7 @@ module Print =
                 | Hole(v, _) -> "{" + v.Name + "}")
             |> String.concat ""
             |> sprintf "\"%s\""
-        | Dbg(value, _) -> $"dbg({atom value})"
+        | Dbg text -> $"dbg({atom text})"
         | BoxFloat value -> string value
         | Panic messages -> $"""panic({messages |> String.concat ""})"""
         | ForEach loop ->

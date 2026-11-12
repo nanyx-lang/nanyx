@@ -208,7 +208,7 @@ shape. A body is an expression with a type on every node:
 | `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |
 | `panic(messages)` | an error deferred to run time: writes the messages to stderr and ends the program |
 | `interpolate(parts)` | builds an interpolated string from its text and its holes, each already stored in its hole local |
-| `dbg(atom, form)` | prints a value as `dbg` does for its type, and leaves it |
+| `dbg(text)` | prints the string `text`, the text of a value its type's printer wrote, after `dbg: ` |
 | `let x = value in body` | names a value; the value is never a `let` itself |
 | `do value; rest` | evaluates a value for its effects and drops it |
 | `if atom then e1 else e2` | |
@@ -268,10 +268,10 @@ and all, so nothing waits on the stack across a store. Record layouts and functi
 functions are emitted, in definition order, each definition followed by its specialisations. What the module needs
 besides its functions comes from the IR of exactly the functions it emits (`CoreIrFacts.fs`): the tags it numbers
 (sorted by name, so every case of a tag type a hole prints has one), the string literals in its data segment, and the
-host imports and helpers `dbg` calls. The heap is set up when some function calls `$alloc`.
+helpers `dbg` calls. The heap is set up when some function calls `$alloc`.
 
 **What cannot be compiled.** Every function is compiled from the IR; there is no other way. What the IR cannot lower
-(a local function, `==` on records and lists, `dbg` of a record, and the like) is an error,
+(a local function, `==` on records and lists, and the like) is an error,
 `UnsupportedByBackend`, reported where it is written: `tryTranspileTypedModuleToWat` gives the first one. `==` is built
 in only for numbers, strings and tags; comparing and printing records and lists structurally is
 [#424](https://github.com/nanyx-lang/nanyx/issues/424). Only a type-checked module is compiled.
@@ -296,8 +296,8 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
 
 - **Every variable owns its reference,** except a parameter its function borrows, a name a pattern binds that the
   arm does not use, and, inside a `for` loop's body or a guard, every variable from outside it. Each instruction
-  either takes an operand over (a call that owns the parameter, a field of a new object, a value returned, `dbg`)
-  or borrows it (a field read, an operator, a runtime helper): a variable is duplicated where it is taken over and
+  either takes an operand over (a call that owns the parameter, a field of a new object, a value returned)
+  or borrows it (a field read, an operator, a runtime helper, `dbg`): a variable is duplicated where it is taken over and
   still used after, and dropped after the instruction that used it last if that one only borrowed it. An
   instruction reads what it borrows when it runs, after all its operands are evaluated, so a variable it borrows
   counts as used until then: an operand after it that takes it over (`f(x, x)` with the first parameter borrowed)

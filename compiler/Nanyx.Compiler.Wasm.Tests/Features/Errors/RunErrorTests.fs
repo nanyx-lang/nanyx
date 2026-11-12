@@ -9,21 +9,25 @@ open TranspilerWasmTestHelpers
 [<Fact>]
 let ``Run - what the backend cannot compile is reported with its place, like any other error`` () =
     let source =
-        "import nanyx/console\n" +
-        "\n" +
-        "def shout: (int, int) -> int = { t ->\n" +
-        "  def u = dbg(t)\n" +
-        "  u.0\n" +
-        "}\n" +
-        "\n" +
-        "@entry\n" +
-        "def main = { println(\"{shout((1, 2))}\") }\n"
-    let outcome = runSource source
+        """
+import nanyx/console
+
+type Nest(a) = #leaf(a) | #deeper(Nest(list(a)))
+
+def depth: Nest(int) -> int = { t ->
+  def u = t
+  1
+}
+
+@entry
+def main = { println(depth(#leaf(1))) }
+"""
+    let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    // `path/to/file.nyx:4:11: error NYX0301: ...`, at the `dbg`.
+    // `path/to/file.nyx:6:31: error NYX0301: ...`, at the function.
     Assert.Matches(
-        ":4:11: error NYX0301: The WebAssembly backend cannot compile `dbg` of a value of type \\(0: int, 1: int\\) yet\\r?\\n$",
+        ":6:31: error NYX0301: The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet\\r?\\n$",
         outcome.StandardError)
 
 [<Fact>]
