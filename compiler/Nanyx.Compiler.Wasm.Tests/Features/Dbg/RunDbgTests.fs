@@ -125,13 +125,16 @@ dbg(["tea" => 3, "cake" => 4])
 def none: map(string, int) = map.empty
 dbg(none)
 dbg(set.fromList([3, 1, 3]))
+def noInts: set(int) = set.empty
+dbg(noInts)
 """
     |> printsAs """
 dbg: [1, 2]
 dbg: []
-dbg: ["tea" => 3, "cake" => 4]
-dbg: map.empty
-dbg: set.fromList([3, 1])
+dbg: Map["tea" => 3, "cake" => 4]
+dbg: Map[]
+dbg: Set[3, 1]
+dbg: Set[]
 """
 
 [<Fact>]

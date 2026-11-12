@@ -117,13 +117,13 @@ A value is printed as you would write it in code, from its type, whatever `toStr
 | `#some(5)`, `#pair(1, "a")` | `#some(5)`, `#pair(1, "a")` |
 | `(1, "a")`, `(name = "Ada", age = 36)` | `(1, "a")`, `(age = 36, name = "Ada")` |
 | `[1, 2]` | `[1, 2]` |
-| `["tea" => 3]`, an empty map | `["tea" => 3]`, `map.empty` |
-| `set.fromList([1, 2])` | `set.fromList([1, 2])` |
+| `["tea" => 3, "coffee" => 1]`, an empty map | `Map["tea" => 3, "coffee" => 1]`, `Map[]` |
+| `set.fromList([1, 2])`, an empty set | `Set[1, 2]`, `Set[]` |
 | `$Money(250)` | `$Money(250)` |
 | `()` | `()` |
 | `{ n -> n + 1 }` | `<function int -> int>` |
 
-A record's fields are printed in alphabetical order. A nominal type is printed by its name around its shape, in its own module or any other.
+A record's fields are printed in alphabetical order. A map's entries and a set's elements are printed in the order the map or set holds them, after its type's name. A nominal type is printed by its name around its shape, in its own module or any other.
 
 ---
 

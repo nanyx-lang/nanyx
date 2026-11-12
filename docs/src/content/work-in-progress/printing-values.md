@@ -94,7 +94,9 @@ Each hole is a call to a function the type checker has already chosen, so the ba
 
 `dbg` keeps its type, `[Console] a -> a`, and needs no `ToString`. The backend lowers generic code at the concrete types it is used at, so every call to `dbg` is at a concrete type, and the backend generates a printer for each type `dbg` prints, from the type the type checker resolved (`Nanyx.Compiler.Wasm/CoreIrLowerDbg.fs`). Each part of a structure is written by the printer of its own type, so one type that holds itself is written by one printer that calls itself. What each type prints as is on [`dbg`'s entry](../stdlib/io#dbg).
 
-`dbg` shows what a value is, not how its type chooses to present itself, so it ignores any `ToString`. That keeps its output predictable when chasing a bug. For the same reason a protected type prints its shape, `$UserId(42)`, outside its home module as well as in it. That breaks no invariant, since invariants are about construction and no code can read what `dbg` prints, and `dbg` is a tool for the programmer.
+`dbg` shows what a value is, not how its type chooses to present itself, so it ignores any `ToString`. That keeps its output predictable when chasing a bug.
+
+A record's fields are written in alphabetical order, as interpolation writes them, since a record type keeps no other order: `(age = 36, name = "Ada")`. A map and a set are written as their type's name and their entries or elements in square brackets, a map's with `=>` between each key and its value: `Map["tea" => 3, "coffee" => 1]`, `Set[1, 2]`, and `Map[]` and `Set[]` when empty. For the same reason a protected type prints its shape, `$UserId(42)`, outside its home module as well as in it. That breaks no invariant, since invariants are about construction and no code can read what `dbg` prints, and `dbg` is a tool for the programmer.
 
 # Open questions
 
