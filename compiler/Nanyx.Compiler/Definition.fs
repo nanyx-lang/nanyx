@@ -34,7 +34,12 @@ let private symbolAndNameAt (file: string) (result: CompileResult) (offset: int)
     | Some syntax, Some typed ->
         let referencedAt (id: NodeId) (span: SourceSpan option) =
             match typed.References |> Map.tryFind id, span with
-            | Some id, Some span when contains offset span -> typed.Symbols |> Map.tryFind id |> Option.map (fun symbol -> symbol, span)
+            | Some id, Some span when contains offset span ->
+                typed.Symbols
+                |> Map.tryFind id
+                // What syntax is desugared to (`__pow` for `**`) is not a name the user wrote: the expression inside it is.
+                |> Option.filter (fun symbol -> not (ReservedNames.isHidden symbol))
+                |> Option.map (fun symbol -> symbol, span)
             | _ -> None
         let referenced =
             Hover.expressionsAt offset syntax
@@ -54,8 +59,9 @@ let private symbolAndNameAt (file: string) (result: CompileResult) (offset: int)
 
 /// The symbol for the name at `offset` in the compiled root module: what it refers to, or, on a declaration's
 /// own name, the symbol it declares. `file` is the file the root module was compiled as (empty for source
-/// compiled directly), which tells its own declarations from those of the modules it imports. `None` when the
-/// module did not type-check or no name is at `offset`.
+/// compiled directly), which tells its own declarations from those of the modules it imports. A reserved name of the
+/// standard library's (see `ReservedNames.isHidden`) is never the symbol. `None` when the module did not type-check
+/// or no name is at `offset`.
 let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol option =
     symbolAndNameAt file result offset |> Option.map fst
 

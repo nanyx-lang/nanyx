@@ -162,6 +162,22 @@ let private definitionOf (result: CompileResult) (offset: int) =
     |> Option.map (fun symbol -> symbol.Kind, symbol.Declaration.File, symbol.Declaration.Start)
 
 [<Fact>]
+let ``An operator never goes to the standard library's reserved name it is desugared to`` () =
+    let source = "def p = 2.0 ** 3\ndef e = 1 == 2\ndef s = \"n = {p}\"\n"
+    let result = Compiler.compile source
+    // Nowhere in `2.0 ** 3` (`__pow`), `1 == 2` (`__equals`) or the hole `{p}` (`__interpolate`) is there a
+    // reserved name: an operand or a hole's value is still the name it is.
+    let reservedAt (text: string) =
+        [ for i in 0 .. text.Length - 1 -> Definition.symbolAt "" result (offsetOf source text 0 i) ]
+        |> List.choose id
+        |> List.filter (fun symbol -> symbol.Name.StartsWith ReservedNames.prefix)
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Empty(reservedAt "2.0 ** 3")
+    Assert.Empty(reservedAt "1 == 2")
+    Assert.Empty(reservedAt "{p}")
+    Assert.Equal(Some (TopLevelValue, "", 4), definitionOf result (offsetOf source "{p}" 0 1))
+
+[<Fact>]
 let ``Type names refer to the type definition`` () =
     let source =
         "def id: Point -> Point = { p -> p }\n" +

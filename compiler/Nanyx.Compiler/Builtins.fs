@@ -181,3 +181,19 @@ module StandardLibrary =
             |> Array.map (fun line -> line.TrimEnd '\r')
             |> Array.tryFind (fun line -> line.StartsWith(heading, System.StringComparison.Ordinal))
             |> Option.map (fun line -> line.Substring heading.Length))
+
+/// The names the standard library keeps for itself: those that start with `__`, as the helpers syntax is desugared to
+/// (`__equals` for `==`, `__pow` for `**`, `__interpolate` for a hole in a string). The intrinsics (see `Intrinsics`)
+/// start with it too, but are never in scope outside the standard library to begin with.
+module ReservedNames =
+    let prefix = "__"
+
+    /// Whether the editor keeps `name`, declared at `declaration`, out of sight in the module being edited: a reserved
+    /// name the standard library declares, which completion never offers, the info view never lists, and hover, go to
+    /// definition and doc comment links never lead to. A module's own declarations are never hidden from it, so a
+    /// standard-library file being edited still sees its own.
+    let isHiddenName (name: string) (declaration: SourceSpan) =
+        name.StartsWith prefix && declaration.File.StartsWith StandardLibrary.importPrefix
+
+    /// `isHiddenName` for a symbol's name and declaration.
+    let isHidden (symbol: Symbol) = isHiddenName symbol.Name symbol.Declaration

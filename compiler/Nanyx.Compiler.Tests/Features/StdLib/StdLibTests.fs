@@ -144,6 +144,25 @@ let ``Compiler intrinsics are not in scope in user code`` () =
     Assert.Contains("Unknown function '__nanyx_string_length'", message)
 
 [<Fact>]
+let ``Calling an intrinsic from user code is an unknown name with no suggestion`` () =
+    let source =
+        """def bye = __nanyx_exit(1)
+def typo = __nanyx_exti(1)
+"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.UnknownFunction.Code, "Unknown function '__nanyx_exit'"
+          DiagnosticCodes.UnknownFunction.Code, "Unknown function '__nanyx_exti'" ],
+        result.Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message))
+    Assert.All(result.Diagnostics, fun diagnostic -> Assert.Empty diagnostic.Fixes)
+
+[<Fact>]
+let ``A standard-library module still checks its calls to intrinsics`` () =
+    let source = "export def size: string -> int = { s -> __nanyx_string_length(s) }\n"
+    let result = Compiler.compileFrom Linters.none (StandardLibraryModule "scratch") source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+
+[<Fact>]
 let ``Standard library import with alias is qualified`` () =
     let source =
         "import nanyx/text as t\n" +

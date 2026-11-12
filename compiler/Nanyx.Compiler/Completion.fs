@@ -8,8 +8,8 @@ open Parser.Program
 /// ordered by name. Where several declarations of a name are in scope, the nearest is the one the name means: the one
 /// with the narrowest scope (a parameter before a top-level def, a top-level def before an import), and of equal
 /// scopes the one declared last (a def in a block shadows an earlier one of the same name). Names with a dot
-/// (`inner.secret`, `string.shout`) are left out: they are reached through what comes before the dot. Empty when
-/// the module did not type-check.
+/// (`inner.secret`, `string.shout`) are left out: they are reached through what comes before the dot, and so are the
+/// standard library's reserved names (see `ReservedNames.isHidden`). Empty when the module did not type-check.
 let namesInScope (result: CompileResult) (offset: int) : Symbol list =
     match result.Syntax, result.Typed with
     | Some _, Some typed ->
@@ -17,7 +17,7 @@ let namesInScope (result: CompileResult) (offset: int) : Symbol list =
         |> Map.toSeq
         |> Seq.filter (fun (_, scope) -> scope.Start <= offset && offset < scope.End)
         |> Seq.map (fun (id, scope) -> typed.Symbols.[id], scope)
-        |> Seq.filter (fun (symbol, _) -> not (symbol.Name.Contains '.'))
+        |> Seq.filter (fun (symbol, _) -> not (symbol.Name.Contains '.') && not (ReservedNames.isHidden symbol))
         |> Seq.groupBy (fun (symbol, _) -> symbol.Name)
         |> Seq.map (fun (_, candidates) ->
             candidates
