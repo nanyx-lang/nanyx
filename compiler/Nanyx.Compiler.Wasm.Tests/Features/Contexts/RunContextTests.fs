@@ -568,3 +568,58 @@ def inside: [Foo] string -> string = { s ->
 println(use Foo(bar = { s -> s ++ "!" }) in inside("ok"))
 """
     runSource source |> assertRan "ok! y!! 2\n"
+
+[<Fact>]
+let ``Run - a lambda calls a member a use loads (#778)`` () =
+    let source =
+        """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def calledInUse = {
+  use Foo(bar = { s -> s ++ "?" })
+  def f = { bar("w") }
+  f()
+}
+
+println(calledInUse())
+"""
+    runSource source |> assertRan "w?\n"
+
+[<Fact>]
+let ``Run - a lambda passed to list.map calls a member a use loads (#778)`` () =
+    let source =
+        """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def mapped = {
+  use Foo(bar = { s -> s ++ "!" })
+  ["a", "b"] \list.map { s -> bar(s) } \list.fold("", { acc, s -> acc ++ s })
+}
+
+println(mapped())
+"""
+    runSource source |> assertRan "a!b!\n"
+
+[<Fact>]
+let ``Run - a nested lambda passes the members a use loads on to a def that requires them (#778)`` () =
+    let source =
+        """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def twice: [Foo] string -> string = { s -> bar(bar(s)) }
+
+def nested = {
+  use Foo(bar = { s -> s ++ "." })
+  def outer = { x ->
+    def inner = { twice(x) }
+    inner()
+  }
+  outer("n")
+}
+
+println(nested())
+"""
+    runSource source |> assertRan "n..\n"

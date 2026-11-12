@@ -2,8 +2,8 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// Walking the module as written, for the rules of the official linter.
-module internal SyntaxTree =
+/// Walking the module as written, for the rules of the official linter and the backend's lambda lifting.
+module SyntaxTree =
     /// The expressions directly within `expr`, and the statements of it if it is a block: a guard's predicate among
     /// them. What types hold is left out: they hold no blocks.
     let childrenOf (expr: Expression) : Expression list * Statement list =
