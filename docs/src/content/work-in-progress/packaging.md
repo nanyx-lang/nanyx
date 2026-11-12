@@ -48,7 +48,8 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 - **A package can be built and run** (`Package.fs`). The manifest's `[package]` table (`name`, `version`,
   `sources`; `public-modules` is accepted but not used) and `[linters]` table are read, with an error naming the
   key for anything wrong or unknown. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
-  directory or manifest) check every source file, and `run` runs the one `@entry`; `build` writes it to
+  directory or manifest) check every source file, each module once however many files import it (`Package.build`,
+  [#698](https://github.com/nanyx-lang/nanyx/issues/698)), and `run` runs the one `@entry`; `build` writes it to
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
   configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, and there is no
   `.nyxproj` or `restore`. The formatter still reads its `[formatter]` table itself.

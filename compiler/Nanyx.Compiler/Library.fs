@@ -31,7 +31,7 @@ type CompileResult =
       Syntax: Module option }
 
 /// A type-checkedModule module together with what an importer needs from it.
-type private CheckedModule =
+type internal CheckedModule =
     { Typed: TypedModule
       /// The errors found checking the module itself. A module with errors is still typed, with what did check,
       /// for the editor's features; it cannot be run or imported.
@@ -952,7 +952,7 @@ module Compiler =
             | TypedExprItem expr -> Some (Expr (lower expr.Expr)))
         |> List.map TopLevelItem.synthetic
 
-    let private originKey (origin: ModuleOrigin) =
+    let internal originKey (origin: ModuleOrigin) =
         match origin with
         | SourceFile fullPath -> fullPath
         | StandardLibraryModule name -> StandardLibrary.importPrefix + name
@@ -968,7 +968,7 @@ module Compiler =
     /// The modules one compilation has checked, by `originKey`, so that a module imported along several paths is
     /// checked once and every importer sees the same symbols; with the package whose files' imports are resolved
     /// through its module table, if the compilation is of a package's file.
-    type private CheckedModules(package: PackageModules option) =
+    type internal CheckedModules(package: PackageModules option) =
         inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
         member _.Package = package
 
@@ -982,7 +982,7 @@ module Compiler =
 
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
     /// error says which phase it came from.
-    let rec private typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
+    let rec internal typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         let resolved =
             parseWithDiagnostics (sourceFileName origin) source
@@ -1418,14 +1418,13 @@ module Compiler =
         | Result.Ok (ast, _, _) -> Ok ast
         | Result.Error err -> Error [ syntaxError err ]
 
-    /// Checks the module from `origin`, its imports resolved through the module table of `package` if it is one of its
-    /// files (see `PackageModules.resolveImport`), then runs the linters `options` names over it if it type-checked. A module
-    /// with type or name errors is typed all the same, with what did check, beside its errors. Only
-    /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
-    /// diagnostics are not repeated in every module that imports it, and the standard library never is (but by tests).
-    let private compileIn (package: PackageModules option) (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        let checkedModules = CheckedModules package
-        match typecheckModule checkedModules origin source Set.empty with
+    /// The compile of the module from `origin`, which `typecheckModule` gave as `checked` with `checkedModules`, the linters
+    /// `options` names run over it if it type-checked. A module with type or name errors is typed all the same, with what did
+    /// check, beside its errors. Only the module being compiled is analyzed: an imported module is analyzed when it is
+    /// compiled itself, so its diagnostics are not repeated in every module that imports it, and the standard library
+    /// never is (but by tests).
+    let internal compileChecked (checkedModules: CheckedModules) (options: LinterOptions) (origin: ModuleOrigin) (source: string) checked : CompileResult =
+        match checked with
         | Result.Error (phase, diagnostics) ->
             { Phase = phase
               Diagnostics = diagnostics
@@ -1473,13 +1472,14 @@ module Compiler =
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax }
 
-    /// `compileIn` for a module in no package.
+    /// The module from `origin`, in no package, checked and compiled (see `compileChecked`).
     let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        compileIn None options origin source
+        let checkedModules = CheckedModules None in compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty)
 
     /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules.
     let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        compileIn (Some package) options (SourceFile (Path.GetFullPath filePath)) source
+        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules (Some package)
+        compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty)
 
     /// `compileFile` with the linters and severities `options` gives.
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =

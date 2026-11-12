@@ -191,8 +191,8 @@ type Package =
       Sources: string list
       Entry: string option }
 
-/// What building a package found: each source file's compile, and every diagnostic once, though a file imported by
-/// another is checked as part of both.
+/// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
+/// for the whole build, though a file imported by another is compiled as part of both.
 type PackageBuild =
     { Package: Package
       Results: (string * CompileResult) list
@@ -287,13 +287,40 @@ module Package =
             | _ -> None
         | _ -> None
 
-    /// Compiles `source` as the source file at `filePath` of the package `modules`: its imports name the package's
-    /// modules, and it must be a named module of its own (see `PackageModules.fileErrors`).
-    let private compileIn (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        let result = Compiler.compileSourceIn modules options filePath source
+    /// `result`, the compile of the source file at `filePath` of the package `modules`, with the errors of a file that
+    /// is not a named module of its own (see `PackageModules.fileErrors`).
+    let private withFileErrors (modules: PackageModules) (filePath: string) (source: string) (result: CompileResult) : CompileResult =
         match PackageModules.fileErrors modules (Path.GetFullPath filePath) source with
         | [] -> result
         | errors -> { result with Diagnostics = errors @ result.Diagnostics; ErrorsDeferred = false }
+
+    /// Compiles `source` as the source file at `filePath` of the package `modules`: its imports name the package's
+    /// modules, and it must be a named module of its own (see `PackageModules.fileErrors`).
+    let private compileIn (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        Compiler.compileSourceIn modules options filePath source |> withFileErrors modules filePath source
+
+    /// Each of `files`, a source file of the package `modules` with its text, compiled as `compileIn` compiles one, but
+    /// with each module checked once (#698). A module that checked, for one file or as an import of one, is not checked
+    /// again for a later file that imports it, nor for its own file. One that failed to check is checked again where it
+    /// is needed, since an import cycle is reported where the file being compiled enters it.
+    let private compileAll (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
+        let checkedOnce = Collections.Generic.Dictionary<string, CheckedModule>()
+        files
+        |> List.map (fun (file, source) ->
+            let origin = SourceFile (Path.GetFullPath file)
+            let key = Compiler.originKey origin
+            let checkedModules = Compiler.CheckedModules (Some modules)
+            for KeyValue(checkedKey, checkedModule) in checkedOnce do
+                checkedModules.[checkedKey] <- Result.Ok checkedModule
+            let checkedModule =
+                match checkedOnce.TryGetValue key with
+                | true, checkedModule -> Result.Ok checkedModule
+                | false, _ -> Compiler.typecheckModule checkedModules origin source Set.empty
+            for KeyValue(checkedKey, result) in Seq.append checkedModules [ Collections.Generic.KeyValuePair(key, checkedModule) ] do
+                match result with
+                | Result.Ok checked -> checkedOnce.TryAdd(checkedKey, checked) |> ignore
+                | Result.Error _ -> ()
+            file, Compiler.compileChecked checkedModules options origin source checkedModule |> withFileErrors modules file source)
 
     /// Compiles `source` as the file at `filePath` (which need not hold it yet: an editor's unsaved buffer, say) with
     /// the linters `options` gives: as a source file of the package it is in, if it is in one, or else on its own.
@@ -305,16 +332,15 @@ module Package =
     /// Checks every source file of `package`, running the linters its manifest turns on over each.
     let build (package: Package) : PackageBuild =
         let modules = modules package
+        let sources = package.Sources |> List.map (fun file -> file, File.ReadAllText file)
         let results =
-            package.Sources
-            |> List.map (fun file ->
-                let source = File.ReadAllText file
-                let result = compileIn modules package.Manifest.Linters file source
+            compileAll modules package.Manifest.Linters sources
+            |> List.map2 (fun (_, source) (file, result) ->
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
                 { result with
                     Diagnostics = directives @ result.Diagnostics
-                    ErrorsDeferred = result.ErrorsDeferred && directives.IsEmpty })
+                    ErrorsDeferred = result.ErrorsDeferred && directives.IsEmpty }) sources
         // A file's errors are deferred when it did not type-check and each of its errors was placed; a linter rule
         // configured as an error, in a file that did type-check, is not deferred.
         let deferred (result: CompileResult) =
