@@ -574,6 +574,16 @@ export def __pow: [Num(a)] a, int -> a = { base, exponent ->
     else powOnto(base, exponent, fromInt(1))
 }
 
+--| What `f >> g` is: the function that applies `f`, and then `g` to what `f` returns.
+export def __composeForward: [c] ([c] a -> b), ([c] b -> d) -> [c] a -> d = { f, g ->
+  { x -> g(f(x)) }
+}
+
+--| What `g << f` is: the same function as `f >> g`.
+export def __composeBackward: [c] ([c] b -> d), ([c] a -> b) -> [c] a -> d = { g, f ->
+  { x -> g(f(x)) }
+}
+
 --| `base ** exponent`, as a function that can be passed around.
 export def pow: [Num(a)] a, int -> a = { base, exponent ->
   base ** exponent

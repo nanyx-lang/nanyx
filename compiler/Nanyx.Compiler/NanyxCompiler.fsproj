@@ -47,6 +47,7 @@
     <Compile Include="NumericLiterals.fs" />
     <Compile Include="ArithmeticOperators.fs" />
     <Compile Include="AppendOperator.fs" />
+    <Compile Include="CompositionOperators.fs" />
     <Compile Include="ContextShapes.fs" />
     <Compile Include="ContextInference.fs" />
     <Compile Include="ArithmeticInference.fs" />
@@ -75,6 +76,7 @@
     <Compile Include="ExpressionRewrites.fs" />
     <Compile Include="BuiltinTypeNames.fs" />
     <Compile Include="FileImports.fs" />
+    <Compile Include="PackageModules.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />

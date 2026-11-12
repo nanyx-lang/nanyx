@@ -50,16 +50,24 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
   key for anything wrong or unknown. `nanyx build`, `nanyx check` and `nanyx run` without a file (or with a
   directory or manifest) check every source file, and `run` runs the one `@entry`; `build` writes it to
   `out/<name>.wat`. `nanyx new` makes a package (`NewPackage.fs`). The language server reads the manifest's linter
-  configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, source files need not
-  be named modules yet, and there is no `.nyxproj` or `restore`.
-  The formatter still reads its `[formatter]` table itself.
-- **Imports resolve two ways only** (`resolveImportPath` and `StandardLibrary.tryModuleName` in `Library.fs`).
-  A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file, with `.` and `/` treated
-  alike. A name starting `nanyx/` comes from the standard library embedded in the compiler. There are no search
-  paths, and a module's declared name is not checked against the name it was imported by. An import by file path
-  must have an alias (`NYX0014`) and must name a script module, not one that declares `module name` (`NYX0015`),
-  and no import may name an entrypoint, a file with top-level statements (`NYX0016`), as the
-  [modules page](../tour/modules#importing-modules-by-file-path) says (`FileImports.fs`).
+  configuration too. `[dependencies]` and `[project-references]` are refused when non-empty, and there is no
+  `.nyxproj` or `restore`. The formatter still reads its `[formatter]` table itself.
+- **A package's imports go through its module table** (`PackageModules.fs`). Every source file the manifest
+  selects is keyed by the module name it declares (`PackageModules.ofFiles`), and in those files `import greetings`
+  and `import acme.web/greetings` both reach the file that declares `module greetings`, wherever it is
+  (`PackageModules.resolveImport`). An unknown module is `NYX0003`, naming the package, the file named for the module
+  if it declares another name, or close names. A source file must declare a module name and have no top-level
+  statements (`NYX0017`), and no two may declare the same module (`NYX0018`). `Package.build`, a single file of a
+  package compiled with `nanyx run`/`check`, and the language server (`Package.compileSourceWith`) all resolve this
+  way. The table maps each name to a list of files, so partial modules
+  ([#949](https://github.com/nanyx-lang/nanyx/issues/949)) can give a name several.
+- **Outside a package, imports resolve two ways only** (`FileImports.resolvePath` and
+  `StandardLibrary.tryModuleName`). A module import `a.b/c` becomes the file `a/b/c.nyx` next to the importing file,
+  with `.` and `/` treated alike. A name starting `nanyx/` comes from the standard library embedded in the compiler.
+  There are no search paths, and a module's declared name is not checked against the name it was imported by. An
+  import by file path, in a package or not, must have an alias (`NYX0014`) and must name a script module, not one
+  that declares `module name` (`NYX0015`), and no import may name an entrypoint, a file with top-level statements
+  (`NYX0016`), as the [modules page](../tour/modules#importing-modules-by-file-path) says (`FileImports.fs`).
 - **The parser accepts only part of the documented import syntax.** `import x as m` and grouped imports work;
   `as (a, b)`, `as m & (a, b)` and re-exports (`export collections.list (map, filter)`) do not parse.
 - **A program compiles to one WebAssembly module.** Imported modules are type-checked separately and their items
@@ -210,9 +218,8 @@ cached source read-only.
 
 _To do._ Candidate items, not yet filed, roughly in order. Each produces something usable on its own:
 
-1. **Imports by module name within a package.** Read `.nyxp` (`name`, `version`, `sources`,
-   `public-modules`), require named modules, check a module's declared name against its import, and resolve
-   `package/module` names through the manifest instead of the file system.
+1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)) but
+   for `public-modules`, which only matters once another package can import this one.
 2. **The rest of the import syntax.** `as (a, b)`, `as m & (a, b)` and re-exports, which `public-modules` relies
    on (compilation workstream).
 3. **Local dependencies and projects.** `.nyxproj`, project references and path dependencies; one version per

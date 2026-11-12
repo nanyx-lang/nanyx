@@ -45,6 +45,15 @@ import (
 
 The `/` separates the package name from the module name. Dots within a module name are part of that module's name and can be used to organize modules hierarchically.
 
+Inside the package, a module is imported by its name alone, or with the package's name as well:
+
+```nanyx fragment
+import json.deserialization
+import acme.web/http
+```
+
+A module is found by the name its file declares, not by where the file is: `json.deserialization` could as well be declared in `src/parsing.nyx`. Two files of a package cannot declare the same module.
+
 # Package manifests
 
 Every package has a `.nyxp` manifest written in TOML.
@@ -87,7 +96,7 @@ If `sources` is omitted, it defaults to:
 
 All source files included in a package must contain named modules.
 
-An anonymous module is therefore a compilation error when encountered during a package build. Anonymous modules are intended for script mode and file-path imports rather than inclusion in normal packages.
+An anonymous module is therefore a compilation error when encountered during a package build, and so is a source file with top-level statements: a package's code runs from its `@entry`. Anonymous modules are intended for script mode and file-path imports rather than inclusion in normal packages.
 
 # Package dependencies
 

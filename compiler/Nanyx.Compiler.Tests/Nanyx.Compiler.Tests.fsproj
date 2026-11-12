@@ -12,6 +12,7 @@
   <ItemGroup>
     <Compile Include="TestSupport.fs" />
     <Compile Include="Features\Arithmetic\ArithmeticTests.fs" />
+    <Compile Include="Features\Operators\OperatorTests.fs" />
     <Compile Include="Features\Arithmetic\ComparisonLiteralTests.fs" />
     <Compile Include="Features\Arithmetic\SizedIntegerTests.fs" />
     <Compile Include="Features\Arithmetic\F32Tests.fs" />
@@ -46,6 +47,7 @@
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
     <Compile Include="Features\Imports\NameSuggestionTests.fs" />
+    <Compile Include="Features\Imports\PackageImportTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
     <Compile Include="Features\Inference\InferenceTests.fs" />
     <Compile Include="Features\Inference\TypedAstTests.fs" />

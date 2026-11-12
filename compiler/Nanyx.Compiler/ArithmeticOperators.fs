@@ -189,5 +189,4 @@ module internal ArithmeticOperators =
         (left: Expression)
         (right: Expression)
         : Result<TypedExpr * InferState, Diagnostic list> =
-        let call = { expr with Kind = FunctionCall(powerFunction, None, [ left; right ]) }
-        infer state call |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add call.Id call })
+        inferAsCall infer state expr powerFunction [ left; right ]

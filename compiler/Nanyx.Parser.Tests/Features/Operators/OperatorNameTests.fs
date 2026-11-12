@@ -15,6 +15,16 @@ let ``A definition can be named by an operator in backticks`` () =
     | [ Def (ValueDef (_, "<+>", None, Kind (Lambda _))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
+[<Theory>]
+[<InlineData("def `+++` = { a, b -> a }", "`+++` = { a, b -> a }", "+++")>]
+[<InlineData("def $Money.`<=>` = { a, b -> a }", "`<=>` = { a, b -> a }", "<=>")>]
+[<InlineData("def f = {\n  def `!` = { a -> a }\n  1\n}", "`!` = { a -> a }", "!")>]
+[<InlineData("def f = {\n  rec `**!` = { a -> a }\n  1\n}", "`**!` = { a -> a }", "**!")>]
+let ``An operator Nanyx does not have cannot be defined`` (source: string) (at: string) (operator: string) =
+    let reported, text = parseErrorOf source
+    Assert.Contains($"`{operator}` is not one of Nanyx's operators, so it cannot be defined. The operators are `**`, `*`", reported)
+    Assert.Equal(at, text)
+
 [<Fact>]
 let ``An operator can be attached to a type`` () =
     match parsed "def Point.`==`: Point, Point -> bool = { p, q -> true }" with
@@ -26,8 +36,8 @@ let ``An operator can be attached to a type`` () =
 
 [<Fact>]
 let ``A local definition can be named by an operator`` () =
-    match parsed "def f = {\n  def `++++` = { a, b -> a }\n  `++++`(1, 2)\n}" with
-    | [ Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "++++", _, _)); Kind (ExprStatement (Kind (FunctionCall ("++++", _, _)))) ]), _)))) ] -> ()
+    match parsed "def f = {\n  def `<*>` = { a, b -> a }\n  `<*>`(1, 2)\n}" with
+    | [ Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (DefStatement (_, "<*>", _, _)); Kind (ExprStatement (Kind (FunctionCall ("<*>", _, _)))) ]), _)))) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

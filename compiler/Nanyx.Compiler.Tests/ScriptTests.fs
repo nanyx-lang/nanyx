@@ -99,7 +99,7 @@ let ``A directive in a file of a package is an error saying to use the manifest`
     let manifest = Path.Combine(root, "demo.nyxp")
     File.WriteAllText(manifest, "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n")
     let main = Path.Combine(root, "main.nyx")
-    File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\n" + unusedBinding)
+    File.WriteAllText(main, "::linters.default.unusedBindings = \"error\"\nmodule main\n\n" + unusedBinding)
     try
         let directives = Script.read main (File.ReadAllText main)
         Assert.Equal(None, directives.Linters)

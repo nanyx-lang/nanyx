@@ -177,14 +177,15 @@ public sealed class DocumentStore
 
     private OpenDocument Compile(DocumentUri uri, string text)
     {
-        // A file on disk gets its imports resolved relative to itself; anything else (an untitled buffer, say)
-        // can still import the standard library. The compiler names a file by its full path.
+        // A file on disk gets its imports resolved through its package's modules if it is a source file of one, or
+        // else relative to itself; anything else (an untitled buffer, say) can still import the standard library.
+        // The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : null;
         try
         {
             var directives = Script.read(path ?? string.Empty, text);
             var linters = _settings.LinterOptionsFor(path, directives);
-            var result = path is null ? Compiler.compileWith(linters, text) : Compiler.compileSourceWith(linters, path, text);
+            var result = path is null ? Compiler.compileWith(linters, text) : PackageModule.compileSourceWith(linters, path, text);
             return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null);
         }
         catch (Exception ex)

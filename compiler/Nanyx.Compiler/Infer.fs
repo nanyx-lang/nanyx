@@ -577,6 +577,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | Lambda(args, body, _) ->
         inferLambdaWithExpected env state expr args body None None
     | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
+    | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
+        inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
     | BinaryOp(_, _, left, right) ->
         match inferExpr env state left with
         | Error err -> Error err
@@ -631,6 +633,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     // Both operands are already unified with each other; pin them to bool.
                     let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
                     Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)
+                // A spare operator (`^`, `<>`, ...) means only what a definition of it gives it.
+                | BinaryOp(op, opSpan, _, _) ->
+                    let operandTy = Unifier.tyToString (resolveSoFar nextState leftExpr.Type)
+                    let message =
+                        $"`{op}` has no built-in meaning, and `{operandTy}` has no `{op}` attached. A type gets one by attaching it: def $Money.`{op}` = ..."
+                    Error [ Diagnostics.at DiagnosticCodes.UnknownFunction (opSpan |> Option.defaultValue expr.Span) message ]
                 | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
     | Pipe(value, name, spanOpt, args) ->
         match inferExpr env state value with

@@ -67,12 +67,69 @@ let ``keyword operators do not swallow identifiers that start with them`` () =
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
+/// The value of the one def in `source`, which must parse.
+let private valueOf (source: string) =
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, _, value))) ] -> value.Kind
+    | other -> failwith $"Unexpected parse: %A{other}"
+
 [<Fact>]
-let ``&& and || are aliases for and and or`` () =
-    match parseModule "def x = a && b || c" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (BinaryOp ("or", _, Kind (BinaryOp ("and", _, _, _)), _))))) ] -> ()
-    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
-    | Result.Error err -> failwith $"Parse failed: {err}"
+let ``composition binds looser than concatenation and tighter than comparison`` () =
+    match valueOf "def x = f >> g == h" with
+    | BinaryOp ("==", _, Kind (BinaryOp (">>", _, _, _)), Kind (IdentifierExpr "h")) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+    match valueOf "def x = a ++ b >> c" with
+    | BinaryOp (">>", _, Kind (BinaryOp ("++", _, _, _)), Kind (IdentifierExpr "c")) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``>> groups to the left and << to the right`` () =
+    match valueOf "def x = f >> g >> h" with
+    | BinaryOp (">>", _, Kind (BinaryOp (">>", _, _, _)), Kind (IdentifierExpr "h")) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+    match valueOf "def x = f << g << h" with
+    | BinaryOp ("<<", _, Kind (IdentifierExpr "f"), Kind (BinaryOp ("<<", _, _, _))) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Theory>]
+[<InlineData("^", "+")>]
+[<InlineData("<*>", "+")>]
+[<InlineData("<+>", "++")>]
+[<InlineData("<>", ">>")>]
+[<InlineData("~", "==")>]
+[<InlineData(">>=", "and")>]
+[<InlineData("=<<", "and")>]
+let ``a spare operator binds tighter than the operator it is listed above`` (spare: string) (looser: string) =
+    match valueOf $"def x = a {spare} b {looser} c" with
+    | BinaryOp (outer, _, Kind (BinaryOp (inner, _, _, _)), Kind (IdentifierExpr "c")) when outer = looser && inner = spare -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Theory>]
+[<InlineData("def x = a < b < c", "< c", "Comparisons do not chain: write `a < b and b < c`")>]
+[<InlineData("def x = a == b != c", "!= c", "Comparisons do not chain: write `a == b and b != c`")>]
+[<InlineData("def x = {\n  a <= b >= c\n}", ">= c", "Comparisons do not chain: write `a <= b and b >= c`")>]
+[<InlineData("def x = f >> g << h", "<< h", "`>>` and `<<` cannot be written side by side")>]
+[<InlineData("def x = a..b..c", "..c", "`..` and `..` cannot be written side by side")>]
+let ``operators that do not group cannot be written side by side`` (source: string) (at: string) (message: string) =
+    let reported, text = parseErrorOf source
+    Assert.Contains(message, reported)
+    Assert.Equal(at, text)
+
+[<Fact>]
+let ``comparisons in parentheses are not a chain`` () =
+    match valueOf "def x = (a < b) == c" with
+    | BinaryOp ("==", _, Kind (BinaryOp ("<", _, _, _)), Kind (IdentifierExpr "c")) -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Theory>]
+[<InlineData("def x = a && b", "&& b", "`&&` is not an operator in Nanyx: write `and`")>]
+[<InlineData("def x = {\n  a || b\n}", "|| b", "`||` is not an operator in Nanyx: write `or`")>]
+[<InlineData("def x = !a", "!a", "There is no prefix `!` in Nanyx: logical not is the keyword `not`")>]
+[<InlineData("def x = {\n  f(!a)\n}", "!a)", "There is no prefix `!` in Nanyx")>]
+let ``&&, || and prefix ! are reported as what to write instead`` (source: string) (at: string) (message: string) =
+    let reported, text = parseErrorOf source
+    Assert.Contains(message, reported)
+    Assert.Equal(at, text)
 
 [<Fact>]
 let ``++ shorthand lambda is the two-argument concatenation`` () =
@@ -238,7 +295,7 @@ let ``or after a call at the start of a block statement is the operator`` () =
 
 [<Fact>]
 let ``and binds tighter than or and looser than comparison in a block statement`` () =
-    match blockStatementOf "def b = { x ->\n  x == 1 and f(x) or g(x) && not h(x) || x % 2 == 0\n}\n" with
+    match blockStatementOf "def b = { x ->\n  x == 1 and f(x) or g(x) and not h(x) or x % 2 == 0\n}\n" with
     | BinaryOp ("or", _,
                 Kind (BinaryOp ("or", _,
                                 Kind (BinaryOp ("and", _, Kind (BinaryOp ("==", _, _, _)), Kind (FunctionCall ("f", _, _)))),

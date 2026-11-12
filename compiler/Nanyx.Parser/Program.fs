@@ -352,12 +352,6 @@ type Operand = Expression * SourceSpan
 // Operator precedence parser
 let opp = new OperatorPrecedenceParser<Operand, SourceSpan, ParseState>()
 
-/// What follows an operator's text: `after`, and then the span of the operator itself, which ends where `after` starts.
-/// Every operator is written on one line, so it starts `op.Length` characters before that.
-let private operatorSpan (op: string) (after: Parser<unit, ParseState>) : Parser<SourceSpan, ParseState> =
-    getPosition .>> after |>> fun opEnd ->
-        let length = int64 op.Length
-        spanOf (Position(opEnd.StreamName, opEnd.Index - length, opEnd.Line, opEnd.Column - length)) (int opEnd.Index)
 
 let private binary op (opSpan: SourceSpan) ((left, leftText): Operand) ((right, rightText): Operand) : Operand =
     let span = SourceSpan.between leftText rightText
@@ -792,35 +786,18 @@ let private prefixed (prefix: Parser<Identifier * SourceSpan, ParseState>) : Par
             let span = SourceSpan.between prefixSpan innerText
             Expression.at span (FunctionCall(builtIn, None, [ inner ])), span) prefixes term)
 
-let private operand : Parser<Operand, ParseState> = prefixed (notKeyword <|> minus)
+let private operand : Parser<Operand, ParseState> = prefixed (notKeyword <|> minus <|> bang) .>> symbolicBoolean
 
 opp.TermParser <- operand
 
-// `-` must not take the start of a `->` (as in `for 1..2 -> ...`) or of a `--` comment.
-let private minusEnd = notFollowedBy (anyOf ">-")
-
-/// Adds every operator in `binaryOperators` to `table`, each taking `space` after it. A keyword operator must not
-/// swallow the start of an identifier such as `order` or `android`.
-let private addBinaryOperators (table: OperatorPrecedenceParser<Operand, SourceSpan, ParseState>) (space: Parser<unit, ParseState>) =
-    for op in binaryOperators do
-        let operatorEnd =
-            if Char.IsLetter op.Text[0] then keywordEnd
-            elif op.Text = "-" then minusEnd
-            else preturn ()
-        let associativity =
-            match op.Associativity with
-            | LeftAssociative -> Associativity.Left
-            | RightAssociative -> Associativity.Right
-        table.AddOperator(InfixOperator(op.Text, operatorSpan op.Text (operatorEnd >>. space), op.Precedence, associativity, (), binary op.Name))
-
-addBinaryOperators opp ws
+addBinaryOperators opp ws binary
 
 // A bounded range `a..b` (see the ranges page) is represented as a call to the built-in "__range". It binds
 // looser than arithmetic, so `n - 1..n + 1` is `(n - 1)..(n + 1)`. `...` is list spread, not a range. A `..` with
 // nothing after it on its line but the rest of an enclosing construct is the unbounded `a..` (see `withOpenRange`).
 let private rangeHasEnd =
     notFollowedBy (wsInline >>. (skipNewline <|> eof <|> skipAnyOf "|)]},\\" <|> skipString "->" <|> skipString "--"))
-opp.AddOperator(InfixOperator("..", operatorSpan ".." (notFollowedBy (pchar '.') >>. rangeHasEnd >>. ws), 4, Associativity.Left, (), fun _ (x, xText) (y, yText) ->
+opp.AddOperator(InfixOperator("..", operatorSpan ".." (notFollowedBy (pchar '.') >>. rangeHasEnd >>. ws), rangePrecedence, Associativity.None, (), fun _ (x, xText) (y, yText) ->
     let span = SourceSpan.between xText yText
     Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ x; y ])), span))
 
@@ -858,9 +835,9 @@ let private pipeTarget =
 let oppInline = new OperatorPrecedenceParser<Operand, SourceSpan, ParseState>()
 let private notKeywordInline =
     attempt (withSpan (pstring "not" .>> keywordEnd)) .>> wsInline |>> fun (_, span) -> NotSyntax.builtIn, span
-oppInline.TermParser <- prefixed (notKeywordInline <|> minus)
+oppInline.TermParser <- prefixed (notKeywordInline <|> minus <|> bang) .>> symbolicBoolean
 
-addBinaryOperators oppInline wsInline
+addBinaryOperators oppInline wsInline binary
 
 /// `expr \f \g(a)`: each pipe spans from the start of `expr`'s text to the end of its own target.
 let private applyPipes (value: Operand) pipes =
@@ -899,7 +876,7 @@ let private withOpenRange (valueParser: Parser<Operand, ParseState>) : Parser<Op
 let pipeExpr =
     let pipeOp = pipeLeadingWs >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
     pipe2
-        (withOpenRange opp.ExpressionParser)
+        (withOpenRange (reportingConflicts opp))
         (many (attempt (pipeOp .>> wsInline)))
         applyPipes
     |> withExcept pipeLeadingWs
@@ -911,7 +888,7 @@ let inlinePipeExpr =
     currentLineIndent >>= fun lineIndent ->
         let pipeOp = continuationWs lineIndent >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
         pipe2
-            oppInline.ExpressionParser
+            (reportingConflicts oppInline)
             (many (attempt (pipeOp .>> wsInline)))
             applyPipes
         |> withExcept (continuationWs lineIndent)
@@ -1008,9 +985,13 @@ do
     // `{ }`, possibly spanning lines, is a lambda that does nothing
     let emptyLambda = skipMany (skipAnyOf " \t\r\n") >>. followedBy (pstring "}") >>% fun span -> Lambda([], Expression.at span UnitExpr, false)
 
-    // The infix operators written with operator characters (see the operators page of the docs), longer ones before
-    // the shorter ones they start with.
-    let shorthandOperators = [ "++"; "+"; "-"; "**"; "*"; "/"; "%"; "<="; ">="; "<"; ">"; "=="; "!=" ]
+    // The infix operators written with operator characters (see `binaryOperators`), longer ones before the shorter
+    // ones they start with.
+    let shorthandOperators =
+        binaryOperators
+        |> List.map _.Text
+        |> List.filter (fun text -> not (Char.IsLetter text[0]))
+        |> List.sortByDescending _.Length
     let shorthandOperator =
         notFollowedBy (pstring "->" <|> pstring "--")
         >>. choice (shorthandOperators |> List.map pstring)
@@ -1149,7 +1130,8 @@ do
         getPosition >>= fun lineStart ->
             (pstring "rec" >>. keywordEnd >>. ws >>. getPosition .>>. defNameAndType lineStart.Column typedQualifiedIdentifier)
             >>= fun (start, (name, typeOpt)) ->
-                defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsNoNl() >>. defExprParser
+                definableName start name
+                >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsNoNl() >>. defExprParser
                 >>= fun expr ->
                     let value = Expression.from expr (FunctionCall("__rec", None, [ expr ]))
                     declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)

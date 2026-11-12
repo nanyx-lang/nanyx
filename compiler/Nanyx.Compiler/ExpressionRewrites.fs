@@ -109,7 +109,8 @@ module internal ExpressionRewrites =
     /// one: `0` in `x + 0` becomes `zero`, `x ** n` becomes `__pow(x, n)` (see `ArithmeticOperators`), and a call of a
     /// map, `m(k)`, becomes `map.get(m, k)` (see `Maps`). A call an operator is read as takes the operands as they are
     /// rewritten, since one may be read as another too, and so does a call that a call is read as with the callee
-    /// first: the map's lookup takes the call's arguments as they are rewritten.
+    /// first: the map's lookup takes the call's arguments as they are rewritten. A call that is already what it is read as
+    /// keeps its arguments as they are rewritten: `(x ** 2) ** 3`.
     let writeAsRead (readAs: Map<NodeId, Expression>) (expr: Expression) : Expression =
         if readAs.IsEmpty then
             expr
@@ -118,6 +119,9 @@ module internal ExpressionRewrites =
             |> mapExpressionKinds (fun current kind ->
                 match kind, readAs |> Map.tryFind current.Id with
                 | BinaryOp(_, _, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
+                // The typed tree can hold the call already, as it does in a top-level def's value: it keeps its arguments
+                // as they are rewritten, rather than becoming the call as first read, whose operands are not.
+                | FunctionCall(name, _, args), Some { Kind = FunctionCall(callee, _, readArgs) } when name = callee && args.Length = readArgs.Length -> kind
                 | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, receiver :: readArgs) } when readArgs.Length = args.Length ->
                     FunctionCall(callee, span, receiver :: args)
                 | _, Some read -> read.Kind

@@ -21,6 +21,19 @@ let withTempDir (action: string -> unit) =
         if Directory.Exists dir then
             Directory.Delete(dir, true)
 
+/// A new directory holding `files` (relative path, contents), deleted when disposed: a package, with its manifest.
+type TempPackage(files: (string * string) list) =
+    let root = Path.Combine(Path.GetTempPath(), "nanyx-package-" + Guid.NewGuid().ToString("N"))
+    do
+        for (path, contents) in files do
+            let full = Path.Combine(root, path)
+            Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
+            File.WriteAllText(full, contents)
+    member _.Root = root
+    member _.Path(relative: string) = Path.Combine(root, relative)
+    interface IDisposable with
+        member _.Dispose() = try Directory.Delete(root, true) with _ -> ()
+
 let compileImporting (moduleSource: string) (mainSource: string) =
     let mutable result = Unchecked.defaultof<CompileResult>
     withTempDir (fun dir ->

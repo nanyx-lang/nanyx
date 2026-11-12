@@ -9,16 +9,39 @@ open Parser.Program
 module FileImports =
     let private identifier = Regex(@"^[A-Za-z_][A-Za-z0-9_]*$")
 
-    /// The name a file declares with `module name`, if it does. The parser writes each `module name =` block as a
-    /// module declaration too (see `expandMidFileModules`), at the block's span, so those are left out: a script that
-    /// holds a block is still a script.
-    let declaredName (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) : string option =
+    /// The name a file declares with `module name`, if it does, with the span of the declaration. The parser writes
+    /// each `module name =` block as a module declaration too (see `expandMidFileModules`), at the block's span, so
+    /// those are left out: a script that holds a block is still a script.
+    let declaration (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) : (string * SourceSpan) option =
         let isBlock (span: SourceSpan) = moduleBlocks |> List.exists (fun (_, block) -> block.Start = span.Start)
         module'
         |> List.tryPick (fun item ->
             match item.Kind with
-            | ModuleDecl name when not (isBlock item.Span) -> Some name
+            | ModuleDecl name when not (isBlock item.Span) -> Some (name, item.Span)
             | _ -> None)
+
+    /// The name a file declares with `module name`, if it does (see `declaration`).
+    let declaredName (moduleBlocks: (ModuleName * SourceSpan) list) (module': Module) : string option =
+        declaration moduleBlocks module' |> Option.map fst
+
+    /// The full path of the file `item` imports, from the directory `baseDir` of the importing file: a file path as
+    /// written, or a module import `a.b/c` as the file `a/b/c.nyx`.
+    let resolvePath (baseDir: string) (item: ImportItem) : Result<string, Diagnostic> =
+        let rawPath =
+            match item.Source with
+            | PathImport path ->
+                if Path.IsPathRooted path then path else Path.Combine(baseDir, path)
+            | ModuleImport name ->
+                let relative =
+                    name.Replace(".", string Path.DirectorySeparatorChar)
+                        .Replace("/", string Path.DirectorySeparatorChar)
+                Path.Combine(baseDir, relative + ".nyx")
+        let fullPath =
+            if Path.GetExtension rawPath = "" then rawPath + ".nyx" else rawPath
+        if File.Exists fullPath then
+            Ok (Path.GetFullPath fullPath)
+        else
+            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {rawPath}")
 
     /// The error for a file-path import with no alias, which would bring the file's exports in unqualified.
     let missingAlias (item: ImportItem) : Diagnostic option =

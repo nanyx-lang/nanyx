@@ -58,7 +58,7 @@ module NameSuggestions =
             scored |> List.filter (fun (_, d) -> d = best) |> List.map fst |> List.sort |> List.truncate 3
 
     /// `suggestions` as the end of a message: ": did you mean 'a'?", ": did you mean 'a' or 'b'?"; empty for none.
-    let private question (suggestions: string list) =
+    let internal question (suggestions: string list) =
         match suggestions with
         | [] -> ""
         | _ ->

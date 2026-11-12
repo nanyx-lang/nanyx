@@ -530,6 +530,12 @@ let internal instantiate (state: InferState) (scheme: TypeScheme) : Ty * InferSt
 let internal mkTypedExpr expr ty body statements matchArms : TypedExpr =
     { Expr = expr; Type = ty; Body = body; Statements = statements; MatchArms = matchArms; Arguments = None }
 
+/// `expr` inferred by `infer` as the call of `callee` with `args` that it is read as, and recorded in `ReadAs` to be
+/// written as it: `x ** n` is `__pow(x, n)`. The call keeps the node of `expr`, which its types are recorded by.
+let internal inferAsCall (infer: InferState -> Expression -> Result<'Typed * InferState, 'Error>) (state: InferState) (expr: Expression) (callee: Identifier) (args: Expression list) =
+    let call = { expr with Kind = FunctionCall(callee, None, args) }
+    infer state call |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add call.Id call })
+
 /// The fields of a record type, looking through aliases and a nominal wrapper.
 let internal recordFieldsOf (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
