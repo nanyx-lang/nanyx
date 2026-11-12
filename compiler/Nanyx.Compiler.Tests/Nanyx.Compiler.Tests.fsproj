@@ -4,6 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <WarningsAsErrors>0025</WarningsAsErrors>
+    <!-- Each compile allocates gigabytes, so tests running in parallel wait on one another's collections under the
+         workstation collector (#706). -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
