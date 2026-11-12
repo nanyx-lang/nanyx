@@ -1108,13 +1108,15 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match missingWitnesses with
                 | None -> []
                 | Some witnesses ->
-                    match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
-                    | [ index, witness ] ->
-                        let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}" ]
-                    | _ ->
-                        let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
-                        [ Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}" ]
+                    let diagnostic =
+                        match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
+                        | [ index, witness ] ->
+                            let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
+                            Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}"
+                        | _ ->
+                            let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
+                            Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}"
+                    [ { diagnostic with Fixes = MatchArmFixes.unplaced arms (PatternSpace.missingArms (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some)) } ]
             // A tag that an earlier arm handles in full (its payload and every other position are catch-alls)
             // cannot reach a later arm, so a name bound by a catch-all in a later arm has the scrutinee's union
             // without those tags; with only the rest left, it has the rest's type. That is what lets
