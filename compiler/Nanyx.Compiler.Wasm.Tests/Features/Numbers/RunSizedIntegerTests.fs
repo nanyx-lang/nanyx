@@ -52,6 +52,33 @@ def main = {
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "255 7 5000000000 -2\n-9\n1\n2\n4 true\n"
 
+[<Fact>]
+let ``Run - a literal is of the sized type the code around it expects`` () =
+    let source =
+        """
+import nanyx/console
+
+def classify = { (b: U8) ->
+  match b
+  | 0 -> "zero"
+  | 255 -> "max"
+  | _ -> "other"
+}
+
+@entry
+def main = {
+  def small: U8 = 200
+  def huge: U64 = 18_446_744_073_709_551_615
+  def local: I16 = -300
+  def ratio: F32 = 0.1
+  def wide: U32 = 4_000_000_000
+  println("{small} {huge} {local * 2} {classify(255)} {classify(3)} {ratio} {wide > 3_000_000_000}")
+  println("{[1, 2] ++ [3]} {I8.zero} {3_000_000_000 + 1}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n")
+    |> assertRan "200 18446744073709551615 -600 max other 0.1 true\n[1, 2, 3] 0 3000000001\n"
+
 [<Theory>]
 [<InlineData("I8.fromInt(127) + I8.fromInt(1)")>]
 [<InlineData("I16.fromInt(-32768) - I16.fromInt(1)")>]

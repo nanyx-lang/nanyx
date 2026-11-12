@@ -68,12 +68,11 @@ let intLiteralNoWs: Parser<Literal, ParseState> =
     // Just don't allow a SINGLE dot (which would make it a float)
     let notFloat = followedBy (pstring "..") <|> notFollowedBy (pchar '.')
     // Hexadecimal, octal and binary, `0x1F`, are FParsec's.
-    let nonDecimal = followedBy (optional (anyOf "+-") >>. pchar '0' >>. anyOf "xXoObB") >>. pint64
+    let nonDecimal = followedBy (optional (anyOf "+-") >>. pchar '0' >>. anyOf "xXoObB") >>. pint64 |>> bigint
+    // Any number of digits: whether the value fits the literal's type is the type checker's to say.
     let decimal =
-        pipe2 numberSign (digitGroups true) (+) >>= fun text ->
-            match Int64.TryParse(text, Globalization.NumberStyles.AllowLeadingSign, Globalization.CultureInfo.InvariantCulture) with
-            | true, value -> preturn value
-            | false, _ -> fail "The number is too large for an int"
+        pipe2 numberSign (digitGroups true) (+)
+        |>> fun text -> Numerics.BigInteger.Parse(text, Globalization.NumberStyles.AllowLeadingSign, Globalization.CultureInfo.InvariantCulture)
     (attempt nonDecimal <|> decimal) .>> notFloat |>> IntLit
     <?> "integer literal"
 

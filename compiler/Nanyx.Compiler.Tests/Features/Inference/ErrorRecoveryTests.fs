@@ -160,7 +160,7 @@ def main = {
     let result = Compiler.compile source
     Assert.Equal<(string * string * int) list>(
         [ DiagnosticCodes.UnknownFunction.Code, "Unknown function 'missing'", 6
-          DiagnosticCodes.TypeMismatch.Code, "Type mismatch: #some(string) vs int.", 2 ],
+          DiagnosticCodes.TypeMismatch.Code, "Type mismatch: int vs #some(string).", 2 ],
         result.Diagnostics |> List.map (fun diag -> diag.Code, diag.Message, diag.Span.Value.StartLine))
 
 [<Theory>]

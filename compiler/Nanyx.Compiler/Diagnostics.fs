@@ -115,6 +115,7 @@ module DiagnosticCodes =
     let UnboundContextVariable = code 226 "Unbound context variable" Severity.Error
     let ContextsNotAllowed = code 227 "Function requires contexts not allowed here" Severity.Error
     let UnguardedRecursiveAlias = code 228 "Type alias refers to itself outside a tag" Severity.Error
+    let LiteralOutOfRange = code 229 "Literal out of range" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -134,6 +135,7 @@ module DiagnosticCodes =
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
           CellEscapesMemory; UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
+          LiteralOutOfRange
           UnsupportedByBackend ]
 
 module Diagnostics =

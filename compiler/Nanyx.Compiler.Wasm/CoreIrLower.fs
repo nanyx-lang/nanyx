@@ -264,10 +264,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             k value
         match expr.Kind with
         | UnitExpr -> k (mk (Atom AUnit) IrUnit)
-        | LiteralExpr(IntLit value) -> k (mk (Atom(AInt(int64 value))) IrInt)
+        | LiteralExpr(IntLit value) -> k (mk (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (mk (Atom(ABool value)) IrBool)
         | LiteralExpr(StringLit value) -> k (mk (Atom(AString value)) IrString)
-        | LiteralExpr(FloatLit value) -> k (mk (BoxFloat value) IrFloat)
+        | LiteralExpr(FloatLit value) -> k (mk (BoxFloat value) (tyOf expr))
         | IdentifierExpr name ->
             match scope.Vars |> Map.tryFind name with
             | Some var ->
@@ -1195,7 +1195,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     let var = newVar candidate PatternBound valueTy
                     armVars <- armVars |> Map.add name var
                     PBind var
-                | LiteralPattern(IntLit value) -> PInt(int64 value)
+                | LiteralPattern(IntLit value) -> PInt(intBits value)
                 | LiteralPattern(StringLit value) -> PString value
                 // `| { % 2 == 0 } ->`: the predicate is inlined, its parameter a local the value matched here is put
                 // in each time the arm is tested. It sees what is in scope at the match, not what the arm binds.

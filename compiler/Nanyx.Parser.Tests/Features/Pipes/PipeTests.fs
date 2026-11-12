@@ -199,7 +199,7 @@ let ``Parse pipe with literal`` () =
         | Kind (Def (ValueDef (_, name, _, Kind (Pipe (expr, funcName, _, args))))) ->
             name |> should equal "result"
             match expr.Kind with
-            | LiteralExpr (IntLit n) -> n |> should equal 5L
+            | LiteralExpr (IntLit n) -> n |> should equal 5I
             | _ -> failwith "Expected int literal"
             funcName |> should equal "double"
             args |> should haveLength 0

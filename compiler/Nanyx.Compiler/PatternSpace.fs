@@ -116,9 +116,13 @@ module PatternSpace =
         | HNil
         | HCons
 
+    /// Whether `value` is a value an `int` can be, which the ranges of `Ints` are of. A literal past them, of a `U64`,
+    /// is matched as a literal of its own.
+    let private fitsInt (value: bigint) = value >= bigint Int64.MinValue && value <= bigint Int64.MaxValue
+
     let private intOf (expr: Expression) =
         match expr.Kind with
-        | LiteralExpr (IntLit value) -> Some (int64 value)
+        | LiteralExpr (IntLit value) when fitsInt value -> Some (int64 value)
         | _ -> None
 
     /// What `pattern` matches. `certain` says what a pattern the check cannot reason about stands for: nothing when
@@ -130,7 +134,7 @@ module PatternSpace =
         | UnitPattern
         | ElsePattern
         | IdentifierPattern _ -> Any
-        | LiteralPattern (IntLit value) -> Ints(int64 value, int64 value)
+        | LiteralPattern (IntLit value) when fitsInt value -> Ints(int64 value, int64 value)
         | LiteralPattern (BoolLit value) -> Bool value
         | LiteralPattern literal -> Lit literal
         | RangePattern(low, high) ->

@@ -16,6 +16,7 @@
     <Compile Include="Features\Arithmetic\ComparisonLiteralTests.fs" />
     <Compile Include="Features\Arithmetic\SizedIntegerTests.fs" />
     <Compile Include="Features\Arithmetic\F32Tests.fs" />
+    <Compile Include="Features\Arithmetic\NumericLiteralTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attached\BuiltinTypeNameTests.fs" />
     <Compile Include="Features\Attached\PipeLookupTests.fs" />
