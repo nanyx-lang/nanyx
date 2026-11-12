@@ -11,7 +11,7 @@ def sayHello: [Console] () -> () = {
 
 def add: [Sum(int)] int -> int = { x -> x }
 
-def readAndPrint: [Console + FileSystem] string -> () = { filename ->
+def readAndPrint: [Console & FileSystem] string -> () = { filename ->
   println(filename)
 }
 
@@ -27,4 +27,4 @@ def main = {
   println("ok")
 }
 
-context Web = [Console + Logger + Http]
+context Web = [Console & Logger & Http]

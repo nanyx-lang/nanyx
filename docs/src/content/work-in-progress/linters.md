@@ -222,8 +222,11 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > ([#673](https://github.com/nanyx-lang/nanyx/issues/673)): `use X in { ... }`, whose body is a lambda of no
 > arguments rather than a block; it leaves alone a lambda written `{ () -> ... }`, which the tree marks as taking
 > unit. Its ninth is `strayDocComments`
-> ([#719](https://github.com/nanyx-lang/nanyx/issues/719)): a doc comment (`--|`) that documents nothing. The`n> `SemanticModel` carries the module's doc comments, which it parses for again only when a rule asks and the text has
-> a `--|`. The rules for unused and
+> ([#719](https://github.com/nanyx-lang/nanyx/issues/719)): a doc comment (`--|`) that documents nothing. The
+> `SemanticModel` carries the module's doc comments, which it parses for again only when a rule asks and the text has
+> a `--|`. Its tenth is `plusBetweenContexts` ([#645](https://github.com/nanyx-lang/nanyx/issues/645)): a `+` between
+> a function's contexts, which an earlier spec of the language wrote where it now writes `&`. The parser still reads
+> it, and the rule finds it in the module's text between two contexts' spans. The rules for unused and
 > unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:

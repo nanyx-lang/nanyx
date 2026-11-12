@@ -675,18 +675,62 @@ module StrayDocComments =
               Related = []
               Fixes = [ { Title = "Make it an ordinary comment"; Edits = [ { Span = comment.Span; NewText = asOrdinaryComment written } ] } ] })
 
+/// The official linter's `plusBetweenContexts` rule: contexts joined with `+`, as an earlier spec of the language had
+/// it, rather than `&`: `[Eq(a) + Hash(a)]`. The parser still reads `+`, and the rule's fix writes `&`.
+module PlusBetweenContexts =
+    let rule =
+        { Id = "plusBetweenContexts"
+          Title = "Contexts joined with `+`"
+          DefaultSeverity = Severity.Warning
+          Description = "Contexts joined with `+`, as in `[Eq(a) + Hash(a)]`. Join them with `&`: `[Eq(a) & Hash(a)]`." }
+
+    /// The span of each `+` that joins two of `contexts`, as written in `source`.
+    let private plusesBetween (source: string) (contexts: TypeExpr list) : SourceSpan list =
+        contexts
+        |> List.pairwise
+        |> List.choose (fun (left, right) ->
+            if SourceSpan.isNone left.Span || SourceSpan.isNone right.Span || right.Span.Start > source.Length then
+                None
+            else
+                let between = source.Substring(left.Span.End, right.Span.Start - left.Span.End)
+                match between.Trim() with
+                | "+" ->
+                    let plus = left.Span.End + between.IndexOf '+'
+                    Some (TextEdit.spanBetween source left.Span plus (plus + 1))
+                | _ -> None)
+
+    let lint (model: SemanticModel) : Report list =
+        let rec walk (typeExpr: TypeExpr) = typeExpr :: (TypeExpr.children typeExpr |> List.collect walk)
+        let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+        (model.Syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
+        |> List.collect walk
+        |> List.collect (fun typeExpr ->
+            match typeExpr.Kind with
+            | TypeContext contexts
+            | TypeWithContext(contexts, _) -> plusesBetween model.Source contexts
+            | _ -> [])
+        |> List.distinct
+        |> List.sortBy (fun span -> span.Start)
+        |> List.map (fun span ->
+            { Rule = rule.Id
+              Span = span
+              Message = "Join contexts with `&`: `+` is what an earlier spec of the language wrote"
+              Related = []
+              Fixes = [ { Title = "Replace `+` with `&`"; Edits = [ { Span = span; NewText = "&" } ] } ] })
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
         { Name = "default"
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
-              UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule ]
+              UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
+              PlusBetweenContexts.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
-                @ StrayDocComments.lint model }
+                @ StrayDocComments.lint model @ PlusBetweenContexts.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

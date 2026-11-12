@@ -20,7 +20,7 @@ order: 10
   `__map` with the list of the entries as tuples, `__map([(k, v), ...])` (`MapSyntax` in `Nanyx.Parser/Ast.fs`), so the
   type checker and the backend see an ordinary call. Entries and elements in one literal are a parse error. `[]` is
   always the empty list; the empty map is `map.empty`. There is no set literal: `set.fromList([1, 2])`.
-- **Keys need `Eq` and `Hash`.** Every function that looks up a key or an element requires `[Eq(k) + Hash(k)]`, as
+- **Keys need `Eq` and `Hash`.** Every function that looks up a key or an element requires `[Eq(k) & Hash(k)]`, as
   [the equality design](./equality-and-well-known-contexts#hashing) agreed. So a key type that holds a function is an
   error at the literal or the call, and so is a nominal type that attaches `==` without `hash`. The hash is not used
   yet: lookups compare with `==`.

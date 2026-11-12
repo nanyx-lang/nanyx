@@ -43,23 +43,23 @@ export def writeError: string -> () = { text ->
 
 --| Writes `value` to standard output as its `toString` writes it: a string as it is, `print(42)`
   as `42`, `print([1, 2])` as `[1, 2]`.
-export def print: [Console + ToString(a)] a -> () = { value ->
+export def print: [Console & ToString(a)] a -> () = { value ->
   write(toString(value))
 }
 
 --| Writes `value` followed by a line break to standard output, as `print` writes it.
-export def println: [Console + ToString(a)] a -> () = { value ->
+export def println: [Console & ToString(a)] a -> () = { value ->
   write(toString(value))
   write(__nanyx_string_from_byte(10))
 }
 
 --| Writes `value` to standard error, as `print` writes it.
-export def eprint: [Console + ToString(a)] a -> () = { value ->
+export def eprint: [Console & ToString(a)] a -> () = { value ->
   writeError(toString(value))
 }
 
 --| Writes `value` followed by a line break to standard error, as `print` writes it.
-export def eprintln: [Console + ToString(a)] a -> () = { value ->
+export def eprintln: [Console & ToString(a)] a -> () = { value ->
   writeError(toString(value))
   writeError(__nanyx_string_from_byte(10))
 }

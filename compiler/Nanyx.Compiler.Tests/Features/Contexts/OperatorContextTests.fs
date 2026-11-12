@@ -74,9 +74,9 @@ let ``Operators on two type variables require the contexts of each`` () =
 let ``A def that writes two contexts with a member of one name calls each instance's member`` () =
     let source =
         """
-def both: [Add(a) + Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
-def same: [Eq(a) + Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
-def negated: [Add(a) + Add(b)] a, b -> (a, b) = { x, p -> (-x, -p) }
+def both: [Add(a) & Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def same: [Eq(a) & Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
+def negated: [Add(a) & Add(b)] a, b -> (a, b) = { x, p -> (-x, -p) }
 def t = both(1, 2, 1.5, 2.0)
 def u = same(1, 1, "a", "b")
 def v = negated(1, 2.5)
@@ -131,10 +131,10 @@ let ``An operator required by its member is the prelude's context that has it`` 
     let eq = TypeApply("Eq", [ TypeExpr.synthetic (TypeVar "a") ])
     Assert.Equal<TypeExprKind list>([ add ], writtenContexts "def add: [`+`: a, a -> a] = { + }\ndef f = add(1.5, 2.5)\n" "add")
     Assert.Equal<TypeExprKind list>([ add ], writtenContexts "def sub: [`-`: (a, a) -> a] a, a -> a = { x, y -> x - y }\n" "sub")
-    Assert.Equal<TypeExprKind list>([ num ], writtenContexts "def lerp: [`+`: a, a -> a + `*`: a, a -> a] a, a, a -> a = { a, b, t -> a + b * t }\n" "lerp")
-    Assert.Equal<TypeExprKind list>([ add; eq ], writtenContexts "def f: [`+`: a, a -> a + `==`: a, a -> bool] a, a -> a = { x, y -> if x == y then x + x else x }\n" "f")
+    Assert.Equal<TypeExprKind list>([ num ], writtenContexts "def lerp: [`+`: a, a -> a & `*`: a, a -> a] a, a, a -> a = { a, b, t -> a + b * t }\n" "lerp")
+    Assert.Equal<TypeExprKind list>([ add; eq ], writtenContexts "def f: [`+`: a, a -> a & `==`: a, a -> bool] a, a -> a = { x, y -> if x == y then x + x else x }\n" "f")
     // One written both ways is required once.
-    Assert.Equal<TypeExprKind list>([ add ], writtenContexts "def add: [Add(a) + `+`: a, a -> a] a, a -> a = { x, y -> x + y }\n" "add")
+    Assert.Equal<TypeExprKind list>([ add ], writtenContexts "def add: [Add(a) & `+`: a, a -> a] a, a -> a = { x, y -> x + y }\n" "add")
 
 [<Fact>]
 let ``Only an operator of a prelude context, at its member's type, can be required by its member`` () =

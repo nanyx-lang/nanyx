@@ -52,7 +52,7 @@ let ``Run - println passed as a value at a type variable gets the ToString its d
 
 def apply: (a -> ()), a -> () = { f, x -> f(x) }
 
-def show: [ToString(a) + Console] a -> () = { x -> apply(println, x) }
+def show: [ToString(a) & Console] a -> () = { x -> apply(println, x) }
 
 show(5)
 """

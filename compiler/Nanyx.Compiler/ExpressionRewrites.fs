@@ -86,7 +86,7 @@ module internal ExpressionRewrites =
     /// `` $Vector.`+`(x, y) ``, and `-x` becomes `negate(x)`. `x != y` calls what `==` does, and becomes
     /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by. An operator
     /// that calls the member of an instance in scope (`instances`, by the operator's node) calls it through that
-    /// instance, `` Add(a).`+`(x, y) ``, so that a function that requires `[Add(a) + Add(b)]` calls the right one.
+    /// instance, `` Add(a).`+`(x, y) ``, so that a function that requires `[Add(a) & Add(b)]` calls the right one.
     let callOperators (calls: Map<NodeId, Identifier>) (instances: Map<NodeId, TypeExpr>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr

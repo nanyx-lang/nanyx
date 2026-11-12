@@ -7,7 +7,7 @@ open NyxCompiler.InferState
 /// in the docs' work in progress): `` def add: [`+`: a, a -> a] = { + } ``. Such a requirement is not a context of
 /// its own. It is read, before the def is checked, as the prelude's context that has the member, at the type the
 /// member's type is written for, so `add` is `[Add(a)] a, a -> a`, exactly as if its type said `[Add(a)]`. Several on
-/// one type are the contexts `OperatorContexts.covering` gives: `` [`+`: a, a -> a + `*`: a, a -> a] `` is `[Num(a)]`.
+/// one type are the contexts `OperatorContexts.covering` gives: `` [`+`: a, a -> a & `*`: a, a -> a] `` is `[Num(a)]`.
 ///
 /// Only an operator can be required this way, and only a member of one of the prelude's contexts.
 module internal InlineContexts =

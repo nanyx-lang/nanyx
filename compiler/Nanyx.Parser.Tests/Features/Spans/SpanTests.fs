@@ -655,7 +655,7 @@ let ``each type expression spans its text, and nested types span theirs`` () =
     let source =
         "def f: (int, string) -> list(a)? = f\n" +
         "def g: int, int -> int = g\n" +
-        "def h: [Sum(int) + Console] int -> #some(n: int) | #none = h\n" +
+        "def h: [Sum(int) & Console] int -> #some(n: int) | #none = h\n" +
         "type Shape =\n  | #circle(r: float)\n  | #square(side: float)"
     let module' = parse source
     let f = annotationOf "f" module'
@@ -685,7 +685,7 @@ let ``each type expression spans its text, and nested types span theirs`` () =
     | TypeFunc (input, _) -> textOf source input.Span |> should equal "int, int"
     | other -> failwith $"Expected a function, got %A{other}"
     let h = annotationOf "h" module'
-    textOf source h.Span |> should equal "[Sum(int) + Console] int -> #some(n: int) | #none"
+    textOf source h.Span |> should equal "[Sum(int) & Console] int -> #some(n: int) | #none"
     match h.Kind with
     | TypeWithContext ([ sum; console ], inner) ->
         textOf source sum.Span |> should equal "Sum(int)"
