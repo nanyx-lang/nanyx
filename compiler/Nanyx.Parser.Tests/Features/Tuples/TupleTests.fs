@@ -78,7 +78,7 @@ let ``def with a pattern that may not match binds through a one-arm match`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
     // A literal in a tuple pattern takes the same route, and a pattern binding no name is only the match.
     match parseModule "def (1, y) = point" with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit 1L)); Kind (IdentifierPattern "y") ]) ], Kind (IdentifierExpr "y") ])))))
+    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit64 1L)); Kind (IdentifierPattern "y") ]) ], Kind (IdentifierExpr "y") ])))))
                   Kind (Def (ValueDef (_, "y", None, Kind (IdentifierExpr _)))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
@@ -90,7 +90,7 @@ let ``def with a pattern that may not match binds through a one-arm match`` () =
 [<Fact>]
 let ``def with a bare name is an ordinary def, not a destructuring one`` () =
     match parseModule "def x = 1" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", None, Kind (LiteralExpr (IntLit 1L))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", None, Kind (LiteralExpr (IntLit64 1L))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
     match parseModule "def $Money.new: int -> $Money = { pence -> $Money(pence) }" with

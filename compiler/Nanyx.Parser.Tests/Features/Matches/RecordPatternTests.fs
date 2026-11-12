@@ -14,7 +14,7 @@ let private armsOf (source: string) =
 [<Fact>]
 let ``a record pattern by member name may end in ... to leave the other fields out`` () =
     match armsOf "def f = { | (a = 1, ...) -> 1 | (a = 1, b = x , ... ) -> 2 | (a = 1, b = _) -> 3 }" with
-    | [ [ Kind (RecordMemberPattern ([ "a", Kind (LiteralPattern (IntLit 1L)) ], true)) ]
+    | [ [ Kind (RecordMemberPattern ([ "a", Kind (LiteralPattern (IntLit64 1L)) ], true)) ]
         [ Kind (RecordMemberPattern ([ "a", _; "b", Kind (IdentifierPattern "x") ], true)) ]
         [ Kind (RecordMemberPattern ([ "a", _; "b", Kind WildcardPattern ], false)) ] ] -> ()
     | other -> failwith $"Unexpected arms: %A{other}"

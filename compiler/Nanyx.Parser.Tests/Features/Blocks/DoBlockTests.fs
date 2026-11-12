@@ -2,6 +2,7 @@ module ParserTests.Features.DoBlocks
 
 open Xunit
 open Parser.Program
+open ParserTestHelpers
 
 let private parse (source: string) = parseModuleFile "t.nyx" source
 
@@ -11,7 +12,7 @@ let private textOf (source: string) (span: SourceSpan) = source.Substring(span.S
 let ``A do block is a block statement in the block around it`` () =
     let source = "def f = { ->\n  do\n    def x = 1\n    x\n  2\n}\n"
     match parse source with
-    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (ExprStatement (Kind (Block inner) as block)); Kind (ExprStatement (Kind (LiteralExpr (IntLit 2L)))) ]), _))))) ] ->
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([], Kind (Block [ Kind (ExprStatement (Kind (Block inner) as block)); Kind (ExprStatement (Kind (LiteralExpr (IntLit64 2L)))) ]), _))))) ] ->
         Assert.Equal("def x = 1\n    x", textOf source block.Span)
         Assert.Equal(2, inner.Length)
     | other -> Assert.Fail $"Unexpected parse: %A{other}"

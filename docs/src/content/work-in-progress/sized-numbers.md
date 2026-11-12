@@ -7,10 +7,9 @@ order: 6
 > **Status: partly implemented.** `int` is a 64-bit integer in the compiled program, and `+`, `-` and `*` on it stop
 > the program on overflow ([#342](https://github.com/nanyx-lang/nanyx/issues/342)). `I64`, `F64` and `Boolean` are the
 > types `int`, `float` and `bool` name. `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32` are types with the
-> compiler's own `Add` and `Num`, and integer arithmetic stops the program when the result does not fit. Until literals
-> take the expected type, a value of one is made with `fromInt`: `U8.fromInt(200)`, which stops the program when the
-> `int` does not fit an integer type. Literals of the expected type, the wrapping operations and the conversions do not
-> exist yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
+> compiler's own `Add` and `Num`, and integer arithmetic stops the program when the result does not fit. Literals take
+> the expected type, and one that does not fit it is an error. The wrapping operations and the conversions do not exist
+> yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
 `list`. Numbers also come in fixed widths, for binary data, compact records and talking to hosts, as ordinary named
@@ -54,8 +53,22 @@ def big = 3_000_000_000  -- an int
 def ratio: F32 = 0.5     -- an F32
 ```
 
-A literal that does not fit its type is a compile error: `def small: U8 = 300` is rejected.
+A literal that does not fit its type is a compile error: `def small: U8 = 300` is rejected, with
+`'300' does not fit in U8 (0 to 255)`. So is an integer literal past the largest `int` where nothing says otherwise.
 
+An integer literal is only ever of an integer type, and a literal with a decimal point only of a floating-point type:
+`def x: float = 1` is a type error, as in Rust, which says to write `1.0` and has a fix that does. (Settled: the alternative, Swift's, lets `1` be a float wherever one is expected.)
+
+**How the checker does it.** Each number literal's type is a variable of its own while the def it is in is inferred
+(`NumericLiterals.fs`), which the code around it settles: an annotation, a parameter's type, the other operand of an
+operator, a pattern's scrutinee. One that nothing has settled is `int` or `float`:
+
+- **when the def it is in is generalised**, since a literal is not of every type: a local def such as `def n = 5` is an
+  `int`, whatever the code after it does with `n`, as it is in a top-level def;
+- **where a call needs a context of its type**, as `2.0 ** n` needs `Num` of its base: the instance is found there, so the
+  type cannot wait for the rest of the def.
+
+Once every type is known, each literal is checked against its own: its range, or the kind of number it is.
 # Arithmetic
 
 Arithmetic and comparison work on two values of the same type, through the [`Add(a)` and `Num(a)`](../advanced/contexts)

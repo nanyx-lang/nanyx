@@ -1,11 +1,11 @@
-module Nanyx.Compiler.ScriptTests
+module Nanyx.Compiler.Tests.Features.Scripts.Scripts
 
 open System
 open System.IO
 open Xunit
 open NyxCompiler
 
-let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
+let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
 /// Where a script with no package around it is compiled from: a new directory under the temporary directory.
 let private scriptPath () =

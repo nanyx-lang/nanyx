@@ -8,7 +8,7 @@ open ParserTestHelpers
 [<Fact>]
 let ``record update with is a call to __with on the record and the updated fields`` () =
     match parseModule "def older = alice with age = 31, name = \"Al\"" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "older", _, Kind (FunctionCall ("__with", None, [ Kind (IdentifierExpr "alice"); Kind (RecordExpr [ NamedField ("age", Kind (LiteralExpr (IntLit 31L))); NamedField ("name", Kind (LiteralExpr (StringLit "Al"))) ]) ]))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "older", _, Kind (FunctionCall ("__with", None, [ Kind (IdentifierExpr "alice"); Kind (RecordExpr [ NamedField ("age", Kind (LiteralExpr (IntLit64 31L))); NamedField ("name", Kind (LiteralExpr (StringLit "Al"))) ]) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

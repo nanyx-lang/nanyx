@@ -19,8 +19,8 @@ let ``if-matching desugars to a match with a unit wildcard arm`` () =
 let ``if-matching with else uses the else as the wildcard arm`` () =
     match parseModule "def x = if p is (a, 0) then a else 0" with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match ([ Kind (IdentifierExpr "p") ],
-                                                               [ [ Kind (TuplePattern [ Kind (IdentifierPattern "a"); Kind (LiteralPattern (IntLit 0L)) ]) ], Kind (IdentifierExpr "a")
-                                                                 [ Kind WildcardPattern ], Kind (LiteralExpr (IntLit 0L)) ]))))) ] -> ()
+                                                               [ [ Kind (TuplePattern [ Kind (IdentifierPattern "a"); Kind (LiteralPattern (IntLit64 0L)) ]) ], Kind (IdentifierExpr "a")
+                                                                 [ Kind WildcardPattern ], Kind (LiteralExpr (IntLit64 0L)) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -38,8 +38,8 @@ let ``a condition without is stays a plain if, and is must end the keyword`` () 
 [<Fact>]
 let ``multi-branch if desugars to nested ifs ending in the else arm`` () =
     match parseModule "def x = if | a -> 1 | b -> 2 | else -> 3" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (IfExpr (Kind (IdentifierExpr "a"), Kind (LiteralExpr (IntLit 1L)),
-                                                                Kind (IfExpr (Kind (IdentifierExpr "b"), Kind (LiteralExpr (IntLit 2L)), Kind (LiteralExpr (IntLit 3L))))))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (IfExpr (Kind (IdentifierExpr "a"), Kind (LiteralExpr (IntLit64 1L)),
+                                                                Kind (IfExpr (Kind (IdentifierExpr "b"), Kind (LiteralExpr (IntLit64 2L)), Kind (LiteralExpr (IntLit64 3L))))))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -65,8 +65,8 @@ let ``multi-branch if inside a match arm stops at its else arm`` () =
         "  | 0 -> if | a -> 1 | else -> 2\n" +
         "  | _ -> 3\n"
     match parseModule source with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match (_, [ [ Kind (LiteralPattern (IntLit 0L)) ], Kind (IfExpr _)
-                                                                    [ Kind WildcardPattern ], Kind (LiteralExpr (IntLit 3L)) ]))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match (_, [ [ Kind (LiteralPattern (IntLit64 0L)) ], Kind (IfExpr _)
+                                                                    [ Kind WildcardPattern ], Kind (LiteralExpr (IntLit64 3L)) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

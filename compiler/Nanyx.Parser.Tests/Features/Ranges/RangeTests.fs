@@ -25,7 +25,7 @@ let ``for with arms is a call to __for with a pattern lambda, and -> without an 
 [<Fact>]
 let ``a.. with nothing after it is a call to __range with only its start`` () =
     match parseModule "def a = 0..\ndef b = n + 1..\ndef c = 1.. \\take(3)\ndef d = f(0..)" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__range", None, [ Kind (LiteralExpr (IntLit 0L)) ])))))
+    | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__range", None, [ Kind (LiteralExpr (IntLit64 0L)) ])))))
                   Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__range", None, [ Kind (BinaryOp ("+", _, _, _)) ])))))
                   Kind (Def (ValueDef (_, "c", _, Kind (Pipe (Kind (FunctionCall ("__range", None, [ _ ])), "take", _, _)))))
                   Kind (Def (ValueDef (_, "d", _, Kind (FunctionCall ("f", _, [ Kind (FunctionCall ("__range", None, [ _ ])) ]))))) ] -> ()
