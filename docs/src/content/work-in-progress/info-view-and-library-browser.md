@@ -58,7 +58,11 @@ the flow view, and types as trees. `NyxCompiler.InfoView.at` gathers it, `InfoVi
 
 The panel follows the cursor. It shows, from top to bottom:
 
-- **Expression.** The type of the narrowest typed expression at the cursor, as hover shows it.
+- **Expression.** The type of the narrowest typed expression at the cursor, as hover shows it. On a name that refers
+  to a generic def, the def's declared signature comes first, as hover writes the def (`def name: [contexts] type`),
+  then the type at this use, then the bindings of the signature's type variables at this use (`a = string`, and a
+  context variable as the contexts it stands for, `c = Console`), each linking to the def; `Hover.instantiationAt`
+  works them out ([#929](https://github.com/nanyx-lang/nanyx/issues/929)). A def that is not generic shows its type once.
 - **In scope.** The locals, parameters and pattern variables in scope, each with its type, nearest first. Top-level
   and imported names are collapsed by default.
 - **Contexts.** The contexts in scope at the cursor. For each one, where it comes from:

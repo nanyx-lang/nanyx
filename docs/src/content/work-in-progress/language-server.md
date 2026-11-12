@@ -45,7 +45,7 @@ what the compiler keeps: exact spans, resolved names and types.
   as its type is (`[Show(Point)] Point -> string`). A local def that does not write its type shows none, as a generic
   local def has no contexts inferred yet. The module's own defs' contexts are in `TypedModule.ContextTypes`; an imported
   def's, the standard library's among them, are in `ImportedContextTypes` with the def's type, carried over from the
-  module that declares it (both filled in by `RequiredContexts`). A desugared workflow bind or return gets a node id of its own, so the bind as
+  module that declares it with its annotation's variable names (both filled in by `RequiredContexts`). A desugared workflow bind or return gets a node id of its own, so the bind as
   written has no type rather than that of the rest of the workflow. Each document
   is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A file
   that has never parsed shows no hover.
@@ -170,7 +170,9 @@ what the compiler keeps: exact spans, resolved names and types.
   another file is not offered.
 - **The info view** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)), a request of the server's own,
   `nanyx/infoView` (`InfoViewHandler`), with a document and a position. It returns sections of items, each item with
-  its text, a detail and a location to link to: the expression at the position with its type, as hover gives it; the
+  its text, a detail and a location to link to: the expression at the position with its type, as hover gives it, and on
+  a use of a generic def its declared signature (`declared`), its type there (`at this use`) and the bindings of its
+  type variables (`type variables`), each linking to the def; the
   locals, parameters and pattern variables in scope, nearest first; the top-level defs and imports in scope (less the
   standard library's reserved `__` names); the contexts in scope with where each comes from; and the diagnostics on the position's line.
   `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the

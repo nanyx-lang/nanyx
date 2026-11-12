@@ -118,6 +118,150 @@ public sealed partial class LanguageServerTests
         Assert.Equal("n: int", Assert.Single(Section(view, "inScope").Items).Text);
     }
 
+    [Fact]
+    public async Task Info_view_shows_the_signature_of_a_generic_def_beside_its_type_at_the_use()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-6");
+
+        Open(uri, """
+            def pair: a, b -> (a, b) = { x, y -> (x, y) }
+            def first = { x, y -> x }
+            def p = pair("a", #some(1))
+            def f = first(1, "b")
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var annotated = Section(await InfoViewAt(uri, 2, 9), "expression").Items;
+        Assert.Equal(
+            [
+                ("def pair: a, b -> (a, b)", "declared"),
+                ("def pair: string, #some(int) -> (string, #some(int))", "at this use"),
+                ("a = string, b = #some(int)", "type variables")
+            ],
+            annotated.Select(item => (item.Text, item.Detail)));
+        Assert.All(annotated, item => Assert.Equal(new Range(0, 4, 0, 8), item.Location?.Range));
+
+        var inferred = Section(await InfoViewAt(uri, 3, 9), "expression").Items;
+        Assert.Equal(
+            [
+                ("def first: α, β -> α", "declared"),
+                ("def first: int, string -> int", "at this use"),
+                ("α = int, β = string", "type variables")
+            ],
+            inferred.Select(item => (item.Text, item.Detail)));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_a_def_that_is_not_generic_once()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-7");
+
+        Open(uri, """
+            def double: int -> int = { n -> n + n }
+            def four = double(2)
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var expression = Assert.Single(Section(await InfoViewAt(uri, 1, 12), "expression").Items);
+        Assert.Equal(("def double: int -> int", null), (expression.Text, expression.Detail));
+        // The def's own name shows its signature once too.
+        Assert.Single(Section(await InfoViewAt(uri, 0, 5), "expression").Items);
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_signature_of_a_def_with_a_context_variable()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-8");
+
+        Open(uri, """
+            import nanyx/console
+            def apply: [c] ([c] a -> b), a -> b = { f, x -> f(x) }
+            def n = apply({ x -> x + 1 }, 1)
+            def say = { apply({ x -> println(x) }, "hi") }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // A context variable that stands for no contexts is not among the bindings.
+        Assert.Equal(
+            [
+                ("def apply: [c] ([c] a -> b), a -> b", "declared"),
+                ("def apply: (int -> int), int -> int", "at this use"),
+                ("a = int, b = int", "type variables")
+            ],
+            Section(await InfoViewAt(uri, 2, 10), "expression").Items.Select(item => (item.Text, item.Detail)));
+        Assert.Equal(
+            [
+                ("def apply: [c] ([c] a -> b), a -> b", "declared"),
+                ("def apply: [Console] ([Console] string -> ()), string -> ()", "at this use"),
+                ("c = Console, a = string, b = ()", "type variables")
+            ],
+            Section(await InfoViewAt(uri, 3, 14), "expression").Items.Select(item => (item.Text, item.Detail)));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_signature_of_a_def_from_an_imported_module()
+    {
+        var directory = Directory.CreateTempSubdirectory("nanyx-info-view-");
+        try
+        {
+            var modulePath = Path.Combine(directory.FullName, "mod.nyx");
+            File.WriteAllText(modulePath, """
+                module mod
+                export def wrap: a -> #some(a) | #nothing = { x -> #some(x) }
+
+                """.ReplaceLineEndings("\n"));
+            var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory.FullName, "main.nyx"));
+
+            Open(uri, """
+                module main
+                import mod as m
+                def w = m.wrap("hi")
+
+                """.ReplaceLineEndings("\n"));
+            Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+            var items = Section(await InfoViewAt(uri, 2, 11), "expression").Items;
+            Assert.Equal(
+                [
+                    ("def wrap: a -> #some(a) | #nothing", "declared"),
+                    ("def wrap: string -> #some(string) | #nothing", "at this use"),
+                    ("a = string", "type variables")
+                ],
+                items.Select(item => (item.Text, item.Detail)));
+            Assert.All(items, item => Assert.Equal(
+                new Location { Uri = DocumentUri.FromFileSystemPath(modulePath), Range = new Range(1, 11, 1, 15) },
+                item.Location));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_signature_of_a_standard_library_def_with_contexts()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-9");
+
+        Open(uri, """
+            import nanyx/math as m
+            def biggest = m.max(1, 2)
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(
+            [
+                ("def max: [Ord(a)] a, a -> a", "declared"),
+                ("def max: [Ord(int)] int, int -> int", "at this use"),
+                ("a = int", "type variables")
+            ],
+            Section(await InfoViewAt(uri, 1, 17), "expression").Items.Select(item => (item.Text, item.Detail)));
+    }
+
     private async Task<InfoViewResult> InfoViewAt(DocumentUri uri, int line, int character)
     {
         var result = await _client

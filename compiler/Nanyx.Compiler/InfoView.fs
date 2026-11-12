@@ -24,10 +24,13 @@ type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declara
 /// name of the def that was inferred to require it. The runtime's has none.
 type ScopedContext = { Context: string; Source: ContextSource; Span: SourceSpan }
 
-/// What the info view shows. `Locals` are the locals, parameters and pattern variables in scope, nearest first;
-/// `TopLevel` the top-level defs and imports in scope, the module's own first, then by name, less intrinsics.
+/// What the info view shows. `Expression` is what hover shows at the position; `Instantiation`, on a name that refers
+/// to a generic def, the def's own signature and how this use fills in its type variables. `Locals` are the locals,
+/// parameters and pattern variables in scope, nearest first; `TopLevel` the top-level defs and imports in scope, the
+/// module's own first, then by name, less intrinsics.
 type Info =
     { Expression: Hover.HoverInfo option
+      Instantiation: Hover.Instantiation option
       Locals: ScopedName list
       TopLevel: ScopedName list
       Contexts: ScopedContext list }
@@ -117,10 +120,7 @@ let private isLocal (symbol: Symbol) =
 
 /// The type of a top-level def or import in scope, after the contexts it requires, as hover writes it.
 let private topLevelType (names: TypeNotation) (typed: TypedModule) (symbol: Symbol) : string option =
-    match typed.SymbolTypes |> Map.tryFind symbol.Id, typed.ImportedContextTypes |> Map.tryFind symbol.Id with
-    | Some ty, _ -> Some (Signatures.typeWithContexts names ty (typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []))
-    | None, Some (general, contexts) -> Some (Signatures.typeWithContexts names general contexts)
-    | None, None -> Completion.symbolType typed symbol |> Option.map (Unifier.tyToDisplayString names)
+    Hover.declaredType typed symbol |> Option.map (fun (ty, contexts) -> Signatures.typeWithContexts names ty contexts)
 
 /// `written` cut into runs of the lengths of `groups`.
 let rec private splitAs (groups: 'a list list) (written: string list) : string list list =
@@ -137,10 +137,10 @@ let rec private splitAs (groups: 'a list list) (written: string list) : string l
 let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Info =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
-        let expression =
+        let expression, instantiation =
             match Definition.typeDefinitionAt names file result offset with
-            | Some info -> Some info
-            | None -> Hover.typeAt names result offset
+            | Some info -> Some info, None
+            | None -> Hover.typeAt names result offset, Hover.instantiationAt names result offset
         let inScope = Completion.namesInScope result offset
         let locals =
             inScope
@@ -160,6 +160,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let localsWritten, contextsWritten = List.splitAt locals.Length written
         let scoped (symbol: Symbol) typeWritten = { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration }
         { Expression = expression
+          Instantiation = instantiation
           Locals =
             List.map2
                 (fun (symbol, (ty: Ty option, _)) typeWritten ->
@@ -175,4 +176,4 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             |> List.map (fun symbol -> scoped symbol (topLevelType names typed symbol))
           Contexts =
             List.map2 (fun (_, source, span) contextWritten -> { Context = List.exactlyOne contextWritten; Source = source; Span = span }) contexts contextsWritten }
-    | _ -> { Expression = None; Locals = []; TopLevel = []; Contexts = [] }
+    | _ -> { Expression = None; Instantiation = None; Locals = []; TopLevel = []; Contexts = [] }
