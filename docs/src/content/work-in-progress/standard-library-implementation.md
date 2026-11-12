@@ -16,8 +16,11 @@ program imports its modules like any other package's: `import nanyx/console`, `i
 `import nanyx/text as t` for qualified access.
 
 It ships inside the compiler. `NanyxCompiler.fsproj` embeds every `stdlib/nanyx/*.nyx` file as a
-resource named `nanyx/<module>.nyx`, so the published single-file `nanyx` binary carries the library
-and reads nothing from disk. `import nanyx/<module>` reads that resource (`StandardLibrary` in
+resource named `nanyx/<file>.nyx`, so the published single-file `nanyx` binary carries the library
+and reads nothing from disk. A module is in the file named for it, `nanyx/<module>.nyx`, and may have more
+files, each starting `@partial module <module>` (see [partial modules](../tour/modules#partial-modules)): the
+library's modules are the names its files declare (`StandardLibrary.moduleNames`, read from each file's first
+`module` line). `import nanyx/<module>` reads the module's files (`StandardLibrary` in
 `Nanyx.Compiler/Builtins.fs`), compiles the module together with the program, and inlines its
 definitions into the program the backend sees; importing a module the library does not have is a
 compile error that lists the ones it does.
@@ -35,7 +38,7 @@ and its explicit imports take precedence over the prelude's, so a module can def
 
 | Module          | What it holds                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------- |
-| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type (`#some(a) \| #error(e)`) with `Result.map`, `mapError`, `bind`, `defaultValue`, `mapOr`, `toOption`, `orElse`, `isOk`, `isError`. The helpers for option-like unions, plain functions whose names end in `Option`: `mapOption`, `bindOption`, `defaultValueOption`, `isSomeOption`, `isNoneOption`, `toResultOption`, `mapOrOption`, `mapOrElseOption`, `orElseOption`, `toListOption`, `valuesOption`. `int.fromString`, which reads a decimal integer (`#some(int) \| #invalidInt`). `float.fromString`, which reads a decimal with an optional point and exponent (`#some(float) \| #invalidFloat`). `bool.fromString`, which reads `true` or `false` (`#some(bool) \| #invalidBool`). `int.toFloat`, which turns an `int` into a `float`. The `ToString(a)` context every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `int.toString`, `float.toString`, `bool.toString` and `string.toString`, which write a value as interpolation does. The `FromString(a, e)` context, which an attached `fromString` gives a type, as `int.fromString`, `float.fromString` and `bool.fromString` give `int`, `float` and `bool`. The `List` functions: `list.length`, `head`, `map`, `filter`, `find`, `all`, `any`, `fold`, `foldBack`, `reverse`, `append`, `flatten`, `take`, `skip`, `zip`, `get`, `partition`, `skipWhile`, `unzip` |
+| `nanyx/prelude` | Imported automatically. `proc`, the result workflow: in `proc { ... }`, `try x` continues with the payload of `#some` or gives back any other tag (the block's type collects them), and `return x` is `#some(x)`. The `Result(a, e)` type (`#some(a) \| #error(e)`) with `Result.map`, `mapError`, `bind`, `defaultValue`, `mapOr`, `orElse`, `isOk`, `isError`. The helpers for option-like unions, plain functions named for the `#some` tag: `mapSome`, `bindSome`, `someOr`, `isSome`, `isNone`, `someToResult`, `mapSomeOr`, `mapSomeOrElse`, `orElseSome`, `someToList`, `somes`. `int.fromString`, which reads a decimal integer (`#some(int) \| #invalidInt`). `float.fromString`, which reads a decimal with an optional point and exponent (`#some(float) \| #invalidFloat`). `bool.fromString`, which reads `true` or `false` (`#some(bool) \| #invalidBool`). `int.toFloat`, which turns an `int` into a `float`. The `ToString(a)` context every interpolation hole goes through (`"{x}"` is a call to `__interpolate(x)`, which requires it), and `int.toString`, `float.toString`, `bool.toString` and `string.toString`, which write a value as interpolation does. The `FromString(a, e)` context, which an attached `fromString` gives a type, as `int.fromString`, `float.fromString` and `bool.fromString` give `int`, `float` and `bool`. The `List` functions: `list.length`, `head`, `map`, `filter`, `find`, `all`, `any`, `fold`, `foldBack`, `reverse`, `append`, `flatten`, `take`, `skip`, `zip`, `get`, `partition`, `skipWhile`, `unzip` |
 | `nanyx/console` | The `Console` context (`write`, `writeError`, `readLine`, `readToEnd`, `flush`), the `IoError` type, the instance the runtime supplies to the entry point, and `print`, `println`, `eprint` and `eprintln`, which write any value with a `ToString` through it |
 | `nanyx/math`    | `abs` and `pow` over `Num(a)`, so on `int` and `float`; `min`, `max` and `clamp` over `Ord(a)`; `sqrt`, `floor`, `ceil`, `round` and `truncate` on `float` |
 | `nanyx/result`  | Nothing: kept so that `import nanyx/result` still compiles now that `proc` is in the prelude      |
@@ -64,7 +67,9 @@ Their names all start with `__nanyx_`.
 # Adding to it
 
 To add a module: create `stdlib/nanyx/<name>.nyx` declaring `module <name>`, mark what it offers with
-`export`, and rebuild; the glob picks it up and `import nanyx/<name>` resolves. Definitions inside a
+`export`, and rebuild; the glob picks it up and `import nanyx/<name>` resolves. To split a module, start
+`stdlib/nanyx/<name>.nyx` and each other file of it (`stdlib/nanyx/<name>.<part>.nyx`, say) with
+`@partial module <name>`. Definitions inside a
 module must be written before the definitions that use them (self-recursion is fine). Add an intrinsic
 only when a function genuinely cannot be written in Nanyx: give it a name and type in `Intrinsics`, and
 a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in

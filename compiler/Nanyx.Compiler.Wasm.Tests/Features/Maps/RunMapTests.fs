@@ -41,7 +41,7 @@ let ``Run - a map literal can be written one entry per line`` () =
           "  1 => \"one\""
           "  2 => \"two\""
           "]"
-          "println(map.get(m, 2) \\defaultValueOption(\"none\"))" ]
+          "println(map.get(m, 2) \\someOr(\"none\"))" ]
     |> runSource
     |> assertRan "two\n"
 
@@ -128,9 +128,9 @@ let ``Run - list.groupBy takes a key of any type with an Eq and a Hash`` () =
         [ """def people: list(Person) = [Person(name = "Ann", city = "Leeds", age = 40), Person(name = "Bob", city = "York", age = 30), Person(name = "Cy", city = "Leeds", age = 30)]"""
           """def byCity = people \groupBy { p -> p.city }"""
           """println(list.fold(map.keys(byCity), "", { acc, k -> acc ++ k ++ " " }))"""
-          """println(names(byCity("Leeds") \defaultValueOption([])))"""
+          """println(names(byCity("Leeds") \someOr([])))"""
           """def byBoth = people \groupBy { p -> (p.city, p.age) }"""
-          """println("{map.count(byBoth)} {names(byBoth(("Leeds", 30)) \defaultValueOption([]))}")""" ]
+          """println("{map.count(byBoth)} {names(byBoth(("Leeds", 30)) \someOr([]))}")""" ]
     |> runSource
     |> assertRan "Leeds York \nAnn,Cy,\n3 Cy,\n"
 
@@ -139,8 +139,8 @@ let ``Run - List.groupBy groups elements by a key, in order`` () =
     program
         [ "def show = { xs -> xs \\list.map(int.toString) \\list.fold(\"\", { acc, s -> acc ++ s }) }" ]
         [ "def groups = [1, 2, 3, 4, 5] \\list.groupBy { x -> x % 2 }"
-          "println(show(groups(1) \\defaultValueOption([])))"
-          "println(show(groups(0) \\defaultValueOption([])))"
+          "println(show(groups(1) \\someOr([])))"
+          "println(show(groups(0) \\someOr([])))"
           "println(show(map.toList(groups) \\list.map({ group -> group.0 })))"
           "println(\"{map.count(list.groupBy([], { (x: int) -> x }))}\")" ]
     |> runSource
@@ -217,7 +217,7 @@ let ``Run - map changes a map's values and keeps its keys`` () =
           """found(m \map.get("b"))"""
           """println(map.keys(m) \list.fold("", { acc, k -> acc ++ k }))"""
           """def named = m \map.map { n -> "#{n}" }"""
-          """println(map.get(named, "a") \defaultValueOption("none"))""" ]
+          """println(map.get(named, "a") \someOr("none"))""" ]
     |> runSource
     |> assertRan "20\nab\n#10\n"
 

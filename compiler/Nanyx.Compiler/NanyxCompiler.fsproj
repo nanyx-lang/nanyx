@@ -77,6 +77,7 @@
     <Compile Include="BuiltinTypeNames.fs" />
     <Compile Include="FileImports.fs" />
     <Compile Include="PackageModules.fs" />
+    <Compile Include="PartialModules.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />
@@ -94,7 +95,8 @@
     <!--
       The standard library (the `nanyx` package) is Nanyx source in stdlib/nanyx at the repository root.
       It is embedded here so the published single-file `nanyx` binary carries it: one resource per
-      module, named "nanyx/<module>.nyx" (see StandardLibrary in Builtins.fs).
+      file, named "nanyx/<file>.nyx". A module is in the file named for it, and may have more files, each
+      starting `@partial module <module>` (see StandardLibrary in Builtins.fs).
     -->
     <EmbeddedResource Include="..\..\stdlib\nanyx\*.nyx" LogicalName="nanyx/%(Filename)%(Extension)" />
   </ItemGroup>

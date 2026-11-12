@@ -46,7 +46,7 @@ export def int.fromString: string -> #some(int) | #invalidInt = { s ->
   if __nanyx_string_length(s) <= start
     then #invalidInt
     else if first == 45
-      then mapOption(parseDigits(s, start, 0), { n -> 0 - n })
+      then mapSome(parseDigits(s, start, 0), { n -> 0 - n })
       else parseDigits(s, start, 0)
 }
 
@@ -755,7 +755,7 @@ export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
   if s == "NaN"
     then #some(0.0 / 0.0)
     else if first == 45
-      then mapOption(readFloatMagnitude(s, start), float.negate)
+      then mapSome(readFloatMagnitude(s, start), float.negate)
       else readFloatMagnitude(s, start)
 }
 
@@ -1051,12 +1051,6 @@ export def Result.mapOr: [c] Result(a, e), b, ([c] a -> b) -> b = {
   | #error(_), default, _ -> default
 }
 
---| The success as `#some`, or `#none` for an error.
-export def Result.toOption: Result(a, e) -> #some(a) | #none = {
-  | #some(value) -> #some(value)
-  | #error(_) -> #none
-}
-
 --| The success as it is, or `f` applied to the error.
 export def Result.orElse: [c] Result(a, e), ([c] e -> Result(a, f)) -> Result(a, f) = {
   | #some(value), _ -> #some(value)
@@ -1076,72 +1070,72 @@ export def Result.isError: Result(a, e) -> bool = {
 -- Options ---------------------------------------------------------------------------------------
 --
 -- There is no `Option` type: any union with a `#some(a)` tag is option-like, and these helpers
--- keep every other tag as it is. They are plain functions whose names end in `Option`, called as
--- `mapOption(x, f)` or `x \mapOption(f)`.
+-- keep every other tag as it is. They are plain functions named for the `#some` tag they act on,
+-- such as `mapSome`, `someOr` and `somes`, called as `mapSome(x, f)` or `x \mapSome(f)`.
 
 --| Applies `f` to the value of `#some`.
-export def mapOption: [c] (#some(a) | r), ([c] a -> b) -> #some(b) | r = {
+export def mapSome: [c] (#some(a) | r), ([c] a -> b) -> #some(b) | r = {
   | #some(value), f -> #some(f(value))
   | other, _ -> other
 }
 
 --| Continues with `f` on the value of `#some`. The other tags of both steps are kept: `r` stands for all of them,
   and a step given with other tags adds them to it.
-export def bindOption: [c] (#some(a) | r), ([c] a -> #some(b) | r) -> #some(b) | r = {
+export def bindSome: [c] (#some(a) | r), ([c] a -> #some(b) | r) -> #some(b) | r = {
   | #some(value), f -> f(value)
   | other, _ -> other
 }
 
 --| The value of `#some`, or `fallback` for any other tag.
-export def defaultValueOption: (#some(a) | r), a -> a = {
+export def someOr: (#some(a) | r), a -> a = {
   | #some(value), _ -> value
   | _, fallback -> fallback
 }
 
-export def isSomeOption: (#some(a) | r) -> bool = {
+export def isSome: (#some(a) | r) -> bool = {
   | #some(_) -> true
   | _ -> false
 }
 
-export def isNoneOption: (#some(a) | r) -> bool = {
+export def isNone: (#some(a) | r) -> bool = {
   | #some(_) -> false
   | _ -> true
 }
 
 --| The value of `#some` as a success, or `error` for any other tag.
-export def toResultOption: (#some(a) | r), e -> Result(a, e) = {
+export def someToResult: (#some(a) | r), e -> Result(a, e) = {
   | #some(value), _ -> #some(value)
   | _, error -> #error(error)
 }
 
 --| `f` applied to the value of `#some`, or `default` for any other tag.
-export def mapOrOption: [c] (#some(a) | r), b, ([c] a -> b) -> b = {
+export def mapSomeOr: [c] (#some(a) | r), b, ([c] a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, default, _ -> default
 }
 
 --| `f` applied to the value of `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
   when it is needed.
-export def mapOrElseOption: [c] (#some(a) | r), ([c] () -> b), ([c] a -> b) -> b = {
+export def mapSomeOrElse: [c] (#some(a) | r), ([c] () -> b), ([c] a -> b) -> b = {
   | #some(value), _, f -> f(value)
   | _, fallback, _ -> fallback()
 }
 
 --| The option as it is if it is `#some`, or the result of calling `fallback` for any other tag. `fallback` runs only
   when it is needed.
-export def orElseOption: [c] (#some(a) | r), ([c] () -> #some(a) | s) -> #some(a) | s = {
+export def orElseSome: [c] (#some(a) | r), ([c] () -> #some(a) | s) -> #some(a) | s = {
   | #some(value), _ -> #some(value)
   | _, fallback -> fallback()
 }
 
 --| The value of `#some` as a one-element list, or the empty list for any other tag.
-export def toListOption: (#some(a) | r) -> list(a) = {
+export def someToList: (#some(a) | r) -> list(a) = {
   | #some(value) -> [value]
   | _ -> []
 }
 
 --| The values of the `#some`s in `options`, in order. The other tags are dropped.
-export def valuesOption: list(#some(a) | r) -> list(a) = { options ->
+export def somes: list(#some(a) | r) -> list(a) = { options ->
   def keep = {
     | acc, #some(value) -> [value, ...acc]
     | acc, _ -> acc
@@ -1630,7 +1624,7 @@ export def map.get: [Eq(k) & Hash(k)] map(k, v), k -> #some(v) | #notFound = { m
 
 --| Whether `m` holds a value for `key`.
 export def map.containsKey: [Eq(k) & Hash(k)] map(k, v), k -> bool = { m, key ->
-  isSomeOption(findEntry(__nanyx_map_entries(m), key))
+  isSome(findEntry(__nanyx_map_entries(m), key))
 }
 
 --| `m` with `key` holding `value`, in place of any value it held before.
@@ -1652,7 +1646,7 @@ export def map.count: map(k, v) -> int = { m ->
 def groupInto: [Eq(b) & Hash(b) & c] list(a), ([c] a -> b), map(b, list(a)) -> map(b, list(a)) = {
   | [], _, groups -> groups
   | [x, ...rest], key, groups ->
-    def group = defaultValueOption(map.get(groups, key(x)), [])
+    def group = someOr(map.get(groups, key(x)), [])
     groupInto(rest, key, map.insert(groups, key(x), [x, ...group]))
 }
 

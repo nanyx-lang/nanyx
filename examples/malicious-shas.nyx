@@ -81,7 +81,7 @@ def main: [Console & Http & FileSystem & Clock] () -> () = {
       | #error(#httpError(status)) -> println("HTTP error {status}")
       | #error(#badResponse) -> println("Unreadable response")
 
-  def malicious = verdicts \valuesOption \filter { .status == #malicious }
+  def malicious = verdicts \somes \filter { .status == #malicious }
   def fileName = Clock.now \format("yyyy-MM-dd_HH-mm-ss") ++ ".csv"
 
   File.writeLines(fileName, malicious \map(toCsvLine))

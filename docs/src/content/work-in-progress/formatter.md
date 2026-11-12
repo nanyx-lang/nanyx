@@ -113,7 +113,7 @@ issue):
   indented once:
 
   ```nanyx
-  def mapOption
+  def mapSome
     : (#some(a) | r), (a -> b) -> (#some(b) | r)
     = { | #some(a), f -> #some(f(a))
         | other, _ -> other }

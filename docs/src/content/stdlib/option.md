@@ -6,22 +6,22 @@ order: 7
 
 The option helpers work on [**option-like** unions](../advanced/option-like-types). They are in the [prelude](../tour/modules#modules-in-the-standard-library), so no import is needed.
 
-In Nanyx, any union that includes `#some(a)` is considered option-like. There is no `Option(a)` alias; `#some(a) | #none` is just the most common option-like union, and these helpers are written to preserve all non-`#some` tags, whatever they are. Their names end in `Option`, as in `mapOption`, because there is no `Option` type for them to be attached to.
+In Nanyx, any union that includes `#some(a)` is considered option-like. There is no `Option(a)` alias; `#some(a) | #none` is just the most common option-like union, and these helpers are written to preserve all non-`#some` tags, whatever they are. They are plain functions rather than definitions attached to a type, because there is no `Option` type for them to be attached to, and they are named for the `#some` tag they act on, as in `mapSome`, `someOr` and `somes`.
 
 # map
 
 ```nanyx
-mapOption: [c] ((#some(a) | r), ([c] a -> b)) -> (#some(b) | r)
+mapSome: [c] ((#some(a) | r), ([c] a -> b)) -> (#some(b) | r)
 ```
 
 Transforms the value when present.
 
 ```nanyx
-#some("abc") \mapOption { .length }
+#some("abc") \mapSome { .length }
 -- #some(3)
 
 def value: (#some(string) | #empty) = #some("abc")
-value \mapOption { .length }
+value \mapSome { .length }
 -- #some(3)
 ```
 
@@ -30,14 +30,14 @@ value \mapOption { .length }
 # bind
 
 ```nanyx
-bindOption: [c] ((#some(a) | r), ([c] a -> (#some(b) | r))) -> (#some(b) | r)
+bindSome: [c] ((#some(a) | r), ([c] a -> (#some(b) | r))) -> (#some(b) | r)
 ```
 
 Chains option-producing operations. The result has the other tags of both steps: `r` stands for all of them, and each step adds its own.
 
 ```nanyx
 def a: (#some(string) | #notFound) = #some("42")
-def b = a \bindOption(int.fromString) -- b: (#some(int) | #notFound | #invalidInt)
+def b = a \bindSome(int.fromString) -- b: (#some(int) | #notFound | #invalidInt)
 
 match b
   | #some(n) -> "the number {n}"
@@ -52,13 +52,13 @@ A function that is itself generic in both steps cannot say so yet: a union has o
 # defaultValue
 
 ```nanyx
-defaultValueOption: ((#some(a) | r), a) -> a
+someOr: ((#some(a) | r), a) -> a
 ```
 
 Returns the wrapped value or a fallback.
 
 ```nanyx
-defaultValueOption(#none, 0)
+someOr(#none, 0)
 -- 0
 ```
 
@@ -67,11 +67,11 @@ defaultValueOption(#none, 0)
 # isSome
 
 ```nanyx
-isSomeOption: (#some(a) | r) -> bool
+isSome: (#some(a) | r) -> bool
 ```
 
 ```nanyx
-isSomeOption(#some(10))
+isSome(#some(10))
 -- true
 ```
 
@@ -80,11 +80,11 @@ isSomeOption(#some(10))
 # isNone
 
 ```nanyx
-isNoneOption: (#some(a) | r) -> bool
+isNone: (#some(a) | r) -> bool
 ```
 
 ```nanyx
-isNoneOption(#none)
+isNone(#none)
 -- true
 ```
 
@@ -93,13 +93,13 @@ isNoneOption(#none)
 # toResult
 
 ```nanyx
-toResultOption: ((#some(a) | r), e) -> #some(a) | #error(e)
+someToResult: ((#some(a) | r), e) -> #some(a) | #error(e)
 ```
 
 Converts an option to a result with a supplied error value.
 
 ```nanyx
-toResultOption(#none, "missing user")
+someToResult(#none, "missing user")
 -- #error("missing user")
 ```
 
@@ -108,16 +108,16 @@ toResultOption(#none, "missing user")
 # mapOr
 
 ```nanyx
-mapOrOption: [c] ((#some(a) | r), b, ([c] a -> b)) -> b
+mapSomeOr: [c] ((#some(a) | r), b, ([c] a -> b)) -> b
 ```
 
 Maps the contained value or returns a default.
 
 ```nanyx
-mapOrOption(#some("abc"), 0) { .length }
+mapSomeOr(#some("abc"), 0) { .length }
 -- 3
 
-mapOrOption(#none, 0) { .length }
+mapSomeOr(#none, 0) { .length }
 -- 0
 ```
 
@@ -126,17 +126,17 @@ mapOrOption(#none, 0) { .length }
 # toList
 
 ```nanyx
-toListOption: (#some(a) | r) -> list(a)
+someToList: (#some(a) | r) -> list(a)
 ```
 
 The value as a one-element list, or the empty list for any other tag. Spreading it adds an element only when it is present.
 
 ```nanyx
-toListOption(#some(3))
+someToList(#some(3))
 -- [3]
 
 def identity: #some(string) | #notFound = #notFound
-["device", ...(identity \toListOption)]
+["device", ...(identity \someToList)]
 -- ["device"]
 ```
 
@@ -145,13 +145,13 @@ def identity: #some(string) | #notFound = #notFound
 # values
 
 ```nanyx
-valuesOption: list(#some(a) | r) -> list(a)
+somes: list(#some(a) | r) -> list(a)
 ```
 
 The values of the `#some`s in a list, in order. The other tags are dropped.
 
 ```nanyx
-["1", "x", "3"] \list.map(int.fromString) \valuesOption
+["1", "x", "3"] \list.map(int.fromString) \somes
 -- [1, 3]
 ```
 
@@ -160,13 +160,13 @@ The values of the `#some`s in a list, in order. The other tags are dropped.
 # mapOrElse
 
 ```nanyx
-mapOrElseOption: [c] ((#some(a) | r), ([c] () -> b), ([c] a -> b)) -> b
+mapSomeOrElse: [c] ((#some(a) | r), ([c] () -> b), ([c] a -> b)) -> b
 ```
 
 Maps the contained value or computes a fallback lazily: the fallback is called only when there is no `#some`.
 
 ```nanyx
-mapOrElseOption(#none, { expensiveFallback() }) { .length }
+mapSomeOrElse(#none, { expensiveFallback() }) { .length }
 ```
 
 ---
@@ -174,17 +174,17 @@ mapOrElseOption(#none, { expensiveFallback() }) { .length }
 # orElse
 
 ```nanyx
-orElseOption: [c] ((#some(a) | r), ([c] () -> (#some(a) | s))) -> #some(a) | s
+orElseSome: [c] ((#some(a) | r), ([c] () -> (#some(a) | s))) -> #some(a) | s
 ```
 
 Keeps a `#some` as it is; for any other tag, calls the fallback and gives back what it returns. The fallback is called only when it is needed, and the result has its tags, not the first option's.
 
 ```nanyx
 def cached: #some(string) | #none = #none
-cached \orElseOption { lookup(key) }
+cached \orElseSome { lookup(key) }
 -- what lookup(key) gives
 
-#some("hit") \orElseOption { lookup(key) }
+#some("hit") \orElseSome { lookup(key) }
 -- #some("hit"), and lookup is not called
 ```
 

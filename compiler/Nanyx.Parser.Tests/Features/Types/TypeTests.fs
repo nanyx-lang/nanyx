@@ -26,14 +26,14 @@ let ``Parse type definition feature files`` () =
 [<Fact>]
 let ``def annotation can start an indented continuation line`` () =
     let source =
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | other, _ -> other }\n"
     let optionOf payload = ty (TypeUnion [ tag "some" (Some (var payload)); var "r" ])
     let expected = func (tuple [ optionOf "a"; func (var "a") (var "b") ]) (optionOf "b")
     match parseModule source with
-    | Result.Ok [ Kind (Def (ValueDef (_, "mapOption", Some annotation, Kind (Lambda _)))) ] -> annotation |> should equal expected
+    | Result.Ok [ Kind (Def (ValueDef (_, "mapSome", Some annotation, Kind (Lambda _)))) ] -> annotation |> should equal expected
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

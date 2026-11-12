@@ -27,32 +27,32 @@ let private header =
     "\n"
 
 [<Fact>]
-let ``Run - toListOption gives the value of #some as a list, and the empty list otherwise`` () =
+let ``Run - someToList gives the value of #some as a list, and the empty list otherwise`` () =
     let source =
         header +
         "@entry\n" +
         "def main = {\n" +
-        "  showInts(toListOption(present))\n" +
-        "  showInts(absent \\toListOption)\n" +
+        "  showInts(someToList(present))\n" +
+        "  showInts(absent \\someToList)\n" +
         "  def notFound: #some(int) | #notFound = #notFound\n" +
-        "  showInts([1, ...(notFound \\toListOption)])\n" +
+        "  showInts([1, ...(notFound \\someToList)])\n" +
         "}\n"
     runSource source |> assertRan "[3]\n[]\n[1]\n"
 
 [<Fact>]
-let ``Run - valuesOption keeps the values of the #somes in order and drops the other tags`` () =
+let ``Run - somes keeps the values of the #somes in order and drops the other tags`` () =
     let source =
         header +
         "@entry\n" +
         "def main = {\n" +
-        "  showInts(valuesOption([present, absent, #some(5), absent, #some(7)]))\n" +
-        "  showInts([absent, absent] \\valuesOption)\n" +
-        "  showInts(valuesOption([]))\n" +
+        "  showInts(somes([present, absent, #some(5), absent, #some(7)]))\n" +
+        "  showInts([absent, absent] \\somes)\n" +
+        "  showInts(somes([]))\n" +
         "}\n"
     runSource source |> assertRan "[3, 5, 7]\n[]\n[]\n"
 
 [<Fact>]
-let ``Run - valuesOption of a long list does not overflow the stack`` () =
+let ``Run - somes of a long list does not overflow the stack`` () =
     let source =
         header +
         "def options: int, list(#some(int) | #none) -> list(#some(int) | #none) = {\n" +
@@ -61,9 +61,9 @@ let ``Run - valuesOption of a long list does not overflow the stack`` () =
         "}\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  def values = valuesOption(options(200000, []))\n" +
+        "  def values = somes(options(200000, []))\n" +
         "  dbg(list.length(values))\n" +
-        "  dbg(defaultValueOption(list.head(values), 0))\n" +
+        "  dbg(someOr(list.head(values), 0))\n" +
         "}\n"
     runSource source |> assertRan "dbg: 100000\ndbg: 2\n"
 
@@ -80,17 +80,6 @@ let ``Run - Result.mapOr applies the function to a success and gives the default
     runSource source |> assertRan "dbg: 40\ndbg: 0\nnone\n"
 
 [<Fact>]
-let ``Run - Result.toOption gives #some for a success and #none for an error`` () =
-    let source =
-        header +
-        "@entry\n" +
-        "def main = {\n" +
-        "  showOption(Result.toOption(ok))\n" +
-        "  showOption(bad \\Result.toOption)\n" +
-        "}\n"
-    runSource source |> assertRan "#some(4)\n#none\n"
-
-[<Fact>]
 let ``Run - Result.orElse keeps a success and passes an error to the fallback`` () =
     let source =
         header +
@@ -105,16 +94,16 @@ let ``Run - Result.orElse keeps a success and passes an error to the fallback`` 
     runSource source |> assertRan "#some(4)\n#some(3)\n#error(retried bad)\n#error(recovered from bad)\n"
 
 [<Fact>]
-let ``Run - orElseOption keeps a #some and calls the fallback only for another tag (#480)`` () =
+let ``Run - orElseSome keeps a #some and calls the fallback only for another tag (#480)`` () =
     let source =
         header + """def lookup: () -> #some(int) | #none = { #some(9) }
 @entry
 def main = {
-  showOption(orElseOption(present, { #some(8) }))
-  showOption(absent \orElseOption { #some(8) })
-  showOption(absent \orElseOption(lookup))
-  showOption(absent \orElseOption { absent })
-  showOption(present \orElseOption {
+  showOption(orElseSome(present, { #some(8) }))
+  showOption(absent \orElseSome { #some(8) })
+  showOption(absent \orElseSome(lookup))
+  showOption(absent \orElseSome { absent })
+  showOption(present \orElseSome {
     println("not called")
     #none
   })
@@ -123,14 +112,14 @@ def main = {
     runSource source |> assertRan "#some(3)\n#some(8)\n#some(9)\n#none\n#some(3)\n"
 
 [<Fact>]
-let ``Run - mapOrElseOption maps a #some and calls the fallback only for another tag (#182)`` () =
+let ``Run - mapSomeOrElse maps a #some and calls the fallback only for another tag (#182)`` () =
     let source =
         header + """def seven: () -> int = { 7 }
 @entry
 def main = {
-  dbg(mapOrElseOption(#none, { 7 }, { n -> n + 1 }))
-  dbg(mapOrElseOption(present, { dbg(0) }, { n -> n + 1 }))
-  dbg(absent \mapOrElseOption(seven, { n -> n + 1 }))
+  dbg(mapSomeOrElse(#none, { 7 }, { n -> n + 1 }))
+  dbg(mapSomeOrElse(present, { dbg(0) }, { n -> n + 1 }))
+  dbg(absent \mapSomeOrElse(seven, { n -> n + 1 }))
 }
 """
     runSource source |> assertRan "dbg: 7\ndbg: 4\ndbg: 7\n"
@@ -150,17 +139,17 @@ let private steps =
     "}\n"
 
 [<Fact>]
-let ``Run - bindOption keeps the tags both steps fail with, matched with no catch-all`` () =
+let ``Run - bindSome keeps the tags both steps fail with, matched with no catch-all`` () =
     let source =
         steps +
         "def piped: int -> string = { n ->\n" +
-        "  match find(n) \\bindOption(parseDigit)\n" +
+        "  match find(n) \\bindSome(parseDigit)\n" +
         "    | #some(digit) -> \"#some({digit})\"\n" +
         "    | #notFound -> \"#notFound\"\n" +
         "    | #invalidInt -> \"#invalidInt\"\n" +
         "}\n" +
         "def called: int -> string = { n ->\n" +
-        "  def b = bindOption(find(n), parseDigit)\n" +
+        "  def b = bindSome(find(n), parseDigit)\n" +
         "  match b\n" +
         "    | #some(digit) -> \"#some({digit})\"\n" +
         "    | #notFound -> \"#notFound\"\n" +

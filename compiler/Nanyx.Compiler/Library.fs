@@ -986,9 +986,13 @@ module Compiler =
         let key = originKey origin
         let resolved =
             parseWithDiagnostics (sourceFileName origin) source
+            // A module split across files is checked as one: its other files' items join this one's.
+            |> Result.bind (fun parsed ->
+                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package origin) parsed
+                |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
-            |> Result.bind (fun (ast, declared, moduleBlocks) ->
-                match desugarWithDiagnostics ast with
+            |> Result.bind (fun (ast, (items, declared, moduleBlocks)) ->
+                match desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _ -> Error (Desugared, errors)
                 | desugaredAst, [], zeros ->
                     applyAttributes desugaredAst

@@ -560,7 +560,7 @@ module MatchHead =
     /// The head of the match `matchExpr` on `scrutinees`: what is reported for the match as a whole, rather than
     /// for one arm. That depends on how the match was written:
     /// - `match a | ...` is from `match` to the end of the last value matched on, so `match a`, or
-    ///   `match getData() \mapOption { ... }`.
+    ///   `match getData() \mapSome { ... }`.
     /// - `{ | pattern -> ... }`, and a `for` loop's arms, match on values made up over the whole match, arms and
     ///   all. Their head is the first character, the `{` or the first `|`.
     /// - A lambda's pattern parameters (`{ #some(n) -> n }`) match on values made up where the patterns are
@@ -626,6 +626,16 @@ module TopLevelItem =
 
     /// A top-level item the compiler made up that has no source of its own.
     let synthetic (kind: TopLevelItemKind) = at SourceSpan.none kind
+
+    /// The attribute that makes a file's module declaration one fragment of a module split across files, written on
+    /// the declaration's line: `@partial module utils`.
+    let partialAttribute = "partial"
+
+    /// Whether `attribute` is `@partial` and `next`, the item after it, a module declaration.
+    let isPartialDeclaration (attribute: TopLevelItem) (next: TopLevelItem) =
+        match attribute.Kind, next.Kind with
+        | Attribute(name, None), ModuleDecl _ -> name = partialAttribute
+        | _ -> false
 
 /// How a node declares names. One node can declare in more than one way: `def f = { x -> x }` declares `f` by
 /// the lambda as a def's value, and `x` by the lambda's parameters.

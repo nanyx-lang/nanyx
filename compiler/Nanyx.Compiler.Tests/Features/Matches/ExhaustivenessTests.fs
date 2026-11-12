@@ -409,13 +409,13 @@ let ``A non-exhaustive match is reported from the match keyword to the end of it
 [<Fact>]
 let ``A non-exhaustive match on a pipeline is reported over the whole pipeline`` () =
     let prefix =
-        "def mapOption\n" +
+        "def mapSome\n" +
         "  : (#some(int) | #notFound), (int -> string) -> (#some(string) | #notFound)\n" +
         "  = { | #some(a), f -> #some(f(a))\n" +
         "      | #notFound, _ -> #notFound }\n" +
         "def getData: () -> #some(int) | #notFound = { #notFound }\n" +
         "def b = "
-    let head = "match getData() \\mapOption { n: int -> \"{n}\" }"
+    let head = "match getData() \\mapSome { n: int -> \"{n}\" }"
     let source = prefix + head + "\n  | #some(s) -> s\n"
     Assert.Equal((prefix.Length, prefix.Length + head.Length, head), onlySpan source)
 
@@ -454,7 +454,7 @@ let ``Matches that cover every value pass, however the arms split them`` () =
 [<Fact>]
 let ``A match on a call's result that leaves out one of its tags reports only that tag`` () =
     // #681: the arms' closed union narrowed the call's result, and the call's argument was reported as well.
-    for head in [ """match find(n) \bindOption(parseDigit)"""; """match bindOption(find(n), parseDigit)""" ] do
+    for head in [ """match find(n) \bindSome(parseDigit)"""; """match bindSome(find(n), parseDigit)""" ] do
         let source =
             $$"""
 def parseDigit: string -> #some(int) | #invalidInt = {

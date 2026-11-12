@@ -41,6 +41,16 @@ def main = {
 
 See [Hello, World!](../getting-started/hello-world) and [Entrypoints](./packages#entrypoints).
 
+## `@partial`
+
+Marks a file's module declaration as one fragment of a module split across files. It is written on the declaration's line, and every file of the module must have it.
+
+```nanyx fragment
+@partial module utils
+```
+
+See [Partial modules](./modules#partial-modules).
+
 ## `@workflow`
 
 Marks a workflow builder definition and enables workflow helper generation.
