@@ -74,3 +74,67 @@ module SyntaxTree =
         (if statements.IsEmpty then [] else [ statements ])
         @ (children |> List.collect blocksWithin)
         @ (statements |> List.collect ofStatement |> List.collect blocksWithin)
+
+    /// Every name an expression may refer to: identifiers, callees and pipe targets, and for a member access
+    /// `a.b.c` both the dotted name and the member as `.c`, since the backend may call a definition named either
+    /// way. Shadowing is ignored, so this can only over-count.
+    let rec referencedNames (expr: Expression) : string list =
+        let rec dottedName (current: Expression) =
+            match current.Kind with
+            | IdentifierExpr name -> Some name
+            | MemberAccess(inner, memberName, _) -> dottedName inner |> Option.map (fun prefix -> $"{prefix}.{memberName}")
+            | _ -> None
+        match expr.Kind with
+        | IdentifierExpr name -> [ name ]
+        | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
+        | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
+        | Lambda(_, body) -> referencedNames body
+        | BinaryOp(_, left, right) -> referencedNames left @ referencedNames right
+        | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
+        | Block statements -> statements |> List.collect referencedNamesInStatement
+        | Match(values, arms) ->
+            (values |> List.collect referencedNames)
+            @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencedNamesInPattern) @ referencedNames body))
+        | Except(value, arms) -> referencedNames { expr with Kind = Match([ value ], arms) }
+        | TupleExpr items
+        | ListExpr items -> items |> List.collect referencedNames
+        | RecordExpr fields ->
+            fields |> List.collect (function NamedField(_, value) | PositionalField value -> referencedNames value)
+        | TagExpr(_, payload) -> payload |> Option.map referencedNames |> Option.defaultValue []
+        | MemberAccess(inner, memberName, _) ->
+            $".{memberName}" :: (dottedName expr |> Option.toList) @ referencedNames inner
+        | UseIn(value, body) -> referencedNames value @ referencedNames body
+        | WorkflowBindExpr(_, value)
+        | WorkflowReturnExpr value -> referencedNames value
+        | InterpolatedString parts ->
+            parts |> List.collect (function StringExpr value -> referencedNames value | StringText _ -> [])
+        | ContextMemberCall(_, memberName, args) -> memberName :: (args |> List.collect referencedNames)
+        | ContextMemberAccess _
+        | UnitExpr
+        | LiteralExpr _ -> []
+
+    and referencedNamesInStatement (statement: Statement) : string list =
+        match statement.Kind with
+        | DefStatement(_, _, _, value) -> referencedNames value
+        | ExprStatement value -> referencedNames value
+        | UseStatement value -> referencedNames value
+        | ImportStatement _
+        | TypeDefStatement _ -> []
+
+    and referencedNamesInPattern (pattern: Pattern) : string list =
+        match pattern.Kind with
+        | GuardPattern predicate -> referencedNames predicate
+        | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
+        | TagPattern(_, Some payload) -> referencedNamesInPattern payload
+        | TuplePattern patterns
+        | AndPattern patterns
+        | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesInPattern
+        | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesInPattern
+        | RecordPattern(_, patterns) -> patterns |> List.collect referencedNamesInPattern
+        | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencedNamesInPattern)
+        | TagPattern(_, None)
+        | LiteralPattern _
+        | IdentifierPattern _
+        | WildcardPattern
+        | UnitPattern
+        | ElsePattern -> []

@@ -2711,7 +2711,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let beginDef () = state <- { state with TypeVars = initialState.TypeVars }
     let mutable currentModule: string option = None
     let mutable types = Map.empty
-    let mutable items: TypedTopLevelItem list = []
+    // Each typed item with the index of the item it was checked from, which may be out of order (see `DefinitionOrder`).
+    let mutable items: (int * TypedTopLevelItem) list = []
+    let mutable itemIndex = 0
+    let emit item = items <- items @ [ itemIndex, item ]
     // A name defined again is reported, and only its first definition is inferred.
     let module', duplicateErrors = DuplicateDefinitions.check initialState.Declared module'
     let mutable errors: Diagnostic list = duplicateErrors
@@ -2814,7 +2817,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             | _ -> expr
         state <- { state with FailedExprs = (failedNode.Id, diagnostics) :: state.FailedExprs }
         types <- types |> Map.add name Unifier.errorType
-        items <- items @ [ TypedDef (TypedValueDef(isExport, name, None, mkTypedExpr expr Unifier.errorType None None None)) ]
+        emit (TypedDef (TypedValueDef(isExport, name, None, mkTypedExpr expr Unifier.errorType None None None)))
         match TypeEnv.tryFind name env with
         | Some scheme -> env <- declareTopLevel name scheme.Symbol (TypeEnv.mono Unifier.errorType) env
         | None -> ()
@@ -2936,7 +2939,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                             state <- resolvedState
                             env <- declareTopLevel name symbol scheme env
                             types <- types |> Map.add name declaredTy
-                            items <- items @ [ TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)) ]
+                            emit (TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)))
                 | Error err -> abandon isExport name expr err
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
@@ -2946,12 +2949,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->
                 state <- next
-                items <- items @ [ TypedExprItem typedExpr ]
+                emit (TypedExprItem typedExpr)
             | Error err -> errors <- errors @ err
-        | Import itemsList -> items <- items @ [ TypedImport itemsList ]
+        | Import itemsList -> emit (TypedImport itemsList)
         | ModuleDecl name ->
             currentModule <- Some name
-            items <- items @ [ TypedModuleDecl name ]
+            emit (TypedModuleDecl name)
         | ModuleBlock _ -> ()
         // Attributes are resolved by the compiler front end before inference (see Compiler.applyAttributes).
         | Attribute _ -> ()
@@ -2960,10 +2963,32 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
             | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters
             | typeOfErrors -> errors <- errors @ typeOfErrors
-            items <- items @ [ TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ]
+            emit (TypedDef (TypedTypeDef(name, modifiers, parameters, body)))
 
-    for item in module' do
-        check item
+    // A def is checked after the defs it uses that are not in a cycle with it, so that it sees their types. Each item
+    // is checked in the module it is written in.
+    let itemsByIndex = Array.ofList module'
+    let inferredAfter = DefinitionOrder.inferredAfter module'
+    let moduleBefore =
+        module'
+        |> List.scan (fun current (item: TopLevelItem) ->
+            match item.Kind with
+            | ModuleDecl name -> Some name
+            | _ -> current) currentModule
+        |> Array.ofList
+    let mutable checkedItems = Set.empty
+    let rec checkInOrder index =
+        if not (checkedItems.Contains index) then
+            checkedItems <- checkedItems.Add index
+            for used in inferredAfter |> Map.tryFind index |> Option.defaultValue [] do
+                checkInOrder used
+            itemIndex <- index
+            currentModule <- moduleBefore.[index]
+            check itemsByIndex.[index]
+    for index in 0 .. itemsByIndex.Length - 1 do
+        checkInOrder index
+    currentModule <- Array.last moduleBefore
+    itemIndex <- itemsByIndex.Length
 
     // The holes left to the end of the module (see `InterpolationHoles.resolveLater`), now that every type is known.
     // An instance derived from a type's parts is a definition of its own (see `StructuralInstances`), inferred here
@@ -3023,7 +3048,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         errors @ failedExprErrors
         |> List.distinct
         |> List.sortBy (fun diag -> diag.Span |> Option.map (fun span -> span.Start) |> Option.defaultValue System.Int32.MaxValue)
-    types, items, state, allErrors
+    types, items |> List.sortBy fst |> List.map snd, state, allErrors
 
 /// Infers a module, carrying on past an item that fails to check: the types and items of those that do, and the
 /// diagnostics of those that do not. The constraints are not solved here, so a type mismatch is not among them.
