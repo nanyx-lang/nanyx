@@ -87,6 +87,40 @@ use Foo(bar = { s -> s }) in main()
     runSource source |> assertRan "x!\n"
 
 [<Fact>]
+let ``Run - a lambda returned out of the use it was made under uses the instance where it is called`` () =
+    let source = """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def make: [Foo] string -> ([Foo] () -> string) = { s -> { bar(s) } }
+
+def main = {
+  def f = use Foo(bar = { s -> "first " ++ s }) in make("x")
+  use Foo(bar = { s -> "second " ++ s }) in println(f())
+}
+
+main()
+"""
+    runSource source |> assertRan "second x\n"
+
+[<Fact>]
+let ``Run - a function named as a value where its context is not available, and called where it is`` () =
+    let source = """import nanyx/console
+
+context Foo = (bar: string -> string)
+
+def needsFoo: [Foo] string -> string = { s -> bar(s) }
+
+def main = {
+  def g = needsFoo
+  use Foo(bar = { s -> s ++ "!" }) in println(g("x"))
+}
+
+main()
+"""
+    runSource source |> assertRan "x!\n"
+
+[<Fact>]
 let ``Run - a use member that prints calls the write in scope where the use is`` () =
     let source = """import nanyx/console
 

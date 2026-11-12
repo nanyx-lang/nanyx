@@ -4,9 +4,11 @@ description: "Which values may leave the scope that supplies a context, once fun
 order: 1
 ---
 
-This page is a design in progress for what replaces today's two escape checks, NYX0224 for `memory` blocks and
-NYX0225 for contexts, once function types carry contexts ([#768](https://github.com/nanyx-lang/nanyx/issues/768)).
-The aim is one rule that covers both, with nothing special about `memory`. Nothing here is implemented.
+This page is a design in progress for what replaces NYX0224, the escape check for `memory` blocks, now that function
+types carry contexts ([#768](https://github.com/nanyx-lang/nanyx/issues/768)). The aim is one rule for every context,
+with nothing special about `memory`. Nothing here is implemented. NYX0225, the escape check for other contexts, is
+gone: since [#836](https://github.com/nanyx-lang/nanyx/issues/836) each call passes a function value the instances in
+scope where it is called, so a lambda that requires a context may leave the scope that supplies it.
 
 # Two cases
 
@@ -22,8 +24,8 @@ def tryToFool = {
 }
 ```
 
-A function that only _requires_ a context, and captures nothing that belongs to a scope, can leave freely. Today
-NYX0225 can't tell the two apart, and function types can't say `[Foo]`, so this can't be written:
+A function that only _requires_ a context, and captures nothing that belongs to a scope, can leave freely. NYX0225
+couldn't tell the two apart, and function types couldn't say `[Foo]`, so this couldn't be written until #768 and #836:
 
 ```nanyx
 def fooEscapes2: string -> [Foo] () -> string = { s ->
@@ -71,9 +73,9 @@ The rule reads off signatures, so no new syntax is needed:
   `counter` is rejected where its block ends.
 - `fooEscapes2` supplies nothing: its own type doesn't require `Foo`, and it has no parameter that does. It checks.
 - `def fooEscapes: [Foo] string -> [Foo] () -> string` requires `Foo` itself rather than supplying it, so it checks
-  too. This replaces NYX0225's rule for defs, which rejected it.
+  too. NYX0225 rejected it until #836.
 - `use (bar = ...) in { bar("x") }` supplies `Foo` and results in a lambda that requires it, so it's rejected, as
-  NYX0225 rejects it today. For `Foo` this is stricter than safety needs, because a caller could supply another `Foo`.
+  NYX0225 rejected it until #836. For `Foo` this is stricter than safety needs, because a caller could supply another `Foo`.
   But it's what the code says, and it keeps one rule for all contexts.
 
 **It has to reach type variables.** A check only at `memory`'s call isn't sound:
@@ -152,4 +154,4 @@ Option A's rule rather than replacing it.
   can supply another instance. That needs a way to tell such contexts apart from `$Memory`, which is the special case
   this design is trying to avoid.
 - **Diagnostics.** Name the cell or member that introduced the requirement, and give the supplying `memory` or `use`
-  as a related span, as NYX0224 and NYX0225 do today.
+  as a related span, as NYX0224 does today.

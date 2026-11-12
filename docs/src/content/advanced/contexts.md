@@ -95,7 +95,7 @@ def greet: [Console] = {
 
 A function that writes its type runs only in the contexts the type declares, so calling `println` from a `def f: int -> int` is an error. A function that does not write its type needs whichever of the runtime's contexts its body uses, and so does any function that calls it. The top level of a module runs in the runtime's contexts.
 
-For now, passing a function as a value needs its contexts where it is named, as calling it does. Given `def useFoo: [Foo] string -> string`, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`.
+Passing a function as a value needs its contexts where it runs, not where it is named. Given `def useFoo: [Foo] string -> string` and an `apply` that calls the function it is given, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`. But `def later = useFoo` is fine anywhere: calling `later` needs `Foo`.
 
 A function's type says which contexts it requires, and a lambda's type says which ones it uses: `{ s -> bar(s) }` is a `[Foo] string -> string`. Calling it requires `Foo`, as calling a function that declares `[Foo]` does, and it can't be given where a pure function is expected (`NYX0227`). A higher-order function takes such a lambda with a context variable, as `list.map` does (see [Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts)). A function named as a value, such as `useFoo` above, has its contexts in its type too.
 
@@ -113,21 +113,23 @@ def main: [Foo] () -> string = { run({ bar("x") }) }   // "inner x"
 
 A function value given where one requiring other contexts is expected, such as a lambda that prints given for a context's member whose type doesn't require `Console`, keeps the instances of those other contexts that are in scope where it is given.
 
-For now, too, a lambda that uses a context can't leave the scope that supplies it. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
+So a lambda that uses a context can leave the scope that supplies it. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. Its type still requires `Foo`, so the function that returns it says so, and calling it needs `Foo` where it is called:
 
 ```nanyx
 context Foo = (bar: string -> string)
 
-// The def supplies Foo only inside itself.
-def fooEscapes: [Foo] string -> () -> string = { s ->
+def fooEscapes: [Foo] string -> ([Foo] () -> string) = { s ->
   { bar(s) }
 }
 
-// The use loads Foo only for its body.
-def loaded = use Foo(bar = { s -> s }) in { bar("hi") }
+def main: [Console] () -> () = {
+  def escaped = use Foo(bar = { s -> s }) in fooEscapes("hi")
+  use Foo(bar = { s -> s ++ "!" }) in println(escaped())   // hi!
+  println(escaped())                                       // error: requires 'Foo'
+}
 ```
 
-So is a block whose result is such a lambda after `use Foo(...)`, and a result that holds one, such as a record with the lambda in a field. Inside the scope, the lambda is fine: call it there, or pass it to a function such as `list.map`. A lambda that uses only a value computed with the context can leave, so `def t = bar(s)` followed by `{ t }` is not an error.
+A result type that leaves the context out, `[Foo] string -> () -> string`, is an error (`NYX0227`). A lambda that uses only a value computed with the context requires nothing, so `def t = bar(s)` followed by `{ t }` is a `() -> string`.
 
 The same goes for a parameterised context. A function that does not write its type, and calls a function that requires `Show(a)` with a value of one of its own type variables, requires `Show` at that variable itself:
 
