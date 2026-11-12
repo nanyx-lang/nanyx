@@ -11,7 +11,7 @@ let ``Run - functions that require Console passed as values inside a Console def
 
 def say: [Console] string -> () = { s -> println(s) }
 
-def apply: (string -> ()), string -> () = { f, s -> f(s) }
+def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
 def main: [Console] () -> () = {
   apply(say, "inside a Console def")
@@ -29,7 +29,7 @@ let ``Run - a function that requires Console passed as a value at the top level`
 
 def say: [Console] string -> () = { s -> println(s) }
 
-def apply: (string -> ()), string -> () = { f, s -> f(s) }
+def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
 apply(say, "top")
 """
@@ -39,7 +39,7 @@ apply(say, "top")
 let ``Run - println passed as a value at int finds ToString of int`` () =
     let source = """import nanyx/console
 
-def apply: (a -> ()), a -> () = { f, x -> f(x) }
+def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
 
 apply(println, 7)
 apply(println, "seven")
@@ -50,7 +50,7 @@ apply(println, "seven")
 let ``Run - println passed as a value at a type variable gets the ToString its def requires`` () =
     let source = """import nanyx/console
 
-def apply: (a -> ()), a -> () = { f, x -> f(x) }
+def apply: [c] ([c] a -> ()), a -> () = { f, x -> f(x) }
 
 def show: [ToString(a) & Console] a -> () = { x -> apply(println, x) }
 
@@ -70,7 +70,7 @@ let ``Run - println mapped over a list at the top level`` () =
 let ``Run - println passed to a function that maps an option`` () =
     let source = """import nanyx/console
 
-def mapOpt: #some(a) | #none, (a -> b) -> #some(b) | #none = { o, f ->
+def mapOpt: [c] #some(a) | #none, ([c] a -> b) -> #some(b) | #none = { o, f ->
   match o
     | #some(x) -> #some(f(x))
     | #none -> #none
@@ -86,7 +86,7 @@ let ``Run - a function passed as a value captures the members of the use where i
 
 def say: [Console] string -> () = { s -> write(s) }
 
-def apply: (string -> ()), string -> () = { f, s -> f(s) }
+def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
 def main = {
   use (write = { s -> write("[" ++ s ++ "]") })
@@ -106,7 +106,7 @@ context Greeter = (greet: string -> ())
 
 def hello: [Greeter] string -> () = { name -> greet(name) }
 
-def apply: (string -> ()), string -> () = { f, s -> f(s) }
+def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 
 @entry
 def main = {

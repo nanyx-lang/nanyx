@@ -9,7 +9,7 @@ The `Result` helpers work on values represented as `#some(a) | #error(e)`, the `
 # map
 
 ```nanyx
-Result.map: (#some(a) | #error(e), (a -> b)) -> #some(b) | #error(e)
+Result.map: [c] (#some(a) | #error(e), ([c] a -> b)) -> #some(b) | #error(e)
 ```
 
 Transforms successful values and leaves errors unchanged.
@@ -24,7 +24,7 @@ Transforms successful values and leaves errors unchanged.
 # mapError
 
 ```nanyx
-Result.mapError: (#some(a) | #error(e), (e -> f)) -> #some(a) | #error(f)
+Result.mapError: [c] (#some(a) | #error(e), ([c] e -> f)) -> #some(a) | #error(f)
 ```
 
 Transforms error values.
@@ -39,7 +39,7 @@ Transforms error values.
 # bind
 
 ```nanyx
-Result.bind: (#some(a) | #error(e), (a -> (#some(b) | #error(e)))) -> #some(b) | #error(e)
+Result.bind: [c] (#some(a) | #error(e), ([c] a -> (#some(b) | #error(e)))) -> #some(b) | #error(e)
 ```
 
 Chains result-producing operations. Both steps must have the same error type; to chain a step whose errors differ, bring them to one type with `mapError` first. That holds for errors that are tags too: unlike the other tags of [`bindOption`](../stdlib/option#bind), which are a union's rest and take the tags of both steps, the error is one type, so `#error(#notFound)` and `#error(#invalidInt)` do not chain ([#679](https://github.com/nanyx-lang/nanyx/issues/679)).
@@ -80,7 +80,7 @@ Result.defaultValue(#error("x"), 0)
 # mapOr
 
 ```nanyx
-Result.mapOr: ((#some(a) | #error(e)), b, (a -> b)) -> b
+Result.mapOr: [c] ((#some(a) | #error(e)), b, ([c] a -> b)) -> b
 ```
 
 Maps the success value or returns a default for an error.
@@ -113,7 +113,7 @@ Result.toOption(#error("bad"))
 # orElse
 
 ```nanyx
-Result.orElse: ((#some(a) | #error(e)), (e -> (#some(a) | #error(f)))) -> #some(a) | #error(f)
+Result.orElse: [c] ((#some(a) | #error(e)), ([c] e -> (#some(a) | #error(f)))) -> #some(a) | #error(f)
 ```
 
 Recovers from an error: the fallback gets the error and gives another result. A success is left as it is.

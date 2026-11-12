@@ -43,6 +43,8 @@ def main = {
 }
 ```
 
+A member given this way can use other contexts that are available where the instance is made, as `use Log(log = { s -> println(s) })` uses `Console`. The instance keeps them from there, so `log` is still a `string -> ()`.
+
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
 ```nanyx
@@ -95,7 +97,9 @@ A function that writes its type runs only in the contexts the type declares, so 
 
 Passing a function as a value needs its contexts where it is named, as calling it does: the value is passed with the instances in scope there. Given `def useFoo: [Foo] string -> string`, `apply(useFoo, "hi")` is an error unless `Foo` is available at that call, from the type of the function around it or from a `use`.
 
-A lambda that uses a context can't leave the scope that supplies it. Function types don't yet say which contexts a function requires, so once the lambda is out, nothing would supply `Foo` where it is called. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
+A function's type says which contexts it requires, and a lambda's type says which ones it uses: `{ s -> bar(s) }` is a `[Foo] string -> string`. Calling it requires `Foo`, as calling a function that declares `[Foo]` does, and it can't be given where a pure function is expected (`NYX0227`). A higher-order function takes such a lambda with a context variable, as `list.map` does (see [Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts)). A function named as a value, such as `useFoo` above, has its contexts in its type too.
+
+For now, a lambda that uses a context also can't leave the scope that supplies it, because the lambda takes the context's members from that scope. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
 
 ```nanyx
 context Foo = (bar: string -> string)

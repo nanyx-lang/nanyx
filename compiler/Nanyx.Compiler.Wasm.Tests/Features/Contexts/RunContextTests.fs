@@ -73,7 +73,7 @@ let ``Run - a use binding lambda that captures a local`` () =
 let ``Run - a parameter or local holding a function as a use binding`` () =
     let source =
         myConsolePrelude +
-        "def viaParameter: (string -> ()) -> () = { f ->\n" +
+        "def viaParameter: [c] ([c] string -> ()) -> () = { f ->\n" +
         "  use MyConsole(p = f)\n" +
         "  greet(\"parameter\")\n" +
         "}\n" +

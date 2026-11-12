@@ -152,7 +152,7 @@ map.isEmpty(["a" => 1])     -- false
 ## update
 
 ```nanyx
-map.update: [Eq(k) & Hash(k)] (map(k, v), k, ((#some(v) | #notFound) -> v)) -> map(k, v)
+map.update: [Eq(k) & Hash(k) & c] (map(k, v), k, ([c] (#some(v) | #notFound) -> v)) -> map(k, v)
 ```
 
 The map with a key holding what a function makes of the value the map held for it: `#some(v)`, or `#notFound` when the map does not have the key. A key the map does not have is added at the end.
@@ -170,7 +170,7 @@ counts \map.update("tea", bump) \map.update("cake", bump)
 ## fold
 
 ```nanyx
-map.fold: (map(k, v), b, ((b, k, v) -> b)) -> b
+map.fold: [c] (map(k, v), b, ([c] (b, k, v) -> b)) -> b
 ```
 
 Combines a starting value with each key and value of a map in turn, in the order of `map.toList`.
@@ -185,7 +185,7 @@ Combines a starting value with each key and value of a map in turn, in the order
 ## map
 
 ```nanyx
-map.map: (map(k, v), (v -> w)) -> map(k, w)
+map.map: [c] (map(k, v), ([c] v -> w)) -> map(k, w)
 ```
 
 The map with a function applied to each value. The keys stay as they are, in the same order.
@@ -200,7 +200,7 @@ The map with a function applied to each value. The keys stay as they are, in the
 ## filter
 
 ```nanyx
-map.filter: (map(k, v), ((k, v) -> bool)) -> map(k, v)
+map.filter: [c] (map(k, v), ([c] (k, v) -> bool)) -> map(k, v)
 ```
 
 The entries of a map whose key and value pass a test, in the same order.

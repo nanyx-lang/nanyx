@@ -231,7 +231,14 @@ type InferState =
             /// The local defs that are cells, made with `mut` (see `MemoryCells`).
             Cells: Set<SymbolId>;
             /// Where each `:=` is written: a type mismatch there is the assignment's (see `MemoryCells.mismatchCode`).
-            CellAssignments: Set<SourceSpan> }
+            CellAssignments: Set<SourceSpan>;
+            /// The contexts each lambda being inferred uses so far, the innermost first (see `LambdaContexts`).
+            LambdaContexts: Ty list list;
+            /// The lambdas that are a def's own body: the def's contexts are its, not its type's (see `LambdaContexts`).
+            BodyLambdas: Set<NodeId>;
+            /// The context variables each unannotated top-level def uses so far, by the def's name: those of the
+            /// functions it is given that it calls or passes on (see `ContextVariables`).
+            InferredContextVars: Map<Identifier, Ty list> }
 
 let emptyState =
         { NextId = 0;
@@ -296,7 +303,10 @@ let emptyState =
             DerivedDefs = [];
             DerivedCalls = Map.empty;
             Cells = Set.empty;
-            CellAssignments = Set.empty }
+            CellAssignments = Set.empty;
+            LambdaContexts = [];
+            BodyLambdas = Set.empty;
+            InferredContextVars = Map.empty }
 
 let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }

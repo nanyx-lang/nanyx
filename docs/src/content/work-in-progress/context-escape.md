@@ -46,8 +46,8 @@ With contexts in function types, a lambda requires the contexts it uses where it
 not the one in scope where `inner` was written. That follows from "require, don't capture", but the language docs
 should say it plainly.
 
-#768 alone breaks `memory`, though. The prelude declares `memory: ([$Memory] () -> a) -> a`, and nothing stops `a`
-being `[$Memory] () -> int`:
+#768 alone breaks `memory`, though. The prelude declares `memory: [c] ([$Memory & c] () -> a) -> a`, and nothing
+stops `a` being `[$Memory] () -> int`:
 
 ```nanyx
 def counter = memory { def y = mut 0; { y := y + 1; y } }   -- [$Memory] () -> int
@@ -67,8 +67,8 @@ same way.
 
 The rule reads off signatures, so no new syntax is needed:
 
-- `memory: ([$Memory] () -> a) -> a` supplies `$Memory` to `block`, so `a` must not require `$Memory`. `counter` is
-  rejected where its block ends.
+- `memory: [c] ([$Memory & c] () -> a) -> a` supplies `$Memory` to `block`, so `a` must not require `$Memory`.
+  `counter` is rejected where its block ends.
 - `fooEscapes2` supplies nothing: its own type doesn't require `Foo`, and it has no parameter that does. It checks.
 - `def fooEscapes: [Foo] string -> [Foo] () -> string` requires `Foo` itself rather than supplying it, so it checks
   too. This replaces NYX0225's rule for defs, which rejected it.

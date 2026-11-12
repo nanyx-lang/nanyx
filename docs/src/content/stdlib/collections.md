@@ -17,7 +17,7 @@ Every one of them is stack-safe: `map`, `filter`, `take`, `flatten`, `zip`, `sor
 ## all
 
 ```nanyx
-list.all: (list(a), (a -> bool)) -> bool
+list.all: [c] (list(a), ([c] a -> bool)) -> bool
 ```
 
 Returns `true` if all elements satisfy the predicate.
@@ -34,7 +34,7 @@ Note: it can seem counter intuitive, but `list.all` always returns `true` for an
 ## any
 
 ```nanyx
-list.any: (list(a), (a -> bool)) -> bool
+list.any: [c] (list(a), ([c] a -> bool)) -> bool
 ```
 
 Returns `true` if any element satisfies the predicate.
@@ -81,7 +81,7 @@ Returns `true` if any element is equal to the value. Elements are compared with 
 ## count
 
 ```nanyx
-list.count: (list(a), (a -> bool)) -> int
+list.count: [c] (list(a), ([c] a -> bool)) -> int
 ```
 
 Returns the number of elements that satisfy the predicate.
@@ -128,7 +128,7 @@ list.dropLast([1, 2, 3])
 ## filter
 
 ```nanyx
-list.filter: (list(a), (a -> bool)) -> list(a)
+list.filter: [c] (list(a), ([c] a -> bool)) -> list(a)
 ```
 
 Keeps only elements that satisfy the predicate.
@@ -143,7 +143,7 @@ Keeps only elements that satisfy the predicate.
 ## find
 
 ```nanyx
-list.find: (list(a), (a -> bool)) -> #some(a) | #notFound
+list.find: [c] (list(a), ([c] a -> bool)) -> #some(a) | #notFound
 ```
 
 Returns the first element matching the predicate.
@@ -158,7 +158,7 @@ Returns the first element matching the predicate.
 ## flatMap
 
 ```nanyx
-list.flatMap: (list(a), (a -> list(b))) -> list(b)
+list.flatMap: [c] (list(a), ([c] a -> list(b))) -> list(b)
 ```
 
 Applies a function that gives a list to every element, and joins the lists end to end. It is a `map` followed by a `flatten`.
@@ -203,7 +203,7 @@ list.head([10, 20, 30])
 ## fold
 
 ```nanyx
-list.fold: (list(a), b, ((b, a) -> b)) -> b
+list.fold: [c] (list(a), b, ([c] (b, a) -> b)) -> b
 ```
 
 Reduces a list to a single value. Runs through the list from left to right, applying the function to an accumulator and each element.
@@ -218,7 +218,7 @@ Reduces a list to a single value. Runs through the list from left to right, appl
 ## foldBack
 
 ```nanyx
-list.foldBack: (list(a), b, ((b, a) -> b)) -> b
+list.foldBack: [c] (list(a), b, ([c] (b, a) -> b)) -> b
 ```
 
 Reduces a list to a single value. Runs through the list backwards (from right to left), applying the function to an accumulator and each element.
@@ -250,7 +250,7 @@ Returns the element at an index, counting from 0. A negative index, or one past 
 ## groupBy
 
 ```nanyx
-list.groupBy: [Eq(b) & Hash(b)] (list(a), (a -> b)) -> map(b, list(a))
+list.groupBy: [Eq(b) & Hash(b) & c] (list(a), ([c] a -> b)) -> map(b, list(a))
 ```
 
 Groups elements of a list by a key function, returning a [map](map) from each key to the elements that have it, in order. The keys are in the order they first appear. Keys need an `Eq` and a `Hash`, as a map's do.
@@ -325,7 +325,7 @@ list.length([1, 2, 3])
 ## map
 
 ```nanyx
-list.map: (list(a), (a -> b)) -> list(b)
+list.map: [c] (list(a), ([c] a -> b)) -> list(b)
 ```
 
 Applies a function to every element in a list, collecting the results in a new list. The resulting list always has the same length as the input list.
@@ -340,7 +340,7 @@ Applies a function to every element in a list, collecting the results in a new l
 ## mapIndexed
 
 ```nanyx
-list.mapIndexed: (list(a), ((int, a) -> b)) -> list(b)
+list.mapIndexed: [c] (list(a), ([c] (int, a) -> b)) -> list(b)
 ```
 
 Like `map`, but the function is also given each element's position, counting from 0.
@@ -385,7 +385,7 @@ list.min(["pear", "apple", "fig"])
 ## partition
 
 ```nanyx
-list.partition: (list(a), (a -> bool)) -> (list(a), list(a))
+list.partition: [c] (list(a), ([c] a -> bool)) -> (list(a), list(a))
 ```
 
 Returns the elements that pass the predicate and the elements that fail it, each in their original order.
@@ -429,7 +429,7 @@ list.skip([1, 2, 3, 4], 2)
 ## skipWhile
 
 ```nanyx
-list.skipWhile: (list(a), (a -> bool)) -> list(a)
+list.skipWhile: [c] (list(a), ([c] a -> bool)) -> list(a)
 ```
 
 Returns the elements from the first one that fails the predicate, so `xs \takeWhile(f) ++ xs \skipWhile(f)` is `xs`.
@@ -458,7 +458,7 @@ list.sort([3, 1, 2])
 ## sortBy
 
 ```nanyx
-list.sortBy: [Ord(b)] (list(a), (a -> b)) -> list(a)
+list.sortBy: [Ord(b) & c] (list(a), ([c] a -> b)) -> list(a)
 ```
 
 Sorts a list in ascending order of the key the projection function gives each element. The key can be of any type with an order, a tuple of keys included. The sort is stable: elements with equal keys keep their order.
@@ -506,7 +506,7 @@ list.take([1, 2, 3, 4], 2)
 ## takeWhile
 
 ```nanyx
-list.takeWhile: (list(a), (a -> bool)) -> list(a)
+list.takeWhile: [c] (list(a), ([c] a -> bool)) -> list(a)
 ```
 
 Returns the elements before the first one that fails the predicate.
@@ -569,7 +569,7 @@ Not in the prelude yet: it waits on the `Yield` context ([#478](https://github.c
 ## unfold
 
 ```nanyx
-list.unfold: (b, (b -> #some(a, b) | #done)) -> list(a)
+list.unfold: [c] (b, ([c] b -> #some(a, b) | #done)) -> list(a)
 ```
 
 Generates a sequence from an initial state value and a function that produces either `#done` to end the sequence or `#some(element, newState)` to yield an element and a new state for the next step. Returns a list of all yielded elements.

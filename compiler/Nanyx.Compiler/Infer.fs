@@ -935,7 +935,13 @@ let private contextArgTysAtCall (state: InferState) (signature: TypeExpr option)
         | Some signature ->
             let signatureTy = read signature
             let argTys = args |> List.map read
-            current <- addConstraint signatureTy calleeTy current
+            // A function named as a value requires its own contexts, which its signature leaves out (see
+            // `ContextVariables.ofNamedValue`).
+            let withoutOwnContexts =
+                match Unifier.unalias calleeTy with
+                | TyFunc(input, output, _) -> TyFunc(input, output, [])
+                | other -> other
+            current <- addConstraint signatureTy withoutOwnContexts current
             argTys
         | None ->
             let names = namedVarsIn generalTy calleeTy
@@ -1509,6 +1515,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Error err -> Error err
             | Ok state ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
+                let ty =
+                    match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
+                    | Some written -> ContextVariables.ofNamedValue written scheme.Type ty
+                    | None -> ty
                 Ok (mkTypedExpr expr ty None None None, next)
         | None -> Error [ Diagnostics.at DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" ]
     | FunctionCall(name, spanOpt, args) ->
@@ -1618,7 +1628,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | Ok (elements, constrained) ->
                     let expectedInput = inputTypeFromArgs (List.map fst elements)
                     match inferLambdaWithExpected env constrained lambdaExpr lambdaArgs lambdaBody (Some expectedInput) None with
-                    | Ok (_, next) -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, next)
+                    // The loop runs its body where it is written: what the body uses is used here.
+                    | Ok (typedLambda, next) -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, LambdaContexts.recordRunHere typedLambda.Type next)
                     | Error err -> Error err
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
         else
@@ -1632,6 +1643,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match contextCheck with
         | Error err -> Error err
         | Ok state ->
+            // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
+            let state =
+                let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+                let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
+                state |> LambdaContexts.recordWritten written |> LambdaContexts.record ofMember
             match TypeEnv.tryFind name env with
             | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
             | Some scheme when isMap state scheme.Type -> inferMapLookup env state expr (Expression.from expr (IdentifierExpr name)) spanOpt args
@@ -1661,7 +1677,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 match Unifier.unalias typedLambda.Type with
                                 | TyFunc(_, ret, _) -> ret
                                 | other -> other
-                            Ok (mkTypedExpr expr returnTy None None None, { next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
+                            Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
                         | Error err -> Error err
                     | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
                 | None ->
@@ -1729,24 +1745,33 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Some diagnostic -> Error [ diagnostic ]
                         | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
+                        // A function value requires the contexts its type says where it is called. One whose type is
+                        // not known yet, such as a parameter of a def that does not write its type, requires a context
+                        // variable of its own (see `ContextVariables`).
+                        let calleeContexts, current =
+                            match Unifier.unalias funcTy with
+                            | TyFunc(_, _, contexts) -> contexts, current
+                            | _ -> let var, next = freshVar current in [ var ], next
+                        // The callee's own context variables stand for the contexts of the arguments given for them,
+                        // and the call requires those too. Both are used by the lambda around the call, if any.
+                        let requireUsed (next: InferState) =
+                            let ofVariables =
+                                match next.ContextRequirements |> Map.tryFind (canonicalName env next name) |> Option.map ContextVariables.names with
+                                | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
+                                | _ -> []
+                            let ofValue = if calleeContexts.IsEmpty then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
+                            let used = ofVariables @ ofValue |> List.distinct
+                            let requirePlain current ctx = ensureContextAvailable true env current name [ ctx ] calleeSpan
+                            ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.record used next)
                         // When the callee's type is already a function (an annotated or already-inferred
                         // def), its return type is the call's type directly, so a member access or match on
                         // the result can see it without waiting for the constraint below to be solved.
-                        // The callee's own context variables stand for the contexts of the arguments given for them,
-                        // which the call requires (see `ContextVariables`).
-                        let requireBound (next: InferState) =
-                            match next.ContextRequirements |> Map.tryFind (canonicalName env next name) |> Option.map ContextVariables.names with
-                            | Some vars when not vars.IsEmpty ->
-                                let bound = ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
-                                let requirePlain current ctx = ensureContextAvailable true env current name [ ctx ] calleeSpan
-                                ContextVariables.require requirePlain name calleeSpan bound next
-                            | _ -> Ok next
                         match Unifier.unalias funcTy, paramTys with
                         // Each argument was checked against its parameter above, which is all a known signature
                         // asks; constraining several arguments together as well, as one record, would make each
                         // equal to its parameter, and undo an argument union's widening into its parameter's.
                         | TyFunc(_, declaredRet, _), Some _ when args.Length > 1 ->
-                            requireBound current |> Result.map (fun next -> { mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, next)
+                            requireUsed current |> Result.map (fun next -> { mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, next)
                         | _ ->
                         let retTy, nextState =
                             match Unifier.unalias funcTy with
@@ -1764,13 +1789,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         // callee's type when that is known to be a function, whose result is the call's already.
                         let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
                         let funcSpan = if paramTys.IsSome then inputSpan else SourceSpan.none
-                        let calleeContexts =
-                            match Unifier.unalias funcTy with
-                            | TyFunc(_, _, contexts) -> contexts
-                            | _ -> []
                         let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy, calleeContexts)) nextState2
                         let withAssignable = addAssignableConstraintAt inputSpan inputTy expectedInput withFuncConstraint
-                        requireBound withAssignable |> Result.map (fun next -> { mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, next)
+                        requireUsed withAssignable |> Result.map (fun next -> { mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, next)
                     else
                         Error errors
             | None ->
@@ -1799,6 +1820,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         let inputTy = inputTypeFromArgs argTys
+                        // An instance of a context keeps the contexts its members use from where it is made.
+                        let inputTy = if info.IsContext then LambdaContexts.captured inputTy else inputTy
                         let constrained = addAssignableConstraint inputTy info.Underlying current
                         Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
                     else
@@ -2446,6 +2469,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme when not (referenceErrors qualifiedName expr scheme state).IsEmpty -> Error (referenceErrors qualifiedName expr scheme state)
             | Some scheme ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
+                let ty =
+                    match state.ContextRequirements |> Map.tryFind (canonicalName env state qualifiedName) with
+                    | Some written -> ContextVariables.ofNamedValue written scheme.Type ty
+                    | None -> ty
                 Ok (mkTypedExpr expr ty None None None, next)
             | None -> readMember env state expr baseExpr (Some baseName) memberName memberSpan
         | _ -> readMember env state expr baseExpr None memberName memberSpan
@@ -2547,8 +2574,9 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
         let symbol, next = declareSymbol LambdaParameters lambda.Id name Parameter false (Some lambda.Span.End) current
         current <- next |> recordSymbolType symbol ty |> recordAnnotated symbol typeOpt.IsSome
         env' <- TypeEnv.declare name symbol (TypeEnv.mono ty) env'
-    match inferExpr env' current body with
+    match inferExpr env' (LambdaContexts.enter lambda current) body with
     | Ok (bodyExpr, next) ->
+        let used, next = LambdaContexts.leave lambda next
         let withReturnConstraint =
             match expectedReturnOpt with
             | Some expectedReturn -> addDeclaredConstraintAt body.Span bodyExpr.Type expectedReturn next
@@ -2557,7 +2585,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
             match expectedInputOpt with
             | Some expectedInput -> expectedInput
             | None -> inputTypeFromArgs argTys
-        Ok (mkTypedExpr lambda (TyFunc(inputTy, bodyExpr.Type, [])) (Some bodyExpr) None None, withReturnConstraint)
+        Ok (mkTypedExpr lambda (TyFunc(inputTy, bodyExpr.Type, used)) (Some bodyExpr) None None, withReturnConstraint)
         // Called directly for a lambda whose input is known, not only through `inferExpr`.
         |> recordExprType
     | Error err -> Error err
@@ -2623,7 +2651,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         let outerScope = nextStateWithReq.ContextScope
                         let bodyState =
                             match typeOpt, expr.Kind with
-                            | Some _, Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, false) }
+                            | Some _, Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, false) } |> LambdaContexts.markBody expr
                             | _ -> nextStateWithReq
                         let inferResult =
                             match expr.Kind with
@@ -2940,7 +2968,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 // level, in the ambient ones.
                 let bodyState =
                     match expr.Kind with
-                    | Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, typeOpt.IsNone) }
+                    | Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, typeOpt.IsNone) } |> LambdaContexts.markBody expr
                     | _ -> nextStateWithReq
                 let inferResult =
                     match expr.Kind with
@@ -2951,16 +2979,18 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = AmbientScope })
                 match inferResult with
                 | Ok (typedExpr, next) ->
-                    let declaredTy, finalState =
+                    // An unannotated def names the context variables it was found to use (see `ContextInference`).
+                    let declaredTy, finalState, contextVariables =
                         match expectedDeclaredOpt with
                         | Some declaredTy ->
-                            declaredTy, TypeHoles.constrainToAnnotation expr declaredTypeExprOpt declaredTy typedExpr.Type next
+                            declaredTy, TypeHoles.constrainToAnnotation expr declaredTypeExprOpt declaredTy typedExpr.Type next, []
                         | None ->
                             let updatedState =
                                 match preboundFreshVars |> Map.tryFind name with
                                 | Some preboundTy -> addConstraintAt expr.Span preboundTy typedExpr.Type next
                                 | None -> next
-                            typedExpr.Type, updatedState
+                            let names, named = ContextInference.nameContextVariables name typedExpr.Type updatedState
+                            typedExpr.Type, named, names
                     // An annotated def pre-bound at a fresh variable (one with a `typeof`) is that annotation.
                     let finalState =
                         match expectedDeclaredOpt, preboundFreshVars |> Map.tryFind name with
@@ -3001,7 +3031,13 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                                         registerContextRequirement resolvedState name contexts (Some signature)
                                     | None -> typeOpt, resolvedState
                                 | _ -> Option.orElse inferredAnnotation typeOpt, resolvedState
-                            state <- resolvedState
+                            // The context variables it names are among the contexts it requires, after any others, so
+                            // that a call binds them.
+                            let written = resolvedState.ContextRequirements |> Map.tryFind name |> Option.defaultValue []
+                            state <-
+                                match contextVariables with
+                                | [] -> resolvedState
+                                | names -> { resolvedState with ContextRequirements = resolvedState.ContextRequirements |> Map.add name (written @ (names |> List.map (TypeVar >> TypeExpr.synthetic))) }
                             env <- declareTopLevel name symbol scheme env
                             types <- types |> Map.add name declaredTy
                             emit (TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)))

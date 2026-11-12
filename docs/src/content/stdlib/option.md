@@ -11,7 +11,7 @@ In Nanyx, any union that includes `#some(a)` is considered option-like. There is
 # map
 
 ```nanyx
-mapOption: ((#some(a) | r), (a -> b)) -> (#some(b) | r)
+mapOption: [c] ((#some(a) | r), ([c] a -> b)) -> (#some(b) | r)
 ```
 
 Transforms the value when present.
@@ -30,7 +30,7 @@ value \mapOption { .length }
 # bind
 
 ```nanyx
-bindOption: ((#some(a) | r), (a -> (#some(b) | r))) -> (#some(b) | r)
+bindOption: [c] ((#some(a) | r), ([c] a -> (#some(b) | r))) -> (#some(b) | r)
 ```
 
 Chains option-producing operations. The result has the other tags of both steps: `r` stands for all of them, and each step adds its own.
@@ -108,7 +108,7 @@ toResultOption(#none, "missing user")
 # mapOr
 
 ```nanyx
-mapOrOption: ((#some(a) | r), b, (a -> b)) -> b
+mapOrOption: [c] ((#some(a) | r), b, ([c] a -> b)) -> b
 ```
 
 Maps the contained value or returns a default.
@@ -160,7 +160,7 @@ The values of the `#some`s in a list, in order. The other tags are dropped.
 # mapOrElse
 
 ```nanyx
-mapOrElseOption: ((#some(a) | r), () -> b, (a -> b)) -> b
+mapOrElseOption: [c] ((#some(a) | r), ([c] () -> b), ([c] a -> b)) -> b
 ```
 
 Maps the contained value or computes a fallback lazily: the fallback is called only when there is no `#some`.
@@ -174,7 +174,7 @@ mapOrElseOption(#none, { expensiveFallback() }) { .length }
 # orElse
 
 ```nanyx
-orElseOption: ((#some(a) | r), () -> (#some(a) | s)) -> #some(a) | s
+orElseOption: [c] ((#some(a) | r), ([c] () -> (#some(a) | s))) -> #some(a) | s
 ```
 
 Keeps a `#some` as it is; for any other tag, calls the fallback and gives back what it returns. The fallback is called only when it is needed, and the result has its tags, not the first option's.
