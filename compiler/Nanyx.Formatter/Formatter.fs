@@ -350,7 +350,7 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and needsParentheses (position: Position) (e: Expression) =
         match e.Kind with
-        | BinaryOp(op, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
+        | BinaryOp(op, _, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
         | RangeSyntax.Call _ -> 4 < position.Prec || position.Inline
         | FunctionCall("not", _, [ _ ]) -> 8 < position.Prec || position.Inline
         | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> 8 < position.Prec
@@ -382,7 +382,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | IdentifierExpr n when n = implicitArgument -> Doc.empty
         | IdentifierExpr n when n = notImplemented -> text n
         | IdentifierExpr n -> text (Names.written n)
-        | BinaryOp(op, l, r) ->
+        | BinaryOp(op, _, l, r) ->
             match spreadSegments e with
             | Some segments -> listDoc e.Span segments
             | None -> binary position op l r
@@ -493,7 +493,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         // A node of the chain: same precedence, needing no brackets where it is, and not a list with spreads.
         let continues (x: Expression) =
             match x.Kind with
-            | BinaryOp(op', _, _) ->
+            | BinaryOp(op', _, _, _) ->
                 precedence op' = p
                 && rightAssociative.Contains op' = isRight
                 && not (position.Inline && not (inlineOperators.Contains op'))
@@ -501,13 +501,13 @@ let format (options: Options) (parsed: SourceModule) : string =
             | _ -> false
         let rec flattenLeft (x: Expression) =
             match x.Kind with
-            | BinaryOp(op', a, b) when continues x ->
+            | BinaryOp(op', _, a, b) when continues x ->
                 let operands, operators = flattenLeft a
                 operands @ [ b ], operators @ [ writtenOperator op' a b ]
             | _ -> [ x ], []
         let rec flattenRight (x: Expression) =
             match x.Kind with
-            | BinaryOp(op', a, b) when continues x ->
+            | BinaryOp(op', _, a, b) when continues x ->
                 let operands, operators = flattenRight b
                 a :: operands, writtenOperator op' a b :: operators
             | _ -> [ x ], []
@@ -544,14 +544,14 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// run of elements or a list spread, when `e` is such a literal.
     and spreadSegments (e: Expression) : Choice<Expression list, Expression> list option =
         match e.Kind with
-        | BinaryOp("++", l, r) when valid e.Span && source[e.Span.Start] = '[' && (l.Span = e.Span || (valid l.Span && l.Span.Start > e.Span.Start)) ->
+        | BinaryOp("++", _, l, r) when valid e.Span && source[e.Span.Start] = '[' && (l.Span = e.Span || (valid l.Span && l.Span.Start > e.Span.Start)) ->
             let segment (x: Expression) =
                 match x.Kind with
                 | ListExpr items when x.Span = e.Span -> Choice1Of2 items
                 | _ -> Choice2Of2 x
             let rec flatten (x: Expression) =
                 match x.Kind with
-                | BinaryOp("++", a, b) when x.Span = e.Span -> segment a :: flatten b
+                | BinaryOp("++", _, a, b) when x.Span = e.Span -> segment a :: flatten b
                 | _ -> [ segment x ]
             Some(segment l :: flatten r)
         | _ -> None
@@ -730,7 +730,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let made (x: Expression) = valid e.Span && x.Span = e.Span
         match parameters, body.Kind with
         | [], UnitExpr when made body -> Some(text "{ }")
-        | [ (first, None); (second, None) ], BinaryOp(op, l, r) when
+        | [ (first, None); (second, None) ], BinaryOp(op, _, l, r) when
             first = implicitArgument && second = implicitSecondArgument && l.Kind = IdentifierExpr first && r.Kind = IdentifierExpr second ->
             Some(text $"{{ {op} }}")
         | [ (only, None) ], _ when only = implicitArgument ->

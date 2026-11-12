@@ -573,8 +573,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | _ -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
     | Lambda(args, body, _) ->
         inferLambdaWithExpected env state expr args body None None
-    | BinaryOp(op, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
-    | BinaryOp(_, left, right) ->
+    | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
+    | BinaryOp(_, _, left, right) ->
         match inferExpr env state left with
         | Error err -> Error err
         | Ok (leftExpr, next) ->
@@ -595,16 +595,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     Ok (mkTypedExpr expr resultTy None None None, called)
                 | None ->
                 match expr.Kind with
-                | BinaryOp(op, _, _) when op = AppendOperator.operator ->
+                | BinaryOp(op, _, _, _) when op = AppendOperator.operator ->
                     AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
                     |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
-                | BinaryOp(op, _, _) when ArithmeticOperators.isOperator op ->
+                | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
                     ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
                     |> Result.map (fun numericConstrained -> mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
-                | BinaryOp(op, _, _) when OrderingOperators.isOperator op ->
+                | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op ->
                     OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
                     |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
-                | BinaryOp(op, _, _) when EqualityOperators.isOperator op ->
+                | BinaryOp(op, _, _, _) when EqualityOperators.isOperator op ->
                     // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
                     // tags. Anything else is made equal.
                     let operandTy, joined =
@@ -615,7 +615,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
                     EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
                     |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
-                | BinaryOp(op, _, _) when ["and"; "or"] |> List.contains op ->
+                | BinaryOp(op, _, _, _) when ["and"; "or"] |> List.contains op ->
                     // Both operands are already unified with each other; pin them to bool.
                     let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
                     Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)

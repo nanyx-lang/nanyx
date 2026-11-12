@@ -17,8 +17,8 @@ module internal ExpressionRewrites =
                 FunctionCall(name, rangeOpt, args |> List.map mapExpr)
             | Lambda(parameters, body, takesUnit) ->
                 Lambda(parameters, mapExpr body, takesUnit)
-            | BinaryOp(op, left, right) ->
-                BinaryOp(op, mapExpr left, mapExpr right)
+            | BinaryOp(op, opSpan, left, right) ->
+                BinaryOp(op, opSpan, mapExpr left, mapExpr right)
             | Pipe(value, name, rangeOpt, args) ->
                 Pipe(mapExpr value, name, rangeOpt, args |> List.map mapExpr)
             | Block statements ->
@@ -84,24 +84,25 @@ module internal ExpressionRewrites =
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node, with
     /// the name it calls) written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``, or
     /// `` $Vector.`+`(x, y) ``, and `-x` becomes `negate(x)`. `x != y` calls what `==` does, and becomes
-    /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by. An operator
-    /// that calls the member of an instance in scope (`instances`, by the operator's node) calls it through that
-    /// instance, `` Add(a).`+`(x, y) ``, so that a function that requires `[Add(a) & Add(b)]` calls the right one.
+    /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by, and the
+    /// operator's span as its name's. An operator that calls the member of an instance in scope (`instances`, by the
+    /// operator's node) calls it through that instance, `` Add(a).`+`(x, y) ``, so that a function that requires
+    /// `[Add(a) & Add(b)]` calls the right one.
     let callOperators (calls: Map<NodeId, Identifier>) (instances: Map<NodeId, TypeExpr>) (expr: Expression) : Expression =
         if calls.IsEmpty then
             expr
         else
             expr
             |> mapExpressionKinds (fun current kind ->
-                let call (callee: Identifier) (args: Expression list) =
+                let call (callee: Identifier) (opSpan: SourceSpan option) (args: Expression list) =
                     match instances |> Map.tryFind current.Id with
                     | Some instance -> ContextMemberCall(instance, callee, args)
-                    | None -> FunctionCall(callee, None, args)
+                    | None -> FunctionCall(callee, opSpan, args)
                 match kind, calls |> Map.tryFind current.Id with
-                | BinaryOp(op, left, right), Some callee when op = EqualityOperators.notEquals ->
-                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = call callee [ left; right ] } ])
-                | BinaryOp(_, left, right), Some callee -> call callee [ left; right ]
-                | FunctionCall(_, _, [ operand ]), Some callee -> call callee [ operand ]
+                | BinaryOp(op, opSpan, left, right), Some callee when op = EqualityOperators.notEquals ->
+                    FunctionCall(NotSyntax.builtIn, None, [ { current with Kind = call callee opSpan [ left; right ] } ])
+                | BinaryOp(_, opSpan, left, right), Some callee -> call callee opSpan [ left; right ]
+                | FunctionCall(_, span, [ operand ]), Some callee -> call callee span [ operand ]
                 | other, _ -> other)
 
     /// Every expression that inference read as another (`readAs`, by the node of the one written) written as that
@@ -116,7 +117,7 @@ module internal ExpressionRewrites =
             expr
             |> mapExpressionKinds (fun current kind ->
                 match kind, readAs |> Map.tryFind current.Id with
-                | BinaryOp(_, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
+                | BinaryOp(_, _, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
                 | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, receiver :: readArgs) } when readArgs.Length = args.Length ->
                     FunctionCall(callee, span, receiver :: args)
                 | _, Some read -> read.Kind

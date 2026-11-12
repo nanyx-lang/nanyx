@@ -1125,6 +1125,53 @@ public sealed partial class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task References_hover_and_definition_on_a_user_defined_operator_point_at_the_operator()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "user-operator.nyx"));
+
+        Open(uri, """
+            type Point = (x: int, y: int)
+            --| Adds two points.
+            def Point.`+`: Point, Point -> Point = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
+            def q: Point = Point(x = 1, y = 2) + Point(x = 3, y = 4)
+            def r: Point = q + q
+            """);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var uses = new[] { new Range(3, 35, 3, 36), new Range(4, 17, 4, 18) };
+        // From a use, and from the declaration; the `+`s on ints in its body are not among them.
+        Assert.Equal(uses, (await ReferencesAt(uri, 3, 35, includeDeclaration: false)).Select(location => location.Range));
+        Assert.Equal(
+            uses.Prepend(new Range(2, 4, 2, 13)),
+            (await ReferencesAt(uri, 2, 5, includeDeclaration: true)).Select(location => location.Range));
+
+        var hover = await HoverAt(uri, 3, 35);
+        Assert.Equal("```nanyx\ndef Point.+: Point, Point -> Point\n```\n\n---\n\nAdds two points.", hover?.Contents.MarkupContent?.Value);
+        Assert.Equal(new Range(3, 35, 3, 36), hover?.Range);
+        Assert.Equal(new Range(2, 4, 2, 13), (await SingleDefinitionAt(uri, 3, 35))?.Range);
+        // Beside the operator, an operand is hovered as before.
+        Assert.Equal("```nanyx\ndef q: Point\n```", (await HoverAt(uri, 4, 15))?.Contents.MarkupContent?.Value);
+    }
+
+    [Fact]
+    public async Task Hover_on_an_operator_in_a_generic_function_shows_the_context_member_it_calls()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "context-operator.nyx"));
+
+        Open(uri, "def plus: [Add(a)] a, a -> a = { x, y -> x + y }\ndef inferred = { a, b -> a + b }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // The `+` of the `Add(a)` the function requires.
+        var hover = await HoverAt(uri, 0, 43);
+        Assert.Equal("```nanyx\n+: a, a -> a\n```", hover?.Contents.MarkupContent?.Value);
+        Assert.Equal(new Range(0, 43, 0, 44), hover?.Range);
+        // Where the context is inferred, there is no member to show, and the operator shows its type.
+        var inferred = await HoverAt(uri, 1, 27);
+        Assert.Equal("```nanyx\nα, α -> α\n```", inferred?.Contents.MarkupContent?.Value);
+        Assert.Equal(new Range(1, 27, 1, 28), inferred?.Range);
+    }
+
+    [Fact]
     public void Server_advertises_document_formatting()
     {
         Assert.NotNull(_client.ServerSettings.Capabilities.DocumentFormattingProvider);

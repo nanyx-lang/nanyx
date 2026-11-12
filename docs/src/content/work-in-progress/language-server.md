@@ -243,12 +243,14 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    after the attribute).
 2. **Hover.** Done: inferred types ([#120](https://github.com/nanyx-lang/nanyx/issues/120)), a name's declaration
    with its contexts ([#765](https://github.com/nanyx-lang/nanyx/issues/765)) and doc comments
-   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)). Hover on an operator shows the type of the whole
-   expression, not the operator's definition ([#792](https://github.com/nanyx-lang/nanyx/issues/792)).
+   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)). An operator records its own span, so hover on one
+   that calls a definition (an attached `` `+` ``, or the member of a context the function requires) shows that
+   definition, and on a built-in one its type there ([#792](https://github.com/nanyx-lang/nanyx/issues/792)).
 3. **Go-to-definition and find-references.** From the recorded symbols and references ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
    Go-to-definition is done for values (including those in the standard library), type names and context members
    ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
-   ([#276](https://github.com/nanyx-lang/nanyx/issues/276)); across the workspace it is not.
+   ([#276](https://github.com/nanyx-lang/nanyx/issues/276)), with a use of an operator at the operator
+   ([#792](https://github.com/nanyx-lang/nanyx/issues/792)); across the workspace it is not.
 4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278)), though a local def in a
    nested block or lambda argument, such as a `memory` block's cells, is not listed yet
    ([#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace) would

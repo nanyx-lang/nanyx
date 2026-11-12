@@ -72,7 +72,7 @@ let ``Expressions at a position are innermost first`` () =
         | Error message -> failwith message
     let found = Hover.expressionsAt (offsetOf source "2" 0 0) syntax
     match found |> List.map (fun expr -> expr.Kind) with
-    | [ LiteralExpr (IntLit 2L); BinaryOp("*", _, _); BinaryOp("+", _, _) ] -> ()
+    | [ LiteralExpr (IntLit 2L); BinaryOp("*", _, _, _); BinaryOp("+", _, _, _) ] -> ()
     | kinds -> failwithf "Unexpected expressions: %A" kinds
     // Each one encloses the one before it.
     found

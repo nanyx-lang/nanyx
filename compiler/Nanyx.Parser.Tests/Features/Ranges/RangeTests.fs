@@ -9,7 +9,7 @@ open System.IO
 [<Fact>]
 let ``a..b is a call to __range that binds looser than arithmetic`` () =
     match parseModule "def r = n - 1..n + 1" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "r", _, Kind (FunctionCall ("__range", None, [ Kind (BinaryOp ("-", _, _)); Kind (BinaryOp ("+", _, _)) ]))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "r", _, Kind (FunctionCall ("__range", None, [ Kind (BinaryOp ("-", _, _, _)); Kind (BinaryOp ("+", _, _, _)) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
@@ -26,7 +26,7 @@ let ``for with arms is a call to __for with a pattern lambda, and -> without an 
 let ``a.. with nothing after it is a call to __range with only its start`` () =
     match parseModule "def a = 0..\ndef b = n + 1..\ndef c = 1.. \\take(3)\ndef d = f(0..)" with
     | Result.Ok [ Kind (Def (ValueDef (_, "a", _, Kind (FunctionCall ("__range", None, [ Kind (LiteralExpr (IntLit 0L)) ])))))
-                  Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__range", None, [ Kind (BinaryOp ("+", _, _)) ])))))
+                  Kind (Def (ValueDef (_, "b", _, Kind (FunctionCall ("__range", None, [ Kind (BinaryOp ("+", _, _, _)) ])))))
                   Kind (Def (ValueDef (_, "c", _, Kind (Pipe (Kind (FunctionCall ("__range", None, [ _ ])), "take", _, _)))))
                   Kind (Def (ValueDef (_, "d", _, Kind (FunctionCall ("f", _, [ Kind (FunctionCall ("__range", None, [ _ ])) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"

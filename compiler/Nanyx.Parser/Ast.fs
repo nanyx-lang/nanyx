@@ -260,6 +260,7 @@ and [<CustomEquality; CustomComparison; StructuredFormatDisplay("{Kind}")>] Expr
     member private this.Code =
         match this.Kind with
         | FunctionCall(name, Some _, args) -> FunctionCall(name, None, args)
+        | BinaryOp(op, Some _, left, right) -> BinaryOp(op, None, left, right)
         | Pipe(value, name, Some _, args) -> Pipe(value, name, None, args)
         | MemberAccess(target, field, Some _) -> MemberAccess(target, field, None)
         | kind -> kind
@@ -277,8 +278,8 @@ and [<CustomEquality; CustomComparison; StructuredFormatDisplay("{Kind}")>] Expr
             | :? Expression as expr -> compare this.Code expr.Code
             | _ -> invalidArg "other" "an Expression can only be compared with another Expression"
 
-/// The span on `FunctionCall`, `Pipe` and `MemberAccess` is that of the name (the function or the field), which
-/// is not where the expression as a whole starts.
+/// The span on `FunctionCall`, `Pipe` and `MemberAccess` is that of the name (the function or the field), and the one on
+/// `BinaryOp` that of the operator, which is not where the expression as a whole starts.
 and ExpressionKind =
     | LiteralExpr of Literal
     | UnitExpr
@@ -288,7 +289,7 @@ and ExpressionKind =
     /// parameters, `{ ... }`, which ignores a parameter the type it is checked against gives it (both have no
     /// parameters here).
     | Lambda of parameters: (Identifier * TypeExpr option) list * body: Expression * takesUnit: bool
-    | BinaryOp of string * Expression * Expression
+    | BinaryOp of string * SourceSpan option * Expression * Expression  // left op right
     | Pipe of Expression * Identifier * SourceSpan option * Expression list  // expr \func or expr \func(args)
     | Block of Statement list
     | Match of Expression list * MatchArm list  // Can match on multiple values

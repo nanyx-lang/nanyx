@@ -27,7 +27,7 @@ let ``if-matching with else uses the else as the wildcard arm`` () =
 [<Fact>]
 let ``a condition without is stays a plain if, and is must end the keyword`` () =
     match parseModule "def x = if a == b then 1 else 2" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (IfExpr (Kind (BinaryOp ("==", _, _)), _, _))))) ] -> ()
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (IfExpr (Kind (BinaryOp ("==", _, _, _)), _, _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
     match parseModule "def y = if island then 1 else 2" with
@@ -54,7 +54,7 @@ let ``multi-branch if arms may test patterns with is, and a missing else is unit
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match ([ Kind (FunctionCall _) ],
                                                                                       [ [ Kind (TagPattern ("some", Some (Kind (IdentifierPattern "i")))) ], Kind (IdentifierExpr "i")
-                                                                                        [ Kind WildcardPattern ], Kind (IfExpr (Kind (BinaryOp ("==", _, _)), _, Kind UnitExpr)) ])))) ]), _))))) ] -> ()
+                                                                                        [ Kind WildcardPattern ], Kind (IfExpr (Kind (BinaryOp ("==", _, _, _)), _, Kind UnitExpr)) ])))) ]), _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 
