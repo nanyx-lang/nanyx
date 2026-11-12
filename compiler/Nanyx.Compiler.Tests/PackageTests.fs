@@ -4,21 +4,9 @@ open System
 open System.IO
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
-
-/// A new directory holding `files` (relative path, contents), deleted when disposed.
-type private TempPackage(files: (string * string) list) =
-    let root = Path.Combine(Path.GetTempPath(), "nanyx-package-" + Guid.NewGuid().ToString("N"))
-    do
-        for (path, contents) in files do
-            let full = Path.Combine(root, path)
-            Directory.CreateDirectory(Path.GetDirectoryName full) |> ignore
-            File.WriteAllText(full, contents)
-    member _.Root = root
-    member _.Path(relative: string) = Path.Combine(root, relative)
-    interface IDisposable with
-        member _.Dispose() = try Directory.Delete(root, true) with _ -> ()
 
 let private manifest extra = $"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n{extra}"
 

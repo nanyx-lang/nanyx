@@ -112,10 +112,10 @@ module Script =
             ErrorsDeferred = result.ErrorsDeferred && not (directives.Diagnostics |> List.exists Diagnostics.isError) }
 
     /// Compiles `source` as the script at `filePath`, with the linters its directives turn on (none if they turn none
-    /// on), as `nanyx run` does.
+    /// on), as `nanyx run` does. A source file of a package is compiled as one (see `Package.compileSourceWith`).
     let compileSource (filePath: string) (source: string) : CompileResult =
         let directives = read filePath source
-        Compiler.compileSourceWith (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        Package.compileSourceWith (directives.Linters |> Option.defaultValue Linters.none) filePath source
         |> withDirectives directives
 
     /// `compileSource` for the file at `filePath` as it is on disk.

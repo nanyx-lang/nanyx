@@ -966,8 +966,11 @@ module Compiler =
         | InMemory -> ""
 
     /// The modules one compilation has checked, by `originKey`, so that a module imported along several paths is
-    /// checked once and every importer sees the same symbols.
-    type private CheckedModules = System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>
+    /// checked once and every importer sees the same symbols; with the package whose files' imports are resolved
+    /// through its module table, if the compilation is of a package's file.
+    type private CheckedModules(package: PackageModules option) =
+        inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
+        member _.Package = package
 
     /// The standard-library modules this process has checked, by `originKey` and source, each with the modules it
     /// imports, which a compilation that imports it needs too (`compileFrom` resolves inlined definitions' types by
@@ -1215,7 +1218,7 @@ module Compiler =
                 | None ->
                     match origin with
                     | SourceFile fullPath ->
-                        match FileImports.missingAlias item, FileImports.resolvePath (Path.GetDirectoryName fullPath) item with
+                        match FileImports.missingAlias item, PackageModules.resolveImport checkedModules.Package fullPath item with
                         | Some diag, _
                         | None, Error diag -> errors <- errors @ [ diag ]
                         | None, Ok importPath ->
@@ -1394,7 +1397,7 @@ module Compiler =
                     let source = readSource ()
                     let check _ =
                         lazy
-                            (let own = CheckedModules()
+                            (let own = CheckedModules None
                              let checkedModule = typecheckModule own origin source visited
                              checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
                     let checkedModule, imports = checkedStandardLibrary.GetOrAdd((key, source), check).Value
@@ -1411,12 +1414,13 @@ module Compiler =
         | Result.Ok (ast, _, _) -> Ok ast
         | Result.Error err -> Error [ syntaxError err ]
 
-    /// Checks the module from `origin`, then runs the linters `options` names over it if it type-checked. A module
+    /// Checks the module from `origin`, its imports resolved through the module table of `package` if it is one of its
+    /// files (see `PackageModules.resolveImport`), then runs the linters `options` names over it if it type-checked. A module
     /// with type or name errors is typed all the same, with what did check, beside its errors. Only
     /// the module being compiled is analyzed: an imported module is analyzed when it is compiled itself, so its
     /// diagnostics are not repeated in every module that imports it, and the standard library never is (but by tests).
-    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        let checkedModules = CheckedModules()
+    let private compileIn (package: PackageModules option) (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        let checkedModules = CheckedModules package
         match typecheckModule checkedModules origin source Set.empty with
         | Result.Error (phase, diagnostics) ->
             { Phase = phase
@@ -1464,6 +1468,14 @@ module Compiler =
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax }
+
+    /// `compileIn` for a module in no package.
+    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        compileIn None options origin source
+
+    /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules.
+    let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileIn (Some package) options (SourceFile (Path.GetFullPath filePath)) source
 
     /// `compileFile` with the linters and severities `options` gives.
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =

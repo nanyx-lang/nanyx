@@ -69,6 +69,8 @@ module DiagnosticCodes =
     let PathImportWithoutAlias = code 14 "File-path import without an alias" Severity.Error
     let NamedModuleImportedByPath = code 15 "Named module imported by file path" Severity.Error
     let EntrypointImported = code 16 "Entrypoint imported" Severity.Error
+    let ScriptInPackage = code 17 "Script in a package" Severity.Error
+    let DuplicateModule = code 18 "Module declared by more than one file" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -122,7 +124,7 @@ module DiagnosticCodes =
         [ SyntaxError; FileNotFound; ImportNotFound; ImportCycle; UnknownStandardLibraryModule
           InvalidStandardLibraryModule; UnknownAttribute; MisplacedAttribute; InvalidDirective; DirectiveInPackage
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
-          NamedModuleImportedByPath; EntrypointImported
+          NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType

@@ -208,6 +208,13 @@ module Package =
         matcher.AddIncludePatterns manifest.Sources
         matcher.GetResultsInFullPath manifest.Root |> Seq.map Path.GetFullPath |> Seq.sort |> List.ofSeq
 
+    /// Whether the manifest's `sources` select the file at the full path `filePath`, which need not exist yet.
+    let private selects (manifest: Manifest) (filePath: string) =
+        let relative = Path.GetRelativePath(manifest.Root, filePath)
+        let matcher = Matcher(StringComparison.OrdinalIgnoreCase)
+        matcher.AddIncludePatterns manifest.Sources
+        not (Path.IsPathRooted relative || relative.StartsWith "..") && matcher.Match(relative).HasMatches
+
     /// Whether the module at `path` declares an `@entry`. A file that does not parse does not; building it reports why.
     let private declaresEntry (path: string) =
         match parseModuleFile path (File.ReadAllText path) with
@@ -262,13 +269,47 @@ module Package =
                 directive.Span
                 $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, {manifestPath}")
 
+    /// The modules of `package`, by the names its source files declare.
+    let modules (package: Package) : PackageModules =
+        PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Sources
+
+    /// The modules of the package the file at `filePath` is a source file of, if it is one of a package whose
+    /// manifest reads. A file the manifest selects that is not on disk yet (an editor's new buffer) is one of them.
+    let modulesFor (filePath: string) : PackageModules option =
+        let filePath = Path.GetFullPath filePath
+        let directory = Path.GetDirectoryName filePath
+        match if Directory.Exists directory then Manifest.tryFind directory else Result.Ok None with
+        | Result.Ok (Some manifestPath) ->
+            match Manifest.read manifestPath with
+            | Result.Ok manifest when selects manifest filePath ->
+                let modules = PackageModules.ofFiles manifest.Name manifest.Root (sources manifest)
+                Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] })
+            | _ -> None
+        | _ -> None
+
+    /// Compiles `source` as the source file at `filePath` of the package `modules`: its imports name the package's
+    /// modules, and it must be a named module of its own (see `PackageModules.fileErrors`).
+    let private compileIn (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        let result = Compiler.compileSourceIn modules options filePath source
+        match PackageModules.fileErrors modules (Path.GetFullPath filePath) source with
+        | [] -> result
+        | errors -> { result with Diagnostics = errors @ result.Diagnostics; ErrorsDeferred = false }
+
+    /// Compiles `source` as the file at `filePath` (which need not hold it yet: an editor's unsaved buffer, say) with
+    /// the linters `options` gives: as a source file of the package it is in, if it is in one, or else on its own.
+    let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        match modulesFor filePath with
+        | Some modules -> compileIn modules options filePath source
+        | None -> Compiler.compileSourceWith options filePath source
+
     /// Checks every source file of `package`, running the linters its manifest turns on over each.
     let build (package: Package) : PackageBuild =
+        let modules = modules package
         let results =
             package.Sources
             |> List.map (fun file ->
                 let source = File.ReadAllText file
-                let result = Compiler.compileSourceWith package.Manifest.Linters file source
+                let result = compileIn modules package.Manifest.Linters file source
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
                 { result with
