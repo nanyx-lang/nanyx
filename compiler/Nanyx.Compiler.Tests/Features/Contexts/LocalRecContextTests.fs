@@ -104,3 +104,45 @@ def tickAll = { items ->
   loop(items)
 }
 """)
+
+[<Fact>]
+let ``A local rec def that calls itself through a function value has no context`` () =
+    // `next(total + 1)` calls a function value whose type is not known yet, so its type has a context variable, which
+    // no caller of `later` or `loop` can choose: it stands for none.
+    Assert.Equal<(string * string) list>(
+        [ "later", "int -> int -> int"; "loop", "int -> int -> int"; "next", "int -> int" ],
+        hints
+            """
+def later = { n ->
+  rec loop = { k ->
+    { total ->
+      def next = loop(k - 1)
+      if k == 0 then total else next(total + 1)
+    }
+  }
+  loop(n)
+}
+""")
+
+[<Fact>]
+let ``A lambda a local rec def returns that prints requires Console, and nothing besides`` () =
+    // The def around it requires Console too, as a def that makes a lambda that prints does.
+    Assert.Equal<(string * string) list>(
+        [ "later", "[Console] int -> ([Console] int -> int)"
+          "loop", "int -> ([Console] int -> int)"
+          "next", "[Console] int -> int" ],
+        hints
+            """
+import nanyx/console
+
+def later = { n ->
+  rec loop = { k ->
+    { total ->
+      println("tick")
+      def next = loop(k - 1)
+      if k == 0 then total else next(total + 1)
+    }
+  }
+  loop(n)
+}
+""")
