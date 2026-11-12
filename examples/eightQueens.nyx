@@ -23,12 +23,12 @@ def solve: list(int) -> #some(list(int)) | #noSolution = { queens ->
         else tryColumns(rest)
     }
 
-    tryColumns(0..boardSize - 1 \toList)
+    tryColumns((0..boardSize - 1) \toList)
 }
 
 def render: list(int) -> string = { queens ->
   queens
-    \map { q -> 0..boardSize - 1 \map { c -> if c == q then "Q " else ". " } \string.join("") }
+    \map { q -> (0..boardSize - 1) \map { c -> if c == q then "Q " else ". " } \string.join("") }
     \string.join("\n")
 }
 

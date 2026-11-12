@@ -786,25 +786,6 @@ let private prefixed (prefix: Parser<Identifier * SourceSpan, ParseState>) : Par
             let span = SourceSpan.between prefixSpan innerText
             Expression.at span (FunctionCall(builtIn, None, [ inner ])), span) prefixes term)
 
-let private operand : Parser<Operand, ParseState> = prefixed (notKeyword <|> minus <|> bang) .>> symbolicBoolean
-
-opp.TermParser <- operand
-
-addBinaryOperators opp ws binary
-
-// A bounded range `a..b` (see the ranges page) is represented as a call to the built-in "__range". It binds
-// looser than arithmetic, so `n - 1..n + 1` is `(n - 1)..(n + 1)`. `...` is list spread, not a range. A `..` with
-// nothing after it on its line but the rest of an enclosing construct is the unbounded `a..` (see `withOpenRange`).
-let private rangeHasEnd =
-    notFollowedBy (wsInline >>. (skipNewline <|> eof <|> skipAnyOf "|)]},\\" <|> skipString "->" <|> skipString "--"))
-opp.AddOperator(InfixOperator("..", operatorSpan ".." (notFollowedBy (pchar '.') >>. rangeHasEnd >>. ws), rangePrecedence, Associativity.None, (), fun _ (x, xText) (y, yText) ->
-    let span = SourceSpan.between xText yText
-    Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ x; y ])), span))
-
-// Note: Comma is NOT an operator in the OPP
-// Commas are handled explicitly in tuple/record literals and function calls
-// For bare tuple expressions (def x = 1, 2), we handle it in defStatement
-
 /// What a `\` applies the value before it to.
 type private PipeStep =
     /// `\f`, `\f(args)` or `\f(args) { ... }`: a call of `f` with the value as its first argument.
@@ -829,16 +810,6 @@ let private pipeTarget =
                 PipeCall(funcName, funcRange, args))
     attempt matchStep <|> callStep
 
-// Inline operator precedence parser (no newlines in operator whitespace). It parses a block's statements and a match
-// arm's body, so it has every operator `opp` has but `..` (see `binaryOperators`), each taking only the space on its
-// line after it.
-let oppInline = new OperatorPrecedenceParser<Operand, SourceSpan, ParseState>()
-let private notKeywordInline =
-    attempt (withSpan (pstring "not" .>> keywordEnd)) .>> wsInline |>> fun (_, span) -> NotSyntax.builtIn, span
-oppInline.TermParser <- prefixed (notKeywordInline <|> minus <|> bang) .>> symbolicBoolean
-
-addBinaryOperators oppInline wsInline binary
-
 /// `expr \f \g(a)`: each pipe spans from the start of `expr`'s text to the end of its own target.
 let private applyPipes (value: Operand) pipes =
     pipes
@@ -849,7 +820,6 @@ let private applyPipes (value: Operand) pipes =
             | PipeCall(funcName, nameSpan, args) -> Pipe(acc, funcName, nameSpan, args)
             | PipeMatch arms -> Match([ acc ], arms)
         Expression.at span kind, span) value
-    |> fst
 
 let private pipeLeadingWs =
     skipMany (skipAnyOf " \t") >>.
@@ -864,6 +834,46 @@ let private continuationWs (lineIndent: int64) =
         skipMany1 (attempt (blockLineEnd () >>. wsInline)) >>. getPosition >>= fun position ->
             if position.Column > lineIndent then preturn () else pzero))
 
+/// `value` and then any number of `\` steps, each after `pipeWs`. A pipe binds tighter than every binary operator, so it
+/// is part of the operand: `xs \min ?? 0` is `(xs \min) ?? 0`, and `a + b \f` is `a + (b \f)`. A prefix operator is part
+/// of the value it pipes: `-x \abs` is `(-x) \abs`.
+let private withPipes (pipeWs: Parser<unit, ParseState>) (value: Parser<Operand, ParseState>) : Parser<Operand, ParseState> =
+    let pipeOp = pipeWs >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
+    pipe2 value (many (attempt (pipeOp .>> wsInline))) applyPipes
+
+let private operand : Parser<Operand, ParseState> =
+    prefixed (notKeyword <|> minus <|> bang) |> withPipes pipeLeadingWs .>> symbolicBoolean
+
+opp.TermParser <- operand
+
+addBinaryOperators opp ws binary
+
+// A bounded range `a..b` (see the ranges page) is represented as a call to the built-in "__range". It binds
+// looser than arithmetic, so `n - 1..n + 1` is `(n - 1)..(n + 1)`. `...` is list spread, not a range. A `..` with
+// nothing after it on its line but the rest of an enclosing construct is the unbounded `a..` (see `withOpenRange`).
+let private rangeHasEnd =
+    notFollowedBy (wsInline >>. (skipNewline <|> eof <|> skipAnyOf "|)]},\\" <|> skipString "->" <|> skipString "--"))
+opp.AddOperator(InfixOperator("..", operatorSpan ".." (notFollowedBy (pchar '.') >>. rangeHasEnd >>. ws), rangePrecedence, Associativity.None, (), fun _ (x, xText) (y, yText) ->
+    let span = SourceSpan.between xText yText
+    Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ x; y ])), span))
+
+// Note: Comma is NOT an operator in the OPP
+// Commas are handled explicitly in tuple/record literals and function calls
+// For bare tuple expressions (def x = 1, 2), we handle it in defStatement
+
+// Inline operator precedence parser (no newlines in operator whitespace). It parses a block's statements and a match
+// arm's body, so it has every operator `opp` has but `..` (see `binaryOperators`), each taking only the space on its
+// line after it.
+let oppInline = new OperatorPrecedenceParser<Operand, SourceSpan, ParseState>()
+let private notKeywordInline =
+    attempt (withSpan (pstring "not" .>> keywordEnd)) .>> wsInline |>> fun (_, span) -> NotSyntax.builtIn, span
+// A pipe continues an operand on the lines after it when they are indented more than the line it starts on.
+oppInline.TermParser <-
+    currentLineIndent >>= fun lineIndent ->
+        prefixed (notKeywordInline <|> minus <|> bang) |> withPipes (continuationWs lineIndent) .>> symbolicBoolean
+
+addBinaryOperators oppInline wsInline binary
+
 /// `a..`, a range without an end: the start, taking in every operator before it as `a..b` does, and then `..`.
 let private withOpenRange (valueParser: Parser<Operand, ParseState>) : Parser<Operand, ParseState> =
     valueParser .>>. opt (attempt (withSpan (pstring ".." .>> notFollowedBy (pchar '.'))) .>> wsInline)
@@ -873,12 +883,9 @@ let private withOpenRange (valueParser: Parser<Operand, ParseState>) : Parser<Op
             Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ first ])), span
         | operand, None -> operand
 
+// The operands take the pipes after them, so the only pipes left here are those after an open range: `1.. \take(3)`.
 let pipeExpr =
-    let pipeOp = pipeLeadingWs >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
-    pipe2
-        (withOpenRange (reportingConflicts opp))
-        (many (attempt (pipeOp .>> wsInline)))
-        applyPipes
+    withPipes pipeLeadingWs (withOpenRange (reportingConflicts opp)) |>> fst
     |> withExcept pipeLeadingWs
     |> withAssignment expression
 
@@ -886,11 +893,7 @@ let pipeExpr =
 /// after, indented more than the line it starts on (see `continuationWs`).
 let inlinePipeExpr =
     currentLineIndent >>= fun lineIndent ->
-        let pipeOp = continuationWs lineIndent >>. pstring "\\" >>. wsInline >>. withSpan pipeTarget
-        pipe2
-            (reportingConflicts oppInline)
-            (many (attempt (pipeOp .>> wsInline)))
-            applyPipes
+        reportingConflicts oppInline |>> fst
         |> withExcept (continuationWs lineIndent)
         |> withAssignment exprWithoutCrossingNewlines
 

@@ -50,7 +50,8 @@ let ``an except arm may have alternatives`` () =
 [<Fact>]
 let ``except binds looser than pipes and operators`` () =
     match valueOf "def v = n + 1 \\lookup(table) except #notFound -> #some(0)" with
-    | Kind (Except (Kind (Pipe (Kind (BinaryOp ("+", _, _, _)), "lookup", _, _)), [ _ ])) -> ()
+    // The pipe binds tighter than `+` (#986).
+    | Kind (Except (Kind (BinaryOp ("+", _, _, Kind (Pipe (_, "lookup", _, _)))), [ _ ])) -> ()
     | other -> failwith $"Unexpected value: %A{other}"
 
 [<Fact>]

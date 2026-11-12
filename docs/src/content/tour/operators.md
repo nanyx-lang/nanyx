@@ -80,6 +80,20 @@ def main = {
 -- ada! bob!
 ```
 
+A pipe binds tighter than every binary operator, so an operator can follow it: `xs \length == 0` is `(xs \length) == 0`. It pipes only the operand just before it, so `a + b \f` is `a + (b \f)`; to pipe a whole expression, bracket it, as in `(a + b) \f`. A prefix operator is part of what it pipes: `-x \f` is `(-x) \f`.
+
+```nanyx
+def total = [1, 2, 3] \list.fold(0) { acc, x -> acc + x } * 2
+
+def both = ([1] ++ [2, 3]) \list.length
+
+@entry
+def main = {
+  println("{total} {both}")
+}
+-- 12 3
+```
+
 # The operators
 
 An operator is written with a space on each side: `x + y`, not `x+y` or `x +y`. Without the spaces it is an error, which shows where the space is missing. A line break counts as a space, and so does the `{` of a shorthand lambda that starts with the operator, as in `{+ 1}` (which the formatter writes `{ + 1 }`). Prefix `-` and `not` are not binary operators: `-x` is written against its operand. Keeping operators apart from what is around them leaves their characters free for other uses later, such as a `?` at the end of a name.
@@ -89,6 +103,7 @@ These are all of Nanyx's operators, tightest first. An operator binds tighter th
 | Operators | Groups | Meaning |
 |---|---|---|
 | `-x` (prefix), `not` | | negation (`Add`'s `negate`), logical not |
+| `\` | left | [pipe](../tour/piping): `x \f(y)` is `f(x, y)` |
 | `**` | right | power: `2 ** 3 ** 2` is `2 ** 9` |
 | `*` `/` `%` | left | multiplication, division, remainder (`Num`) |
 | `^` `<*>` | left | spare |

@@ -25,6 +25,7 @@
     <Compile Include="Features\Loops\LoopTests.fs" />
     <Compile Include="Features\Matches\MatchTests.fs" />
     <Compile Include="Features\Memory\MemoryTests.fs" />
+    <Compile Include="Features\Pipes\PipePrecedenceTests.fs" />
     <Compile Include="Features\Pipes\PipeTests.fs" />
     <Compile Include="Features\Strings\StringEscapeTests.fs" />
     <Compile Include="Features\TopLevel\TopLevelTests.fs" />
