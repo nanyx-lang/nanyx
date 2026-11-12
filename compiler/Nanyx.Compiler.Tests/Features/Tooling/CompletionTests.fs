@@ -227,3 +227,34 @@ let ``After a pipe on a value of unknown type come only the functions in scope``
     let source = "def f = { v -> v }\n"
     Assert.All(pipeTargetsIn source "v }" [ "v" ], fun target -> Assert.False target.IsAttached)
     Assert.Contains("f", pipeTargetsIn source "v }" [] |> List.map (fun target -> target.Name))
+
+// Reserved names: the standard library's `__` names are never offered outside it.
+
+/// Those of `names` that start with `__`.
+let private reserved (names: string list) = names |> List.filter (fun name -> name.StartsWith ReservedNames.prefix)
+
+[<Fact>]
+let ``The standard library's reserved names are never offered, at the start of an expression, after a pipe or after a dot`` () =
+    let written =
+        """import nanyx/text
+import nanyx/console
+import nanyx/math
+def s = "abc"
+def r = s
+"""
+    let source = written.ReplaceLineEndings "\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    // The prelude's reserved names are in scope, since what `==` and `**` are desugared to calls them.
+    Assert.Contains("__equals", result.Typed.Value.Symbols |> Map.values |> Seq.map _.Name)
+    let at = offsetOf source "def r" 0 0
+    Assert.Empty(reserved (Completion.namesInScope result at |> List.map _.Name))
+    Assert.Empty(reserved (Completion.typedNamesInScope Unicode result at |> List.map _.Symbol.Name))
+    Assert.Empty(reserved (Completion.pipeTargetsAt Unicode result at [ "s" ] |> List.map _.Name))
+    for path in [ [ "s" ]; [ "string" ]; [ "String" ]; [ "int" ]; [ "float" ]; [ "list" ]; [ "Result" ] ] do
+        Assert.Empty(reserved (Completion.membersAt Unicode result at path |> List.map _.Name))
+
+[<Fact>]
+let ``A module's own reserved names are offered in it`` () =
+    let source = "def __twice = { n -> n * 2 }\ndef four = __twice(2)\n"
+    Assert.Equal<string list>([ "__twice" ], reserved (ownNamesAt source (offsetOf source "def four" 0 0) |> List.map fst))

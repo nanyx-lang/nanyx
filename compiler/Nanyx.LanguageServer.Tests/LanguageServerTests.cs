@@ -1083,6 +1083,48 @@ public sealed partial class LanguageServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Completion_never_offers_the_standard_librarys_reserved_names()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-reserved");
+        var text = """
+            import nanyx/text
+            import nanyx/console
+            def s = "abc"
+            def r = s
+            def m = Result.map
+
+            """.ReplaceLineEndings("\n");
+
+        Open(uri, text);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // At the start of an expression, and after a dot.
+        Assert.DoesNotContain(await CompletionsAt(uri, 3, 8), item => item.Label.StartsWith("__"));
+        Assert.DoesNotContain(await CompletionsAt(uri, 4, 15), item => item.Label.StartsWith("__"));
+
+        // After a pipe just typed.
+        Change(uri, version: 2, text.Replace("def r = s\n", "def r = s \\\n"));
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+        var piped = await CompletionsAt(uri, 3, 11);
+        Assert.Contains(piped, item => item.Label == "startsWith");
+        Assert.DoesNotContain(piped, item => item.Label.StartsWith("__"));
+    }
+
+    [Fact]
+    public async Task Hover_and_definition_on_an_operator_never_lead_to_what_it_is_desugared_to()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "reserved-operator.nyx"));
+
+        Open(uri, "def p = 2.0 ** 3\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // The `**`, desugared to the prelude's `__pow`.
+        var hover = (await HoverAt(uri, 0, 12))?.Contents.MarkupContent?.Value;
+        Assert.Equal("```nanyx\nfloat\n```", hover);
+        Assert.Empty(await DefinitionsAt(uri, 0, 12));
+    }
+
+    [Fact]
     public void Server_advertises_document_formatting()
     {
         Assert.NotNull(_client.ServerSettings.Capabilities.DocumentFormattingProvider);

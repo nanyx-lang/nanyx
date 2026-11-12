@@ -65,7 +65,8 @@ type Reader(file: string, own: FileDocComments, result: CompileResult, offset: i
     let declarationOf (comment: DocComment) (docs: FileDocComments) (name: string) =
         let ownFile = docs.TopLevel |> List.tryFind (fun (declared, _) -> declared = name) |> Option.map snd
         let inScope () = inScopeAt (if comment.Span.File = file then comment.Span.End else offset) |> Map.tryFind name
-        if comment.Span.File = file then inScope () |> Option.orElse ownFile else ownFile |> Option.orElseWith inScope
+        let found = if comment.Span.File = file then inScope () |> Option.orElse ownFile else ownFile |> Option.orElseWith inScope
+        found |> Option.filter (fun declaration -> not (ReservedNames.isHiddenName name declaration))
 
     let render (comment: DocComment) (docs: FileDocComments) =
         linkPattern.Replace(

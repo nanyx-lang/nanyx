@@ -10,7 +10,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references and the outline view
-- completion of names, record fields, module members and import paths, each name with its doc comment
+- completion of names, record fields, module members and import paths, each name with its doc comment. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
 - an [info view](#info-view), a panel that shows what the compiler knows at the cursor

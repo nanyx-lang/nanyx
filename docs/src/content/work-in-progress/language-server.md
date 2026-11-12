@@ -109,7 +109,14 @@ what the compiler keeps: exact spans, resolved names and types.
   (`OpenDocument.NearestInLastGood`): a cursor in text edited since moves to where the edit starts, so a name
   declared since that compile is not offered until the text parses again. Whether the cursor is in a comment
   or a string, after a dot, or naming a new def is read from the characters alone (`CompletionContext`), since the
-  text being typed rarely parses.
+  text being typed rarely parses. The names the standard library reserves, those starting with `__` that syntax is
+  desugared to (`__equals`, `__pow`), are in scope but never offered (`ReservedNames.isHidden`,
+  [#914](https://github.com/nanyx-lang/nanyx/issues/914)); hover, go to definition, doc comment links and the info
+  view never lead to them either, so hovering `**` shows its operands, not `__pow`. A module's own declarations are
+  never hidden from it, so an open copy of a standard-library file still sees its own. The intrinsics (`__nanyx_*`)
+  are not in scope outside the standard library at all. VS Code's word-based suggestions are kept to the current
+  document (`editor.wordBasedSuggestions` defaults to `currentDocument` for Nanyx), so a standard-library file opened
+  from go to definition does not offer its words, intrinsics among them, in every other file.
 - **Completion after a dot** ([#213](https://github.com/nanyx-lang/nanyx/issues/213)), triggered by typing it.
   The names before the dot are read from the characters (`CompletionContext.MemberPath`). If the first is a value
   in scope, the fields of its record type are offered, followed through the rest of the path. Otherwise the names
@@ -165,7 +172,7 @@ what the compiler keeps: exact spans, resolved names and types.
   `nanyx/infoView` (`InfoViewHandler`), with a document and a position. It returns sections of items, each item with
   its text, a detail and a location to link to: the expression at the position with its type, as hover gives it; the
   locals, parameters and pattern variables in scope, nearest first; the top-level defs and imports in scope (less the
-  `__` intrinsics); the contexts in scope with where each comes from; and the diagnostics on the position's line.
+  standard library's reserved `__` names); the contexts in scope with where each comes from; and the diagnostics on the position's line.
   `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the
   locals' types and the contexts are named together, so an `α` means the same in both. A context comes from a `use`
   before the position in a block around it, a def around it (its annotation, or what it was inferred to need), or, at

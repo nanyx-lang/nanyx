@@ -71,6 +71,22 @@ def counted: [Counter] int -> int = { n -> next(n) }
     Assert.Equal(Some "The next number.", docsOf file source result "next")
 
 [<Fact>]
+let ``A link to a reserved name of the standard library's is never made`` () =
+    let written =
+        """--| Compares as [`__equals`] does, unlike [`same`].
+def same = { a, b -> a == b }
+def h = int.hash(3)
+"""
+    let source = written.ReplaceLineEndings "\n"
+    let result = Compiler.compileSource "main.nyx" source
+    let file = Path.GetFullPath "main.nyx"
+    Assert.Equal(Some "Compares as `__equals` does, unlike [`same`](main.nyx:2).", docsOf file source result "same")
+    // Nor does a standard-library definition's doc comment mention one.
+    let hash = docsOf file source result "int.hash"
+    Assert.True(hash.IsSome)
+    Assert.DoesNotContain(ReservedNames.prefix, hash.Value)
+
+[<Fact>]
 let ``A standard-library definition's doc comment is found by its symbol`` () =
     let source = "def lengths = list.map([[1], [2, 3]], list.length)\n"
     let result = Compiler.compileSource "main.nyx" source

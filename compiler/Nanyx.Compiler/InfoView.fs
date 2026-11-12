@@ -170,8 +170,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                 localsWritten
           TopLevel =
             inScope
-            // Names that start with `__` are intrinsics and what syntax desugars to, which no one writes.
-            |> List.filter (fun symbol -> (symbol.Kind = TopLevelValue || symbol.Kind = ImportedModule) && not (symbol.Name.StartsWith "__"))
+            |> List.filter (fun symbol -> (symbol.Kind = TopLevelValue || symbol.Kind = ImportedModule) && not (ReservedNames.isHidden symbol))
             |> List.sortBy (fun symbol -> symbol.Declaration.File <> file, symbol.Name)
             |> List.map (fun symbol -> scoped symbol (topLevelType names typed symbol))
           Contexts =

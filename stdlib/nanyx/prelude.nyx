@@ -563,22 +563,22 @@ export def __hash: a -> int = { x ->
 -- its parts' hashes. A built-in type's hash is always the compiler's own: `Hash` does not read
 -- these.
 
---| The compiler's own hash of `x`, as [`__hash`] gives it.
+--| The compiler's own hash of `x`, as [`Hash`] gives it to a type with no `hash` of its own.
 export def int.hash: int -> int = { x ->
   __hash(x)
 }
 
---| The compiler's own hash of `x`, as [`__hash`] gives it.
+--| The compiler's own hash of `x`, as [`Hash`] gives it to a type with no `hash` of its own.
 export def float.hash: float -> int = { x ->
   __hash(x)
 }
 
---| The compiler's own hash of `x`, as [`__hash`] gives it.
+--| The compiler's own hash of `x`, as [`Hash`] gives it to a type with no `hash` of its own.
 export def bool.hash: bool -> int = { x ->
   __hash(x)
 }
 
---| The compiler's own hash of `s`, as [`__hash`] gives it.
+--| The compiler's own hash of `s`, as [`Hash`] gives it to a type with no `hash` of its own.
 export def string.hash: string -> int = { s ->
   __hash(s)
 }
