@@ -942,3 +942,21 @@ module Unifier =
     let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =
         let subst, failures = solveDetailed constraints
         subst, failures |> List.map (fun (message, span, _) -> message, span)
+
+    /// `subst` with each variable named in `declared`, the types defs declare, standing for the made-up variable it
+    /// was solved to, rather than the reverse, so a reader sees the name written. Solving binds whichever of two
+    /// variables comes first in a constraint: `f(x)`, where `f` is an `a -> b` and `x` a pattern's variable, binds `a`
+    /// to `x`'s. The same types are equal either way; only which one's name is shown differs.
+    let keepWrittenNames (declared: Ty seq) (subst: Subst) : Subst =
+        let named =
+            declared
+            |> Seq.toList
+            |> List.collect varOccurrences
+            |> List.filter (fun v -> v.Name.IsSome)
+            |> List.distinctBy (fun v -> v.Id)
+        named
+        |> List.fold (fun (acc: Subst) v ->
+            match apply acc (TyVar v) with
+            | TyVar madeUp when madeUp.Name.IsNone && madeUp.Id <> v.Id ->
+                acc |> Map.remove v.Id |> Map.add madeUp.Id (TyVar v)
+            | _ -> acc) subst

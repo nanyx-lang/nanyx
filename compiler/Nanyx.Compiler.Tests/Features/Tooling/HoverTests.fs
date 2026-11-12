@@ -540,3 +540,17 @@ let ``Hover on an expression that is not a name shows just its type`` () =
     Assert.Equal(Some "int", hoverType source (offsetOf source "+" 0 0))
     Assert.Equal(Some "int -> int", hoverType source (offsetOf source "{ n" 0 0))
     Assert.Equal(Some "int", hoverType source (offsetOf source "(1)" 0 0))
+
+[<Fact>]
+let ``Hover keeps the annotation's type variable names when the body is a match lambda`` () =
+    let source = """
+type Option(a) = #some(a) | #none
+
+def mapOpt: Option(a), (a -> b) -> Option(b) = {
+  | #some(x), f -> #some(f(x))
+  | #none, _ -> #none
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "def mapOpt: Option(a), (a -> b) -> Option(b)", hoverType source (offsetOf source "mapOpt" 0 0))
+    Assert.Equal(Some "x: a", hoverType source (offsetOf source "x)," 0 0))

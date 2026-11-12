@@ -221,8 +221,8 @@ compiler exception is reported as a diagnostic rather than taking the server dow
 Each feature is one handler class in `Nanyx.LanguageServer/Handlers/`, registered in
 `NanyxLanguageServer.Configure`. Hover and the type hints name made-up type variables `α`, `β`, … through the Greek
 alphabet, a union's rest variable from the other end (`#some(α) | ω`), and a record's rest spread with an ellipsis,
-written bare where it appears nowhere else (`list(name: α, …) -> list(α)`); annotation variables keep their names, and
-a type alias is shown by its name (`Customer`, not `(name: string)`: inference carries aliases as `TyAlias`).
+written bare where it appears nowhere else (`list(name: α, …) -> list(α)`); annotation variables keep their names, even
+where solving bound one to a made-up variable (`Unifier.keepWrittenNames`), and a type alias is shown by its name (`Customer`, not `(name: string)`: inference carries aliases as `TyAlias`).
 `nanyx lsp --ascii` writes types in ASCII only. `--top-level-type-hints inlay` shows the top-level defs' types as
 inlay hints after their names instead of lenses, and `--top-level-type-hints off` shows neither (the default is
 `lens`). `--no-local-type-hints`, `--no-parameter-type-hints` and `--no-pattern-variable-type-hints` turn off the
