@@ -87,7 +87,7 @@ module myLinter
 def lint: TypedAst -> list(Diagnostic) = { ast ->
   -- Inspect the AST and collect diagnostics
   ast.declarations
-    \filter { d -> (d.name \startsWith("_")) and d.isPublic }
+    \filter { d -> d.name \startsWith("_") and d.isPublic }
     \map { d -> Diagnostic(
       severity = #warning
       message = "Public definitions should not start with an underscore"

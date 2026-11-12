@@ -355,7 +355,8 @@ let format (options: Options) (parsed: SourceModule) : string =
         | RangeSyntax.Call _ -> rangePrecedence < position.Prec || position.Inline
         | FunctionCall("not", _, [ _ ]) -> position.Prec >= prefixPrecedence || position.Inline
         | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> position.Prec >= prefixPrecedence
-        | Pipe _ -> 0 < position.Prec
+        // A pipe binds tighter than every binary operator, but not than a prefix one: `-(x \abs)` keeps its brackets, as `-x \abs` is `(-x) \abs`.
+        | Pipe _ -> position.Prec >= prefixPrecedence
         // `(r with (x = 1)).x`: nothing follows a `with` but an operator, though its updates are bracketed.
         | FunctionCall("__with", _, [ _; updates ]) when startsWith updates.Span "(" -> position.Prec >= prefixPrecedence
         | _ when isOpenEnded e -> not position.Tail || position.Prec >= prefixPrecedence
@@ -818,7 +819,13 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | None -> e, steps
             | _ -> e, steps
         let root, steps = collect e []
-        let rootDoc = expr { position with Tail = false; Prec = 0 } root
+        // A pipe binds tighter than every binary operator, so one piped is bracketed: `(a + b) \f`. A range without an end
+        // has nothing after its `..` for a pipe to take, so it is not: `1.. \take(3)`.
+        let rootDoc =
+            match root.Kind with
+            | BinaryOp _
+            | RangeSyntax.Call(_, Some _) -> parens (expr full root)
+            | _ -> expr { position with Tail = false; Prec = 0 } root
         let isMatch = steps |> List.map (fun (_, _, isMatch, _) -> isMatch)
         let afterMatch = false :: List.truncate (steps.Length - 1) isMatch
         // Whether the step at `at` starts a line of its own after the value it pipes.

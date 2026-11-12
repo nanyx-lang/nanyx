@@ -21,7 +21,7 @@ let ``Run - a function calling itself in tail position recurses a million deep``
         "def steps: (int, int) -> int = { n, acc ->\n" +
         "  match n\n" +
         "  | 0 -> acc\n" +
-        "  | _ -> n - 1 \\steps(acc + 1)\n" +
+        "  | _ -> (n - 1) \\steps(acc + 1)\n" +
         "}\n" +
         "\n" +
         "println(\"{countdown(1000000, 0)}\")\n" +
