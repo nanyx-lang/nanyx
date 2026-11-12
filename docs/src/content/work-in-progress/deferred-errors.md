@@ -44,8 +44,8 @@ an unhandled case is reached. They fall under this design.
 The backend's code is type-directed, which rules out the obvious shortcut: which instructions an operator becomes
 depends on its operand types (`+` on strings calls the concatenation helper). Badly typed code cannot be lowered
 "dynamically" without runtime type checks on every operation. That is a second backend to keep in step with the
-first, for code that is about to be fixed; this design does not do it. (Every value is the same size, an `i32`,
-which [makes traps easy](#errors-become-traps).)
+first, for code that is about to be fixed; this design does not do it. (A trap ends in `unreachable`, which stands
+for a value of any type, which [makes traps easy](#errors-become-traps).)
 
 # Design
 
@@ -123,9 +123,9 @@ expression of any type. Two rules keep the rest of the function valid:
 
 How it is built:
 
-- **The values are uniform,** which makes the first rule above unnecessary. Every Nanyx value is an `i32` in the
-  backend: an immediate or a pointer (a float is boxed), so a trap's `unreachable` stands in for any expression and
-  the code after it still validates. Nothing is cut off after a trap.
+- **A trap stands for any value,** which makes the first rule above unnecessary. A trap's `unreachable` stands in for
+  an expression of any type, an `i64` int as well as an `i32` (an immediate or a pointer; a float is boxed), and the
+  code after it still validates. Nothing is cut off after a trap.
 - **The deferral pass** is `Compiler.deferErrors` in [Library.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Library.fs), run as the typed
   module's items are lowered for the backend. Each node in `FailedExprs` becomes `__panic("<message>")`. A conflict
   among the constraints is only known by where it was found, so it replaces the outermost expression at that span.

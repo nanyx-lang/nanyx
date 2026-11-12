@@ -1,6 +1,6 @@
 /// The hash functions of a module: for each type the compiler's own `Hash` hashes (see `WellKnownContexts.hashing`),
 /// one that hashes a value of it by its structure, so that two values `==` finds equal by their structure have the same
-/// hash. Ints, bools and unit are their own hash; a float is hashed by its bits, with `-0.0` as `0.0`; a string by its
+/// hash. Bools and unit are their own hash, and so is an int that fits 32 bits; a float is hashed by its bits, with `-0.0` as `0.0`; a string by its
 /// bytes (FNV-1a); records and tuples field by field, lists element by element, and tags by their code and then their
 /// payload, each part's hash folded into the whole's. Functions have no hash, and never reach here. A hash function
 /// only reads its operand: it borrows it, as every runtime helper does.
@@ -39,7 +39,22 @@ let private indent (lines: string list) = lines |> List.map (fun line -> "  " + 
 /// each tag the module numbers.
 let private hashBody (tagId: string -> int option) (ty: IrType) : string list * string list =
     match IrType.unfold ty with
-    | IrInt
+    // The low half, with the high half folded in as far as it is not the low half's sign: an int that fits 32 bits is
+    // its own hash.
+    | IrInt ->
+        [],
+        [ "local.get $a"
+          "i32.wrap_i64"
+          "local.get $a"
+          "i64.const 32"
+          "i64.shr_u"
+          "i32.wrap_i64"
+          "local.get $a"
+          "i32.wrap_i64"
+          "i32.const 31"
+          "i32.shr_s"
+          "i32.xor"
+          "i32.xor" ]
     | IrBool
     | IrUnit -> [], [ "local.get $a" ]
     | IrFloat ->
@@ -97,7 +112,10 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
         [ "(local $h i32)" ],
         [ "i32.const 17"
           "local.set $h"
-          yield! fields |> List.mapi (fun slot (_, fieldTy) -> fold (hashOf fieldTy [ "local.get $a"; $"i32.load offset={slot * 4}" ])) |> List.concat
+          yield!
+              fields
+              |> List.mapi (fun slot (_, fieldTy) -> fold (hashOf fieldTy [ "local.get $a"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ]))
+              |> List.concat
           "local.get $h" ]
     | IrList element ->
         // Cell by cell, so that a long list takes no stack. The empty list is 0.
@@ -109,9 +127,9 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
           "    local.get $a"
           "    i32.eqz"
           "    br_if $done"
-          yield! fold (hashOf element [ "local.get $a"; "i32.load" ]) |> indent |> indent
+          yield! fold (hashOf element [ "local.get $a"; CoreIrLayout.load element 0 ]) |> indent |> indent
           "    local.get $a"
-          "    i32.load offset=4"
+          $"    i32.load offset={CoreIrLayout.tailOffset element}"
           "    local.set $a"
           "    br $next"
           "  end"
@@ -120,7 +138,7 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
     | IrTags tags ->
         // A tag without a payload is its code, which is odd, and that is its hash. One with a payload is a pointer to a
         // cell that holds its code and then its payload, whose hash is folded into the code.
-        let payload payloadTy = fold (hashOf payloadTy [ "local.get $a"; "i32.load offset=4" ])
+        let payload payloadTy = fold (hashOf payloadTy [ "local.get $a"; CoreIrLayout.load payloadTy CoreIrLayout.payloadOffset ])
         let payloads = tags |> List.choose (fun (name, payloadTy) -> payloadTy |> Option.map (fun payloadTy -> name, payloadTy))
         let hashPayload =
             match payloads |> List.map snd |> List.distinct with
@@ -154,7 +172,8 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
     | IrFunction _
     | IrError
     | IrRecursive _
-    | IrSelf -> internalError $"a hash function for {IrType.show ty}, which has no hash"
+    | IrSelf
+    | IrWord -> internalError $"a hash function for {IrType.show ty}, which has no hash"
 
 /// The runtime helpers the hash functions of `types` call.
 let helpersUsed (types: IrType list) : string list =
@@ -166,7 +185,7 @@ let render (tagId: string -> int option) (types: IrType list) : string list =
     types
     |> List.map (fun ty ->
         let locals, body = hashBody tagId ty
-        [ $"(func ${hashName ty} (param $a i32) (result i32)"
+        [ $"(func ${hashName ty} (param $a {CoreIrLayout.valueType ty}) (result i32)"
           $"  ;; {IrType.show ty}"
           yield! indent locals
           yield! indent body

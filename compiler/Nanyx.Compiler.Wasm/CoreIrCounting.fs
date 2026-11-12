@@ -38,7 +38,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | MakeTag(_, payload) -> [ payload, Owned ]
     | MakeRecord fields -> fields |> List.map snd |> all Owned
     | Field(record, _) -> [ record, Borrowed ]
-    | UpdateRecord(record, _, updates) -> (record, Borrowed) :: (updates |> List.map snd |> all Owned)
+    | UpdateRecord(record, updates) -> (record, Borrowed) :: (updates |> List.map snd |> all Owned)
     // The value is taken over by the cell, which is used after it, to drop what it held.
     | Assign(cell, value) -> [ value, Owned; AVar cell, Borrowed ]
     | SetField(record, _, value) -> [ value, Owned; AVar record, Borrowed ]

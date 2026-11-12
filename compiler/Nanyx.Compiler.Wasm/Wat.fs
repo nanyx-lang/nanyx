@@ -20,6 +20,26 @@ let wasmBinaryInstruction op =
     | "or" -> Some "i32.or"
     | _ -> None
 
+/// The i64 instruction for an operator on ints that has one: not `+`, `-` and `*`, which call the helpers that stop the
+/// program when the result does not fit (see `WasmRuntime.Helpers.intAdd`).
+let wasmIntInstruction op =
+    match op with
+    | "/" -> Some "i64.div_s"
+    | "%" -> Some "i64.rem_s"
+    | "==" -> Some "i64.eq"
+    | "!=" -> Some "i64.ne"
+    | "<" -> Some "i64.lt_s"
+    | "<=" -> Some "i64.le_s"
+    | ">" -> Some "i64.gt_s"
+    | ">=" -> Some "i64.ge_s"
+    | _ -> None
+
+/// The name of the function type `call_indirect` calls a function of `parameters` returning `result` (WebAssembly
+/// value types) through. A function of `i32`s alone keeps the name of its arity.
+let indirectTypeName (parameters: string list) (result: string) =
+    if parameters @ [ result ] |> List.forall ((=) "i32") then $"ctx_fn_{parameters.Length}"
+    else $"""ctx_fn_{parameters.Length}_{String.concat "_" parameters}_to_{result}"""
+
 /// A tag's code: odd, so a tag without a payload (which is its code) can't be mistaken for a pointer to the cell
 /// of a tag with one.
 let tagCode (id: int) = (id <<< 1) ||| 1

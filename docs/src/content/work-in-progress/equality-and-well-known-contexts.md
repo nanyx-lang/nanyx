@@ -186,7 +186,7 @@ built from a type's structure (see [structural context synthesis](./type-members
   no requirement to a generic function. `list.distinct: list(a) -> list(a)` relies on this
   (`stdlib/nanyx/prelude.nyx:281-288`).
 - **Lowering.** After monomorphisation the backend picks an implementation from the operand's concrete type
-  (`CoreIrLower.fs:479-504`): `i32.eq` for int, bool and unit; `f64.eq` for float; a byte comparison for strings;
+  (`CoreIrLower.fs:479-504`): `i64.eq` for int; `i32.eq` for bool and unit; `f64.eq` for float; a byte comparison for strings;
   `__nanyx_tag_equals` for tags. Anything else, records, tuples, lists and functions, type-checks and then fails in
   the backend with `NYX0301 UnsupportedByBackend` ([#424](https://github.com/nanyx-lang/nanyx/issues/424)). A generic
   `def same: a, a -> bool = { x, y -> x == y }` is accepted, and fails only when some caller uses it at a record.

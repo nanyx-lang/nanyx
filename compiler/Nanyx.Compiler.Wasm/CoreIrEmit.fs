@@ -1,7 +1,8 @@
 /// WebAssembly text from the core IR (`CoreIr.fs`).
 ///
-/// Every value is still an `i32`, as in `CodeGen.fs`, and the code is laid out as `CodeGen.fs` lays it out, so that a
-/// function compiles to the same text whichever path it takes. A temporary is not stored: its value is computed
+/// Each value is held in the WebAssembly type of its type (see `CoreIrLayout`): an int in an `i64`, everything else in
+/// an `i32`. A local of an int is named with `_i64` after the variable's name (see `localName`), since variables of the
+/// same kind and name share a local, and may be of different types. A temporary is not stored: its value is computed
 /// where it is used, as a nested expression would be. An operand that stores to a local on the way to its value (a
 /// `def` or a `match` among a call's arguments, say) is a temporary whose value is the whole sequence, stores and all
 /// (see `Atoms` in `CoreIrLower.fs`), so no store ever happens while a temporary waits to be used.
@@ -23,8 +24,13 @@ type EmitContext =
       RecordLayoutId: string list -> int
       /// The function table slot of the function of this name and arity, giving it one if it has none.
       FunctionSlot: string -> int -> int
-      /// Notes an indirect call of this arity, so the module declares a type for it.
-      IndirectCall: int -> unit }
+      /// Notes an indirect call of a function of these parameters and this result (WebAssembly value types), so the
+      /// module declares a type for it (see `Wat.indirectTypeName`).
+      IndirectCall: string list * string -> unit
+      /// The types of the parameters and the result of the top-level function of this name, if the module has it, so
+      /// that a value of no known type (see `IrError`) is passed as the parameter takes it and the result taken as the
+      /// call's, or the other way round.
+      Signature: string -> (IrType list * IrType) option }
 
 /// A function as WebAssembly text, and the runtime helpers (see `WasmRuntime.Helpers`) it calls.
 type Emitted =
@@ -33,6 +39,29 @@ type Emitted =
 
 let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
+
+/// The name of the local `var` is kept in: its name, with `_i64` after it for a value held in an `i64`.
+let private localName (var: Var) =
+    match CoreIrLayout.valueType var.Type with
+    | "i32" -> var.Name
+    | valueType -> $"{var.Name}_{valueType}"
+
+/// The helpers whose parameters and results of type int are `i64`s. The others take and give `i32`s, which the
+/// emitter converts an int to and from.
+let private takesInts = set [ Helpers.intToFloat; Helpers.floatToInt ]
+
+/// The code that converts a value of `from` on the stack to one of `into`, when they are held differently: only a
+/// value of no known type (see `IrError`) is held differently from a value it is taken as. It is an `i32`, and an int
+/// that becomes one keeps its low 32 bits.
+let private conversion (from: IrType) (into: IrType) =
+    match CoreIrLayout.valueType from, CoreIrLayout.valueType into with
+    | fromType, intoType when fromType = intoType -> ""
+    | "i64", _ -> "i32.wrap_i64"
+    | _ -> "i64.extend_i32_s"
+
+/// The helpers that take an int as an index into a string, which they are given clamped (see `Helpers.intToIndex`).
+/// Any other helper is given an int's low 32 bits.
+let private takesIndices = set [ Helpers.stringByteAt; Helpers.stringSlice ]
 
 /// The temporaries an expression uses directly, which it computes as part of its own code.
 let rec private tempsUsedBy (expr: Expr) : Var list =
@@ -46,7 +75,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | MakeClosure(_, _, atoms)
     | CallClosure(_, atoms) -> ofAtoms atoms
     | MakeRecord fields -> ofAtoms (List.map snd fields)
-    | UpdateRecord(record, _, updates) -> ofAtoms (record :: List.map snd updates)
+    | UpdateRecord(record, updates) -> ofAtoms (record :: List.map snd updates)
     | MakeTag(_, atom)
     | Field(atom, _)
     | Assign(_, atom)
@@ -79,24 +108,24 @@ let private dropVars (localOf: Var -> string) (vars: Var list) =
 
 type private FunctionEmitter(context: EmitContext) =
     let helpers = HashSet<string>()
-    // The locals the counting needs beyond the IR's own: one for each temporary dropped after the instruction that
-    // borrowed it, and one for each value a construct has to read twice.
-    let extraLocals = ResizeArray<string>()
+    // The locals the counting needs beyond the IR's own, with their value types: one for each temporary dropped after
+    // the instruction that borrowed it, and one for each value a construct has to read twice.
+    let extraLocals = ResizeArray<string * string>()
     let droppedTemps = Dictionary<int, string>()
 
     let helper (name: string) =
         helpers.Add name |> ignore
         name
 
-    let freshLocal (prefix: string) =
+    let freshLocal (prefix: string) (valueType: string) =
         let name = $"{prefix}_{extraLocals.Count}"
-        extraLocals.Add name
+        extraLocals.Add((name, valueType))
         name
 
     let localOf (var: Var) =
         match droppedTemps.TryGetValue var.Id with
         | true, local -> local
-        | _ -> var.Name
+        | _ -> localName var
 
     member _.Helpers = Set.ofSeq helpers
 
@@ -106,27 +135,27 @@ type private FunctionEmitter(context: EmitContext) =
     member _.DupVars (vars: Var list) =
         vars
         |> List.filter (fun var -> CoreIrDrop.isHeapType var.Type)
-        |> List.map (fun var -> $"local.get ${var.Name}\n    call ${CoreIrDrop.dupName var.Type}\n    drop")
+        |> List.map (fun var -> $"local.get ${localName var}\n    call ${CoreIrDrop.dupName var.Type}\n    drop")
         |> String.concat "\n    "
 
     /// The code that gives up an object an arm took apart (see `CoreIrReuse`). When the arm holds the only reference,
     /// the names it binds keep the fields' references, the fields it does not bind are dropped, and the block is freed
     /// or kept in the token; otherwise the names take references of their own and the object's count goes down.
     member this.Release (released: Released) =
-        let object = released.Object.Name
+        let object = localName released.Object
         let block = $"local.get ${object}\n      i32.const {released.CountOffset}\n      i32.sub"
         let unique =
             [ for offset, bound, fieldTy in released.Fields do
                   if bound.IsNone && CoreIrDrop.isHeapType fieldTy then
                       $"local.get ${object}\n      i32.load offset={offset}\n      call ${CoreIrDrop.dropName fieldTy}"
               match released.Token with
-              | Some token -> $"{block}\n      local.set ${token.Name}"
+              | Some token -> $"{block}\n      local.set ${localName token}"
               | None -> $"{block}\n      call ${helper Helpers.free}" ]
         let shared =
             [ this.DupVars (released.Fields |> List.choose (fun (_, bound, _) -> bound))
               $"{block}\n      call ${helper Helpers.release}\n      drop"
               match released.Token with
-              | Some token -> $"i32.const 0\n      local.set ${token.Name}"
+              | Some token -> $"i32.const 0\n      local.set ${localName token}"
               | None -> "" ]
         let lines (code: string list) = code |> List.filter ((<>) "") |> String.concat "\n      "
         let count = $"local.get ${object}\n    i32.const {released.CountOffset}\n    i32.sub\n    i32.load"
@@ -158,13 +187,13 @@ type private FunctionEmitter(context: EmitContext) =
             parts
             |> List.map (function
                 | Text text -> Interpolation.textLength text
-                | Hole(var, holeType) -> Interpolation.holeLength (this.HoleKind holeType) $"local.get ${var.Name}")
+                | Hole(var, holeType) -> Interpolation.holeLength (this.HoleKind holeType) $"local.get ${localName var}")
             |> String.concat "\n    "
         let writeCode =
             parts
             |> List.map (function
                 | Text text -> Interpolation.textWrite text
-                | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) $"local.get ${var.Name}")
+                | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) $"local.get ${localName var}")
             |> String.concat "\n    "
         helper Helpers.stringAlloc |> ignore
         Interpolation.measureAndWrite lengthCode writeCode
@@ -198,7 +227,7 @@ type private FunctionEmitter(context: EmitContext) =
             | Let(var, value, body) ->
                 claim value
                 flush ()
-                parts.Add(join "\n    " [ this.Value false deferred onStack value; $"local.set ${var.Name}" ])
+                parts.Add(join "\n    " [ this.Value false deferred onStack value; $"local.set ${localName var}" ])
                 walk body
             | Do(value, rest) ->
                 claim value
@@ -223,6 +252,13 @@ type private FunctionEmitter(context: EmitContext) =
         if deferred.Count > 0 || onStack.Count > 0 then internalError "a temporary in the core IR is used out of order"
         join "\n    " parts
 
+    /// The code of a sequence whose value is taken as a value of `ty` (see `conversion`): a branch of an `if` or a
+    /// `match`, or a function's body. Nothing can follow a tail call, so a sequence that needs converting makes none.
+    member this.SequenceAs (tail: bool) (ty: IrType) (expr: Expr) : string =
+        match conversion expr.Type ty with
+        | "" -> this.Sequence tail expr
+        | converted -> $"{this.Sequence false expr}\n    {converted}"
+
     /// The code of a value that is not a `Let` or `Do`.
     member this.Value (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
         // The code of each atom in order. A temporary already on the stack has none, so it has to come before anything
@@ -241,13 +277,40 @@ type private FunctionEmitter(context: EmitContext) =
                     this.Atom deferred onStack atom)
             |> join "\n    "
         let atoms = atomsAfter false
-        // Each value, then its store into its slot of the record whose pointer is on the stack.
-        let stores (slotsAndValues: (int * Atom) list) =
-            slotsAndValues
-            |> List.map (fun (slot, value) ->
-                join "\n    " [ atomsAfter true [ value ]; $"i32.const {slot * 4}\n    call ${helper Helpers.recordSet}" ])
+        // The helper of `Helpers.storingValues` `name` for a value of `ty`.
+        let storing (name: string) (ty: IrType) = helper (Helpers.forValueType name (CoreIrLayout.valueType ty))
+        // Each value, then its store at its offset in the record whose pointer is on the stack.
+        let stores (offsetsAndValues: (int * Atom) list) =
+            offsetsAndValues
+            |> List.map (fun (offset, value) ->
+                join "\n    " [ atomsAfter true [ value ]; $"i32.const {offset}\n    call ${storing Helpers.recordSet (atomType value)}" ])
+        // The fields of a new record, each at its offset.
+        let fieldStores (values: Atom list) = stores (List.zip (CoreIrLayout.offsets (List.map atomType values)) values)
+        let recordFields (record: IrType) =
+            match record with
+            | IrRecord fields -> fields
+            | other -> internalError $"a field of {IrType.show other}, which is not a record"
         match expr.Kind with
         | Atom atom -> atoms [ atom ]
+        | Prim(Binary op, operands) when operands |> List.exists (atomType >> (=) IrInt) ->
+            // An operand of no known type (see `IrError`) beside an int is taken as one.
+            let operandCode =
+                operands
+                |> List.mapi (fun index operand ->
+                    join "\n    " [ atomsAfter (index > 0) [ operand ]; (if atomType operand = IrInt then "" else "i64.extend_i32_s") ])
+                |> join "\n    "
+            let instruction =
+                match op with
+                | "+" -> $"call ${helper Helpers.intAdd}"
+                | "-" -> $"call ${helper Helpers.intSub}"
+                | "*" -> $"call ${helper Helpers.intMul}"
+                | _ ->
+                    match wasmIntInstruction op with
+                    | Some instruction -> instruction
+                    | None -> internalError $"no instruction for the operator {op} on ints"
+            // Arithmetic gives an int and a comparison a bool, taken as the type the expression has.
+            let given = if [ "+"; "-"; "*"; "/"; "%" ] |> List.contains op then IrInt else IrBool
+            join "\n    " [ operandCode; instruction; conversion given expr.Type ]
         | Prim(Binary op, operands) ->
             match wasmBinaryInstruction op with
             | Some instruction -> join "\n    " [ atoms operands; instruction ]
@@ -272,128 +335,170 @@ type private FunctionEmitter(context: EmitContext) =
             writes @ [ "i32.const 1"; $"call ${helper Helpers.procExit}"; "unreachable" ] |> String.concat "\n    "
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | Call(name, args) ->
-            let call = if tail then "return_call" else "call"
-            join "\n    " [ atoms args; $"{call} ${name}" ]
+            match context.Signature name with
+            | Some(parameterTys, resultTy) when parameterTys.Length = args.Length ->
+                let arguments =
+                    List.zip args parameterTys
+                    |> List.mapi (fun index (arg, parameterTy) -> join "\n    " [ atomsAfter (index > 0) [ arg ]; conversion (atomType arg) parameterTy ])
+                // Nothing can follow a tail call, so a result that needs converting comes from a plain call.
+                match conversion resultTy expr.Type with
+                | "" -> join "\n    " [ yield! arguments; $"""{(if tail then "return_call" else "call")} ${name}""" ]
+                | resultConversion -> join "\n    " [ yield! arguments; $"call ${name}"; resultConversion ]
+            | _ -> join "\n    " [ atoms args; $"""{(if tail then "return_call" else "call")} ${name}""" ]
         | MakeTag(name, payload) ->
-            join "\n    " [ $"i32.const {tagCode (context.TagId name)}"; atomsAfter true [ payload ]; $"call ${helper Helpers.tagBox}" ]
-        | MakeRecord fields ->
-            // A slot per field, with the layout's number as the info word. The record is allocated before its fields
-            // are evaluated, and its pointer stays on the stack meanwhile.
-            let layoutId = context.RecordLayoutId (List.map fst fields)
             join "\n    " [
-                $"i32.const {fields.Length * 4}\n    i32.const {layoutId}\n    call ${helper Helpers.newObject}"
-                yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value)) ]
+                $"i32.const {tagCode (context.TagId name)}"
+                atomsAfter true [ payload ]
+                $"call ${storing Helpers.tagBox (atomType payload)}" ]
+        | MakeRecord fields ->
+            // Each field at its offset, with the layout's number as the info word. The record is allocated before its
+            // fields are evaluated, and its pointer stays on the stack meanwhile.
+            let layoutId = context.RecordLayoutId (List.map fst fields)
+            let values = List.map snd fields
+            join "\n    " [
+                $"i32.const {CoreIrLayout.totalSize (List.map atomType values)}\n    i32.const {layoutId}\n    call ${helper Helpers.newObject}"
+                yield! fieldStores values ]
         | Field(record, slot) ->
             // The field's value, with a reference of its own.
+            let fields = recordFields (atomType record)
             let dup = if CoreIrDrop.isHeapType expr.Type then $"call ${CoreIrDrop.dupName expr.Type}" else ""
-            join "\n    " [ atoms [ record ]; $"i32.const {slot * 4}\n    i32.add\n    i32.load"; dup ]
-        | UpdateRecord(record, fieldCount, updates) ->
+            join "\n    " [ atoms [ record ]; CoreIrLayout.load expr.Type (CoreIrLayout.fieldOffset fields slot); dup ]
+        | UpdateRecord(record, updates) ->
             // A copy of the record, layout and all, with the updated fields overwritten in place. The copy takes a
             // reference to each field on the heap it keeps.
+            let fields = recordFields (atomType record)
             let kept =
-                match atomType record with
-                | IrRecord fields ->
-                    fields
-                    |> List.indexed
-                    |> List.filter (fun (slot, (_, fieldTy)) -> CoreIrDrop.isHeapType fieldTy && not (updates |> List.exists (fst >> (=) slot)))
-                | _ -> []
+                fields
+                |> List.indexed
+                |> List.filter (fun (slot, (_, fieldTy)) -> CoreIrDrop.isHeapType fieldTy && not (updates |> List.exists (fst >> (=) slot)))
             let keepCode =
                 match kept with
                 | [] -> ""
                 | _ ->
-                    let copy = freshLocal "__update"
+                    let copy = freshLocal "__update" "i32"
                     let dups =
                         kept
                         |> List.map (fun (slot, (_, fieldTy)) ->
-                            $"local.get ${copy}\n    i32.load offset={slot * 4}\n    call ${CoreIrDrop.dupName fieldTy}\n    drop")
+                            $"local.get ${copy}\n    {CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot)}\n    call ${CoreIrDrop.dupName fieldTy}\n    drop")
                     String.concat "\n    " (($"local.tee ${copy}") :: dups)
             join "\n    " [
                 atoms [ record ]
-                $"i32.const {fieldCount * 4}\n    call ${helper Helpers.recordCopy}"
+                $"i32.const {CoreIrLayout.recordSize fields}\n    call ${helper Helpers.recordCopy}"
                 keepCode
-                yield! stores updates ]
+                yield! stores (updates |> List.map (fun (slot, value) -> CoreIrLayout.fieldOffset fields slot, value)) ]
         | Assign(cell, value) ->
             // The new value is computed before the old one is dropped, since it may be made from it.
-            let dropOld = if CoreIrDrop.isHeapType cell.Type then $"local.get ${cell.Name}\n    {dropValue cell.Type}" else ""
-            join "\n    " [ atoms [ value ]; dropOld; $"local.set ${cell.Name}"; "i32.const 0" ]
+            let dropOld = if CoreIrDrop.isHeapType cell.Type then $"local.get ${localName cell}\n    {dropValue cell.Type}" else ""
+            join "\n    " [ atoms [ value ]; dropOld; $"local.set ${localName cell}"; "i32.const 0" ]
         | SetField(record, slot, value) ->
             let fieldTy = atomType value
-            let held = freshLocal "__set"
+            let offset = CoreIrLayout.fieldOffset (recordFields record.Type) slot
+            let held = freshLocal "__set" (CoreIrLayout.valueType fieldTy)
             let dropOld =
-                if CoreIrDrop.isHeapType fieldTy then $"local.get ${record.Name}\n    i32.load offset={slot * 4}\n    {dropValue fieldTy}" else ""
+                if CoreIrDrop.isHeapType fieldTy then $"local.get ${localName record}\n    {CoreIrLayout.load fieldTy offset}\n    {dropValue fieldTy}" else ""
             join "\n    " [
                 atoms [ value ]
                 $"local.set ${held}"
                 dropOld
-                $"local.get ${record.Name}\n    local.get ${held}\n    i32.store offset={slot * 4}"
+                $"local.get ${localName record}\n    local.get ${held}\n    {CoreIrLayout.store fieldTy offset}"
                 "i32.const 0" ]
         | MakeList items ->
             // The elements left to right, then the empty list, then a cons for each from the back.
+            let element =
+                match expr.Type with
+                | IrList element -> element
+                | other -> internalError $"a list literal of type {IrType.show other}"
             join "\n    " [
                 atoms items
                 "i32.const 0"
-                yield! items |> List.map (fun _ -> $"call ${helper Helpers.listCons}") ]
+                yield! items |> List.map (fun _ -> $"call ${storing Helpers.listCons element}") ]
         | CallRuntime(name, ([ first; _ ] as args), _) when
             name = Helpers.listConcat && (match atomType first with IrList element -> CoreIrDrop.isHeapType element | _ -> false) ->
             // Copying cells of elements on the heap takes a reference to each element (see `CoreIrDrop`).
             let element = match atomType first with IrList element -> element | _ -> IrUnit
             helper Helpers.listCons |> ignore
             join "\n    " [ atoms args; $"call ${CoreIrDrop.listConcatName element}" ]
+        | CallRuntime(name, ([ first; _ ] as args), _) when name = Helpers.listConcat ->
+            let element = match atomType first with IrList element -> element | _ -> IrUnit
+            join "\n    " [ atoms args; $"call ${storing Helpers.listConcat element}" ]
+        | CallRuntime(name, ([ head; _ ] as args), _) when name = Helpers.listCons ->
+            join "\n    " [ atoms args; $"call ${storing Helpers.listCons (atomType head)}" ]
         | CallRuntime(name, ([ first; _ ] as args), _) when name = Helpers.valueEquals ->
             join "\n    " [ atoms args; $"call ${CoreIrEquality.equalsName (atomType first)}" ]
+        // An order and a hash are ints, which the functions that compute them give as `i32`s.
         | CallRuntime(name, ([ first; _ ] as args), _) when name = Helpers.valueCompare ->
-            join "\n    " [ atoms args; $"call ${CoreIrOrdering.compareName (atomType first)}" ]
+            join "\n    " [ atoms args; $"call ${CoreIrOrdering.compareName (atomType first)}"; "i64.extend_i32_s" ]
         | CallRuntime(name, ([ first ] as args), _) when name = Helpers.valueHash ->
-            join "\n    " [ atoms args; $"call ${CoreIrHashing.hashName (atomType first)}" ]
+            join "\n    " [ atoms args; $"call ${CoreIrHashing.hashName (atomType first)}"; "i64.extend_i32_s" ]
         | CallRuntime(name, args, returnsValue) ->
-            // Every value is an i32, so a helper that returns nothing leaves unit, 0.
-            join "\n    " [ atoms args; $"call ${helper name}"; (if returnsValue then "" else "i32.const 0") ]
+            // An int argument and an int result are converted where the helper holds them in `i32`s, and a helper that
+            // returns nothing leaves unit, 0.
+            let converts = not (takesInts.Contains name)
+            let arguments =
+                args
+                |> List.mapi (fun index arg ->
+                    let conversion =
+                        if not converts || atomType arg <> IrInt then ""
+                        elif takesIndices.Contains name then $"call ${helper Helpers.intToIndex}"
+                        else "i32.wrap_i64"
+                    join "\n    " [ atomsAfter (index > 0) [ arg ]; conversion ])
+            let result =
+                // Exiting never returns: `unreachable` lets the call stand wherever a value of any type is expected.
+                if name = Helpers.exit then "unreachable"
+                elif not returnsValue then "i32.const 0"
+                elif converts && expr.Type = IrInt then "i64.extend_i32_s"
+                else ""
+            join "\n    " [ yield! arguments; $"call ${helper name}"; result ]
         | MakeClosure(name, arity, captured) ->
-            // A block of 4-byte slots: the function's table slot, then what it captures, with the table slot of the
-            // function that drops what it captures as the info word (see `CoreIrDrop`). The block is allocated before
-            // anything is stored, and its pointer stays on the stack meanwhile.
-            let values =
-                $"i32.const {context.FunctionSlot name arity}"
-                :: (captured |> List.map (fun value -> atomsAfter true [ value ]))
-            let stores =
-                values |> List.mapi (fun index code -> $"{code}\n    i32.const {index * 4}\n    call ${helper Helpers.recordSet}")
-            let dropSlot = context.FunctionSlot (CoreIrDrop.environmentDropName (captured |> List.map atomType)) 1
-            join "\n    " [ $"i32.const {values.Length * 4}\n    i32.const {dropSlot}\n    call ${helper Helpers.newObject}"; yield! stores ]
+            // The function's table slot, then what it captures, each at its offset, with the table slot of the function
+            // that drops what it captures as the info word (see `CoreIrDrop`). The block is allocated before anything is
+            // stored, and its pointer stays on the stack meanwhile.
+            let capturedTys = captured |> List.map atomType
+            let offsets = CoreIrLayout.closureOffsets capturedTys
+            let slotStore = $"i32.const {context.FunctionSlot name arity}\n    i32.const 0\n    call ${helper Helpers.recordSet}"
+            let dropSlot = context.FunctionSlot (CoreIrDrop.environmentDropName capturedTys) 1
+            join "\n    " [
+                $"i32.const {CoreIrLayout.closureSize capturedTys}\n    i32.const {dropSlot}\n    call ${helper Helpers.newObject}"
+                slotStore
+                yield! stores (List.zip offsets.Tail captured) ]
         | CallClosure(closure, args) ->
             // The closure is passed first, as the environment, and read again for the table slot it holds.
-            let read = $"local.get ${closure.Name}"
-            let arity = args.Length + 1
-            context.IndirectCall arity
+            let read = $"local.get ${localName closure}"
+            let parameters = "i32" :: (args |> List.map (atomType >> CoreIrLayout.valueType))
+            let result = CoreIrLayout.valueType expr.Type
+            context.IndirectCall(parameters, result)
             let call = if tail then "return_call" else "call"
-            join "\n    " [ read; atomsAfter true args; read; "i32.load"; $"{call}_indirect (type $ctx_fn_{arity})" ]
+            join "\n    " [ read; atomsAfter true args; read; "i32.load"; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
         | Interpolate parts -> this.Interpolation parts
         | Dbg text -> join "\n    " [ atoms [ text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->
             let condCode = atoms [ cond ]
-            $"{condCode}\n    (if (result i32)\n      (then\n        {this.Sequence tail ifTrue}\n      )\n      (else\n        {this.Sequence tail ifFalse}\n      )\n    )"
-        | Match(scrutinees, arms) -> this.Arms tail scrutinees arms
+            let result = CoreIrLayout.valueType expr.Type
+            $"{condCode}\n    (if (result {result})\n      (then\n        {this.SequenceAs tail expr.Type ifTrue}\n      )\n      (else\n        {this.SequenceAs tail expr.Type ifFalse}\n      )\n    )"
+        | Match(scrutinees, arms) -> this.Arms tail expr.Type scrutinees arms
         | Dup(vars, body) -> join "\n    " [ this.DupVars vars; this.Value tail deferred onStack body ]
         | Drop(vars, body) -> join "\n    " [ dropVars localOf vars; this.Value tail deferred onStack body ]
         | Release(released, body) -> join "\n    " [ this.Release released; this.Value tail deferred onStack body ]
         // An allocation into the block a reuse token holds, if it holds one (see `CoreIrReuse`).
-        | Reuse(token, { Kind = CallRuntime(_, args, _) }) ->
-            join "\n    " [ $"local.get ${token.Name}"; atomsAfter true args; $"call ${helper Helpers.listConsAt}" ]
+        | Reuse(token, { Kind = CallRuntime(_, ([ head; _ ] as args), _) }) ->
+            join "\n    " [ $"local.get ${localName token}"; atomsAfter true args; $"call ${storing Helpers.listConsAt (atomType head)}" ]
         | Reuse(token, { Kind = MakeTag(name, payload) }) ->
             join "\n    " [
-                $"local.get ${token.Name}\n    i32.const {tagCode (context.TagId name)}"
+                $"local.get ${localName token}\n    i32.const {tagCode (context.TagId name)}"
                 atomsAfter true [ payload ]
-                $"call ${helper Helpers.tagBoxAt}" ]
+                $"call ${storing Helpers.tagBoxAt (atomType payload)}" ]
         | Reuse(token, { Kind = MakeRecord fields }) ->
             let layoutId = context.RecordLayoutId (List.map fst fields)
+            let values = List.map snd fields
             join "\n    " [
-                $"local.get ${token.Name}\n    i32.const {fields.Length * 4}\n    i32.const {layoutId}\n    call ${helper Helpers.reuseObject}"
-                yield! stores (fields |> List.mapi (fun slot (_, value) -> slot, value)) ]
+                $"local.get ${localName token}\n    i32.const {CoreIrLayout.totalSize (List.map atomType values)}\n    i32.const {layoutId}\n    call ${helper Helpers.reuseObject}"
+                yield! fieldStores values ]
         | Reuse _ -> internalError "a reuse of a block by something other than an allocation"
         | DropAfter(body, vars) ->
             // A temporary among `vars` is kept in a local as its value is pushed, to be dropped once `body` is done.
             // Nothing can follow a tail call, so `body` is not one.
             for var in vars do
-                if var.Kind = Temp then droppedTemps.[var.Id] <- freshLocal "__owned"
+                if var.Kind = Temp then droppedTemps.[var.Id] <- freshLocal "__owned" (CoreIrLayout.valueType var.Type)
             join "\n    " [ this.Value false deferred onStack body; dropVars localOf vars ]
         | Let _
         | Do _ -> this.Sequence tail expr
@@ -408,8 +513,8 @@ type private FunctionEmitter(context: EmitContext) =
                 | true, local -> $"{this.Value false deferred onStack value}\n    local.tee ${local}"
                 | _ -> this.Value false deferred onStack value
             | _ -> internalError "a temporary in the core IR is used twice"
-        | AVar v -> $"local.get ${v.Name}"
-        | AInt value -> $"i32.const {value}"
+        | AVar v -> $"local.get ${localName v}"
+        | AInt value -> $"i64.const {value}"
         | ABool value -> if value then "i32.const 1" else "i32.const 0"
         | AUnit -> "i32.const 0"
         | AString value -> $"i32.const {context.StringOffset value}"
@@ -423,25 +528,26 @@ type private FunctionEmitter(context: EmitContext) =
         // What each stream does before the loop, at the top of each time round, and at the bottom.
         let start (stream: ForStream) =
             match stream.Source with
-            | OverRange(first, last) -> [ atomCode first; $"local.set ${stream.Element.Name}"; atomCode last; $"local.set ${stream.End.Name}" ]
-            | OverRangeFrom first -> [ atomCode first; $"local.set ${stream.Element.Name}" ]
-            | OverList list -> [ atomCode list; $"local.set ${stream.Cursor.Name}" ]
+            | OverRange(first, last) -> [ atomCode first; $"local.set ${localName stream.Element}"; atomCode last; $"local.set ${localName stream.End}" ]
+            | OverRangeFrom first -> [ atomCode first; $"local.set ${localName stream.Element}" ]
+            | OverList list -> [ atomCode list; $"local.set ${localName stream.Cursor}" ]
+        // A range counts in ints; a list's cursor moves to each cell's tail, after its head.
         let next (stream: ForStream) =
             match stream.Source with
-            | OverRange _ -> [ $"local.get ${stream.Element.Name}"; $"local.get ${stream.End.Name}"; "i32.gt_s"; done' ]
+            | OverRange _ -> [ $"local.get ${localName stream.Element}"; $"local.get ${localName stream.End}"; "i64.gt_s"; done' ]
             | OverRangeFrom _ -> []
             | OverList _ ->
-                let cursor = stream.Cursor.Name
-                [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; "i32.load"; $"local.set ${stream.Element.Name}" ]
+                let cursor = localName stream.Cursor
+                [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; CoreIrLayout.load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
         let advance (stream: ForStream) =
             match stream.Source with
             | OverRange _
             | OverRangeFrom _ ->
-                let element = stream.Element.Name
-                [ $"local.get ${element}"; "i32.const 1"; "i32.add"; $"local.set ${element}" ]
+                let element = localName stream.Element
+                [ $"local.get ${element}"; "i64.const 1"; $"call ${helper Helpers.intAdd}"; $"local.set ${element}" ]
             | OverList _ ->
-                let cursor = stream.Cursor.Name
-                [ $"local.get ${cursor}"; "i32.const 4"; "i32.add"; "i32.load"; $"local.set ${cursor}" ]
+                let cursor = localName stream.Cursor
+                [ $"local.get ${cursor}"; $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type
         // The starting atoms are read in the order `tempsUsedBy` gives them.
@@ -452,12 +558,30 @@ type private FunctionEmitter(context: EmitContext) =
         $"{startCode}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        {inLoop}\n      end\n    end\n    i32.const 0"
 
     /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
-    member this.Arms (tail: bool) (scrutinees: Var list) (arms: Arm list) : string =
-        let tagPayloadCode valueCode = $"{valueCode}\n      i32.load offset=4"
-        let fieldCode valueCode slot = $"{valueCode}\n      i32.const {slot * 4}\n      i32.add\n      i32.load"
-        // The list after `count` cells, and the head of the list after `index` cells.
-        let listTailCode valueCode count = valueCode + String.replicate count "\n      i32.const 4\n      i32.add\n      i32.load"
-        let listElementCode valueCode index = $"{listTailCode valueCode index}\n      i32.load"
+    member this.Arms (tail: bool) (resultTy: IrType) (scrutinees: Var list) (arms: Arm list) : string =
+        // The payload of the tag `name` of a value of `ty`, with its type.
+        let tagPayloadCode (ty: IrType) (name: string) valueCode =
+            let payloadTy =
+                match IrType.unfold ty with
+                | IrTags tags -> tags |> List.tryPick (fun (tag, payload) -> if tag = name then payload else None)
+                | _ -> None
+            match payloadTy with
+            | Some payloadTy -> $"{valueCode}\n      {CoreIrLayout.load payloadTy CoreIrLayout.payloadOffset}", payloadTy
+            | None -> internalError $"a pattern on the payload of #{name}, which {IrType.show ty} does not give one"
+        // The field in `slot` of a record of `ty`, with its type.
+        let fieldCode (ty: IrType) valueCode slot =
+            match ty with
+            | IrRecord fields -> $"{valueCode}\n      {CoreIrLayout.load (snd fields.[slot]) (CoreIrLayout.fieldOffset fields slot)}", snd fields.[slot]
+            | other -> internalError $"a pattern on the fields of {IrType.show other}, which is not a record"
+        let elementOf (ty: IrType) =
+            match IrType.unfold ty with
+            | IrList element -> element
+            | other -> internalError $"a list pattern on {IrType.show other}"
+        // The list after `count` cells, and the head of the list after `index` cells, of a list of `ty`.
+        let listTailCode (ty: IrType) valueCode count =
+            valueCode + String.replicate count $"\n      i32.load offset={CoreIrLayout.tailOffset (elementOf ty)}"
+        let listElementCode (ty: IrType) valueCode index =
+            $"{listTailCode ty valueCode index}\n      {CoreIrLayout.load (elementOf ty) 0}"
         let guarded first second =
             $"{first}\n      (if (result i32)\n        (then\n          {second})\n        (else i32.const 0))"
         let allOf conditions =
@@ -465,11 +589,12 @@ type private FunctionEmitter(context: EmitContext) =
             | [] -> "i32.const 1"
             | [ single ] -> single
             | many -> (many |> String.concat "\n      ") + String.replicate (many.Length - 1) "\n      i32.and"
-        let rec condition (pattern: Pattern) (valueCode: string) =
+        // Whether the value `valueCode` leaves, of type `ty`, matches `pattern`: 1 when it does.
+        let rec condition (pattern: Pattern) (valueCode: string) (ty: IrType) =
             match pattern with
             | PWildcard
             | PBind _ -> "i32.const 1"
-            | PInt value -> $"{valueCode}\n      i32.const {value}\n      i32.eq"
+            | PInt value -> $"{valueCode}\n      i64.const {value}\n      i64.eq"
             | PBool value ->
                 let flag = if value then 1 else 0
                 $"{valueCode}\n      i32.const {flag}\n      i32.eq"
@@ -480,78 +605,84 @@ type private FunctionEmitter(context: EmitContext) =
                 | None -> discriminant
                 | Some inner ->
                     // Only look at the payload once the code matches: only then is the value a cell.
-                    match condition inner (tagPayloadCode valueCode) with
+                    match tagPayloadCode ty name valueCode ||> condition inner with
                     | "i32.const 1" -> discriminant
                     | payloadCheck -> guarded discriminant payloadCheck
-            | PFields fields -> fields |> List.map (fun (slot, inner) -> condition inner (fieldCode valueCode slot)) |> allOf
+            | PFields fields -> fields |> List.map (fun (slot, inner) -> fieldCode ty valueCode slot ||> condition inner) |> allOf
             | PString value ->
                 $"{valueCode}\n      i32.const {context.StringOffset value}\n      call ${helper Helpers.stringEquals}"
-            | PGuard(var, guard) -> $"{valueCode}\n      local.set ${var.Name}\n      {this.Sequence false guard}"
+            | PGuard(var, guard) -> $"{valueCode}\n      local.set ${localName var}\n      {this.Sequence false guard}"
             // Left to right, each part tested only once those before it match: `#some(_) & { ... }`'s predicate runs
             // only on a `#some`.
             | PAll parts ->
-                match parts |> List.map (fun part -> condition part valueCode) |> List.filter ((<>) "i32.const 1") with
+                match parts |> List.map (fun part -> condition part valueCode ty) |> List.filter ((<>) "i32.const 1") with
                 | [] -> "i32.const 1"
                 | checks -> List.reduceBack guarded checks
             | PList(elements, rest) ->
                 // Only the cells the pattern needs are looked at: one for each element, each checked only once the cell
                 // before it exists, and then, without a rest, that the list ends there.
-                let cellChecks = List.init elements.Length (fun index -> $"{listTailCode valueCode index}\n      i32.const 0\n      i32.ne")
+                let cellChecks = List.init elements.Length (fun index -> $"{listTailCode ty valueCode index}\n      i32.const 0\n      i32.ne")
                 let endCheck =
                     match rest with
                     | Some _ -> []
-                    | None -> [ $"{listTailCode valueCode elements.Length}\n      i32.eqz" ]
+                    | None -> [ $"{listTailCode ty valueCode elements.Length}\n      i32.eqz" ]
                 let lengthCheck =
                     match cellChecks @ endCheck with
                     | [] -> "i32.const 1"
                     | checks -> List.reduceBack guarded checks
                 let elementChecks =
-                    elements |> List.mapi (fun index element -> condition element (listElementCode valueCode index)) |> allOf
+                    elements
+                    |> List.mapi (fun index element -> condition element (listElementCode ty valueCode index) (elementOf ty))
+                    |> allOf
                 let restCheck =
                     match rest with
-                    | Some restPattern -> condition restPattern (listTailCode valueCode elements.Length)
+                    | Some restPattern -> condition restPattern (listTailCode ty valueCode elements.Length) ty
                     | None -> "i32.const 1"
                 // The elements only exist once the length check holds.
                 match lengthCheck, allOf [ elementChecks; restCheck ] with
                 | _, "i32.const 1" -> lengthCheck
                 | "i32.const 1", elementsAndRest -> elementsAndRest
                 | _, elementsAndRest -> guarded lengthCheck elementsAndRest
-        let rec binds (pattern: Pattern) (valueCode: string) =
+        // The code that binds the names `pattern` binds in the value `valueCode` leaves, of type `ty`.
+        let rec binds (pattern: Pattern) (valueCode: string) (ty: IrType) =
             match pattern with
-            | PBind var -> [ $"{valueCode}\n        local.set ${var.Name}" ]
-            | PTag(_, Some inner) -> binds inner (tagPayloadCode valueCode)
-            | PFields fields -> fields |> List.collect (fun (slot, inner) -> binds inner (fieldCode valueCode slot))
-            | PAll parts -> parts |> List.collect (fun part -> binds part valueCode)
+            | PBind var -> [ $"{valueCode}\n        local.set ${localName var}" ]
+            | PTag(name, Some inner) -> tagPayloadCode ty name valueCode ||> binds inner
+            | PFields fields -> fields |> List.collect (fun (slot, inner) -> fieldCode ty valueCode slot ||> binds inner)
+            | PAll parts -> parts |> List.collect (fun part -> binds part valueCode ty)
             | PList(elements, rest) ->
-                (elements |> List.mapi (fun index element -> binds element (listElementCode valueCode index)) |> List.concat)
-                @ (rest |> Option.map (fun restPattern -> binds restPattern (listTailCode valueCode elements.Length)) |> Option.defaultValue [])
+                (elements |> List.mapi (fun index element -> binds element (listElementCode ty valueCode index) (elementOf ty)) |> List.concat)
+                @ (rest
+                   |> Option.map (fun restPattern -> binds restPattern (listTailCode ty valueCode elements.Length) ty)
+                   |> Option.defaultValue [])
             | _ -> []
         let rec emit (remaining: Arm list) =
             match remaining with
             | [] -> "unreachable"
             | arm :: rest ->
                 let conditions =
-                    List.map2 (fun pattern (scrutinee: Var) -> condition pattern $"local.get ${scrutinee.Name}") arm.Patterns scrutinees
+                    List.map2 (fun pattern (scrutinee: Var) -> condition pattern $"local.get ${localName scrutinee}" scrutinee.Type) arm.Patterns scrutinees
                 let allConditions =
                     match conditions with
                     | [] -> "i32.const 1"
                     | [ single ] -> single
                     | many -> (many |> String.concat "\n      ") + String.replicate (many.Length - 1) "\n      i32.and"
                 let bindCode =
-                    List.map2 (fun pattern (scrutinee: Var) -> binds pattern $"local.get ${scrutinee.Name}") arm.Patterns scrutinees
+                    List.map2 (fun pattern (scrutinee: Var) -> binds pattern $"local.get ${localName scrutinee}" scrutinee.Type) arm.Patterns scrutinees
                     |> List.concat
                     |> String.concat "\n    "
-                let armCode = join "\n    " [ bindCode; this.Sequence tail arm.Body ]
-                $"{allConditions}\n    (if (result i32)\n      (then\n        {armCode}\n      )\n      (else\n        {emit rest}\n      )\n    )"
+                let armCode = join "\n    " [ bindCode; this.SequenceAs tail resultTy arm.Body ]
+                let result = CoreIrLayout.valueType resultTy
+                $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {emit rest}\n      )\n    )"
         emit arms
 
 /// The locals a function declares beyond its parameters, in the order `CodeGen.fs` declares them: its own locals, the
 /// scrutinees', what patterns bind, what interpolated strings need (their scratch locals, then their holes by depth),
 /// and its scratch locals.
-let private declaredLocals (body: Expr) : string list =
+let private declaredLocals (body: Expr) : (string * string) list =
     let found = ResizeArray<Var>()
     // The holes of the interpolated strings, by depth and place.
-    let holes = ResizeArray<int * int>()
+    let holes = ResizeArray<int * int * Var>()
     let interpolates = ref false
     // The locals of the `for` loops, in the order the old path declares them: each loop's, then those of the loops in
     // its body.
@@ -574,7 +705,7 @@ let private declaredLocals (body: Expr) : string list =
         | Let(var, value, body) ->
             match var.Kind with
             | Temp -> ()
-            | InterpolationHole(depth, index) -> holes.Add((depth, index))
+            | InterpolationHole(depth, index) -> holes.Add((depth, index, var))
             | _ -> found.Add var
             walk value
             walk body
@@ -616,28 +747,34 @@ let private declaredLocals (body: Expr) : string list =
             ForLoop.locals loop |> List.iter loops.Add
             walk loop.Body
     walk body
-    let ofKind kind = found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map _.Name |> List.ofSeq
+    let declared (var: Var) = localName var, CoreIrLayout.valueType var.Type
+    let ofKind kind = found |> Seq.filter (fun var -> var.Kind = kind) |> Seq.map declared |> List.ofSeq
     let interpolationLocals =
         if interpolates.Value then
-            Interpolation.scratchLocals
-            @ (holes |> Seq.distinct |> Seq.sort |> Seq.map (fun (depth, index) -> Interpolation.holeLocalName depth index) |> List.ofSeq)
+            (Interpolation.scratchLocals |> List.map (fun name -> name, "i32"))
+            @ [ Interpolation.intLocal, "i64" ]
+            @ (holes |> Seq.sortBy (fun (depth, index, var) -> depth, index, localName var) |> Seq.map (fun (_, _, var) -> declared var) |> List.ofSeq)
         else []
     [ yield! ofKind Local
       yield! ofKind MatchTemp
       yield! ofKind PatternBound
       yield! interpolationLocals
-      yield! loops |> Seq.map _.Name
+      yield! loops |> Seq.map declared
       yield! ofKind Scratch ]
     |> List.distinct
+
+/// The declarations of `locals`, each a name and its value type.
+let private localDeclarations (locals: (string * string) list) =
+    locals |> List.map (fun (name, valueType) -> $"(local ${name} {valueType})") |> String.concat " "
 
 /// `func` as a WebAssembly function, exported under `exportName` if given.
 let emitFunction (context: EmitContext) (func: Function) (exportName: string option) : Emitted =
     let emitter = FunctionEmitter(context)
-    let bodyCode = emitter.Sequence true func.Body
+    let bodyCode = emitter.SequenceAs true func.Result func.Body
     let header =
-        [ func.Params |> List.map (fun p -> $"(param ${p.Name} i32)") |> String.concat " "
-          "(result i32)"
-          declaredLocals func.Body @ emitter.ExtraLocals |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " ]
+        [ func.Params |> List.map (fun p -> $"(param ${localName p} {CoreIrLayout.valueType p.Type})") |> String.concat " "
+          $"(result {CoreIrLayout.valueType func.Result})"
+          localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) ]
         |> join " "
     let text =
         match exportName with
@@ -659,7 +796,7 @@ let emitStart (context: EmitContext) (func: Function) : Emitted =
         |> List.map (fun value -> $"{emitter.Sequence false value}\n    {dropValue value.Type}")
         |> String.concat "\n    "
     let header =
-        match declaredLocals func.Body @ emitter.ExtraLocals |> List.map (fun name -> $"(local ${name} i32)") |> String.concat " " with
+        match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
         | "" -> ""
         | locals -> " " + locals
     { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers }

@@ -97,7 +97,7 @@ let ``Typecheck records typed match patterns`` () =
                         patterns
                         |> List.exists (fun pattern ->
                             match pattern.Pattern.Kind with
-                            | LiteralPattern (IntLit 1) -> pattern.Type = TyPrimitive "int"
+                            | LiteralPattern (IntLit 1L) -> pattern.Type = TyPrimitive "int"
                             | _ -> false))
                 | None -> false
             | _ -> false)

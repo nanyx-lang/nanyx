@@ -27,23 +27,24 @@ and a drop function for its type (see Object header below), and the compiler ins
 Inserting counts below), so a program frees each object once nothing refers to it, and reuses an object it takes
 apart and holds the only reference to for a new one of the same size.
 
-Every value is an `i32`. On the heap, after each object's header:
+An `int` is an `i64`, and every other value an `i32` (see Value representation below). On the heap, after each object's
+header:
 
 | Value | Layout |
 |-------|--------|
 | String | UTF-8 bytes, the byte length in the 4 bytes before the pointer, a 0 byte after |
-| List | 0 for the empty list, else a pointer to an 8-byte cell of (head, tail) |
-| Record, tuple | a 4-byte slot per field in field-name order, the layout's number in the 4 bytes before |
+| List | 0 for the empty list, else a pointer to a cell of (head, tail) |
+| Record, tuple | the fields one after another in field-name order, the layout's number in the 4 bytes before |
 | Closure | the function's table slot, then the captured values; the table slot of its environment's drop function in the 4 bytes before |
 | Float | an 8-byte box holding the `f64` |
-| Tag with a payload | a pointer to an 8-byte cell of (code, payload) |
+| Tag with a payload | a pointer to a cell of (code, payload) |
 
 String literals live in the data segment, with a header of their own. A tag without a payload is not on the heap: it is its code,
 `(id << 1) | 1`. Codes are odd and allocations are 4-byte aligned, so a tag value is a code exactly when its low
 bit is set ([#181](https://github.com/nanyx-lang/nanyx/issues/181)).
 
 Code generation goes from the typed module through the core IR (see Core IR below) to WebAssembly text. Generic
-functions are specialised for each set of type arguments they are used at, though every value is still an `i32`.
+functions are specialised for each set of type arguments they are used at.
 
 # Why Perceus
 
@@ -102,8 +103,14 @@ not specialised. Monomorphising first does not rule that out.
 ## Value representation
 
 With every type known, values no longer have to fit one `i32`. Integers, floats and booleans are stored unboxed at
-their own width, in locals, fields and payloads alike, and a record's fields get a layout of their own (no longer a
-4-byte slot each). Floats stop being boxed.
+their own width, in locals, fields and payloads alike, and a record's fields get a layout of their own. Floats stop
+being boxed.
+
+**Implemented for `int`:** an `int` is an `i64` in locals, parameters and results, and takes 8 bytes in a field, a list
+cell's head, a tag's payload and a closure's captures, with every other value in 4 (`CoreIrLayout.fs`). A local of an
+`int` is named with `_i64` after the variable's name, since variables of the same kind and name share a local. The
+runtime helpers that store a value (`listCons`, `tagBox`, `recordSet` and the rest) have an `_i64` variant, and a call
+through a closure uses a function type of the values it passes (`Wat.indirectTypeName`). Floats are still boxed.
 
 `int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`
 and so on; see [Sized numbers](./sized-numbers)). Each maps to the Wasm
@@ -262,8 +269,8 @@ already. A definition (or top-level expression) that holds such errors and canno
 lowered to a trap that reports them as soon as it is called. A definition that is generic only because an error left
 its type open, and is not specialised, is lowered with its type variables defaulted, so that it still exists.
 
-**Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, still with every value an `i32` and laid out
-as `CodeGen.fs` lays it out. A temporary is not stored: it is used exactly once, by the next instruction that needs
+**Generating code.** `CoreIrEmit.fs` writes WebAssembly text from the IR, with each value in the WebAssembly type of
+its type (see Value representation above). A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
 or an interpolated string among a call's arguments, say) is one temporary whose value is the whole sequence, stores
 and all, so nothing waits on the stack across a store. Record layouts and function table slots are numbered as

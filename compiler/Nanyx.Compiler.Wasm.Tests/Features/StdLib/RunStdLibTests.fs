@@ -564,7 +564,7 @@ let ``Run - nanyx/math floor of a float out of the range of int stops the progra
         "import nanyx/math as math\n" +
         "\n" +
         "println(\"before\")\n" +
-        "def n = math.floor(1.0e12)\n" +
+        "def n = math.floor(1.0e19)\n" +
         "println(\"after {n}\")\n"
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)

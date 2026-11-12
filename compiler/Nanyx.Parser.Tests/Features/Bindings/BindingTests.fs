@@ -120,7 +120,7 @@ let ``Parse definition with newline before equals`` () =
         match module'.[0] with
         | Kind (Def (ValueDef (_, name, _, Kind (LiteralExpr (IntLit value))))) ->
             name |> should equal "x"
-            value |> should equal 1
+            value |> should equal 1L
         | _ -> failwith "Expected Def with IntLit"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
 

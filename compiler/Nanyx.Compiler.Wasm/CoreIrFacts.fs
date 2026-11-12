@@ -79,7 +79,7 @@ let collect (functions: Function list) : ModuleFacts =
         | Field(record, _) -> atom record
         | Assign(_, value)
         | SetField(_, _, value) -> atom value
-        | UpdateRecord(record, _, updates) ->
+        | UpdateRecord(record, updates) ->
             atom record
             updates |> List.iter (snd >> atom)
         | Interpolate parts ->

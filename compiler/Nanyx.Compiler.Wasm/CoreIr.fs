@@ -33,6 +33,9 @@ type IrType =
     | IrRecursive of IrType
     /// In the body of an `IrRecursive`, and not inside another one there, the `IrRecursive` itself.
     | IrSelf
+    /// A 32-bit word that is no value of the program's: a function's slot in the table, which a closure block holds
+    /// first, a cursor along a list's cells, or the block a reuse token holds.
+    | IrWord
 
 /// What a variable is, which decides how it is stored. The lowering names every variable as it is to be written in
 /// WebAssembly text; variables of the same kind and name share a local.
@@ -112,8 +115,8 @@ and ExprKind =
     | MakeRecord of (string * Atom) list
     /// Reads the field stored in this slot of a record.
     | Field of Atom * int
-    /// Copies a record of this many fields, and replaces the fields in these slots: `record with f = v`.
-    | UpdateRecord of Atom * int * (int * Atom) list
+    /// Copies a record, and replaces the fields in these slots: `record with f = v`.
+    | UpdateRecord of Atom * (int * Atom) list
     /// Gives the cell this local is (see `CellSyntax`) the atom's value, dropping the value it held, and is unit.
     | Assign of Var * Atom
     /// Writes the atom's value into this slot of the record in the local, dropping the value it held, and is unit: how a
@@ -257,7 +260,8 @@ module IrType =
             | IrUnit
             | IrString
             | IrFloat
-            | IrError -> inner
+            | IrError
+            | IrWord -> inner
         match ty with
         | IrRecursive body -> replace body
         | _ -> ty
@@ -312,11 +316,13 @@ module IrType =
         | IrBool
         | IrUnit
         | IrString
-        | IrFloat -> false
+        | IrFloat
+        | IrWord -> false
 
     let rec show (ty: IrType) =
         match ty with
         | IrInt -> "int"
+        | IrWord -> "word"
         | IrBool -> "bool"
         | IrUnit -> "unit"
         | IrString -> "string"
@@ -432,7 +438,7 @@ module Print =
             let shown = fields |> List.map (fun (name, value) -> $"{name} = {atom value}") |> String.concat ", "
             $"({shown})"
         | Field(record, slot) -> $"{atom record}[{slot}]"
-        | UpdateRecord(record, _, updates) ->
+        | UpdateRecord(record, updates) ->
             let shown = updates |> List.map (fun (slot, value) -> $"[{slot}] = {atom value}") |> String.concat ", "
             $"{atom record} with {shown}"
         | Assign(var, value) -> $"{var.Name} := {atom value}"

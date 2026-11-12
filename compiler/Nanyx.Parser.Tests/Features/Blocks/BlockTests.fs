@@ -18,10 +18,10 @@ let ``Parse block with two literals`` () =
             name |> should equal "test"
             statements |> should haveLength 2
             match statements.[0] with
-            | Kind (ExprStatement (Kind (LiteralExpr (IntLit 1)))) -> ()
+            | Kind (ExprStatement (Kind (LiteralExpr (IntLit 1L)))) -> ()
             | _ -> failwith "Expected first statement to be literal 1"
             match statements.[1] with
-            | Kind (ExprStatement (Kind (LiteralExpr (IntLit 2)))) -> ()
+            | Kind (ExprStatement (Kind (LiteralExpr (IntLit 2L)))) -> ()
             | _ -> failwith "Expected second statement to be literal 2"
         | _ -> failwith "Expected a block with two literal statements"
     | Result.Error err -> failwith $"Parse failed: {err}"

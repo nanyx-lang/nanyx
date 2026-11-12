@@ -1,21 +1,21 @@
 (module
-  (func $g (param $x i32) (result i32) (local $__match_tmp_0 i32) (local $__guard i32)
-    local.get $x
-    local.set $__match_tmp_0
-    local.get $__match_tmp_0
-      local.set $__guard
-      local.get $__guard
-    i32.const 5
-    i32.gt_s
-    (if (result i32)
+  (func $g (param $x_i64 i64) (result i64) (local $__match_tmp_0_i64 i64) (local $__guard_i64 i64)
+    local.get $x_i64
+    local.set $__match_tmp_0_i64
+    local.get $__match_tmp_0_i64
+      local.set $__guard_i64
+      local.get $__guard_i64
+    i64.const 5
+    i64.gt_s
+    (if (result i64)
       (then
-        i32.const 1
+        i64.const 1
       )
       (else
         i32.const 1
-    (if (result i32)
+    (if (result i64)
       (then
-        i32.const 0
+        i64.const 0
       )
       (else
         unreachable
@@ -26,8 +26,8 @@
   )
   (export "g" (func $g))
 
-  (func $main (result i32)
-    i32.const 7
+  (func $main (result i64)
+    i64.const 7
     return_call $g
   )
   (export "main" (func $main))

@@ -28,7 +28,8 @@ let private needsFunction (ty: IrType) =
     | IrString
     | IrFunction _
     | IrError
-    | IrSelf -> false
+    | IrSelf
+    | IrWord -> false
 
 /// The types of the (first) operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
 /// (`parts` gives a type's own), each once, in the order they are first needed, where `needsFunction` holds: the types
@@ -116,7 +117,7 @@ let collect (functions: Function list) : IrType list =
 /// when they are equal.
 let private compare (ty: IrType) (loadA: string list) (loadB: string list) : string list =
     match ty with
-    | IrInt
+    | IrInt -> loadA @ loadB @ [ "i64.eq" ]
     | IrBool
     | IrUnit -> loadA @ loadB @ [ "i32.eq" ]
     | IrFloat -> loadA @ [ "f64.load" ] @ loadB @ [ "f64.load"; "f64.eq" ]
@@ -127,7 +128,8 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrRecursive _ -> loadA @ loadB @ [ $"call ${equalsName ty}" ]
     | IrFunction _
     | IrError
-    | IrSelf -> internalError $"an equality of {IrType.show ty}, which has none"
+    | IrSelf
+    | IrWord -> internalError $"an equality of {IrType.show ty}, which has none"
 
 /// Returns 0 from the function unless the code before it left 1.
 let private orReturnFalse = [ "i32.eqz"; "if"; "  i32.const 0"; "  return"; "end" ]
@@ -141,7 +143,7 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
         [ yield!
               fields
               |> List.mapi (fun slot (_, fieldTy) ->
-                  let field var = [ $"local.get ${var}"; $"i32.load offset={slot * 4}" ]
+                  let field var = [ $"local.get ${var}"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ]
                   compare fieldTy (field "a") (field "b") @ orReturnFalse)
               |> List.concat
           "i32.const 1" ]
@@ -155,12 +157,15 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
           "    i32.eqz"
           "    i32.or"
           "    br_if $done"
-          yield! compare element [ "local.get $a"; "i32.load" ] [ "local.get $b"; "i32.load" ] @ orReturnFalse |> indent |> indent
+          yield!
+              compare element [ "local.get $a"; CoreIrLayout.load element 0 ] [ "local.get $b"; CoreIrLayout.load element 0 ] @ orReturnFalse
+              |> indent
+              |> indent
           "    local.get $a"
-          "    i32.load offset=4"
+          $"    i32.load offset={CoreIrLayout.tailOffset element}"
           "    local.set $a"
           "    local.get $b"
-          "    i32.load offset=4"
+          $"    i32.load offset={CoreIrLayout.tailOffset element}"
           "    local.set $b"
           "    br $next"
           "  end"
@@ -173,7 +178,9 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
         // A tag without a payload is its code, which is odd; one with a payload is a pointer to a cell that holds its
         // code and then its payload. When either is a code, they are equal only when both are the same code.
         let payloads = tags |> List.choose (fun (name, payload) -> payload |> Option.map (fun payloadTy -> name, payloadTy))
-        let comparePayload payloadTy = compare payloadTy [ "local.get $a"; "i32.load offset=4" ] [ "local.get $b"; "i32.load offset=4" ]
+        let comparePayload payloadTy =
+            let payload var = [ $"local.get ${var}"; CoreIrLayout.load payloadTy CoreIrLayout.payloadOffset ]
+            compare payloadTy (payload "a") (payload "b")
         let payloadsEqual =
             match payloads |> List.map snd |> List.distinct with
             | [] -> [ "i32.const 1" ]

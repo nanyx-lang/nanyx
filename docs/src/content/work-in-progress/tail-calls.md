@@ -97,7 +97,7 @@ the linter below shares), and lowering a call looks itself up there. A call to a
 passes them as extra arguments, which changes nothing. A lambda with no parameters is lifted into a function of its
 own, like any lambda, so its body's tail calls are that function's.
 
-Every function the backend emits returns an `i32`, so a tail call always returns what its caller returns. The
+A call in tail position has the type of the function it is in, so a tail call always returns what its caller returns. The
 module's start function, which runs top-level expressions and returns nothing, makes no tail calls. Calls to
 runtime helpers and host functions stay plain calls; they do not recurse into Nanyx code.
 

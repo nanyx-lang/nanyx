@@ -1,21 +1,21 @@
 (module
-  (func $threshold (param $x i32) (result i32)
-    local.get $x
-    i32.const 10
-    i32.ge_s
-    (if (result i32)
+  (func $threshold (param $x_i64 i64) (result i64)
+    local.get $x_i64
+    i64.const 10
+    i64.ge_s
+    (if (result i64)
       (then
-        i32.const 1
+        i64.const 1
       )
       (else
-        i32.const 0
+        i64.const 0
       )
     )
   )
   (export "threshold" (func $threshold))
 
-  (func $main (result i32)
-    i32.const 15
+  (func $main (result i64)
+    i64.const 15
     return_call $threshold
   )
   (export "main" (func $main))

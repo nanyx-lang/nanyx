@@ -164,16 +164,16 @@
       i32.store
     end
   )
-  (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
+  (func $__nanyx_tag_box_i64 (param $code i32) (param $payload i64) (result i32)
     (local $cell i32)
-    i32.const 8
+    i32.const 12
     call $__nanyx_new_cell
     local.tee $cell
     local.get $code
     i32.store
     local.get $cell
     local.get $payload
-    i32.store offset=4
+    i64.store offset=4
     local.get $cell
   )
   (func $__nanyx_tag_code (param $tag i32) (result i32)
@@ -187,19 +187,42 @@
       i32.load
     end
   )
+  (func $__nanyx_int_add (param $a i64) (param $b i64) (result i64)
+    (local $r i64)
+    local.get $a
+    local.get $b
+    i64.add
+    local.set $r
+    local.get $a
+    local.get $r
+    i64.xor
+    local.get $b
+    local.get $r
+    i64.xor
+    i64.and
+    i64.const 0
+    i64.lt_s
+    if
+      i64.const -9223372036854775808
+      i64.const -1
+      i64.div_s
+      drop
+    end
+    local.get $r
+  )
 
-  (func $getOrDefault__int (param $opt i32) (param $default i32) (result i32) (local $__match_tmp_0 i32) (local $__payload_value i32)
+  (func $getOrDefault__int (param $opt i32) (param $default_i64 i64) (result i64) (local $__match_tmp_0 i32) (local $__payload_value_i64 i64)
     local.get $opt
     local.set $__match_tmp_0
     local.get $__match_tmp_0
       call $__nanyx_tag_code
       i32.const 5
       i32.eq
-    (if (result i32)
+    (if (result i64)
       (then
         local.get $__match_tmp_0
-      i32.load offset=4
-        local.set $__payload_value
+      i64.load offset=4
+        local.set $__payload_value_i64
     local.get $__match_tmp_0
     i32.const 4
     i32.sub
@@ -218,18 +241,18 @@
       call $__nanyx_release
       drop
     end
-    local.get $__payload_value
+    local.get $__payload_value_i64
       )
       (else
         local.get $__match_tmp_0
       call $__nanyx_tag_code
       i32.const 3
       i32.eq
-    (if (result i32)
+    (if (result i64)
       (then
         local.get $__match_tmp_0
     call $__nanyx_drop_tags_None_Some_int
-    local.get $default
+    local.get $default_i64
       )
       (else
         unreachable
@@ -239,24 +262,24 @@
     )
   )
 
-  (func $main (result i32) (local $x i32) (local $y i32) (local $a i32) (local $b i32)
+  (func $main (result i64) (local $x i32) (local $y i32) (local $a_i64 i64) (local $b_i64 i64)
     i32.const 5
-    i32.const 42
-    call $__nanyx_tag_box
+    i64.const 42
+    call $__nanyx_tag_box_i64
     local.set $x
     i32.const 3
     local.set $y
     local.get $x
-    i32.const 0
+    i64.const 0
     call $getOrDefault__int
-    local.set $a
+    local.set $a_i64
     local.get $y
-    i32.const 99
+    i64.const 99
     call $getOrDefault__int
-    local.set $b
-    local.get $a
-    local.get $b
-    i32.add
+    local.set $b_i64
+    local.get $a_i64
+    local.get $b_i64
+    call $__nanyx_int_add
   )
   (export "main" (func $main))
 

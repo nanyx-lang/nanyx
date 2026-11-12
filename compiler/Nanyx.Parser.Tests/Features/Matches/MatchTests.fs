@@ -19,9 +19,9 @@ let private implicitArg = IdentifierExpr implicitArgument
 [<Fact>]
 let ``a braced guard pattern is a shorthand lambda and the bare form still parses as one`` () =
     match guardsOf "def f = { | { < 0 } -> 1 | { >= limit * 2 } -> 2 | > 5 -> 3 | _ -> 4 }" with
-    | [ Lambda ([ (a, None) ], Kind (BinaryOp ("<", Kind (IdentifierExpr a'), Kind (LiteralExpr (IntLit 0)))), _)
+    | [ Lambda ([ (a, None) ], Kind (BinaryOp ("<", Kind (IdentifierExpr a'), Kind (LiteralExpr (IntLit 0L)))), _)
         Lambda ([ (b, None) ], Kind (BinaryOp (">=", Kind (IdentifierExpr b'), Kind (BinaryOp ("*", Kind (IdentifierExpr "limit"), _)))), _)
-        Lambda ([ (c, None) ], Kind (BinaryOp (">", Kind (IdentifierExpr c'), Kind (LiteralExpr (IntLit 5)))), _) ]
+        Lambda ([ (c, None) ], Kind (BinaryOp (">", Kind (IdentifierExpr c'), Kind (LiteralExpr (IntLit 5L)))), _) ]
         when List.forall ((=) implicitArgument) [ a; a'; b; b'; c; c' ] -> ()
     | other -> failwith $"Unexpected guards: %A{other}"
 
@@ -39,7 +39,7 @@ let ``a guard pattern nests inside other patterns`` () =
     match parseModule "def f = { | (0, { < 0 }) -> 1 | [{ % 2 == 0 }, ...] -> 2 | _ -> 3 }" with
     | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms)), _))))) ] ->
         match arms |> List.map fst with
-        | [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit 0)); Kind (GuardPattern (Kind (Lambda _))) ]) ]
+        | [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit 0L)); Kind (GuardPattern (Kind (Lambda _))) ]) ]
             [ Kind (ListPattern ([ Kind (GuardPattern (Kind (Lambda _))) ], Some _)) ]
             [ Kind WildcardPattern ] ] -> ()
         | other -> failwith $"Unexpected arms: %A{other}"

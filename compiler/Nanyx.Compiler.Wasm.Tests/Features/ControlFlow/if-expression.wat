@@ -1,20 +1,20 @@
 (module
-  (func $choose__int (param $flag i32) (param $a i32) (param $b i32) (result i32)
+  (func $choose__int (param $flag i32) (param $a_i64 i64) (param $b_i64 i64) (result i64)
     local.get $flag
-    (if (result i32)
+    (if (result i64)
       (then
-        local.get $a
+        local.get $a_i64
       )
       (else
-        local.get $b
+        local.get $b_i64
       )
     )
   )
 
-  (func $main (result i32)
+  (func $main (result i64)
     i32.const 1
-    i32.const 10
-    i32.const 20
+    i64.const 10
+    i64.const 20
     return_call $choose__int
   )
   (export "main" (func $main))

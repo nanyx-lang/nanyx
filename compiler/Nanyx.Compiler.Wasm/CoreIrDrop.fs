@@ -25,7 +25,8 @@ let rec isHeapType (ty: IrType) =
     | IrInt
     | IrBool
     | IrUnit
-    | IrError -> false
+    | IrError
+    | IrWord -> false
 
 /// How far before an object's pointer its count is: 8 for an object with an info word (a string, a record, a
 /// closure), else 4.
@@ -189,7 +190,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrFloat -> releaseThen ty []
     | IrRecord fields ->
         fields
-        |> List.mapi (fun slot (_, fieldTy) -> dropField fieldTy [ "local.get $p"; $"i32.load offset={slot * 4}" ])
+        |> List.mapi (fun slot (_, fieldTy) -> dropField fieldTy [ "local.get $p"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ])
         |> List.concat
         |> releaseThen ty
     | IrFunction _ ->
@@ -233,7 +234,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
           "    br_if $done"
           yield! dropField element [ "local.get $p"; "i32.load" ] |> List.map (fun line -> "    " + line)
           "    local.get $p"
-          "    i32.load offset=4"
+          $"    i32.load offset={CoreIrLayout.tailOffset element}"
           "    local.set $tail"
           yield! free ty |> List.map (fun line -> "    " + line)
           "    local.get $tail"
@@ -245,6 +246,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrBool
     | IrUnit
     | IrError
+    | IrWord
     | IrRecursive _
     | IrSelf -> internalError $"a drop function for {IrType.show ty}, which is not on the heap"
 
@@ -285,7 +287,7 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                   ")" ] ])
     let listConcats =
         drops.ListConcats
-        |> List.map (fun element -> listConcatFunction (listConcatName element) [ $"call ${dupName element}" ])
+        |> List.map (fun element -> listConcatFunction (listConcatName element) [ $"call ${dupName element}" ] (CoreIrLayout.valueType element))
     let environmentDrops =
         drops.Environments
         |> List.distinctBy environmentDropName
@@ -293,8 +295,8 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
             lines [
                 $"(func ${environmentDropName captured} (param $p i32) (result i32)"
                 yield!
-                    captured
-                    |> List.mapi (fun index capturedTy -> dropField capturedTy [ "local.get $p"; $"i32.load offset={(index + 1) * 4}" ])
+                    List.zip captured (CoreIrLayout.closureOffsets captured).Tail
+                    |> List.map (fun (capturedTy, offset) -> dropField capturedTy [ "local.get $p"; CoreIrLayout.load capturedTy offset ])
                     |> List.concat
                     |> List.map (fun line -> "  " + line)
                 "  i32.const 0"

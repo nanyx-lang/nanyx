@@ -53,7 +53,7 @@ module Intrinsics =
     let floatTrunc = prefix + "float_trunc"
     /// A whole float as an int. A float that is NaN, infinite or out of the range of `int` stops the program.
     let floatToInt = prefix + "float_to_int"
-    /// An int as a float. Every `int` has an exact `float`, so this never fails.
+    /// An int as a float: the nearest one, which is exact up to 2^53. It never fails.
     let intToFloat = prefix + "int_to_float"
     /// Two values of a type the compiler orders (see `WellKnownContexts.ordering`) put in order by their structure:
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
