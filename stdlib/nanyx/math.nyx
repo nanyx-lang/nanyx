@@ -3,8 +3,8 @@ module math
 -- nanyx/math: numeric utilities.
 --
 -- `abs`, `sign` and `pow` are generic over the `Num(a)` context, so they take an `int` or a `float`. `abs`,
--- `sign`, `min`, `max` and `clamp` compare through `Ord(a)`, so the last three take a value of any type that
--- has an order, a `string` among them. `sqrt`, `exp`, `ln`, `floor`, `ceil`, `round` and `truncate` take a
+-- `sign`, `min`, `max`, `minMax` and `clamp` compare through `Ord(a)`, so the last four take a value of any
+-- type that has an order, a `string` among them. `sqrt`, `exp`, `ln`, `floor`, `ceil`, `round` and `truncate` take a
 -- `float`. `exp` and `ln` are the prelude's `__floatExp` and `__floatLn`, which `float.pow` is written with;
 -- the others are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
 -- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`. `pi` and `e` are constants.
@@ -40,6 +40,12 @@ export def min: [Ord(a)] a, a -> a = { a, b ->
 --| The larger of `a` and `b`.
 export def max: [Ord(a)] a, a -> a = { a, b ->
   if a >= b then a else b
+}
+
+--| `a` and `b` in ascending order: the smaller first, then the larger. When they are equal, `a` comes
+  first.
+export def minMax: [Ord(a)] a, a -> (a, a) = { a, b ->
+  if a <= b then (a, b) else (b, a)
 }
 
 --| `n` moved into the range from `min` to `max`: `min` if it is below, `max` if it is above.

@@ -6,7 +6,7 @@ order: 9
 
 The `math` module provides common numeric and floating-point operations.
 
-Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs`, `sign` and `pow` accept either without conversion. `min`, `max` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
+Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs`, `sign` and `pow` accept either without conversion. `min`, `max`, `minMax` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
 
 `floor`, `ceil`, `round` and `truncate` turn a `float` into an `int`; `int.toFloat`, in the prelude, goes the other way. A float that is NaN, infinite or out of the range of `int` has no `int` to give, and stops the program.
 
@@ -104,6 +104,24 @@ math.max(3, 7)
 -- 7
 math.max(1.5, 2.0)
 -- 2.0
+```
+
+---
+
+# minMax
+
+```nanyx
+math.minMax: [Ord(a)] (a, a) -> (a, a)
+```
+
+Both values in ascending order: the smaller first, then the larger. When they are equal, the first argument comes first. To put more than two values in order, use [`list.sort`](./collections).
+
+```nanyx
+math.minMax(7, 3)
+-- (3, 7)
+
+def low, high = math.minMax("pear", "apple")
+-- low is "apple", high is "pear"
 ```
 
 ---
