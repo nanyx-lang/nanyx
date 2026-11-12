@@ -118,6 +118,9 @@ module internal ExpressionRewrites =
             expr
             |> mapExpressionKinds (fun current kind ->
                 match kind, readAs |> Map.tryFind current.Id with
+                // `a ?? b` is read as a call that takes `b` in a lambda (see `CoalesceOperator`), which keeps its node.
+                | CoalesceOperator.Call(left, right), Some { Kind = FunctionCall(callee, span, [ _; Kind (Lambda(parameters, _, takesUnit)) as fallback ]) } ->
+                    FunctionCall(callee, span, [ left; { fallback with Kind = Lambda(parameters, right, takesUnit) } ])
                 | BinaryOp(_, _, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
                 // The typed tree can hold the call already, as it does in a top-level def's value: it keeps its arguments
                 // as they are rewritten, rather than becoming the call as first read, whose operands are not.

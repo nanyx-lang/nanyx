@@ -995,7 +995,7 @@ do
     let shorthandOperator =
         notFollowedBy (pstring "->" <|> pstring "--")
         >>. choice (shorthandOperators |> List.map pstring)
-        .>> notFollowedBy (anyOf "+-*/%^~<>=!")
+        .>> notFollowedBy (anyOf "+-*/%^~<>=!?")
 
     // Shorthand lambda: an operator alone stands for itself, so `{ + }` means `{ a, b -> a + b }`.
     let shorthandBinaryOp =
