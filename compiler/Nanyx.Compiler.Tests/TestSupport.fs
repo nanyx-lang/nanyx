@@ -15,6 +15,25 @@ let withTempDir (action: string -> unit) =
         if Directory.Exists dir then
             Directory.Delete(dir, true)
 
+/// The one diagnostic of `result`.
+let single (result: CompileResult) =
+    Assert.Single(result.Diagnostics) |> ignore
+    result.Diagnostics.Head
+
+/// The text `span` covers in `source` (whose line endings are already `\n`).
+let textAt (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
+
+let spanOf (diagnostic: Diagnostic) =
+    Assert.True(diagnostic.Span.IsSome, $"Expected a span on %A{diagnostic}")
+    diagnostic.Span.Value
+
+/// Compiles `source` with every linter the compiler has turned on, at its defaults, but for `unusedPrivateDefinitions`:
+/// these tests write top-level defs nothing uses, and that rule has tests of its own.
+let compileWithOfficial (source: string) =
+    Compiler.compileWith
+        { Linters.everyLinter with Severities = Map.ofList [ "default/unusedPrivateDefinitions", None ] }
+        source
+
 /// A new directory holding `files` (relative path, contents), deleted when disposed: a package, with its manifest.
 type TempPackage(files: (string * string) list) =
     let root = Path.Combine(Path.GetTempPath(), "nanyx-package-" + Guid.NewGuid().ToString("N"))
@@ -52,6 +71,12 @@ let applyFix (source: string) (fix: Fix) =
     fix.Edits
     |> List.sortByDescending (fun edit -> edit.Span.Start)
     |> List.fold (fun (text: string) edit -> text.Substring(0, edit.Span.Start) + edit.NewText + text.Substring(edit.Span.End)) source
+
+/// `source` with the edits of the only fix of the only diagnostic `compileWithOfficial` gives for it applied.
+let fixed' (source: string) =
+    let diagnostic = Assert.Single((compileWithOfficial source).Diagnostics)
+    let fix = Assert.Single(diagnostic.Fixes)
+    applyFix source fix, fix.Title
 
 /// The offset of the `occurrence`th (zero-based) appearance of `text` in `source`, plus `within` characters.
 let offsetOf (source: string) (text: string) (occurrence: int) (within: int) =
