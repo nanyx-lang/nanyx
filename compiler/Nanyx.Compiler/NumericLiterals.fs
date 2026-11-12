@@ -63,16 +63,21 @@ module internal NumericLiterals =
         | TyVar v -> openLiterals state |> List.exists (fun (_, other) -> other.Id = v.Id)
         | _ -> false
 
+    /// The literals of a variable of its own, as `state` resolves it, that is in `tys`.
+    let openIn (tys: Ty list) (state: InferState) : NumericLiteral list =
+        let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany
+        openLiterals state |> List.filter (fun (_, v) -> inTys.Contains v.Id) |> List.map fst
+
+    /// `state` with each of `literals` made its default type.
+    let settleLiterals (literals: NumericLiteral list) (state: InferState) : InferState =
+        literals |> List.fold (fun current literal -> addConstraint literal.Type (defaultType literal.Value) current) state
+
     /// `state` with each literal of a variable of its own that is in `tys` made its default type, if there is one: where
     /// a call finds the instance of a context of the literal's type, the type cannot wait for the rest of the def.
     let settleIn (tys: Ty list) (state: InferState) : InferState option =
-        let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany
-        match openLiterals state |> List.filter (fun (_, v) -> inTys.Contains v.Id) with
+        match openIn tys state with
         | [] -> None
-        | settling ->
-            settling
-            |> List.fold (fun current (literal, _) -> addConstraint literal.Type (defaultType literal.Value) current) state
-            |> Some
+        | settling -> Some (settleLiterals settling state)
 
     /// Whether a value of the type `ty`, as far as `state` knows it, can be of the type `target`: `ty` is `target`, or
     /// it is still a literal's own variable and `target` is a number of the literal's kind.
@@ -89,6 +94,18 @@ module internal NumericLiterals =
     /// `state` with each literal of a variable of its own that is in `tys` made its default type: where the type is
     /// read before the rest of the def can settle it, as a pipe reads it to pick the attached function it calls.
     let settleWithin (tys: Ty list) (state: InferState) : InferState = settleIn tys state |> Option.defaultValue state
+
+    /// The state an operator on operands of the types `left` and `right` reads them in, and that state with the two made
+    /// one type. Only arithmetic leaves a literal to be whatever number the code around it settles: any other operator
+    /// reads its operands' type, once they are one type, so a literal still of its own variable then is of its default
+    /// type, as in `1 == 2`, while `x == 1` is `x`'s. An operand that failed to check says nothing of the other, so the
+    /// two are not made one type, and a literal there is of its default type.
+    let atOperator (arithmetic: bool) (left: Ty) (right: Ty) (state: InferState) : InferState * InferState =
+        let state = if arithmetic then state else settleLiterals (openIn [ left ] (addConstraint left right state)) state
+        let constrained =
+            if [ left; right ] |> List.exists (fun ty -> Unifier.isError (resolveSoFar state ty)) then settleWithin [ left; right ] state
+            else addConstraint left right state
+        state, constrained
 
     /// The literal `value`, as it is written, and the smallest and largest values of the integer type `name`.
     let private range (value: bigint) (name: string) (smallest: bigint) (largest: bigint) =

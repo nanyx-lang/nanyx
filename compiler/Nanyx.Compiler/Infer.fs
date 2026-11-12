@@ -586,16 +586,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match inferExpr env next right |> Result.bind (fun (rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
             | Error err -> Error err
             | Ok (leftExpr, rightExpr, nextState) ->
-                // An operand that failed to check says nothing of the other: a literal there is of its default type.
-                let constrained =
-                    if [ leftExpr; rightExpr ] |> List.exists (fun operand -> Unifier.isError (resolveSoFar nextState operand.Type)) then
-                        NumericLiterals.settleWithin [ leftExpr.Type; rightExpr.Type ] nextState
-                    else addConstraint leftExpr.Type rightExpr.Type nextState
-                // Only arithmetic leaves a literal to be whatever number the code around it settles (see NumericLiterals).
-                let constrained =
-                    match expr.Kind with
-                    | BinaryOp(op, _, _, _) when not (ArithmeticOperators.isOperator op) -> NumericLiterals.settleWithin [ leftExpr.Type ] constrained
-                    | _ -> constrained
+                let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
+                let nextState, constrained = NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
                 let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
                 // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
                 let attached (name: Identifier) =
