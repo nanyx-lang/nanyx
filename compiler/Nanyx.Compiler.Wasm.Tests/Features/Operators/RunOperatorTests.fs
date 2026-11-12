@@ -126,7 +126,7 @@ let ``Run - ** is the prelude's pow, and Float.pow takes any exponent`` () =
         "  println(\"{float.pow(2.0, 0.5)} {float.pow(2.0, 10.0)} {float.pow(10.0, -1.5)} {float.pow(0.0, 0.5)}\")\n" +
         "  println(\"{math.pow(2, 8)} {math.pow(1.5, 3)} {pow(3, 4)} {cube(2)} {cube(0.5)}\")\n" +
         "}\n"
-    runSource source |> assertRan "1024 2.25 512 64 18 0 0.25\n1.414213562373095 1024.0 0.0316227766016838 0.0\n256 3.375 81 8 0.125\n"
+    runSource source |> assertRan "1024 2.25 512 64 18 0 0.25\n1.4142135623730951 1024.0 0.0316227766016838 0.0\n256 3.375 81 8 0.125\n"
 
 [<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
