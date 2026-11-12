@@ -348,7 +348,7 @@ let ``A function that reads a field of any record is specialised for each layout
     Assert.DoesNotContain("call $__nanyx_open_field", specialisations)
 
 /// What the core IR lowers from `typed`, with no contexts, records or lifted functions.
-let private lowerInput (typed: TypedModule) : CoreIrLower.LowerInput =
+let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
     { Definitions =
         typed.Module |> List.choose (function Kind (Def (ValueDef(_, name, _, expr))) -> Some (name, expr) | _ -> None)
       ExprTypes = typed.ExprTypes

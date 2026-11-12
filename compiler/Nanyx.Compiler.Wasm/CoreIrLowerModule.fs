@@ -8,6 +8,7 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 open Transpiler.Wasm.CoreIrLowerSyntax
+open Transpiler.Wasm.CoreIrLowerInput
 open Transpiler.Wasm.CoreIrLower
 
 /// The most specialisations one definition may have: a definition that calls itself at ever bigger types

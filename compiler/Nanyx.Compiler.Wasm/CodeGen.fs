@@ -20,10 +20,10 @@ let private unsupportedAt (span: SourceSpan) (message: string) : 'a = raise (Uns
 let private internalErrorMessage (reason: string) = $"Internal error: {reason}"
 
 /// What a function the core IR could not lower or finish says to the user.
-let lowerFailureMessage (failure: CoreIrLower.LowerFailure) =
+let lowerFailureMessage (failure: CoreIrLowerInput.LowerFailure) =
     match failure with
-    | CoreIrLower.Internal reason -> internalErrorMessage reason
-    | CoreIrLower.NotYet reason -> $"The WebAssembly backend cannot compile {reason} yet"
+    | CoreIrLowerInput.Internal reason -> internalErrorMessage reason
+    | CoreIrLowerInput.NotYet reason -> $"The WebAssembly backend cannot compile {reason} yet"
 
 type private ContextFn = string * int * int
 
@@ -58,7 +58,7 @@ type WasmOptions =
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
     /// The start function, which runs the program's top-level code.
-    let start = CoreIrLower.startFunctionName
+    let start = CoreIrLowerInput.startFunctionName
     /// How many blocks the program allocated and has not freed.
     let liveBlocks = MemoryChecks.liveBlocks
     /// How many blocks the program allocated.
@@ -219,7 +219,7 @@ let private contextArguments
     (scopeKeys: Set<string>)
     (name: string)
     (callId: NodeId)
-    : CoreIrLower.ContextArgument list =
+    : CoreIrLowerInput.ContextArgument list =
     let required = requirements |> Map.tryFind name |> Option.defaultValue []
 
     // A member of the same context at other type arguments, not already passed: a required `ToString_a_toString`
@@ -240,10 +240,10 @@ let private contextArguments
 
     // The member in scope, else the ambient instance's.
     let memberFor (requiredKey: string) (resolvedKey: string) =
-        if scopeKeys.Contains resolvedKey then CoreIrLower.MemberInScope resolvedKey
+        if scopeKeys.Contains resolvedKey then CoreIrLowerInput.MemberInScope resolvedKey
         else
             match ambientMembers |> Map.tryFind resolvedKey with
-            | Some wrapper -> CoreIrLower.ClosureOverWrapper wrapper
+            | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
             | None ->
                 let available = (List.ofSeq scopeKeys) @ (ambientMembers |> Map.toList |> List.map fst) |> String.concat ", "
                 failwith $"Context function {requiredKey} not available in current scope. Available: [{available}]"
@@ -263,7 +263,7 @@ let private contextArguments
 
     required
     |> List.mapi (fun index requiredKey -> requiredKey, instances |> Option.map (fun perMember -> perMember.[index]))
-    |> List.fold (fun (acc: CoreIrLower.ContextArgument list, used: Set<string>) (requiredKey, instance) ->
+    |> List.fold (fun (acc: CoreIrLowerInput.ContextArgument list, used: Set<string>) (requiredKey, instance) ->
         match instance with
         // An instance in scope, as written where it is: the members of a `use` or of the context a function's type
         // declares. A `use` of a record value, which the type checker found to be the instance by its shape, binds
@@ -278,8 +278,8 @@ let private contextArguments
             let definition = members |> List.find (fun (n, _) -> n = memberName) |> snd
             let argument =
                 match functionWrappers |> Map.tryFind definition with
-                | Some wrapper -> CoreIrLower.ClosureOverWrapper wrapper
-                | None -> CoreIrLower.DefinitionValue definition
+                | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
+                | None -> CoreIrLowerInput.DefinitionValue definition
             acc @ [ argument ], used
         | _ ->
             let resolvedKey =
@@ -523,9 +523,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         let parameters =
             functionContextRequirements.[name]
             |> List.map (fun key ->
-                { CoreIrLower.ContextParameter.Key = key
-                  CoreIrLower.ContextParameter.Name = contextMemberParameter key
-                  CoreIrLower.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
+                { CoreIrLowerInput.ContextParameter.Key = key
+                  CoreIrLowerInput.ContextParameter.Name = contextMemberParameter key
+                  CoreIrLowerInput.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
         parameters, contextMemberAliases name |> Map.ofList
 
     // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported.
@@ -543,7 +543,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           FunctionSlot = (fun _ _ -> 0)
           IndirectCall = ignore }
     let lowered =
-        let input: CoreIrLower.LowerInput =
+        let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
               ExprTypes = typed.InlinedExprTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
               CalleeTypes = typed.InlinedCalleeTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) typed.CalleeTypes
@@ -563,8 +563,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
               NominalWrappers = nominalWrappers
               Lifted =
-                [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLower.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner))
-                  yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLower.FunctionWrapper wrapped) ]
+                [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLowerInput.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner))
+                  yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLowerInput.FunctionWrapper wrapped) ]
                 |> Map.ofList
               TopLevel = topLevelExprs
               NamedTypes =
@@ -589,7 +589,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             [ yield! lowered.Roots |> Map.tryFind name |> Option.map fst |> Option.toList
               yield! lowered.Specialisations |> Map.tryFind name |> Option.defaultValue [] |> List.map fst ])
 
-    let startFunction = lowered.Roots |> Map.tryFind CoreIrLower.startFunctionName |> Option.map fst
+    let startFunction = lowered.Roots |> Map.tryFind CoreIrLowerInput.startFunctionName |> Option.map fst
 
     // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
     // the functions it calls; then drop specialisation and reuse.
@@ -641,8 +641,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
             let directive =
-                if options.CheckMemory then $"  (export \"{CheckedExports.start}\" (func ${CoreIrLower.startFunctionName}))"
-                else $"  (start ${CoreIrLower.startFunctionName})"
+                if options.CheckMemory then $"  (export \"{CheckedExports.start}\" (func ${CoreIrLowerInput.startFunctionName}))"
+                else $"  (start ${CoreIrLowerInput.startFunctionName})"
             emitted.Text, directive
         | None -> "", ""
 
