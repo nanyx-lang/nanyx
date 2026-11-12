@@ -23,6 +23,7 @@
     <Compile Include="Sets.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="WrittenContexts.fs" />
+    <Compile Include="ContextVariables.fs" />
     <Compile Include="BranchJoin.fs" />
     <Compile Include="BlockResult.fs" />
     <Compile Include="Visibility.fs" />

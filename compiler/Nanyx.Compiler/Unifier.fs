@@ -132,9 +132,7 @@ module Unifier =
             match writtenContexts contexts with
             | [] -> $"{argText} -> {retText}"
             | written ->
-                // A context is written by its name alone when it has no arguments: `Console`, not `Console()`.
-                let context = function TyApply(name, []) -> name | ctx -> printTy spread false ctx
-                $"""[{written |> List.map context |> String.concat ", "}] {argText} -> {retText}"""
+                $"""[{written |> List.map (printTy spread false) |> String.concat ", "}] {argText} -> {retText}"""
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
@@ -174,6 +172,8 @@ module Unifier =
             | Some (TyPrimitive "unit") -> $"#{name}()"
             | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy spread false payload)})"
             | None -> $"#{name}"
+        // A context with no arguments is written by its name: `Console`.
+        | TyApply(name, []) -> name
         | TyApply(name, [ arg ]) -> $"{name}({soleArgument arg})"
         | TyApply(name, args) -> $"{name}({items args})"
         // A union of no tags has no values: the bottom type.
@@ -233,11 +233,10 @@ module Unifier =
     /// Says which contexts make two function types differ: `onlyLeft` are those the first requires that the second has
     /// no room for, and `onlyRight` the reverse.
     let private contextsMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
-        let contextText context = match context with TyApply(name, []) -> name | _ -> tyToString context
         let onlyIn which contexts =
             match contexts with
             | [] -> None
-            | _ -> Some $"""only the {which} requires {contexts |> List.map (fun c -> $"'{contextText c}'") |> String.concat ", "}"""
+            | _ -> Some $"""only the {which} requires {contexts |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "}"""
         let differences = [ onlyIn "first" onlyLeft; onlyIn "second" onlyRight ] |> List.choose id |> String.concat "; "
         $"Context mismatch: {differences}. {mismatchMessage left right}"
 

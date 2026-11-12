@@ -106,9 +106,10 @@ These rules land together. A lambda's type carrying `[Console]` without context 
 
 A function type written in an annotation carries its contexts ([#797](https://github.com/nanyx-lang/nanyx/issues/797)). A parameter's, a result's, a record field's or a type alias's `[Console] string -> ()` keeps `Console`, and `nanyx check`, hover, type lenses and inlay hints show it: `[c] Option(a), ([c] a -> b) -> Option(b)`. `TyFunc` holds the contexts, and `FunctionContexts.fs` says when two lists of them agree. Two function types that must be the same require the same contexts. A function that requires fewer fits where one requiring more is expected, so a pure function can be passed for a `[Console] int -> int` parameter, but a `[Console] int -> int` can't be passed for an `int -> int` one.
 
+A single lowercase letter in a context list is a context variable ([#798](https://github.com/nanyx-lang/nanyx/issues/798)). A def's own context list binds it: `def g: [d] ([c] int -> int) -> int` is `NYX0226` at `c`. A call binds each of the callee's context variables to the contexts of the argument given for it, and requires them as if the callee wrote them. So passing a `[Console] int -> int` to `apply: [c] ([c] int -> int), int -> int` needs `Console` where the call is, or infers it in an unannotated def. A variable bound to a pure function requires nothing. Hover at the call shows the variable filled in. `ContextVariables.fs` holds this. The call reads what the variables stand for from the types solved so far, so an argument whose type isn't known there yet binds nothing.
+
 Not yet done:
 
-- A context variable such as `c` is kept and shown, but not checked, and a call doesn't bind it ([#798](https://github.com/nanyx-lang/nanyx/issues/798)).
 - A lambda's type, and that of a named function used as a value, doesn't carry the contexts it uses ([#799](https://github.com/nanyx-lang/nanyx/issues/799)), and calling a function value doesn't require its contexts.
 
 Until they are:
