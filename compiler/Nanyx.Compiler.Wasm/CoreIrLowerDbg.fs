@@ -4,7 +4,7 @@
 ///
 /// A number, a bool and a string are written as a literal of their own is, a string quoted and escaped. A tag, a
 /// tuple, a record, a list, a map and a set are written as they would be made, each part through the printer of its
-/// own type: `#some(5)`, `(1, "a")`, `(age = 36, name = "Ada")`, `[1, 2]`, `["tea" => 3]`, `set.fromList([1, 2])`.
+/// own type: `#some(5)`, `(1, "a")`, `(age = 36, name = "Ada")`, `[1, 2]`, `Map["tea" => 3]`, `Set[1, 2]`.
 /// A record's fields are in alphabetical order, as a record type keeps no other. A nominal type is written by its name
 /// around its shape, `$Money(250)`, inside its module or out; unit is `()`; and a function, which has nothing to show,
 /// says that it is one and of what type, `<function int -> string>`.
@@ -133,9 +133,9 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
     let entryText (entry: Var) (keyTy: Ty) (valueTy: Ty) (k: InterpolationPart list -> Expr) =
         showFields entry [ "0", keyTy; "1", valueTy ] (fun parts -> k [ parts.[0]; Text " => "; parts.[1] ])
 
-    /// The text of the list `list` of `elementTy`s, in square brackets, each element written by `first` and the rest
-    /// by `rest`; or `empty`.
-    let listText (list: Var) (elementTy: Ty) (empty: string) (first: Var -> (InterpolationPart list -> Expr) -> Expr) (rest: Printer) =
+    /// The text of the list `list` of `elementTy`s, after `prefix` and in square brackets, each element written by
+    /// `first` and the rest by `rest`.
+    let listText (list: Var) (elementTy: Ty) (prefix: string) (first: Var -> (InterpolationPart list -> Expr) -> Expr) (rest: Printer) =
         let elementIr = tools.ToIrType elementTy
         let head = bound "__dbg_head" elementIr
         let tail = bound "__dbg_tail" list.Type
@@ -145,9 +145,9 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 let others = local "__dbg_rest" IrString
                 bind written (text parts) (
                     bind others (mk (Call(tools.PrinterOf rest, [ AVar tail; AVar written ])) IrString) (
-                        text [ Text "["; Hole(others, HoleString); Text "]" ])))
+                        text [ Text $"{prefix}["; Hole(others, HoleString); Text "]" ])))
         matching list
-            [ { Patterns = [ PList([], None) ]; Body = mk (Atom(AString empty)) IrString }
+            [ { Patterns = [ PList([], None) ]; Body = mk (Atom(AString $"{prefix}[]")) IrString }
               { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = nonEmpty } ]
             IrString
 
@@ -223,13 +223,11 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                     let written = List.map2 (fun (fieldName, _) part -> [ Text $"{fieldName} = "; part ]) named parts
                     text (Text "(" :: separated written @ [ Text ")" ]))
             | TyApply("list", [ elementTy ]) ->
-                listText value elementTy "[]" (showElement elementTy) (ShowingRest(elementTy, false))
+                listText value elementTy "" (showElement elementTy) (ShowingRest(elementTy, false))
+            // A map and a set are written as a list of their entries or elements, after their type's name.
             | Maps.MapType(keyTy, valueTy) ->
                 let entryTy = TyRecord(Map.ofList [ "0", keyTy; "1", valueTy ])
-                listText value entryTy "map.empty" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true))
-            | Sets.SetType elementTy ->
-                let elements = local "__dbg_elements" IrString
-                bind elements (mk (Call(tools.PrinterOf (Showing (TyApply("list", [ elementTy ]))), [ AVar value ])) IrString) (
-                    text [ Text "set.fromList("; Hole(elements, HoleString); Text ")" ])
+                listText value entryTy "Map" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true))
+            | Sets.SetType elementTy -> listText value elementTy "Set" (showElement elementTy) (ShowingRest(elementTy, false))
             | other -> cannot $"`dbg` of a value of type {Unifier.tyToString other}"
         make [ value ] body
