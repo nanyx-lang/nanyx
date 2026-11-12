@@ -1,16 +1,18 @@
+--| Numeric utilities.
+
+  [`abs`], [`sign`] and [`pow`] are generic over the `Num(a)` context, so they take an `int` or a
+  `float`. `abs`, `sign`, [`min`], [`max`], [`minMax`] and [`clamp`] compare through `Ord(a)`, so the
+  last four take a value of any type that has an order, a `string` among them. [`sqrt`], [`exp`],
+  [`ln`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`. [`pi`] and [`e`] are
+  constants.
+
+  Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified to
+  call `abs(x)`.
 module math
 
--- nanyx/math: numeric utilities.
---
--- `abs`, `sign` and `pow` are generic over the `Num(a)` context, so they take an `int` or a `float`. `abs`,
--- `sign`, `min`, `max`, `minMax` and `clamp` compare through `Ord(a)`, so the last four take a value of any
--- type that has an order, a `string` among them. `sqrt`, `exp`, `ln`, `floor`, `ceil`, `round` and `truncate` take a
--- `float`. `exp` and `ln` are the prelude's `__floatExp` and `__floatLn`, which `float.pow` is written with;
+-- `exp` and `ln` are the prelude's `__floatExp` and `__floatLn`, which `float.pow` is written with;
 -- the others are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
--- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`. `pi` and `e` are constants.
---
--- Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified
--- to call `abs(x)`.
+-- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`.
 
 --| The ratio of a circle's circumference to its diameter, as near as a `float` holds it.
 export def pi: float = 3.141592653589793

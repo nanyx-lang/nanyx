@@ -35,20 +35,22 @@ public sealed record InfoViewSection
 
 /// <summary>
 /// An item of a section: its text (<c>name: type</c>, a context, a message), what kind of thing it is or where it
-/// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), and where it is, for a link.
+/// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), where it is, for a link, and its documentation,
+/// as Markdown: for an import, the doc comment of the module it brings in.
 /// </summary>
 public sealed record InfoViewItem
 {
     public required string Text { get; init; }
     public string? Detail { get; init; }
     public Location? Location { get; init; }
+    public string? Documentation { get; init; }
 }
 
 /// <summary>
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel. The expression there with
 /// its type, as hover shows it, and on a use of a generic def the def's declared signature and how the use fills in
 /// its type variables (see <see cref="ExpressionItems"/>); the locals, parameters and pattern variables in scope, nearest first; the top-level defs
-/// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
+/// and imports in scope, an import with its module's doc comment; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
 /// that was inferred to require it, or the runtime); and the diagnostics on the position's line. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it.
@@ -80,9 +82,13 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         }
 
         var offset = document.Positions.ToOffset(request.Position);
-        var info = document.LastGood is { Compiled: { } compiled } lastGood && document.NearestInLastGood(offset) is { } nearest
-            ? InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest)
-            : null;
+        InfoView.Info? info = null;
+        NyxCompiler.Documentation.Reader? docs = null;
+        if (document.LastGood is { Compiled: { } compiled } lastGood && document.NearestInLastGood(offset) is { } nearest)
+        {
+            info = InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest);
+            docs = lastGood.DocReader(uri, nearest, _standardLibrary);
+        }
 
         Location? Locate(Parser.Program.SourceSpan span) => LocationOf(uri, document, span);
 
@@ -105,7 +111,8 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         {
             Text = name.Type?.Value is { } type ? $"{name.Name}: {type}" : name.Name,
             Detail = Describe(name.Kind),
-            Location = Locate(name.Declaration)
+            Location = Locate(name.Declaration),
+            Documentation = name.Module?.Value is { } module ? docs?.ForModule(module)?.Value : null
         };
 
         return new InfoViewResult

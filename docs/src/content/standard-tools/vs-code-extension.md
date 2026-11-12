@@ -7,10 +7,10 @@ order: 3
 The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, and a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
 - errors and warnings as you type
-- the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there
+- the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references and the outline view
-- completion of names, record fields, module members and import paths, each name with its doc comment. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words
+- completion of names, record fields, module members and import paths, each name with its doc comment and each module with the module's. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
@@ -92,7 +92,8 @@ It shows:
   at this use, then what this use fills in each type variable with, such as `a = string, b = #some(int) | #nothing`.
   Each links to the function's definition. A function that is not generic is shown once.
 - **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
-- **Top level**: the top-level definitions and imports in scope, the file's own first. It starts closed.
+- **Top level**: the top-level definitions and imports in scope, the file's own first, each import with the doc comment
+  of the module it brings in. It starts closed.
 - **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the
   definition around it, a definition that does not write its type and was inferred to need it, or, at the top level of
   the file, the runtime (`Console`, once `nanyx/console` is imported).

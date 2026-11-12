@@ -1,10 +1,9 @@
-module prelude
+--| What every module sees without importing anything.
 
--- nanyx/prelude: what every module sees without importing anything.
---
--- The compiler imports this module, unqualified, into every other module, the rest of the standard
--- library included. A module's own definitions and its explicit imports take precedence over the
--- names here, so a module can define its own `proc`.
+  The compiler imports this module, unqualified, into every other module, the rest of the standard
+  library included. A module's own definitions and its explicit imports take precedence over the
+  names here, so a module can define its own `proc`.
+module prelude
 
 --| Stops the program: writes `panic: ` and `message` on a line to standard error, and exits with
   code 1. It never returns, so its result is `undefined` and a call fits wherever a value of any

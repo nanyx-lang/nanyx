@@ -20,6 +20,10 @@ interface InfoViewItem {
   text: string;
   detail?: string;
   location?: LspLocation;
+  /** Markdown: for an import, the doc comment of the module it brings in. */
+  documentation?: string;
+  /** `documentation` rendered to HTML by VS Code's Markdown renderer, filled in by the extension. */
+  documentationHtml?: string;
 }
 
 interface InfoViewSection {
@@ -110,12 +114,14 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
     this.listeners.splice(0).forEach((listener) => listener.dispose());
   }
 
-  private receive(message: { type: string; location?: LspLocation }): void {
+  private receive(message: { type: string; location?: LspLocation; href?: string }): void {
     if (message.type === "pin") {
       this.pinned = this.pinned ? undefined : this.cursor();
       this.schedule();
     } else if (message.type === "open" && message.location) {
       void open(message.location);
+    } else if (message.type === "openLink" && message.href) {
+      void openLink(message.href);
     }
   }
 
@@ -153,7 +159,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
           position: client.code2ProtocolConverter.asPosition(target.position)
         });
         shown = result
-          ? { kind: "info", where, pinned, sections: result.sections }
+          ? { kind: "info", where, pinned, sections: await withRenderedDocumentation(result.sections) }
           : { kind: "message", where, pinned, text: "The language server has not compiled this document yet." };
       } catch (error) {
         shown = {
@@ -182,6 +188,44 @@ async function open(location: LspLocation): Promise<void> {
   });
 }
 
+/**
+ * Opens a link in an item's documentation. A doc comment's link to a name is the URI of its file with the line and
+ * column (`file:///a.nyx#L3,5`), which opens at that place; any other link opens as VS Code opens links.
+ */
+async function openLink(href: string): Promise<void> {
+  const uri = vscode.Uri.parse(href);
+  const place = /^L(\d+),(\d+)$/.exec(uri.fragment);
+  if (place) {
+    const line = Number(place[1]) - 1;
+    const character = Number(place[2]) - 1;
+    const range = { start: { line, character }, end: { line, character } };
+    await open({ uri: uri.with({ fragment: "" }).toString(), range });
+  } else {
+    await vscode.commands.executeCommand("vscode.open", uri);
+  }
+}
+
+/**
+ * The sections with each item's documentation rendered to HTML by VS Code's Markdown renderer (the built-in Markdown
+ * extension's `markdown.api.render`). Without that renderer, the webview shows the Markdown as it is.
+ */
+async function withRenderedDocumentation(sections: InfoViewSection[]): Promise<InfoViewSection[]> {
+  return Promise.all(sections.map(async (section) => ({
+    ...section,
+    items: await Promise.all(section.items.map(async (item) => {
+      if (!item.documentation) {
+        return item;
+      }
+      try {
+        const html = await vscode.commands.executeCommand<string>("markdown.api.render", item.documentation);
+        return { ...item, documentationHtml: html };
+      } catch {
+        return item;
+      }
+    }))
+  })));
+}
+
 /** The view's page: it draws what the extension posts to it, and posts back pins and clicks on links. */
 function page(webview: vscode.Webview): string {
   const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
@@ -202,7 +246,9 @@ function page(webview: vscode.Webview): string {
   summary { font-weight: 600; cursor: pointer; }
   summary .count { font-weight: normal; color: var(--vscode-descriptionForeground); }
   ul { list-style: none; margin: 4px 0; padding-left: 12px; }
-  li { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; }
+  li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 1px 0; }
+  .doc { flex-basis: 100%; color: var(--vscode-descriptionForeground); }
+  .doc p { margin: 2px 0 4px; white-space: pre-wrap; }
   code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); white-space: pre-wrap; word-break: break-word; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover { text-decoration: underline; }
@@ -244,6 +290,22 @@ function page(webview: vscode.Webview): string {
       li.appendChild(code);
     }
     if (entry.detail) li.appendChild(element("span", "detail", entry.detail));
+    if (entry.documentationHtml) {
+      const doc = element("div", "doc");
+      doc.innerHTML = entry.documentationHtml;
+      doc.addEventListener("click", (event) => {
+        const link = event.target.closest("a");
+        if (link && link.getAttribute("href")) {
+          event.preventDefault();
+          vscode.postMessage({ type: "openLink", href: link.getAttribute("href") });
+        }
+      });
+      li.appendChild(doc);
+    } else if (entry.documentation) {
+      const doc = element("div", "doc");
+      doc.appendChild(element("p", "", entry.documentation));
+      li.appendChild(doc);
+    }
     return li;
   }
 

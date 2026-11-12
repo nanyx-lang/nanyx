@@ -17,8 +17,9 @@ type ContextSource =
     /// The runtime supplies it, at the top level of the module (see `TypedModule.AmbientContexts`).
     | Runtime
 
-/// A name in scope, with its type as hover writes it, if it has one.
-type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declaration: SourceSpan }
+/// A name in scope, with its type as hover writes it, if it has one. An import has the file of the module it brings
+/// in as `Module` (see `ImportedFile`).
+type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declaration: SourceSpan; Module: string option }
 
 /// A context in scope, written as hover writes it, and the span of what provides it: the annotation, the `use`, or the
 /// name of the def that was inferred to require it. The runtime's has none.
@@ -158,7 +159,12 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let contextGroups = contexts |> List.map (fun (ty, _, _) -> [ ty ])
         let written = splitAs (localGroups @ contextGroups) (Unifier.tysToDisplayStrings names (List.concat (localGroups @ contextGroups)))
         let localsWritten, contextsWritten = List.splitAt locals.Length written
-        let scoped (symbol: Symbol) typeWritten = { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration }
+        let scoped (symbol: Symbol) typeWritten =
+            { Name = symbol.Name
+              Type = typeWritten
+              Kind = symbol.Kind
+              Declaration = symbol.Declaration
+              Module = typed.ImportedFiles |> Map.tryFind symbol.Id |> Option.map _.File }
         { Expression = expression
           Instantiation = instantiation
           Locals =

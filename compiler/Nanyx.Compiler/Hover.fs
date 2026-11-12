@@ -193,6 +193,61 @@ let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverIn
         |> Option.map (fun (ty, symbol, span) -> { Type = fst (writtenAt names typed symbol ty []); Span = span })
     | _ -> None
 
+/// A module a hover is on: the file it is read from, as its spans name it (see `ImportedFile`), the name it is shown
+/// by, and the span of the syntax that names it.
+type ModuleHover = { File: string; Name: string; Span: SourceSpan }
+
+/// The names around `offset` that an import's alias can qualify, each with its node and its span, which starts where
+/// the name does: an identifier, a call's or a pipe's function name, or a type's name.
+let private writtenNames (syntax: Module) (offset: int) : (NodeId * Identifier * SourceSpan) list =
+    let ofExpr (expr: Expression) =
+        match expr.Kind with
+        | IdentifierExpr name -> Some (expr.Id, name, expr.Span)
+        | FunctionCall(name, nameSpan, _) -> Some (expr.Id, name, nameSpan |> Option.defaultValue expr.Span)
+        | Pipe(_, name, Some nameSpan, _) -> Some (expr.Id, name, nameSpan)
+        | _ -> None
+    let ofTypeExpr (typeExpr: TypeExpr) =
+        match typeExpr.Kind with
+        | TypeName name
+        | TypeApply(name, _) -> Some (typeExpr.Id, name, typeExpr.Span)
+        | _ -> None
+    (expressionsAt offset syntax |> List.choose ofExpr) @ (typeExprsAt offset syntax |> List.choose ofTypeExpr)
+
+/// The module named at `offset` in the compiled root module, compiled as `file` (empty for source compiled directly):
+/// by the file's own `module` line, by an import (its path or its alias), or by the alias that qualifies a name an
+/// import brought in (`m` in `m.foo`). An import is shown by the name its module declares. `None` anywhere else, and
+/// when the module did not type-check.
+let moduleAt (file: string) (result: CompileResult) (offset: int) : ModuleHover option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let imported (import: SymbolId) (span: SourceSpan) =
+            typed.ImportedFiles
+            |> Map.tryFind import
+            |> Option.map (fun found -> { File = found.File; Name = found.Name |> Option.defaultValue typed.Symbols[import].Name; Span = span })
+        let ownModule () =
+            syntax
+            |> List.tryPick (fun item ->
+                match item.Kind with
+                | ModuleDecl name when contains offset item.Span -> Some { File = file; Name = name; Span = item.Span }
+                | _ -> None)
+        let import () =
+            typed.ImportedFiles
+            |> Map.tryPick (fun import _ ->
+                let declaration = typed.Symbols[import].Declaration
+                if declaration.File = file && contains offset declaration then imported import declaration else None)
+        let qualifier () =
+            writtenNames syntax offset
+            |> List.tryPick (fun (node, name, span) ->
+                typed.ImportReferences
+                |> Map.tryFind node
+                |> Option.bind (fun import ->
+                    let alias = typed.Symbols[import].Name
+                    let aliasSpan = { span with End = span.Start + alias.Length }
+                    if name.StartsWith(alias + ".", System.StringComparison.Ordinal) && contains offset aliasSpan then imported import aliasSpan
+                    else None))
+        ownModule () |> Option.orElseWith import |> Option.orElseWith qualifier
+    | _ -> None
+
 /// A def's own signature, beside the type a name that refers to it has where it is used. `Declared` is the signature
 /// as hover writes the def's declaration: its annotation, or else the generic type it was inferred to have. `Bindings`
 /// are the type variables of the signature that are something else at the use, in the order the signature writes
