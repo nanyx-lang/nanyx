@@ -8,7 +8,7 @@ open Xunit
 open Parser.Program
 open Nanyx.Formatter
 
-let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
+let private repositoryRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", ".."))
 
 let private skipped = [ "bin"; "obj"; "node_modules"; ".git"; ".claude" ]
 
