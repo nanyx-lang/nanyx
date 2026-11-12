@@ -19,7 +19,7 @@ let ``A workflow keyword in a branch of an if or match statement has the rest of
         "  def half = try halve(n)\n" +
         "  return half\n" +
         "} }\n" +
-        // Annotated: inferred, a failure only one branch adds is dropped (#354).
+        // A failure only one branch adds is in an annotation too.
         "def label: int -> #some(string) | #odd = { n -> proc {\n" +
         "  def text = match n\n" +
         "    | 0 -> \"zero\"\n" +
@@ -188,6 +188,74 @@ let ``A proc block collects the failures of each try`` () =
     let partialResult = Compiler.compile partial
     Assert.False(partialResult.Diagnostics.IsEmpty)
     Assert.Contains("notFound", (List.head partialResult.Diagnostics).Message)
+
+[<Fact>]
+let ``A proc block's failures include a try's though only one branch has it`` () =
+    // The joined branches used to drop the failure of a `try` that only one of them has (#354).
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let inferred (body: string) =
+        let result = Compiler.compile (halve + "def label = { n -> proc {\n" + body + "\n  return text\n} }")
+        Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+        Unifier.tyToString result.Typed.Value.Types.["label"]
+    let withMatch =
+        """  def text = match n
+    | 0 -> "zero"
+    | _ ->
+      def h = try halve(n)
+      "half is {h}" """
+    let withIf =
+        """  def text = if n == 0 then "zero" else
+    def h = try halve(n)
+    "half is {h}" """
+    Assert.Equal("int -> #some(string) | #odd", inferred withMatch)
+    Assert.Equal("int -> #some(string) | #odd", inferred withIf)
+
+[<Fact>]
+let ``An annotation that leaves out a try's failure is a mismatch`` () =
+    // It used to be accepted, though `label(3)` is `#odd` (#354).
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let diagnosticCodes (body: string) =
+        let result = Compiler.compile (halve + "def label: int -> #some(string) = { n -> proc {\n" + body + "\n} }")
+        result.Diagnostics |> List.map (fun diagnostic -> diagnostic.Code)
+    let straight =
+        """  def h = try halve(n)
+  return "half is {h}" """
+    let withIf =
+        """  def text = if n == 0 then "zero" else
+    def h = try halve(n)
+    "half is {h}"
+  return text"""
+    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], diagnosticCodes straight)
+    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], diagnosticCodes withIf)
+
+[<Fact>]
+let ``A bare tag given to try in one branch widens the block's failures`` () =
+    // The tag used to close the rest of the union `try` expects, so the branches failed to agree (#353).
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let inferred (source: string) =
+        let result = Compiler.compile (halve + source)
+        Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+        Unifier.tyToString result.Typed.Value.Types.["f"]
+    let byHand (branches: string) =
+        $"""def f = {{ n ->
+  def t1 = proc.try
+  def t2 = proc.try
+  def r1 = proc.return
+  def r2 = proc.return
+{branches}
+}}"""
+    let withKeywords =
+        """def f = { n -> proc {
+  if n < 0 then try #negative
+  def h = try halve(n)
+  return h
+} }"""
+    // A union's tags are in the order they were found.
+    Assert.Equal<string list>(
+        [ "int -> #some(int) | #odd | #negative"; "int -> #some(int) | #odd | #negative"; "int -> #some(int) | #negative | #odd" ],
+        [ inferred (byHand "  if n < 0 then t1(#negative, { v -> r1(v) }) else t2(halve(n), { v -> r2(v) })")
+          inferred (byHand "  match n\n    | 0 -> t1(#negative, { v -> r1(v) })\n    | _ -> t2(halve(n), { v -> r2(v) })")
+          inferred withKeywords ])
 
 [<Fact>]
 let ``A try nested in an expression of a proc block is bound before its statement`` () =

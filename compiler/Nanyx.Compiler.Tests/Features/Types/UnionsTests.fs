@@ -19,15 +19,21 @@ let ``Typecheck treats union order as assignable`` () =
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
 
 [<Fact>]
-let ``Typecheck allows wider unions in assignment`` () =
+let ``A function that takes a wider union can be given where one that takes a narrower union is expected`` () =
     let source =
-        "def f: (#some(int) | #notFound) -> int = { x -> 1 }\n" +
-        "def g: (#some(int) | #notFound | #error(string)) -> int = f\n" +
+        "def f: (#some(int) | #notFound | #error(string)) -> int = { x -> 1 }\n" +
+        "def g: (#some(int) | #notFound) -> int = f\n" +
         "def result = g(#notFound)"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
+    // The reverse would give `f` a tag it does not handle (#354).
+    let narrower =
+        "def f: (#some(int) | #notFound) -> int = { x -> 1 }\n" +
+        "def g: (#some(int) | #notFound | #error(string)) -> int = f"
+    let diagnostic = Assert.Single((Compiler.compile narrower).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
 
 [<Fact>]
 let ``Typecheck supports tag union rest parameter`` () =
