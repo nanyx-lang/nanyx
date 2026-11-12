@@ -33,7 +33,8 @@ type FileResult =
     | Failed of Formatting
 
 /// The comments of `parsed`: in order, except for those at the end of an import's line, which move with the import
-/// when the formatter sorts imports, and so are compared in sorted order.
+/// when the formatter sorts imports, and so are compared in sorted order. A doc comment is taken laid out as the
+/// formatter lays it out, since the formatter moves its continuation lines to their own indent.
 let commentsOf (parsed: SourceModule) =
     let text = parsed.Source
     let rec importEnds (items: TopLevelItem list) =
@@ -49,6 +50,7 @@ let commentsOf (parsed: SourceModule) =
     let moved, kept =
         parsed.Trivia
         |> List.choose (function
+            | LineComment(comment, _, span) when comment.StartsWith "--|" -> Some(DocComments.relaidOut 0 comment, span)
             | LineComment(comment, _, span) -> Some(comment.TrimEnd(), span)
             | BlankLines _ -> None)
         |> List.partition (snd >> onImportLine)
