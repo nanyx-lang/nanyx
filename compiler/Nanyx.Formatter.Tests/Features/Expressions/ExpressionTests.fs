@@ -6,7 +6,7 @@ open Nanyx.Formatter.Tests.TestHelpers
 
 [<Fact>]
 let ``Spacing is made regular`` () =
-    Assert.Equal("def add = { a, b -> a + b }\n", format "def add={a,b->a+b}")
+    Assert.Equal("def add = { a, b -> a + b }\n", format "def add={a,b->a +  b}")
 
 [<Fact>]
 let ``Parentheses are kept where precedence needs them, and only there`` () =

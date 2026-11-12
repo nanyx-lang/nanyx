@@ -25,7 +25,7 @@ let private names directory (files: string list) =
     files |> List.map (fun file -> Path.GetRelativePath(directory, file).Replace('\\', '/'))
 
 let private formatted = "def add = { a, b -> a + b }\n"
-let private unformatted = "def add={a,b->a+b}"
+let private unformatted = "def add={a,b->a +  b}"
 
 let private run mode files = FormatCommand.run (Settings.cached ()) mode files
 
@@ -228,8 +228,8 @@ let ``A formatter key that is not a table is an error naming it`` () =
 [<Fact>]
 let ``A script's #! line and directives are kept as written, with the comments among them`` () =
     let header = "#!/usr/bin/env -S nanyx run\n-- Says hello.\n::linters.default.unusedBindings   =  \"error\"\n\n::formatter.lineWidth = 100"
-    Assert.Equal(header + "\n\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\n\n\ndef add={a,b->a+b}"))
-    Assert.Equal(header + "\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\ndef add={a,b->a+b}"))
+    Assert.Equal(header + "\n\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\n\n\ndef add={a,b->a +  b}"))
+    Assert.Equal(header + "\ndef add = { a, b -> a + b }\n", formattedWith Formatter.Options.defaults (header + "\ndef add={a,b->a +  b}"))
     Assert.Equal(header + "\n", formattedWith Formatter.Options.defaults (header + "\n\n"))
 
 [<Fact>]
