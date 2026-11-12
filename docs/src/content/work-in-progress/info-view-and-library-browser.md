@@ -4,7 +4,7 @@ description: "A panel that shows what the compiler knows at the cursor, and a br
 order: 30
 ---
 
-> **Status: proposal.** Doc comments are done; nothing else here is built yet. This page sets out what the features are, what the compiler
+> **Status: proposal.** Doc comments and a first cut of the info view are done; nothing else here is built yet. This page sets out what the features are, what the compiler
 > already records that they can use, what it would have to start recording, and an order to build them in. Each
 > plan item has an issue under the `lsp` label. See [Language server and editor](./language-server) for what the server does
 > today.
@@ -33,7 +33,8 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Names in scope at the cursor | `Scopes`, read by `Completion.namesInScope` |
 | Contexts an unannotated def needs | `InferredContextTypes` |
 | Where a call finds a parameterised context | `ContextInstances`: in scope (from a `use` or the signature), built from attached definitions, or built in |
-| What each `use` loads | `UseContexts` (parameterised contexts only) |
+| What each `use` loads | `UseContexts` (parameterised contexts only); the type of the value it loads, in `ExprTypes` |
+| The contexts the runtime supplies at the top level | `AmbientContexts` |
 | The library's modules and their summaries | `StandardLibrary.moduleNames`, `StandardLibrary.trySummary` |
 | Opening a library definition | `StandardLibrarySource` writes a read-only copy of a module to open |
 | Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
@@ -49,6 +50,10 @@ Some things are not recorded yet:
 
 # 1. Info view
 
+The first cut is built ([#715](https://github.com/nanyx-lang/nanyx/issues/715)): everything below but "This call",
+the flow view, and types as trees. `NyxCompiler.InfoView.at` gathers it, `InfoViewHandler` answers the request, and
+`extension/src/infoView.ts` is the panel (see [VS Code extension](../standard-tools/vs-code-extension#info-view)).
+
 ## What it shows
 
 The panel follows the cursor. It shows, from top to bottom:
@@ -61,9 +66,13 @@ The panel follows the cursor. It shows, from top to bottom:
   - a `use` (a link to its line)
   - an inferred requirement (`[Show(α)]`, from `InferredContextTypes`)
   - the runtime, at the top level of a module
+
+  A `use` comes first, nearest first, then the signature or inferred contexts of each def around the cursor,
+  innermost first. Each context is written as hover writes it, with its type variables named together with the
+  types of the locals.
 - **This call.** On a call to a function that requires contexts, each context it requires and where it finds that
   context: the provider from the list above, an instance built from attached definitions, or the compiler's own
-  (`InstanceBuiltIn`).
+  (`InstanceBuiltIn`). Not shown yet: it needs [#716](https://github.com/nanyx-lang/nanyx/issues/716).
 - **Messages.** The diagnostics at the cursor's line.
 
 Every span in the panel is a link: clicking a `use` or a signature jumps to it.
@@ -95,12 +104,15 @@ anything new.
 ## Protocol and client
 
 - **Request.** A custom request, `nanyx/infoView`, with a document and a position. It returns structured JSON:
-  sections of items, each with its text and spans. It returns data, not rendered text, so the client can lay it out
-  and link the spans. The server reads the same cached compile as hover (`DocumentStore`), and the last good
-  compile while the text does not parse.
-- **Client.** A webview panel in `extension/`, opened by a command (*Nanyx: Show info view*) and a keybinding. It
-  sends the request when the selection changes, debounced. It can pin a position, so the panel keeps showing that
-  position while you edit elsewhere. Plain TypeScript and HTML are enough for this; nothing here needs a framework.
+  sections (`expression`, `inScope`, `topLevel`, `contexts`, `messages`, always all of them, in that order), each
+  with a title, whether it starts collapsed, and items. An item has its text, a detail (`parameter`, `use`,
+  `error NYX0101`) and a location to link to. It returns data, not rendered text, so the client can lay it out and
+  link the spans. The server reads the same cached compile as hover (`DocumentStore`), and the last good compile
+  while the text does not parse; the expression is left out where the text has been edited since.
+- **Client.** A webview panel in `extension/`, opened by *Nanyx: Show info view* (Ctrl+Shift+Enter, as in Lean). It
+  sends the request when the selection or the document changes, debounced, and drops an answer a later request has
+  overtaken. It can pin a position, so the panel keeps showing that position while you edit elsewhere; the pinned
+  position does not move with edits above it yet. Plain TypeScript and HTML; no framework.
 - **Other editors.** The request is plain LSP, so another client can show the same thing. A text rendering in an
   output buffer would do for Neovim.
 
@@ -207,8 +219,9 @@ In order. Each item is one PR:
    opening definitions and inserting imports.
 4. **Search by type** ([#714](https://github.com/nanyx-lang/nanyx/issues/714)). The matcher and ranking in the
    compiler (as a module beside `Completion`), `nanyx search`, then the search box and the quick pick.
-5. **Info view, first cut** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)). `nanyx/infoView` with the
-   expression, names in scope, contexts from the signature and `use`, and messages; the webview panel with pinning.
+5. **Info view, first cut** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)). Done: `nanyx/infoView` with
+   the expression, names in scope, contexts from the signature, a `use`, inference and the runtime, and messages; the
+   webview panel with pinning.
 6. **Context providers** ([#716](https://github.com/nanyx-lang/nanyx/issues/716)). Record a `ContextProvider` for
    every context at every call, unparameterised ones included, and show "this call" in the info view.
 7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). The flow view of a function, and

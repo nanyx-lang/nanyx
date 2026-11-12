@@ -205,6 +205,9 @@ type ContextInstance =
 /// ones it writes or needs of the runtime (`Console`). Resolved for the root module only, as `SymbolTypes` is.
 /// `ImportedContextTypes` holds the same for each def an import brings in that requires contexts, by its symbol, with
 /// the def's type they are over: resolved as the module that declares it resolved them, and with variables of their own.
+///
+/// `AmbientContexts` are the names of the imported contexts the runtime supplies, as `nanyx/console`'s definitions are
+/// its `Console`, in order: the top level of the module runs in them.
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -225,5 +228,6 @@ type TypedModule =
       InferredContextTypes: Map<SymbolId, Ty list>
       ContextTypes: Map<SymbolId, Ty list>
       ImportedContextTypes: Map<SymbolId, Ty * Ty list>
+      AmbientContexts: string list
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }

@@ -33,7 +33,7 @@ type NameInScope = { Symbol: Symbol; Type: string option; IsFunction: bool }
 
 /// The type of a symbol: what inference recorded for a declaration of the module's own, or what its module gave a
 /// definition an import brings in. An import's alias has none.
-let private symbolType (typed: TypedModule) (symbol: Symbol) : Ty option =
+let internal symbolType (typed: TypedModule) (symbol: Symbol) : Ty option =
     typed.SymbolTypes |> Map.tryFind symbol.Id |> Option.orElse (typed.ImportedTypes |> Map.tryFind symbol.Id)
 
 let private isFunction (ty: Ty) =

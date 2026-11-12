@@ -13,6 +13,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - completion of names, record fields, module members and import paths, each name with its doc comment
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
+- an [info view](#info-view), a panel that shows what the compiler knows at the cursor
 - a run button, which runs the file as `nanyx run` does
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
@@ -75,6 +76,24 @@ VS Code's own `editor.codeLens` and `editor.inlayHints.enabled` settings turn al
 
 **Format Document** formats a `.nyx` file with the [standard formatter](./formatter). A file that does not parse is left as it is. To format every time you save, set `editor.formatOnSave` to `true`, as in the example above.
 
+# Info view
+
+**Nanyx: Show info view** (Ctrl+Shift+Enter, or Cmd+Shift+Enter on a Mac, in a `.nyx` editor) opens a panel beside the
+editor that follows the cursor. It shows:
+
+- **Expression**: the type of the expression at the cursor, as hover shows it.
+- **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
+- **Top level**: the top-level definitions and imports in scope, the file's own first. It starts closed.
+- **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the
+  definition around it, a definition that does not write its type and was inferred to need it, or, at the top level of
+  the file, the runtime (`Console`, once `nanyx/console` is imported).
+- **Messages**: the errors and warnings on the cursor's line.
+
+Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
+keeps the panel on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
+again. While the file does not parse, the panel shows what the compiler knew the last time it did. It needs a compiler
+newer than 0.23.0.
+
 # Running a file
 
 The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current file** from the command palette, saves the file and runs it with `nanyx run`. The program runs in a terminal of its own in the panel, so it can read what you type, and Ctrl+C stops it. Running the file again uses the same terminal.
@@ -88,6 +107,7 @@ The command has no keyboard shortcut. To give it one, look for it in **Keyboard 
 | Command | What it does |
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
+| **Nanyx: Show info view** | Opens the panel that shows what the compiler knows at the cursor. See [Info view](#info-view). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |
 | **Nanyx: Restart the language server** | Stops the server and starts it again. |
 

@@ -161,9 +161,21 @@ what the compiler keeps: exact spans, resolved names and types.
   line, else after the `::` directives (which must come before any code), else at the top. `NyxCompiler.ImportFixes` attaches these fixes in the compiler, from an index of the
   library's exports built once; the prelude is left out, since its names are always in scope. A fix that edits
   another file is not offered.
+- **The info view** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)), a request of the server's own,
+  `nanyx/infoView` (`InfoViewHandler`), with a document and a position. It returns sections of items, each item with
+  its text, a detail and a location to link to: the expression at the position with its type, as hover gives it; the
+  locals, parameters and pattern variables in scope, nearest first; the top-level defs and imports in scope (less the
+  `__` intrinsics); the contexts in scope with where each comes from; and the diagnostics on the position's line.
+  `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the
+  locals' types and the contexts are named together, so an `α` means the same in both. A context comes from a `use`
+  before the position in a block around it, a def around it (its annotation, or what it was inferred to need), or, at
+  the top level, the runtime (`TypedModule.AmbientContexts`). Where each call finds its contexts is not recorded yet
+  ([#716](https://github.com/nanyx-lang/nanyx/issues/716)), so the view lists what is in scope, not what a call
+  uses. The extension shows it in a webview panel (see
+  [Info view and library browser](./info-view-and-library-browser)).
 - **A parse error hides the rest of the file**, because the parser has no error recovery.
 - **The extension** highlights syntax, finds `nanyx` (setting, `PATH`, or a downloaded release) and offers
-  *Download the compiler* and *Restart the language server*. Its settings are described for users on the
+  *Download the compiler* and *Restart the language server*, and shows the info view. Its settings are described for users on the
   [VS Code extension](../standard-tools/vs-code-extension) page, which a change to the extension's settings or
   commands updates in the same PR.
 
@@ -236,7 +248,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    for the file they belong to, not the file being edited.
 8. **A library browser, search by type and an info view.** Planned on
    [Info view and library browser](./info-view-and-library-browser). Doc comments, the first item there, are done
-   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)).
+   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)), and so is a first cut of the info view
+   ([#715](https://github.com/nanyx-lang/nanyx/issues/715)).
 
 # Open questions
 

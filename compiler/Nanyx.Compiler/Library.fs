@@ -1355,6 +1355,7 @@ module Compiler =
                           InferredContextTypes = state.InferredContextTypes
                           ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
                           ImportedContextTypes = importedContextTypes
+                          AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
                           // Filled in for the root module only, by `compileWith`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }

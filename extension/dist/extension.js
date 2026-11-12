@@ -39,10 +39,12 @@ const vscode = __importStar(require("vscode"));
 const node_1 = require("vscode-languageclient/node");
 const compiler_1 = require("./compiler");
 const developmentMode_1 = require("./developmentMode");
+const infoView_1 = require("./infoView");
 const run_1 = require("./run");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
 const COMMAND_RUN = "nanyx.runFile";
+const COMMAND_INFO_VIEW = "nanyx.showInfoView";
 /** When the extension last asked GitHub for a newer compiler release (milliseconds since the epoch). */
 const LAST_UPDATE_CHECK = "nanyx.lastUpdateCheck";
 const UPDATE_CHECK_INTERVAL = 24 * 60 * 60 * 1000;
@@ -52,12 +54,15 @@ let compiler;
 /** In development mode, watches the `nanyx.path` build for changes. */
 let buildWatcher;
 let outputChannel;
+let infoView;
 let declinedDownload = false;
 let declinedUpdate = false;
 async function activate(context) {
     outputChannel = vscode.window.createOutputChannel("Nanyx");
     context.subscriptions.push(outputChannel);
-    context.subscriptions.push(vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
+    const view = new infoView_1.InfoView(() => client);
+    infoView = view;
+    context.subscriptions.push(view, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
         declinedDownload = false;
         const settings = (0, compiler_1.readSettings)();
         const version = await (0, compiler_1.versionToDownload)(context, settings, log);
@@ -275,6 +280,7 @@ async function restartClient(context, executable) {
     client = new node_1.LanguageClient("nanyx", "Nanyx Language Server", serverOptions, clientOptions);
     try {
         await client.start();
+        infoView?.refresh();
     }
     catch (error) {
         void vscode.window.showErrorMessage(`Nanyx: the language server failed to start (${messageOf(error)}). See the Nanyx output channel.`);
