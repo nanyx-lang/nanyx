@@ -27,11 +27,11 @@ let ``Run - names that differ only in characters an identifier cannot hold stay 
         "def `add points`: (int, int) -> int = { a, b -> a + b }\n" +
         "def add_points: (int, int) -> int = { a, b -> a * b }\n" +
         "def `<+>`: (int, int) -> int = { a, b -> a - b }\n" +
-        "def `<->`: (int, int) -> int = { a, b -> b - a }\n" +
+        "def `<*>`: (int, int) -> int = { a, b -> b - a }\n" +
         "\n" +
         "@entry\n" +
         "def main = {\n" +
-        "  println(\"{`add points`(2, 5)} {add_points(2, 5)} {`<+>`(2, 5)} {`<->`(2, 5)}\")\n" +
+        "  println(\"{`add points`(2, 5)} {add_points(2, 5)} {`<+>`(2, 5)} {`<*>`(2, 5)}\")\n" +
         "}\n"
     runSource source |> assertRan "7 10 -3 3\n"
 

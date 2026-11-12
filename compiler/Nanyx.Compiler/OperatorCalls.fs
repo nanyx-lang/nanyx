@@ -34,7 +34,7 @@ module internal OperatorCalls =
 
     /// The definition the operator `expr` calls with its operands (`input`, as a call's arguments are typed), if it
     /// calls one, and the name it calls it by. On a built-in type, that of its left operand (`leftTy`) as far as it is
-    /// known, the operator is the built-in one, and so is `++` on a list. Otherwise it is the definition attached under the operator's name to
+    /// known, the operator is the built-in one, unless it is a spare one (`^`, `<>`, ...), which has none, and so is `++` on a list. Otherwise it is the definition attached under the operator's name to
     /// that type, when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is the binding of the
     /// operator's name in `env`. `!=` calls what `==` does, and `-x` what `negate` is. `and` and `or` are keywords, so
     /// their names are never bound. The ordering operators are always read through `Ord` (see `OrderingOperators`).
@@ -72,7 +72,7 @@ module internal OperatorCalls =
         | Some name, (TyVar _ as operandTy) when (instanceMember name operandTy).IsSome ->
             instanceMember name operandTy |> Option.map (fun (instance, scheme) -> name, scheme, Some instance)
         | Some name, operandTy when (inScope name operandTy).IsSome -> inScope name operandTy
-        | Some _, TyPrimitive _ -> None
+        | Some name, TyPrimitive _ when not (isSpareOperator name) -> None
         | Some name, operandTy when name = AppendOperator.operator && AppendOperator.isBuiltIn operandTy -> None
         | Some name, operandTy ->
             match attached name with

@@ -390,10 +390,11 @@
         { "name": "keyword.operator.spread.nanyx", "match": "\\.\\.\\." },
         { "name": "keyword.operator.range.nanyx", "match": "\\.\\." },
         {
-          "comment": "Operator names are sequences of + - * / % ^ ~ < > = !",
+          "comment": "Nanyx's operators, a closed list (see the operators page), longer ones before those they start with",
           "name": "keyword.operator.nanyx",
-          "match": "[+\\-*/%^~<>=!]+"
+          "match": ">>=|=<<|<\\*>|<\\+>|\\*\\*|\\+\\+|<>|>>|<<|<=|>=|==|!=|[-+*/%^<>~]"
         },
+        { "name": "keyword.operator.definition.nanyx", "match": "=" },
         { "name": "keyword.operator.bar.nanyx", "match": "\\|" },
         { "name": "keyword.operator.and.nanyx", "match": "&" },
         { "name": "keyword.operator.optional.nanyx", "match": "\\?" },

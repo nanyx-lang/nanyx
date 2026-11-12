@@ -81,11 +81,6 @@ let ``A unit parameter is printed as written`` () =
     unchanged "def c = { 5 }\n"
 
 [<Fact>]
-let ``&& and || stay as written`` () =
-    unchanged "def a = b && c || d\n"
-    unchanged "def a = b and c or d\n"
-
-[<Fact>]
 let ``A match that is not the last arm's body is bracketed`` () =
     unchanged (lines [ "def f = { x, y ->"; "  match x"; "    | 0 -> (match y"; "      | 0 -> 1"; "      | _ -> 2)"; "    | _ -> 3"; "}" ])
 

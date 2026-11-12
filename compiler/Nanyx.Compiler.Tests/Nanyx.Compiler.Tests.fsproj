@@ -12,6 +12,7 @@
   <ItemGroup>
     <Compile Include="TestSupport.fs" />
     <Compile Include="Features\Arithmetic\ArithmeticTests.fs" />
+    <Compile Include="Features\Operators\OperatorTests.fs" />
     <Compile Include="Features\Arithmetic\ComparisonLiteralTests.fs" />
     <Compile Include="Features\Arithmetic\SizedIntegerTests.fs" />
     <Compile Include="Features\Arithmetic\F32Tests.fs" />

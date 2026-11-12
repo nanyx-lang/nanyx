@@ -37,11 +37,11 @@ let ``an and-pattern binds tighter than an or-pattern and looser than a tag's pa
     | other -> failwith $"Unexpected arms: %A{other}"
 
 [<Fact>]
-let ``&& after a pattern is still the operator`` () =
-    // A lambda whose body starts with a name and `&&` is not a pattern parameter.
-    match parseModule "def f = { a -> { a && b } }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Lambda (_, Kind (BinaryOp (_, _, Kind (IdentifierExpr "a"), Kind (IdentifierExpr "b"))), _)), _))))) ] -> ()
-    | other -> failwith $"Unexpected parse: %A{other}"
+let ``&& after a name in a lambda is not taken for an and-pattern`` () =
+    // A lambda whose body starts with a name and `&&` is not a pattern parameter: the `&&` is what is wrong.
+    let reported, text = parseErrorOf "def f = { a -> { a && b } }"
+    Assert.Contains("`&&` is not an operator in Nanyx: write `and`", reported)
+    Assert.Equal("&& b } }", text)
 
 [<Fact>]
 let ``an and-pattern spans its parts`` () =

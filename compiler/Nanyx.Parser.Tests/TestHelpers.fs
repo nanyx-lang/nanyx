@@ -1,5 +1,6 @@
 module ParserTestHelpers
 
+open System
 open System.IO
 open Parser.Program
 
@@ -14,6 +15,17 @@ let isError result =
     match result with
     | Result.Ok _ -> false
     | Result.Error _ -> true
+
+// The error `source` fails to parse with: its message, its lines (which FParsec wraps) joined into one, and the text
+// from where it is reported to the end of that line.
+let parseErrorOf (source: string) =
+    match parseModuleFileWithNames "t.nyx" source with
+    | Result.Error error ->
+        let rest = source.Substring(error.Span.Start)
+        let lineEnd = rest.IndexOf '\n'
+        String.Join(" ", error.Message.Split([| ' '; '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)),
+        (if lineEnd < 0 then rest else rest.Substring(0, lineEnd))
+    | Result.Ok parsed -> failwith $"Expected a parse error, got %A{parsed}"
 
 let private testRootDir = __SOURCE_DIRECTORY__
 let private featureRootDir = Path.Combine(testRootDir, "Features")

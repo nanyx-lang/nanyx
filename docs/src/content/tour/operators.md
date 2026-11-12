@@ -1,37 +1,39 @@
 ---
 title: "Operators"
-description: "Operators as functions"
+description: "Operators as functions, and the list of them"
 order: 14
 ---
 
-Operators are ordinary functions with special names. They can be used infix, prefix, postfix, or passed around like any other function.
+Operators are ordinary functions with special names. Nanyx has a fixed list of them, each with its own precedence ([The operators](#the-operators)): you can give your own types any operator on the list, but you can't make up new ones.
 
 # Defining operators
 
-You define operators by naming a function with a valid operator name, encased in backticks:
+You define an operator by naming a function after it, encased in backticks:
 
-```nanyx skip=#735
-def `+++`: string, string -> string = { a, b -> a + b }
+```nanyx
+def `<>`: string, string -> string = { a, b -> a ++ " " ++ b }
 
-def r = "one" +++ "two"
+def r = "one" <> "two"
 ```
 
 Operators can take more than two arguments. Extra arguments are passed as a record, [in the same way as piping](../tour/piping#piping-with-extra-arguments):
 
-```nanyx skip=#735
-def `<+>` = { a, b, c -> ... }
+```nanyx skip=#965
+def `<+>` = { a, b, c -> a + b * c }
 
-def r = a <+> (b, c)
+def r = 1 <+> (2, 3)
 ```
 
 # Using operators as functions
 
 Since operators are just specially-named functions, you can also use them in a non-operator way:
 
-```nanyx skip=#735
-def r1 = "one" +++ "two"
-def r2 = `+++`("one", "two")
-def f = `+++`
+```nanyx
+def `<>`: string, string -> string = { a, b -> a ++ " " ++ b }
+
+def r1 = "one" <> "two"
+def r2 = `<>`("one", "two")
+def f = `<>`
 ```
 
 Also, lambda syntax supports an [operator-based shorthand](../tour/functions#shorthand-lambdas) for using operators:
@@ -62,24 +64,54 @@ Comparison is read through the standard library's contexts instead: `==` and `!=
 
 # Pipe and composition
 
-Piping uses `\`, and composition uses `>>` and `<<`:
+Piping uses `\`, and composition uses `>>` and `<<`. `f >> g` is the function that applies `f` and then `g` to what `f` returns, and `g << f` is the same function:
 
-```nanyx skip=#735
-def normalize = trim >> toLowerCase
+```nanyx
+def normalize = string.trim >> string.lowercase
 
-def result = data
-  \filter { .isActive }
-  \map { .name }
-  \sort
+def result = [" Ada ", "BOB"]
+  \map(normalize)
+  \map { s -> s ++ "!" }
+
+@entry
+def main = {
+  println(result \string.join(" "))
+}
+-- ada! bob!
 ```
 
-# Valid operator names
+# The operators
 
-An operator name is any sequence of one or more of the following characters: `+`, `-`, `*`, `/`, `%`, `^`, `~`, `<`, `>`, `=`, `!`. For example, `++`, `>>>` and `<+>` are valid operator names, but `+a` is not.
+These are all of Nanyx's operators, tightest first. An operator binds tighter than those below it, so `a + b * c` is `a + (b * c)`, and `f >> g == h` is `(f >> g) == h`.
+
+| Operators | Groups | Meaning |
+|---|---|---|
+| `-x` (prefix), `not` | | negation (`Add`'s `negate`), logical not |
+| `**` | right | power: `2 ** 3 ** 2` is `2 ** 9` |
+| `*` `/` `%` | left | multiplication, division, remainder (`Num`) |
+| `^` `<*>` | left | spare |
+| `+` `-` | left | addition, subtraction (`Add`) |
+| `<+>` | left | spare |
+| `++` | right | concatenation |
+| `<>` | right | spare |
+| `>>` | left | forward composition |
+| `<<` | right | backward composition |
+| `<` `<=` `>` `>=` | none | ordering (`Ord`) |
+| `~` | none | spare |
+| `..` | none | [range](../tour/ranges) |
+| `==` `!=` | none | equality (`Eq`) |
+| `>>=` | left | spare |
+| `=<<` | right | spare |
+| `and` | left | logical and |
+| `or` | left | logical or |
+
+A **spare** operator has no built-in meaning: it means only what a definition of it gives it, one attached to the type of its left operand or one in scope, so `1 ^ 2` is an error. The others are built in, and you can attach them to your own types, as `` Vector.`+` `` above, but not redefine them globally. Defining an operator that is not on the list, such as `` `+++` ``, is an error.
+
+An operator that groups to the left reads `a - b - c` as `(a - b) - c`, and one that groups to the right reads `a ++ b ++ c` as `a ++ (b ++ c)`. One that does not group can't be written twice in a row: `a < b < c` is an error, which asks for `a < b and b < c`, and so is `a == b == c`. Two operators of one precedence that group different ways can't be written side by side either: `f >> g << h` needs brackets around one of them.
+
+Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not operators, and neither is a prefix `!`: the compiler tells you to write the keyword instead. `<<` and `>>` are composition only; bitwise operations on integers are named functions. Likewise, testing a value against a pattern in an `if` condition uses the keyword `is` (`if x is #some(v) then ...`), not an operator.
 
 The characters `|`, `&`, `?`, `#`, `@`, `$`, `:` and `\` are not operator characters; they are syntax (see below).
-
-Boolean operations are the keywords `and`, `or` and `not`, not operators. Likewise, testing a value against a pattern in an `if` condition uses the keyword `is` (`if x is #some(v) then ...`), not an operator.
 
 ## Reserved spellings
 
@@ -103,12 +135,3 @@ Some sequences built from operator characters are syntax, not operators, and can
 | `:` | Type annotation |
 | `?` | Optional marker |
 | `???` | Unimplemented placeholder |
-
-The following operators are built in. You can attach them to your own types, but you cannot redefine them globally:
-
-| Operators | Meaning |
-|---|---|
-| `+`, `-`, `*`, `/`, `%`, `**` | Arithmetic |
-| `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison |
-| `>>`, `<<` | Composition |
-| `++` | Concatenation |
