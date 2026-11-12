@@ -4,11 +4,12 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The one diagnostic `result` has: its code, its message, and the text its span covers in `source`.
+/// The one diagnostic `result` has: its code, its message, and the text its span covers in `source`. Spans are
+/// offsets in the source with its line endings made `\n`, whatever this file's are.
 let private onlyDiagnostic (source: string) (result: CompileResult) =
     let diagnostic = Assert.Single(result.Diagnostics)
     let span = diagnostic.Span.Value
-    diagnostic.Code, diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
+    diagnostic.Code, diagnostic.Message, source.ReplaceLineEndings("\n").Substring(span.Start, span.End - span.Start)
 
 let private shoutingModules =
     [ "one.nyx", """module one
