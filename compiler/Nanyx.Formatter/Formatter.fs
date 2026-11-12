@@ -415,6 +415,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ForSyntax.Call(iterables, loop, parameters, _) when parameters = List.init iterables.Length (fun index -> (ForSyntax.element (index + 1), None)) ->
             forDoc iterables loop
         | MapSyntax.Call entries -> mapDoc e.Span entries
+        | FunctionCall(n, _, [ Kind (RecordExpr fields) ]) when n = SpreadSyntax.builtIn -> recordFieldsDoc true e.Span.Start e.Span.End fields
         | MutSyntax.Call value -> cat [ text "mut "; expr { full with Tail = position.Tail } value ]
         | AssignSyntax.Call(target, value) -> cat [ expr operandPosition target; text " := "; expr { full with Tail = position.Tail } value ]
         | FunctionCall(n, nameSpan, args) ->
@@ -605,12 +606,17 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     /// Fields in brackets: a record, a tuple, or a call's arguments, laid out by `bracketed`, or one per line when there
     /// is a comment among them.
-    and fieldsDoc (start: int) (finish: int) (fields: RecordField list) : Doc =
+    and fieldsDoc (start: int) (finish: int) (fields: RecordField list) : Doc = recordFieldsDoc false start finish fields
+
+    /// Fields in brackets, as `fieldsDoc` lays them out. With `spread`, they are the parts of a record literal with a
+    /// spread (see `SpreadSyntax`), and each positional one is a record spread, `...r`.
+    and recordFieldsDoc (spread: bool) (start: int) (finish: int) (fields: RecordField list) : Doc =
         let count = fields.Length
         let fieldDoc index field =
             let position = { full with Tail = (index = count - 1) }
             match field with
             | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expr position value ]
+            | PositionalField value when spread -> cat [ text "..."; expr position value ]
             | PositionalField value -> expr position value
         let valueOf field =
             match field with

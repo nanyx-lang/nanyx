@@ -74,6 +74,7 @@
     <Compile Include="Features\Packages\PackageCommandTests.fs" />
     <Compile Include="Features\Packages\PartialModuleTests.fs" />
     <Compile Include="Features\Records\RunRecordTests.fs" />
+    <Compile Include="Features\Records\RunRecordSpreadTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />
     <Compile Include="Features\StdLib\RunOptionResultTests.fs" />

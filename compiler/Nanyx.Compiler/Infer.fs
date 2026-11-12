@@ -247,6 +247,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | None -> ty
                 Ok (mkTypedExpr expr ty None None None, next)
         | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
+    | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) ->
         let calleeSpan = nameSpan spanOpt expr
         if name = DbgSyntax.builtIn && (TypeEnv.tryFind name env).IsNone then
@@ -303,7 +304,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         if errors.IsEmpty then Ok (mkTypedExpr expr typedBase.Type None None None, current)
                         else Error errors
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` expects a record and the fields to update" ]
-
         elif name = RangeSyntax.builtIn then
             // `a..b`: a bounded range of ints, a `seq(int)`; `a..` has no end, so it is a `gen(int)` (see the ranges page).
             let mutable current = state

@@ -24,6 +24,7 @@
     <Compile Include="CoreIrLowerSyntax.fs" />
     <Compile Include="CoreIrLowerInput.fs" />
     <Compile Include="CoreIrLowerDbg.fs" />
+    <Compile Include="CoreIrLowerSpread.fs" />
     <Compile Include="CoreIrLower.fs" />
     <Compile Include="CoreIrLowerModule.fs" />
     <Compile Include="CoreIrDrop.fs" />

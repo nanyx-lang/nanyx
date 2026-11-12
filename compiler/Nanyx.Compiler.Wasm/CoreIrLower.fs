@@ -41,7 +41,6 @@ type internal Lowering =
     /// As the start function, from the module's top-level expressions.
     | AsStart
 
-
 /// Lowers the closure of a local function generic in type variables of its own at some type arguments, given what they
 /// bind, and passes it on.
 type internal LocalClosure = Map<int, Ty> -> IrType list -> (Expr -> Expr) -> Expr
@@ -453,6 +452,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope (record :: List.map snd slotsAndValues) (fun atoms ->
                 let updated = List.zip (List.map fst slotsAndValues) atoms.Tail
                 k (mk (UpdateRecord(atoms.Head, updated)) ty))
+        | SpreadSyntax.Call parts ->
+            CoreIrLowerSpread.record (fun ty -> newVar (uniqueName "__spread") Local ty) (this.Complex scope) (tyOf expr) parts k
         // The hole function called outside a string, at a built-in type: the value as a hole would write it.
         | FunctionCall(_, _, [ value ]) when input.BuiltInHoles.Contains expr.Id ->
             this.Complex scope { expr with Kind = InterpolatedString [ StringExpr value ] } k
