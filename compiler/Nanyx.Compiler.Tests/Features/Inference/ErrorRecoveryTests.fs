@@ -142,3 +142,48 @@ let ``A type error in one def does not make a later match on tags an error too``
         Assert.Equal("'string' cannot be used with +: it is not a number. Use ++ to join them", diagnostic.Message)
         Assert.Equal(0, diagnostic.Span.Value.StartLine)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``A conflict in one def is reported alongside a later def's error`` () =
+    // The conflict in `bad` once left `v` unresolved, so `v.major` failed, and that error stopped the module's
+    // constraints being solved: the conflict itself was never reported (#170).
+    let source = """
+type P = (major: int)
+def bad = { x -> if x then (1, #some("")) else (1, 5) }
+def make: string -> #some(P) | #error(#bad) = { value -> #error(#bad) }
+def main = {
+  match make("x")
+    | #some(v) -> v.major + missing(1)
+    | #error(#bad) -> 0
+}
+"""
+    let result = Compiler.compile source
+    Assert.Equal<(string * string * int) list>(
+        [ DiagnosticCodes.UnknownFunction.Code, "Unknown function 'missing'", 6
+          DiagnosticCodes.TypeMismatch.Code, "Type mismatch: #some(string) vs int.", 2 ],
+        result.Diagnostics |> List.map (fun diag -> diag.Code, diag.Message, diag.Span.Value.StartLine))
+
+[<Theory>]
+[<InlineData(true)>]
+[<InlineData(false)>]
+let ``A conflict between two closed tag unions is reported in its own def, naming the tags`` (conflictFirst: bool) =
+    // It was reported at an unrelated match in another def, or as "Tag union length mismatch: 2 vs 2" (#170).
+    let conflict = """
+def applyOp: int -> #some(int) | #bad(string) = { a -> if a == 1 then #some(a) else #bad("x") }
+def other: int -> #some(int) | #underflow = { a -> if a == 1 then #some(a) else #underflow }
+def step = { x -> if x == 1 then applyOp else other }
+"""
+    let head = """
+def head2: list(int) -> int = { xs ->
+  match list.head(xs)
+    | #some(m) -> m
+    | #emptyList -> 0
+}
+"""
+    let source = if conflictFirst then conflict + head else head + conflict
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Equal(
+        "Tag union mismatch: only the first has #bad; only the second has #underflow. Type mismatch: #some(int) | #bad(string) vs #some(int) | #underflow.",
+        diagnostic.Message)
+    Assert.Equal(offsetOf source "if x == 1 then applyOp" 0 0, diagnostic.Span.Value.Start)

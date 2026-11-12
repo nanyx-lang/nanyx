@@ -35,7 +35,8 @@ need it first. This workstream fills it with content.
 - **Some spans are approximate.** Field names, type annotations and attributes have no spans yet
   ([#96](https://github.com/nanyx-lang/nanyx/issues/96)), so errors about them are reported at the nearest node
   that has one. A type mismatch is reported where the constraint that failed was made, which is not always where
-  the conflicting types came from.
+  the conflicting types came from. A mismatch between two records or two tag unions names what only one of them
+  has: `Tag union mismatch: only the first has #bad; only the second has #underflow.`
 - **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
   and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
 - **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.
