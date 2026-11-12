@@ -1231,10 +1231,17 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
             Some (OrderingOperators.resolvePending (orderingInstance pending.Callee pending.Span) hasInstanceIn defScheme current pending argTys)
         else
             // The def now requires a well-known context of each of its variables the call compares values of. A call left
-            // to the end of the module needs an instance for each variable of the type the def around it writes.
+            // to the end of the module needs an instance for each variable of the type the def around it writes, but
+            // for a rest of a union in it, which a call that only checks its context leaves to each call to that def
+            // (see `ContextInference.checkRestsAtCalls`).
+            let declaredRests =
+                if pending.ChecksOnly then
+                    annotatedDef |> Option.bind defScheme |> Option.map (_.Type >> ContextInference.unionRests >> List.map _.Id >> Set.ofList)
+                else None
+                |> Option.defaultValue Set.empty
             let hasInstance (ty: Ty) =
                 match ty with
-                | TyVar v when declaredVars.Contains v.Id -> hasInstanceIn scopeEnv ty
+                | TyVar v when declaredVars.Contains v.Id -> declaredRests.Contains v.Id || hasInstanceIn scopeEnv ty
                 | _ -> true
             match wellKnownInstanceAtCall env pending.Context argTys hasInstance with
             | Some (_, WellKnownContexts.Open _) -> Some (Error pending.Errors)
@@ -1255,13 +1262,14 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
         |> OrderingOperators.callHelpers inputOf orderings
         |> ArithmeticInference.callMembers inputOf arithmetic)
 
-/// Checks `call`, a call to `name` that inference has just typed, when `name` is a local function that compares or
-/// orders values of type variables it is generic in: each needs that well-known context of the type it is at the call
-/// (see `WellKnownContexts.checkLocalCall`).
-let private checkLocalComparisons (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
+/// Checks `call`, a call to `name` that inference has just typed, when `name` needs well-known contexts of variables
+/// of its type that it is passed nothing for: a local function's (see `InferState.LocalComparisons`), and the rests of
+/// the unions a function compares (see `InferState.CheckedRests`). Each needs that context of the type it is at the
+/// call (see `WellKnownContexts.checkLocalCall`).
+let private checkCalledComparisons (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
-    | Some ({ Symbol = Some symbol } as scheme), Some calleeTy when state.LocalComparisons.ContainsKey symbol ->
-        state.LocalComparisons.[symbol]
+    | Some ({ Symbol = Some symbol } as scheme), Some calleeTy when state.LocalComparisons.ContainsKey symbol || state.CheckedRests.ContainsKey symbol ->
+        ContextInference.checkedAtCalls state symbol scheme
         |> Map.toList
         |> List.fold (fun result (ctxName, used) ->
             varsIn (fun v -> if used.Contains v.Id then Some v.Id else None) scheme.Type calleeTy
@@ -1445,7 +1453,7 @@ let rec private inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) 
             | FunctionCall(name, spanOpt, _) ->
                 resolveCallInstances env next expr name (nameSpan spanOpt expr)
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
-                |> Result.bind (fun next -> checkLocalComparisons env next expr name (nameSpan spanOpt expr))
+                |> Result.bind (fun next -> checkCalledComparisons env next expr name (nameSpan spanOpt expr))
                 |> Result.bind (MemoryCells.checkCall env expr name)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))

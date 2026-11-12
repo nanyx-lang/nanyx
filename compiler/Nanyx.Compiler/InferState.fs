@@ -25,8 +25,8 @@ type DeferredContextUse =
 /// type. Once the def is inferred, the context is found for the types they turned out to be, or, where they are
 /// variables of the def's type, required by the def itself. `Index` is the context's place among the `Count` the
 /// callee requires, and `Errors` what to report if neither can be done. A call that `ChecksOnly` is passed no
-/// instance: its callee is a local function, which requires no contexts, and the context only has to exist (see
-/// `EqualityOperators.checkLocalCall`).
+/// instance: its callee is passed nothing for the context, which only has to exist (see `CheckedRests` and
+/// `WellKnownContexts.checkLocalCall`).
 type PendingContextInstance =
     { Def: Identifier
       Call: NodeId
@@ -107,6 +107,12 @@ type InferState =
             /// the function's symbol and then by the well-known context it needs of them (`Eq`, `Ord`): a call to it
             /// needs that context of the types they are at the call (see `WellKnownContexts.checkLocalCall`).
             LocalComparisons: Map<SymbolId, Map<Identifier, Set<int>>>;
+            /// The rests of the unions in its type each top-level function compares values of (`r` in `#none | r`),
+            /// by the function's symbol and then by the well-known context it needs of them, each by its place among
+            /// `ContextInference.unionRests` of the function's type, which an import renumbers. The function is passed
+            /// nothing for them: a call to it needs that context of the types they are at the call, as a call to a
+            /// local function does (see `ContextInference.checkRestsAtCalls`).
+            CheckedRests: Map<SymbolId, Map<Identifier, int list>>;
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
             InferredContextTypes: Map<SymbolId, Ty list>;
@@ -248,6 +254,7 @@ let emptyState =
             NamedAsValues = Set.empty;
             HoleScopes = Map.empty;
             LocalComparisons = Map.empty;
+            CheckedRests = Map.empty;
             InferredContextTypes = Map.empty;
             LocalContextRequirements = Map.empty;
             Home = InMemory;

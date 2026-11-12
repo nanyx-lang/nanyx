@@ -9,8 +9,10 @@ open NyxCompiler.WellKnownContexts
 /// two things are checked: a function is never compared, and a function that compares values of one of its own type
 /// variables requires `Eq` of it. One that does not write its type has the requirement inferred, as it is for a call
 /// to a function that requires a context (see `ContextInference`), and its `==` then calls the member of the instance
-/// it is passed. A structure with a part that has an `==` of its own is compared by a definition derived from its
-/// parts (see `StructuralInstances`).
+/// it is passed. A function that compares values of a union with a rest, `o == #none` on an `#none | r`, needs `Eq` of
+/// whatever the rest is at each call to it, which is checked there but not passed (see `WellKnownContexts.comparedRests`).
+/// A structure with a part that has an `==` of its own is compared by a definition derived from its parts (see
+/// `StructuralInstances`).
 module internal EqualityOperators =
     /// The prelude's context.
     let context = equality.Context
@@ -44,8 +46,8 @@ module internal EqualityOperators =
     /// Checks `expr`, a `==` or `!=` (`op`) in `env` that compares two values of the type `operandTy` (given as
     /// `input`, as a call's arguments are typed) and calls no definition. Two lists whose elements have an `Eq` other
     /// than the compiler's own, which `instanceOf` finds, are compared through it (see
-    /// `WellKnownContexts.throughElements`). A function is an error. A type with a variable left in it is checked once
-    /// it is known (see `WellKnownContexts.pendingOperator`). The prelude's `builtInFunction` is the comparison itself,
+    /// `WellKnownContexts.throughElements`). A function is an error. A type with a variable left in it, a union's rest
+    /// among them, is checked once it is known (see `WellKnownContexts.pendingOperator`). The prelude's `builtInFunction` is the comparison itself,
     /// of any type.
     ///
     /// Any other structure with a part that has an `==` of its own (`comparesParts`) is compared by a derived
@@ -72,7 +74,7 @@ module internal EqualityOperators =
             | None, DefScope(name, false) when name = builtInFunction -> Ok state
             | None, _ when not (isDeclared equality state) -> Ok state
             | None, _ when (TypeEnv.freeTyVars ty).IsEmpty -> Ok (derive ty state |> Option.defaultValue state)
-            | None, _ when (comparedVars ty).IsEmpty && not (comparesParts ty) -> Ok state
+            | None, _ when (checkedVars ty).IsEmpty && not (comparesParts ty) -> Ok state
             | None, _ -> Ok (pendingOperator equality env state expr op ty)
 
     /// Whether `pending` is a comparison `require` left to be checked, rather than a call.

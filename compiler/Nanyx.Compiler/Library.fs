@@ -58,6 +58,9 @@ type private CheckedModule =
       ContextRequirements: Map<string, TypeExpr list>
       /// The type each of those definitions declares, without its contexts, where it writes one.
       ContextSignatures: Map<string, TypeExpr>
+      /// The rests of the unions each of the module's own top-level functions compares values of, which a call to it
+      /// checks a well-known context of, by its symbol (see `InferState.CheckedRests`).
+      CheckedRests: Map<SymbolId, Map<Identifier, int list>>
       /// The ambient contexts (the runtime's, as `Console`) by the names the module knows them by, with their
       /// definitions: an importer that cannot name one still needs it where it calls a function that requires it.
       AmbientContexts: Map<string, TypeDefInfo> }
@@ -1173,7 +1176,13 @@ module Compiler =
                             |> Seq.fold (fun acc (KeyValue(id, _)) ->
                                 acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
                         ContextRequirements = contextRequirements
-                        ContextSignatures = contextSignatures }
+                        ContextSignatures = contextSignatures
+                        // A call to an imported function checks what it compares the rests of its unions with as a
+                        // call to one of the module's own does.
+                        CheckedRests =
+                            imported.CheckedRests
+                            |> Map.filter (fun symbol _ -> exportedSymbols.ContainsKey symbol)
+                            |> Map.fold (fun acc symbol checkedRests -> acc |> Map.add symbol checkedRests) state.CheckedRests }
                 if importedKey = preludeKey then
                     preludeInlined <- inlinedItemsForImport item imported
                 else
@@ -1359,6 +1368,7 @@ module Compiler =
                      ContextSignatures =
                         let exported = exportedValueNames own
                         state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
+                     CheckedRests = state.CheckedRests
                      AmbientContexts =
                         state.AmbientMembers
                         |> Map.values
