@@ -165,6 +165,10 @@ type ContextInstance =
     /// backend writes the value itself.
     | InstanceBuiltIn
 
+/// The module an import brings in: the file it is read from, as its spans name it (a full path, or a standard-library
+/// module's import path, `nanyx/text.nyx`), and the name its `module` line declares, if it has one.
+type ImportedFile = { File: string; Name: string option }
+
 /// `ExprTypes` holds the resolved type of every expression inference typed, and of every `_` written in a type that
 /// it read, by node; `CalleeTypes` the type of
 /// the function at each call or pipe, by the call's node; `SymbolTypes` the type of each declaration the module
@@ -209,6 +213,8 @@ type ContextInstance =
 ///
 /// `AmbientContexts` are the names of the imported contexts the runtime supplies, as `nanyx/console`'s definitions are
 /// its `Console`, in order: the top level of the module runs in them.
+///
+/// `ImportedFiles` holds the module each of the module's imports brings in, by the import's symbol (see `ImportedFile`).
 type TypedModule =
     { Module: Module
       Types: Map<string, Ty>
@@ -230,5 +236,6 @@ type TypedModule =
       ContextTypes: Map<SymbolId, Ty list>
       ImportedContextTypes: Map<SymbolId, Ty * Ty list>
       AmbientContexts: string list
+      ImportedFiles: Map<SymbolId, ImportedFile>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }

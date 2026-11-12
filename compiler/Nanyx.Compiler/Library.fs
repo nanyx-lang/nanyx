@@ -1051,7 +1051,9 @@ module Compiler =
             // The modules that bring each name in unqualified, by the module's key, with the name of the module.
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
             let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
-            let mergeImport (importedKey: string) (item: ImportItem) (imported: CheckedModule) =
+            let mutable importedFiles: Map<SymbolId, ImportedFile> = Map.empty
+            let mergeImport (importedOrigin: ModuleOrigin) (item: ImportItem) (imported: CheckedModule) =
+                let importedKey = originKey importedOrigin
                 let qualifier = importQualifier item
                 let exportedValues = exportedValueNames imported.Own
                 if qualifier.IsNone && importedKey <> preludeKey then
@@ -1096,6 +1098,7 @@ module Compiler =
                             | None, ModuleImport moduleName -> moduleName
                             | None, PathImport path -> path
                         let import = { Id = SymbolId.next (); Name = name; Kind = ImportedModule; Declaration = item.Span; IsExported = false }
+                        importedFiles <- importedFiles |> Map.add import.Id { File = sourceFileName importedOrigin; Name = imported.Name }
                         // Only an alias is written as a name: an import without one has no name to write.
                         if item.Alias.IsSome then
                             state <- { state with Scopes = state.Scopes |> Map.add import.Id (Scope.wholeModule item.Span.File) }
@@ -1225,7 +1228,7 @@ module Compiler =
                         | Ok imported when imported.Name <> Some moduleName ->
                             let declared = imported.Name |> Option.defaultValue "(none)"
                             errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
-                        | Ok imported -> mergeImport (originKey (StandardLibraryModule moduleName)) item imported
+                        | Ok imported -> mergeImport (StandardLibraryModule moduleName) item imported
                 | None ->
                     match origin with
                     | SourceFile fullPath ->
@@ -1237,7 +1240,7 @@ module Compiler =
                             | Error (_, diags) -> errors <- errors @ diags
                             | Ok imported ->
                                 match FileImports.importedFile item imported.Name imported.Syntax with
-                                | [] -> mergeImport (originKey (SourceFile importPath)) item imported
+                                | [] -> mergeImport (SourceFile importPath) item imported
                                 | diags -> errors <- errors @ diags
                     | StandardLibraryModule name ->
                         errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{name}' may only import other standard library modules" ]
@@ -1356,6 +1359,7 @@ module Compiler =
                           ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
                           ImportedContextTypes = importedContextTypes
                           AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
+                          ImportedFiles = importedFiles
                           // Filled in for the root module only, by `compileWith`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }

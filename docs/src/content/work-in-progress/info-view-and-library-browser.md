@@ -35,7 +35,7 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | Where a call finds a parameterised context | `ContextInstances`: in scope (from a `use` or the signature), built from attached definitions, or built in |
 | What each `use` loads | `UseContexts` (parameterised contexts only); the type of the value it loads, in `ExprTypes` |
 | The contexts the runtime supplies at the top level | `AmbientContexts` |
-| The library's modules and their summaries | `StandardLibrary.moduleNames`, `StandardLibrary.trySummary` |
+| The library's modules and their doc comments | `StandardLibrary.moduleNames`, `Documentation.ofModule` |
 | Opening a library definition | `StandardLibrarySource` writes a read-only copy of a module to open |
 | Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
 | Doc comments | attached by `DocComments.attach`, read for a symbol by `Documentation.Reader` |
@@ -110,7 +110,8 @@ anything new.
 - **Request.** A custom request, `nanyx/infoView`, with a document and a position. It returns structured JSON:
   sections (`expression`, `inScope`, `topLevel`, `contexts`, `messages`, always all of them, in that order), each
   with a title, whether it starts collapsed, and items. An item has its text, a detail (`parameter`, `use`,
-  `error NYX0101`) and a location to link to. It returns data, not rendered text, so the client can lay it out and
+  `error NYX0101`), a location to link to and, for an import, its module's doc comment as Markdown, which the client
+  renders with VS Code's Markdown renderer (`markdown.api.render`). It returns data, not rendered text, so the client can lay it out and
   link the spans. The server reads the same cached compile as hover (`DocumentStore`), and the last good compile
   while the text does not parse; the expression is left out where the text has been edited since.
 - **Client.** A webview view in `extension/`, in a view container of its own in VS Code's secondary side bar
@@ -135,15 +136,16 @@ or context, a field or context member (by the span `DeclaredNames` has for it), 
 server shows a symbol's doc comment on hover and in completion items, read with `Documentation.Reader.ForSymbol`, which
 parses the file the symbol is declared in (the document, a file beside it, or a standard-library module) for its doc
 comments and keeps them by file. It turns each `` [`name`] `` into a link to the name's definition, looked up among
-the names in scope where the comment is, then the top-level names of the comment's own file.
+the names in scope where the comment is, then the top-level names of the comment's own file. A module's doc comment
+is shown on hover over the module's name, in completion of import paths and with an import in the info view's
+top-level list (`Documentation.Reader.ForModule`, [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
 
 Still open:
 
 - Generating the standard library's docs pages from its doc comments
-  ([#722](https://github.com/nanyx-lang/nanyx/issues/722)). Its definitions, types, contexts and context members
-  have doc comments ([#721](https://github.com/nanyx-lang/nanyx/issues/721)), but each module's summary is still an
-  ordinary `-- nanyx/<name>: ...` comment after `module`, because `trySummary` reads that line. Making it a module doc
-  comment, before `module`, needs `trySummary` to read the doc comment instead.
+  ([#722](https://github.com/nanyx-lang/nanyx/issues/722)). Its modules, definitions, types, contexts and context
+  members have doc comments ([#721](https://github.com/nanyx-lang/nanyx/issues/721),
+  [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
 - Recording docs by symbol in `TypedModule`, so the info view and the browser read them as they read types, rather
   than parsing the declaring file again.
 - A tag has no symbol, so its doc comment is attached but not shown anywhere yet; nor is a record field's on a

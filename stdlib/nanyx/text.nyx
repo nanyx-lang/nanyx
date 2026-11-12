@@ -1,26 +1,25 @@
+--| Functions on strings.
+
+  Each is attached to `string`, so with `import nanyx/text` it is called as `string.trim(s)`, or as
+  `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
+  `s.trim` is an error.
+
+  Strings are UTF-8. Most of these functions work byte by byte: `length` counts bytes (not
+  characters or grapheme clusters), indices and widths are byte offsets, `uppercase` and `lowercase`
+  only change ASCII letters, and the trimming and `words` functions only treat ASCII whitespace as
+  whitespace. Multi-byte characters pass through unchanged, except that `padStart` and `padEnd` cut
+  their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars` and `reverse`
+  work by character, where a character is one Unicode code point: they read each UTF-8 sequence's
+  lead byte, so they never cut a character in half.
+
+  Every function here is stack-safe: each one that walks a string calls itself only in tail
+  position, so it works on a string of any length.
 module text
 
--- nanyx/text: functions on strings.
---
--- Each is attached to `string`, so with `import nanyx/text` it is called as `string.trim(s)`, or as
--- `s \trim` when `s` is known to be a string. A dot on a value never reaches an attached definition:
--- `s.trim` is an error.
---
--- Strings are UTF-8. Most of this first slice works byte by byte: `length` counts bytes (not characters
--- or grapheme clusters), indices and widths are byte offsets, `uppercase` and
--- `lowercase` only change ASCII letters, and the trimming and `words` functions only treat ASCII
--- whitespace as whitespace. Multi-byte characters pass through unchanged, except that `padStart` and
--- `padEnd` cut their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars` and
--- `reverse` work by character, where a character is one Unicode code point: they read each UTF-8
--- sequence's lead byte, so they never cut a character in half.
---
 -- Everything here is written over four compiler intrinsics: `__nanyx_string_length`,
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice` and `__nanyx_string_from_byte`; `split` and
 -- `words` also build their results with `__nanyx_list_cons`, last first, and reverse them with the
 -- prelude's `list.reverse`. `++` (concatenation) and `==` on strings are language operators.
---
--- Every function here is stack-safe: each one that walks a string calls itself only in tail position,
--- so it works on a string of any length.
 
 --| The number of bytes in `s`.
 export def string.length: string -> int = { s ->

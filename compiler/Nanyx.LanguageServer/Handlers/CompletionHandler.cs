@@ -56,7 +56,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
         var cursor = document.Positions.ToOffset(request.Position);
         if (CompletionContext.ImportPathAt(text, cursor) is { } import)
         {
-            return ImportPaths(document, import, cursor);
+            return ImportPaths(request.TextDocument.Uri, document, import, cursor);
         }
 
         var wordStart = CompletionContext.WordStart(text, cursor);
@@ -98,19 +98,24 @@ public sealed class CompletionHandler : CompletionHandlerBase
     /// after <c>nanyx/</c>, a level at a time (<c>nanyx/text.</c> offers the modules under <c>text</c>), and in quotes
     /// the <c>.nyx</c> files and folders beside the document, or in the folder the path has reached. An untitled
     /// document has no folder, so it is offered no files. Each item replaces only the part of the path after its last
-    /// <c>/</c> (or <c>.</c>, in a module's path), and a folder or a level of modules asks for the next part.
+    /// <c>/</c> (or <c>.</c>, in a module's path), and a folder or a level of modules asks for the next part. A module
+    /// or file has its module's doc comment as its documentation (see <see cref="Documentation.ofModule"/>).
     /// </summary>
-    private static CompletionList ImportPaths(OpenDocument document, ImportPath import, int cursor)
+    private CompletionList ImportPaths(DocumentUri uri, OpenDocument document, ImportPath import, int cursor)
     {
         var written = import.Written;
         var separator = import.IsFile ? written.LastIndexOf('/') : written.LastIndexOfAny(['/', '.']);
         var range = document.Positions.ToRange(cursor - (written.Length - separator - 1), cursor);
+        string? ModuleDoc(string moduleFile) =>
+            Documentation.ofModule(moduleFile, span => SourceLocations.LinkTo(uri, document, span, _standardLibrary)!)?.Value;
         CompletionItem Item(string label, CompletionItemKind kind, string insert, string? documentation = null) => new()
         {
             Label = label,
             Kind = kind,
             TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit { Range = range, NewText = insert }),
-            Documentation = documentation is null ? null : new StringOrMarkupContent(documentation),
+            Documentation = documentation is null
+                ? null
+                : new StringOrMarkupContent(new MarkupContent { Kind = MarkupKind.Markdown, Value = documentation }),
             // A folder or a level of modules is only part of a path: the editor asks again for what follows it.
             Command = insert == label ? null : new Command { Name = "editor.action.triggerSuggest", Title = "Suggest" }
         };
@@ -134,10 +139,9 @@ public sealed class CompletionHandler : CompletionHandlerBase
                 .Where(name => !name.StartsWith('.'))
                 .Select(name => Item(name, CompletionItemKind.Folder, $"{name}/"));
             var files = Directory.GetFiles(folder, "*.nyx")
-                .Where(file => !string.Equals(Path.GetFullPath(file), document.FileName, StringComparison.OrdinalIgnoreCase))
-                .Select(Path.GetFileName)
-                .OfType<string>()
-                .Select(name => Item(name, CompletionItemKind.File, name));
+                .Select(Path.GetFullPath)
+                .Where(file => !string.Equals(file, document.FileName, StringComparison.OrdinalIgnoreCase))
+                .Select(file => Item(Path.GetFileName(file), CompletionItemKind.File, Path.GetFileName(file), ModuleDoc(file)));
             return new CompletionList(folders.Concat(files));
         }
 
@@ -157,7 +161,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
                 .Select(name => name[level.Length..])
                 .GroupBy(rest => rest.Split('.')[0])
                 .Select(group => group.Contains(group.Key)
-                    ? Item(group.Key, CompletionItemKind.Module, group.Key, StandardLibrary.trySummary(level + group.Key)?.Value)
+                    ? Item(group.Key, CompletionItemKind.Module, group.Key, ModuleDoc($"{prefix}{level}{group.Key}.nyx"))
                     : Item(group.Key, CompletionItemKind.Module, $"{group.Key}.")));
     }
 

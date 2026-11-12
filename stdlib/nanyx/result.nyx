@@ -1,7 +1,6 @@
-module result
+--| Kept so that existing `import nanyx/result` lines still compile.
 
--- nanyx/result: kept so that existing `import nanyx/result` lines still compile.
---
--- Everything it used to define, the `proc` workflow included, is now in the prelude
--- (`nanyx/prelude`), which every module sees without importing it: `proc`, the `Result(a, e)`
--- type, and the `Result.*` helpers.
+  Everything it used to define, the `proc` workflow included, is now in the prelude
+  (`nanyx/prelude`), which every module sees without importing it: `proc`, the `Result(a, e)` type,
+  and the `Result.*` helpers.
+module result

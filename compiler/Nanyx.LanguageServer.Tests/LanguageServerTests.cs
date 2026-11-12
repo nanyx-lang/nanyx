@@ -1225,7 +1225,7 @@ public sealed partial class LanguageServerTests : IAsyncLifetime
         Assert.Equal(["console", "math", "result", "text"], modules.Select(item => item.Label));
         var console = modules[0];
         Assert.Equal(new Range(0, 13, 0, 15), console.TextEdit?.TextEdit?.Range);
-        Assert.Equal("how a program talks to the terminal.", console.Documentation?.String);
+        Assert.StartsWith("How a program talks to the terminal.\n", console.Documentation?.MarkupContent?.Value);
     }
 
     [Fact]

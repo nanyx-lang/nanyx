@@ -41,6 +41,34 @@ let private ofOtherFile (file: string) : FileDocComments option =
 /// A name in backticks and square brackets, `` [`name`] ``, that is not already a link.
 let private linkPattern = Regex(@"\[`([^`\n]+)`\](?![\(\[])", RegexOptions.Compiled)
 
+/// The text of `comment` with each link in it, `` [`name`] ``, written as a Markdown link to where `declarationOf` finds
+/// the name declared, with the target `linkTo` gives for that span, or as plain code when the name is not found or
+/// `linkTo` gives `null`.
+let private render (declarationOf: string -> SourceSpan option) (linkTo: Func<SourceSpan, string>) (comment: DocComment) =
+    linkPattern.Replace(
+        comment.Text,
+        MatchEvaluator(fun found ->
+            let name = found.Groups[1].Value
+            match declarationOf name |> Option.map linkTo.Invoke with
+            | Some target when not (isNull target) -> $"[`{name}`]({target})"
+            | _ -> $"`{name}`"))
+
+/// The doc comment of the module in `docs`, the doc comments of its file: the one at the top of the file.
+let private moduleComment (docs: FileDocComments) : DocComment option =
+    docs.Comments |> List.tryFind (fun comment -> comment.Target = DocumentsModule)
+
+/// The doc comment of the module in the file `moduleFile`, which is not the document (see `ofOtherFile`), as Markdown,
+/// for where there is no compile of the document to read it by: its links lead only to the names the module's own top
+/// level declares, with the targets `linkTo` gives (see `Reader`). `None` when it has none.
+let ofModule (moduleFile: string) (linkTo: Func<SourceSpan, string>) : string option =
+    ofOtherFile moduleFile
+    |> Option.bind (fun docs ->
+        let declarationOf name =
+            docs.TopLevel
+            |> List.tryFind (fun (declared, span) -> declared = name && not (ReservedNames.isHiddenName name span))
+            |> Option.map snd
+        moduleComment docs |> Option.map (render declarationOf linkTo))
+
 /// Reads the doc comments of the names in one compile of a document (`result`, of the file `file`, whose doc comments
 /// are `own`), for a request at `offset`. A link in a doc comment, `` [`name`] ``, is written as a Markdown link to
 /// where `name` is declared, with the target `linkTo` gives for that span, or as plain code when the name is not
@@ -68,14 +96,10 @@ type Reader(file: string, own: FileDocComments, result: CompileResult, offset: i
         let found = if comment.Span.File = file then inScope () |> Option.orElse ownFile else ownFile |> Option.orElseWith inScope
         found |> Option.filter (fun declaration -> not (ReservedNames.isHiddenName name declaration))
 
-    let render (comment: DocComment) (docs: FileDocComments) =
-        linkPattern.Replace(
-            comment.Text,
-            MatchEvaluator(fun found ->
-                let name = found.Groups[1].Value
-                match declarationOf comment docs name |> Option.map linkTo.Invoke with
-                | Some target when not (isNull target) -> $"[`{name}`]({target})"
-                | _ -> $"`{name}`"))
+    let render (comment: DocComment) (docs: FileDocComments) = render (declarationOf comment docs) linkTo comment
+
+    /// The doc comments of the file `docFile`: the document's own, or another file's (see `ofOtherFile`).
+    let docsOf (docFile: string) = if docFile = file then Some own else ofOtherFile docFile
 
     /// Where the name is declared that the link at `at` in a doc comment of the document links to, given the
     /// document's text, `source`. `None` when `at` is not in a link, or the name is not found.
@@ -88,15 +112,26 @@ type Reader(file: string, own: FileDocComments, result: CompileResult, offset: i
             |> Seq.tryFind (fun found -> comment.Span.Start + found.Index <= at && at < comment.Span.Start + found.Index + found.Length)
             |> Option.bind (fun found -> declarationOf comment own found.Groups[1].Value))
 
-    /// The doc comment of `symbol`, as Markdown with its links written out. `None` when it has none.
-    member _.ForSymbol(symbol: Symbol) : string option =
+    /// The doc comment of the module in the file `moduleFile`, the document or another file, as its spans name it (see
+    /// `Hover.moduleAt`), as Markdown with its links written out. `None` when it has none.
+    member _.ForModule(moduleFile: string) : string option =
+        docsOf moduleFile |> Option.bind (fun docs -> moduleComment docs |> Option.map (fun comment -> render comment docs))
+
+    /// The doc comment of `symbol`, as Markdown with its links written out: for an import, that of the module it
+    /// brings in. `None` when it has none.
+    member this.ForSymbol(symbol: Symbol) : string option =
         let declaration = symbol.Declaration
-        let docs = if declaration.File = file then Some own else ofOtherFile declaration.File
-        docs
-        |> Option.bind (fun docs ->
-            docs.Comments
-            |> List.tryFind (fun comment ->
-                match comment.Target with
-                | DocumentsDeclaration span -> span.Start = declaration.Start && span.End = declaration.End
-                | _ -> false)
-            |> Option.map (fun comment -> render comment docs))
+        match symbol.Kind with
+        | ImportedModule ->
+            result.Typed
+            |> Option.bind (fun typed -> typed.ImportedFiles |> Map.tryFind symbol.Id)
+            |> Option.bind (fun imported -> this.ForModule imported.File)
+        | _ ->
+            docsOf declaration.File
+            |> Option.bind (fun docs ->
+                docs.Comments
+                |> List.tryFind (fun comment ->
+                    match comment.Target with
+                    | DocumentsDeclaration span -> span.Start = declaration.Start && span.End = declaration.End
+                    | _ -> false)
+                |> Option.map (fun comment -> render comment docs))

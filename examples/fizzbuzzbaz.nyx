@@ -1,10 +1,9 @@
+--| Fizzbuzzbaz is a variant of fizzbuzz where the rules are supplied at
+  runtime. For example, 3 -> "fizz", 5 -> "buzz", 7 -> "baz", so a multiple
+  of both 3 and 7 is replaced with "fizzbaz".
 module fizzbuzzbaz
 
 import nanyx/text
-
--- Fizzbuzzbaz is a variant of fizzbuzz where the rules are supplied at
--- runtime. For example, 3 -> "fizz", 5 -> "buzz", 7 -> "baz", so a multiple
--- of both 3 and 7 is replaced with "fizzbaz".
 
 def playNumber: (divisor: int, word: string, i: int) -> string = { divisor, word, i ->
   if i % divisor == 0 then word else ""

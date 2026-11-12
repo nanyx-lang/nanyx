@@ -242,7 +242,16 @@ type Point = (
 )
 ```
 
-A doc comment at the top of a file, before `module` or the first `import`, documents the module. Anywhere else, a
+A doc comment at the top of a file, before `module` or the first `import`, documents the module, and the editor shows
+it wherever the module is named: in its `module` line, in an `import` of it and in an alias that qualifies a name.
+
+```nanyx
+--| Fizzbuzzbaz is a variant of fizzbuzz where the rules are supplied at
+  runtime.
+module fizzbuzzbaz
+```
+
+Anywhere else, a
 doc comment that isn't followed by something it can document gets a warning from the
 [official linter](../standard-tools/official-linter#doc-comment-that-documents-nothing). A `---` block comment is
 always an ordinary comment, so commenting code out never turns it into documentation.

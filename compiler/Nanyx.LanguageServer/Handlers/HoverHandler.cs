@@ -14,6 +14,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// shows the type's definition instead, even inside an expression. Nothing is shown in a top-level item edited since
 /// that compile, nor in a document that has never been typed (see <see cref="OpenDocument.LastGood"/>). Below the
 /// type comes the doc comment of the name there, if it has one, as Markdown (see <see cref="NyxCompiler.Documentation.Reader"/>).
+/// On a module's name, in the document's <c>module</c> line, an import or an alias that qualifies a name, it shows
+/// <c>module name</c> and the module's doc comment.
 /// </summary>
 public sealed class HoverHandler : HoverHandlerBase
 {
@@ -40,6 +42,11 @@ public sealed class HoverHandler : HoverHandlerBase
             return null;
         }
 
+        if (CompilerHover.moduleAt(lastGood.FileName, compiled, offset)?.Value is { } module)
+        {
+            return ModuleHover(request, document, lastGood, offset, module);
+        }
+
         // A type's name, in an annotation inside a block say, is about the type, not the block around it.
         var info = Definition.typeDefinitionAt(_settings.TypeNotation, lastGood.FileName, compiled, offset)
             ?? CompilerHover.typeAt(_settings.TypeNotation, compiled, offset);
@@ -58,6 +65,29 @@ public sealed class HoverHandler : HoverHandlerBase
             {
                 Kind = MarkupKind.Markdown,
                 Value = $"```nanyx\n{info.Value.Type}\n```" + (docs is null ? "" : $"\n\n---\n\n{docs}")
+            }),
+            Range = document.Positions.ToRange(span.Start, span.End)
+        };
+    }
+
+    /// <summary>
+    /// The hover on a module's name (see <see cref="CompilerHover.moduleAt"/>): <c>module name</c>, then the module's
+    /// doc comment, if it has one.
+    /// </summary>
+    private Hover? ModuleHover(HoverParams request, OpenDocument document, OpenDocument lastGood, int offset, CompilerHover.ModuleHover module)
+    {
+        if (document.FromLastGood(module.Span.Start, module.Span.End) is not { } span)
+        {
+            return null;
+        }
+
+        var docs = lastGood.DocReader(request.TextDocument.Uri, offset, _standardLibrary).ForModule(module.File)?.Value;
+        return new Hover
+        {
+            Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+            {
+                Kind = MarkupKind.Markdown,
+                Value = $"```nanyx\nmodule {module.Name}\n```" + (docs is null ? "" : $"\n\n---\n\n{docs}")
             }),
             Range = document.Positions.ToRange(span.Start, span.End)
         };

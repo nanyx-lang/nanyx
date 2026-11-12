@@ -138,10 +138,18 @@ what the compiler keeps: exact spans, resolved names and types.
 - **Completion of import paths** ([#214](https://github.com/nanyx-lang/nanyx/issues/214)), triggered by `/` and
   `"` too, and needing no compile: which import item the cursor is on is read from the characters
   (`CompletionContext.ImportPathAt`), on an `import` line or in an `import ( ... )` block. A module path offers
-  `nanyx/`, then the standard library's modules (`StandardLibrary.moduleNames`) a level at a time, each with the
-  summary from the comment that opens it (`StandardLibrary.trySummary`). A quoted path offers the `.nyx` files and
-  the folders beside the document, or in the folder the path has reached; an untitled document has none. Each item
-  replaces only the part after the path's last separator, and a folder or a level asks for the next part at once.
+  `nanyx/`, then the standard library's modules (`StandardLibrary.moduleNames`) a level at a time. A quoted path
+  offers the `.nyx` files and the folders beside the document, or in the folder the path has reached; an untitled
+  document has none. A module or a file has its module's doc comment as its documentation
+  (`Documentation.ofModule`, [#937](https://github.com/nanyx-lang/nanyx/issues/937)), with links only to what the
+  module itself declares, since there may be no compile to look names up in. Each item replaces only the part after
+  the path's last separator, and a folder or a level asks for the next part at once.
+- **A module's doc comment** ([#937](https://github.com/nanyx-lang/nanyx/issues/937)), the `--|` comment before its
+  `module` line, is shown on hover over the module's name: in its own `module` line, in an import (its path or its
+  alias) and in an alias that qualifies a name (`m` in `m.foo`). `Hover.moduleAt` finds the module there, and the
+  compiler records which file each import brings in (`TypedModule.ImportedFiles`), so `Documentation.Reader.ForModule`
+  can read that file's doc comments. Completion of an alias, and the info view's top-level list, show an import with
+  its module's doc comment too.
 - **Find-references in the open document** ([#276](https://github.com/nanyx-lang/nanyx/issues/276)). From the
   name under the cursor it finds the symbol as go-to-definition does, then every name in the document's compile
   whose node `References` maps to it (`NyxCompiler.Definition.referencesTo`): a call's or pipe's function name, an
