@@ -917,9 +917,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// The type arguments, and what they bind, of each use in `expr` of `name`, a local function of type `localTy`
     /// generic in variables of its own, where `bindings` binds the variables of the function `expr` is in as it says:
     /// none where a use's type is not known. A use in a lambda that captures it counts (see
-    /// `LambdaLifting.usesThroughClosures`).
+    /// `ClosureSyntax.usesThroughClosures`).
     member private this.LocalUses (bindings: Map<int, Ty>) (localTy: Ty) (name: string) (expr: Expression) : (IrType list * Map<int, Ty>) list =
-        LambdaLifting.usesThroughClosures (fun target -> definitions |> Map.tryFind target) name expr
+        ClosureSyntax.usesThroughClosures (fun target -> definitions |> Map.tryFind target) name expr
         |> List.map (fun reference ->
             let instanceTy =
                 match reference.Kind with
