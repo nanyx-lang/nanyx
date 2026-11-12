@@ -83,7 +83,9 @@ module internal WellKnownContexts =
         | TyApply("list", _) -> true
         | _ -> false
 
-    /// `Eq`: every type that holds no function, and no map, has the compiler's own, which compares by structure.
+    /// `Eq`: every type that holds no function has the compiler's own, which compares by structure. A map or a set,
+    /// or a structure that holds one, is compared by a definition derived from its parts, whatever order the entries
+    /// were added in (see `StructuralInstances`).
     let equality =
         { Context = "Eq"
           Member = "=="
@@ -92,9 +94,6 @@ module internal WellKnownContexts =
           Lacks =
             lacking "equality" (function
                 | TyFunc _ -> Some ("a function", "functions")
-                // Comparing the lists of their entries would depend on the order the keys were added in (#618).
-                | Maps.MapType _ -> Some ("a map", "maps")
-                | Sets.SetType _ -> Some ("a set", "sets")
                 | _ -> None)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           AgreesWith = None
@@ -129,7 +128,8 @@ module internal WellKnownContexts =
 
     /// `Hash`: every type that has the compiler's own `Eq` has the compiler's own `Hash`, which hashes by structure, so
     /// that values equal by their structure have the same hash. It has no operators. A type that attaches its own `==`
-    /// must attach `hash` too.
+    /// must attach `hash` too. A map or a set has none yet: hashing the list of its entries would give equal maps
+    /// different hashes.
     let hashing =
         { Context = "Hash"
           Member = "hash"

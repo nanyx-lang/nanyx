@@ -1277,6 +1277,26 @@ export def map.filter: [c] map(k, v), ([c] k, v -> bool) -> map(k, v) = { m, kee
   __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
 }
 
+--| Whether the maps `m` and `n` hold the same keys, compared with `==`, and equal values for each,
+  as `same` compares two values, whatever order their keys were added in. The `==` the compiler
+  derives for a map calls it.
+export def __mapEqualsBy
+  : [Eq(k) & c] map(k, v), map(k, v), ([c] v, v -> bool) -> bool
+  = { m, n, same ->
+    def theirs = __nanyx_map_entries(n)
+
+    if list.length(__nanyx_map_entries(m)) != list.length(theirs)
+      then false
+      else list.all(
+        __nanyx_map_entries(m)
+        { entry ->
+          match findEntry(theirs, entry.0)
+            | #some(value) -> same(entry.1, value)
+            | #notFound -> false
+        }
+      )
+  }
+
 --| `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
   does not have is added at the end.
 export def map.update
@@ -1352,6 +1372,16 @@ export def set.filter: [c] set(a), ([c] a -> bool) -> set(a) = { s, keep ->
 --| Whether `t` holds every element of `s`.
 export def set.isSubset: [Eq(a) & Hash(a)] set(a), set(a) -> bool = { s, t ->
   list.all(__nanyx_set_elements(s), { x -> set.contains(t, x) })
+}
+
+--| Whether the sets `s` and `t` hold the same elements, as `same` compares two, whatever order they
+  were added in. The `==` the compiler derives for a set calls it.
+export def __setEqualsBy: [c] set(a), set(a), ([c] a, a -> bool) -> bool = { s, t, same ->
+  def theirs = __nanyx_set_elements(t)
+
+  if list.length(__nanyx_set_elements(s)) != list.length(theirs)
+    then false
+    else list.all(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> same(x, y) }) })
 }
 
 --| The elements of `s`, then those of `t` that `s` does not hold.

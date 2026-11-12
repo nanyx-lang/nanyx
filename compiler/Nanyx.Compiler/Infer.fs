@@ -1086,16 +1086,20 @@ let private derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyVa
         StructuralInstances.comparison rigid instanceOf call span ty state |> Option.map calling
     | None, _ -> None
 
-/// The instance of `Eq` the call `call`, at `span`, finds for the structure `ty` in place of the compiler's own
-/// (`wellKnown` is `Eq`, found as `instance`), when `ty` has nothing left to settle and compares a part with an `==`
-/// of its own: the derived definition, as the context's member.
-let private derivedEquality (env: TypeEnv) (state: InferState) (wellKnown: WellKnownContexts.WellKnownContext) (instance: WellKnownContexts.CallInstance) (call: NodeId) (span: SourceSpan) (ty: Ty) : (ContextInstance * InferState) option =
-    if wellKnown.Context = EqualityOperators.context
-       && instance = WellKnownContexts.BuiltIn
-       && (TypeEnv.freeTyVars ty).IsEmpty
-       && comparesOwnParts env Set.empty (fun _ -> false) ty then
+/// The instance of `Eq` the call `call` to `calleeName`, at `span`, finds for the structure `ty` in place of the
+/// compiler's own (`wellKnown` is `Eq`, found as `instance`), when `ty` has nothing left to settle and compares a part
+/// with an `==` of its own: the derived definition, as the context's member. A type with variables in it that holds a
+/// map or a set is an error: the compiler's own cannot compare it, and the derived one cannot be passed yet.
+let private derivedEquality (env: TypeEnv) (state: InferState) (wellKnown: WellKnownContexts.WellKnownContext) (instance: WellKnownContexts.CallInstance) (calleeName: Identifier) (call: NodeId) (span: SourceSpan) (ty: Ty) : Result<ContextInstance * InferState, Diagnostic list> option =
+    if wellKnown.Context <> EqualityOperators.context || instance <> WellKnownContexts.BuiltIn then None
+    elif not (TypeEnv.freeTyVars ty).IsEmpty then
+        if StructuralInstances.holdsCollection ty then
+            Some (Error (WellKnownContexts.error span (EqualityOperators.collectionAtGenericCall calleeName ty)))
+        else None
+    elif comparesOwnParts env Set.empty (fun _ -> false) ty then
         StructuralInstances.instance Set.empty (fun _ -> None) false call span EqualityOperators.context ty state
         |> Option.bind Result.toOption
+        |> Option.map Ok
     else None
 
 /// The instance of `ctxName` at `argTys` derived from the type's parts for `call`, a call to `calleeName` at `span`,
@@ -1163,8 +1167,8 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         else
                             wellKnownInstanceAtCall env ctxName argTys (fun ty -> (instanceInScope env current ctxName [ ty ]).IsSome)
                             |> Option.bind (fun (wellKnown, instance) ->
-                                match derivedEquality env current wellKnown instance call.Id calleeSpan argTys.Head with
-                                | Some (derived, next) -> Some (Ok (found @ [ Some derived ], next))
+                                match derivedEquality env current wellKnown instance name call.Id calleeSpan argTys.Head with
+                                | Some derived -> Some (derived |> Result.map (fun (derived, next) -> found @ [ Some derived ], next))
                                 | None -> WellKnownContexts.resolveCall wellKnown env current call name calleeSpan found contexts.Length argTys.Head instance)
                     // A structure with nothing left to settle has the instance derived from its parts.
                     let derived () =
@@ -1303,8 +1307,8 @@ let private resolvePendingInstances (env: TypeEnv) (state: InferState) (name: Id
             | Some (wellKnown, WellKnownContexts.NoInstance reason) ->
                 Some (Error (WellKnownContexts.error pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
             | Some (wellKnown, WellKnownContexts.BuiltIn) ->
-                match derivedEquality env current wellKnown WellKnownContexts.BuiltIn pending.Call pending.Span (List.head argTys) with
-                | Some (instance, next) -> Some (Ok (Some instance, next))
+                match derivedEquality env current wellKnown WellKnownContexts.BuiltIn pending.Callee pending.Call pending.Span (List.head argTys) with
+                | Some derived -> Some (derived |> Result.map (fun (instance, next) -> Some instance, next))
                 | None -> Some (Ok (Some (InstanceSynthesized (WellKnownContexts.builtInMembers wellKnown)), current))
             | _ when InterpolationHoles.passesBuiltIn env pending.Context argTys ->
                 Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
@@ -1335,6 +1339,8 @@ let private checkCalledComparisons (env: TypeEnv) (state: InferState) (call: Exp
                     let ty = resolveSoFar current ty
                     let hasInstance ty = (instanceInScope env current ctxName [ ty ]).IsSome
                     match wellKnownInstanceAtCall env ctxName [ ty ] hasInstance with
+                    | Some (wellKnown, _) when wellKnown.Context = EqualityOperators.context && StructuralInstances.holdsCollection ty ->
+                        Error (WellKnownContexts.error calleeSpan (EqualityOperators.collectionPassedNothing name ty))
                     | Some (wellKnown, instance) -> WellKnownContexts.checkLocalCall wellKnown env current call name calleeSpan ty instance
                     | None -> Ok current)) result) (Ok state)
     | _ -> Ok state
