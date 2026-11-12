@@ -28,7 +28,8 @@ compile error that lists the ones it does.
 Each standard-library module is checked once per process, the first time a compile imports it, and every later
 compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the module and its
 source). So the language server and the compiler's tests check the prelude once, not on every compile. A user's own
-modules are checked again in each compile.
+modules are checked again in each compile, but once in a package build, which hands each file's compile the modules
+the files before it checked (`Package.build`).
 
 One module, `nanyx/prelude`, is never imported by name: the compiler imports it, unqualified, into every
 other module, so its definitions are what a file sees with no imports at all. A module's own definitions

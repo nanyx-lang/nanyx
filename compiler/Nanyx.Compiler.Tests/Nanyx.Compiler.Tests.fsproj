@@ -54,6 +54,7 @@
     <Compile Include="Features\Imports\ImportFixTests.fs" />
     <Compile Include="Features\Imports\NameSuggestionTests.fs" />
     <Compile Include="Features\Imports\PackageImportTests.fs" />
+    <Compile Include="Features\Imports\PackageBuildTests.fs" />
     <Compile Include="Features\Imports\PartialModuleTests.fs" />
     <Compile Include="Features\Imports\ImportedTypeTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
