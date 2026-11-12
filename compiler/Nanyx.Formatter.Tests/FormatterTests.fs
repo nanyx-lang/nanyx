@@ -18,6 +18,10 @@ let ``Spacing is made regular`` () =
     Assert.Equal("def add = { a, b -> a + b }\n", format "def add={a,b->a+b}")
 
 [<Fact>]
+let ``A dotted module declaration is printed as written`` () =
+    unchanged "module collections.list\n\nexport def one = 1\n"
+
+[<Fact>]
 let ``Parentheses are kept where precedence needs them, and only there`` () =
     Assert.Equal("def a = (b + c) * d\n", format "def a = ((b + c) * d)")
     Assert.Equal("def a = b - (c - d)\n", format "def a = b - (c - d)")

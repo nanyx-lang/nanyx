@@ -1192,9 +1192,10 @@ do
 let private spannedItem (p: Parser<TopLevelItemKind, ParseState>) : Parser<TopLevelItem, ParseState> =
     withSpan p |>> fun (kind, span) -> TopLevelItem.at span kind
 
-// Parser for module declaration
+/// A module declaration, `module collections.list`. A dotted name is kept whole, as a module block's qualified name is.
 let moduleDecl: Parser<TopLevelItem, ParseState> =
-    spannedItem (pstring "module" >>. ws >>. identifier |>> ModuleDecl)
+    let moduleName = (sepBy1 identifierNoWs (pchar '.') |>> String.concat ".") .>> wsInline
+    spannedItem (pstring "module" >>. ws >>. moduleName |>> ModuleDecl)
     <?> "module declaration"
 
 let private valueDefExprParser =
