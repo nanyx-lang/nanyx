@@ -4,7 +4,7 @@ description: "A panel that shows what the compiler knows at the cursor, and a br
 order: 30
 ---
 
-> **Status: proposal.** Nothing here is built yet. This page sets out what the features are, what the compiler
+> **Status: proposal.** Doc comments are done; nothing else here is built yet. This page sets out what the features are, what the compiler
 > already records that they can use, what it would have to start recording, and an order to build them in. Each
 > plan item has an issue under the `lsp` label. See [Language server and editor](./language-server) for what the server does
 > today.
@@ -17,8 +17,8 @@ Three editor features, each built on what the language server already knows:
    Code extension. It shows the type of the expression at the cursor and the names in scope with their types. It
    also shows the contexts in scope and where each comes from. In a long function, that last part shows which
    `use` or which part of the signature each call's contexts come from.
-2. **Doc comments.** The `--` comment directly above a definition is its documentation. Hover, completion and the
-   browser show it.
+2. **Doc comments.** A `--|` comment above a definition is its documentation. Hover and completion show it, and
+   the browser will.
 3. **A library browser with search by type.** A view of the standard library's modules and what each exports,
    with each export's type and doc comment. You can search it by name or by type: type `bool -> string` and find
    what turns a `bool` into a `string`, without knowing its name.
@@ -37,14 +37,13 @@ These features mostly read tables the server already has in `TypedModule` (see `
 | The library's modules and their summaries | `StandardLibrary.moduleNames`, `StandardLibrary.trySummary` |
 | Opening a library definition | `StandardLibrarySource` writes a read-only copy of a module to open |
 | Every export in the library | the export index `ImportFixes` builds once, to offer missing imports |
-| Comments and their spans | the parser's trivia (`LineComment`), which the formatter reads |
+| Doc comments | attached by `DocComments.attach`, read for a symbol by `Documentation.Reader` |
 
 Some things are not recorded yet:
 
 - **Unparameterised contexts.** `ContextInstances` has `None` for a context such as `Console`, whose instance is
   found by its members' names. Nothing records which `use` (or which part of the signature, or the runtime)
   provides a call's `Console`.
-- **Doc comments.** The comments are kept as trivia, but none is attached to a definition.
 - **Types of exports by symbol, for search.** These are in `ImportedTypes` only for what a module imports, not for
   the whole library.
 
@@ -115,7 +114,7 @@ on for the lines indented further than its first (see [Basics](../getting-starte
 takes the continuation lines as part of the comment, and `DocComments.attach` (in `Nanyx.Parser/DocComments.fs`)
 attaches each doc comment, by position, to the declaration whose name starts the next line with code: a def, a type
 or context, a field or context member (by the span `DeclaredNames` has for it), a tag, or the module. The language
-server shows a symbol's doc comment on hover and in completion items, read with `Documentation.forSymbol`, which
+server shows a symbol's doc comment on hover and in completion items, read with `Documentation.Reader.ForSymbol`, which
 parses the file the symbol is declared in (the document, a file beside it, or a standard-library module) for its doc
 comments and keeps them by file. It turns each `` [`name`] `` into a link to the name's definition, looked up among
 the names in scope where the comment is, then the top-level names of the comment's own file.
@@ -131,6 +130,7 @@ Still open:
   than parsing the declaring file again.
 - A tag has no symbol, so its doc comment is attached but not shown anywhere yet; nor is a record field's on a
   member completion.
+
 # 3. Library browser and search by type
 
 ## The browser
@@ -198,9 +198,9 @@ Completion could later use the same ranking: offer the functions whose type fits
 
 In order. Each item is one PR:
 
-1. **Doc comments** ([#711](https://github.com/nanyx-lang/nanyx/issues/711)). Attach the comment above each
-   declaration, record docs by symbol, and show them in hover and completion. This is useful on its own, and the
-   browser needs it.
+1. **Doc comments** ([#711](https://github.com/nanyx-lang/nanyx/issues/711)). Done, as
+   [#719](https://github.com/nanyx-lang/nanyx/issues/719) designed them: hover and completion show them. Recording
+   them by symbol is still open (see [Doc comments](#2-doc-comments)).
 2. **Library requests** ([#712](https://github.com/nanyx-lang/nanyx/issues/712)). `nanyx/libraryModules` and
    `nanyx/libraryModule`, from the export index, with types and docs.
 3. **Library browser** ([#713](https://github.com/nanyx-lang/nanyx/issues/713)). The tree view in the extension,
