@@ -110,6 +110,21 @@ Elements are compared with `==`, which compares records, tuples, lists and tags 
 
 ---
 
+## distinctBy
+
+```nanyx
+list.distinctBy: [Eq(b) & Hash(b) & c] (list(a), ([c] a -> b)) -> list(a)
+```
+
+Returns a new list with no two elements of the same key, keeping the first element of each key, in order. The key function is called once for each element, and can require contexts. A key can be of any type with an [`Eq`](../advanced/contexts#eqa) and a `Hash`, as a map's keys can.
+
+```nanyx
+[(name = "Ann", age = 40), (name = "Bob", age = 30), (name = "Cy", age = 40)] \list.distinctBy { .age }
+-- [(name = "Ann", age = 40), (name = "Bob", age = 30)]
+```
+
+---
+
 ## dropLast
 
 ```nanyx
@@ -165,6 +180,21 @@ Returns the first element matching the predicate.
 
 ```nanyx
 [1, 2, 3] \list.find { > 1 }
+-- #some(2)
+```
+
+---
+
+## findIndex
+
+```nanyx
+list.findIndex: [c] (list(a), ([c] a -> bool)) -> #some(int) | #notFound
+```
+
+Returns the position of the first element matching the predicate, counting from 0, or `#notFound`. It is [`indexOf`](#indexof) with a test in place of a value.
+
+```nanyx
+[3, 5, 8, 10] \list.findIndex { % 2 == 0 }
 -- #some(2)
 ```
 
@@ -373,11 +403,26 @@ Like `map`, but the function is also given each element's position, counting fro
 list.max: [Ord(a)] list(a) -> #some(a) | #emptyList
 ```
 
-Returns the greatest element, or `#emptyList` for an empty list. Of several greatest elements, the first. Elements are ordered by their [`Ord`](../advanced/contexts#orda), so a list of records has no `max`: use a key with `sortBy`.
+Returns the greatest element, or `#emptyList` for an empty list. Of several greatest elements, the first. Elements are ordered by their [`Ord`](../advanced/contexts#orda), so a list of records has no `max`: use [`maxBy`](#maxby) with a key.
 
 ```nanyx
 list.max([3, 8, 1])
 -- #some(8)
+```
+
+---
+
+## maxBy
+
+```nanyx
+list.maxBy: [Ord(b) & c] (list(a), ([c] a -> b)) -> #some(a) | #emptyList
+```
+
+Returns the element with the greatest key, or `#emptyList` for an empty list. Of several elements with the greatest key, the first. The key function is called once for each element, and can require contexts. A key can be of any type with an [`Ord`](../advanced/contexts#orda).
+
+```nanyx
+[(name = "Ann", age = 40), (name = "Bob", age = 30), (name = "Cy", age = 40)] \list.maxBy { .age }
+-- #some((name = "Ann", age = 40))
 ```
 
 ---
@@ -393,6 +438,21 @@ Returns the least element, or `#emptyList` for an empty list. Of several least e
 ```nanyx
 list.min(["pear", "apple", "fig"])
 -- #some("apple")
+```
+
+---
+
+## minBy
+
+```nanyx
+list.minBy: [Ord(b) & c] (list(a), ([c] a -> b)) -> #some(a) | #emptyList
+```
+
+Returns the element with the least key, or `#emptyList` for an empty list. Of several elements with the least key, the first. The key function is called once for each element, and can require contexts.
+
+```nanyx
+["pear", "apple", "fig"] \list.minBy { .length }
+-- #some("fig")
 ```
 
 ---
