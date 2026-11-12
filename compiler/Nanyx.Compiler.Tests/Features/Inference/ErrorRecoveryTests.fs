@@ -180,7 +180,7 @@ def head2: list(int) -> int = { xs ->
     | #emptyList -> 0
 }
 """
-    let source = if conflictFirst then conflict + head else head + conflict
+    let source = (if conflictFirst then conflict + head else head + conflict).ReplaceLineEndings "\n"
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal(
