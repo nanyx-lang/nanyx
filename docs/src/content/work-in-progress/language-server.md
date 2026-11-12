@@ -29,9 +29,9 @@ what the compiler keeps: exact spans, resolved names and types.
   and the span of the node it is about, published as the full range (UTF-16 columns, through `SourcePositions`).
   Related locations ("declared here") are published as `relatedInformation`. A diagnostic in an imported module
   carries that module's file: it is published on the document being edited, at its start, naming the file and
-  linking to the place there; publishing it on the imported file itself is Plan item 7. A diagnostic about the
-  whole compilation is shown at the start of the file. Inference still stops at the first error in a module, so
-  only one type error shows at a time. See [How the server is built](#how-the-server-is-built).
+  linking to the place there; publishing it on the imported file itself is Plan item 7
+  ([#794](https://github.com/nanyx-lang/nanyx/issues/794)). A diagnostic about the whole compilation is shown at the
+  start of the file. See [How the server is built](#how-the-server-is-built).
 - **Hover shows inferred types** ([#120](https://github.com/nanyx-lang/nanyx/issues/120)). Inference records the
   resolved type of every expression by `NodeId` (`TypedModule.ExprTypes`, the `Types` table of the planned
   [semantic model](./linters#3-the-semantic-model)), and the callee's type at each call (`CalleeTypes`), for
@@ -47,9 +47,8 @@ what the compiler keeps: exact spans, resolved names and types.
   def's, the standard library's among them, are in `ImportedContextTypes` with the def's type, carried over from the
   module that declares it (both filled in by `RequiredContexts`). A desugared workflow bind or return gets a node id of its own, so the bind as
   written has no type rather than that of the rest of the workflow. Each document
-  is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A
-  declared signature or doc comment needs name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)),
-  and a file that has never parsed shows no hover.
+  is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A file
+  that has never parsed shows no hover.
 - **Hover on a type's name shows its definition** ([#297](https://github.com/nanyx-lang/nanyx/issues/297)):
   `type Point = (x: int, y: int)`, or `context Logger = (...)` for a context. The type is the one go-to-definition
   finds (`Definition.typeDefinitionAt`), in an annotation, a type definition or a signature's contexts, whether the
@@ -209,14 +208,18 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
    [#96](https://github.com/nanyx-lang/nanyx/issues/96): a diagnostic about a field name, a type annotation or an
    attribute is reported at the nearest node that has a span (the field's value, the definition's name, the item
    after the attribute).
-2. **Hover.** Inferred types are done ([#120](https://github.com/nanyx-lang/nanyx/issues/120)); declared
-   signatures and docs follow from name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
+2. **Hover.** Done: inferred types ([#120](https://github.com/nanyx-lang/nanyx/issues/120)), a name's declaration
+   with its contexts ([#765](https://github.com/nanyx-lang/nanyx/issues/765)) and doc comments
+   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)). Hover on an operator shows the type of the whole
+   expression, not the operator's definition ([#792](https://github.com/nanyx-lang/nanyx/issues/792)).
 3. **Go-to-definition and find-references.** From the recorded symbols and references ([#98](https://github.com/nanyx-lang/nanyx/issues/98)).
    Go-to-definition is done for values (including those in the standard library), type names and context members
    ([#266](https://github.com/nanyx-lang/nanyx/issues/266)). Find-references is done in the open document
    ([#276](https://github.com/nanyx-lang/nanyx/issues/276)); across the workspace it is not.
-4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278)). Workspace symbols (Go to
-   Symbol in Workspace) would need an index of the workspace's files, as find-references across it does.
+4. **Document symbols.** Done ([#278](https://github.com/nanyx-lang/nanyx/issues/278)), though a local def in a
+   nested block or lambda argument, such as a `memory` block's cells, is not listed yet
+   ([#793](https://github.com/nanyx-lang/nanyx/issues/793)). Workspace symbols (Go to Symbol in Workspace) would
+   need an index of the workspace's files, as find-references across it does.
 5. **Completion.** The last good compile, which completion needs because it is asked for while the text does not
    parse, is kept ([#210](https://github.com/nanyx-lang/nanyx/issues/210)); each symbol's scope is recorded
    ([#211](https://github.com/nanyx-lang/nanyx/issues/211)); the names in scope are offered
@@ -227,9 +230,11 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). The first
    compiler error with fixes is an unknown name the standard library exports, which offers its import
    ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet.
-7. **Diagnostics in imported files.** Publish diagnostics for the file they belong to, not the file being edited.
-8. **Doc comments, a library browser, search by type and an info view.** Planned on
-   [Info view and library browser](./info-view-and-library-browser).
+7. **Diagnostics in imported files** ([#794](https://github.com/nanyx-lang/nanyx/issues/794)). Publish diagnostics
+   for the file they belong to, not the file being edited.
+8. **A library browser, search by type and an info view.** Planned on
+   [Info view and library browser](./info-view-and-library-browser). Doc comments, the first item there, are done
+   ([#719](https://github.com/nanyx-lang/nanyx/issues/719)).
 
 # Open questions
 
