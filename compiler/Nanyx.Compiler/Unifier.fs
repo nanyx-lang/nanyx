@@ -260,6 +260,21 @@ module Unifier =
         else
             Error "Only tag unions are supported"
 
+    /// The tags of a union or a lone tag, and the union's rest, as `parseTagUnion` gives them.
+    let private parseTagsOf ty =
+        match ty with
+        | TyUnion items -> parseTagUnion items
+        | _ -> parseTagUnion [ ty ]
+
+    /// Whether `ty` is given where `expected` is, and one is a tag or union while the other is a variable: what the
+    /// variable stands for has still to be found.
+    let private isPendingUnion ty expected =
+        let isTagUnion ty = match ty with TyUnion _ | TyTag _ -> true | _ -> false
+        match ty, expected with
+        | TyVar _, other
+        | other, TyVar _ -> isTagUnion other
+        | _ -> false
+
     let empty : Subst = Map.empty
 
     let rec apply (subst: Subst) (ty: Ty) : Ty =
@@ -709,11 +724,17 @@ module Unifier =
                     | _ -> loop subst rest
                 else
                     match kind with
-                    | Assignable ->
+                    | Assignable | AssignableLater ->
                         match l, r with
                         // The bottom type is assignable to every type, and binds no variable (see `bottomType`).
                         | TyUnion [], _ ->
                             loop subst rest
+                        // A tag union given where a type not known yet is expected, or the reverse, is solved after the
+                        // other constraints: solved now, the variable would be made equal to the union before a `try`
+                        // widens it with another failure (#354). Constraints are otherwise solved newest first, so
+                        // this changes their order.
+                        | _ when kind = Assignable && isPendingUnion l r ->
+                            loop subst (rest @ [ (left, right, AssignableLater, origin) ])
                         | TyVar _, _
                         | _, TyVar _ ->
                             unifyEqual false origin l r rest
@@ -724,12 +745,13 @@ module Unifier =
                         // A closed union given where an open one is expected widens it: the tags it has that the
                         // expected union does not name go into the expected union's rest, which stays open for
                         // more. So `#some(string) | #nil` and then `#some(int) | #notFound`, given in turn to a
-                        // `#some(a) | r` whose `r` they share, leave `r` as `#nil | #notFound | r'`.
-                        | TyUnion lItems, TyUnion rItems when
-                            (match parseTagUnion lItems, parseTagUnion rItems with
+                        // `#some(a) | r` whose `r` they share, leave `r` as `#nil | #notFound | r'`. A lone tag is a
+                        // closed union of one (#353).
+                        | (TyUnion _ | TyTag _), TyUnion rItems when
+                            (match parseTagsOf l, parseTagUnion rItems with
                              | Ok (_, None), Ok (_, Some _) -> true
                              | _ -> false) ->
-                            match parseTagUnion lItems, parseTagUnion rItems with
+                            match parseTagsOf l, parseTagUnion rItems with
                             | Ok (lMap, _), Ok (rMap, Some restVar) ->
                                 let pairs =
                                     lMap
@@ -740,6 +762,29 @@ module Unifier =
                                     if extraTags.IsEmpty then [] else [ (TyVar restVar, TyUnion(extraTags @ [ freshRest () ]), Equal, origin) ]
                                 loop subst (pairs @ restConstraints @ rest)
                             | _ -> unifyEqual false origin l r rest
+                        // A union is assignable to a closed union or a tag only if the expected type names each of its
+                        // tags: `#some(int) | #odd` is not a `#some(int)`, though as types that must be equal each is
+                        // taken to be the other's member (#354). An open union's rest can then have only the expected
+                        // type's tags: those it names too, as a rest shared with a branch can repeat them, and the
+                        // others. So a `try` that widens it later with another tag is a mismatch. A rest an
+                        // annotation names takes only the others, as it did when this was solved as equal.
+                        | TyUnion lItems, (TyUnion _ | TyTag _) when
+                            (match parseTagUnion lItems, parseTagsOf r with
+                             | Ok _, Ok (_, None) -> true
+                             | _ -> false) ->
+                            match parseTagUnion lItems, parseTagsOf r with
+                            | Ok (lMap, lRest), Ok (rMap, _) when lMap |> Map.forall (fun key _ -> rMap.ContainsKey key) ->
+                                let pairs = lMap |> Map.toList |> List.map (fun (key, lTy) -> (lTy, rMap.[key], Equal, origin))
+                                let extraTags = rMap |> Map.toList |> List.filter (fun (key, _) -> not (lMap.ContainsKey key)) |> List.map snd
+                                let restConstraints =
+                                    match lRest with
+                                    | Some restVar when restVar.Name.IsNone -> [ (TyVar restVar, TyUnion(rMap |> Map.toList |> List.map snd), Equal, origin) ]
+                                    | Some restVar when not extraTags.IsEmpty -> [ (TyVar restVar, TyUnion extraTags, Equal, origin) ]
+                                    | _ -> []
+                                loop subst (pairs @ restConstraints @ rest)
+                            // A rest this closed can repeat a tag, which the message leaves out.
+                            | _, Ok (rMap, _) -> Error (mismatchMessage l (TyUnion(rMap |> Map.toList |> List.map snd)), origin)
+                            | _ -> Error (mismatchMessage l r, origin)
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
                         // there too: `list($Person)` is assignable to `list((name: string))`, but not the reverse.
                         // Values are immutable, so a type's arguments are covariant, and so are a record's fields:
