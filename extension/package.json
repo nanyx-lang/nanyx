@@ -8,14 +8,14 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.76.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "Programming Languages"
@@ -50,6 +50,24 @@
         "editor.wordBasedSuggestions": "currentDocument",
         "editor.wordBasedSuggestionsMode": "currentDocument"
       }
+    },
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "nanyx",
+          "title": "Nanyx",
+          "icon": "img/nanyx.png"
+        }
+      ]
+    },
+    "views": {
+      "nanyx": [
+        {
+          "type": "webview",
+          "id": "nanyx.infoView",
+          "name": "Info view"
+        }
+      ]
     },
     "commands": [
       {
@@ -166,7 +184,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
-    "@types/vscode": "^1.76.0",
+    "@types/vscode": "^1.106.0",
     "typescript": "^5.5.4",
     "vscode-tmgrammar-test": "^0.1.3"
   }

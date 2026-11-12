@@ -13,7 +13,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 - completion of names, record fields, module members and import paths, each name with its doc comment. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words
 - quick fixes, such as adding the import for a standard-library name, or writing `int.fromString` for the deprecated `Int.fromString`
 - **Format Document**, which formats the file as `nanyx format` does
-- an [info view](#info-view), a panel that shows what the compiler knows at the cursor
+- an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a run button, which runs the file as `nanyx run` does
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
@@ -78,8 +78,14 @@ VS Code's own `editor.codeLens` and `editor.inlayHints.enabled` settings turn al
 
 # Info view
 
-**Nanyx: Show info view** (Ctrl+Shift+Enter, or Cmd+Shift+Enter on a Mac, in a `.nyx` editor) opens a panel beside the
-editor that follows the cursor. It shows:
+The info view follows the cursor and shows what the compiler knows there. It lives in VS Code's secondary side bar (the
+side bar on the opposite side from the Explorer, where Chat is), under a **Nanyx** tab, so it stays beside the code
+while editors open and close. **Nanyx: Show info view** (Ctrl+Shift+Enter, or Cmd+Shift+Enter on a Mac, in a `.nyx`
+editor) opens the secondary side bar if it is closed, shows the view and moves the focus to it; click back in the
+editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to the primary side bar or to the panel,
+and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
+
+It shows:
 
 - **Expression**: the type of the expression at the cursor, as hover shows it.
 - **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
@@ -90,8 +96,8 @@ editor that follows the cursor. It shows:
 - **Messages**: the errors and warnings on the cursor's line.
 
 Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
-keeps the panel on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
-again. While the file does not parse, the panel shows what the compiler knew the last time it did. It needs a compiler
+keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
+again. While the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
 newer than 0.23.0.
 
 # Running a file
@@ -107,7 +113,7 @@ The command has no keyboard shortcut. To give it one, look for it in **Keyboard 
 | Command | What it does |
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
-| **Nanyx: Show info view** | Opens the panel that shows what the compiler knows at the cursor. See [Info view](#info-view). |
+| **Nanyx: Show info view** | Shows and focuses the view that shows what the compiler knows at the cursor. See [Info view](#info-view). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |
 | **Nanyx: Restart the language server** | Stops the server and starts it again. |
 
