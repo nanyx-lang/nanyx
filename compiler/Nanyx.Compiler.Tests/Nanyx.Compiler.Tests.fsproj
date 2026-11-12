@@ -12,6 +12,7 @@
   <ItemGroup>
     <Compile Include="TestSupport.fs" />
     <Compile Include="Features\Arithmetic\ArithmeticTests.fs" />
+    <Compile Include="Features\Arithmetic\ComparisonLiteralTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attached\BuiltinTypeNameTests.fs" />
     <Compile Include="Features\Attached\PipeLookupTests.fs" />

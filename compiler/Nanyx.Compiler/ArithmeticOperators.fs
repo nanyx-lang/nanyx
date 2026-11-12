@@ -36,6 +36,10 @@ module internal ArithmeticOperators =
     /// Whether `op` is an arithmetic operator.
     let isOperator (op: string) = List.contains op operators
 
+    /// Whether an integer literal beside `op` is read as a member in generic code (see `readLiterals`): an arithmetic
+    /// operator, a comparison or `==` and `!=`.
+    let private readsLiterals (op: string) = isOperator op || OrderingOperators.isOperator op || EqualityOperators.isOperator op
+
     /// Whether `ty` is a type that is known not to be a number. A type variable, an open record and a nominal type
     /// are left to unification, which reports them if they are not numbers; the error type is what failed to check.
     let private isKnownNonNumber (ty: Ty) =
@@ -108,17 +112,18 @@ module internal ArithmeticOperators =
             Ok { state with PendingArithmetic = pending :: state.PendingArithmetic }
         | _ -> Ok (addConstraint leftTy numberTy state)
 
-    /// What a literal operand of an arithmetic operator is, where it is not the literal it would be elsewhere.
+    /// What a literal operand of an arithmetic operator or a comparison is, where it is not the literal it would be
+    /// elsewhere.
     type private LiteralReading =
         /// The member of the context the function requires that it is written as.
         | AsMember of Expression
         /// An error: the literal cannot be of the type it is used at.
         | Wrong of DiagnosticCode * string
 
-    /// What the literal `literal` is, an operand of an arithmetic operator whose other operand is of the type
-    /// `otherTy`, where that is a type variable of the type the function around it writes, in a function that requires
-    /// `Add` or `Num` of it (and so binds `zero` in `env`). `0` is `zero`, and any other integer `fromInt` of it, which
-    /// needs `Num`. A decimal literal cannot be of the variable: it may be an integer type.
+    /// What the literal `literal` is, an operand of an arithmetic operator or a comparison whose other operand is of the
+    /// type `otherTy`, where that is a type variable of the type the function around it writes, in a function that
+    /// requires `Add` or `Num` of it (and so binds `zero` in `env`). `0` is `zero`, and any other integer `fromInt` of
+    /// it, which needs `Num`. A decimal literal cannot be of the variable: it may be an integer type.
     ///
     /// The other operand may be of a variable the constraints so far have put in place of the type's own, as the
     /// result of `x * x` is: the operator calls the member there all the same. Only an error needs to name the type's.
@@ -143,10 +148,10 @@ module internal ArithmeticOperators =
             | _ -> None
         | _ -> None
 
-    /// The operands `left` and `right` of `expr`, an arithmetic operator, with a literal among them that is not the
-    /// literal it would be elsewhere (see `literalReading`) inferred again as the member it is written as, by `infer`,
-    /// and recorded in `ReadAs` to be written as it. A literal that cannot be of the type it is used at fails to
-    /// check, and is taken to be of that type, so that the operator is not also reported.
+    /// The operands `left` and `right` of `expr`, an arithmetic operator, a comparison, `==` or `!=`, with a literal
+    /// among them that is not the literal it would be elsewhere (see `literalReading`) inferred again as the member it
+    /// is written as, by `infer`, and recorded in `ReadAs` to be written as it. A literal that cannot be of the type it
+    /// is used at fails to check, and is taken to be of that type, so that the operator is not also reported.
     let readLiterals
         (infer: InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
         (env: TypeEnv)
@@ -157,10 +162,10 @@ module internal ArithmeticOperators =
         : Result<TypedExpr * TypedExpr * InferState, Diagnostic list> =
         let reread (operand: TypedExpr) (other: TypedExpr) (state: InferState) =
             match expr.Kind, literalReading env state operand.Expr other.Type with
-            | BinaryOp(op, _, _), Some (AsMember asMember) when isOperator op ->
+            | BinaryOp(op, _, _), Some (AsMember asMember) when readsLiterals op ->
                 infer state asMember
                 |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add asMember.Id asMember })
-            | BinaryOp(op, _, _), Some (Wrong(code, message)) when isOperator op ->
+            | BinaryOp(op, _, _), Some (Wrong(code, message)) when readsLiterals op ->
                 let error = Diagnostics.at code operand.Expr.Span message
                 Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)

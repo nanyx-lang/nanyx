@@ -33,15 +33,17 @@ prelude declares `Add(a)` and `Num(a)`.
   `float` `-0.0 - x`, which is IEEE 754's negation. On any other type it calls that type's attached `negate`, or the
   `negate` of the `Add` the function requires. In a shorthand lambda's body a leading `-` stays the infix operator,
   so `{ -x }` is `{ n -> n - x }`.
-- **`0` reads as `zero`** where it is an operand of an arithmetic operator and the other operand is of a variable of
-  the type the function writes, in a function that requires `Add` of it: `x + 0` (`InferState.LiteralMembers`).
+- **`0` reads as `zero`** where it is an operand of an arithmetic operator, a comparison (`<`, `<=`, `>`, `>=`), `==`
+  or `!=`, and the other operand is of a variable of the type the function writes, in a function that requires `Add`
+  of it: `x + 0`, `n < 0` (`ArithmeticOperators.readLiterals`,
+  [#678](https://github.com/nanyx-lang/nanyx/issues/678)).
 - **`list.sum: [Add(a)] list(a) -> a`** ([#475](https://github.com/nanyx-lang/nanyx/issues/475)).
 - **`Num(a)` is a prelude context**, with `Add`'s members and `` `*` ``, `` `/` ``, `` `%` `` and `fromInt`; `*`, `/`
   and `%` on a type variable call its members, and without `[Num(a)]` are `NYX0205`, as `+` is without `Add`. The
   compiler's own `Num(int)` and `Num(float)` are again the members the prelude attaches to `int` and `float`
   ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
 - **Integer literals are `fromInt`** where `0` would be `zero` and the function requires `Num`: `x * 2` is
-  `` `*`(x, fromInt(2)) ``. In a function that requires only `Add`, such a literal is `NYX0205`, `'1' is an 'a' here,
+  `` `*`(x, fromInt(2)) ``, and `n == 2` compares `n` with `fromInt(2)`. In a function that requires only `Add`, such a literal is `NYX0205`, `'1' is an 'a' here,
   which needs Num(a): add [Num(a)] to the type of 'inc'`, and a decimal literal there is `NYX0201`, `'0.5' cannot be
   an 'a': 'a' may be an integer type. Take the value as a parameter`. A `fromInt` is a call at run time, not folded
   to a constant.
@@ -55,7 +57,7 @@ prelude declares `Add(a)` and `Num(a)`.
   written in the prelude from their series, since WebAssembly has neither. The prelude exports them as `__floatExp`
   and `__floatLn` for `nanyx/math`, which gives them as `math.exp` and `math.ln`
   ([#822](https://github.com/nanyx-lang/nanyx/issues/822)).
-- **`math.abs: [Num(a) & Ord(a)] a -> a`**, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
+- **`math.abs: [Num(a) & Ord(a)] a -> a`**, written with `n < 0`, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
   `int`, a `float` or any other type with an order ([#186](https://github.com/nanyx-lang/nanyx/issues/186)).
 - **An operator finds its context in the prelude**, by the member it reads, rather than in a table the compiler
   keeps, and **a function that does not write its type requires it**: `def add = { x, y -> x + y }` is
@@ -68,10 +70,9 @@ Not done yet:
 
 - **A negative exponent on an integer type** is `1 / x ** -n`, which truncates, rather than stopping the program as
   the design says: `__pow` is generic, and cannot tell an integer type from a float without a member to ask.
-- **`0` elsewhere in generic code.** A `0` that is not an operand of an arithmetic operator beside a value of the
-  type variable, such as the start of a `fold`, a function's result or the other side of a comparison, is still an
-  `int`; write `zero` there, as `math.abs` does in `compare(n, zero)`. A literal beside a comparison is
-  [#678](https://github.com/nanyx-lang/nanyx/issues/678). Literals are typed before the type they are expected to
+- **`0` elsewhere in generic code.** A `0` that is not an operand of an arithmetic operator or a comparison beside a
+  value of the type variable, such as the start of a `fold`, a function's result or an argument, is still an `int`;
+  write `zero` there, as `math.abs` does for its result. Literals are typed before the type they are expected to
   have is known, so reading them by their expected type needs a pass after the def is inferred.
 - **`use` does not change concrete arithmetic** (decision 6): an `Add(int)` loaded with `use` reaches generic code
   called from its block, but a concrete `1 + 2` there is still the built-in `+`.
