@@ -768,11 +768,8 @@ let memberAccessChain =
 
 let primaryExpr = memberAccessChain .>> wsInline  // Consume trailing inline ws for operator parsing
 
-// Boolean operations are the keywords `not`, `and` and `or` (lowest precedence; see the operators page of
-// the docs). A keyword operator must not swallow the start of an identifier such as `order` or `android`.
-// The symbolic `&&` and `||` predate the keywords and are kept as aliases that build the same tree.
+// Boolean operations are the keywords `not`, `and` and `or` (see `binaryOperators` and the operators page of the docs).
 let private keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
-let private keywordOperatorEnd = keywordEnd >>. ws
 
 // `not` binds tighter than every infix operator, so `not a == b` is `(not a) == b`, as `!` does elsewhere. That
 // makes it part of the operand it applies to, so it is parsed here rather than by the operator precedence parser,
@@ -799,31 +796,25 @@ let private operand : Parser<Operand, ParseState> = prefixed (notKeyword <|> min
 
 opp.TermParser <- operand
 
-// Define operators with precedence
-// Powers bind tighter than every other infix operator and group to the right: `2 ** 3 ** 2` is `2 ** (3 ** 2)`.
-opp.AddOperator(InfixOperator("**", operatorSpan "**" ws, 8, Associativity.Right, (), binary "**"))
-
-// Multiplicative operators (higher precedence)
-opp.AddOperator(InfixOperator("*", operatorSpan "*" ws, 7, Associativity.Left, (), binary "*"))
-opp.AddOperator(InfixOperator("/", operatorSpan "/" ws, 7, Associativity.Left, (), binary "/"))
-opp.AddOperator(InfixOperator("%", operatorSpan "%" ws, 7, Associativity.Left, (), binary "%"))
-
-// Additive operators
-opp.AddOperator(InfixOperator("+", operatorSpan "+" ws, 6, Associativity.Left, (), binary "+"))
 // `-` must not take the start of a `->` (as in `for 1..2 -> ...`) or of a `--` comment.
 let private minusEnd = notFollowedBy (anyOf ">-")
-opp.AddOperator(InfixOperator("-", operatorSpan "-" (minusEnd >>. ws), 6, Associativity.Left, (), binary "-"))
 
-// Concatenation (strings, lists): binds looser than arithmetic, tighter than comparison
-opp.AddOperator(InfixOperator("++", operatorSpan "++" ws, 5, Associativity.Right, (), binary "++"))
+/// Adds every operator in `binaryOperators` to `table`, each taking `space` after it. A keyword operator must not
+/// swallow the start of an identifier such as `order` or `android`.
+let private addBinaryOperators (table: OperatorPrecedenceParser<Operand, SourceSpan, ParseState>) (space: Parser<unit, ParseState>) =
+    for op in binaryOperators do
+        let operatorEnd =
+            if Char.IsLetter op.Text[0] then keywordEnd
+            elif op.Text = "-" then minusEnd
+            else preturn ()
+        let associativity =
+            match op.Associativity with
+            | LeftAssociative -> Associativity.Left
+            | RightAssociative -> Associativity.Right
+        table.AddOperator(InfixOperator(op.Text, operatorSpan op.Text (operatorEnd >>. space), op.Precedence, associativity, (), binary op.Name))
 
-// Comparison operators (lower precedence)
-opp.AddOperator(InfixOperator("<", operatorSpan "<" ws, 4, Associativity.Left, (), binary "<"))
-opp.AddOperator(InfixOperator(">", operatorSpan ">" ws, 4, Associativity.Left, (), binary ">"))
-opp.AddOperator(InfixOperator("<=", operatorSpan "<=" ws, 4, Associativity.Left, (), binary "<="))
-opp.AddOperator(InfixOperator(">=", operatorSpan ">=" ws, 4, Associativity.Left, (), binary ">="))
+addBinaryOperators opp ws
 
-// Equality operators
 // A bounded range `a..b` (see the ranges page) is represented as a call to the built-in "__range". It binds
 // looser than arithmetic, so `n - 1..n + 1` is `(n - 1)..(n + 1)`. `...` is list spread, not a range. A `..` with
 // nothing after it on its line but the rest of an enclosing construct is the unbounded `a..` (see `withOpenRange`).
@@ -832,13 +823,6 @@ let private rangeHasEnd =
 opp.AddOperator(InfixOperator("..", operatorSpan ".." (notFollowedBy (pchar '.') >>. rangeHasEnd >>. ws), 4, Associativity.Left, (), fun _ (x, xText) (y, yText) ->
     let span = SourceSpan.between xText yText
     Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ x; y ])), span))
-opp.AddOperator(InfixOperator("==", operatorSpan "==" ws, 3, Associativity.Left, (), binary "=="))
-opp.AddOperator(InfixOperator("!=", operatorSpan "!=" ws, 3, Associativity.Left, (), binary "!="))
-
-opp.AddOperator(InfixOperator("and", operatorSpan "and" keywordOperatorEnd, 2, Associativity.Left, (), binary "and"))
-opp.AddOperator(InfixOperator("or", operatorSpan "or" keywordOperatorEnd, 1, Associativity.Left, (), binary "or"))
-opp.AddOperator(InfixOperator("&&", operatorSpan "&&" ws, 2, Associativity.Left, (), binary "and"))
-opp.AddOperator(InfixOperator("||", operatorSpan "||" ws, 1, Associativity.Left, (), binary "or"))
 
 // Note: Comma is NOT an operator in the OPP
 // Commas are handled explicitly in tuple/record literals and function calls
@@ -869,33 +853,14 @@ let private pipeTarget =
     attempt matchStep <|> callStep
 
 // Inline operator precedence parser (no newlines in operator whitespace). It parses a block's statements and a match
-// arm's body, so it has every operator `opp` has but `..`, each taking only the space on its line after it.
+// arm's body, so it has every operator `opp` has but `..` (see `binaryOperators`), each taking only the space on its
+// line after it.
 let oppInline = new OperatorPrecedenceParser<Operand, SourceSpan, ParseState>()
 let private notKeywordInline =
     attempt (withSpan (pstring "not" .>> keywordEnd)) .>> wsInline |>> fun (_, span) -> NotSyntax.builtIn, span
 oppInline.TermParser <- prefixed (notKeywordInline <|> minus)
 
-oppInline.AddOperator(InfixOperator("**", operatorSpan "**" wsInline, 8, Associativity.Right, (), binary "**"))
-oppInline.AddOperator(InfixOperator("*", operatorSpan "*" wsInline, 7, Associativity.Left, (), binary "*"))
-oppInline.AddOperator(InfixOperator("/", operatorSpan "/" wsInline, 7, Associativity.Left, (), binary "/"))
-oppInline.AddOperator(InfixOperator("%", operatorSpan "%" wsInline, 7, Associativity.Left, (), binary "%"))
-
-oppInline.AddOperator(InfixOperator("+", operatorSpan "+" wsInline, 6, Associativity.Left, (), binary "+"))
-oppInline.AddOperator(InfixOperator("-", operatorSpan "-" (minusEnd >>. wsInline), 6, Associativity.Left, (), binary "-"))
-oppInline.AddOperator(InfixOperator("++", operatorSpan "++" wsInline, 5, Associativity.Right, (), binary "++"))
-
-oppInline.AddOperator(InfixOperator("<", operatorSpan "<" wsInline, 4, Associativity.Left, (), binary "<"))
-oppInline.AddOperator(InfixOperator(">", operatorSpan ">" wsInline, 4, Associativity.Left, (), binary ">"))
-oppInline.AddOperator(InfixOperator("<=", operatorSpan "<=" wsInline, 4, Associativity.Left, (), binary "<="))
-oppInline.AddOperator(InfixOperator(">=", operatorSpan ">=" wsInline, 4, Associativity.Left, (), binary ">="))
-
-oppInline.AddOperator(InfixOperator("==", operatorSpan "==" wsInline, 3, Associativity.Left, (), binary "=="))
-oppInline.AddOperator(InfixOperator("!=", operatorSpan "!=" wsInline, 3, Associativity.Left, (), binary "!="))
-
-oppInline.AddOperator(InfixOperator("and", operatorSpan "and" (keywordEnd >>. wsInline), 2, Associativity.Left, (), binary "and"))
-oppInline.AddOperator(InfixOperator("or", operatorSpan "or" (keywordEnd >>. wsInline), 1, Associativity.Left, (), binary "or"))
-oppInline.AddOperator(InfixOperator("&&", operatorSpan "&&" wsInline, 2, Associativity.Left, (), binary "and"))
-oppInline.AddOperator(InfixOperator("||", operatorSpan "||" wsInline, 1, Associativity.Left, (), binary "or"))
+addBinaryOperators oppInline wsInline
 
 /// `expr \f \g(a)`: each pipe spans from the start of `expr`'s text to the end of its own target.
 let private applyPipes (value: Operand) pipes =

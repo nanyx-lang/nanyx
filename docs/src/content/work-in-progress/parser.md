@@ -73,7 +73,8 @@ formatter and the language server need no change until the parser underneath the
 - **The refactors already filed**, which shrink what has to be ported: name the desugared calls in one place
   ([#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
   ([#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
-  list ([#370](https://github.com/nanyx-lang/nanyx/issues/370)), and split the parser out of `Program.fs`
+  list (done: `binaryOperators` in `Operators.fs`, [#370](https://github.com/nanyx-lang/nanyx/issues/370)), and split
+  the parser out of `Program.fs`
   ([#366](https://github.com/nanyx-lang/nanyx/issues/366)).
 
 ## Stage 1: a lexer, used alongside the parser
