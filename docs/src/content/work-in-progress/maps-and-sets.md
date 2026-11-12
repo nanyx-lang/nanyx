@@ -51,9 +51,9 @@ Known gaps:
 # What is left: hash-based maps
 
 The list of entries is to become a persistent hash trie written in the prelude, behind the same intrinsics, so
-nothing outside the prelude changes. A trie is a recursive type, `#leaf(...) | #node(Trie(k, v), Trie(k, v))`, and a
-type alias cannot refer to itself yet ([#246](https://github.com/nanyx-lang/nanyx/issues/246)), so this waits on that,
-and on [open question 2](#open-questions), which decides the order a hash-based map gives its entries in.
+nothing outside the prelude changes. A trie is a recursive type, `#leaf(...) | #node(Trie(k, v), Trie(k, v))`, which a
+type alias can now be ([#246](https://github.com/nanyx-lang/nanyx/issues/246)). This waits on
+[open question 2](#open-questions), which decides the order a hash-based map gives its entries in.
 # Open questions
 
 These are the choices the docs leave open. The code takes the marked default until they are answered.

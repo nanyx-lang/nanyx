@@ -81,6 +81,11 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                     let name = match tag with TyTag(n, _) -> n | _ -> ""
                     let index = acc |> List.tryFindIndex (function TyTag(n, _) -> n = name | _ -> false)
                     match index |> Option.map (fun i -> acc.[i]), tag with
+                    // The same payload twice is that payload. Joined, a recursive alias's tags would hold the same two
+                    // payloads again.
+                    | Some (TyTag(_, Some existingPayload)), TyTag(_, Some payload) when
+                        resolveSoFar st existingPayload = resolveSoFar st payload ->
+                        acc, st
                     | Some (TyTag(_, Some existingPayload)), TyTag(_, Some payload) when
                         isTagPayload st existingPayload && isTagPayload st payload ->
                         let joinedPayload, next =

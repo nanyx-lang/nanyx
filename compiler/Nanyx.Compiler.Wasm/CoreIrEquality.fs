@@ -19,14 +19,16 @@ let private needsFunction (ty: IrType) =
     match ty with
     | IrRecord _
     | IrList _
-    | IrTags _ -> true
+    | IrTags _
+    | IrRecursive _ -> true
     | IrInt
     | IrBool
     | IrUnit
     | IrFloat
     | IrString
     | IrFunction _
-    | IrError -> false
+    | IrError
+    | IrSelf -> false
 
 /// The types of the (first) operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
 /// (`parts` gives a type's own), each once, in the order they are first needed, where `needsFunction` holds: the types
@@ -103,7 +105,7 @@ let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -
 /// `==` compares at, and the parts of those types that need a function of their own too.
 let collect (functions: Function list) : IrType list =
     let parts (ty: IrType) =
-        match ty with
+        match IrType.unfold ty with
         | IrList element -> [ element ]
         | IrRecord fields -> fields |> List.map snd
         | IrTags tags -> tags |> List.choose snd
@@ -121,9 +123,11 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrString -> loadA @ loadB @ [ $"call ${Helpers.stringEquals}" ]
     | IrRecord _
     | IrList _
-    | IrTags _ -> loadA @ loadB @ [ $"call ${equalsName ty}" ]
+    | IrTags _
+    | IrRecursive _ -> loadA @ loadB @ [ $"call ${equalsName ty}" ]
     | IrFunction _
-    | IrError -> internalError $"an equality of {IrType.show ty}, which has none"
+    | IrError
+    | IrSelf -> internalError $"an equality of {IrType.show ty}, which has none"
 
 /// Returns 0 from the function unless the code before it left 1.
 let private orReturnFalse = [ "i32.eqz"; "if"; "  i32.const 0"; "  return"; "end" ]
@@ -132,7 +136,7 @@ let private indent (lines: string list) = lines |> List.map (fun line -> "  " + 
 
 /// The body of the equality function of `ty`, which compares `$a` and `$b` and leaves 1 when they are equal.
 let private equalsBody (tagId: string -> int option) (ty: IrType) : string list =
-    match ty with
+    match IrType.unfold ty with
     | IrRecord fields ->
         [ yield!
               fields
@@ -216,7 +220,7 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
 let helpersUsed (types: IrType list) : string list =
     let comparesStrings =
         types
-        |> List.exists (function
+        |> List.exists (IrType.unfold >> function
             | IrRecord fields -> fields |> List.exists (snd >> (=) IrString)
             | IrList element -> element = IrString
             | IrTags tags -> tags |> List.exists (snd >> (=) (Some IrString))

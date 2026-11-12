@@ -465,6 +465,10 @@ module TypeExpr =
         | TypeConstraint(_, inner, _)
         | TypeWhere(inner, _) -> [ inner ]
 
+    /// `typeExpr` and every type expression inside it, in order.
+    let rec within (typeExpr: TypeExpr) : TypeExpr list =
+        typeExpr :: (children typeExpr |> List.collect within)
+
     /// Each `_` written in `typeExpr`, in order.
     let rec holes (typeExpr: TypeExpr) : TypeExpr list =
         match typeExpr.Kind with

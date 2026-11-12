@@ -142,7 +142,9 @@ let private compareBody (ty: IrType) : string list * string list =
           yield! sign [ "local.get $a"; "i32.const 0"; "i32.ne" ] [ "local.get $b"; "i32.const 0"; "i32.ne" ] ]
     | IrTags _
     | IrFunction _
-    | IrError -> internalError $"an ordering function for {IrType.show ty}, which has no order"
+    | IrError
+    | IrRecursive _
+    | IrSelf -> internalError $"an ordering function for {IrType.show ty}, which has no order"
 
 /// The runtime helpers the ordering functions of `types` call.
 let helpersUsed (types: IrType list) : string list =

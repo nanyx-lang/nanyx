@@ -304,7 +304,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (CallRuntime(helper, atoms, true)) ty))
         | BinaryOp(("==" | "!=") as op, left, right) when (match tyOf left with
-                                                           | IrString | IrTags _ | IrRecord _ | IrList _ -> true
+                                                           | IrString | IrTags _ | IrRecord _ | IrList _ | IrRecursive _ -> true
                                                            | _ -> false) ->
             // A string, a record, a list and a tag with a payload are pointers: equality compares what they point to,
             // by the operands' structure (see `CoreIrEquality`).
@@ -1178,14 +1178,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     PGuard(var, this.Tail { armScope with Vars = armScope.Vars |> Map.add parameter var } predicateBody)
                 | ListPattern(elements, rest) ->
                     let elementTy =
-                        match valueTy with
+                        match IrType.unfold valueTy with
                         | IrList elementTy -> elementTy
                         | other -> cannot $"a list pattern on a value of type {IrType.show other}"
                     PList(elements |> List.map (lowerPattern false scrutinee elementTy), rest |> Option.map (lowerPattern false scrutinee valueTy))
                 | LiteralPattern(BoolLit value) -> PBool value
                 | TagPattern(name, payload) ->
                     let payloadTy =
-                        match valueTy with
+                        match IrType.unfold valueTy with
                         | IrTags tags ->
                             match tags |> List.tryFind (fst >> (=) name) with
                             | Some (_, payloadTy) -> payloadTy
@@ -1197,7 +1197,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | Some _, None -> cannot $"a payload pattern on #{name}, which has none"
                 | TuplePattern elements ->
                     let fields =
-                        match valueTy with
+                        match IrType.unfold valueTy with
                         | IrRecord fields when fields.Length = elements.Length -> fields
                         | other -> cannot $"a tuple pattern on a value of type {IrType.show other}"
                     let names = fields |> List.map fst |> Set.ofList
@@ -1209,7 +1209,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 // looked at.
                 | RecordMemberPattern(members, _) ->
                     let fields =
-                        match valueTy with
+                        match IrType.unfold valueTy with
                         | IrRecord fields -> fields
                         | other -> cannot $"a record pattern on a value of type {IrType.show other}"
                     PFields(members |> List.map (fun (name, member') ->

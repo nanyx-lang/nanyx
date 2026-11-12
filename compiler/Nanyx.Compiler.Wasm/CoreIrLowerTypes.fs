@@ -48,6 +48,14 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
 let concreteContexts (contexts: Ty list) : Ty list =
     FunctionContexts.flatten contexts |> List.filter (FunctionContexts.isVariable >> not) |> List.distinct
 
+/// The definition and arguments of the recursive alias `ty` refers to, through any aliases of it (see
+/// `RecursiveAliases`).
+let rec private recursiveReference (ty: Ty) : (Ty * Ty list) option =
+    match ty with
+    | RecursiveAliases.RecursiveAlias(body, args) -> Some (body, args)
+    | TyAlias(_, _, underlying) -> recursiveReference underlying
+    | _ -> None
+
 /// `ty` without the contexts its function types require, to compare types as values alone.
 let rec private withoutContexts (ty: Ty) : Ty =
     match ty with
@@ -67,6 +75,12 @@ let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<in
         match ty with
         | TyUnion [ TyTag _ as tag ] -> tag
         | _ -> withoutContexts ty
+    // Unfolded, two references to one recursive alias would hold the same two references again: their arguments are
+    // what differs. One with no type variables binds none.
+    match recursiveReference scheme, recursiveReference instance with
+    | Some (body, args), Some (body', args') when body = body' -> List.fold2 bindScheme bindings args args'
+    | Some _, _ when (freeVars scheme).IsEmpty -> bindings
+    | _ ->
     match Unifier.unalias scheme, Unifier.unalias instance with
     | TyVar v, _ ->
         match bindings |> Map.tryFind v.Id with
@@ -143,12 +157,21 @@ type ContextLayouts = Map<string, (string * Ty) list>
 /// is unit, and the rest of a union adds no tags. A function type takes the members of the contexts without parameters
 /// it requires, which `layouts` gives (see `IrFunction`); a parameterised one is found where the function is made, so
 /// it takes none for that.
-let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpanding layouts Set.empty ty
+let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpanding layouts Set.empty [] ty
 
 /// `toIrTypeIn`, inside the members of the contexts `expanding`: a member's type that requires one of them again takes
-/// none of its members, so that a context whose member requires the context itself has an IR type.
-and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (ty: Ty) : IrType =
-    let toIrType = toIrTypeExpanding layouts expanding
+/// none of its members, so that a context whose member requires the context itself has an IR type. `recursing` is the
+/// recursive aliases `ty` is inside, innermost first, each by its definition and arguments: one of them again is
+/// `IrSelf`.
+and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (recursing: (Ty * Ty list) list) (ty: Ty) : IrType =
+    let toIrType = toIrTypeExpanding layouts expanding recursing
+    match recursiveReference ty with
+    | Some reference when recursing |> List.tryHead = Some reference -> IrSelf
+    // A type that holds itself at other arguments, such as `#node(T(list(a)))` in `T(a)`, holds ever more types.
+    | Some reference when recursing |> List.contains reference || (recursing |> List.filter (fst >> (=) (fst reference)) |> List.length) > 8 ->
+        cannot "a recursive type that holds itself at other type arguments"
+    | Some reference -> IrRecursive(toIrTypeExpanding layouts expanding (reference :: recursing) (Unifier.unalias ty))
+    | None ->
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt
     | TyPrimitive "bool" -> IrBool
@@ -190,7 +213,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
                 layouts
                 |> Map.tryFind name
                 |> Option.defaultValue []
-                |> List.map (fun (key, memberTy) -> key, toIrTypeExpanding layouts (expanding.Add name) memberTy))
+                |> List.map (fun (key, memberTy) -> key, toIrTypeExpanding layouts (expanding.Add name) recursing memberTy))
             |> List.distinctBy fst
         IrFunction(toIrType input, toIrType output, members)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"

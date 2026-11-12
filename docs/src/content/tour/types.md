@@ -138,6 +138,32 @@ def area: Shape -> float = { shape ->
 }
 ```
 
+## Recursive types
+
+A tag union can name itself in the payload of one of its tags, so a value can hold other values of its own type. This is how you write a syntax tree, or a tree of any kind:
+
+```nanyx
+type Expr = #num(int) | #add(Expr, Expr)
+
+def eval: Expr -> int = {
+  | #num(n) -> n
+  | #add(a, b) -> eval(a) + eval(b)
+}
+
+eval(#add(#num(2), #num(3)))  -- 5
+
+type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))
+
+def size: Tree(a) -> int = {
+  | #leaf -> 0
+  | #node(l, _, r) -> size(l) + 1 + size(r)
+}
+```
+
+A type can name itself only inside a tag's payload, where each value ends at a tag that holds no more of it, such as `#num` or `#leaf`. Anywhere else, as in `type Pair = (int, Pair)`, it is the error `NYX0228`. Like every alias, a recursive type is the type it stands for: two types with the same tags, such as `Expr` and a `Term = #num(int) | #add(Term, Term)`, are the same type.
+
+Two types can't yet refer to each other, and the WebAssembly backend does not compile a type that holds itself at other type arguments, such as `#node(T(list(a)))` inside `T(a)`.
+
 # Option types
 
 Nanyx has no null values. Use tag unions to represent optional values instead:

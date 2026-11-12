@@ -21,7 +21,7 @@ let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : (int * Var option
         | PBind var -> Some (Some var)
         | PWildcard -> Some None
         | _ -> None
-    match ty, pattern with
+    match IrType.unfold ty, pattern with
     | IrList element, PList([ head ], Some rest) ->
         match leaf head, leaf rest with
         | Some headVar, Some restVar -> Some [ 0, headVar, element; 4, restVar, ty ]
@@ -44,7 +44,7 @@ let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : (int * Var option
 /// The size of the block an object of type `ty` that a pattern takes apart has (its header and its fields), or 0 for
 /// one that is not reused.
 let private blockSize (ty: IrType) =
-    match ty with
+    match IrType.unfold ty with
     | IrList _
     | IrTags _ -> 12
     | IrRecord fields -> 8 + 4 * fields.Length

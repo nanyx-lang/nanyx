@@ -265,6 +265,12 @@ let ``References are every name that refers to a declaration, in order`` () =
     Assert.Equal<(string * int) list>([ at "Point" 1 ], referencesAt source (offsetOf source "type Point" 0 5))
 
 [<Fact>]
+let ``References to a recursive type include its names in its own definition`` () =
+    let source = "type Expr = #num(int) | #add(Expr, Expr)\ndef zero: Expr = #num(0)\n"
+    let at occurrence = "Expr", offsetOf source "Expr" occurrence 0
+    Assert.Equal<(string * int) list>([ at 1; at 2; at 3 ], referencesAt source (offsetOf source "type Expr" 0 5))
+
+[<Fact>]
 let ``References to an import are the alias its names are written with`` () =
     let source = "import nanyx/text as t\ndef a = t.string.uppercase(\"x\")\ndef b = t.string.uppercase(\"y\")\n"
     Assert.Equal<(string * int) list>(
