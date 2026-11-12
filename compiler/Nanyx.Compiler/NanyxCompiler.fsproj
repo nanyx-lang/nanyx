@@ -88,6 +88,7 @@
     <Compile Include="TypeHints.fs" />
     <Compile Include="Completion.fs" />
     <Compile Include="InfoView.fs" />
+    <Compile Include="ContextFlow.fs" />
     <Compile Include="Outline.fs" />
     <Compile Include="Documentation.fs" />
   </ItemGroup>

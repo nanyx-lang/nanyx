@@ -100,7 +100,13 @@ It shows:
   where it finds it: one of the sources above, linked to the `use` or the signature, or an instance the compiler builds,
   from the definitions attached to the type (`attached Point.show`), derived from the type's parts, or its own
   (`built in`).
+- **Context flow**: in a definition, each context its signature writes or it was inferred to need, and each `use` in
+  it, with the calls each one serves under it. A `use` that serves no call is marked `unused`.
 - **Messages**: the errors and warnings on the cursor's line.
+
+While the view is visible and not pinned, it also highlights in the editor how contexts flow: with the cursor on a
+`use`, or on a context in a definition's signature, the calls it serves are highlighted; with the cursor on a call,
+the `use` or signature context it draws on is.
 
 Under each item that has one comes its [doc comment](../getting-started/basics#doc-comments), as hover shows it: a name's own, an
 import's module's, a context's own, or, for a context a `use` gives, that of the definition the `use` names if it has one. A doc comment of

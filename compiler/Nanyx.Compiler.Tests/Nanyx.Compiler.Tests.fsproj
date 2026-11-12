@@ -100,6 +100,7 @@
     <Compile Include="Features\StdLib\StandardLibraryCacheTests.fs" />
     <Compile Include="Features\Strings\InterpolationTests.fs" />
     <Compile Include="Features\Tooling\CompletionTests.fs" />
+    <Compile Include="Features\Tooling\ContextFlowTests.fs" />
     <Compile Include="Features\Tooling\DocumentationTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
     <Compile Include="Features\Tooling\InfoViewCallTests.fs" />

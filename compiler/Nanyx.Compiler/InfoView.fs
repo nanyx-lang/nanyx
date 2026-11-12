@@ -60,7 +60,7 @@ type Info =
 
 /// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation and the span
 /// of its statement.
-let private defsAround (syntax: Module) (offset: int) : (Identifier * TypeExpr option * SourceSpan) list =
+let internal defsAround (syntax: Module) (offset: int) : (Identifier * TypeExpr option * SourceSpan) list =
     let local =
         Hover.expressionsAt offset syntax
         |> List.collect (fun expr ->
@@ -83,7 +83,7 @@ let private defsAround (syntax: Module) (offset: int) : (Identifier * TypeExpr o
 
 /// The symbol a def declares: the first value of its name declared in its statement, since a def's name comes before
 /// its value.
-let private defSymbol (typed: TypedModule) (name: Identifier, _, statement: SourceSpan) : Symbol option =
+let internal defSymbol (typed: TypedModule) (name: Identifier, _, statement: SourceSpan) : Symbol option =
     typed.Symbols
     |> Map.values
     |> Seq.filter (fun symbol ->
@@ -108,7 +108,7 @@ let private usesAround (syntax: Module) (offset: int) : (Expression * SourceSpan
         | _ -> [])
 
 /// The symbol `expr` refers to, if it is a name or a call of one.
-let private referenced (typed: TypedModule) (expr: Expression) : Symbol option =
+let internal referenced (typed: TypedModule) (expr: Expression) : Symbol option =
     typed.References |> Map.tryFind expr.Id |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
 
 /// The symbol of the context `context` is, whose doc comment describes it.
@@ -150,7 +150,7 @@ let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty
     fromUses @ fromDefs @ fromRuntime
 
 /// The name of the context `context` is.
-let private contextName (context: Ty) : Identifier option =
+let internal contextName (context: Ty) : Identifier option =
     match context with
     | TyApply(name, _)
     | TyAlias(name, _, _) -> Some name
@@ -177,56 +177,70 @@ let private contextsAtCall (typed: TypedModule) (symbol: Symbol) (call: Expressi
         | Error _ -> []
     | _ -> []
 
-/// The contexts the innermost call or pipe around `offset` that requires any requires, each with where it finds it, the
-/// span of what provides it and the symbol of the def a `use` of it names: first those its callee's type declares, in
-/// order, at the types of the call (see `TypedModule.ContextInstances`), then the others `TypedModule.ContextProviders`
-/// records for it, a member's context or one a function value it runs requires.
-let private callContextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * CallSource * SourceSpan * Symbol option) list =
-    let expressions = lazy (Hover.allExpressions syntax |> List.map (fun expr -> expr.Id, expr) |> Map.ofList)
-    let provided (call: Expression) (context: Ty) (provider: ContextProvider) =
+/// Whether `expr` is a call or a pipe, which may require contexts.
+let internal isCall (expr: Expression) =
+    match expr.Kind with
+    | FunctionCall _
+    | Pipe _ -> true
+    | _ -> false
+
+/// The contexts `call`, a call or pipe in `syntax`, requires, each with where it finds it, the span of what provides it
+/// and the symbol of the def a `use` of it names: first those its callee's type declares, in order, at the types of the
+/// call (see `TypedModule.ContextInstances`), then the others `TypedModule.ContextProviders` records for it, a member's
+/// context or one a function value it runs requires. `valueAt` finds the value a `use` loads by its node.
+let internal callContextsOf
+    (typed: TypedModule)
+    (syntax: Module)
+    (valueAt: NodeId -> Expression option)
+    (call: Expression)
+    : (Ty * CallSource * SourceSpan * Symbol option) list =
+    let provided (context: Ty) (provider: ContextProvider) =
         match provider with
         | FromSignature span -> context, Provided Signature, span, None
         | FromUse value ->
-            match expressions.Value |> Map.tryFind value with
+            match valueAt value with
             | Some value -> context, Provided Use, value.Span, referenced typed value
             | None -> context, Provided Use, SourceSpan.none, None
         | FromInference ->
             let def = defsAround syntax call.Span.Start |> List.tryPick (defSymbol typed)
             context, Provided Inferred, def |> Option.map _.Declaration |> Option.defaultValue SourceSpan.none, None
         | FromRuntime -> context, Provided Runtime, SourceSpan.none, None
-    let ofCall (call: Expression) =
-        let providers = typed.ContextProviders |> Map.tryFind call.Id |> Option.defaultValue []
-        let instances = typed.ContextInstances |> Map.tryFind call.Id |> Option.defaultValue []
-        let declared =
-            referenced typed call
-            |> Option.map (fun symbol -> contextsAtCall typed symbol call)
-            |> Option.defaultValue []
-            |> List.mapi (fun index context ->
-                match List.tryItem index instances |> Option.flatten, contextName context with
-                | Some (InstanceInScope(_, provider)), _ -> Some (provided call context provider)
-                | Some (InstanceSynthesized members), Some ctxName -> Some (context, builtSource ctxName members, SourceSpan.none, None)
-                | Some (InstanceDerived _), _ -> Some (context, Derived, SourceSpan.none, None)
-                | Some InstanceBuiltIn, _ -> Some (context, BuiltIn, SourceSpan.none, None)
-                | None, Some ctxName ->
-                    providers
-                    |> List.tryFind (fun p -> contextName p.Context = Some ctxName)
-                    |> Option.map (fun p -> provided call context p.Provider)
-                | _ -> None)
-            |> List.choose id
-        let covered = declared |> List.choose (fun (context, _, _, _) -> contextName context) |> Set.ofList
-        let others =
-            providers
-            |> List.filter (fun p -> contextName p.Context |> Option.forall (covered.Contains >> not))
-            |> List.map (fun p -> provided call p.Context p.Provider)
-        declared @ others
+    let providers = typed.ContextProviders |> Map.tryFind call.Id |> Option.defaultValue []
+    let instances = typed.ContextInstances |> Map.tryFind call.Id |> Option.defaultValue []
+    let declared =
+        referenced typed call
+        |> Option.map (fun symbol -> contextsAtCall typed symbol call)
+        |> Option.defaultValue []
+        |> List.mapi (fun index context ->
+            match List.tryItem index instances |> Option.flatten, contextName context with
+            | Some (InstanceInScope(_, provider)), _ -> Some (provided context provider)
+            | Some (InstanceSynthesized members), Some ctxName -> Some (context, builtSource ctxName members, SourceSpan.none, None)
+            | Some (InstanceDerived _), _ -> Some (context, Derived, SourceSpan.none, None)
+            | Some InstanceBuiltIn, _ -> Some (context, BuiltIn, SourceSpan.none, None)
+            | None, Some ctxName ->
+                providers
+                |> List.tryFind (fun p -> contextName p.Context = Some ctxName)
+                |> Option.map (fun p -> provided context p.Provider)
+            | _ -> None)
+        |> List.choose id
+    let covered = declared |> List.choose (fun (context, _, _, _) -> contextName context) |> Set.ofList
+    let others =
+        providers
+        |> List.filter (fun p -> contextName p.Context |> Option.forall (covered.Contains >> not))
+        |> List.map (fun p -> provided p.Context p.Provider)
+    declared @ others
+
+/// Each expression of `syntax` by its node, to find a value a `use` loads by (see `callContextsOf`).
+let internal expressionsById (syntax: Module) : Map<NodeId, Expression> =
+    Hover.allExpressions syntax |> List.map (fun expr -> expr.Id, expr) |> Map.ofList
+
+/// The contexts the innermost call or pipe around `offset` that requires any requires (see `callContextsOf`).
+let private callContextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * CallSource * SourceSpan * Symbol option) list =
+    let expressions = lazy (expressionsById syntax)
     Hover.expressionsAt offset syntax
-    |> List.filter (fun expr ->
-        match expr.Kind with
-        | FunctionCall _
-        | Pipe _ -> true
-        | _ -> false)
+    |> List.filter isCall
     |> List.tryPick (fun call ->
-        match ofCall call with
+        match callContextsOf typed syntax (fun node -> expressions.Value |> Map.tryFind node) call with
         | [] -> None
         | found -> Some found)
     |> Option.defaultValue []
