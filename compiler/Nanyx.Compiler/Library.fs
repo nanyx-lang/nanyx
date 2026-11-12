@@ -95,23 +95,6 @@ module Compiler =
     let private importQualifier (item: ImportItem) =
         item.Alias |> Option.map sanitizeIdentifier
 
-    let private resolveImportPath (baseDir: string) (item: ImportItem) : Result<string, Diagnostic> =
-        let rawPath =
-            match item.Source with
-            | PathImport path ->
-                if Path.IsPathRooted path then path else Path.Combine(baseDir, path)
-            | ModuleImport name ->
-                let relative =
-                    name.Replace(".", string Path.DirectorySeparatorChar)
-                        .Replace("/", string Path.DirectorySeparatorChar)
-                Path.Combine(baseDir, relative + ".nyx")
-        let fullPath =
-            if Path.GetExtension rawPath = "" then rawPath + ".nyx" else rawPath
-        if File.Exists fullPath then
-            Ok (Path.GetFullPath fullPath)
-        else
-            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {rawPath}")
-
     let private collectImports (module': Module) =
         module'
         |> List.choose (function
@@ -1232,7 +1215,7 @@ module Compiler =
                 | None ->
                     match origin with
                     | SourceFile fullPath ->
-                        match FileImports.missingAlias item, resolveImportPath (Path.GetDirectoryName fullPath) item with
+                        match FileImports.missingAlias item, FileImports.resolvePath (Path.GetDirectoryName fullPath) item with
                         | Some diag, _
                         | None, Error diag -> errors <- errors @ [ diag ]
                         | None, Ok importPath ->
