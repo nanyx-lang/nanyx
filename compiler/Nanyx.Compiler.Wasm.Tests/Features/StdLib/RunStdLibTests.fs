@@ -464,6 +464,28 @@ let ``Run - nanyx/math min and max take any type with an order`` () =
     runSource source |> assertRan "2.0 7 pear\n1.5 3 apple\n-2.0 7\n"
 
 [<Fact>]
+let ``Run - nanyx/math minMax puts two values in ascending order`` () =
+    // #489
+    let source =
+        """
+import nanyx/console
+import nanyx/math as math
+
+def a, b = math.minMax(7, 3)
+def c, d = math.minMax(3, 7)
+def e, f = math.minMax(2.5, -1.5)
+def g, h = math.minMax("pear", "apple")
+def spread: [Num(a) & Ord(a)] a, a -> a = { p, q ->
+  def low, high = math.minMax(p, q)
+  high - low
+}
+println("{a} {b} {c} {d} {e} {f} {g} {h}")
+println("{spread(9, 4)} {spread(0.25, 0.5)}")
+"""
+            .ReplaceLineEndings "\n"
+    runSource source |> assertRan "3 7 3 7 -1.5 2.5 apple pear\n5 0.25\n"
+
+[<Fact>]
 let ``Run - nanyx/math clamp takes an int or a float`` () =
     // #610: `clamp` is `[Ord(a)] (a, min: a, max: a) -> a`.
     let source =

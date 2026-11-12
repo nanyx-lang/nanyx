@@ -219,6 +219,27 @@ let ``nanyx/math abs, min, max and clamp give the type they are called with`` ()
         Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.[name])
 
 [<Fact>]
+let ``nanyx/math minMax gives both values at the type it is called with`` () =
+    // #489
+    let result =
+        Compiler.compile (
+            """
+import nanyx/math as math
+def a, b = math.minMax(3, 1)
+def c, d = math.minMax(1.5, 2.0)
+def e, f = math.minMax("pear", "apple")
+"""
+                .ReplaceLineEndings "\n")
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    for name, expected in [ "a", "int"; "b", "int"; "c", "float"; "d", "float"; "e", "string"; "f", "string" ] do
+        Assert.Equal(TyPrimitive expected, result.Typed.Value.Types.[name])
+
+[<Fact>]
+let ``nanyx/math minMax of an int and a float is an error`` () =
+    let mixed = Compiler.compile "import nanyx/math as math\n\ndef a = math.minMax(1, 2.5)"
+    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], mixed.Diagnostics |> List.map (fun d -> d.Code))
+
+[<Fact>]
 let ``nanyx/math abs of a string is an error, and so is min of an int and a float`` () =
     let notANumber = Compiler.compile "import nanyx/math as math\n\ndef a = math.abs(\"x\")"
     Assert.Equal<string list>([ DiagnosticCodes.MissingContextMembers.Code ], notANumber.Diagnostics |> List.map (fun d -> d.Code))
