@@ -211,4 +211,4 @@ let ``A list of a type with its own == is compared through it, element by elemen
             "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }\n")
     Assert.Contains(InstanceSynthesized [ "==", "$Email.==" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
-    Assert.Contains(instances, function InstanceInScope (Kind (TypeApply("Eq", [ Kind (TypeVar "a") ]))) -> true | _ -> false)
+    Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Eq", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

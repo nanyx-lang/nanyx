@@ -31,24 +31,32 @@ let internal isParameterizedContext (state: InferState) (ctx: TypeExpr) =
     | _ -> false
 
 /// `env` with the instance of `ctxName` applied to `argTys` in scope, as `written`: bound under a name of its own, with
-/// the context applied to its arguments as its type (`Sum(Point)` is `TyApply("Sum", [Point])`). Of two instances of
-/// one context, the one put in scope later is nearer.
-let private bindInstanceOf (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) (written: TypeExpr) : TypeEnv * InferState =
+/// the context applied to its arguments as its type (`Sum(Point)` is `TyApply("Sum", [Point])`), and `provider`, the
+/// `use` or the signature that puts it there, kept beside it. Of two instances of one context, the one put in scope
+/// later is nearer.
+let private bindInstanceOf (env: TypeEnv) (state: InferState) (provider: ContextProvider) (ctxName: Identifier) (argTys: Ty list) (written: TypeExpr) : TypeEnv * InferState =
     let bindingName = $"{instancePrefix}{ctxName} {state.NextId}"
-    let state = { state with NextId = state.NextId + 1; InstanceContexts = state.InstanceContexts |> Map.add bindingName written }
+    let state = { state with NextId = state.NextId + 1; InstanceContexts = state.InstanceContexts |> Map.add bindingName (written, provider) }
     TypeEnv.extend bindingName (TypeEnv.mono (TyApply(ctxName, argTys))) env, state
 
-/// `env` with the instance `ctx` in scope, if it is one of a parameterised context (see `bindInstanceOf`).
-let private bindInstance (env: TypeEnv) (state: InferState) (ctx: TypeExpr) : TypeEnv * InferState =
+/// `env` with the instance `ctx` in scope, if it is one of a parameterised context, as `providerOf ctx` puts it there
+/// (see `bindInstanceOf`).
+let private bindInstance (env: TypeEnv) (state: InferState) (providerOf: TypeExpr -> ContextProvider) (ctx: TypeExpr) : TypeEnv * InferState =
     match ctx.Kind with
     | TypeApply(ctxName, args) when isParameterizedContext state ctx ->
         let argTys, state = args |> List.mapFold typeExprToTy state
-        bindInstanceOf env state ctxName argTys ctx
+        bindInstanceOf env state (providerOf ctx) ctxName argTys ctx
     | _ -> env, state
 
-/// `env` with each instance of a parameterised context among `contexts` in scope (see `bindInstance`).
+/// `env` with each instance of a parameterised context among `contexts`, which a `use` loads or a signature declares,
+/// in scope (see `bindInstance`).
+let private bindInstancesFrom (env: TypeEnv) (state: InferState) (providerOf: TypeExpr -> ContextProvider) (contexts: TypeExpr list) : TypeEnv * InferState =
+    contexts |> List.fold (fun (env, state) ctx -> bindInstance env state providerOf ctx) (env, state)
+
+/// `env` with each instance of a parameterised context among `contexts`, the contexts a def's signature declares, in
+/// scope (see `bindInstance`).
 let internal bindInstances (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) : TypeEnv * InferState =
-    contexts |> List.fold (fun (env, state) ctx -> bindInstance env state ctx) (env, state)
+    bindInstancesFrom env state (fun ctx -> FromSignature ctx.Span) contexts
 
 /// `ty` with each type variable named in `names` replaced by the type it maps to.
 let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
@@ -108,8 +116,8 @@ let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys
     | _ -> None
 
 /// The instance of `ctxName` applied to `argTys` nearest in scope in `env`, as written where it is put in scope: one of
-/// `ctxName` itself, else one of a context that has all its members (see `ContextShapes`).
-let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : TypeExpr option =
+/// `ctxName` itself, else one of a context that has all its members (see `ContextShapes`), with what put it there.
+let private instanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (TypeExpr * ContextProvider) option =
     let ofContext (ctxName: Identifier) =
         let prefix = $"{instancePrefix}{ctxName} "
         env
@@ -147,7 +155,7 @@ let internal memberOfInstanceInScope (env: TypeEnv) (state: InferState) (memberN
             | _ -> None)
         |> Seq.sortByDescending (fun (order, _, _) -> order)
         |> Seq.tryHead
-        |> Option.bind (fun (_, name, scheme) -> state.InstanceContexts |> Map.tryFind name |> Option.map (fun written -> written, scheme))
+        |> Option.bind (fun (_, name, scheme) -> state.InstanceContexts |> Map.tryFind name |> Option.map (fun (written, _) -> written, scheme))
     | _ -> None
 
 /// Whether an instance of a context applied to `argTys` can be built from attached definitions: whether the type it
@@ -260,10 +268,10 @@ let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) 
         let context = TyApply(ctxName, argTys)
         match ContextInference.typeExprOf (ContextInference.varNames context) context with
         | Some written ->
-            let env, state = bindInstanceOf env state ctxName argTys written
+            let env, state = bindInstanceOf env state (FromUse value.Id) ctxName argTys written
             env, { state with UseContexts = state.UseContexts |> Map.add value.Id written }
         | None -> env, state
-    | _ -> bindInstances env state (contextsOfValue state valueTy)
+    | _ -> bindInstancesFrom env state (fun _ -> FromUse value.Id) (contextsOfValue state valueTy)
 
 /// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is a
 /// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type variable is in scope.
@@ -291,13 +299,13 @@ let private derivableType (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list)
 
 /// The instance of `ctxName` in scope in `env` at the part `ty` of a structure, for one that is not a type variable
 /// (see `StructuralInstances.abstractParts`).
-let internal partInstanceIn (env: TypeEnv) (state: InferState) (ctxName: Identifier) (ty: Ty) : TypeExpr option =
+let internal partInstanceIn (env: TypeEnv) (state: InferState) (ctxName: Identifier) (ty: Ty) : (TypeExpr * ContextProvider) option =
     instanceInScope env state ctxName [ ty ]
 
 /// Whether comparing two values of the structure `ty` compares a part with an `==` of its own (see
 /// `StructuralInstances.comparesParts`): one attached to the part's type, an `Eq` of it in scope that `partInstance`
 /// finds, or the `Eq` of a type variable that `hasInstance` says is in scope.
-let internal comparesOwnParts (env: TypeEnv) (rigid: Set<int>) (partInstance: Ty -> TypeExpr option) (hasInstance: TyVar -> bool) (ty: Ty) : bool =
+let internal comparesOwnParts (env: TypeEnv) (rigid: Set<int>) (partInstance: Ty -> (TypeExpr * ContextProvider) option) (hasInstance: TyVar -> bool) (ty: Ty) : bool =
     ty
     |> StructuralInstances.comparesParts rigid (fun part ->
         match part with
@@ -390,7 +398,7 @@ let private derivedInstance
 /// a type that is not a built-in one (see `WellKnownContexts.isBuiltIn`).
 let internal wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (op: string) (span: SourceSpan) : WellKnownContexts.InstanceOf = fun env state ty ->
     match instanceInScope env state wellKnown.Context [ ty ] with
-    | Some written -> Ok (Some (InstanceInScope written), state)
+    | Some inScope -> Ok (Some (InstanceInScope inScope), state)
     | None when not (WellKnownContexts.isBuiltIn ty) && (tryResolveAttachedFunction env ty wellKnown.Member).IsSome ->
         synthesizeInstance env state op wellKnown.Context [ ty ] span
         |> Result.map (fun (members, next) -> Some (InstanceSynthesized members), next)
@@ -443,7 +451,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                             |> Option.map (Result.map (fun (instance, next) -> found @ [ Some instance ], next))
                         else None
                     match instanceInScope env current ctxName argTys, wellKnown |> Option.orElseWith derived with
-                    | Some written, _ -> Ok (found @ [ Some (InstanceInScope written) ], current)
+                    | Some inScope, _ -> Ok (found @ [ Some (InstanceInScope inScope) ], current)
                     | None, _ when reference && not settled -> Ok (found @ [ None ], current)
                     // A value that failed to check has every context, so that the call is not an error too. It has the
                     // compiler's own `ToString`, so the backend still has a member to pass. A hole of one is written by
@@ -552,8 +560,8 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
         // settles, as in `[]`): it is written with the compiler's own `ToString` at each type the function is
         // specialised at, as a hole of the variable itself is (see `InterpolationHoles.resolvePending`).
         let instanceOf (var: TyVar) =
-            match instanceInScope scopeEnv current pending.Context [ TyVar var ] |> Option.orElseWith (fun () -> ownInstance pending.Context var) with
-            | Some written -> Some (InstanceInScope written)
+            match instanceInScope scopeEnv current pending.Context [ TyVar var ] |> Option.orElseWith (fun () -> ownInstance pending.Context var |> Option.map (fun written -> written, FromInference)) with
+            | Some inScope -> Some (InstanceInScope inScope)
             | None when not (rigid.Contains var.Id)
                          && pending.Context = InterpolationHoles.context
                          && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome ->
@@ -633,6 +641,25 @@ let internal checkCalledComparisons (env: TypeEnv) (state: InferState) (call: Ex
                     | Some (wellKnown, instance) -> WellKnownContexts.checkLocalCall wellKnown env current call name calleeSpan ty instance
                     | None -> Ok current)) result) (Ok state)
     | _ -> Ok state
+
+/// `state` with what provides each parameterised context that a call of the module finds an instance of in scope
+/// recorded for the call, before the contexts found by their members' names (see `TypedModule.ContextProviders`): the
+/// context as it is written where it is put in scope, as a type over variables of its own that keep its names.
+let internal recordInstanceProviders (state: InferState) : InferState =
+    state.ContextInstances
+    |> Map.fold (fun (current: InferState) call instances ->
+        let provided, next =
+            instances
+            |> List.choose (function
+                | Some (InstanceInScope({ Kind = TypeApply(ctxName, args) }, provider)) -> Some (ctxName, args, provider)
+                | _ -> None)
+            |> List.mapFold (fun (reading: InferState) (ctxName, args, provider) ->
+                let argTys, read = args |> List.mapFold typeExprToTy { reading with TypeVars = Map.empty }
+                { Context = TyApply(ctxName, argTys); Provider = provider }, { reading with NextId = read.NextId }) current
+        if provided.IsEmpty then current
+        else
+            let recorded = next.ContextProviders |> Map.tryFind call |> Option.defaultValue []
+            { next with ContextProviders = next.ContextProviders |> Map.add call (provided @ recorded) }) state
 
 /// Builds, before the def `name` is generalised, the instances of contexts of more than one parameter that its calls
 /// left to be found and that are now known to be for a type with a name, from that type's attached definitions, as a

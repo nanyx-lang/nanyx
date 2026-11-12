@@ -360,7 +360,7 @@ module internal WellKnownContexts =
                 let calleeTy = TyFunc(inputOf (List.head pending.ArgTys), TyPrimitive "bool", [])
                 let operatorInstances =
                     match instance with
-                    | InstanceInScope written when not keepInstance -> current.OperatorInstances |> Map.add pending.Call written
+                    | InstanceInScope(written, _) when not keepInstance -> current.OperatorInstances |> Map.add pending.Call written
                     | _ -> current.OperatorInstances
                 { current with
                     ContextInstances = if keepInstance then current.ContextInstances else current.ContextInstances |> Map.remove pending.Call

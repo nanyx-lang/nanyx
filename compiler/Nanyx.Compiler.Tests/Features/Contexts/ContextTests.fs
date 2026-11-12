@@ -170,9 +170,9 @@ let ``A loaded instance wins over synthesis, and a generic function passes its o
         "  describe(Point(x = 1, y = 2))\n" +
         "}\n"
     match instancesIn source with
-    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
-        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
-        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
+    | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
+        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
+        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ] ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
@@ -189,8 +189,8 @@ let ``A call finds an instance loaded with use by name, from a def or a paramete
         "  describe(Point(x = 1, y = 2))\n" +
         "}\n"
     match instancesIn source with
-    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ]
-        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
+    | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ]
+        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ] ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
@@ -224,13 +224,13 @@ let private namedShowInstance =
 
 [<Fact>]
 let ``A use of a named value loads it as the instance of the context it has the shape of`` () =
-    let loaded = [ Some (InstanceInScope (TypeExpr.synthetic (TypeApply("Show", [ TypeExpr.synthetic (TypeName "Point") ])))) ]
+    let loaded = "the instance in scope Show(Point)"
     let statement = namedShowInstance + "def main = {\n  use showPoint\n  describe(Point(x = 1, y = 2))\n}\n"
     let expression = namedShowInstance + "def main = {\n  use showPoint in describe(Point(x = 1, y = 2))\n}\n"
     for source in [ statement; expression ] do
         match instancesIn source with
-        | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])))) ] ] -> ()
-        | other -> failwith $"Expected %A{loaded}, got %A{other}"
+        | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeName "Point") ])), _)) ] ] -> ()
+        | other -> failwith $"Expected {loaded}, got %A{other}"
 
 [<Fact>]
 let ``A use of a named value is only an instance for the type it has the shape of`` () =
@@ -292,8 +292,8 @@ let ``A def that does not write its type requires the parameterised context it c
     // `twice` passes its own instance of `Show(a)` on, and the call to it builds one for `Point`.
     let source = inferredShow + "def s = twice(Point(x = 1, y = 2))\n"
     match instancesIn source with
-    | [ [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
-        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+    | [ [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
+        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
         [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
 
@@ -304,8 +304,8 @@ let ``An inferred parameterised context passes through another def that does not
         "def thrice = { v -> twice(v) ++ describe(v) }\n" +
         "def s = thrice(Point(x = 1, y = 2))\n"
     match instancesIn source with
-    | [ _; _; [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
-        [ Some (InstanceInScope (Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])))) ]
+    | [ _; _; [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
+        [ Some (InstanceInScope(Kind (TypeApply ("Show", [ Kind (TypeVar "a") ])), _)) ]
         [ Some (InstanceSynthesized [ "show", "Point.show" ]) ] ] -> ()
     | other -> failwith $"Unexpected instances: %A{other}"
 

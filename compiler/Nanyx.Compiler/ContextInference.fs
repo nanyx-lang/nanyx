@@ -282,7 +282,7 @@ module internal ContextInference =
                 | Some _, Some _ when p.ChecksOnly -> Ok current
                 | Some vars, Some (contexts, _) ->
                     let context = contexts.[required |> List.findIndex (fun required -> key required = key (p.Context, vars))]
-                    Ok { current with ContextInstances = withInstance p (InstanceInScope context) current.ContextInstances }
+                    Ok { current with ContextInstances = withInstance p (InstanceInScope(context, FromInference)) current.ContextInstances }
                 // An operator in a def whose type cannot be written is the compiler's own, as it is in a local function.
                 | Some _, None when not (WellKnownContexts.isOperatorPending p || p.ChecksOnly) -> Error p.Errors
                 | _ ->

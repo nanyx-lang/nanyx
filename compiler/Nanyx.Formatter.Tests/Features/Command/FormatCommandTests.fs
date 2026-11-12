@@ -260,3 +260,10 @@ let ``A formatter directive in a file of a package is an error saying to use the
     match run Write [ file ] with
     | [ _, Failed(BadSettings error) ] -> Assert.Contains("[formatter] table of " + Path.Combine(directory, "app.nyxp"), error)
     | other -> failwith $"Unexpected results: %A{other}"
+
+[<Fact>]
+let ``A chain of 10,000 operators is formatted without running out of stack`` () =
+    let text = "def total = 1" + String.replicate 9_999 " + 1" + "\n"
+    match formatText Formatter.Options.defaults "" text with
+    | Formatted _ -> ()
+    | other -> failwith $"Unexpected: %A{other}"

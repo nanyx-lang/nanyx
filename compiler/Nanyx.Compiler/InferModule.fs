@@ -417,7 +417,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 for ctxName in Set.difference required.[used.Callee] used.Available do
                     errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span |> ContextFixes.withAddToType state caller ctxName ]
             | _ -> ()
-        state <- recordDeferredProviders required uses state
+        state <- recordDeferredProviders required uses state |> recordInstanceProviders
         // What an unannotated function needs is part of its type, as a context written in its type is. They come after
         // the parameterised contexts it requires, which its calls have already found instances of in that order.
         state <-

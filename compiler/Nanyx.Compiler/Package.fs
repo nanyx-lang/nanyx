@@ -305,6 +305,7 @@ module Package =
     /// is needed, since an import cycle is reported where the file being compiled enters it.
     let private compileAll (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
         let checkedOnce = Collections.Generic.Dictionary<string, CheckedModule>()
+        Nanyx.LargeStack.run <| fun () ->
         files
         |> List.map (fun (file, source) ->
             let origin = SourceFile (Path.GetFullPath file)
