@@ -110,6 +110,9 @@ type InferState =
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
             InferredContextTypes: Map<SymbolId, Ty list>;
+            /// The contexts each local def that writes its type requires, as written, by the def's symbol: what
+            /// `ContextRequirements` holds for it by name, which a def of the same name elsewhere can stand for.
+            LocalContextRequirements: Map<SymbolId, TypeExpr list>;
             LocalNominals: Set<string>;
             LocalPrivateNominals: Set<string>;
             /// The type of every expression inferred so far, and of every `_` written in a type, by node. These are
@@ -241,6 +244,7 @@ let emptyState =
             HoleScopes = Map.empty;
             LocalComparisons = Map.empty;
             InferredContextTypes = Map.empty;
+            LocalContextRequirements = Map.empty;
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
             ExprTypes = Map.empty;
@@ -331,6 +335,14 @@ let internal registerContextRequirement (state: InferState) (name: Identifier) (
             match signature with
             | Some signature -> state.ContextSignatures |> Map.add name signature
             | None -> state.ContextSignatures |> Map.remove name }
+
+/// Records that the local function `name`, declared as `symbol`, requires `contexts`, as `registerContextRequirement`
+/// does, and by its symbol too (see `LocalContextRequirements`).
+let internal registerLocalContextRequirement state (symbol: SymbolId option) name contexts signature =
+    let registered = registerContextRequirement state name contexts signature
+    match symbol with
+    | Some symbol -> { registered with LocalContextRequirements = registered.LocalContextRequirements |> Map.add symbol contexts }
+    | None -> registered
 
 /// Records `ty` as the type of the declaration `symbol`, if the parser saw one.
 let internal recordSymbolType (symbol: SymbolId option) (ty: Ty) (state: InferState) =

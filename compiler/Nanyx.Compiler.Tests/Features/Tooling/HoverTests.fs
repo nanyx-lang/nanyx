@@ -481,6 +481,25 @@ def main = { println("hello") }
     Assert.Equal(Some "def println: [Console, ToString(string)] string -> ()", hoverType source (offsetOf source "println" 0 0))
 
 [<Fact>]
+let ``An imported def's contexts name their variables together with its type`` () =
+    let source = "def total = { xs -> xs \\list.sum }\n"
+    Assert.Equal(Some "def list.sum: [Add(α)] list(α) -> α", hoverType source (offsetOf source "list.sum" 0 0))
+
+[<Fact>]
+let ``Hover on a local def shows the contexts it writes, at its declaration and as it is called`` () =
+    let source = """
+context Show(a) = (show: a -> string)
+def int.show: int -> string = { n -> "{n}" }
+def local = {
+  def inner: [Show(a)] a -> string = { v -> Show(a).show(v) }
+  inner(1)
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "inner: [Show(a)] a -> string", hoverType source (offsetOf source "inner" 0 0))
+    Assert.Equal(Some "inner: [Show(int)] int -> string", hoverType source (offsetOf source "inner(" 0 0))
+
+[<Fact>]
 let ``Hover on a local def, a parameter or a pattern variable shows its name and type`` () =
     let source = """
 def answer = {
