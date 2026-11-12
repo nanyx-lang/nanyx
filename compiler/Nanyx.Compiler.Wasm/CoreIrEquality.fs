@@ -22,6 +22,7 @@ let private needsFunction (ty: IrType) =
     | IrTags _
     | IrRecursive _ -> true
     | IrInt
+    | IrSized _
     | IrBool
     | IrUnit
     | IrFloat
@@ -118,6 +119,7 @@ let collect (functions: Function list) : IrType list =
 let private compare (ty: IrType) (loadA: string list) (loadB: string list) : string list =
     match ty with
     | IrInt -> loadA @ loadB @ [ "i64.eq" ]
+    | IrSized _ -> loadA @ loadB @ [ $"{CoreIrLayout.valueType ty}.eq" ]
     | IrBool
     | IrUnit -> loadA @ loadB @ [ "i32.eq" ]
     | IrFloat -> loadA @ [ "f64.load" ] @ loadB @ [ "f64.load"; "f64.eq" ]

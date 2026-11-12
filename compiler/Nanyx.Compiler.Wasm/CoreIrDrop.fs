@@ -23,6 +23,7 @@ let rec isHeapType (ty: IrType) =
     | IrFunction _ -> true
     | IrTags tags -> tags |> List.exists (snd >> Option.isSome)
     | IrInt
+    | IrSized _
     | IrBool
     | IrUnit
     | IrError
@@ -243,6 +244,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
           "  end"
           "end" ]
     | IrInt
+    | IrSized _
     | IrBool
     | IrUnit
     | IrError

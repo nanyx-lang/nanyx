@@ -207,6 +207,290 @@ export def float.fromInt: int -> float = { n ->
   int.toFloat(n)
 }
 
+-- The compiler's own `Add` and `Num` of the sized integers, and their `compare`, `hash` and
+-- `toString`, as `int` has them. Arithmetic that does not fit the type stops the program, and so
+-- does `fromInt` of an `int` outside its range.
+
+export def I8.zero: I8 = __nanyx_from_int(0)
+
+export def I8.`+`: I8, I8 -> I8 = { x, y ->
+  x + y
+}
+
+export def I8.`-`: I8, I8 -> I8 = { x, y ->
+  x - y
+}
+
+export def I8.negate: I8 -> I8 = { n ->
+  -n
+}
+
+export def I8.`*`: I8, I8 -> I8 = { x, y ->
+  x * y
+}
+
+export def I8.`/`: I8, I8 -> I8 = { x, y ->
+  x / y
+}
+
+export def I8.`%`: I8, I8 -> I8 = { x, y -> x % y }
+
+export def I8.fromInt: int -> I8 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def I8.compare: I8, I8 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def I8.hash: I8 -> int = { x ->
+  __hash(x)
+}
+
+export def I8.toString: I8 -> string = { n ->
+  "{n}"
+}
+
+export def I16.zero: I16 = __nanyx_from_int(0)
+
+export def I16.`+`: I16, I16 -> I16 = { x, y ->
+  x + y
+}
+
+export def I16.`-`: I16, I16 -> I16 = { x, y ->
+  x - y
+}
+
+export def I16.negate: I16 -> I16 = { n ->
+  -n
+}
+
+export def I16.`*`: I16, I16 -> I16 = { x, y ->
+  x * y
+}
+
+export def I16.`/`: I16, I16 -> I16 = { x, y ->
+  x / y
+}
+
+export def I16.`%`: I16, I16 -> I16 = { x, y -> x % y }
+
+export def I16.fromInt: int -> I16 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def I16.compare: I16, I16 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def I16.hash: I16 -> int = { x ->
+  __hash(x)
+}
+
+export def I16.toString: I16 -> string = { n ->
+  "{n}"
+}
+
+export def I32.zero: I32 = __nanyx_from_int(0)
+
+export def I32.`+`: I32, I32 -> I32 = { x, y ->
+  x + y
+}
+
+export def I32.`-`: I32, I32 -> I32 = { x, y ->
+  x - y
+}
+
+export def I32.negate: I32 -> I32 = { n ->
+  -n
+}
+
+export def I32.`*`: I32, I32 -> I32 = { x, y ->
+  x * y
+}
+
+export def I32.`/`: I32, I32 -> I32 = { x, y ->
+  x / y
+}
+
+export def I32.`%`: I32, I32 -> I32 = { x, y -> x % y }
+
+export def I32.fromInt: int -> I32 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def I32.compare: I32, I32 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def I32.hash: I32 -> int = { x ->
+  __hash(x)
+}
+
+export def I32.toString: I32 -> string = { n ->
+  "{n}"
+}
+
+export def U8.zero: U8 = __nanyx_from_int(0)
+
+export def U8.`+`: U8, U8 -> U8 = { x, y ->
+  x + y
+}
+
+export def U8.`-`: U8, U8 -> U8 = { x, y ->
+  x - y
+}
+
+export def U8.negate: U8 -> U8 = { n ->
+  -n
+}
+
+export def U8.`*`: U8, U8 -> U8 = { x, y ->
+  x * y
+}
+
+export def U8.`/`: U8, U8 -> U8 = { x, y ->
+  x / y
+}
+
+export def U8.`%`: U8, U8 -> U8 = { x, y -> x % y }
+
+export def U8.fromInt: int -> U8 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def U8.compare: U8, U8 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def U8.hash: U8 -> int = { x ->
+  __hash(x)
+}
+
+export def U8.toString: U8 -> string = { n ->
+  "{n}"
+}
+
+export def U16.zero: U16 = __nanyx_from_int(0)
+
+export def U16.`+`: U16, U16 -> U16 = { x, y ->
+  x + y
+}
+
+export def U16.`-`: U16, U16 -> U16 = { x, y ->
+  x - y
+}
+
+export def U16.negate: U16 -> U16 = { n ->
+  -n
+}
+
+export def U16.`*`: U16, U16 -> U16 = { x, y ->
+  x * y
+}
+
+export def U16.`/`: U16, U16 -> U16 = { x, y ->
+  x / y
+}
+
+export def U16.`%`: U16, U16 -> U16 = { x, y -> x % y }
+
+export def U16.fromInt: int -> U16 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def U16.compare: U16, U16 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def U16.hash: U16 -> int = { x ->
+  __hash(x)
+}
+
+export def U16.toString: U16 -> string = { n ->
+  "{n}"
+}
+
+export def U32.zero: U32 = __nanyx_from_int(0)
+
+export def U32.`+`: U32, U32 -> U32 = { x, y ->
+  x + y
+}
+
+export def U32.`-`: U32, U32 -> U32 = { x, y ->
+  x - y
+}
+
+export def U32.negate: U32 -> U32 = { n ->
+  -n
+}
+
+export def U32.`*`: U32, U32 -> U32 = { x, y ->
+  x * y
+}
+
+export def U32.`/`: U32, U32 -> U32 = { x, y ->
+  x / y
+}
+
+export def U32.`%`: U32, U32 -> U32 = { x, y -> x % y }
+
+export def U32.fromInt: int -> U32 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def U32.compare: U32, U32 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def U32.hash: U32 -> int = { x ->
+  __hash(x)
+}
+
+export def U32.toString: U32 -> string = { n ->
+  "{n}"
+}
+
+export def U64.zero: U64 = __nanyx_from_int(0)
+
+export def U64.`+`: U64, U64 -> U64 = { x, y ->
+  x + y
+}
+
+export def U64.`-`: U64, U64 -> U64 = { x, y ->
+  x - y
+}
+
+export def U64.negate: U64 -> U64 = { n ->
+  -n
+}
+
+export def U64.`*`: U64, U64 -> U64 = { x, y ->
+  x * y
+}
+
+export def U64.`/`: U64, U64 -> U64 = { x, y ->
+  x / y
+}
+
+export def U64.`%`: U64, U64 -> U64 = { x, y -> x % y }
+
+export def U64.fromInt: int -> U64 = { n ->
+  __nanyx_from_int(n)
+}
+
+export def U64.compare: U64, U64 -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+export def U64.hash: U64 -> int = { x ->
+  __hash(x)
+}
+
+export def U64.toString: U64 -> string = { n ->
+  "{n}"
+}
+
 -- Joining ---------------------------------------------------------------------------------------
 
 --| The values of type `a` that join, end to end. `x ++ y` is read through it:

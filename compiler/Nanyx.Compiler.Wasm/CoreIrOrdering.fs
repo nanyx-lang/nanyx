@@ -48,6 +48,10 @@ let private compareBody (ty: IrType) : string list * string list =
     let both instruction = [ "local.get $a"; "local.get $b"; instruction ]
     match ty with
     | IrInt -> [], sign (both "i64.gt_s") (both "i64.lt_s")
+    | IrSized integer ->
+        let valueType = CoreIrLayout.valueType ty
+        let signed = if NyxCompiler.SizedInteger.isSigned integer then "s" else "u"
+        [], sign (both $"{valueType}.gt_{signed}") (both $"{valueType}.lt_{signed}")
     | IrBool
     | IrUnit -> [], sign (both "i32.gt_s") (both "i32.lt_s")
     | IrFloat ->

@@ -342,7 +342,8 @@ The language server's code action for the second and fourth adds the requirement
    and `clamp` with `Ord` (#186) ([#610](https://github.com/nanyx-lang/nanyx/issues/610)).
 5. **Done.** `**` and the prelude's `pow` ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 6. Instances for the sized numbers as they land ([#343](https://github.com/nanyx-lang/nanyx/issues/343)), and the
-   dimension rules for `*` and `/` with units.
+   dimension rules for `*` and `/` with units. The sized integers, `I8` to `U64`, have theirs; `F32` and the units
+   do not yet.
 
 # Decided
 

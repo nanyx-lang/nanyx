@@ -4,9 +4,14 @@
 /// IR is built (`CoreIrLower.fs`), and code is generated from it (`CoreIrEmit.fs`).
 module Transpiler.Wasm.CoreIr
 
+open NyxCompiler
+
 /// A concrete type. There are no type variables: a generic function is only ever lowered at concrete types.
 type IrType =
     | IrInt
+    /// A sized integer other than `int`: a `U64` is held in an `i64`, and any other in an `i32`, sign-extended or
+    /// zero-extended from its width as it is signed or not (see `CoreIrLayout`).
+    | IrSized of SizedInteger
     | IrBool
     | IrUnit
     | IrString
@@ -70,6 +75,8 @@ type Var =
 type Atom =
     | AVar of Var
     | AInt of int64
+    /// A sized integer constant, in its bits: a `U64` past the largest `int` is negative here.
+    | ASized of SizedInteger * int64
     | ABool of bool
     | AUnit
     /// A string literal, which lives in the data segment.
@@ -88,6 +95,8 @@ type PrimOp =
 type HoleType =
     | HoleString
     | HoleInt
+    /// A sized integer, written in decimal as an int is.
+    | HoleSized of SizedInteger
     | HoleBool
     /// A float, formatted to a string when the hole is evaluated.
     | HoleFloat
@@ -256,6 +265,7 @@ module IrType =
             | IrFunction(input, output, members) ->
                 IrFunction(replace input, replace output, members |> List.map (fun (key, memberTy) -> key, replace memberTy))
             | IrInt
+            | IrSized _
             | IrBool
             | IrUnit
             | IrString
@@ -313,6 +323,7 @@ module IrType =
         | IrRecord fields -> fields |> List.exists (snd >> holdsUnordered)
         | IrList element -> holdsUnordered element
         | IrInt
+        | IrSized _
         | IrBool
         | IrUnit
         | IrString
@@ -322,6 +333,7 @@ module IrType =
     let rec show (ty: IrType) =
         match ty with
         | IrInt -> "int"
+        | IrSized integer -> SizedInteger.name integer
         | IrWord -> "word"
         | IrBool -> "bool"
         | IrUnit -> "unit"
@@ -375,6 +387,7 @@ let atomType (atom: Atom) =
     match atom with
     | AVar var -> var.Type
     | AInt _ -> IrInt
+    | ASized(integer, _) -> IrSized integer
     | ABool _ -> IrBool
     | AUnit -> IrUnit
     | AString _ -> IrString
@@ -399,6 +412,7 @@ module Print =
         match a with
         | AVar v -> v.Name
         | AInt value -> string value
+        | ASized(integer, value) -> $"{value}:{SizedInteger.name integer}"
         | ABool value -> if value then "true" else "false"
         | AUnit -> "()"
         | AString value -> $"\"{value}\""

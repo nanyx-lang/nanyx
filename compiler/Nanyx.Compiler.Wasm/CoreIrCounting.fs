@@ -251,6 +251,7 @@ type private Counter(ownership: Ownership, func: Function) =
         | AVar var when var.Kind = Temp -> this.Free temps.[var.Id]
         | AVar var -> Set.singleton var.Id
         | AInt _
+        | ASized _
         | ABool _
         | AUnit
         | AString _

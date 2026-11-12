@@ -55,6 +55,9 @@ module Intrinsics =
     let floatToInt = prefix + "float_to_int"
     /// An int as a float: the nearest one, which is exact up to 2^53. It never fails.
     let intToFloat = prefix + "int_to_float"
+    /// An int as a value of the sized integer type it is taken as (see `SizedInteger`), which stops the program when it
+    /// does not fit that type.
+    let fromInt = prefix + "from_int"
     /// Two values of a type the compiler orders (see `WellKnownContexts.ordering`) put in order by their structure:
     /// negative when the first comes first, 0 when they are equal, positive when it comes after. Floats are in a
     /// total order, with NaN after every other float.
@@ -101,6 +104,7 @@ module Intrinsics =
           floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy, []))
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy, []))
+          fromInt, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, element, []); Symbol = None }
           mapOfEntries, overEntries (TyFunc(entries, map, []))
           mapEntries, overEntries (TyFunc(map, entries, []))
           setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None }

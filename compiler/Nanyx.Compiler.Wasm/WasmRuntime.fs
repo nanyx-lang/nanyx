@@ -640,6 +640,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             ")" ]
       yield! storingHelpers "i32"
       yield! storingHelpers "i64"
+      yield! SizedIntegerCode.helpers
       Helpers.retain, retainHelper checks
       Helpers.copyBytes,
       lines
@@ -1254,6 +1255,7 @@ let helperDependencies =
       Helpers.intSub, []
       Helpers.intMul, []
       Helpers.intToIndex, [] ]
+    @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
 let rec closeHelpers (acc: Set<string>) (pending: string list) =
     match pending with
     | [] -> acc

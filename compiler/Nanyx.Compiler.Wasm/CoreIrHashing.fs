@@ -1,6 +1,7 @@
 /// The hash functions of a module: for each type the compiler's own `Hash` hashes (see `WellKnownContexts.hashing`),
 /// one that hashes a value of it by its structure, so that two values `==` finds equal by their structure have the same
-/// hash. Bools and unit are their own hash, and so is an int that fits 32 bits; a float is hashed by its bits, with `-0.0` as `0.0`; a string by its
+/// hash. Bools, unit and the sized integers narrower than 64 bits are their own hash, and so is an int (or a `U64`)
+/// that fits 32 bits; a float is hashed by its bits, with `-0.0` as `0.0`; a string by its
 /// bytes (FNV-1a); records and tuples field by field, lists element by element, and tags by their code and then their
 /// payload, each part's hash folded into the whole's. Functions have no hash, and never reach here. A hash function
 /// only reads its operand: it borrows it, as every runtime helper does.
@@ -41,7 +42,8 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
     match IrType.unfold ty with
     // The low half, with the high half folded in as far as it is not the low half's sign: an int that fits 32 bits is
     // its own hash.
-    | IrInt ->
+    | IrInt
+    | IrSized NyxCompiler.SizedInteger.U64 ->
         [],
         [ "local.get $a"
           "i32.wrap_i64"
@@ -55,6 +57,7 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
           "i32.shr_s"
           "i32.xor"
           "i32.xor" ]
+    | IrSized _
     | IrBool
     | IrUnit -> [], [ "local.get $a" ]
     | IrFloat ->
