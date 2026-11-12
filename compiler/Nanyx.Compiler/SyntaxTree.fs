@@ -2,7 +2,8 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// Walking the module as written, for the rules of the official linter and the backend's lambda lifting.
+/// Walking the module as written, for the rules of the official linter, the editor's lookups and the backend's lambda
+/// lifting.
 module SyntaxTree =
     /// The expressions directly within `expr`, and the statements of it if it is a block: a guard's predicate among
     /// them. What types hold is left out: they hold no blocks.
@@ -52,6 +53,39 @@ module SyntaxTree =
         | Expr value -> [ value ]
         | ModuleBlock(_, items) -> items |> List.collect ofItem
         | Def (TypeDef _)
+        | ModuleDecl _
+        | Import _
+        | Attribute _ -> []
+
+    /// The types written in a definition: its annotation, or a type definition's parameters' constraints and body.
+    let private definitionTypes (definition: Definition) : TypeExpr list =
+        match definition with
+        | ValueDef(_, _, typeOpt, _) -> Option.toList typeOpt
+        | TypeDef(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
+
+    /// The types written directly in `expr` (not in the expressions inside it): its lambda's parameters' annotations,
+    /// its block's defs' annotations and type definitions, the context it names.
+    let expressionTypes (expr: Expression) : TypeExpr list =
+        match expr.Kind with
+        | Lambda(parameters, _, _) -> parameters |> List.choose snd
+        | Block statements ->
+            statements
+            |> List.collect (fun statement ->
+                match statement.Kind with
+                | DefStatement(_, _, typeOpt, _) -> Option.toList typeOpt
+                | TypeDefStatement(_, _, parameters, body) -> (parameters |> List.choose snd) @ [ body ]
+                | UseStatement _
+                | ExprStatement _
+                | ImportStatement _ -> [])
+        | ContextMemberAccess(context, _)
+        | ContextMemberCall(context, _, _) -> [ context ]
+        | _ -> []
+
+    let rec topLevelTypes (item: TopLevelItem) : TypeExpr list =
+        match item.Kind with
+        | Def definition -> definitionTypes definition
+        | ModuleBlock(_, items) -> items |> List.collect topLevelTypes
+        | Expr _
         | ModuleDecl _
         | Import _
         | Attribute _ -> []
