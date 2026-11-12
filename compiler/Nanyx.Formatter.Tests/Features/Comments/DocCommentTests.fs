@@ -4,14 +4,16 @@ module Nanyx.Formatter.Tests.DocCommentTests
 
 open Xunit
 open Nanyx.Formatter
+open Nanyx.Formatter.FormatCommand
 
 /// `source` with `\n` line breaks, whatever the line endings of this file's checkout, and a final line break.
 let private normalized (source: string) = source.Replace("\r\n", "\n") + "\n"
 
+/// Formats `source` as `nanyx format` does, with the check that the result says the same thing with the same comments.
 let private format (source: string) =
-    match Formatter.formatSource Formatter.Options.defaults "" (normalized source) with
-    | Result.Ok formatted -> formatted
-    | Result.Error error -> failwith $"Parse failed: {error.Message}"
+    match formatText Formatter.Options.defaults "" (normalized source) with
+    | Formatted formatted -> formatted
+    | other -> failwith $"Not formatted: %A{other}"
 
 /// Formatting `source` gives `expected`, and formatting that gives it back unchanged.
 let private formatsTo (expected: string) (source: string) =
@@ -28,6 +30,19 @@ def substring = 1"""
         """--| The `length` bytes of `s` starting at byte `start`.
         Out-of-range values are clamped.
 def substring = 1"""
+
+[<Theory>]
+[<InlineData(1)>]
+[<InlineData(3)>]
+[<InlineData(6)>]
+let ``A doc comment whose continuation lines are indented other than one step is laid out again`` (indent: int) =
+    formatsTo
+        """--| Doc.
+  more.
+def x = 1"""
+        ($"""--| Doc.
+{System.String(' ', indent)}more.
+def x = 1""")
 
 [<Fact>]
 let ``A doc comment keeps its blank lines and the indents of its lines relative to each other`` () =
