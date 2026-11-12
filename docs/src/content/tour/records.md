@@ -60,7 +60,7 @@ type Person = (
 
 Then reference that alias in annotations:
 
-```nanyx
+```nanyx fragment
 def alice: Person = (
   name = "Alice"
   age = 30
@@ -93,7 +93,7 @@ def john: Named = Person(name = "John")
 
 You can also compose record requirements with intersections:
 
-```nanyx
+```nanyx fragment
 type Person = Named & (age: int)
 ```
 
@@ -106,14 +106,14 @@ def f: (x: int, y: int) -> int = { x, y -> x + y }
 
 def data = (x = 1, y = 2, z = 3)
 
-f(data) -- ✗ `f` takes no field `z`
+f(data) -- ✗ error NYX0201: `f` takes no field `z`
 ```
 
 This is what makes named arguments safe. A function's parameters are a record, so a misspelled argument such as `f(x = 1, y = 2, verbos = true)` is an error rather than silently ignored.
 
 To accept any record that has _at least_ some fields, end the type with `...`. This makes it _open_:
 
-```nanyx
+```nanyx skip=#471
 def g: (x: int, y: int, ...) -> int = { x, y -> x + y }
 
 g(data) -- `z` is one of the other fields
@@ -121,7 +121,7 @@ g(data) -- `z` is one of the other fields
 
 Give the other fields a name, as in `...r`, when a type needs to say that two records have the same ones. Here, whatever else the input has, the output has too:
 
-```nanyx
+```nanyx skip=#471
 def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
 
 def moved = moveRight((x = 1, y = 2, label = "a"))
@@ -145,7 +145,7 @@ An annotation is taken exactly as written, so annotate with `...` when you mean 
 
 [Record patterns](./pattern-matching#records) follow the same rule. A pattern names every field of the record, or ends in `...` to leave the others out:
 
-```nanyx
+```nanyx fragment
 match person
   | (name = "Alice", ...) -> "Found Alice"
   | (name = n, age = a) -> "{n} is {a}"
@@ -228,7 +228,7 @@ Nanyx also supports record spread using the `...` sigil (similar to JavaScript).
 
 Spread can combine any number of source objects, interleaved with explicit field definitions:
 
-```nanyx
+```nanyx skip=#954
 def defaults = (host = "localhost", port = 8080)
 def env = (port = 9000)
 def cli = (logLevel = "debug")

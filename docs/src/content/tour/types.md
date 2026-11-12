@@ -168,7 +168,7 @@ Two types can't yet refer to each other, and the WebAssembly backend does not co
 
 Nanyx has no null values. Use tag unions to represent optional values instead:
 
-```nanyx
+```nanyx fragment
 def findUser: UserId -> #some(User) | #notFound = { id ->
   def found = ... -- lookup logic
   if found then #some(user) else #notFound
@@ -248,7 +248,7 @@ In a type, `,` binds tighter than `->`, and `|` binds tighter than both. That me
 
 ```nanyx
 def add: (int, int) -> int = { x, y -> x + y }
-def add: int, int -> int = { x, y -> x + y }
+def sameAdd: int, int -> int = { x, y -> x + y }
 ```
 
 Both describe a function whose single argument is a two-field record of ints. The same rule holds inside brackets, so `(int, a -> b)` is that kind of function too, in brackets, like `| a, b -> ...` in a match is a tuple pattern that goes to its body. Brackets only group; they never change what `,` and `->` mean. So:

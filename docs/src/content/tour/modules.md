@@ -37,7 +37,7 @@ println("Hello from MyApp!")
 
 Module names should be camel-cased and reflect the purpose of the code contained within:
 
-```nanyx
+```nanyx fragment
 module userManagement
 
 ...
@@ -45,7 +45,7 @@ module userManagement
 
 It is a commonly-used convention to use dots to create namespaced hierarchies of modules within a package:
 
-```nanyx
+```nanyx fragment
 module collections.list
 
 ...
@@ -55,7 +55,7 @@ module collections.list
 
 Import other modules to use their exports:
 
-```nanyx
+```nanyx fragment
 module main
 
 -- Notice how we can import multiple modules in a single statement
@@ -76,7 +76,7 @@ Note that most standard library functions are [attached definitions](../advanced
 
 Script modules have no module name, so they can only be imported by file path. When importing a file path, you must use an alias to give the module a name in your current scope.
 
-```nanyx
+```nanyx fragment
 -- If importing a file the module name must be qualified
 import "./utils" as utils
 
@@ -85,14 +85,14 @@ utils.someHelper(...)
 
 A named module cannot be imported this way, even if you know its file path:
 
-```nanyx
+```nanyx fragment
 -- userManagement.nyx
 module userManagement
 
 export def createUser = { ... }
 ```
 
-```nanyx
+```nanyx fragment
 -- Error: `userManagement` declares a module name, so it must be imported as `userManagement`, not by file path
 import "./userManagement" as um
 ```
@@ -101,7 +101,7 @@ import "./userManagement" as um
 
 When importing external packages (such as those installed from a package manager), the import includes the package name as a prefix. Dots separate levels within a module's own hierarchy; a single `/` separates the package name from the module name:
 
-```nanyx
+```nanyx fragment
 -- Notice how the package name and module name are separated by a slash
 -- We import the `http` and `json.deserialization` modules from the `nanyx.web` package
 import (
@@ -112,7 +112,7 @@ import (
 
 The standard library is available under the `nanyx` package and is available in all Nanyx programs; there's no need to install it:
 
-```nanyx
+```nanyx fragment
 module main
 
 import nanyx/collections
@@ -126,7 +126,7 @@ Access module members with the module name:
 ```nanyx
 import nanyx/math as m
 
-def result = m.sqrt(16)  -- 4.0
+def result = m.sqrt(16.0)  -- 4.0
 def pi = m.pi
 ```
 
@@ -136,26 +136,26 @@ An aliased import brings nothing into scope unqualified, types included: a type 
 
 Import specific items from a module using deconstruction syntax on the import:
 
-```nanyx
-import nanyx/math as (sqrt, pi, cos)
+```nanyx skip=#289
+import nanyx/math as (sqrt, pi, abs)
 
-def result = sqrt(16)  -- No need for Math. prefix
+def result = sqrt(16.0)  -- No need for an m. prefix
 ```
 
 It's even possible to both deconstruct and alias an import, although the need to do this is rare:
 
-```nanyx
+```nanyx skip=#289
 import nanyx/math as m & (sqrt, pi)
 
-def a = sqrt(16)
-def b = m.cos(0)
+def a = sqrt(16.0)
+def b = m.abs(-1)
 ```
 
 ## Ambiguous imports
 
 If two imported modules both export the same unqualified name, referring to that name directly is ambiguous and is an error — Nanyx does not use import order, or any kind of overload resolution, to pick one:
 
-```nanyx
+```nanyx fragment
 import (
   csvParser
   jsonParser
@@ -167,7 +167,7 @@ def data = parse(input)
 
 Resolve the clash explicitly, either by aliasing one or both imports, or by selectively importing only the name(s) you need from each:
 
-```nanyx
+```nanyx fragment
 import (
   csvParser as csv
   jsonParser as json
@@ -180,7 +180,7 @@ def data = csv.parse(input)
 
 Types and definitions are private to a module by default — this is what makes it safe for a plain import to lift a module's members directly into scope (see [Importing modules](#importing-modules)). Use `export` to make a definition part of a module's public API:
 
-```nanyx
+```nanyx fragment
 module utils
 
 -- Public
@@ -204,7 +204,7 @@ Modules themselves do not need to be exported; they are available for import by 
 
 Export items from other modules:
 
-```nanyx
+```nanyx fragment
 module collections
 
 -- Re-export from sub-modules
@@ -216,7 +216,7 @@ export collections.map (empty, insert, lookup)
 
 Inside a named module, textual declaration order has no semantic significance. Every declaration in the module — public or private, wherever it sits in the file — participates in the same module-wide scope, so a definition may refer to another definition declared later in the same module:
 
-```nanyx
+```nanyx fragment
 module shapes
 
 export def describe: Shape -> string = { shape ->
@@ -230,7 +230,7 @@ def area: Shape -> float = { shape -> ... }
 
 Order-independent name resolution is not the same as unrestricted recursion. The compiler analyses the dependency graph between declarations separately from name resolution, and rejects cycles where a value would need itself to be constructed:
 
-```nanyx
+```nanyx skip=#955
 module invalid
 
 -- Error: `a` and `b` form a cycle; neither can be built without the other
@@ -244,7 +244,7 @@ Being visible everywhere in the module (as `b` is to `a` above) doesn't excuse a
 
 You can declare module blocks inside a file. The block name is appended to the outer module name (if one exists):
 
-```nanyx
+```nanyx fragment
 -- myModule.nanyx
 module myModule
 
@@ -264,7 +264,7 @@ A nested module encapsulates just like a file-level one: what it does not `expor
 
 If the file has no file-level module declaration, the nested module names are not prefixed:
 
-```nanyx
+```nanyx fragment
 -- looseCode.nanyx
 
 -- The full name of this module is simply `functions`
@@ -317,7 +317,7 @@ A block is also isolated as a file module is. It sees its own definitions and ty
 
 Create hierarchies with dot notation:
 
-```nanyx
+```nanyx fragment
 module users.validation
 
 def validateEmail: string -> Result(Email, ValidationError) = { ... }
@@ -332,7 +332,7 @@ The compiler conceptually assembles all fragments of a partial module before doi
 
 Because sharing a module name across files is easy to do by accident, each fragment must opt in explicitly with the `@partial` attribute; without it, declaring the same module name in two files is an error.
 
-```nanyx
+```nanyx fragment
 -- validation.nyx
 @partial module utils
 
@@ -340,7 +340,7 @@ Because sharing a module name across files is easy to do by accident, each fragm
 export def validate: string -> bool = { s -> s \isNonEmpty }
 ```
 
-```nanyx
+```nanyx fragment
 -- format.nyx
 @partial module utils
 
@@ -353,7 +353,7 @@ export def format: string -> string = { s -> s \trim }
 
 Top-level definitions in a named module must be context-free: they cannot require a context such as `[Console]` or `[Random]`, since a top-level initializer has no place to declare — or receive — a context requirement of its own.
 
-```nanyx
+```nanyx skip=#956
 module config
 
 def maxRetries = 3              -- Ok: context-free
@@ -372,7 +372,7 @@ Effects enter a program through its entry *function*, the one marked `@entry` (s
 
 The rules above are specific to named modules. A script module — one with no module name — may contain top-level executable statements, and for those, execution order is meaningful and preserved, exactly as written:
 
-```nanyx
+```nanyx fragment
 -- No module name: this is a script, and these statements run top to bottom
 println("starting")
 def result = compute()
@@ -385,13 +385,13 @@ Not every source file is order-independent — only the declarations inside a na
 
 Avoid circular module dependencies. If module A imports B, then B cannot import A. (This is about dependencies between modules; for cycles between declarations inside a single module, see [Declaration order](#declaration-order).)
 
-```nanyx
+```nanyx fragment
 -- a.nyx (bad: circular dependency)
 module a
 import b  -- a imports b
 ```
 
-```nanyx
+```nanyx fragment
 -- b.nyx
 module b
 import a  -- b imports a (circular!)
@@ -399,19 +399,19 @@ import a  -- b imports a (circular!)
 
 Instead, extract the shared code to a third module:
 
-```nanyx
+```nanyx fragment
 -- shared.nyx
 module shared
 -- Common definitions
 ```
 
-```nanyx
+```nanyx fragment
 -- a.nyx
 module a
 import shared
 ```
 
-```nanyx
+```nanyx fragment
 -- b.nyx
 module b
 import shared
@@ -421,7 +421,7 @@ import shared
 
 Nanyx's standard library appears as a package called `nanyx` and is organized into modules:
 
-```nanyx
+```nanyx skip=#870
 import (
   nanyx/collections
   nanyx/map
@@ -437,7 +437,7 @@ One module is never imported by name: the **prelude**, `nanyx/prelude`, is impor
 
 # Example: User management module
 
-```nanyx
+```nanyx fragment
 module userManagement
 
 export type User = (

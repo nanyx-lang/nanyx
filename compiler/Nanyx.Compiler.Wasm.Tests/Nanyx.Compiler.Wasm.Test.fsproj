@@ -32,6 +32,7 @@
     <Compile Include="Features\Contexts\RunStructuralInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunContextKeyTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
+    <Compile Include="Features\Docs\RunTourExampleTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
     <Compile Include="Features\Examples\RunExampleTests.fs" />

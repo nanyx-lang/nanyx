@@ -70,7 +70,7 @@ The `()` type (unit) represents the absence of a meaningful value. It's used for
 
 ```nanyx
 -- No meaningful return value
-def printHello: () -> () = {
+def printHello: [Console] () -> () = {
   println("Hello")
   -- Don't need to write `return ()`
 }
@@ -85,7 +85,7 @@ def getMessage: () -> string = {
 
 Lambda expressions (also called anonymous functions) are created with braces:
 
-```nanyx
+```nanyx fragment
 -- Explicit lambda
 def print1 = { print("1") }
 
@@ -100,7 +100,7 @@ def names = data \map { item -> item.name }
 
 Nanyx provides convenient shorthand syntax for common lambda patterns, including member access and binary operators:
 
-```nanyx
+```nanyx fragment
 -- Property access
 def names = users \map { .name }
 -- Equivalent to: users \map { user -> user.name }
@@ -133,7 +133,7 @@ The argument has no name, so a name written in the body always means what it mea
 
 Suffix a parameter name with `?` to make it optional. If the parameter would otherwise have type `T`, its type becomes `#some(T) | #none`, and `#none` is passed when the caller omits it.
 
-```nanyx
+```nanyx skip=#953
 def printMessage = { message? ->
   message
     \match
@@ -147,7 +147,7 @@ def printMessage = { message? ->
 
 A parameter with a default value is also optional at the call site, but inside the function it has its plain type, with the default used when the caller omits it:
 
-```nanyx
+```nanyx skip=#953
 def printResults = { left = "left", middle, right = "right" ->
   println("{left}, {middle}, {right}")
 }
@@ -162,7 +162,7 @@ Parameters with defaults are named fields, so callers pass them by name (see [Na
 
 If you name parameters in the signature, callers _must_ pass those fields by name, and the function body must destructure them by name too. When the local name is the same as the field name, `field = field` can be shortened to just `field`:
 
-```nanyx
+```nanyx fragment
 def replace: (string, pattern: string, replacement: string) -> string
   = { s, pattern, replacement -> ??? }
 
@@ -171,7 +171,7 @@ replace("Hello world", pattern = "world", replacement = "Nanyx")
 
 Passing a named parameter by position is an error that says which names to write:
 
-```nanyx
+```nanyx fragment
 replace("Hello world", "world", "Nanyx")
 -- error NYX0218: 'replace' takes 'pattern' and 'replacement' by name, not by position: write 'pattern = ...' and 'replacement = ...'
 ```
@@ -182,7 +182,7 @@ This is one rule for every call and every record construction: a positional fiel
 
 A lambda's parameters and result can be annotated inline when inference needs a nudge or when the types document intent:
 
-```nanyx
+```nanyx skip=#442
 def double = { (x: int): int -> x * 2 }
 ```
 
@@ -190,7 +190,7 @@ Without brackets, a parameter's annotation ends at the `->`, so `{ q: Point -> q
 
 Named fields can be destructured to a different local name with `field = localName`:
 
-```nanyx
+```nanyx skip=#443
 def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
   Math.sqrt(innerX * innerX + innerY * innerY)
 }
@@ -360,7 +360,7 @@ def result = add5(10)  -- 15
 
 With records, you can simulate partial application:
 
-```nanyx
+```nanyx fragment
 def process: (config: Config, data: Data) -> Result = { config, data ->
   -- processing logic
 }
@@ -373,7 +373,7 @@ def processWithConfig = { data -> process(myConfig, data) }
 
 While type inference works well, annotating function signatures is recommended for exported functions:
 
-```nanyx
+```nanyx fragment
 -- Without annotation (inferred)
 def add = { x, y -> x + y }
 

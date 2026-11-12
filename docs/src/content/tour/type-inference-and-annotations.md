@@ -8,7 +8,7 @@ Type inference is foundational in Nanyx; type annotations very rarely _need_ to 
 
 # Inference by value
 
-```nanyx
+```nanyx fragment
 def message = "Hello world" -- inferred as string
 
 def message: string = "Hello world" -- explicitly annotated
@@ -79,33 +79,39 @@ def getMessage: () -> #some(string) | #noMessage | #error(string) = {
 When functions are unannotated, Nanyx assumes that any deconstructed arguments are positional. If you want to use named parameters, annotate the function type:
 
 ```nanyx
--- Inferred as `int, int -> int` with positional parameters
+import nanyx/math as math
+
+-- Inferred as `float, float -> float` with positional parameters
 def magnitude = { x, y -> math.sqrt(x * x + y * y) }
 ```
 
 ```nanyx
+import nanyx/math as math
+
 -- The annotation makes field names part of the function signature
-def magnitude2: (x: int, y: int) -> float = { x, y -> math.sqrt(x * x + y * y) }
+def magnitude2: (x: float, y: float) -> float = { x, y -> math.sqrt(x * x + y * y) }
 ```
 
 Field names in function signatures should be a deliberate choice, since callers must use the field names to call the function:
 
-```nanyx
-magnitude2(3, 4) -- ✗ This will not compile because the function expects named parameters
+```nanyx fragment
+magnitude2(3.0, 4.0) -- ✗ This will not compile because the function expects named parameters
 
-magnitude2(x = 3, y = 4) -- The correct way to call a function with named parameters
+magnitude2(x = 3.0, y = 4.0) -- The correct way to call a function with named parameters
 ```
 
 This is the one rule for named fields everywhere in the language: it applies equally when constructing a record from a type alias (see [Constructing records from a type alias](../tour/records#constructing-records-from-a-type-alias)), so `Point(x = 3, y = 4)` is correct and `Point(3, 4)` is an error for a type with named fields.
 
 Also, when fields in a function signature are named--as with any kind of deconstruction--deconstruction must also be by name in the function body (although if the deconstructed names are the same as the field names, you can collapse `field = field` to just `field`):
 
-```nanyx
-def magnitude2: (x: int, y: int) -> float = { x, y -> math.sqrt(x * x + y * y) }
+```nanyx skip=#443
+import nanyx/math as math
+
+def magnitude2: (x: float, y: float) -> float = { x, y -> math.sqrt(x * x + y * y) }
 
 -- or 
 
-def magnitude3: (x: int, y: int) -> float
+def magnitude3: (x: float, y: float) -> float
     = { x = innerX, y = innerY -> 
         math.sqrt(innerX * innerX + innerY * innerY) 
     }
@@ -143,7 +149,7 @@ type Names = list(_)
 
 By convention, exported values should be annotated:
 
-```nanyx
+```nanyx fragment
 export def add = { a, b -> a + b }
 -- Linter warning: missing type annotation
 
@@ -156,7 +162,7 @@ Although the language itself doesn't mandate this practice, the [official style 
 
 Nanyx can infer types based on how values are used:
 
-```nanyx
+```nanyx fragment
 def parse: string -> a = { json -> ... }
 
 def obj = parse("{}")
@@ -166,6 +172,6 @@ def person: Person = obj
 
 You can also use assertions to guide inference:
 
-```nanyx
+```nanyx fragment
 def obj = parse("..."): Person
 ```

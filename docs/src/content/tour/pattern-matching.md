@@ -10,7 +10,7 @@ While most languages have some kind of multi-way branching construct like `switc
 
 The simplest form of pattern matching is matching against literal values, which is directly equivalent to a C-style `switch` statement:
 
-```nanyx
+```nanyx fragment
 match someValue
   | 0 -> "zero"
   | 1 -> "one"
@@ -23,7 +23,7 @@ Note the use of `_` as a wildcard pattern that matches anything not previously m
 
 Unlike a C-style `switch`, Nanyx's `match` patterns are evaluated in the order they are written. This allows for more flexible patterns and the ability to handle overlapping cases:
 
-```nanyx
+```nanyx fragment
 match value
   | 0 -> "zero"
   | 1 -> "one"
@@ -36,7 +36,7 @@ A match that does not cover every possible value is a compiler error. An arm tha
 
 Patterns can also introduce new variables that are bound to parts of the matched value:
 
-```nanyx
+```nanyx fragment
 match someFunction()
   | 0 -> "zero"
   | 1 -> "one"
@@ -47,7 +47,7 @@ match someFunction()
 
 An arm's body may be another `match`. Its arms end at the first arm indented less than its own, so an arm lined up with the outer match's arms belongs to the outer match:
 
-```nanyx
+```nanyx fragment
 match xs
   | [a] ->
       match a
@@ -64,7 +64,7 @@ Destructuring is a syntax that breaks a data structure into its components and b
 
 ## Lists
 
-```nanyx
+```nanyx fragment
 -- Match an empty list
 match myList
   | [] -> "empty!"
@@ -82,7 +82,7 @@ def (x, y) = (10, 20)
 
 The brackets around the outermost tuple can be left off, so `def x, y = (10, 20)` is the same binding. Nested tuples still need theirs:
 
-```nanyx
+```nanyx fragment
 def low, high = sort(3, -1)
 
 def name, (street, city) = person
@@ -90,7 +90,7 @@ def name, (street, city) = person
 
 Destructuring is available in pattern matching, allowing for simultaneous testing of data and extracting values at the same time:
 
-```nanyx
+```nanyx fragment
 match p
   | (0, y) -> "x is zero, y is {y}"
   | (x, 0) -> "y is zero, x is {x}"
@@ -101,7 +101,7 @@ Note how the patterns `(0, y)` and `(x, 0)` use a combination of literal matchin
 
 A `match` can also take several values at once, separated by commas, with an arm giving a pattern for each. Matching several values is the same as matching a tuple of them, so the brackets are optional on either side: a tuple can be matched with `| x, y`, and several values with `| (x, y)`.
 
-```nanyx
+```nanyx fragment
 match a, b
   | 0, y -> "a is zero, b is {y}"
   | x, y -> "a is {x}, b is {y}"
@@ -113,7 +113,7 @@ The final pattern `(x, y)` matches any tuple and binds both elements to variable
 
 Records can also be destructured in patterns, allowing you to match on specific fields while ignoring others:
 
-```nanyx
+```nanyx fragment
 match r
   | (name = "Alice", ...) -> "Found Alice"
   | (name, age) -> "{name} is {age} years old"
@@ -237,7 +237,7 @@ In this example, the patterns can guide us in understanding the structure of the
 
 Sometimes we may wish to handle multiple patterns with the same result. This can be done with "or" patterns, which use the `|` operator to combine multiple patterns into one:
 
-```nanyx
+```nanyx fragment
 match day
   | "Saturday" | "Sunday" -> "Weekend!"
   | _ -> "Weekday"
@@ -245,7 +245,7 @@ match day
 
 An or-pattern may span several lines. Every arm must end in `->`, so a `|` that is not preceded by `->` continues the current pattern rather than starting a new arm:
 
-```nanyx
+```nanyx fragment
 match day
   | "Saturday"
   | "Sunday" -> "Weekend!"
@@ -256,7 +256,7 @@ match day
 
 "And" patterns allow for the combination of multiple patterns that must all match simultaneously. This is done with the `&` operator:
 
-```nanyx
+```nanyx fragment
 match getValue()
   | { < 0 } & n -> println("Negative: {n}")
   | { > 100 } & n -> println("Large: {n}")
@@ -269,7 +269,7 @@ match getValue()
 
 Patterns can be used outside of `match` expressions as well. A `def` binding can use a pattern to destructure the value on the right-hand side:
 
-```nanyx
+```nanyx fragment
 def (x, y) = getCoordinates()
 
 def #Hsl(h, s, l) = getColor()
@@ -281,7 +281,7 @@ Bear in mind that patterns used in this way must be _total_, meaning they must m
 
 If the pattern is not total and you only care about a single case, you can test a value against a pattern with the `is` keyword instead of writing a full `match` expression:
 
-```nanyx
+```nanyx fragment
 if getResult() is #some(value) then
   println("Got a value: {value}")
 ```
@@ -290,7 +290,7 @@ The value goes on the left of `is` and the pattern on the right. Any variables t
 
 This is equivalent to a `match` expression that only handles one case and ignores everything else:
 
-```nanyx
+```nanyx fragment
 match getResult()
   | #some(value) -> println("Got a value: {value}")
   | _ -> ()
@@ -298,7 +298,7 @@ match getResult()
 
 `is` also works as a branch condition in the multi-branch form of `if`:
 
-```nanyx
+```nanyx fragment
 if | input is #some(n) -> println("Got {n}")
    | input is #none -> println("Got nothing")
    | else -> println("Something else")

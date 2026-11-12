@@ -36,7 +36,7 @@ module json.deserialization
 
 Code in another package can import them using the package name followed by `/` and the module name:
 
-```nanyx
+```nanyx fragment
 import (
   acme.web/http
   acme.web/json.deserialization
@@ -101,7 +101,7 @@ nanyx.web = "1.4"
 
 Source code imports modules using the dependency's package name:
 
-```nanyx
+```nanyx fragment
 import (
   acme.core/collections
   nanyx.web/http
@@ -123,7 +123,7 @@ acme.shared = "../shared"
 
 A project reference uses the referenced package's declared package identity. Source code therefore imports it in exactly the same way as any other dependency:
 
-```nanyx
+```nanyx fragment
 import acme.shared/models
 ```
 
@@ -135,7 +135,7 @@ Project references are only meaningful when packages are being built in the cont
 
 `export` controls visibility between modules:
 
-```nanyx
+```nanyx fragment
 module http.internal
 
 export def createConnection = ...
@@ -158,7 +158,7 @@ public-modules = [
 
 A consuming package can import the public modules:
 
-```nanyx
+```nanyx fragment
 import acme.web/http
 ```
 
@@ -172,7 +172,7 @@ Re-exporting can be used to build a public module from definitions implemented a
 
 A package may contain an entrypoint using the `@entry` attribute in its source code:
 
-```nanyx
+```nanyx fragment
 module main
 
 @entry
@@ -269,13 +269,13 @@ nanyx run hello.nyx
 
 The script can import other anonymous modules by file path:
 
-```nanyx
+```nanyx fragment
 import "./utils" as utils
 ```
 
 For script mode, Nanyx synthesizes a package description in memory rather than requiring a `.nyxp` file. A script can add to that description with `::` directives at the top of the file, each saying what one manifest entry would:
 
-```nanyx
+```nanyx fragment
 ::linters.default.unusedBindings = "error"
 ::formatter.indentSize = 4
 

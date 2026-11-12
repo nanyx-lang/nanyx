@@ -10,12 +10,12 @@ Attributes are annotations that start with `@` and modify how the compiler treat
 
 Place an attribute immediately before the declaration it applies to:
 
-```nanyx
+```nanyx fragment
 @entry
 def main = { ... }
 ```
 
-```nanyx
+```nanyx fragment
 @workflow
 def optionChain = (...)
 ```
@@ -45,7 +45,7 @@ See [Hello, World!](../getting-started/hello-world) and [Entrypoints](./packages
 
 Marks a workflow builder definition and enables workflow helper generation.
 
-```nanyx
+```nanyx fragment
 @workflow
 def optionChain = (
   try = { ... }
@@ -60,7 +60,7 @@ See [Option chaining](../cookbook/option-chaining) and [Workflows](../advanced/w
 
 Used in workflow builders to specify how a custom keyword behaves. It is placed before the field of the builder record that implements the keyword.
 
-```nanyx
+```nanyx fragment
 def async = (
   @customKeywordType(#bind)
   await = { m, continuation -> ... }
@@ -73,7 +73,7 @@ See [Workflows](../advanced/workflows).
 
 Marks a unit declaration as a base unit of its dimension. Base units name the dimension and are never defined in terms of other units.
 
-```nanyx
+```nanyx fragment
 @baseUnit unit(s) Seconds: Time
 ```
 

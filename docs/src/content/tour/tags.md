@@ -28,7 +28,7 @@ def y: #mySecondTag = #mySecondTag
 
 Tag types are most useful when combined into unions. A tag union is a type that can be one of several tagged cases, and can be used anywhere a type is expected. For example, a function that can return either an `#ok` or an `#error` tag can be typed as follows:
 
-```nanyx
+```nanyx fragment
 def f: string -> #ok | #error = { s ->
   ...
 }
@@ -80,7 +80,7 @@ def saved: #some() | #error(string) = #some()
 
 Tag unions are great for readable flags and mode parameters. They make legal options explicit in the function type:
 
-```nanyx
+```nanyx fragment
 def openFile: (string, (#read | #readwrite)) -> File
   = { fileName, mode ->
     ...
@@ -104,7 +104,7 @@ def mapOption
 
 This preserves non-success cases while still transforming success values:
 
-```nanyx
+```nanyx fragment
 def x: (#some(string) | #notFound) = ...
 def y: (#some(int) | #divideByZero) = ...
 
@@ -123,7 +123,7 @@ That said, converting a tag to text gives the expected name:
 ```nanyx
 def t = #readwrite
 
-t.toString   -- "#readwrite"
+"{t}"   -- "#readwrite"
 ```
 
 This is useful for logging and debugging, but it does not change the underlying runtime type of the value.
