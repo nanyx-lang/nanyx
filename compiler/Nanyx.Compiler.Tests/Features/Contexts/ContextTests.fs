@@ -104,6 +104,29 @@ let ``Missing contexts are named, not listed by their members`` () =
         "'g' requires the context 'Clock', which is not available here",
         message (contexts + "def g: [Log + Clock] () -> () = { log(\"hi\") }\ndef h: [Log] () -> () = { g() }"))
 
+[<Fact>]
+let ``A function passed as a value needs its contexts where it is named, as a call does`` () =
+    let definitions = """
+context Foo = (bar: string -> string)
+
+def useFoo: [Foo] string -> string = { s -> bar(s) }
+
+def run2 = { f, a -> f(a) }
+"""
+    let diagnostic = (Compiler.compile (definitions + """run2(useFoo, "hi")""")).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Equal("'useFoo' requires the context 'Foo', which is not available here", diagnostic.Message)
+    // Where the context is available, the function is passed with it.
+    let declared = definitions + """def pass: [Foo] string -> string = { s -> run2(useFoo, s) }"""
+    Assert.Empty((Compiler.compile declared).Diagnostics)
+    let loaded = definitions + """
+def main = {
+  use Foo(bar = { s -> s })
+  run2(useFoo, "hi")
+}
+"""
+    Assert.Empty((Compiler.compile loaded).Diagnostics)
+
 /// A parameterised context, a type, and a function that requires the context, for the tests of where a call finds an
 /// instance of it (#328).
 let private showContext =
