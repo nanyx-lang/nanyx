@@ -57,6 +57,7 @@
     <Compile Include="EscapingLambdas.fs" />
     <Compile Include="MemoryCells.fs" />
     <Compile Include="PipeLookups.fs" />
+    <Compile Include="Contexts.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
