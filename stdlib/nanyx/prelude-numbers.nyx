@@ -1,0 +1,357 @@
+@partial module prelude
+
+-- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
+
+-- Numbers ---------------------------------------------------------------------------------------
+
+--| The value of the ASCII digit `b`, or -1 when `b` is not one.
+def digitValue: int -> int = { b ->
+  if b >= 48 and b <= 57 then b - 48 else -1
+}
+
+--| `acc` followed by the decimal digits of `s` from byte `i` on, or `#invalidInt` at the first byte
+  that is not a digit.
+def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
+  if i >= __nanyx_string_length(s)
+    then #some(acc)
+    else if digitValue(__nanyx_string_byte_at(s, i)) < 0
+      then #invalidInt
+      else parseDigits(s, i + 1, acc * 10 + digitValue(__nanyx_string_byte_at(s, i)))
+}
+
+--| The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
+  anything else (an empty string, a sign alone, spaces, other characters). Overflow is not
+  detected.
+export def int.fromString: string -> #some(int) | #invalidInt = { s ->
+  def first = __nanyx_string_byte_at(s, 0)
+  def start = if first == 45 or first == 43 then 1 else 0
+
+  if __nanyx_string_length(s) <= start
+    then #invalidInt
+    else if first == 45
+      then mapSome(parseDigits(s, start, 0), { n -> 0 - n })
+      else parseDigits(s, start, 0)
+}
+
+--| `n` as a float: `int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
+  `floor`, `ceil`, `round` and `truncate` in `nanyx/math`.
+export def int.toFloat: int -> float = { n ->
+  __nanyx_int_to_float(n)
+}
+
+-- Arithmetic ------------------------------------------------------------------------------------
+
+--| The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
+  so is `0` beside a value of type `a` in a function whose type requires it:
+  `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
+  `def $Money.zero = ...`, `` def $Money.`+` = ... ``, and so on.
+export context Add(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+)
+
+--| The numbers of type `a`: [`Add`]'s members, and `x * y`, `x / y` and `x % y`. In a function whose
+  type requires it, any other integer literal beside a value of type `a` is `fromInt` of it, so
+  `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and `float`.
+  A function that requires `Num(a)` can call one that requires `Add(a)`: a `Num` has every member
+  an `Add` has. On an integer type `/` truncates and `%` takes the sign of `x`; on `float` they are
+  IEEE 754's.
+export context Num(a) = (
+  zero: a
+  `+`: (a, a) -> a
+  `-`: (a, a) -> a
+  negate: a -> a
+  `*`: (a, a) -> a
+  `/`: (a, a) -> a
+  `%`: (a, a) -> a
+  fromInt: int -> a
+)
+
+-- The compiler's own `Add` and `Num` of `int` and `float`: the members attached to `int` and
+-- `float`, which are what a function that requires one is passed. `+` on an `int` or a `float` is
+-- the built-in operator, not a call.
+
+--| The `int` that adds nothing.
+export def int.zero: int = 0
+
+--| `x` plus `y`.
+export def int.`+`: int, int -> int = { x, y ->
+  x + y
+}
+
+--| `x` minus `y`.
+export def int.`-`: int, int -> int = { x, y ->
+  x - y
+}
+
+--| `n` with its sign changed.
+export def int.negate: int -> int = { n ->
+  -n
+}
+
+--| `x` times `y`.
+export def int.`*`: int, int -> int = { x, y ->
+  x * y
+}
+
+--| `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
+export def int.`/`: int, int -> int = { x, y ->
+  x / y
+}
+
+--| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+export def int.`%`: int, int -> int = { x, y -> x % y }
+
+--| `n` itself.
+export def int.fromInt: int -> int = { n ->
+  n
+}
+
+--| The `float` that adds nothing.
+export def float.zero: float = 0.0
+
+--| `x` plus `y`.
+export def float.`+`: float, float -> float = { x, y ->
+  x + y
+}
+
+--| `x` minus `y`.
+export def float.`-`: float, float -> float = { x, y ->
+  x - y
+}
+
+--| `x` with its sign changed: `float.negate(0.0)` is negative zero.
+export def float.negate: float -> float = { x ->
+  -x
+}
+
+--| `x` times `y`.
+export def float.`*`: float, float -> float = { x, y ->
+  x * y
+}
+
+--| `x` divided by `y`.
+export def float.`/`: float, float -> float = { x, y ->
+  x / y
+}
+
+--| The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
+export def float.`%`: float, float -> float = { x, y -> x % y }
+
+--| `n` as a float, as [`int.toFloat`] gives it.
+export def float.fromInt: int -> float = { n ->
+  int.toFloat(n)
+}
+
+-- Powers ----------------------------------------------------------------------------------------
+
+--| `acc` times `base` to the power `exponent`, for an `exponent` of zero or more: by repeated
+  squaring, so it takes as many steps as `exponent` has bits.
+def powOnto: [Num(a)] a, int, a -> a = { base, exponent, acc ->
+  if exponent == 0
+    then acc
+    else powOnto(base * base, exponent / 2, if exponent % 2 == 0 then acc else acc * base)
+}
+
+--| What `base ** exponent` is: `base` multiplied by itself `exponent` times, so `2 ** 10` is 1024
+  and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent`, so on an `int` it truncates
+  towards zero.
+export def __pow: [Num(a)] a, int -> a = { base, exponent ->
+  if exponent < 0
+    then fromInt(1) / powOnto(base, -exponent, fromInt(1))
+    else powOnto(base, exponent, fromInt(1))
+}
+
+--| What `f >> g` is: the function that applies `f`, and then `g` to what `f` returns.
+export def __composeForward: [c] ([c] a -> b), ([c] b -> d) -> [c] a -> d = { f, g ->
+  { x -> g(f(x)) }
+}
+
+--| What `g << f` is: the same function as `f >> g`.
+export def __composeBackward: [c] ([c] b -> d), ([c] a -> b) -> [c] a -> d = { g, f ->
+  { x -> g(f(x)) }
+}
+
+--| `base ** exponent`, as a function that can be passed around.
+export def pow: [Num(a)] a, int -> a = { base, exponent ->
+  base ** exponent
+}
+
+--| `2 ** n` times `x`, for an `n` that is a whole number of any size.
+def scaleByTwos: float, int -> float = { x, n ->
+  if n >= 0 then x * 2.0 ** n else x / 2.0 ** -n
+}
+
+--| The sum of the series for `e ** r`, from the term `term` (which is `r ** k / k!`) on, with `sum`
+  the terms before it. Twenty terms are enough for any `r` of at most `ln(2) / 2`.
+def expSeries: float, float, float, int -> float = { r, term, sum, k ->
+  if k > 20 then sum else expSeries(r, term * r / int.toFloat(k + 1), sum + term, k + 1)
+}
+
+--| `e ** z`, as `2 ** n * e ** r` with `r` of at most `ln(2) / 2`. `nanyx/math` gives it as `math.exp`.
+export def __floatExp: float -> float = { z ->
+  if z != z
+    then z
+    else if z > 709.8
+      then 1.0 / 0.0
+      else if z < -745.2
+        then 0.0
+        else expAround(z, __nanyx_float_floor(z / 0.6931471805599453 + 0.5))
+}
+
+--| `e ** z`, for `n` the number of `ln(2)`s nearest `z`. As in fdlibm, `r` is `z - n * ln(2)` held as
+  `hi - lo`, with `ln(2)` split so that `hi` is exact. `e ** r` is `(1 + hi) + (q - lo)`, with `q`
+  the series from `r ** 2 / 2` on: of the ways to add them up, it is the one most often the float
+  nearest, and `e ** 1.0` is the float nearest `e`.
+def expAround: float, float -> float = { z, n ->
+  def hi = z - n * 0.6931471803691238
+  def lo = n * 0.00000000019082149292705877
+  def r = hi - lo
+  scaleByTwos(1.0 + hi + (expSeries(r, r * r / 2.0, 0.0, 2) - lo), __nanyx_float_to_int(n))
+}
+
+--| The sum of the series for `atanh(t)`, from the term `term` (which is `t ** (2k + 1)`) on, with
+  `sum` the terms before it. Thirty terms are enough for any `t` below 1/3.
+def atanhSeries: float, float, float, int -> float = { term, tt, sum, k ->
+  if k > 30 then sum else atanhSeries(term * tt, tt, sum + term / int.toFloat(2 * k + 1), k + 1)
+}
+
+--| The natural logarithm of `m * 2 ** k`, for an `m` above zero: `m` is moved into [1, 2) first.
+def lnScaled: float, int -> float = { m, k ->
+  if m >= 2.0
+    then lnScaled(m / 2.0, k + 1)
+    else if m < 1.0 then lnScaled(m * 2.0, k - 1) else lnOfReduced(m, k)
+}
+
+--| The natural logarithm of `m * 2 ** k`, for an `m` in [1, 2): `ln(m)` is `2 * atanh((m - 1) / (m + 1))`.
+def lnOfReduced: float, int -> float = { m, k ->
+  def t = (m - 1.0) / (m + 1.0)
+  2.0 * atanhSeries(t, t * t, 0.0, 0) + int.toFloat(k) * 0.6931471805599453
+}
+
+--| The natural logarithm of `x`: minus infinity at zero, and NaN below it. `nanyx/math` gives it as `math.ln`.
+export def __floatLn: float -> float = { x ->
+  if x != x or x < 0.0
+    then 0.0 / 0.0
+    else if x == 0.0 then -1.0 / 0.0 else if x == 1.0 / 0.0 then x else lnScaled(x, 0)
+}
+
+--| `x` to the power `y`, which need not be a whole number: `float.pow(2.0, 0.5)` is the square root
+  of 2. A whole `y` is `x ** y`, exactly; any other is `e ** (y * ln(x))`, so a negative `x` gives
+  NaN.
+export def float.pow: float, float -> float = { x, y ->
+  def whole = __nanyx_float_trunc(y)
+
+  if whole == y and y < 2147483648.0 and y > -2147483648.0
+    then x ** __nanyx_float_to_int(whole)
+    else __floatExp(y * __floatLn(x))
+}
+
+-- Reading floats --------------------------------------------------------------------------------
+
+-- A decimal is read as a whole number `m`, its digits with the point taken out, and a power of ten
+-- `e` that puts the point back: "12.5e3" is 125 times 10 ** 2. `m` is held as a float, exactly
+-- while it is below 2 ** 53.
+
+--| `m` times 10 ** `e`, for a whole `m` of zero or more. When `m` is below 2 ** 53 and `e` is
+  between -22 and 22 both are exact, so the one multiplication or division rounds to the nearest
+  float. Otherwise the power of ten is rounded too.
+def scaleByTens: float, int -> float = { m, e ->
+  if m == 0.0
+    then 0.0
+    else if e >= 0
+      then m * 10.0 ** e
+      else if e < -300 then m / 10.0 ** 300 / 10.0 ** (-300 - e) else m / 10.0 ** -e
+}
+
+--| The decimal `s` writes from byte `i` on, with `m` and `e` the number read so far, `digits` how
+  many digits that is, and `afterPoint` whether they included a `.`. Digits past the first 18 or so
+  only move the point, as `m` holds no more.
+def readDecimal
+  : string, int, float, int, int, bool -> #some(float) | #invalidFloat
+  = { s, i, m, e, digits, afterPoint ->
+    if i >= __nanyx_string_length(s)
+      then (if digits == 0 then #invalidFloat else #some(scaleByTens(m, e)))
+      else readDecimalByte(s, i, m, e, digits, afterPoint, __nanyx_string_byte_at(s, i))
+  }
+
+--| [`readDecimal`] at the byte `b`, which is byte `i` of `s`.
+def readDecimalByte
+  : string, int, float, int, int, bool, int -> #some(float) | #invalidFloat
+  = { s, i, m, e, digits, afterPoint, b ->
+    if digitValue(b) >= 0
+      then (if m < 1.0e17
+        then readDecimal(
+          s
+          i + 1
+          m * 10.0 + int.toFloat(digitValue(b))
+          (if afterPoint then e - 1 else e)
+          digits + 1
+          afterPoint
+        )
+        else readDecimal(s, i + 1, m, (if afterPoint then e else e + 1), digits + 1, afterPoint))
+      else if b == 46 and not afterPoint
+        then readDecimal(s, i + 1, m, e, digits, true)
+        else if (b == 101 or b == 69) and digits > 0
+          then readExponent(s, i + 1, m, e)
+          else #invalidFloat
+  }
+
+--| The exponent that starts at byte `i` of `s`, after its `e`, with its optional sign, applied to
+  `m` and `e`.
+def readExponent: string, int, float, int -> #some(float) | #invalidFloat = { s, i, m, e ->
+  def sign = __nanyx_string_byte_at(s, i)
+
+  if sign == 45
+    then readExponentDigits(s, i + 1, m, e, -1, 0, 0)
+    else readExponentDigits(s, (if sign == 43 then i + 1 else i), m, e, 1, 0, 0)
+}
+
+--| The digits of an exponent from byte `i` of `s` on, with `n` and `digits` the value and count read
+  so far. An exponent past 100000 is held there: it makes infinity or zero all the same.
+def readExponentDigits
+  : string, int, float, int, int, int, int -> #some(float) | #invalidFloat
+  = { s, i, m, e, sign, n, digits ->
+    if i >= __nanyx_string_length(s)
+      then (if digits == 0 then #invalidFloat else #some(scaleByTens(m, e + sign * n)))
+      else if digitValue(__nanyx_string_byte_at(s, i)) < 0
+        then #invalidFloat
+        else readExponentDigits(
+          s
+          i + 1
+          m
+          e
+          sign
+          (if n > 100000 then n else n * 10 + digitValue(__nanyx_string_byte_at(s, i)))
+          digits + 1
+        )
+  }
+
+--| The float `s` writes in decimal, or `#invalidFloat` for anything else (an empty string, a sign
+  alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
+  an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
+  exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
+  [`float.toString`] writes them. A number too large for a float is infinity.
+
+  The result is the nearest float to the decimal when it has at most 15 significant digits and an
+  exponent, once the point is moved to the end, between -22 and 22, which covers most text written
+  by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
+export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
+  def first = __nanyx_string_byte_at(s, 0)
+  def start = if first == 45 or first == 43 then 1 else 0
+
+  if s == "NaN"
+    then #some(0.0 / 0.0)
+    else if first == 45
+      then mapSome(readFloatMagnitude(s, start), float.negate)
+      else readFloatMagnitude(s, start)
+}
+
+--| The float `s` writes from byte `start` on, after any sign.
+def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start ->
+  if s == "Infinity" or s == "+Infinity" or s == "-Infinity"
+    then #some(1.0 / 0.0)
+    else readDecimal(s, start, 0.0, 0, 0, false)
+}

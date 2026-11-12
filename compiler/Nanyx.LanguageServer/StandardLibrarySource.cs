@@ -8,7 +8,7 @@ namespace Nanyx.LanguageServer;
 /// </summary>
 /// <remarks>
 /// The library is embedded in the compiler, and a declaration in it is in a file named by its import path
-/// (<c>nanyx/text.nyx</c>), which is not a file on disk. The first time a module is asked for, its embedded source is
+/// (<c>nanyx/text.nyx</c>), which is not a file on disk. The first time a file is asked for, its embedded source is
 /// written, read-only, under a directory per compiler version, and that file is what the editor opens. The text is
 /// the embedded text exactly, so a declaration's line and column apply to it as they are. A plain file works in
 /// every editor, with nothing for the client to provide.
@@ -35,8 +35,9 @@ public sealed class StandardLibrarySource
     }
 
     /// <summary>
-    /// The file on disk with the source of the standard-library module at <paramref name="importPath"/>
-    /// (<c>nanyx/text.nyx</c>), or null when the path does not name one.
+    /// The file on disk with the source of the standard-library file at <paramref name="importPath"/>: a module's
+    /// (<c>nanyx/text.nyx</c>), or another file of a module split across files (<c>nanyx/prelude-lists.nyx</c>), or null
+    /// when the path does not name one.
     /// </summary>
     public string? TryGetPath(string importPath)
     {
@@ -46,13 +47,12 @@ public sealed class StandardLibrarySource
             return null;
         }
 
-        var moduleName = importPath[prefix.Length..^".nyx".Length];
-        if (StandardLibrary.tryLoadSource(moduleName) is not { } source)
+        if (StandardLibrary.tryLoadFile(importPath) is not { } source)
         {
             return null;
         }
 
-        var path = Path.Combine(_root, StandardLibrary.packageName, moduleName + ".nyx");
+        var path = Path.Combine(_root, StandardLibrary.packageName, importPath[prefix.Length..]);
         lock (_lock)
         {
             // A file left by a build of the same version with a different library is rewritten.

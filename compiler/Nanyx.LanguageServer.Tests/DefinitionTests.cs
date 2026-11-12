@@ -142,9 +142,9 @@ public sealed class DefinitionTests : LanguageServerTestBase
             Open(uri, "import nanyx/text as t\ndef shout = t.string.uppercase(\"hi\")\ndef n = int.fromString(\"1\")\n");
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-            // A qualified import of nanyx/text, and a definition the prelude brings into scope.
-            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 1, 22), "text", "uppercase");
-            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 2, 13), "prelude", "fromString");
+            // A qualified import of nanyx/text, and a definition the prelude brings into scope, in one of its files.
+            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 1, 22), "text.nyx", "uppercase");
+            AssertDefinitionInStandardLibrary(await SingleDefinitionAt(uri, 2, 13), "prelude-numbers.nyx", "fromString");
         }
         finally
         {
@@ -156,15 +156,15 @@ public sealed class DefinitionTests : LanguageServerTestBase
             root.Delete(recursive: true);
         }
 
-        void AssertDefinitionInStandardLibrary(Location? location, string moduleName, string name)
+        void AssertDefinitionInStandardLibrary(Location? location, string fileName, string name)
         {
             Assert.NotNull(location);
-            var path = Path.Combine(root.FullName, "nanyx", moduleName + ".nyx");
+            var path = Path.Combine(root.FullName, "nanyx", fileName);
             Assert.Equal(DocumentUri.FromFileSystemPath(path), location.Uri);
             Assert.True(File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly));
 
             var source = File.ReadAllText(path);
-            Assert.Equal(NyxCompiler.StandardLibrary.tryLoadSource(moduleName).Value, source);
+            Assert.Equal(NyxCompiler.StandardLibrary.tryLoadFile("nanyx/" + fileName).Value, source);
 
             var line = source.Replace("\r\n", "\n").Split('\n')[location.Range.Start.Line];
             Assert.EndsWith(name, line[location.Range.Start.Character..location.Range.End.Character]);

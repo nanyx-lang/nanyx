@@ -13,9 +13,9 @@ label.
 - **Don't grow a file past 1,500 lines.** If your change would take a file over that limit, or the file is
   already over it, put the new part in a new file or a smaller existing one. If what you need to extend sits
   in the middle of a big file, move it out first, in its own PR. The limit is for the compiler's F# and C#
-  sources. It does not apply to the standard library's `.nyx` files: the prelude is one module, which every
-  module imports without saying so, and it grows with the language until it can be split into partial
-  modules ([#950](https://github.com/nanyx-lang/nanyx/issues/950)).
+  sources. It does not apply to the standard library's `.nyx` files. A library module that grows large is
+  split by topic into files that each start `@partial module`, as the prelude is: add to the file whose topic
+  it is, or start a new one beside it.
 - **One concern per function.** A match arm longer than about 50 lines becomes a named function. A closure
   that changes several captured `mutable`s becomes a function that takes state and returns state.
 - **Search before writing a helper.** Look for the function you are about to write, in your project and in
@@ -77,7 +77,7 @@ label.
 - **Keep the prelude's contexts unambiguous.** An operator on a value of a type variable is read through the
   prelude's context with the fewest members that has the member it reads, so `+` is `Add`'s, though `Num` has
   one too ([Operator contexts](docs/src/content/work-in-progress/operator-contexts.md)). Before you add a
-  context to `stdlib/nanyx/prelude.nyx`, or a member to one, check which operators it moves: a context that
+  context to the prelude (`stdlib/nanyx/prelude*.nyx`), or a member to one, check which operators it moves: a context that
   repeats another's member must be larger or smaller than it, never the same size, and a smaller one takes the
   operator over in every function whose type is inferred. The compiler reports a tie as `NYX0006` when it
   checks the prelude.

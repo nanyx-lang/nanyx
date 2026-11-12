@@ -212,6 +212,10 @@ module StandardLibrary =
     let tryLoadSource (moduleName: string) : string option =
         tryLoadFile (resourceName moduleName)
 
+    /// The resource names of every file of the module `moduleName`: `nanyx/prelude.nyx`, `nanyx/prelude-lists.nyx`, ...
+    let moduleFiles (moduleName: string) : string list =
+        files.Value |> List.filter (fun (_, declared) -> declared = moduleName) |> List.map fst
+
     /// The module's files other than the one named for it, each as its resource name and its source.
     let otherFragments (moduleName: string) : (string * string) list =
         files.Value

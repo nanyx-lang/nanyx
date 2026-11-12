@@ -220,9 +220,9 @@ let ``Type names refer to imported types in their own file`` () =
         Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
         let at text = Definition.symbolAt mainPath result (offsetOf mainSource text 0 1) |> Option.map (fun symbol -> symbol.Kind, symbol.Declaration.File, symbol.Declaration.Start)
         Assert.Equal(Some (TypeDefinition, modulePath, offsetOf moduleSource "Shape" 0 0), at "Shape =")
-        // The prelude's types are declared in the prelude.
-        let preludeSource = (StandardLibrary.tryLoadSource "prelude").Value.Replace("\r\n", "\n")
-        Assert.Equal(Some (TypeDefinition, "nanyx/prelude.nyx", offsetOf preludeSource "Result(a, e) =" 0 0), at "Result("))
+        // The prelude's types are declared in the prelude, in the file of their topic.
+        let preludeSource = (StandardLibrary.tryLoadFile "nanyx/prelude-results.nyx").Value.Replace("\r\n", "\n")
+        Assert.Equal(Some (TypeDefinition, "nanyx/prelude-results.nyx", offsetOf preludeSource "Result(a, e) =" 0 0), at "Result("))
 
 [<Fact>]
 let ``Context members are declared in the context and referred to where it is required`` () =

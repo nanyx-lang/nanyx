@@ -1,0 +1,278 @@
+@partial module prelude
+
+-- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
+
+-- Equality --------------------------------------------------------------------------------------
+
+--| How two values of type `a` are compared. `x == y` is read through it, and `x != y` is
+  `not (x == y)`. The compiler has its own for every type that holds no function, which compares
+  by structure: records field by field, lists element by element, tags by name and then payload.
+  Functions have no equality. A function that compares values of one of its type variables
+  requires it: `def same: [Eq(a)] a, a -> bool`.
+export context Eq(a) = (`==`: (a, a) -> bool)
+
+--| The `==` of the compiler's own [`Eq`]: what a function that requires `Eq(a)` is passed when it is
+  called with a type that has no `==` of its own.
+export def __equals: a, a -> bool = { x, y ->
+  x == y
+}
+
+--| What `xs == ys` calls on two lists whose elements have an `Eq` other than the compiler's own:
+  `==` on a `list($Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
+  compared element by element through that `Eq`. `!=` is `not` of it.
+export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
+  | [], [] -> true
+  | [x, ...xs], [y, ...ys] -> (if x == y then __listEquals(xs, ys) else false)
+  | _, _ -> false
+}
+
+--| Whether the lists `xs` and `ys` hold equal elements in the same order, as `same` compares two
+  elements. The `==` the compiler derives for a list whose elements have an `==` of their own
+  calls it.
+export def __listEqualsBy: [c] list(a), list(a), ([c] a, a -> bool) -> bool = { xs, ys, same ->
+  match xs
+    | [] -> list.isEmpty(ys)
+    | [x, ...restOfXs] ->
+      match ys
+        | [] -> false
+        | [y, ...restOfYs] ->
+          if same(x, y) then __listEqualsBy(restOfXs, restOfYs, same) else false
+}
+
+-- Joining ---------------------------------------------------------------------------------------
+
+--| The values of type `a` that join, end to end. `x ++ y` is read through it:
+  `def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }` works at `string` and
+  at any `list`. A type gets one by attaching `` def $Path.`++` = ... ``.
+export context Append(a) = (`++`: (a, a) -> a)
+
+-- The compiler's own `Append` of `string` and `list(a)`: the members attached to them, which are
+-- what a function that requires one is passed. `++` on a `string` or a `list` is the built-in
+-- operator, not a call.
+
+--| `x` followed by `y`.
+export def string.`++`: string, string -> string = { x, y ->
+  x ++ y
+}
+
+--| The elements of `xs` followed by those of `ys`.
+export def list.`++`: list(a), list(a) -> list(a) = { xs, ys ->
+  xs ++ ys
+}
+
+-- Ordering --------------------------------------------------------------------------------------
+
+--| How two values of type `a` are put in order. `x < y`, `x <= y`, `x > y` and `x >= y` are read
+  through it, so the four cannot disagree. The compiler has its own for numbers, `bool` (`false`
+  first), `string` (by bytes, which is the order of code points), and tuples and lists of them
+  (position by position, and a list that is a prefix of another first). Records and tags have no
+  order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
+  with [`list.sortBy`]. A function that orders values of one of its type variables requires it:
+  `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
+  should keep them consistent.
+export context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
+
+--| The `compare` of the compiler's own [`Ord`]: what a function that requires `Ord(a)` is passed when
+  it is called with a type that has no `compare` of its own. On floats it is a total order, with
+  NaN after every other float, while `<` and the others on floats follow IEEE 754.
+export def __compare: a, a -> #less | #equal | #greater = { x, y ->
+  def order = __nanyx_compare(x, y)
+
+  if order < 0 then #less else if order > 0 then #greater else #equal
+}
+
+--| What `x < y` calls when it reads an `Ord` other than the compiler's own: one a function
+  requires, one loaded with `use`, or one built from an attached `compare`. `<=`, `>` and `>=`
+  call the three after it.
+export def __less: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #less -> true
+    | _ -> false
+}
+
+export def __lessOrEqual: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #greater -> false
+    | _ -> true
+}
+
+export def __greater: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #greater -> true
+    | _ -> false
+}
+
+export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
+  match compare(x, y)
+    | #less -> false
+    | _ -> true
+}
+
+--| What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
+  `<` on a `list($Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
+  ordered element by element through that `Ord`, and a list that is a prefix of the other comes
+  first. `<=`, `>` and `>=` call the three after it.
+export def __listCompare: [Ord(a)] list(a), list(a) -> #less | #equal | #greater = {
+  | [], [] -> #equal
+  | [], _ -> #less
+  | _, [] -> #greater
+  | [x, ...xs], [y, ...ys] ->
+    match compare(x, y)
+      | #equal -> __listCompare(xs, ys)
+      | #less -> #less
+      | #greater -> #greater
+}
+
+export def __listLess: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #less -> true
+    | _ -> false
+}
+
+export def __listLessOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #greater -> false
+    | _ -> true
+}
+
+export def __listGreater: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #greater -> true
+    | _ -> false
+}
+
+export def __listGreaterOrEqual: [Ord(a)] list(a), list(a) -> bool = { xs, ys ->
+  match __listCompare(xs, ys)
+    | #less -> false
+    | _ -> true
+}
+
+-- Each built-in type with an order has its order attached as `compare`, so it can be called and
+-- passed around. A built-in type's order is always the compiler's own: `<` and `Ord` do not read
+-- these.
+
+--| Whether `x` is less than, equal to or greater than `y`.
+export def int.compare: int, int -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+--| Whether `x` is less than, equal to or greater than `y`, with NaN after every other float, as
+  [`__compare`] orders floats.
+export def float.compare: float, float -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+--| Whether `x` is less than, equal to or greater than `y`, with `false` first.
+export def bool.compare: bool, bool -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+--| Whether `x` is less than, equal to or greater than `y`, by bytes, which is the order of code
+  points.
+export def string.compare: string, string -> #less | #equal | #greater = { x, y ->
+  __compare(x, y)
+}
+
+-- Hashing ---------------------------------------------------------------------------------------
+
+--| How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
+  so that a map can find a key by its hash. The compiler has its own for every type it has its own
+  `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
+  `hash` that agrees with it, or it has none: `def $Email.hash = { e -> string.hash(lower(e)) }`
+  for an `==` that ignores case. A function that hashes values of one of its type variables
+  requires it: `def bucket: [Hash(a)] a, int -> int`.
+export context Hash(a) = (hash: a -> int)
+
+--| The `hash` of the compiler's own [`Hash`]: what a function that requires `Hash(a)` is passed when
+  it is called with a type that has no `hash` of its own.
+export def __hash: a -> int = { x ->
+  __nanyx_hash(x)
+}
+
+-- Each built-in type has its hash attached as `hash`, so that a type's own `hash` can be built from
+-- its parts' hashes. A built-in type's hash is always the compiler's own: `Hash` does not read
+-- these.
+
+--| The compiler's own hash of `x`, as [`Hash`] gives it to a type with no `hash` of its own.
+export def int.hash: int -> int = { x ->
+  __hash(x)
+}
+
+--| The compiler's own hash of `x`, as [`Hash`] gives it to a type with no `hash` of its own.
+export def float.hash: float -> int = { x ->
+  __hash(x)
+}
+
+--| The compiler's own hash of `x`, as [`Hash`] gives it to a type with no `hash` of its own.
+export def bool.hash: bool -> int = { x ->
+  __hash(x)
+}
+
+--| The compiler's own hash of `s`, as [`Hash`] gives it to a type with no `hash` of its own.
+export def string.hash: string -> int = { s ->
+  __hash(s)
+}
+
+-- Text ------------------------------------------------------------------------------------------
+
+--| How a value of type `a` is written as text. A hole in a string, `"Total: {total}"`, is written
+  through it, so a type can be interpolated when it has one: a type gets one by attaching a
+  `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
+  `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
+  and derives one for a tag with a payload, a tuple, a record and a list from the `ToString` of
+  each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`.
+export context ToString(a) = (toString: a -> string)
+
+--| What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
+  needs a [`ToString`] of its value's type, as a call to a function that requires one does.
+export def __interpolate: [ToString(a)] a -> string = { value ->
+  toString(value)
+}
+
+--| The `toString` of the compiler's own [`ToString`] of a tag without a payload: what a function
+  that requires `ToString(a)` is passed when it is called with one. It writes the tag's name.
+export def __toString: a -> string = { value ->
+  "{value}"
+}
+
+--| What the derived `toString` of a list calls: `xs` in square brackets, each element written by
+  `show`, with `, ` between them.
+export def __listToString: [c] list(a), ([c] a -> string) -> string = { xs, show ->
+  match xs
+    | [] -> "[]"
+    | [first, ...rest] -> "[{__listRestToString(rest, show, show(first))}]"
+}
+
+def __listRestToString: [c] list(a), ([c] a -> string), string -> string = { xs, show, text ->
+  match xs
+    | [] -> text
+    | [first, ...rest] -> __listRestToString(rest, show, "{text}, {show(first)}")
+}
+
+-- Each built-in type has an attached `toString`, so a value can be turned into text by a function
+-- that can be passed around, `scores \map(int.toString)`, as well as by interpolation. Each one
+-- writes the value as interpolation does, with the compiler's own `ToString` for the type.
+
+--| `n` in decimal, with a leading `-` when it is negative.
+export def int.toString: int -> string = { n ->
+  "{n}"
+}
+
+--| `x` in decimal, with the fewest digits that read back as `x`.
+export def float.toString: float -> string = { x ->
+  "{x}"
+}
+
+--| `true` or `false`.
+export def bool.toString: bool -> string = { b ->
+  "{b}"
+}
+
+--| `s` itself.
+export def string.toString: string -> string = { s -> s }
+
+--| How a value of type `a` is read from text, with `e` for text that does not hold one: [`int.fromString`]
+  gives back `#some(int) | #invalidInt`. A type gets one by attaching a `fromString`, as `int`,
+  `float` and `bool` do, so a function can read a value of whichever type it is called at:
+  `def readAll: [FromString(a, e)] list(string) -> list(#some(a) | e)`.
+export context FromString(a, e) = (fromString: string -> #some(a) | e)
