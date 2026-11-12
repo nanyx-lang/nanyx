@@ -36,9 +36,9 @@ module internal EqualityOperators =
     let setFunction = "__setEqualsBy"
 
     /// The error for a call to `calleeName` that requires `Eq` of the type `ty`, which has type variables in it and
-    /// holds a map or a set: only the `==` derived for it compares a map, and a call cannot be passed that yet.
+    /// holds a map or a set: only the `==` derived for it compares a map, and none can be derived for it there.
     let collectionAtGenericCall (calleeName: Identifier) (ty: Ty) =
-        $"'{calleeName}' compares values of type '{display ty}', which holds a map or a set and so is compared by an == the compiler derives from its parts, but it cannot yet pass a function that == for a type with type variables in it"
+        $"'{calleeName}' compares values of type '{display ty}', which holds a map or a set and so is compared by an == the compiler derives from its parts, but none can be derived for it here"
 
     /// The error for a call to `calleeName`, which compares values of the type `ty`, which holds a map or a set, but is
     /// passed nothing to compare them with (see `WellKnownContexts.checkLocalCall`): it compares with the compiler's

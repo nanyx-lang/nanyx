@@ -43,11 +43,11 @@ order: 10
   have their own `==`). The derived `==` calls the prelude's `__mapEqualsBy` or `__setEqualsBy` with a function that
   compares two values or elements. It takes time in proportion to the product of the sizes, as a lookup does; the
   hash is not used yet.
-- **Not yet: comparing maps where the compiler's own `==` would be used.** A local function that compares values
-  generic in their type, or a call that needs `Eq` of a type with variables in it, such as `list.distinct` on a
-  `list(map(k, v))` inside a generic function, is passed the compiler's own `==`, which cannot compare a map. Both are
-  an error when the type holds a map or a set, where a type that holds a nominal type with its own `==` is compared by
-  structure instead ([#630](https://github.com/nanyx-lang/nanyx/issues/630)).
+- **A call that needs `Eq` of a type with variables in it**, such as `list.distinct` on a `list(set(a))` inside a
+  function that requires `[Eq(a)]`, is passed the derived `==` as a closure over the `Eq(a)` the function was given
+  ([#630](https://github.com/nanyx-lang/nanyx/issues/630)).
+- **Not yet: comparing maps in a local function.** A local function that compares values generic in their type is
+  passed the compiler's own `==`, which cannot compare a map, so it is an error when the type holds a map or a set.
 - **No order or hash of maps and sets yet.** `<` on a map or a set, or on anything holding one, is an error, and so
   is a map or a set as a key or a set's element: hashing the list underneath would give equal maps different
   hashes.

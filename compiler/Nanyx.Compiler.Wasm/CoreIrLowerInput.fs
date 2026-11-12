@@ -35,6 +35,10 @@ type ContextArgument =
     | ClosureOverWrapper of string
     /// The value of this top-level definition.
     | DefinitionValue of string
+    /// A closure over this wrapper of a definition the compiler derived from the parts of a type (see
+    /// `InstanceDerived`), which captures the members of the contexts the definition requires, each found where the
+    /// type checker found it for a call to the definition at this node.
+    | DerivedClosure of wrapper: string * at: NodeId
     /// None where the function is named: a member of a context its value requires where it is called, which each call
     /// passes (see `IrFunction`).
     | PassedByCaller

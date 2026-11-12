@@ -413,7 +413,7 @@ def label: [ToString(a)] (string, a) -> string = { name, value -> "{name}: {valu
 def angled = { value -> "<{value}>" }   // [ToString(α)] α -> string
 ```
 
-Such a function can be called with any type that has a `ToString`, the compiler's own included: `angled(3)` is `"<3>"`, and `angled(#red)` is `"<#red>"`. A tag with a payload has none, so `angled(#some(1))` is an error.
+Such a function can be called with any type that has a `ToString`, the compiler's own included: `angled(3)` is `"<3>"`, and `angled(#red)` is `"<#red>"`. A tag with a payload has one the compiler derives from its parts, so `angled(#some(1))` is `"<#some(1)>"`.
 
 A `use` changes how its block writes a type, generic code called from the block included:
 
@@ -435,7 +435,10 @@ A tag with a payload, a tuple, a record and a list have a `ToString` when their 
 "{(name = "Ada", age = 36)}"     // "(age = 36, name = Ada)"
 
 def wrapped: [ToString(a)] a -> string = { value -> "{#some(value)}" }
+def passed: [ToString(a)] a -> string = { value -> angled([value]) }
 ```
+
+Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in `receipt` above `"{[250]}"` would be `"[£2.50]"`.
 
 A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code.
 

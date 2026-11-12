@@ -120,6 +120,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     let toIrType = toIrTypeIn input.ContextLayouts
 
+    /// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in
+    /// the instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
+    let unconstrainedAsUnit (ty: Ty) =
+        substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
+
     /// The members of the contexts without parameters in `contexts`, in the order a function value takes them.
     let membersOf (contexts: Ty list) =
         match toIrType (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
@@ -688,7 +693,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let depth = scope.InterpolationDepth
             let insideHole = { scope with InterpolationDepth = depth + 1 }
             let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
-            let rec evaluateHoles (index: int) (remaining: Expression list) (evaluated: (Var * HoleType) list) =
+            let rec evaluateHoles (index: int) (remaining: Expression list) (evaluated: (Var * HoleType) option list) =
                 match remaining with
                 | [] ->
                     let mutable next = List.rev evaluated
@@ -697,16 +702,23 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         |> List.map (function
                             | StringText text -> Text text
                             | StringExpr _ ->
-                                let var, holeType = next.Head
+                                let held = next.Head
                                 next <- next.Tail
-                                Hole(var, holeType))
+                                match held with
+                                | Some (var, holeType) -> Hole(var, holeType)
+                                | None -> Text "()")
                     k (mk (Interpolate irParts) IrString)
+                // The unit value is written `()`, as a derived `toString` writes it. It is still evaluated, for what it does:
+                // the instance passed for the elements of `[]` writes one (see `unconstrainedAsUnit`).
+                | hole :: rest when tyOf hole = IrUnit ->
+                    let body = evaluateHoles (index + 1) rest (None :: evaluated)
+                    this.Complex insideHole hole (fun value -> mk (Do(value, body)) body.Type)
                 | hole :: rest ->
                     let holeType = this.HoleType scope hole
                     // A float is formatted to a string as its hole is evaluated, since that allocates.
                     let local = newVar (Interpolation.holeLocalName depth index) InterpolationHole (if holeType = HoleFloat then IrString else tyOf hole)
                     let store (value: Expr) =
-                        let body = evaluateHoles (index + 1) rest ((local, holeType) :: evaluated)
+                        let body = evaluateHoles (index + 1) rest (Some (local, holeType) :: evaluated)
                         mk (Let(local, value, body)) body.Type
                     if holeType = HoleFloat then
                         this.Atoms insideHole [ hole ] (fun atoms -> store (mk (CallRuntime(Helpers.floatToString, atoms, true)) IrString))
@@ -742,6 +754,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | (key, ClosureOverWrapper wrapper, memberTy) :: rest ->
                     let closure = this.WrapperClosure wrapper memberTy
                     bindTemp closure (fun atom -> next key atom memberTy rest)
+                | (key, DerivedClosure(wrapper, at), memberTy) :: rest ->
+                    this.DerivedClosure scope wrapper at memberTy (fun atom -> next key atom memberTy rest)
                 | (key, DefinitionValue definition, _) :: rest ->
                     // A member that is a value (`Point.`0``): the top-level value, evaluated.
                     let definitionTy =
@@ -812,12 +826,31 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | TyPrimitive _
             | TyOpenRecord _ -> ty
         let key, wrappedTy =
-            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map withoutOpenRests with
+            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map (withoutOpenRests >> unconstrainedAsUnit) with
             | Some ty, _ when (freeVars ty).IsEmpty -> (wrapper, []), ty
-            | Some _, Some ty when (freeVars ty).IsEmpty -> (wrapper, [ toIrType ty ]), ty
+            | Some _, Some ty -> (wrapper, [ toIrType ty ]), ty
             | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
         let name = request key subst (WrapperCalling(wrapped, wrappedTy, []))
         mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) (toIrType wrappedTy), [])) (toIrType wrappedTy)
+
+    /// A closure over the wrapper `wrapper` of a definition derived from the parts of a type (see `DerivedClosure`), at
+    /// `memberTy`, the type of the context member it is passed as: it captures the members of the contexts the
+    /// definition requires, found as for a call to it at the node `at`.
+    member private this.DerivedClosure (scope: Scope) (wrapper: string) (at: NodeId) (memberTy: Ty option) (k: Atom -> Expr) : Expr =
+        let wrapped =
+            match input.Lifted |> Map.tryFind wrapper with
+            | Some (FunctionWrapper wrapped) -> wrapped
+            | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+        // A member whose type the context's annotation does not give (`ToString(#x(a) | r)`) is at the definition's own.
+        let memberTy =
+            match memberTy, input.DefinitionTypes |> Map.tryFind wrapped with
+            | Some memberTy, _ -> unconstrainedAsUnit memberTy
+            | None, Some (TyFunc(input, output, _)) -> unconstrainedAsUnit (TyFunc(input, output, []))
+            | None, _ -> internalError $"the derived definition '{wrapped}' has no function type"
+        let ty = toIrType memberTy
+        this.ContextMembers scope wrapped at memberTy Set.empty (fun captured ->
+            let name = request (wrapper, [ ty ]) subst (WrapperCalling(wrapped, memberTy, captured |> List.map (fun (key, atom) -> key, atomType atom)))
+            bindTemp (mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) ty, List.map snd captured)) ty) k)
 
     /// The type of `expr` where it is: a name in scope has its variable's type, and a field of one the field's, which
     /// may be more than the type checker recorded at the node (for a parameter lambda lifting annotated, say).

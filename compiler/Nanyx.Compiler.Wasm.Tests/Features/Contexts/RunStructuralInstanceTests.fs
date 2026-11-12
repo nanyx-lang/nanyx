@@ -104,3 +104,81 @@ let ``Run - a structure of a type variable is compared with the Eq the function 
           "same([1], [2])" ]
     |> runSource
     |> assertRan "true\nfalse\ntrue\nfalse\ntrue\ntrue\nfalse\ntrue\nfalse\n"
+
+[<Fact>]
+let ``Run - a function is passed the toString derived for a structure of a type variable`` () =
+    printing
+        [ "type Point = (x: int, y: int)"
+          "def Point.toString = { p -> \"<{p.x},{p.y}>\" }"
+          "def show: [ToString(a)] a -> string = { x -> \"{x}\" }"
+          "def wrap: [ToString(a)] a -> string = { x -> show(#some(x)) }"
+          "def nested: [ToString(a)] a -> string = { x -> show([#some(x)]) }"
+          "def inferred = { x -> show((x, 1)) }" ]
+        [ "wrap(1)"
+          "wrap(Point(x = 1, y = 2))"
+          "nested(\"s\")"
+          "nested(Point(x = 3, y = 4))"
+          "inferred(Point(x = 5, y = 6))" ]
+    |> runSource
+    |> assertRan "#some(1)\n#some(<1,2>)\n[#some(s)]\n[#some(<3,4>)]\n(<5,6>, 1)\n"
+
+[<Fact>]
+let ``Run - a function that requires Eq is passed one derived from the Eq of a type variable, not the compiler's own`` () =
+    comparing
+        [ "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
+          "def listed: [Eq(a)] a, a -> bool = { x, y -> same([x], [y]) }"
+          "def tagged: [Eq(a)] a, a -> bool = { x, y -> same(#some(x), #some(y)) }"
+          "def paired = { x, y -> same((x, 1), (y, 1)) }"
+          "def opened: [Eq(a)] (#x(a) | r), (#x(a) | r) -> bool = { v, w -> same(v, w) }" ]
+        [ "listed(a, b)"
+          "listed(1, 2)"
+          "tagged(a, b)"
+          "tagged(1, 1)"
+          "paired(a, b)"
+          "paired(1, 2)"
+          "opened(#x(1), #x(1))"
+          "opened(#x(1), #y)" ]
+    |> runSource
+    |> assertRan "true\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\nfalse\n"
+
+[<Fact>]
+let ``Run - a generic call compares maps and sets through the Eq the function was given`` () =
+    comparing
+        [ "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
+          "def count: [Eq(a)] list(set(a)) -> int = { xs -> list.distinct(xs) \\list.length }"
+          "def mapped: [Eq(a)] a, a -> bool = { x, y -> same([\"k\" => x], [\"k\" => y]) }" ]
+        [ "count([set.fromList([1]), set.fromList([1]), set.fromList([2])])"
+          "mapped(a, b)"
+          "mapped(1, 2)" ]
+    |> runSource
+    |> assertRan "2\ntrue\nfalse\n"
+
+[<Fact>]
+let ``Run - a part of a structure is written and compared through an instance loaded with use in its block`` () =
+    printing
+        [ "def pounds: ToString(int) = (toString = { p -> \"£{p}\" })"
+          "def always: Eq(string) = (`==` = { a, b -> true })"
+          "def show: [ToString(a)] a -> string = { x -> \"{x}\" }"
+          "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
+          "def priced: int -> string = { n ->"
+          "  use pounds"
+          "  \"{[n, n]} {#some(n)} \" ++ show((n, 1))"
+          "}"
+          "def loose: string, string -> string = { a, b ->"
+          "  use always"
+          "  \"{#some(a) == #some(b)} {same((a, 1), (b, 1))}\""
+          "}" ]
+        [ "priced(5)"; "loose(\"a\", \"b\")"; "[5]"; "#some(\"a\") == #some(\"b\")" ]
+    |> runSource
+    |> assertRan "[£5, £5] #some(£5) (£5, £1)\ntrue true\n[5]\nfalse\n"
+
+[<Fact>]
+let ``Run - a local function writes a structure of a variable it is generic in, and an empty list is written`` () =
+    printing
+        [ "def outer = { y ->"
+          "  def wrap = { x -> \"{#some(x)}\" }"
+          "  wrap(y) ++ \" \" ++ wrap(\"s\")"
+          "}" ]
+        [ "outer(1)"; "[]" ]
+    |> runSource
+    |> assertRan "#some(1) #some(s)\n[]\n"

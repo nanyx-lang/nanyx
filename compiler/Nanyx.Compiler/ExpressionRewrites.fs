@@ -143,15 +143,21 @@ module internal ExpressionRewrites =
                 | other, _ -> other)
 
     /// The definitions that the instances synthesized for the calls in `expr` are made of (`instances`, by the call's
-    /// node): `float.zero`, `` float.`+` ``, ... for a call in it that is passed a `Num(float)`.
+    /// node): `float.zero`, `` float.`+` ``, ... for a call in it that is passed a `Num(float)`. A derived instance is
+    /// made of its definition and what the instances it is passed are made of.
     let synthesizedMembersIn (instances: Map<NodeId, ContextInstance option list>) (expr: Expression) : string list =
         let found = ResizeArray<string>()
-        expr
-        |> mapExpressionKinds (fun current kind ->
-            for instance in instances |> Map.tryFind current.Id |> Option.defaultValue [] do
+        let rec add (node: NodeId) =
+            for instance in instances |> Map.tryFind node |> Option.defaultValue [] do
                 match instance with
                 | Some (InstanceSynthesized members) -> found.AddRange(List.map snd members)
+                | Some (InstanceDerived(_, definition, at)) ->
+                    found.Add definition
+                    add at
                 | _ -> ()
+        expr
+        |> mapExpressionKinds (fun current kind ->
+            add current.Id
             kind)
         |> ignore
         List.ofSeq found
