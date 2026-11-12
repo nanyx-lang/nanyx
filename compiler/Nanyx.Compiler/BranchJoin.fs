@@ -37,12 +37,21 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
         | TyTag _
         | TyVar _ -> true
         | _ -> false
+    // A branch whose type is a variable an earlier join has already made a union, as a second call of a function
+    // parameter's is once the first was joined, is that union, rest and all.
     let tagsOf ty =
+        let ofType ty =
+            match Unifier.unalias ty with
+            | TyTag _ as tag -> Some [ tag ]
+            | TyVar v as var when rowVars.Contains v.Id -> Some [ var ]
+            | TyUnion items when items |> List.forall isUnionMember -> Some (items |> List.map Unifier.unalias)
+            | _ -> None
         match Unifier.unalias ty with
-        | TyTag _ as tag -> Some [ tag ]
-        | TyVar v as var when rowVars.Contains v.Id -> Some [ var ]
-        | TyUnion items when items |> List.forall isUnionMember -> Some (items |> List.map Unifier.unalias)
-        | _ -> None
+        | TyVar v when not (rowVars.Contains v.Id) ->
+            match resolveSoFar state ty with
+            | TyUnion _ as union -> ofType union
+            | _ -> None
+        | _ -> ofType ty
     // A branch that never gives a value (of type `undefined`) adds nothing to the whole's type, which is what the
     // other branches give: `undefined` only when no branch gives one.
     let giving = branchTypes |> List.filter (fun ty -> not (Unifier.isBottom (resolveSoFar state ty)))
