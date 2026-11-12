@@ -155,6 +155,9 @@ type InferState =
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
             /// `x \trim` on a string calls `string.trim`.
             PipeTargets: Map<NodeId, Identifier>;
+            /// The standard-library modules that export each value, as their import paths (`nanyx/text`), by the name
+            /// they export it under: where a pipe's error says to find a definition it could not reach.
+            StandardLibraryExports: Lazy<Map<string, string list>>;
             /// The operators that call a definition, by the operator's node, with the name they call it by: `x + y`
             /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
             /// `` $Vector.`+` `` when that is attached.
@@ -264,6 +267,7 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
+            StandardLibraryExports = lazy Map.empty;
             OperatorCalls = Map.empty;
             OperatorInstances = Map.empty;
             ReadAs = Map.empty;
