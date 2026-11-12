@@ -40,10 +40,11 @@ what the compiler keeps: exact spans, resolved names and types.
   type of what that declares, recorded by symbol (`SymbolTypes`). On a name, at its declaration or where it is
   used, the type comes after the name, as the declaration would write it
   ([#765](https://github.com/nanyx-lang/nanyx/issues/765)): `def takeOrder: [Console] string, list(string) -> ()`
-  for a top-level def, `half: int` for a local def, a parameter or a pattern variable. A top-level def of the
-  module's own shows the contexts it requires, written or inferred (`TypedModule.ContextTypes`, filled in by
-  `RequiredContexts`), instantiated where it is called as its type is (`[Show(Point)] Point -> string`); an
-  imported def does not show its contexts yet. A desugared workflow bind or return gets a node id of its own, so the bind as
+  for a top-level def, `half: int` for a local def, a parameter or a pattern variable. A top-level def shows the
+  contexts it requires, written or inferred, instantiated where it is called as its type is
+  (`[Show(Point)] Point -> string`). The module's own defs' contexts are in `TypedModule.ContextTypes`; an imported
+  def's, the standard library's among them, are in `ImportedContextTypes` with the def's type, carried over from the
+  module that declares it (both filled in by `RequiredContexts`). A desugared workflow bind or return gets a node id of its own, so the bind as
   written has no type rather than that of the rest of the workflow. Each document
   is compiled once per change and the result cached in `DocumentStore`, shared by diagnostics and hover. A
   declared signature or doc comment needs name resolution ([#98](https://github.com/nanyx-lang/nanyx/issues/98)),

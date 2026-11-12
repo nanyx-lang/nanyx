@@ -1,4 +1,5 @@
-/// The contexts a module's own top-level defs require, as types, so that an editor can show them with the defs' types.
+/// The contexts a module's own top-level defs require, and those its imports bring in require, as types, so that an
+/// editor can show them with the defs' types.
 module internal NyxCompiler.RequiredContexts
 
 open NyxCompiler.InferState
@@ -25,3 +26,25 @@ let ofDefs (state: InferState) (subst: Subst) (defs: Symbol list) : Map<SymbolId
             Some (symbol.Id, inferred @ written)
         | _ -> None)
     |> Map.ofList
+
+/// The type and the contexts of each of `symbols`, the defs an import brings in, that requires contexts, by its
+/// symbol, as `TypedModule.ImportedContextTypes` holds them. `contextTypes` and `symbolTypes` are the imported module's
+/// `ContextTypes` and the types of its defs before `subst`, its substitution, resolves them. The variables are
+/// numbered apart from the importer's, as an imported def's type is in its environment, and keep their names.
+let ofImport (subst: Subst) (contextTypes: Map<SymbolId, Ty list>) (symbolTypes: Map<SymbolId, Ty>) (symbols: SymbolId seq) : Map<SymbolId, Ty * Ty list> =
+    symbols
+    |> Seq.choose (fun id ->
+        match contextTypes |> Map.tryFind id, symbolTypes |> Map.tryFind id with
+        | Some (_ :: _ as contexts), Some general ->
+            let resolved = TyApply("", Unifier.apply subst general :: (contexts |> List.map (Unifier.apply subst)))
+            let names = ContextInference.varsInOrder resolved |> List.map (fun var -> var.Id, var.Name) |> Map.ofList
+            let renumbered =
+                TypeEnv.freeTyVars resolved
+                |> Seq.mapi (fun index varId ->
+                    varId, TyVar { Id = -(index + 1); Name = names |> Map.tryFind varId |> Option.flatten })
+                |> Map.ofSeq
+            match Unifier.apply renumbered resolved with
+            | TyApply(_, general :: contexts) -> Some (id, (general, contexts))
+            | _ -> None
+        | _ -> None)
+    |> Map.ofSeq
