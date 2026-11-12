@@ -45,6 +45,7 @@
     <Compile Include="Features\Contexts\ContextMemberValueTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
+    <Compile Include="Features\Definitions\InitialisationCycleTests.fs" />
     <Compile Include="Features\Definitions\ModuleBlockTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticCodeTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticSpanTests.fs" />

@@ -92,7 +92,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let emit item = items <- items @ [ itemIndex, item ]
     // A name defined again is reported, and only its first definition is inferred.
     let module', duplicateErrors = DuplicateDefinitions.check initialState.Declared module'
-    let mutable errors: Diagnostic list = duplicateErrors
+    let mutable errors: Diagnostic list = duplicateErrors @ InitialisationCycles.check initialState.Declared module'
 
     // An imported context whose every member is also an imported definition of that name is an ambient instance:
     // the one the runtime supplies, as `nanyx/console`'s definitions are its `Console`. The top level of the module
