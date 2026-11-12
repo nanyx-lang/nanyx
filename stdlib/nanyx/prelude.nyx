@@ -534,6 +534,109 @@ export def F32.toString: F32 -> string = { x ->
   "{x}"
 }
 
+-- Arithmetic that wraps around on purpose, as a hash or a checksum wants: each keeps the low bits
+-- of the result, as many as the type has, where `+`, `-` and `*` stop the program.
+
+--| `x` plus `y`, wrapping around past the largest or smallest `int`: `int.wrappingAdd(9_223_372_036_854_775_807, 1)`
+  is the smallest `int`. Each integer type has its own, `I32.wrappingAdd` and the rest.
+export def int.wrappingAdd: int, int -> int = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+--| `x` minus `y`, wrapping around as [`int.wrappingAdd`] does.
+export def int.wrappingSub: int, int -> int = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+--| `x` times `y`, wrapping around as [`int.wrappingAdd`] does.
+export def int.wrappingMul: int, int -> int = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def I8.wrappingAdd: I8, I8 -> I8 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def I8.wrappingSub: I8, I8 -> I8 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def I8.wrappingMul: I8, I8 -> I8 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def I16.wrappingAdd: I16, I16 -> I16 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def I16.wrappingSub: I16, I16 -> I16 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def I16.wrappingMul: I16, I16 -> I16 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def I32.wrappingAdd: I32, I32 -> I32 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def I32.wrappingSub: I32, I32 -> I32 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def I32.wrappingMul: I32, I32 -> I32 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def U8.wrappingAdd: U8, U8 -> U8 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def U8.wrappingSub: U8, U8 -> U8 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def U8.wrappingMul: U8, U8 -> U8 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def U16.wrappingAdd: U16, U16 -> U16 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def U16.wrappingSub: U16, U16 -> U16 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def U16.wrappingMul: U16, U16 -> U16 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def U32.wrappingAdd: U32, U32 -> U32 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def U32.wrappingSub: U32, U32 -> U32 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def U32.wrappingMul: U32, U32 -> U32 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
+export def U64.wrappingAdd: U64, U64 -> U64 = { x, y ->
+  __nanyx_wrapping_add(x, y)
+}
+
+export def U64.wrappingSub: U64, U64 -> U64 = { x, y ->
+  __nanyx_wrapping_sub(x, y)
+}
+
+export def U64.wrappingMul: U64, U64 -> U64 = { x, y ->
+  __nanyx_wrapping_mul(x, y)
+}
+
 -- Joining ---------------------------------------------------------------------------------------
 
 --| The values of type `a` that join, end to end. `x ++ y` is read through it:
