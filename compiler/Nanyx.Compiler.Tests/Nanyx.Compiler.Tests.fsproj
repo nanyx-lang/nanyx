@@ -41,6 +41,7 @@
     <Compile Include="Features\Contexts\ContextTypeParameterTests.fs" />
     <Compile Include="Features\Contexts\UndeclaredContextTests.fs" />
     <Compile Include="Features\Contexts\ContextProviderTests.fs" />
+    <Compile Include="Features\Contexts\ContextMemberValueTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Definitions\ModuleBlockTests.fs" />
