@@ -51,6 +51,7 @@
     <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
     <Compile Include="Features\Linters\PlusBetweenContextsTests.fs" />
     <Compile Include="Features\Linters\UnannotatedExportsTests.fs" />
+    <Compile Include="Features\Linters\UnusedResultsTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
     <Compile Include="Features\Maps\MapTests.fs" />
     <Compile Include="Features\Memory\MemoryCellTests.fs" />

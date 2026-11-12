@@ -230,7 +230,10 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an exported top-level def whose `ValueDef` writes no
 > type. Its fix writes the def's type from `SymbolTypes` after the contexts it requires, which the `SemanticModel`
 > carries as `ContextTypes`, printed by `Signatures`: the printer hover and the type lenses use, which joins contexts
-> with `&` as an annotation does. The rules for unused and
+> with `&` as an annotation does. Its twelfth is `unusedResults`
+> ([#105](https://github.com/nanyx-lang/nanyx/issues/105)), an error by default: a statement of a block, other than
+> its last, whose type in `Types` is known and is neither `()` nor `undefined`. A workflow keyword's statement has no
+> type there yet (desugaring keeps no provenance, #99), and is left alone by its kind. The rules for unused and
 > unreachable code are tracked in
 > [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
 > carries the module's text, which fixes need (to remove a whole line, say). What the host settled:

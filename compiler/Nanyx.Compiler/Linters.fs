@@ -787,6 +787,61 @@ module UnannotatedExports =
                         Edits = [ { Span = TextEdit.spanBetween model.Source symbol.Declaration afterName afterName; NewText = $": {written}" } ] } ] }))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `unusedResults` rule: a statement of a block, other than its last, whose value is thrown away
+/// though it is not `()`: `readLine()` on a line of its own. Left alone: a statement whose type is `()`, a type variable
+/// (it may be `()`) or `undefined` (it never gives a value, which `unreachableCode` is about); a workflow keyword's
+/// statement, whose value the workflow takes; and a block's last statement, which is the block's value. A `for` loop
+/// is `()`, so what its body gives is not reported either. Its fix passes the value to `ignore`.
+module UnusedResults =
+    let rule =
+        { Id = "unusedResults"
+          Title = "Unused result"
+          DefaultSeverity = Severity.Error
+          Description =
+            "A statement of a block, other than its last, whose value is not `()` and is thrown away. Bind it to a name, or pass it to `ignore` to say it is not needed." }
+
+    /// The type of `expr` if it is a value that a statement throws away: known, and neither `()` nor `undefined`.
+    let private discardedType (model: SemanticModel) (expr: Expression) : Ty option =
+        match expr.Kind with
+        | WorkflowBindExpr _
+        | WorkflowReturnExpr _ -> None
+        | _ ->
+            model.Types
+            |> Map.tryFind expr.Id
+            |> Option.filter (fun ty ->
+                match Unifier.unalias ty with
+                | TyVar _
+                | TyPrimitive "unit" -> false
+                | unaliased -> not (Unifier.isBottom unaliased))
+
+    let private whatIsUnused (expr: Expression) =
+        match expr.Kind with
+        | FunctionCall(name, _, _)
+        | Pipe(_, name, _, _)
+        | ContextMemberCall(_, name, _) -> $"The result of `{name}`"
+        | _ -> "This value"
+
+    let lint (model: SemanticModel) : Report list =
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.blocksWithin
+        |> List.collect (fun statements ->
+            statements
+            |> List.take (statements.Length - 1)
+            |> List.choose (fun statement ->
+                match statement.Kind with
+                | ExprStatement value ->
+                    discardedType model value
+                    |> Option.map (fun ty ->
+                        let written = model.Source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
+                        { Rule = rule.Id
+                          Span = value.Span
+                          Message = $"{whatIsUnused value}, of type '{Unifier.tyToDisplayString Ascii ty}', is never used: bind it to a name, or pass it to `ignore`"
+                          Related = []
+                          Fixes = [ { Title = "Pass it to `ignore`"; Edits = [ { Span = value.Span; NewText = $"ignore({written})" } ] } ] })
+                | _ -> None))
+        |> List.sortBy (fun report -> report.Span.Start)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
@@ -794,12 +849,13 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              PlusBetweenContexts.rule; UnannotatedExports.rule ]
+              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
-                @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model }
+                @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model
+                @ UnusedResults.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.
