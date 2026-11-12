@@ -18,6 +18,7 @@
     <Compile Include="CoreIrLowerTypes.fs" />
     <Compile Include="CoreIrLowerSyntax.fs" />
     <Compile Include="CoreIrLower.fs" />
+    <Compile Include="CoreIrLowerModule.fs" />
     <Compile Include="CoreIrDrop.fs" />
     <Compile Include="CoreIrEquality.fs" />
     <Compile Include="CoreIrOrdering.fs" />
