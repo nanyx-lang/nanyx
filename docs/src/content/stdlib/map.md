@@ -15,7 +15,7 @@ prices("pie")   -- #notFound
 
 A key written twice in a literal holds the value written last. `[]` is always the empty list; the empty map is `map.empty`. `for prices | name, price -> ...` walks a map's entries.
 
-A map's keys need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, so every function that looks one up requires `[Eq(k) + Hash(k)]`. Numbers, strings, tags, records, tuples and lists can all be keys, and so can a nominal type that attaches its own `==` and `hash`; a type that holds a function cannot, and nor can a nominal type that attaches `==` without `hash`. When the keys are tags of different names, write the key type, as in `def lights: map(#red | #green, string) = ...`: inference does not yet join the tags of separate keys. Two maps cannot be compared with `==` yet ([#618](https://github.com/nanyx-lang/nanyx/issues/618)).
+A map's keys need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, so every function that looks one up requires `[Eq(k) & Hash(k)]`. Numbers, strings, tags, records, tuples and lists can all be keys, and so can a nominal type that attaches its own `==` and `hash`; a type that holds a function cannot, and nor can a nominal type that attaches `==` without `hash`. When the keys are tags of different names, write the key type, as in `def lights: map(#red | #green, string) = ...`: inference does not yet join the tags of separate keys. Two maps cannot be compared with `==` yet ([#618](https://github.com/nanyx-lang/nanyx/issues/618)).
 
 These functions are [attached definitions](../advanced/attached-definitions) on `map`, so `m \insert(k, v)` resolves to `map.insert` when `m` is a map, and are in the [prelude](../tour/modules#modules-in-the-standard-library). Maps are immutable: every function gives back a new map. For now a map keeps its entries in the order their keys were first added, and a lookup takes time in proportion to its size (see [Maps and sets](../work-in-progress/maps-and-sets)).
 
@@ -32,7 +32,7 @@ The map with no keys.
 ## fromList
 
 ```nanyx
-map.fromList: [Eq(k) + Hash(k)] list((k, v)) -> map(k, v)
+map.fromList: [Eq(k) & Hash(k)] list((k, v)) -> map(k, v)
 ```
 
 The map holding each key and value of a list of pairs. Of two pairs with the same key, the later wins.
@@ -77,7 +77,7 @@ The values of a map, in the order their keys were first added.
 ## get
 
 ```nanyx
-map.get: [Eq(k) + Hash(k)] (map(k, v), k) -> #some(v) | #notFound
+map.get: [Eq(k) & Hash(k)] (map(k, v), k) -> #some(v) | #notFound
 ```
 
 The value a map holds for a key, or `#notFound`. Calling the map, `m(key)`, is the same.
@@ -92,7 +92,7 @@ The value a map holds for a key, or `#notFound`. Calling the map, `m(key)`, is t
 ## containsKey
 
 ```nanyx
-map.containsKey: [Eq(k) + Hash(k)] (map(k, v), k) -> bool
+map.containsKey: [Eq(k) & Hash(k)] (map(k, v), k) -> bool
 ```
 
 Whether a map holds a value for a key.
@@ -102,7 +102,7 @@ Whether a map holds a value for a key.
 ## insert
 
 ```nanyx
-map.insert: [Eq(k) + Hash(k)] (map(k, v), k, v) -> map(k, v)
+map.insert: [Eq(k) & Hash(k)] (map(k, v), k, v) -> map(k, v)
 ```
 
 The map with a key holding a value, in place of any value it held before.
@@ -117,7 +117,7 @@ The map with a key holding a value, in place of any value it held before.
 ## remove
 
 ```nanyx
-map.remove: [Eq(k) + Hash(k)] (map(k, v), k) -> map(k, v)
+map.remove: [Eq(k) & Hash(k)] (map(k, v), k) -> map(k, v)
 ```
 
 The map without a key or its value. A map that does not have the key is given back as it is.
@@ -152,7 +152,7 @@ map.isEmpty(["a" => 1])     -- false
 ## update
 
 ```nanyx
-map.update: [Eq(k) + Hash(k)] (map(k, v), k, ((#some(v) | #notFound) -> v)) -> map(k, v)
+map.update: [Eq(k) & Hash(k)] (map(k, v), k, ((#some(v) | #notFound) -> v)) -> map(k, v)
 ```
 
 The map with a key holding what a function makes of the value the map held for it: `#some(v)`, or `#notFound` when the map does not have the key. A key the map does not have is added at the end.

@@ -41,7 +41,7 @@ def g: [c.Console] () -> () = {
   c.flush()
 }
 
-def h: [c.Console + ToString(a)] a -> () = { value ->
+def h: [c.Console & ToString(a)] a -> () = { value ->
   g()
   c.println(value)
 }

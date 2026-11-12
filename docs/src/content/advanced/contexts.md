@@ -126,7 +126,7 @@ For a formal proposal of type-level context requirements, see [Work in progress:
 
 # Combining contexts
 
-You can require multiple contexts by combining them:
+You can require multiple contexts by joining them with `&`:
 
 ```nanyx
 def readAndPrintFile
@@ -177,7 +177,7 @@ A function's type can also require an operator by its member instead of by the c
 
 ```nanyx
 def add: [`+`: a, a -> a] = { + }                           -- [Add(a)] a, a -> a
-def scale: [`+`: a, a -> a + `*`: a, a -> a] a, a -> a      -- [Num(a)] a, a -> a
+def scale: [`+`: a, a -> a & `*`: a, a -> a] a, a -> a      -- [Num(a)] a, a -> a
   = { x, k -> x * k + x }
 ```
 

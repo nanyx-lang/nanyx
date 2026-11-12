@@ -47,6 +47,7 @@
     <Compile Include="Features\Linters\UnreachableCodeTests.fs" />
     <Compile Include="Features\Linters\UseInBracesTests.fs" />
     <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
+    <Compile Include="Features\Linters\PlusBetweenContextsTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
     <Compile Include="Features\Maps\MapTests.fs" />
     <Compile Include="Features\Memory\MemoryCellTests.fs" />

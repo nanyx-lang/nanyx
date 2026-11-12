@@ -45,7 +45,7 @@ module internal OperatorCalls =
     ///
     /// On a type variable, the operator calls the member of the nearest instance in scope of a context of that
     /// variable that has it, which `instanceMember` finds, with that instance as written: in a function that requires
-    /// `[Add(a) + Add(b)]`, `x + y` on two `a`s calls the `` `+` `` of `Add(a)`, though `Add(b)`'s is bound to the
+    /// `[Add(a) & Add(b)]`, `x + y` on two `a`s calls the `` `+` `` of `Add(a)`, though `Add(b)`'s is bound to the
     /// name too.
     let definition
         (instanceMember: Identifier -> Ty -> (TypeExpr * TypeScheme) option)

@@ -56,7 +56,23 @@ let ``An operator is required by the member it reads, among a def's contexts`` (
     Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: (a, a) -> a] a, a -> a = { + }")
     Assert.Equal<TypeExprKind list>(
         [ required "+" (binary a); TypeApply ("Eq", [ a ]); required "==" (binary (TypeExpr.synthetic (TypeName "bool"))); TypeName "Console" ],
-        contextsOf "def f: [`+`: a, a -> a + Eq(a) + `==`: a, a -> bool + Console] a -> a = { x -> x }")
+        contextsOf "def f: [`+`: a, a -> a & Eq(a) & `==`: a, a -> bool & Console] a -> a = { x -> x }")
+    // In brackets, `&` in a member's type is an intersection.
+    let b = TypeExpr.synthetic (TypeVar "b")
+    Assert.Equal<TypeExprKind list>(
+        [ required "f" (TypeExpr.synthetic (TypeFunc (TypeExpr.synthetic (TypeIntersection [ a; b ]), a))); TypeName "Console" ],
+        contextsOf "def f: [`f`: (a & b) -> a & Console] a -> a = { x -> x }")
+
+[<Fact>]
+let ``A def's contexts are joined with &, or with + as an earlier spec had it`` () =
+    let contextsOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext (contexts, _) }, _))) ] -> contexts |> List.map _.Kind
+        | other -> failwith $"Unexpected parse: %A{other}"
+    let a = TypeExpr.synthetic (TypeVar "a")
+    let expected = [ TypeApply ("Eq", [ a ]); TypeApply ("Hash", [ a ]); TypeName "Console" ]
+    Assert.Equal<TypeExprKind list>(expected, contextsOf "def both: [Eq(a) & Hash(a) & Console] a, a -> bool = { x, y -> x == y }")
+    Assert.Equal<TypeExprKind list>(expected, contextsOf "def both: [Eq(a) + Hash(a) + Console] a, a -> bool = { x, y -> x == y }")
 
 /// The statements of `def main = { ... }` in `source`, its line endings made `\n`.
 let private mainStatements (source: string) =

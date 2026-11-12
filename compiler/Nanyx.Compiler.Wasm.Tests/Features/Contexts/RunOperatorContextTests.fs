@@ -38,7 +38,7 @@ let ``Run - an operator required by its member is passed the instance of the pre
         "import nanyx/console\n" +
         "\n" +
         "def add: [`+`: a, a -> a] = { + }\n" +
-        "def scale: [`+`: a, a -> a + `*`: a, a -> a] a, a -> a = { x, k -> x * k + x }\n" +
+        "def scale: [`+`: a, a -> a & `*`: a, a -> a] a, a -> a = { x, k -> x * k + x }\n" +
         "@entry\n" +
         "def main = {\n" +
         "  println(\"{add(1, 2)} {add(1.5, 2.25)} {scale(3, 2)} {scale(1.5, 2.0)}\")\n" +
@@ -47,7 +47,7 @@ let ``Run - an operator required by its member is passed the instance of the pre
 
 [<Fact>]
 let ``Run - a def that compares values of two type variables calls each one's instance`` () =
-    // #690: `same2` is `[Eq(a) + Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
+    // #690: `same2` is `[Eq(a) & Eq(b)] a, a, b, b -> bool`, and each `==` calls the member of its own instance.
     let source =
         """
 import nanyx/console
@@ -68,8 +68,8 @@ let ``Run - arithmetic on two type variables calls each one's instance`` () =
         """
 import nanyx/console
 
-def both: [Add(a) + Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
-def same: [Eq(a) + Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
+def both: [Add(a) & Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p - q) }
+def same: [Eq(a) & Eq(b)] a, a, b, b -> bool = { x, y, p, q -> x == y and p != q }
 def r = { x, y, p, q -> (x + y, p * q) }
 def negated = { x, p -> (-x, -p) }
 def withSum = { x, y, xs -> (x + y, xs \list.sum) }

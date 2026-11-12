@@ -53,7 +53,7 @@ prelude declares `Add(a)` and `Num(a)`.
   as many steps as the exponent has bits ([#611](https://github.com/nanyx-lang/nanyx/issues/611)).
 - **`float.pow(x, y)`** takes any `y`: a whole one is `x ** y`, and any other `e ** (y * ln(x))`, with `exp` and `ln`
   written in the prelude from their series, since WebAssembly has neither.
-- **`math.abs: [Num(a) + Ord(a)] a -> a`**, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
+- **`math.abs: [Num(a) & Ord(a)] a -> a`**, and `math.min`, `max` and `clamp` require `[Ord(a)]`, so they take an
   `int`, a `float` or any other type with an order ([#186](https://github.com/nanyx-lang/nanyx/issues/186)).
 - **An operator finds its context in the prelude**, by the member it reads, rather than in a table the compiler
   keeps, and **a function that does not write its type requires it**: `def add = { x, y -> x + y }` is

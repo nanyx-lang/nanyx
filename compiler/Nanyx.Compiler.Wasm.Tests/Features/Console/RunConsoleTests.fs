@@ -88,7 +88,7 @@ def main = {
 
 [<Fact>]
 let ``Run - a function generic in what it prints passes its ToString to println`` () =
-    let source = """def labelled: [Console + ToString(a)] string, a -> () = { label, value ->
+    let source = """def labelled: [Console & ToString(a)] string, a -> () = { label, value ->
   print(label ++ ": ")
   println(value)
 }
@@ -127,7 +127,7 @@ import nanyx/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 
-def h: [c.Console + ToString(a)] a -> () = { value ->
+def h: [c.Console & ToString(a)] a -> () = { value ->
   g()
   c.write("value: ")
   c.println(value)

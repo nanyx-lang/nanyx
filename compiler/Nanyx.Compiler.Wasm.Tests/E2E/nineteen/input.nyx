@@ -1,21 +1,19 @@
+type Println = (println: string -> ())
+type Add = (add: (int, int) -> int)
 
-type Println = ( println: (string) -> () )
-type Add = ( add: (int, int) -> int )
-
-def f: [Println + Add] = {
+def f: [Println & Add] = {
   println("Hello")
   add(3, 4)
 }
 
 def main = {
   use (
-    println = { s -> 
+    println = { s ->
       dbg(s)
       ()
     }
   )
-  use (
-    add = { x, y -> x + y }
-  )
+
+  use (add = { x, y -> x + y })
   f()
 }

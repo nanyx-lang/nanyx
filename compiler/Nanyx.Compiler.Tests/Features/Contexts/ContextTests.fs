@@ -98,11 +98,11 @@ let ``Missing contexts are named, not listed by their members`` () =
         "context Clock = (now: () -> int)\n"
     Assert.Equal(
         "'g' requires the contexts 'Log' and 'Clock', which are not available here",
-        message (contexts + "def g: [Log + Clock] () -> () = { log(\"hi\") }\ndef h = { g() }"))
+        message (contexts + "def g: [Log & Clock] () -> () = { log(\"hi\") }\ndef h = { g() }"))
     // A context the caller has is not listed.
     Assert.Equal(
         "'g' requires the context 'Clock', which is not available here",
-        message (contexts + "def g: [Log + Clock] () -> () = { log(\"hi\") }\ndef h: [Log] () -> () = { g() }"))
+        message (contexts + "def g: [Log & Clock] () -> () = { log(\"hi\") }\ndef h: [Log] () -> () = { g() }"))
 
 [<Fact>]
 let ``A function passed as a value needs its contexts where it is named, as a call does`` () =

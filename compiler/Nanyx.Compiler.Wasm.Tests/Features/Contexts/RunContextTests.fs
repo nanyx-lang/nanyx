@@ -94,7 +94,7 @@ let ``Run - use bindings of parameterised contexts and records`` () =
         "context Show(a) = (show: a -> string)\n" +
         "context Ask = (ask: () -> int)\n" +
         "\n" +
-        "def describe: [Show(a) + Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ \" & \" ++ Show(b).show(y) }\n" +
+        "def describe: [Show(a) & Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ \" & \" ++ Show(b).show(y) }\n" +
         "def twice: [Ask] () -> int = { ask() + ask() }\n" +
         "\n" +
         "@entry\n" +
@@ -273,7 +273,7 @@ let ``Run - a call synthesizes a context's instance from attached definitions, a
         "}\n" +
         "\n" +
         "def describe: [Show(a)] a -> string = { value -> \"<\" ++ Show(a).show(value) ++ \">\" }\n" +
-        "def both: [Show(a) + Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ \" & \" ++ Show(b).show(y) }\n" +
+        "def both: [Show(a) & Show(b)] (a, b) -> string = { x, y -> Show(a).show(x) ++ \" & \" ++ Show(b).show(y) }\n" +
         "def twice: [Show(a)] a -> string = { value -> describe(value) ++ describe(value) }\n" +
         "def plain: [Show(a)] a -> string = { value -> show(value) }\n" +
         "\n" +

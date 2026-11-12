@@ -77,8 +77,8 @@ Operators on two of the function's type variables require the contexts of each, 
 of its own variable's instance:
 
 ```nanyx
-def r = { x, y, p, q -> (x + y, p * q) }          -- [Add(a) + Num(b)] a, a, b, b -> (a, b)
-def same2 = { x, y, p, q -> x == y and p == q }   -- [Eq(a) + Eq(b)] a, a, b, b -> bool
+def r = { x, y, p, q -> (x + y, p * q) }          -- [Add(a) & Num(b)] a, a, b, b -> (a, b)
+def same2 = { x, y, p, q -> x == y and p == q }   -- [Eq(a) & Eq(b)] a, a, b, b -> bool
 ```
 
 Two cases keep their operators on ints, as they were, because the requirement could not be used yet:
@@ -114,7 +114,7 @@ This replaces the numeric contexts page's "unannotated arithmetic is unchanged":
 A function can require two contexts with a member of the same name, of different type variables:
 
 ```nanyx
-def both: [Add(a) + Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p + q) }
+def both: [Add(a) & Add(b)] a, a, b, b -> (a, b) = { x, y, p, q -> (x + y, p + q) }
 ```
 
 Both `` `+` ``s are bound to the name in the body, so the name alone does not say which an operator calls. An
@@ -133,7 +133,7 @@ A function's type can require an operator by the member it reads, rather than by
 
 ```nanyx
 def add: [`+`: a, a -> a] = { + }
-def scale: [`+`: a, a -> a + `*`: a, a -> a] a, a -> a = { x, k -> x * k + x }
+def scale: [`+`: a, a -> a & `*`: a, a -> a] a, a -> a = { x, k -> x * k + x }
 ```
 
 This is not a context of its own. Before the def is checked, each such requirement is read as the prelude's
@@ -147,7 +147,7 @@ context's name, and the body can use the context's other members.
   `[ToString(a)]`.
 - Only members of the prelude's contexts can. `` [`<`: a, a -> bool] `` is `NYX0108`, since `<` reads `Ord`'s
   `compare`, and the message says to write `[Ord(a)]`.
-- Requirements written both ways are merged: ``[Add(a) + `+`: a, a -> a]`` is `[Add(a)]`.
+- Requirements written both ways are merged: ``[Add(a) & `+`: a, a -> a]`` is `[Add(a)]`.
 - A def that writes only its contexts, as `add` above does, is given the type it would have written, so a call can
   read the context's argument from it. This also makes `def sub: [Add(a)] = { x, y -> x - y }` callable, which it
   was not (`ContextInference.writtenType`).

@@ -443,7 +443,7 @@ let ``Run - nanyx/math abs, min, max, clamp and pow`` () =
 
 [<Fact>]
 let ``Run - nanyx/math abs takes an int or a float`` () =
-    // #610: `abs` is `[Num(a) + Ord(a)] a -> a`; it took an `int` only.
+    // #610: `abs` is `[Num(a) & Ord(a)] a -> a`; it took an `int` only.
     let source =
         "import nanyx/console\n" +
         "import nanyx/math as math\n" +
@@ -483,7 +483,7 @@ let ``Run - nanyx/math abs, min and max are called from generic functions`` () =
         "import nanyx/math as math\n" +
         "\n" +
         "def double: [Num(a)] a -> a = { x -> x * 2 }\n" +
-        "def distance: [Num(a) + Ord(a)] a, a -> a = { p, q -> math.abs(p - q) }\n" +
+        "def distance: [Num(a) & Ord(a)] a, a -> a = { p, q -> math.abs(p - q) }\n" +
         "def widest: [Ord(a)] a, a, a -> a = { p, q, r -> math.max(p, math.max(q, r)) }\n" +
         "println(\"{double(21)} {double(1.5)}\")\n" +
         "println(\"{distance(3, 10)} {distance(1.5, 0.25)}\")\n" +

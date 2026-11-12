@@ -20,7 +20,7 @@ fold small functions such as `println` into their callers.
 # What a call costs today
 
 Since printing takes any value with a `ToString` ([Printing values](./printing-values#printing)), `println` is an
-ordinary function, `[Console + ToString(a)] a -> ()`. Hello world compiles to this (from
+ordinary function, `[Console & ToString(a)] a -> ()`. Hello world compiles to this (from
 `Nanyx.Compiler.Wasm.Tests/E2E/twentythree/expected.wat`):
 
 - **The call site allocates a closure for every member.** `println("Hello, Nanyx!")` makes six closures on the heap,

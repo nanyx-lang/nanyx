@@ -13,7 +13,7 @@ Functions that work on any numeric type are generic over the `Num(a)` [context](
 # abs
 
 ```nanyx
-math.abs: [Num(a) + Ord(a)] a -> a
+math.abs: [Num(a) & Ord(a)] a -> a
 ```
 
 ```nanyx

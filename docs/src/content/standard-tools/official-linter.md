@@ -119,6 +119,15 @@ def f = {
 ```
 
 The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#doc-comments) that isn't followed by something it can document: a definition, a type or context, a member of a context, a field, a tag, or the module itself at the top of the file. Its fix makes it an ordinary `--` comment.
+
+## Contexts joined with `+`
+
+```nanyx
+def both: [Eq(a) + Hash(a)] a, a -> bool = { x, y -> x == y and hash(x) == hash(y) } -- Linter warning: Join contexts with `&`
+```
+
+The rule (`plusBetweenContexts`) reports a `+` between the contexts a function requires. Contexts are joined with `&`, as in `[Eq(a) & Hash(a)]` (see [Contexts](../advanced/contexts)); `+` is what an earlier version of the language wrote, and the compiler still reads it. Its fix replaces the `+` with `&`, and the formatter writes `&` too.
+
 ## Unreachable code path
 
 ```nanyx

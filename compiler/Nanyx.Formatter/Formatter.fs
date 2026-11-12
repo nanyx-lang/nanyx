@@ -1210,13 +1210,25 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeMember(n, None) -> text $"type {n}"
 
     and contextSet (items: TypeExpr list) : Doc =
+        // Whether `t` is written with a `&` outside brackets, which in a context member's type would start the set's
+        // next context.
+        let rec intersects (t: TypeExpr) =
+            match t.Kind with
+            | TypeIntersection _ -> true
+            | TypeTuple items
+            | TypeUnion items -> List.exists intersects items
+            | TypeFunc(parameter, result) -> intersects parameter || intersects result
+            | TypeWithContext(_, inner) -> intersects inner
+            | _ -> false
         let item (t: TypeExpr) =
             match t.Kind with
             | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
             // An operator required by the member it reads: `` `+`: a, a -> a ``.
-            | TypeRecord [ TypeField(n, false, false, Some memberType, None) ] -> cat [ text (Names.written n); text ": "; typeList memberType ]
+            | TypeRecord [ TypeField(n, false, false, Some memberType, None) ] ->
+                let memberDoc = if intersects memberType then parenType memberType else typeList memberType
+                cat [ text (Names.written n); text ": "; memberDoc ]
             | _ -> typeExpr t
-        cat [ text "["; Doc.join (text " + ") (List.map item items); text "]" ]
+        cat [ text "["; Doc.join (text " & ") (List.map item items); text "]" ]
 
     and typeDefDoc (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) : Doc =
         let isPrivate = List.contains Private modifiers

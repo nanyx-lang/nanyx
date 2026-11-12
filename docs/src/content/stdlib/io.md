@@ -11,7 +11,7 @@ All functions in this module require a `Console` context. Its members are `write
 # println
 
 ```nanyx
-println: [Console + ToString(a)] a -> ()
+println: [Console & ToString(a)] a -> ()
 ```
 
 Prints a value followed by a newline to stdout. Any value with a [`ToString`](../advanced/contexts#tostringa) can be printed: a string as it is, a number, a tag, a tuple, a record, a list, or a type with an attached `toString`.
@@ -30,7 +30,7 @@ A value with no `ToString`, such as a function, is an error at the call.
 # print
 
 ```nanyx
-print: [Console + ToString(a)] a -> ()
+print: [Console & ToString(a)] a -> ()
 ```
 
 Prints a value to stdout without a trailing newline, as `println` writes it.
@@ -44,7 +44,7 @@ print("Enter your name: ")
 # eprintln
 
 ```nanyx
-eprintln: [Console + ToString(a)] a -> ()
+eprintln: [Console & ToString(a)] a -> ()
 ```
 
 Prints a value followed by a newline to stderr, as `println` writes it.
@@ -58,7 +58,7 @@ eprintln("Configuration file missing")
 # eprint
 
 ```nanyx
-eprint: [Console + ToString(a)] a -> ()
+eprint: [Console & ToString(a)] a -> ()
 ```
 
 Prints a value to stderr without a trailing newline.

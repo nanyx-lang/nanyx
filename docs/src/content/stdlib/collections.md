@@ -250,7 +250,7 @@ Returns the element at an index, counting from 0. A negative index, or one past 
 ## groupBy
 
 ```nanyx
-list.groupBy: [Eq(b) + Hash(b)] (list(a), (a -> b)) -> map(b, list(a))
+list.groupBy: [Eq(b) & Hash(b)] (list(a), (a -> b)) -> map(b, list(a))
 ```
 
 Groups elements of a list by a key function, returning a [map](map) from each key to the elements that have it, in order. The keys are in the order they first appear. Keys need an `Eq` and a `Hash`, as a map's do.

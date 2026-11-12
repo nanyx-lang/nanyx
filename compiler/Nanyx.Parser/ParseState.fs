@@ -18,6 +18,10 @@ type ParseState =
       /// When the next operand parsed is the argument a shorthand lambda's body leaves out (`{ % 2 == 0 }`), the
       /// span it is given: that of the operator, or the `.`, written in its place.
       ImplicitArgumentNext: SourceSpan option
+      /// Whether the parser is reading the type of a context member in a context set, outside any brackets in it:
+      /// `` `+`: a, a -> a `` in `` [`+`: a, a -> a & Eq(a)] ``. There `&` starts the set's next context, not an
+      /// intersection.
+      InContextMember: bool
       /// The text of each `module name =` block parsed so far, with the block's name.
       ModuleBlocks: (ModuleName * SourceSpan) list
       /// The furthest mistake the parser recognised (a workflow keyword applied to a value, or `use C(T) = ...`),
@@ -41,6 +45,7 @@ module ParseState =
           PendingNames = []
           LambdaDepth = 0
           ImplicitArgumentNext = None
+          InContextMember = false
           ModuleBlocks = []
           FocusedError = ref None
           FailureInBrackets = ref None
