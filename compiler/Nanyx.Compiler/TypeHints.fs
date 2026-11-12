@@ -95,30 +95,28 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
         let lensesAndHints =
             runs
             |> List.map (fun (def, members) ->
-                let defType = def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id)
-                // The contexts the def was inferred to require are named with its type, and written before it.
-                let contexts =
-                    match def, defType with
-                    | Some symbol, Some _ -> typed.InferredContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
-                    | _ -> []
-                let types = Option.toList defType @ contexts @ (members |> List.map (fun symbol -> typed.SymbolTypes.[symbol.Id]))
-                let written =
-                    match Unifier.tysToDisplayStrings names types with
-                    | defWritten :: rest when not contexts.IsEmpty ->
-                        Hover.withContexts (List.take contexts.Length rest) defWritten :: List.skip contexts.Length rest
-                    | written -> written
+                let memberTypes = members |> List.map (fun symbol -> typed.SymbolTypes.[symbol.Id])
                 let hint (symbol: Symbol) ty =
                     { Name = symbol.Name
                       Type = ty
                       Span = symbol.Declaration
                       Kind = symbol.Kind
                       Context = contextOf annotations symbol.Declaration }
-                let lens, memberTypes =
-                    match def, defType, written with
-                    | Some symbol, Some _, defWritten :: rest ->
-                        (if isInferred symbol then [ hint symbol defWritten ] else []), rest
-                    | _ -> [], written
-                lens, List.map2 hint members memberTypes)
+                let lens, membersWritten =
+                    match def |> Option.bind (fun symbol -> typed.SymbolTypes |> Map.tryFind symbol.Id |> Option.map (fun ty -> symbol, ty)) with
+                    | Some (symbol, defType) ->
+                        // The def's type is written after the contexts it requires, as hover writes it, except that a
+                        // def that writes its contexts has its type shown after them, so only the parameterised ones it
+                        // was inferred to need are written.
+                        let contexts =
+                            let required =
+                                if (contextOf annotations symbol.Declaration).IsSome then typed.InferredContextTypes
+                                else typed.ContextTypes
+                            required |> Map.tryFind symbol.Id |> Option.defaultValue []
+                        let defWritten, membersWritten = Hover.typesWithContexts names defType contexts memberTypes
+                        (if isInferred symbol then [ hint symbol defWritten ] else []), membersWritten
+                    | None -> [], Unifier.tysToDisplayStrings names memberTypes
+                lens, List.map2 hint members membersWritten)
         List.collect fst lensesAndHints, List.collect snd lensesAndHints
     | _ -> [], []
 
