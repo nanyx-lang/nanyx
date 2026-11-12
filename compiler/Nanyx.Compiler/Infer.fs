@@ -1820,8 +1820,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         let inputTy = inputTypeFromArgs argTys
-                        // An instance of a context keeps the contexts its members use from where it is made.
-                        let inputTy = if info.IsContext then LambdaContexts.captured inputTy else inputTy
                         let constrained = addAssignableConstraint inputTy info.Underlying current
                         Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
                     else

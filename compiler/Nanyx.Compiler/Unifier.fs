@@ -254,7 +254,7 @@ module Unifier =
     let private contextsNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
         let contexts = extra |> List.map (fun c -> $"'{tyToString c}'") |> String.concat ", "
         let what = if extra.Length = 1 then "the context" else "the contexts"
-        $"A function that requires {what} {contexts} is given where '{tyToString expected}' is expected, which does not: '{tyToString given}'. A context variable lets a function require any contexts, as in '[c] a -> b'."
+        $"A function that requires {what} {contexts} is given where '{tyToString expected}' is expected, which does not: '{tyToString given}'. Write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`."
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: only the first has #bad; only the second has #underflow.`

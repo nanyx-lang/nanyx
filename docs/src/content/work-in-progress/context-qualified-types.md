@@ -112,12 +112,13 @@ A lambda's type carries the contexts it uses ([#799](https://github.com/nanyx-la
 
 An unannotated top-level def infers its context variables ([#800](https://github.com/nanyx-lang/nanyx/issues/800)): calling a function parameter, or passing one to a higher-order function, gives it a context variable, which the def names as an annotation would (`ContextInference.nameContextVariables`). `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. An imported def keeps the names of its context variables, which a call binds them by.
 
+A context's member is a function type like any other, so one that uses another context says so: `context Log = (log: [Console] string -> ())`. A `use` checks the members it is given against those types, and calling `log` requires `Console` as well as `Log`. Giving `log: string -> ()` a lambda that prints is `NYX0227`, whose message says to write the contexts on the member.
+
 The prelude's higher-order functions take a context variable ([#801](https://github.com/nanyx-lang/nanyx/issues/801)): `list.map: [c] list(a), ([c] a -> b) -> list(b)`, `memory: [c] ([$Memory & c] () -> a) -> a`, and the builder `proc`'s `try`. A function type that is not a parameter or result of another, such as a record field's, binds its own context variables.
 
 How it differs from the design above, for now:
 
-- **Contexts are still captured where a lambda is made.** A lambda's body is checked against the contexts where it is written, and the Wasm backend gives it the members from there. Its type says which contexts it requires, so its callers must have them too, but it runs with the instance it was made with. A lambda can't be made where a context it uses isn't available, so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
-- **An instance keeps the contexts its members use.** `use Log(log = { s -> println(s) })` makes a `Log` whose `log` is a `string -> ()`: the lambda's `Console` is checked where the `use` is (`LambdaContexts.captured`).
+- **The backend still uses the instance a lambda captured.** A function value is meant to use the instances in scope where it is called. The type checker does its part: a lambda's type says which contexts it requires, so its callers must have them. But the Wasm backend gives a lambda the members of the scope it is made in, and it runs with those until [#836](https://github.com/nanyx-lang/nanyx/issues/836) passes the caller's at each call. #836 must land before user-defined contexts rely on a different instance at the call site. For the same reason a lambda's body is checked against the contexts where it is written, so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
 - **A parameterised context is never carried,** even at a type variable: it is found where the lambda is made, as before.
 - **A cell doesn't make a lambda require `$Memory`,** so `NYX0224` still keeps a lambda over a cell in its block (see [Context escape](./context-escape)).
 - **`NYX0225` stays.** A def that requires a context can't return a lambda that uses it, and a `use` can't result in one, because the lambda would run with the members of a scope that has ended.
@@ -125,6 +126,7 @@ How it differs from the design above, for now:
 - **A call reads what a context variable stands for from the types solved so far,** and lambda parameters take their types from the constraints only while they all agree, so an earlier type error can leave a context unbound or a parameter's type unknown.
 
 In the Wasm backend, a lifted lambda captures the members its scope supplies: those of the def around it, by their parameters, and those each `use` in scope loads that it may call, by the locals lambda lifting evaluates the `use`'s bindings into. It may call one when it names it, names a function that requires contexts, or holds a closure that captured it. The lifted function loads them again with a `use` of its own ([#778](https://github.com/nanyx-lang/nanyx/issues/778)). `ContextEscapes.fs` holds the `NYX0225` check, and `EscapingLambdas.fs` the walk it shares with `MemoryCells.checkEscape`.
+
 # Design notes
 
 - Prefer wording like "requires context" over "can only exist".

@@ -43,7 +43,7 @@ def main = {
 }
 ```
 
-A member given this way can use other contexts that are available where the instance is made, as `use Log(log = { s -> println(s) })` uses `Console`. The instance keeps them from there, so `log` is still a `string -> ()`.
+A member that uses another context has to say so in the context's definition, as any function type does. To give `Log` a member that prints, write `context Log = (log: [Console] string -> ())`: then `use Log(log = { s -> println(s) })` checks, and calling `log` requires `Console` as well as `Log`. With `log: string -> ()`, that lambda is an error (`NYX0227`), since it requires `Console` and `log`'s type says it requires nothing.
 
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
@@ -99,7 +99,9 @@ Passing a function as a value needs its contexts where it is named, as calling i
 
 A function's type says which contexts it requires, and a lambda's type says which ones it uses: `{ s -> bar(s) }` is a `[Foo] string -> string`. Calling it requires `Foo`, as calling a function that declares `[Foo]` does, and it can't be given where a pure function is expected (`NYX0227`). A higher-order function takes such a lambda with a context variable, as `list.map` does (see [Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts)). A function named as a value, such as `useFoo` above, has its contexts in its type too.
 
-For now, a lambda that uses a context also can't leave the scope that supplies it, because the lambda takes the context's members from that scope. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
+The contexts a function value requires are the ones in scope where it is called: calling a `[Foo] () -> string` inside a `use Foo(...)` is meant to use that `Foo`. The WebAssembly backend doesn't do this yet. A lambda still runs with the members of the scope it was made in, until [#836](https://github.com/nanyx-lang/nanyx/issues/836) passes the caller's instead, so for now don't rely on a different instance where a function value is called.
+
+For now, too, a lambda that uses a context can't leave the scope that supplies it, because the lambda takes the context's members from that scope. A lambda uses `Foo` when it calls one of `Foo`'s members, calls a function that requires `Foo`, or calls a local function that does either. These are errors (`NYX0225`):
 
 ```nanyx
 context Foo = (bar: string -> string)

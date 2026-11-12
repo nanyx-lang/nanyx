@@ -212,3 +212,44 @@ def run: ([Console] int -> ()) -> () = { g -> apply(g, 1) }
 """
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
     Assert.Equal("apply", text)
+
+[<Fact>]
+let ``A context's member that uses another context must say so`` () =
+    let code, text =
+        singleError
+            """
+import nanyx/console
+
+context Log = (log: string -> ())
+
+def main: [Console] () -> () = {
+  use Log(log = { (s: string) -> println(s) })
+  log("hi")
+}
+"""
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal("Log(log = { (s: string) -> println(s) })", text)
+
+[<Fact>]
+let ``Calling a member that declares a context requires it`` () =
+    let source =
+        """
+import nanyx/console
+
+context Log = (log: [Console] string -> ())
+
+def heading: [Log] string -> () = { title -> log(title) }
+"""
+    let code, text = singleError source
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
+    Assert.Equal("log", text)
+    compileClean (
+        source.Replace("def heading: [Log]", "def heading: [Log & Console]")
+        + """
+def main: [Console] () -> () = {
+  use Log(log = { (s: string) -> println(s) })
+  heading("hi")
+}
+"""
+    )
+    |> ignore

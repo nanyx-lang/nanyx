@@ -102,9 +102,9 @@ apply(say, "loud")
 let ``Run - a function that requires a context of the module's own passed as a value`` () =
     let source = """import nanyx/console
 
-context Greeter = (greet: string -> ())
+context Greeter = (greet: [Console] string -> ())
 
-def hello: [Greeter] string -> () = { name -> greet(name) }
+def hello: [Greeter & Console] string -> () = { name -> greet(name) }
 
 def apply: [c] ([c] string -> ()), string -> () = { f, s -> f(s) }
 

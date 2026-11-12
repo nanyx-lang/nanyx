@@ -54,18 +54,6 @@ let recordWritten (written: TypeExpr list) (state: InferState) : InferState =
     let plain = written |> List.choose (fun ctx -> match ctx.Kind with TypeName name -> Some (TyApply(name, [])) | _ -> None)
     record plain state
 
-/// `ty`, the members given to make an instance of a context, with the contexts its function members use left out:
-/// those were checked where the instance is made, and the instance keeps them from there, as the Wasm backend does.
-/// So `use Log(log = { s -> println(s) })` makes a `Log` whose `log` is a `string -> ()`.
-let captured (ty: Ty) : Ty =
-    let withoutContexts member' =
-        match Unifier.unalias member' with
-        | TyFunc(input, output, _ :: _) -> TyFunc(input, output, [])
-        | _ -> member'
-    match Unifier.unalias ty with
-    | TyRecord fields -> TyRecord(fields |> Map.map (fun _ member' -> withoutContexts member'))
-    | _ -> withoutContexts ty
-
 /// The context whose member `name`, as `env` binds it, is: of the ambient instance, of one a def around declares, or of
 /// one a `use` loads. `None` for any other name, and for a member of a parameterised context.
 let contextOfMember (env: TypeEnv) (state: InferState) (name: Identifier) : Identifier option =
