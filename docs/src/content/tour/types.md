@@ -45,6 +45,26 @@ There is no separate `number` type. Generic code over numbers requires a [contex
 
 `int` is a 64-bit integer and `float` a 64-bit floating-point number, on every platform. Numbers of other fixed widths (`I32`, `U8`, `F32` and so on) are planned; see [Sized numbers](../work-in-progress/sized-numbers).
 
+# Built-in type names
+
+Each built-in type has a capitalised name, which is the type, and a lowercase alias, a keyword that means exactly that type, as `string` means `String` in .NET:
+
+| Alias | Type |
+|---|---|
+| `string` | `String` |
+| `list` | `List` |
+| `unit` | `Unit` |
+| `seq` | `Seq` |
+| `map` | `Map` |
+| `set` | `Set` |
+| `int` | `I64` (planned) |
+| `float` | `F64` (planned) |
+| `bool` | `Boolean` (planned) |
+
+The two are the same type everywhere, so `List(int)` and `list(int)` are one type, and so are `def String.trim` and `def string.trim` (see [Attached definitions](../advanced/attached-definitions#attaching-to-a-built-in-type)). The compiler prints the alias: an error message or a hover says `list(string)`.
+
+`int`, `float` and `bool` will be aliases of `I64`, `F64` and `Boolean` once [sized numbers](../work-in-progress/sized-numbers) come. `Int`, `Float` and `Bool` are not types at all: writing one is the error `NYX0114`, with a fix that writes `int`, `float` or `bool`.
+
 # Record types
 
 Records are structural types with named fields. They have their own Language Tour page covering record types, structural typing, optional fields, and the unified record/tuple model.

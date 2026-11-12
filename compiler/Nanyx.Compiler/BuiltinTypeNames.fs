@@ -3,43 +3,42 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.ExpressionRewrites
 
-/// The capitalised spellings of the built-in types, `Int` for `int` and `List` for `list`, which a definition used to
-/// be attached under (`def Int.fromString`) and a type could be written with (`List(int)`). They are not types: the
-/// name before the dot must be a real type, spelled as the type is (#653). For one release each is still read as the
-/// type it stands for, with a warning and a fix that writes the type's name.
-module internal DeprecatedTypeNames =
-    /// Each deprecated spelling and the type's name.
+/// The names of the built-in types. `String`, `List`, `Unit`, `Seq`, `Map` and `Set` are the types, and `string`,
+/// `list` and the rest are keyword aliases that mean exactly them, before the dot of an attached definition
+/// (`def String.trim` is `def string.trim`) as in a type (`List(int)` is `list(int)`). The compiler works with the
+/// alias, so it prints `list(string)`: this pass writes each type's name as its alias before inference (#692).
+/// `Int`, `Float` and `Bool` are not types, and are an error with a fix that writes `int`, `float` and `bool`.
+module internal BuiltinTypeNames =
+    /// Each built-in type's name and the alias the compiler works with.
     let private aliases =
         Map.ofList
-            [ "Int", "int"
-              "Float", "float"
-              "Bool", "bool"
-              "String", "string"
+            [ "String", "string"
               "Unit", "unit"
               "List", "list"
               "Seq", "seq"
               "Map", Maps.typeName
               "Set", Sets.typeName ]
 
-    /// The warning for `written`, a deprecated spelling of `typeName`, at `span`, with the fix that writes the type's name.
-    let private warning (span: SourceSpan) (written: string) (typeName: string) : Diagnostic =
-        { Diagnostics.at
-            DiagnosticCodes.DeprecatedTypeName
-            span
-            $"'{written}' is not a type: write '{typeName}', the type's name. '{written}' is read as '{typeName}' for now, but will stop working" with
-            Fixes = [ { Title = $"Write `{typeName}`";Edits = [ { Span = span; NewText = typeName } ] } ] }
+    /// Each spelling that is not a type and the alias to write instead.
+    let private notTypes = Map.ofList [ "Int", "int"; "Float", "float"; "Bool", "bool" ]
+
+    /// The error for `written`, which is not a type, at `span`, with the fix that writes `alias`.
+    let private error (span: SourceSpan) (written: string) (alias: string) : Diagnostic =
+        { Diagnostics.at DiagnosticCodes.NotABuiltInType span $"'{written}' is not a type: write '{alias}'" with
+            Fixes = [ { Title = $"Write `{alias}`"; Edits = [ { Span = span; NewText = alias } ] } ] }
 
     /// The part of `span`, where `name` is written, that its `length` characters from `offset` are written at.
     let private partOf (span: SourceSpan) (offset: int) (length: int) : SourceSpan =
         if SourceSpan.isNone span then span
         else { span with Start = span.Start + offset; End = span.Start + offset + length; StartColumn = span.StartColumn + offset }
 
-    /// `module'` with each deprecated spelling of a built-in type replaced by the type's name, and a warning for each:
-    /// the type a definition is attached to or a qualified name reaches through (`Int.fromString`, `t.String.trim`),
-    /// and a type written in an annotation (`List(int)`). A spelling the module defines as a type of its own, as
+    /// `module'` with each built-in type's name written as its alias, and an error for each `Int`, `Float` and `Bool`,
+    /// which is written as its alias too, so that it is reported once: the type a definition is attached to or a
+    /// qualified name reaches through (`String.trim`, `t.List.map`), a type written in an annotation (`List(int)`),
+    /// and `Int`, `Float` or `Bool` named on its own as a value. A name the module defines as a type of its own, as
     /// `type Set(a) = ...`, is that type and is left as it is. `declared` gives where each definition's name is written.
     let replace (declared: DeclaredNames) (module': Module) : Module * Diagnostic list =
-        let warnings = ResizeArray<Diagnostic>()
+        let errors = ResizeArray<Diagnostic>()
         let rec ownTypeNames (items: TopLevelItem list) =
             items
             |> List.collect (function
@@ -47,31 +46,39 @@ module internal DeprecatedTypeNames =
                 | Kind (ModuleBlock(_, inner)) -> ownTypeNames inner
                 | _ -> [])
         let own = Set.ofList (ownTypeNames module')
-        let tryAlias (written: string) =
-            if own.Contains written then None else aliases |> Map.tryFind written
+        // The alias `written` at `span` stands for, reporting it if it is not a type.
+        let tryAlias (span: SourceSpan) (written: string) =
+            if own.Contains written then
+                None
+            else
+                match aliases |> Map.tryFind written, notTypes |> Map.tryFind written with
+                | Some alias, _ -> Some alias
+                | None, Some alias ->
+                    errors.Add(error span written alias)
+                    Some alias
+                | None, None -> None
 
-        // `name` with the type its last part is attached to spelled as the type is; `span` is where `name` is written.
+        // `name` with the type its last part is attached to written as its alias; `span` is where `name` is written.
         let qualified (span: SourceSpan) (name: Identifier) : Identifier =
             let parts = name.Split('.')
             if parts.Length < 2 then
                 name
             else
                 let typeIndex = parts.Length - 2
-                match tryAlias parts.[typeIndex] with
+                let offset = parts |> Array.take typeIndex |> Array.sumBy (fun part -> part.Length + 1)
+                match tryAlias (partOf span offset parts.[typeIndex].Length) parts.[typeIndex] with
                 | None -> name
-                | Some typeName ->
-                    let offset = parts |> Array.take typeIndex |> Array.sumBy (fun part -> part.Length + 1)
-                    warnings.Add(warning (partOf span offset parts.[typeIndex].Length) parts.[typeIndex] typeName)
-                    parts.[typeIndex] <- typeName
+                | Some alias ->
+                    parts.[typeIndex] <- alias
                     String.concat "." parts
 
+        // `name`, undotted, reported if it is `Int`, `Float` or `Bool`; it is left as written, since no value has the alias's name.
+        let unqualified (span: SourceSpan) (name: Identifier) =
+            if not (name.Contains '.') && not (own.Contains name) then
+                notTypes |> Map.tryFind name |> Option.iter (fun alias -> errors.Add(error (partOf span 0 name.Length) name alias))
+
         let rec typeExpr (t: TypeExpr) : TypeExpr =
-            let renamed (written: string) =
-                match tryAlias written with
-                | Some typeName ->
-                    warnings.Add(warning (partOf t.Span 0 written.Length) written typeName)
-                    typeName
-                | None -> written
+            let renamed (written: string) = tryAlias (partOf t.Span 0 written.Length) written |> Option.defaultValue written
             let kind =
                 match t.Kind with
                 | TypeName name -> TypeName(renamed name)
@@ -108,10 +115,15 @@ module internal DeprecatedTypeNames =
         let expression =
             mapExpressionKinds (fun current kind ->
                 match kind with
-                | IdentifierExpr name -> IdentifierExpr(qualified current.Span name)
-                | FunctionCall(name, rangeOpt, args) -> FunctionCall(qualified (rangeOpt |> Option.defaultValue current.Span) name, rangeOpt, args)
+                | IdentifierExpr name ->
+                    unqualified current.Span name
+                    IdentifierExpr(qualified current.Span name)
+                | FunctionCall(name, rangeOpt, args) ->
+                    let span = rangeOpt |> Option.defaultValue current.Span
+                    unqualified span name
+                    FunctionCall(qualified span name, rangeOpt, args)
                 | Pipe(value, name, rangeOpt, args) -> Pipe(value, qualified (rangeOpt |> Option.defaultValue SourceSpan.none) name, rangeOpt, args)
-                // An attached definition used as a value, `Int.toString`, is read as a member access.
+                // An attached definition used as a value, `List.map`, is read as a member access.
                 | MemberAccess({ Kind = IdentifierExpr written } as typeName, memberName, rangeOpt) ->
                     let renamed = qualified typeName.Span $"{written}.{memberName}"
                     MemberAccess({ typeName with Kind = IdentifierExpr(renamed.Substring(0, renamed.LastIndexOf '.')) }, memberName, rangeOpt)
@@ -145,4 +157,5 @@ module internal DeprecatedTypeNames =
             | Attribute _ -> topLevel
 
         let replaced = module' |> List.map item
-        replaced, warnings |> Seq.sortBy (fun warning -> warning.Span |> Option.map _.Start |> Option.defaultValue -1) |> List.ofSeq
+        // `Int.toString` is reported both as the member access and as the identifier it reads.
+        replaced, errors |> Seq.distinctBy _.Span |> Seq.sortBy (fun error -> error.Span |> Option.map _.Start |> Option.defaultValue -1) |> List.ofSeq

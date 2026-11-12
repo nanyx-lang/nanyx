@@ -52,7 +52,7 @@ let private lookupPrimitive (name: string) =
     | _ -> None
 
 /// Whether `name` is a type the compiler provides, such as `int` or `list`, rather than one the program defines.
-/// The capitalised spellings, `Int` and `List`, are not: `DeprecatedTypeNames` replaces them before inference.
+/// A type's capitalised name, `List`, is written as its alias, `list`, by `BuiltinTypeNames` before inference.
 let private isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
     || name = "list"

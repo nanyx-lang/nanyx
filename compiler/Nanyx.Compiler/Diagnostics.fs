@@ -2,8 +2,7 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// How serious a diagnostic is. The compiler reports `Critical` and `Error`, and `Warning` only for a spelling it
-/// still accepts but will stop accepting (see `DeprecatedTypeName`); `Warning`, `Info` and `Hint` are for linters.
+/// How serious a diagnostic is. The compiler reports `Critical` and `Error`; `Warning`, `Info` and `Hint` are for linters.
 [<RequireQualifiedAccess>]
 type Severity =
     /// Compilation cannot go on at all: there is no source to check.
@@ -83,8 +82,8 @@ module DiagnosticCodes =
     let UnknownType = code 109 "Unknown type" Severity.Error
     let OutsideModuleBlock = code 110 "Name from outside a module block" Severity.Error
     let NotImplemented = code 111 "Not implemented" Severity.Error
-    let DeprecatedTypeName = code 112 "Deprecated type name" Severity.Warning
     let DuplicateDefinition = code 113 "Duplicate definition" Severity.Error
+    let NotABuiltInType = code 114 "Not a built-in type" Severity.Error
 
     // Types.
     let TypeMismatch = code 201 "Type mismatch" Severity.Error
@@ -123,8 +122,8 @@ module DiagnosticCodes =
           UnsupportedDirective; CodeInModuleBlock; UnexpectedAttributeArgument; PathImportWithoutAlias
           NamedModuleImportedByPath; EntrypointImported
           UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
-          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented; DeprecatedTypeName
-          DuplicateDefinition
+          UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
+          DuplicateDefinition; NotABuiltInType
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
           InvalidWorkflow; WorkflowKeywordOutsideWorkflow; InvalidBuiltInCall; InvalidRecordUpdate
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount

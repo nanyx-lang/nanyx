@@ -25,8 +25,8 @@ let ``Every compiler code is distinct and has the NYX form`` () =
         Assert.Matches("^NYX\\d{4}$", code)
 
 [<Fact>]
-let ``The compiler reports only critical and error severities, but for a deprecated type name`` () =
-    for code in DiagnosticCodes.all |> List.filter ((<>) DiagnosticCodes.DeprecatedTypeName) do
+let ``The compiler reports only critical and error severities`` () =
+    for code in DiagnosticCodes.all do
         Assert.True(code.Severity = Severity.Critical || code.Severity = Severity.Error, $"{code.Code} is {code.Severity}")
 
 [<Fact>]
