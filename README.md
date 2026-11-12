@@ -95,7 +95,7 @@ nanyx run hello.nyx
 # Hello, Nanyx!
 ```
 
-`nanyx wasm hello.nyx` writes the WebAssembly text to `hello.wat` instead of running it, and `nanyx check hello.nyx` type-checks and prints the inferred types.
+`nanyx wasm hello.nyx` writes the WebAssembly text to `hello.wat` instead of running it, and `nanyx check hello.nyx` type-checks it and prints the type of each of its top-level definitions.
 
 A type or name error does not stop `nanyx run`: the program runs, and reports the error if it reaches the code where it was found. `nanyx wasm` and `nanyx build` take `--release` to refuse any error.
 

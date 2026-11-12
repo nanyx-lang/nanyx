@@ -401,7 +401,7 @@ internal static class CliCommands
 
         return target switch
         {
-            Target.Check => RunCheck(result),
+            Target.Check => RunCheck(result, inputFile),
             Target.Wasm => RunWasm(result, inputFile, outputPath, release),
             _ => UnsupportedTarget(target.ToString())
         };
@@ -503,29 +503,34 @@ internal static class CliCommands
         return relative.StartsWith("..", StringComparison.Ordinal) ? file : relative;
     }
 
-    private static void PrintTypes(FSharpMap<string, Ty> types)
+    /// <summary>
+    /// The type of each top-level def <paramref name="inputFile"/> declares, not the prelude's or an import's, in source
+    /// order, written as hover writes it, with type variables <c>a</c>, <c>b</c>, ... since this is a terminal.
+    /// </summary>
+    private static void PrintTypes(string inputFile, CompileResult result)
     {
-        if (types.Count == 0)
+        var types = TypeHints.topLevelTypes(TypeNotation.Ascii, Path.GetFullPath(inputFile), result);
+        if (types.IsEmpty)
         {
-            Console.WriteLine("(no inferred types)");
+            Console.WriteLine("(no definitions)");
             return;
         }
 
-        foreach (var entry in types.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        foreach (var type in types)
         {
-            Console.WriteLine($"{entry.Key} : {entry.Value}");
+            Console.WriteLine($"{type.Name} : {type.Type}");
         }
     }
 
-    private static int RunCheck(CompileResult result)
+    private static int RunCheck(CompileResult result, string inputFile)
     {
         if (result.Typed is null || !result.TypeChecked)
         {
             return 1;
         }
 
-        Console.WriteLine("Inferred types:");
-        PrintTypes(result.Typed.Value.Types);
+        Console.WriteLine("Types:");
+        PrintTypes(inputFile, result);
 
         // The module type-checked, but a linter rule configured as an error fails the check all the same.
         return HasErrors(result.Diagnostics) ? 1 : 0;

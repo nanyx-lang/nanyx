@@ -47,6 +47,14 @@ let private contextOf (annotations: (SourceSpan * SourceSpan) list) (declaration
     |> List.tryHead
     |> Option.map snd
 
+/// The symbols the root module compiled as `file` declares itself, not those of the modules it imports, in source order.
+let private ownSymbols (file: string) (typed: TypedModule) : Symbol list =
+    typed.Symbols
+    |> Map.values
+    |> Seq.filter (fun symbol -> symbol.Declaration.File = file && not (SourceSpan.isNone symbol.Declaration))
+    |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
+    |> List.ofSeq
+
 /// The hints for the root module, as top-level defs (for lenses) and everything else (for inlay hints), each in
 /// source order.
 ///
@@ -56,12 +64,7 @@ let private contextOf (annotations: (SourceSpan * SourceSpan) list) (declaration
 let private hints (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list * TypeHint list =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
-        let own =
-            typed.Symbols
-            |> Map.values
-            |> Seq.filter (fun symbol -> symbol.Declaration.File = file && not (SourceSpan.isNone symbol.Declaration))
-            |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
-            |> List.ofSeq
+        let own = ownSymbols file typed
         // Where each run of declarations starts, and the top-level def it is named with, if any.
         let isInferred (symbol: Symbol) =
             typed.SymbolTypes.ContainsKey symbol.Id && not (typed.AnnotatedSymbols.Contains symbol.Id)
@@ -136,3 +139,23 @@ let inlayHints (names: TypeNotation) (file: string) (result: CompileResult) : Ty
 let inlayHintsWithTopLevel (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     let lenses, others = hints names file result
     lenses @ others |> List.sortBy (fun hint -> hint.Span.Start)
+
+/// The type of each top-level def in the compiled root module, whether it writes its type or not, in source order,
+/// after the contexts it requires, as a hover on its name shows it, with made-up type variables named by `names`, as
+/// `nanyx check` prints them. `file` is as for `typeLenses`. Empty when the module did not type-check.
+let topLevelTypes (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
+    match result.Typed with
+    | Some typed ->
+        ownSymbols file typed
+        |> List.filter (fun symbol -> symbol.Kind = TopLevelValue)
+        |> List.choose (fun symbol ->
+            typed.SymbolTypes
+            |> Map.tryFind symbol.Id
+            |> Option.map (fun ty ->
+                let contexts = typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
+                { Name = symbol.Name
+                  Type = Hover.typeWithContexts names ty contexts
+                  Span = symbol.Declaration
+                  Kind = symbol.Kind
+                  Context = None }))
+    | None -> []

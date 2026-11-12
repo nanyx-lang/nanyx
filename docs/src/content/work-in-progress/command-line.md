@@ -28,7 +28,10 @@ nanyx hello
   only thing written to stdout; diagnostics go to stderr. Exit code 0 on success, 1 for a compile or
   runtime failure, 2 for a usage error.
 - `wasm` writes WebAssembly text next to the input (or to `--out`).
-- `check` prints the compile phase, diagnostics and inferred types.
+- `check` prints the compile phase and diagnostics, then the type of each top-level def the file declares, in
+  source order, as hover writes it, with type variables `a`, `b`, ...: `greet : string -> string`, or
+  `twice : [ToString(a)] a -> string` for a def that requires a context. It prints nothing from the prelude or
+  the file's imports (`TypeHints.topLevelTypes`).
 - `parse` prints the AST.
 - `format` rewrites the files that are not formatted, or with `--check` lists them and exits with 1 (see
   [Formatter](./formatter)).

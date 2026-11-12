@@ -120,6 +120,13 @@ let withContexts (written: string list) (typeWritten: string) =
     | [] -> typeWritten
     | _ -> $"""[{String.concat ", " written}] {typeWritten}"""
 
+/// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, the type variables
+/// named together with the contexts' and by `names`.
+let typeWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
+    match contexts, Unifier.tysToDisplayStrings names (ty :: contexts) with
+    | _ :: _, typeWritten :: contextsWritten -> withContexts contextsWritten typeWritten
+    | _ -> Unifier.tyToDisplayString names ty
+
 /// The span of a call's or pipe's function name, when it has one.
 let private calleeSpan (expr: Expression) =
     match expr.Kind with
@@ -208,9 +215,6 @@ let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverIn
                 match symbol with
                 | Some symbol -> withContextsAt typed symbol ty
                 | None -> ty, []
-            let typeWritten =
-                match contexts, Unifier.tysToDisplayStrings names (ty :: contexts) with
-                | _ :: _, typeWritten :: contextsWritten -> withContexts contextsWritten typeWritten
-                | _ -> Unifier.tyToDisplayString names ty
+            let typeWritten = typeWithContexts names ty contexts
             Some { Type = symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten; Span = span }
     | _ -> None
