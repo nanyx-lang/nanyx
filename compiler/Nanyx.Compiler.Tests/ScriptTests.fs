@@ -13,7 +13,7 @@ let private scriptPath () =
     Directory.CreateDirectory directory |> ignore
     Path.Combine(directory, "script.nyx")
 
-let private unusedBinding = "import nanyx/console\n\nexport def main = {\n  def unused = 1\n  println(\"hi\")\n}\n"
+let private unusedBinding = "import nanyx/console\n\nexport def main: [Console] () -> () = {\n  def unused = 1\n  println(\"hi\")\n}\n"
 
 let private compile (source: string) = Script.compileSource (scriptPath ()) source
 
@@ -57,7 +57,7 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
 
 [<Theory>]
 [<InlineData("::linters.nope", "NYX0009", "unknown linter 'nope'; the linters are 'default'")>]
-[<InlineData("::linters.default.nope = \"error\"", "NYX0009", "unknown rule 'nope' of the linter 'default'; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'linterFailed'")>]
+[<InlineData("::linters.default.nope = \"error\"", "NYX0009", "unknown rule 'nope' of the linter 'default'; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'linterFailed'")>]
 [<InlineData("::linters.default.unusedBindings = \"loud\"", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"")>]
 [<InlineData("::linters.default.unusedBindings = 3", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not 3")>]
 [<InlineData("::linters.default.unusedBindings = error", "NYX0009", "a string needs quotes, as in a manifest: \"error\"")>]

@@ -23,11 +23,11 @@ The style linter helps teams keep APIs predictable and readable by flagging patt
 ## Exported annotations
 
 ```nanyx
--- Linter warning: missing type annotation
+-- Linter warning: `add` is exported but does not write its type: [Add(a)] a, a -> a
 export def add = { a, b -> a + b }
 ```
 
-These diagnostics are warnings/hints from the linter, not the compiler.
+The rule (`unannotatedExports`) reports an exported top-level def that does not write its type, including one a `module name =` block exports. Other modules use it by its type, so the type belongs where a reader finds it rather than left to inference. Its fix writes the type the def was inferred to have after its name, as hover shows it, with the contexts it requires joined with `&`: `export def add: [Add(a)] a, a -> a = { a, b -> a + b }`. A destructuring def, `export def (low, high) = ...`, has no one name to write a type after, and is not reported.
 
 ## Unused local value
 

@@ -81,28 +81,6 @@ let typeExprsAt (offset: int) (module': Module) : TypeExpr list =
         (module' |> List.collect SyntaxTree.topLevelTypes) @ (expressionsAt offset module' |> List.collect SyntaxTree.expressionTypes)
     written |> List.fold search []
 
-/// The type of a def, written for a reader as `type` is, after the contexts it requires, as its annotation would write
-/// them: `[Show(α)] α -> string`. `written` are the contexts as written for a reader, named together with the type.
-let withContexts (written: string list) (typeWritten: string) =
-    match written with
-    | [] -> typeWritten
-    | _ -> $"""[{String.concat ", " written}] {typeWritten}"""
-
-/// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, and each of
-/// `others` written for a reader, the type variables of them all named together and by `names`, so that a variable of
-/// `ty` has the same name in `others`: a parameter's `α` is the `α` of its def's signature.
-let typesWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) (others: Ty list) : string * string list =
-    match contexts, others with
-    | [], [] -> Unifier.tyToDisplayString names ty, []
-    | _ ->
-        let written = Unifier.tysToDisplayStrings names (ty :: contexts @ others)
-        let contextsWritten, othersWritten = List.splitAt contexts.Length (List.tail written)
-        withContexts contextsWritten (List.head written), othersWritten
-
-/// `ty` written for a reader after the contexts `contexts` it requires, as `typesWithContexts` writes it.
-let typeWithContexts (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
-    fst (typesWithContexts names ty contexts [])
-
 /// The span of a call's or pipe's function name, when it has one.
 let private calleeSpan (expr: Expression) =
     match expr.Kind with
@@ -192,6 +170,6 @@ let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverIn
                 match symbol with
                 | Some symbol -> withContextsAt typed symbol ty
                 | None -> ty, []
-            let typeWritten = typeWithContexts names ty contexts
+            let typeWritten = Signatures.typeWithContexts names ty contexts
             Some { Type = symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten; Span = span }
     | _ -> None

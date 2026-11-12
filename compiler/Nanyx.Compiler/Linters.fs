@@ -25,6 +25,9 @@ type SemanticModel =
       Types: Map<NodeId, Ty>
       /// The type of each declaration the module makes, by its symbol.
       SymbolTypes: Map<SymbolId, Ty>
+      /// The contexts each of the module's own top-level defs requires, written or inferred, by its symbol, as
+      /// `TypedModule.ContextTypes` has them: over the variables of its type in `SymbolTypes`.
+      ContextTypes: Map<SymbolId, Ty list>
       /// What the module declares, and the imported definitions it refers to.
       Symbols: Map<SymbolId, Symbol>
       /// The symbol each identifier, call, pipe target and qualified name resolved to, by its node.
@@ -47,6 +50,7 @@ module SemanticModel =
           Source = source
           Types = typed.ExprTypes
           SymbolTypes = typed.SymbolTypes
+          ContextTypes = typed.ContextTypes
           Symbols = typed.Symbols
           References = typed.References
           ImportReferences = typed.ImportReferences
@@ -730,6 +734,59 @@ module PlusBetweenContexts =
               Related = []
               Fixes = [ { Title = "Replace `+` with `&`"; Edits = [ edit ] } ] })
 
+/// The official linter's `unannotatedExports` rule: an exported top-level def, a `module name =` block's among them,
+/// that does not write its type. Its fix writes the type it was inferred to have after its name, with the contexts it
+/// requires, as hover shows it (`Signatures`). A destructuring def (`export def (a, b) = ...`) has no one name to write
+/// a type after, so it is left alone.
+module UnannotatedExports =
+    let rule =
+        { Id = "unannotatedExports"
+          Title = "Exported definition without a type annotation"
+          DefaultSeverity = Severity.Warning
+          Description = "An exported top-level def that does not write its type. Other modules use it by its type, so write it down." }
+
+    /// The value defs the module writes, a `module name =` block's among them, each with whether it writes its
+    /// type.
+    let rec private valueDefsOf (items: TopLevelItem list) : (TopLevelItem * bool) list =
+        items
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Def (ValueDef(_, _, annotation, _)) -> [ item, annotation.IsSome ]
+            | ModuleBlock(_, items) -> valueDefsOf items
+            | Def (TypeDef _)
+            | ModuleDecl _
+            | Import _
+            | Attribute _
+            | Expr _ -> [])
+
+    let lint (model: SemanticModel) : Report list =
+        let defs = valueDefsOf model.Syntax
+        // The defs a destructuring def stands for share its span.
+        let destructuring =
+            defs |> List.countBy (fun (item, _) -> item.Span) |> List.filter (fun (_, count) -> count > 1) |> List.map fst |> Set.ofList
+        let topLevel =
+            model.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue) |> List.ofSeq
+        defs
+        |> List.filter (fun (item, annotated) -> not annotated && not (destructuring.Contains item.Span))
+        // A def's own name is the only top-level symbol declared within it.
+        |> List.choose (fun (item, _) -> topLevel |> List.tryFind (fun symbol -> SourceSpan.contains item.Span symbol.Declaration))
+        |> List.filter (fun symbol -> symbol.IsExported)
+        |> List.choose (fun symbol ->
+            model.SymbolTypes
+            |> Map.tryFind symbol.Id
+            |> Option.map (fun ty ->
+                let contexts = model.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
+                let written = Signatures.typeWithContexts Ascii ty contexts
+                let afterName = symbol.Declaration.End
+                { Rule = rule.Id
+                  Span = symbol.Declaration
+                  Message = $"`{symbol.Name}` is exported but does not write its type: {written}"
+                  Related = []
+                  Fixes =
+                    [ { Title = $"Write the type of `{symbol.Name}`"
+                        Edits = [ { Span = TextEdit.spanBetween model.Source symbol.Declaration afterName afterName; NewText = $": {written}" } ] } ] }))
+        |> List.sortBy (fun report -> report.Span.Start)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
@@ -737,12 +794,12 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              PlusBetweenContexts.rule ]
+              PlusBetweenContexts.rule; UnannotatedExports.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
-                @ StrayDocComments.lint model @ PlusBetweenContexts.lint model }
+                @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.
