@@ -97,7 +97,7 @@ let referencesTo (result: CompileResult) (symbol: Symbol) : SourceSpan list =
                     None)
         let typeSpans =
             let rec walk (typeExpr: TypeExpr) = typeExpr :: (TypeExpr.children typeExpr |> List.collect walk)
-            (syntax |> List.collect Hover.topLevelTypes) @ (Hover.allExpressions syntax |> List.collect Hover.expressionTypes)
+            (syntax |> List.collect SyntaxTree.topLevelTypes) @ (Hover.allExpressions syntax |> List.collect SyntaxTree.expressionTypes)
             |> List.collect walk
             |> List.filter (fun typeExpr -> refersTo typed.References typeExpr.Id)
             |> List.choose typeNameSpan
