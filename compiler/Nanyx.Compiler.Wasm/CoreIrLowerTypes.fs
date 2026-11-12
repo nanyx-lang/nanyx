@@ -28,7 +28,7 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     match ty with
     | TyVar v -> subst |> Map.tryFind v.Id |> Option.defaultValue ty
     | TyPrimitive _ -> ty
-    | TyNominal(name, underlying, isPrivate) -> TyNominal(name, go underlying, isPrivate)
+    | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, go underlying, isPrivate)
     | TyFunc(input, output) -> TyFunc(go input, go output)
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> go))
     | TyOpenRecord(fields, rest) ->
@@ -95,7 +95,7 @@ let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<in
         | _ -> cannot "a union with more than one rest"
     | TyApply(name, args), TyApply(name', args') when name = name' && args.Length = args'.Length ->
         List.fold2 bindScheme bindings args args'
-    | TyNominal(name, underlying, _), TyNominal(name', underlying', _) when name = name' ->
+    | TyNominal(nominal, underlying, _), TyNominal(nominal', underlying', _) when nominal = nominal' ->
         bindScheme bindings underlying underlying'
     | _ -> cannot "a generic definition's type does not fit how it is used"
 

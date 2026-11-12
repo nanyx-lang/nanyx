@@ -55,6 +55,22 @@ module Scope =
     let until (scopeEnd: int) (declaration: SourceSpan) : SourceSpan =
         { declaration with End = max scopeEnd declaration.End }
 
+/// Where a module's source came from, which decides how its imports are resolved and what is in scope.
+type ModuleOrigin =
+    /// A file on disk: imports by path are relative to its directory.
+    | SourceFile of fullPath: string
+    /// A module of the embedded standard library, checkedModule with the compiler intrinsics in scope.
+    | StandardLibraryModule of name: string
+    /// Source given directly (e.g. by tests): only standard-library imports can be resolved.
+    | InMemory
+
+/// What makes a nominal type the type it is: the module that defines it, and the name it is defined under there
+/// (`$Person`, or `money.$Money` in a `module money =` block). Two modules that each define a `$Person` define two
+/// types.
+type NominalId =
+    { Home: ModuleOrigin
+      Name: string }
+
 /// Internal types used during type inference.
 type TyVar =
     { Id: int
@@ -63,7 +79,9 @@ type TyVar =
 type Ty =
     | TyVar of TyVar
     | TyPrimitive of string
-    | TyNominal of string * Ty * bool
+    /// A nominal type: its identity, the type it is made from, and whether that is private to its home module. It is
+    /// written by its own name, `$Person`.
+    | TyNominal of NominalId * Ty * bool
     | TyFunc of Ty * Ty
     | TyRecord of Map<string, Ty>
     /// A record known to have at least these fields, its others standing for the row variable: what reading `p.name`
@@ -109,16 +127,21 @@ type TypedTopLevelItem =
 /// A type definition: its parameters, the type it stands for, and the symbol it declares (`None` for one the
 /// compiler made up, which has no name written in the source). Each parameter's variable is named as the parameter
 /// is written. A context's `Members` are its members' symbols, by name; any other type has none. `Name` is the name
-/// the type is defined under in its home module, whatever it is written as elsewhere (`m.$Email` under an alias):
-/// it is a nominal type's identity.
+/// the type is defined under in `Home`, the module that defines it, whatever it is written as elsewhere (`m.$Email`
+/// under an alias): the two are a nominal type's identity (see `TypeDefInfo.nominalId`).
 type TypeDefInfo =
     { Name: string
+      Home: ModuleOrigin
       Parameters: TyVar list
       Underlying: Ty
       IsPrivate: bool
       IsContext: bool
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
+
+module TypeDefInfo =
+    /// The identity of the nominal type `info` defines.
+    let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
 
 /// Where a call finds an instance of a parameterised context its callee requires, such as `Sum(Point)` for a callee
 /// that requires `[Sum(a)]`.

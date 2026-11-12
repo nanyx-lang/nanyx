@@ -736,7 +736,7 @@ type private FunctionLowering(input: LowerInput, definitions: Map<string, Expres
             | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutOpenRests))
             | TyTag(name, payload) -> TyTag(name, payload |> Option.map withoutOpenRests)
             | TyApply(name, args) -> TyApply(name, args |> List.map withoutOpenRests)
-            | TyNominal(name, underlying, isPrivate) -> TyNominal(name, withoutOpenRests underlying, isPrivate)
+            | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, withoutOpenRests underlying, isPrivate)
             | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map withoutOpenRests, withoutOpenRests underlying)
             | TyVar _
             | TyPrimitive _

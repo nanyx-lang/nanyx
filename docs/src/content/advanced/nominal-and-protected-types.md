@@ -14,6 +14,8 @@ The `$` prefix applies to `context` declarations as well as to `type` declaratio
 
 A nominal type is declared like any other type, with a `$` in front of its name. The declaration gives the type a shape, but the name is what matters: two nominal types with the same shape are still different types, and a plain value of that shape is not a nominal value until it has been wrapped.
 
+A nominal type belongs to its home module, the module that declares it. Two modules that each declare a `$Person` declare two different types, so a module can declare its own `$Person` and still use another module's as `p.$Person`, and a value of one is never accepted where the other is expected.
+
 ```nanyx
 module email
 

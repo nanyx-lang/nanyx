@@ -30,15 +30,6 @@ type CompileResult =
       /// `ExprTypes` and `CalleeTypes` are keyed by. Present when `Typed` is.
       Syntax: Module option }
 
-/// Where a module's source came from, which decides how its imports are resolved and what is in scope.
-type ModuleOrigin =
-    /// A file on disk: imports by path are relative to its directory.
-    | SourceFile of fullPath: string
-    /// A module of the embedded standard library, checkedModule with the compiler intrinsics in scope.
-    | StandardLibraryModule of name: string
-    /// Source given directly (e.g. by tests): only standard-library imports can be resolved.
-    | InMemory
-
 /// A type-checkedModule module together with what an importer needs from it.
 type private CheckedModule =
     { Typed: TypedModule
@@ -1099,7 +1090,7 @@ module Compiler =
                 | StandardLibraryModule _ -> Intrinsics.typeEnv
                 | SourceFile _
                 | InMemory -> TypeEnv.empty
-            let mutable state = { NyxCompiler.Infer.emptyState with Declared = declared; ModuleBlocks = moduleBlocks; WorkflowZeros = zeros }
+            let mutable state = { NyxCompiler.Infer.emptyState with Declared = declared; ModuleBlocks = moduleBlocks; WorkflowZeros = zeros; Home = origin }
             let mutable errors: Diagnostic list = []
             let mutable inlined: TopLevelItem list = []
             // Kept apart and inlined last, so that where an explicit import defines the same name, its definition is kept.

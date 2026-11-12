@@ -88,7 +88,7 @@ let private nameSpan (spanOpt: SourceSpan option) (expr: Expression) : SourceSpa
 let rec attachedTypeNames (ty: Ty) : string list =
     match ty with
     | TyAlias(name, _, underlying) -> name :: attachedTypeNames underlying
-    | TyNominal(name, _, _) -> [ name ]
+    | TyNominal(id, _, _) -> [ id.Name ]
     | TyPrimitive name -> [ name ]
     | TyApply("list", _) -> [ "list" ]
     | TyApply("seq", _) -> [ "seq" ]
@@ -157,7 +157,7 @@ let private isNominal (info: TypeDefInfo) =
 
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
 let private namedType (name: string) (info: TypeDefInfo) : Ty =
-    if isNominal info then TyNominal(info.Name, info.Underlying, info.IsPrivate) else aliasType name info
+    if isNominal info then TyNominal(TypeDefInfo.nominalId info, info.Underlying, info.IsPrivate) else aliasType name info
 
 /// The type definition a type name written in the module means: none for a name only an aliased import brings in,
 /// which has to be written with the alias.
@@ -718,6 +718,7 @@ let private registerTypeDef (state: InferState) (name: Identifier) (modifiers: T
             next.TypeDefs
             |> Map.add name
                 { Name = name
+                  Home = next.Home
                   Parameters = paramVars
                   Underlying = underlyingTy
                   IsPrivate = isPrivate
@@ -779,7 +780,7 @@ let rec private replaceNamedVars (names: Map<string, Ty>) (ty: Ty) : Ty =
     | TyVar { Name = Some name } when names.ContainsKey name -> names.[name]
     | TyVar _
     | TyPrimitive _ -> ty
-    | TyNominal(name, underlying, isPrivate) -> TyNominal(name, recur underlying, isPrivate)
+    | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, recur underlying, isPrivate)
     | TyAlias(name, args, underlying) -> TyAlias(name, List.map recur args, recur underlying)
     | TyFunc(arg, ret) -> TyFunc(recur arg, recur ret)
     | TyRecord fields -> TyRecord(fields |> Map.map (fun _ fieldTy -> recur fieldTy))
@@ -1731,7 +1732,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | Some info when not (blockIsolationAt state name info.Symbol calleeSpan).IsEmpty ->
                     Error (blockIsolationAt state name info.Symbol calleeSpan)
                 // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
-                | Some info when isNominal info && not (inNominalHome state info.Name calleeSpan) ->
+                | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
                 | Some info ->
                     let mutable current = recordConstructorReference expr info state
@@ -2192,7 +2193,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let isolation = blockIsolationAt state' typeName info.Symbol pattern.Span
                     if not isolation.IsEmpty then
                         Error isolation
-                    elif info.IsPrivate && not (inNominalHome state' info.Name pattern.Span) then
+                    elif info.IsPrivate && not (inNominalHome state' (TypeDefInfo.nominalId info) pattern.Span) then
                         Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The protected type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
                     else
                         let constrained = addConstraint scrutineeTy (namedType typeName info) state'

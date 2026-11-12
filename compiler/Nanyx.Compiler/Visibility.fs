@@ -65,11 +65,12 @@ let internal blockAliases (moduleBlocks: (ModuleName * SourceSpan) list) (module
         | Some alias -> $"{alias}.{short}", qualified
         | None -> short, qualified)
 
-/// Whether code at `span` is in the home module of the nominal type `name`: the module that defines it, and within
+/// Whether code at `span` is in the home module of the nominal type `nominal`: the module that defines it, and within
 /// that the `module name =` block it is defined in, if any. Only its home module can make one from its shape.
-let internal inNominalHome (state: InferState) (name: string) (span: SourceSpan) =
-    state.LocalNominals.Contains name
-    && (match state.TypeDefs |> Map.tryFind name |> Option.bind (fun info -> info.Symbol) |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+let internal inNominalHome (state: InferState) (nominal: NominalId) (span: SourceSpan) =
+    nominal.Home = state.Home
+    && state.LocalNominals.Contains nominal.Name
+    && (match state.TypeDefs |> Map.tryFind nominal.Name |> Option.bind (fun info -> info.Symbol) |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
         | Some symbol when not (SourceSpan.isNone span) ->
             blockAround state.ModuleBlocks symbol.Declaration = blockAround state.ModuleBlocks span
         | _ -> true)
@@ -78,7 +79,7 @@ let internal inNominalHome (state: InferState) (name: string) (span: SourceSpan)
 /// In the home module of a nominal type, a value of its underlying type is one of it.
 let internal addDeclaredConstraintAt (span: SourceSpan) (actualTy: Ty) (declaredTy: Ty) (state: InferState) =
     match Unifier.unalias declaredTy with
-    | TyNominal(name, underlying, _) when inNominalHome state name span ->
+    | TyNominal(nominal, underlying, _) when inNominalHome state nominal span ->
         match Unifier.unalias actualTy with
         | TyNominal _ -> addAssignableConstraintAt span actualTy declaredTy state
         | _ -> addAssignableConstraintAt span actualTy underlying state

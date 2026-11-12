@@ -95,7 +95,7 @@ let private loadedBy (state: InferState) (value: Expression) : Set<Identifier> =
 /// it loads.
 let private suppliedBy (state: InferState) (value: Expression) (loaded: Set<Identifier>) : Identifier list =
     match state.ExprTypes.TryFind value.Id |> Option.map (resolveSoFar state) with
-    | Some (TyNominal(name, _, _) | TyAlias(name, _, _)) when state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext -> [ name ]
+    | Some (TyNominal({ Name = name }, _, _) | TyAlias(name, _, _)) when state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext -> [ name ]
     | _ ->
         state.TypeDefs
         |> Map.toList
