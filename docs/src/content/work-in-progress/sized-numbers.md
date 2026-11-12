@@ -4,12 +4,12 @@ description: "Numeric types of fixed widths, and what int and float mean"
 order: 6
 ---
 
-> **Status: partly implemented.** `int` is a 64-bit integer in the compiled program, and `+`, `-` and `*` on it stop
-> the program on overflow ([#342](https://github.com/nanyx-lang/nanyx/issues/342)). `I64`, `F64` and `Boolean` are the
-> types `int`, `float` and `bool` name. `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32` are types with the
-> compiler's own `Add` and `Num`, and integer arithmetic stops the program when the result does not fit. Literals take
-> the expected type, and one that does not fit it is an error. Each integer type has `wrappingAdd`, `wrappingSub` and
-> `wrappingMul`. The conversions do not exist yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
+> **Status: implemented** ([#342](https://github.com/nanyx-lang/nanyx/issues/342),
+> [#343](https://github.com/nanyx-lang/nanyx/issues/343)). Every type below exists, with the compiler's own `Add` and
+> `Num`; integer arithmetic stops the program when the result does not fit; literals take the expected type; and the
+> wrapping operations and conversions are the prelude's. Still open: the integers narrower than 32 bits take 4 bytes in
+> a field rather than their own width (see [Memory management](./memory-management#value-representation)), and floats,
+> `F32` among them, are still boxed.
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
 `list`. Numbers also come in fixed widths, for binary data, compact records and talking to hosts, as ordinary named
@@ -142,6 +142,14 @@ What a conversion takes and gives depends on what it can lose:
 
 `int` is `I64`, so `int` values have the conversions attached to `I64`: `I64.toFloat` is the same definition
 whichever name the value's type was written with.
+
+**Which conversions there are.** Every integer type, `int` among them, converts to every other: as the value where the
+target holds every value of the source (`U8.toI16`), and as `#some(T) | #outOfRange` where it may not (`int.toU8`,
+`I8.toU64`). Each also has `toFloat` and `toF32`. `float` and `F32` convert to each other, and to `int` with `toInt`
+and `tryToInt`; to reach a narrower integer type from a floating-point number, go through `int`. They are written over
+two intrinsics the backend compiles at the types they are used at: `__nanyx_int_cast`, which keeps or extends the bits
+once a conversion that may lose the value has checked it fits, and `__nanyx_to_float`. `nanyx/math`'s `floor`, `ceil`,
+`round` and `truncate` are `float.toInt` with each mode.
 
 Narrowing integer conversions have no wrapping form that keeps only the low bits, as `wrappingAdd` does for
 arithmetic. One can be added later if code needs it.

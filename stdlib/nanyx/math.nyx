@@ -11,8 +11,8 @@
 module math
 
 -- `exp` and `ln` are the prelude's `__floatExp` and `__floatLn`, which `float.pow` is written with;
--- the others are written over the compiler intrinsics `__nanyx_float_sqrt`, `__nanyx_float_floor`,
--- `__nanyx_float_ceil`, `__nanyx_float_trunc` and `__nanyx_float_to_int`.
+-- `floor`, `ceil`, `round` and `truncate` are the prelude's `float.toInt`, and `sqrt` the compiler
+-- intrinsic `__nanyx_float_sqrt`.
 
 --| The ratio of a circle's circumference to its diameter, as near as a `float` holds it.
 export def pi: float = 3.141592653589793
@@ -84,24 +84,20 @@ export def ln: float -> float = { x ->
 
 --| The largest whole number not above `x`: `floor(3.9)` is 3 and `floor(-3.1)` is -4.
 export def floor: float -> int = { x ->
-  __nanyx_float_to_int(__nanyx_float_floor(x))
+  float.toInt(x, #floor)
 }
 
 --| The smallest whole number not below `x`: `ceil(3.1)` is 4 and `ceil(-3.9)` is -3.
 export def ceil: float -> int = { x ->
-  __nanyx_float_to_int(__nanyx_float_ceil(x))
+  float.toInt(x, #ceil)
 }
 
 --| The whole number nearest `x`, with halves rounded away from zero: `round(2.5)` is 3 and `round(-2.5)` is -3.
 export def round: float -> int = { x ->
-  def whole = __nanyx_float_trunc(x)
-
-  if x - whole >= 0.5
-    then __nanyx_float_to_int(whole + 1.0)
-    else if whole - x >= 0.5 then __nanyx_float_to_int(whole - 1.0) else __nanyx_float_to_int(whole)
+  float.toInt(x, #round)
 }
 
 --| `x` with its fraction dropped, towards zero: `truncate(3.9)` is 3 and `truncate(-3.9)` is -3.
 export def truncate: float -> int = { x ->
-  __nanyx_float_to_int(__nanyx_float_trunc(x))
+  float.toInt(x, #truncate)
 }

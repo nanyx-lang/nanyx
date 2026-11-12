@@ -55,6 +55,13 @@ let private takesInts = set [ Helpers.intToFloat; Helpers.floatToInt ]
 let private wrappingOperations =
     Map.ofList [ Intrinsics.wrappingAdd, "add"; Intrinsics.wrappingSub, "sub"; Intrinsics.wrappingMul, "mul" ]
 
+/// The integer type of a value of `ty`, as `SizedIntegerCode` takes it: a sized integer, or `None` for an int.
+let private integerType (ty: IrType) =
+    match ty with
+    | IrSized integer -> Some integer
+    | IrInt -> None
+    | other -> internalError $"a conversion of {IrType.show other}, which is not an integer"
+
 /// The operators that give a number, where the others on numbers give a bool.
 let private arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
 
@@ -467,6 +474,18 @@ type private FunctionEmitter(context: EmitContext) =
                 | IrSized integer -> SizedIntegerCode.wrapping integer operation
                 | other -> internalError $"{name} at {IrType.show other}, which is not an integer"
             join "\n    " [ atoms args; yield! code ]
+        | CallRuntime(name, [ arg ], _) when name = Intrinsics.intCast ->
+            // An integer as one of another integer type, which the prelude has checked it fits.
+            join "\n    " [ atoms [ arg ]; yield! SizedIntegerCode.cast (integerType (atomType arg)) (integerType expr.Type) ]
+        | CallRuntime(name, [ arg ], _) when name = Intrinsics.toFloat ->
+            // A number as the nearest float or `F32`, in a box of its own.
+            let into, box = if expr.Type = IrF32 then "f32", Helpers.f32Box else "f64", Helpers.floatBox
+            let converted =
+                match atomType arg with
+                | IrFloat -> [ "f64.load"; (if into = "f32" then "f32.demote_f64" else "") ]
+                | IrF32 -> [ "f32.load"; (if into = "f64" then "f64.promote_f32" else "") ]
+                | integer -> [ SizedIntegerCode.toFloat (integerType integer) into ]
+            join "\n    " [ atoms [ arg ]; yield! converted; $"call ${helper box}" ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.fromInt ->
             // An int as a sized integer, by the helper of the type it is taken as, or as the nearest `F32`.
             match expr.Type with
