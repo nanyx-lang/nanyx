@@ -166,14 +166,14 @@ Contexts are implicit parameters ([docs: Contexts](../advanced/contexts)). Imple
 - **Requiring** one in a signature: `def describe: [Show(a)] a -> string`. A function that does not write its type
   has its requirements inferred.
 - **Loading** an instance: `use <expr>`, where the value's type is the context at a type, as
-  `def showPoint: Show(Point) = (show = ...)` then `use showPoint` (`Infer.fs:870-881`, `useInstance`). The older
+  `def showPoint: Show(Point) = (show = ...)` then `use showPoint` (`useInstance` in `ContextInstances.fs`). The older
   `use Show(Point) = (...)` is a parse error that says so. The call form `use Show(Point)(...)` that the docs use
   does not parse yet ([#333](https://github.com/nanyx-lang/nanyx/issues/333)).
-- **Resolving** an instance at each call (`Infer.fs:886-925`, `resolveCallInstances`), first match wins:
-  1. an instance for that exact type loaded with `use` around the call, nearest first (`Infer.fs:785-797`);
+- **Resolving** an instance at each call (`resolveCallInstances` in `ContextInstances.fs`), first match wins:
+  1. an instance for that exact type loaded with `use` around the call, nearest first (`instanceInScope`);
   2. the instance the enclosing function's own signature declares (a generic function passes its `[Show(a)]` on);
   3. an instance **synthesized** from the type's attached definitions, matched by member name: `Point.show` makes
-     a `Show(Point)` (`Infer.fs:812-841`, [#328](https://github.com/nanyx-lang/nanyx/issues/328)). A missing or
+     a `Show(Point)` (`synthesizeInstance`, [#328](https://github.com/nanyx-lang/nanyx/issues/328)). A missing or
      ill-typed definition is reported as `MissingContextMembers`, naming it.
 
 Synthesis is **by name only**. Nothing builds an instance for `list(a)` from the instance for `a`, and no instance is

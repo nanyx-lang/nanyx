@@ -74,7 +74,7 @@ The large test files are now split into `Features/<Area>/` files.
 
 | File | Lines | What changed |
 |---|---|---|
-| `Infer.fs` | 2,524 | `TypeResolution.fs` and `Contexts.fs` moved out |
+| `Infer.fs` | 1,887 | `TypeResolution.fs`, `Contexts.fs` and `ContextInstances.fs` moved out |
 
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
