@@ -1377,9 +1377,10 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 let ty, st = freshVar declaredState
                                 ty, st, TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx, true
                         let nextStateWithReq =
+                            let written = recordWrittenType name typeOpt preboundState
                             match contextOpt with
-                            | Some contexts -> registerLocalContextRequirement preboundState symbol name contexts declaredTypeExprOpt
-                            | None -> preboundState
+                            | Some contexts -> registerLocalContextRequirement written symbol name contexts declaredTypeExprOpt
+                            | None -> written
                         // A local function that writes its type runs in the contexts the type declares; one that does
                         // not runs in those of the def around it.
                         let outerScope = nextStateWithReq.ContextScope

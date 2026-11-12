@@ -244,9 +244,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     | Some declaredTy -> TypeEnv.declare name symbol (TypeEnv.mono declaredTy) envWithCtx
                     | None -> envWithCtx
                 let nextStateWithReq =
+                    let written = recordWrittenType name typeOpt nextState2
                     match contextOpt with
-                    | Some contexts -> registerContextRequirement nextState2 name contexts declaredTypeExprOpt
-                    | None -> nextState2
+                    | Some contexts -> registerContextRequirement written name contexts declaredTypeExprOpt
+                    | None -> written
                 // A function runs in the contexts its type declares, or infers them. A value is computed at the top
                 // level, in the ambient ones.
                 let bodyState =
@@ -411,7 +412,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             match used.Caller with
             | DefScope(caller, false) ->
                 for ctxName in Set.difference required.[used.Callee] used.Available do
-                    errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span ]
+                    errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span |> ContextFixes.withAddToType state caller ctxName ]
             | _ -> ()
         // What an unannotated function needs is part of its type, as a context written in its type is. They come after
         // the parameterised contexts it requires, which its calls have already found instances of in that order.

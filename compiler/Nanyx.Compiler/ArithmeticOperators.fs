@@ -105,7 +105,10 @@ module internal ArithmeticOperators =
         match tys |> List.tryFind isKnownNonNumber, contextFor state op, declaredVar, state.ContextScope with
         | Some ty, _, _, _ -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span (notANumber op ty) ]
         | None, Some (context, does), Some v, DefScope(defName, false) ->
-            let error = Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span (undeclared op context does v defName)
+            let required = $"{context}({Unifier.tyToDisplayString Ascii (TyVar v)})"
+            let error =
+                Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span (undeclared op context does v defName)
+                |> ContextFixes.withAddToType state defName required
             Ok { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs }
         | None, Some _, None, DefScope(defName, true) when areVariables ->
             let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; At = expr.Span }
@@ -118,7 +121,7 @@ module internal ArithmeticOperators =
         /// The member of the context the function requires that it is written as.
         | AsMember of Expression
         /// An error: the literal cannot be of the type it is used at.
-        | Wrong of DiagnosticCode * string
+        | Wrong of DiagnosticCode * string * Fix list
 
     /// What the literal `literal` is, an operand of an arithmetic operator or a comparison whose other operand is of the
     /// type `otherTy`, where that is a type variable of the type the function around it writes, in a function that
@@ -140,11 +143,11 @@ module internal ArithmeticOperators =
             | IntLit n ->
                 OperatorContexts.smallest state fromInt
                 |> Option.map (fun context ->
-                    Wrong (DiagnosticCodes.MissingContextMembers, $"'{n}' is an '{tyText}' here, which needs {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"))
+                    Wrong (DiagnosticCodes.MissingContextMembers, $"'{n}' is an '{tyText}' here, which needs {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'", ContextFixes.addToType state defName $"{context}({tyText})"))
             | FloatLit x ->
                 let text = x.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
                 let text = if text.Contains '.' || text.Contains 'E' then text else text + ".0"
-                Some (Wrong (DiagnosticCodes.TypeMismatch, $"'{text}' cannot be an '{tyText}': '{tyText}' may be an integer type. Take the value as a parameter"))
+                Some (Wrong (DiagnosticCodes.TypeMismatch, $"'{text}' cannot be an '{tyText}': '{tyText}' may be an integer type. Take the value as a parameter", []))
             | _ -> None
         | _ -> None
 
@@ -165,8 +168,8 @@ module internal ArithmeticOperators =
             | BinaryOp(op, _, _), Some (AsMember asMember) when readsLiterals op ->
                 infer state asMember
                 |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add asMember.Id asMember })
-            | BinaryOp(op, _, _), Some (Wrong(code, message)) when readsLiterals op ->
-                let error = Diagnostics.at code operand.Expr.Span message
+            | BinaryOp(op, _, _), Some (Wrong(code, message, fixes)) when readsLiterals op ->
+                let error = { Diagnostics.at code operand.Expr.Span message with Fixes = fixes }
                 Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)
         reread left right state

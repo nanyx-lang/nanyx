@@ -241,6 +241,14 @@ module internal WellKnownContexts =
         | Some name -> $"'{name}' {wellKnown.Verb} values of type '{tyText}' with {op}, so its type must require {context}({tyText}): add [{context}({tyText})] to the type of '{name}'"
         | None -> $"{wellKnown.Gerund} values of type '{tyText}' with {op} requires the context '{context}({tyText})', which is not available here"
 
+    /// The error `undeclared` at `span`, with the fix that adds `wellKnown` of `v` to the type of `defName`.
+    let private undeclaredError (state: InferState) (span: SourceSpan) (wellKnown: WellKnownContext) (op: string) (v: TyVar) (defName: Identifier option) =
+        error span (undeclared wellKnown op v defName)
+        |> List.map (fun diagnostic ->
+            match defName with
+            | Some name -> ContextFixes.withAddToType state name $"{wellKnown.Context}({display (TyVar v)})" diagnostic
+            | None -> diagnostic)
+
     /// The instance of a well-known context of a type, in an environment, other than the compiler's own, if it has
     /// one: one in scope, or one built from the member attached to it. Building one can fail, when the attached
     /// member has the wrong type.
@@ -291,7 +299,7 @@ module internal WellKnownContexts =
         let pending =
             { Def = def; Call = expr.Id; Callee = op; Index = 0; Count = 1
               Context = wellKnown.Context; ArgTys = [ ty ]; Span = expr.Span
-              Errors = comparedVars ty |> List.tryHead |> Option.map (fun v -> error expr.Span (undeclared wellKnown op v annotatedDef)) |> Option.defaultValue []
+              Errors = comparedVars ty |> List.tryHead |> Option.map (fun v -> undeclaredError state expr.Span wellKnown op v annotatedDef) |> Option.defaultValue []
               ChecksOnly = false }
         { state with
             PendingContextInstances = pending :: state.PendingContextInstances
@@ -327,7 +335,9 @@ module internal WellKnownContexts =
         | Some reason -> failed (cannotUse wellKnown pending.Callee ty reason)
         | None ->
             match comparedVars ty |> List.tryFind (fun v -> declaredVars.Contains v.Id && not (hasInstance env (TyVar v))) with
-            | Some v -> failed (undeclared wellKnown pending.Callee v annotatedDef)
+            | Some v ->
+                let errors = undeclaredError state pending.Span wellKnown pending.Callee v annotatedDef
+                Ok (None, { state with FailedExprs = (pending.Call, errors) :: state.FailedExprs })
             | None -> Ok (None, state)
 
     /// `state` with each operator among `pendings` that found an instance `calls` takes (see `ContextInference`)
@@ -399,6 +409,15 @@ module internal WellKnownContexts =
         let needs = if tys.[0] = tys.[1] then "is" else $"needs '{context}({tys.[1]})',"
         $"'{calleeName}' requires the context '{context}({tys.[0]})', which {needs} not available here{advice}"
 
+    /// The error `openAtCall` at `span`, with the fix that adds `wellKnown` of `v` to the type of `defName`.
+    let private openAtCallError (state: InferState) (span: SourceSpan) (wellKnown: WellKnownContext) (calleeName: Identifier) (ty: Ty) (v: TyVar) (defName: Identifier option) =
+        let required = $"{wellKnown.Context}({(Unifier.tysToDisplayStrings Ascii [ ty; TyVar v ]).[1]})"
+        error span (openAtCall wellKnown calleeName ty v defName)
+        |> List.map (fun diagnostic ->
+            match defName with
+            | Some name -> ContextFixes.withAddToType state name required diagnostic
+            | None -> diagnostic)
+
     /// What becomes of `call`, a call to `calleeName` at `span` that requires `wellKnown` of `ty` and finds it as
     /// `instance`: the instances `found` so far for the `count` contexts the callee requires, with this one. None for
     /// an instance found as any other context's is: one attached to the type, or one of a type variable in a def that
@@ -422,7 +441,7 @@ module internal WellKnownContexts =
         let pendingIn (def: Identifier) (v: TyVar) (annotatedDef: Identifier option) =
             { Def = def; Call = call.Id; Callee = calleeName; Index = found.Length; Count = count
               Context = wellKnown.Context; ArgTys = [ ty ]; Span = span
-              Errors = error span (openAtCall wellKnown calleeName ty v annotatedDef); ChecksOnly = false }
+              Errors = openAtCallError state span wellKnown calleeName ty v annotatedDef; ChecksOnly = false }
         let later (pending: PendingContextInstance) (state: InferState) =
             Some (Ok (found @ [ None ], { state with PendingContextInstances = pending :: state.PendingContextInstances }))
         match instance, ty, state.ContextScope with
@@ -474,7 +493,7 @@ module internal WellKnownContexts =
             let pending =
                 { Def = def; Call = call.Id; Callee = calleeName; Index = 0; Count = 1
                   Context = wellKnown.Context; ArgTys = [ ty ]; Span = span
-                  Errors = error span (openAtCall wellKnown calleeName ty v annotatedDef); ChecksOnly = true }
+                  Errors = openAtCallError state span wellKnown calleeName ty v annotatedDef; ChecksOnly = true }
             Ok { state with PendingContextInstances = pending :: state.PendingContextInstances }
         match instance, state.ContextScope with
         | NoInstance reason, _ -> Error (error span (noInstanceAtCall wellKnown calleeName ty reason))

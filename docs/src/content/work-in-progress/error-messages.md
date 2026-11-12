@@ -49,7 +49,7 @@ need it first. This workstream fills it with content.
 - **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
   and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
 - **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.
-- **Few errors have fixes.** An unknown name that a standard library module exports offers to import it, and a
+- **Some errors have fixes.** An unknown name that a standard library module exports offers to import it, and a
   named parameter passed by position (NYX0218) offers to name the arguments when each fits just one parameter.
 - **An unknown name asks "did you mean"** (`NameSuggestions.fs`): the names in scope closest to it by edit distance
   (a swap of two letters counts as one edit), at most one edit for every three characters, are named in the message
@@ -61,6 +61,11 @@ need it first. This workstream fills it with content.
   when the arms are written on one. A tag with a payload is added as `#some(_)`, and an int, string or float as `_`,
   since those have too many values to name. A match that would take more than a dozen arms, or whose arms have no
   `|` (a lambda's pattern parameters), gets no fix.
+- **A def that needs a context its type does not declare offers to add it** (`ContextFixes.fs`): every error that
+  says "add [C] to the type of 'f'" (an operator, `++`, an interpolation hole, a call, an ambient context such as
+  `Console`) has a fix that writes `C` after the contexts the type writes, joined with `&`, or in front of the type
+  as `[C] ` when it writes none. It reads where the type is written from `InferState.WrittenTypes`. A context the
+  def could load with `use` instead is only named in the message.
 
 # Goals
 
@@ -78,7 +83,8 @@ _To do._ Candidate items, not yet filed:
 2. **Codes and wording.** Allocate codes and rewrite messages to the house style, as each error moves to the
    structured `Diagnostic` (after [#97](https://github.com/nanyx-lang/nanyx/issues/97)).
 3. **CLI rendering.** File, source excerpt and underline; colour when the output is a terminal.
-4. **Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.
+4. ~~**Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.~~
+   Done ([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see Where the compiler is today.
 5. **Error reference.** A docs page per code, generated or checked against the compiler's table.
 
 # Open questions

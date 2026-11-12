@@ -130,6 +130,12 @@ module InterpolationHoles =
             | None -> ""
         $"'{calleeName}' requires the context 'ToString({display ty})', which is written through 'ToString({partText})', and that is not available here{advice}"
 
+    /// `diagnostic` with the fix that adds `ToString` of `part` to the type of `defName`, if it is in a def.
+    let addToStringFix (state: InferState) (part: Ty) (defName: Identifier option) (diagnostic: Diagnostic) =
+        match defName with
+        | Some name -> ContextFixes.withAddToType state name $"ToString({display part})" diagnostic
+        | None -> diagnostic
+
     /// The def the holes found once the whole module is inferred are pending in (see `resolveLater`). No def has it.
     let moduleEnd: Identifier = ""
 
@@ -161,7 +167,7 @@ module InterpolationHoles =
                 | AmbientScope -> moduleEnd, None
             let pending =
                 { Def = def; Call = call.Id; Callee = holeFunction; Index = found.Length; Count = count
-                  Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared ty annotatedDef); ChecksOnly = false }
+                  Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared ty annotatedDef) |> List.map (addToStringFix state ty annotatedDef); ChecksOnly = false }
             Ok (found @ [ None ],
                 { state with
                     PendingContextInstances = pending :: state.PendingContextInstances

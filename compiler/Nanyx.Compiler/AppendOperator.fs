@@ -51,7 +51,7 @@ module internal AppendOperator =
             let tyText = Unifier.tyToDisplayString Ascii (TyVar v)
             let message =
                 $"'{defName}' joins values of type '{tyText}' with ++, so its type must require {context}({tyText}): add [{context}({tyText})] to the type of '{defName}'"
-            let error = Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span message
+            let error = Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span message |> ContextFixes.withAddToType state defName $"{context}({tyText})"
             Ok (resultTy, { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs })
         | None, Some _, None, DefScope(defName, true) when areVariables ->
             let pending = { InDef = defName; Operator = expr.Id; MemberName = operator; OperandTy = leftTy; At = expr.Span }
