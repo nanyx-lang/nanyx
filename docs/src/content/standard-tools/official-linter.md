@@ -126,7 +126,7 @@ The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#
 def both: [Eq(a) + Hash(a)] a, a -> bool = { x, y -> x == y and hash(x) == hash(y) } -- Linter warning: Join contexts with `&`
 ```
 
-The rule (`plusBetweenContexts`) reports a `+` between the contexts a function requires. Contexts are joined with `&`, as in `[Eq(a) & Hash(a)]` (see [Contexts](../advanced/contexts)); `+` is what an earlier version of the language wrote, and the compiler still reads it. Its fix replaces the `+` with `&`, and the formatter writes `&` too.
+The rule (`plusBetweenContexts`) reports a `+` between the contexts a function requires. Contexts are joined with `&`, as in `[Eq(a) & Hash(a)]` (see [Contexts](../advanced/contexts)); `+` is what an earlier version of the language wrote, and the compiler still reads it. Its fix replaces the `+` with `&`, and the formatter writes `&` too. A member's type runs on past a `&`, so the fix also brackets a member before the `+`: `` [`+`: a, a -> a + Eq(a)] `` becomes `` [(`+`: a, a -> a) & Eq(a)] ``.
 
 ## Unreachable code path
 

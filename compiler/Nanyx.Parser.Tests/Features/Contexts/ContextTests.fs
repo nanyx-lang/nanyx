@@ -56,12 +56,18 @@ let ``An operator is required by the member it reads, among a def's contexts`` (
     Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: (a, a) -> a] a, a -> a = { + }")
     Assert.Equal<TypeExprKind list>(
         [ required "+" (binary a); TypeApply ("Eq", [ a ]); required "==" (binary (TypeExpr.synthetic (TypeName "bool"))); TypeName "Console" ],
-        contextsOf "def f: [`+`: a, a -> a & Eq(a) & `==`: a, a -> bool & Console] a -> a = { x -> x }")
-    // In brackets, `&` in a member's type is an intersection.
+        contextsOf "def f: [(`+`: a, a -> a) & Eq(a) & (`==`: a, a -> bool) & Console] a -> a = { x -> x }")
+    // A member's type runs to the end of the set, so a `&` after it is an intersection in its type.
     let b = TypeExpr.synthetic (TypeVar "b")
     Assert.Equal<TypeExprKind list>(
-        [ required "f" (TypeExpr.synthetic (TypeFunc (TypeExpr.synthetic (TypeIntersection [ a; b ]), a))); TypeName "Console" ],
-        contextsOf "def f: [`f`: (a & b) -> a & Console] a -> a = { x -> x }")
+        [ required "-" (TypeExpr.synthetic (TypeFunc (a, TypeExpr.synthetic (TypeIntersection [ a; b ])))) ],
+        contextsOf "def f: [`-`: a -> a & b] a -> a = { x -> x }")
+    // The bracketed member spans its brackets, which the official linter's fixes rely on.
+    match parseModule "def f: [(`+`: a, a -> a) & Eq(a)] a -> a = { x -> x }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext (requirement :: _, _) }, _))) ] ->
+        Assert.Equal(8, requirement.Span.Start)
+        Assert.Equal(24, requirement.Span.End)
+    | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
 let ``A def's contexts are joined with &, or with + as an earlier spec had it`` () =

@@ -10,12 +10,6 @@ open Parser.Program
 /// Fills `typeExpr`, `typeList`, `typeSignature` and `parameterType`. Called by `Api`: a file's top-level code runs only when one of
 /// its own values is first used.
 let internal fillTypeRefs () =
-    // Runs `p` with `InContextMember` as `inMember`, and puts it back as it was after.
-    let inContextMember (inMember: bool) (p: Parser<'a, ParseState>) =
-        getUserState >>= fun outer ->
-            updateUserState (fun state -> { state with InContextMember = inMember }) >>. p
-            .>> updateUserState (fun state -> { state with InContextMember = outer.InContextMember })
-
     // A type an aliased import brings in is qualified with the alias: `m.$Email`, `m.Shape`.
     let qualifiedTypeName =
         pipe2
@@ -140,13 +134,18 @@ let internal fillTypeRefs () =
 
     // An operator a function needs, required by the context member it reads rather than by a context's name:
     // `` [`+`: a, a -> a] ``. It is a record type of that one member, and its type is a list of types, as a def's is.
-    // A `&` in its type, outside brackets, starts the set's next context (see `InContextMember`).
+    // Its type runs to the end of the set, a `&` in it being an intersection, so a member with contexts after it is
+    // bracketed: `` [(`+`: a, a -> a) & Eq(a)] ``. A bracketed member spans its brackets.
     let contextMember =
         spannedType (
             pipe2
                 (nameNoWs .>> wsNoNl() .>> pstring ":" .>> ws)
-                (inContextMember true typeSignature)
+                typeSignature
                 (fun name memberType -> TypeRecord [ TypeField(name, false, false, Some memberType, None) ]))
+
+    let bracketedContextMember =
+        withSpan (between (pstring "(" >>. ws) (ws >>. pstring ")") contextMember)
+        |>> fun (item, span) -> { item with Span = span }
 
     // The contexts a function needs, joined with `&`: `[Eq(a) & Hash(a)]`. `+` joins them too, as an earlier spec of
     // the language had it; the official linter's `plusBetweenContexts` rule reports it.
@@ -156,7 +155,7 @@ let internal fillTypeRefs () =
                 (pstring "[")
                 (wsNoNl() >>. pstring "]")
                 (sepBy1
-                    (wsNoNl() >>. (attempt contextMember <|> attempt typeApply <|> typeIdentifier))
+                    (wsNoNl() >>. (attempt bracketedContextMember <|> attempt contextMember <|> attempt typeApply <|> typeIdentifier))
                     (wsNoNl() >>. (pstring "&" <|> pstring "+") >>. wsNoNl()))
             |>> TypeContext)
 
@@ -187,16 +186,15 @@ let internal fillTypeRefs () =
         let bracketed = between (pstring "(" >>. ws) (ws >>. pstring ")") path
         spannedType (pstring "typeof" >>. keywordEnd >>. wsInline >>. (bracketed <|> path) |>> TypeOf)
 
-    // In brackets, `&` is an intersection again, even within a context member's type.
     let typeAtom =
         choice [
             attempt typeOf
             attempt typeConstraint
-            attempt (inContextMember false typeTag)
-            attempt (inContextMember false typeApply)
-            attempt (inContextMember false contextSet)
-            attempt (inContextMember false typeRecord)
-            attempt (inContextMember false typeTupleOrParen)
+            attempt typeTag
+            attempt typeApply
+            attempt contextSet
+            attempt typeRecord
+            attempt typeTupleOrParen
             typeIdentifier
         ]
 
@@ -207,8 +205,7 @@ let internal fillTypeRefs () =
             | None -> baseType
 
     let typeIntersection =
-        let separator = userStateSatisfies (fun state -> not state.InContextMember) >>. attempt (ws >>. pstring "&" >>. ws)
-        singleOrCombined TypeIntersection (sepBy1 typePostfix separator)
+        singleOrCombined TypeIntersection (sepBy1 typePostfix (attempt (ws >>. pstring "&" >>. ws)))
 
     let typeUnion =
         opt (pstring "|" >>. ws) >>. singleOrCombined TypeUnion (sepBy1 typeIntersection (attempt (ws >>. pstring "|" >>. ws)))

@@ -133,7 +133,7 @@ A function's type can require an operator by the member it reads, rather than by
 
 ```nanyx
 def add: [`+`: a, a -> a] = { + }
-def scale: [`+`: a, a -> a & `*`: a, a -> a] a, a -> a = { x, k -> x * k + x }
+def scale: [(`+`: a, a -> a) & (`*`: a, a -> a)] a, a -> a = { x, k -> x * k + x }
 ```
 
 This is not a context of its own. Before the def is checked, each such requirement is read as the prelude's
@@ -147,7 +147,7 @@ context's name, and the body can use the context's other members.
   `[ToString(a)]`.
 - Only members of the prelude's contexts can. `` [`<`: a, a -> bool] `` is `NYX0108`, since `<` reads `Ord`'s
   `compare`, and the message says to write `[Ord(a)]`.
-- Requirements written both ways are merged: ``[Add(a) & `+`: a, a -> a]`` is `[Add(a)]`.
+- Requirements written both ways are merged: ``[Add(a) & (`+`: a, a -> a)]`` is `[Add(a)]`.
 - A def that writes only its contexts, as `add` above does, is given the type it would have written, so a call can
   read the context's argument from it. This also makes `def sub: [Add(a)] = { x, y -> x - y }` callable, which it
   was not (`ContextInference.writtenType`).
