@@ -89,15 +89,21 @@ let private calleeSpan (expr: Expression) =
     | Pipe(_, _, nameSpan, _) -> nameSpan
     | _ -> None
 
+/// The type `symbol` is declared with, generic, and the contexts it requires: for one of the module's own, its type and
+/// `TypedModule.ContextTypes`'; for one an import brings in, `ImportedContextTypes`' or else its `ImportedTypes`' type.
+let internal declaredType (typed: TypedModule) (symbol: Symbol) : (Ty * Ty list) option =
+    match typed.SymbolTypes |> Map.tryFind symbol.Id with
+    | Some general -> Some (general, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue [])
+    | None ->
+        typed.ImportedContextTypes
+        |> Map.tryFind symbol.Id
+        |> Option.orElse (typed.ImportedTypes |> Map.tryFind symbol.Id |> Option.map (fun ty -> ty, []))
+
 /// The contexts the def `symbol` requires, a top-level or local one of the module's own or one an import brings in (see
-/// `TypedModule.ContextTypes` and `ImportedContextTypes`), and the type `ty` it has where it is hovered, with the
-/// contexts instantiated as `ty` is: at a call, `[Show(int)]` for the `int` it is called with.
+/// `declaredType`), and the type `ty` it has where it is hovered, with the contexts instantiated as `ty` is: at a call,
+/// `[Show(int)]` for the `int` it is called with.
 let private withContextsAt (typed: TypedModule) (symbol: Symbol) (ty: Ty) : Ty * Ty list =
-    let required =
-        match typed.ContextTypes |> Map.tryFind symbol.Id, typed.SymbolTypes |> Map.tryFind symbol.Id with
-        | Some contexts, Some general -> Some (general, contexts)
-        | _ -> typed.ImportedContextTypes |> Map.tryFind symbol.Id
-    match required with
+    match declaredType typed symbol with
     | Some (general, (_ :: _ as contexts)) ->
         match Unifier.unify [ general, ty, Equal, SourceSpan.none ] with
         // A context variable stands for the contexts it is bound to here, if any.
@@ -117,6 +123,59 @@ let private declared (symbol: Symbol) (typeWritten: string) =
     | ImportedModule
     | TypeDefinition -> typeWritten
 
+/// What hover describes at `offset` in the compiled root module, as `typeAt` finds it: its type there, the symbol of
+/// the name it is, if it is one, and its span.
+let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty * Symbol option * SourceSpan) option =
+    let referenced (expr: Expression) = typed.References |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind
+    // Only the module's own declarations have types recorded, so no imported one is found here.
+    let declarations =
+        typed.SymbolTypes
+        |> Map.toList
+        |> List.choose (fun (id, ty) ->
+            let symbol = typed.Symbols.[id]
+            if contains offset symbol.Declaration then Some (ty, Some symbol, symbol.Declaration) else None)
+    let candidates =
+        // A declaration's name is written as it is, so it comes before any expression of the same span.
+        (declarations |> List.map (fun (ty, symbol, span) -> ty, symbol, span, System.Int32.MaxValue, 0))
+        @ (expressionsAt offset syntax
+        |> List.mapi (fun depth expr ->
+            let callee =
+                match calleeSpan expr with
+                | Some nameSpan when contains offset nameSpan ->
+                    typed.CalleeTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, referenced expr, nameSpan, depth, 0)
+                | _ -> None
+            let name =
+                match expr.Kind with
+                | IdentifierExpr _ -> referenced expr
+                | _ -> None
+            let own = typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, name, expr.Span, depth, 1)
+            Option.toList callee @ Option.toList own)
+        |> List.concat)
+        // A `_` in a type shows what it was inferred to be.
+        @ (typeExprsAt offset syntax
+        |> List.choose (fun typeExpr ->
+            match typeExpr.Kind with
+            | TypeHole -> typed.ExprTypes |> Map.tryFind typeExpr.Id |> Option.map (fun ty -> ty, None, typeExpr.Span, 0, 0)
+            | _ -> None))
+    match candidates with
+    | [] -> None
+    | _ ->
+        // Depth counts outwards from the innermost; a callee's name is inside its call, so it comes first.
+        let ty, symbol, span, _, _ =
+            candidates |> List.minBy (fun (_, _, span, depth, rank) -> span.End - span.Start, -depth, rank)
+        Some (ty, symbol, span)
+
+/// `ty`, the type `symbol` has where it is hovered, as hover writes it: after the contexts it requires there (see
+/// `withContextsAt`) and the name (see `declared`), and with each of `others` written with it, its variables named as
+/// they are there.
+let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) (others: Ty list) =
+    let ty, contexts =
+        match symbol with
+        | Some symbol -> withContextsAt typed symbol ty
+        | None -> ty, []
+    let typeWritten, othersWritten = Signatures.typesWithContexts names ty contexts others
+    (symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten), othersWritten
+
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name, where it is instantiated at that
 /// call, or of what a declaration's own name declares (a def, a parameter, a pattern variable), or of what a `_` in
@@ -130,47 +189,52 @@ let private declared (symbol: Symbol) (typeWritten: string) =
 let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
-        let referenced (expr: Expression) = typed.References |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind
-        // Only the module's own declarations have types recorded, so no imported one is found here.
-        let declarations =
-            typed.SymbolTypes
-            |> Map.toList
-            |> List.choose (fun (id, ty) ->
-                let symbol = typed.Symbols.[id]
-                if contains offset symbol.Declaration then Some (ty, Some symbol, symbol.Declaration) else None)
-        let candidates =
-            // A declaration's name is written as it is, so it comes before any expression of the same span.
-            (declarations |> List.map (fun (ty, symbol, span) -> ty, symbol, span, System.Int32.MaxValue, 0))
-            @ (expressionsAt offset syntax
-            |> List.mapi (fun depth expr ->
-                let callee =
-                    match calleeSpan expr with
-                    | Some nameSpan when contains offset nameSpan ->
-                        typed.CalleeTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, referenced expr, nameSpan, depth, 0)
-                    | _ -> None
-                let name =
-                    match expr.Kind with
-                    | IdentifierExpr _ -> referenced expr
-                    | _ -> None
-                let own = typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, name, expr.Span, depth, 1)
-                Option.toList callee @ Option.toList own)
-            |> List.concat)
-            // A `_` in a type shows what it was inferred to be.
-            @ (typeExprsAt offset syntax
-            |> List.choose (fun typeExpr ->
-                match typeExpr.Kind with
-                | TypeHole -> typed.ExprTypes |> Map.tryFind typeExpr.Id |> Option.map (fun ty -> ty, None, typeExpr.Span, 0, 0)
-                | _ -> None))
-        match candidates with
-        | [] -> None
-        | _ ->
-            // Depth counts outwards from the innermost; a callee's name is inside its call, so it comes first.
-            let ty, symbol, span, _, _ =
-                candidates |> List.minBy (fun (_, _, span, depth, rank) -> span.End - span.Start, -depth, rank)
-            let ty, contexts =
-                match symbol with
-                | Some symbol -> withContextsAt typed symbol ty
-                | None -> ty, []
-            let typeWritten = Signatures.typeWithContexts names ty contexts
-            Some { Type = symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten; Span = span }
+        hoveredAt syntax typed offset
+        |> Option.map (fun (ty, symbol, span) -> { Type = fst (writtenAt names typed symbol ty []); Span = span })
+    | _ -> None
+
+/// A def's own signature, beside the type a name that refers to it has where it is used. `Declared` is the signature
+/// as hover writes the def's declaration: its annotation, or else the generic type it was inferred to have. `Bindings`
+/// are the type variables of the signature that are something else at the use, in the order the signature writes
+/// them, each with what it is there, named as the type at the use names its variables: `a`, `string`.
+type Instantiation = { Declared: string; Bindings: (string * string) list; Definition: SourceSpan }
+
+/// The signature of the def that the name at `offset` in the compiled root module refers to, or declares, when it is not
+/// what `typeAt` shows there, as an `Instantiation`: on a use of a generic def, where its type variables are filled in.
+/// The def is a top-level or local one, the module's own or one an import brings in. `None` when no such name is at
+/// `offset`, or its type there is its signature: a def that is not generic, or the def's own name.
+let instantiationAt (names: TypeNotation) (result: CompileResult) (offset: int) : Instantiation option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        match hoveredAt syntax typed offset with
+        | Some (ty, Some symbol, _) when symbol.Kind = TopLevelValue || symbol.Kind = LocalValue ->
+            declaredType typed symbol
+            |> Option.bind (fun (general, contexts) ->
+                let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
+                let declaredWritten = declared symbol (Signatures.typeWithContexts names general contexts)
+                let contextVariables = FunctionContexts.variablesIn general
+                // Each variable with what it is here: a type, or the contexts a context variable stands for, if any.
+                let bound =
+                    match Unifier.unify [ general, ty, Equal, SourceSpan.none ] with
+                    | Ok subst ->
+                        Unifier.displayedVars names (general :: contexts)
+                        |> List.choose (fun (var, name) ->
+                            match Unifier.apply subst (TyVar var) with
+                            | TyVar same when same.Id = var.Id -> None
+                            | boundTo when contextVariables.ContainsKey var.Id ->
+                                match FunctionContexts.flatten [ boundTo ] |> Unifier.writtenContexts with
+                                | [] -> None
+                                | boundContexts -> Some (name, boundContexts)
+                            | boundTo -> Some (name, [ boundTo ]))
+                    | Error _ -> []
+                let typeWritten, boundWritten = writtenAt names typed (Some symbol) ty (List.collect snd bound)
+                let bindings =
+                    bound
+                    |> List.mapFold (fun written (name, tys) ->
+                        let here, rest = List.splitAt tys.Length written
+                        (name, String.concat " & " here), rest) boundWritten
+                    |> fst
+                if typeWritten = declaredWritten then None
+                else Some { Declared = declaredWritten; Bindings = bindings; Definition = symbol.Declaration })
+        | _ -> None
     | _ -> None

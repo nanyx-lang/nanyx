@@ -87,7 +87,10 @@ and VS Code remembers where you put it. The extension needs VS Code 1.106 or lat
 
 It shows:
 
-- **Expression**: the type of the expression at the cursor, as hover shows it.
+- **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it shows
+  the function's declared signature first (its annotation, or the generic type it was inferred to have), then its type
+  at this use, then what this use fills in each type variable with, such as `a = string, b = #some(int) | #nothing`.
+  Each links to the function's definition. A function that is not generic is shown once.
 - **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
 - **Top level**: the top-level definitions and imports in scope, the file's own first. It starts closed.
 - **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the

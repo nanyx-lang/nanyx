@@ -32,15 +32,16 @@ let ofDefs (state: InferState) (subst: Subst) (topLevel: Symbol list) : Map<Symb
         | _ -> None)
     |> Map.ofList
 
-/// The type and the contexts of each of `symbols`, the defs an import brings in, that requires contexts, by its
-/// symbol, as `TypedModule.ImportedContextTypes` holds them. `contextTypes` and `symbolTypes` are the imported module's
+/// The type and the contexts of each of `symbols`, the defs an import brings in, by its symbol, as
+/// `TypedModule.ImportedContextTypes` holds them. `contextTypes` and `symbolTypes` are the imported module's
 /// `ContextTypes` and the types of its defs before `subst`, its substitution, resolves them. The variables are
 /// numbered apart from the importer's, as an imported def's type is in its environment, and keep their names.
 let ofImport (subst: Subst) (contextTypes: Map<SymbolId, Ty list>) (symbolTypes: Map<SymbolId, Ty>) (symbols: SymbolId seq) : Map<SymbolId, Ty * Ty list> =
     symbols
     |> Seq.choose (fun id ->
-        match contextTypes |> Map.tryFind id, symbolTypes |> Map.tryFind id with
-        | Some (_ :: _ as contexts), Some general ->
+        match symbolTypes |> Map.tryFind id with
+        | Some general ->
+            let contexts = contextTypes |> Map.tryFind id |> Option.defaultValue []
             let resolved = TyApply("", Unifier.apply subst general :: (contexts |> List.map (Unifier.apply subst)))
             let names = ContextInference.varsInOrder resolved |> List.map (fun var -> var.Id, var.Name) |> Map.ofList
             let renumbered =

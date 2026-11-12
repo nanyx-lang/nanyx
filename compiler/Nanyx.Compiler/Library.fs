@@ -1046,7 +1046,7 @@ module Compiler =
             let mutable inlinedInstances: Map<NodeId, ContextInstance option list> = Map.empty
             // The instances the `use`s in the imported modules' definitions load.
             let mutable inlinedUseContexts: Map<NodeId, TypeExpr> = Map.empty
-            // The contexts the defs the imports bring in require, with their types (see `ImportedContextTypes`).
+            // The types of the defs the imports bring in, with the contexts they require (see `ImportedContextTypes`).
             let mutable importedContextTypes: Map<SymbolId, Ty * Ty list> = Map.empty
             // The modules that bring each name in unqualified, by the module's key, with the name of the module.
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.

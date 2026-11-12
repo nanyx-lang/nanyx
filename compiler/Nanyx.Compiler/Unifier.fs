@@ -505,19 +505,30 @@ module Unifier =
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string =
         printIn notation (apply (displayRenaming notation (loneRests ty) ty) ty)
 
+    /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
+    let private loneAcross (tys: Ty list) : Set<int> =
+        let loneIn = tys |> List.map (fun ty -> loneRests ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
+        loneIn
+        |> List.map fst
+        |> Set.unionMany
+        |> Set.filter (fun id -> loneIn |> List.forall (fun (lone, all) -> lone.Contains id || not (all.Contains id)))
+
     /// Each of `tys` for a reader, as `tyToDisplayString` writes it, with a variable they share given the same name
     /// in each. The first one's variables are named first, so it reads as it would alone unless the others use a
     /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list =
-        let lone =
-            let loneIn = tys |> List.map (fun ty -> loneRests ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
-            loneIn
-            |> List.map fst
-            |> Set.unionMany
-            |> Set.filter (fun id -> loneIn |> List.forall (fun (lone, all) -> lone.Contains id || not (all.Contains id)))
-        let renamed = displayRenaming notation lone (TyApply("", tys))
+        let renamed = displayRenaming notation (loneAcross tys) (TyApply("", tys))
         tys |> List.map (apply renamed >> printIn notation)
+
+    /// The type variables `tysToDisplayStrings` writes in `tys`, in the order it names them, each with the name it
+    /// writes. A rest it writes as a bare spread is not among them.
+    let displayedVars (notation: TypeNotation) (tys: Ty list) : (TyVar * string) list =
+        let lone = loneAcross tys
+        let renamed = displayRenaming notation lone (TyApply("", tys))
+        varsInPrintOrder (TyApply("", tys))
+        |> List.filter (fun v -> not (lone.Contains v.Id))
+        |> List.map (fun v -> v, printIn notation (apply renamed (TyVar v)))
 
     /// The rest variables of `ty` that only stand for tags it gives out: ones that appear in no function's input.
     /// Nothing can add a tag to such a union, so it has no more tags than those written: its rest is empty. In

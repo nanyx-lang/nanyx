@@ -46,7 +46,8 @@ public sealed record InfoViewItem
 
 /// <summary>
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel. The expression there with
-/// its type, as hover shows it; the locals, parameters and pattern variables in scope, nearest first; the top-level defs
+/// its type, as hover shows it, and on a use of a generic def the def's declared signature and how the use fills in
+/// its type variables (see <see cref="ExpressionItems"/>); the locals, parameters and pattern variables in scope, nearest first; the top-level defs
 /// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
 /// that was inferred to require it, or the runtime); and the diagnostics on the position's line. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
@@ -87,7 +88,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
 
         // The expression's type is only shown where the text has not been edited since it was typed.
         var expression = info?.Expression?.Value is { } hover && document.ToLastGood(offset) is not null
-            ? new[] { new InfoViewItem { Text = hover.Type, Location = Locate(hover.Span) } }
+            ? ExpressionItems(hover, info.Instantiation?.Value, Locate)
             : [];
         var line = request.Position.Line;
         var messages = DiagnosticsPublisher.Compute(uri, document)
@@ -136,6 +137,41 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 new InfoViewSection { Id = "messages", Title = "Messages", Items = messages }
             ]
         };
+    }
+
+    /// <summary>
+    /// The items of the expression section: the expression's type, as hover shows it, linking to the expression. On a
+    /// use of a generic def, the def's declared signature (<c>declared</c>) comes first, then the type at this use
+    /// (<c>at this use</c>), then what the use fills each of the signature's type variables with
+    /// (<c>a = string, b = int</c>), each linking to the def.
+    /// </summary>
+    private static IReadOnlyList<InfoViewItem> ExpressionItems(
+        NyxCompiler.Hover.HoverInfo hover,
+        NyxCompiler.Hover.Instantiation? instantiation,
+        Func<Parser.Program.SourceSpan, Location?> locate)
+    {
+        if (instantiation is null)
+        {
+            return [new InfoViewItem { Text = hover.Type, Location = locate(hover.Span) }];
+        }
+
+        var definition = locate(instantiation.Definition);
+        var items = new List<InfoViewItem>
+        {
+            new() { Text = instantiation.Declared, Detail = "declared", Location = definition },
+            new() { Text = hover.Type, Detail = "at this use", Location = definition }
+        };
+        if (!instantiation.Bindings.IsEmpty)
+        {
+            items.Add(new InfoViewItem
+            {
+                Text = string.Join(", ", instantiation.Bindings.Select(binding => $"{binding.Item1} = {binding.Item2}")),
+                Detail = "type variables",
+                Location = definition
+            });
+        }
+
+        return items;
     }
 
     /// <summary>
