@@ -59,6 +59,30 @@ def q = { (items: Seq(int)) -> items }"""
     Assert.Equal(TyFunc(TyApply("seq", [ TyPrimitive "int" ]), TyApply("seq", [ TyPrimitive "int" ]), []), typed.Types.["q"])
 
 [<Fact>]
+let ``I64, F64 and Boolean are the types int, float and bool name`` () =
+    let typed =
+        compileClean
+            """def I64.double = { (n: int) -> n * 2 }
+def a = I64.double(3)
+def b = int.double(3)
+def c: I64 = 3 \double
+def total: I64, int -> I64 = { x, y -> x + y }
+def half: F64 = 0.5
+def F64.twice = { (x: F64) -> x * 2.0 }
+def d = float.twice(half)
+def yes: Boolean = true
+def flags: List(Boolean) = [yes, false]
+def show = I64.toString"""
+    Assert.Equal(TyPrimitive "int", typed.Types.["a"])
+    Assert.Equal(TyPrimitive "int", typed.Types.["b"])
+    Assert.Equal(TyPrimitive "int", typed.Types.["c"])
+    Assert.Equal(TyFunc(TyRecord(Map.ofList [ "0", TyPrimitive "int"; "1", TyPrimitive "int" ]), TyPrimitive "int", []), typed.Types.["total"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "int", []), typed.Types.["int.double"])
+    Assert.Equal(TyPrimitive "float", typed.Types.["d"])
+    Assert.Equal(TyApply("list", [ TyPrimitive "bool" ]), typed.Types.["flags"])
+    Assert.Equal(TyFunc(TyPrimitive "int", TyPrimitive "string", []), typed.Types.["show"])
+
+[<Fact>]
 let ``Int, Float and Bool are not types, and the fix writes the alias`` () =
     let source =
         """def Int.double = { n -> n * 2 }

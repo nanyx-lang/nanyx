@@ -5,9 +5,9 @@ order: 6
 ---
 
 > **Status: partly implemented.** `int` is a 64-bit integer in the compiled program, and `+`, `-` and `*` on it stop
-> the program on overflow ([#342](https://github.com/nanyx-lang/nanyx/issues/342)). The sized types below, the names
-> `I64` and `F64`, literals of the expected type, the wrapping operations and the conversions do not exist yet
-> ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
+> the program on overflow ([#342](https://github.com/nanyx-lang/nanyx/issues/342)). `I64`, `F64` and `Boolean` are the
+> types `int`, `float` and `bool` name. The other sized types below, literals of the expected type, the wrapping
+> operations and the conversions do not exist yet ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
 `list`. Numbers also come in fixed widths, for binary data, compact records and talking to hosts, as ordinary named
