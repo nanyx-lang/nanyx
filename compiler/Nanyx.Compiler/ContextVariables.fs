@@ -134,7 +134,8 @@ let require
                 if declared.Contains var then Ok current
                 else
                     Error [ Diagnostics.at DiagnosticCodes.UndeclaredContext span
-                                $"'{callee}' requires the contexts '{var}', which '{defName}' does not declare: add [{var}] to the type of '{defName}'" ]
+                                $"'{callee}' requires the contexts '{var}', which '{defName}' does not declare: add [{var}] to the type of '{defName}'"
+                            |> ContextFixes.withAddToType current defName var ]
             | TyVar _, DefScope(defName, true) ->
                 let inferred = current.InferredContextVars |> Map.tryFind defName |> Option.defaultValue []
                 Ok { current with InferredContextVars = current.InferredContextVars |> Map.add defName (inferred @ [ context ]) }

@@ -187,7 +187,7 @@ let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: 
     | DefScope(defName, true) ->
         let contexts = state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
         Ok { state with InferredContexts = state.InferredContexts |> Map.add defName (contexts.Add ctxName) }
-    | DefScope(defName, false) -> Error [ undeclaredContext defName ctxName what span ]
+    | DefScope(defName, false) -> Error [ undeclaredContext defName ctxName what span |> ContextFixes.withAddToType state defName ctxName ]
 
 /// The name the definition `name` names is declared under: a block import's name (`zero`) stands for the qualified
 /// one (`money.zero`), unless something nearer binds it.
@@ -284,4 +284,15 @@ let internal ensureContextAvailable (reportMissing: bool) (env: TypeEnv) (state:
             | _ ->
                 let contextsText = if contextNames.Length = 1 then "the context" else "the contexts"
                 $"'{name}' requires {contextsText} {Diagnostics.listed contextNames} and the context members {Diagnostics.listed memberNames}, which are not available here"
-        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+        // In a def that writes its type, each context named on its own can be added to it; a parameterised one is
+        // written over the callee's type variables, not the def's.
+        let addable =
+            match state.ContextScope with
+            | DefScope(defName, false) ->
+                named |> List.choose (fun (ctx, _) -> match ctx.Kind with TypeName ctxName -> Some (defName, ctxName) | _ -> None)
+            | _ -> []
+        let diagnostic =
+            addable
+            |> List.fold (fun diagnostic (defName, ctxName) -> ContextFixes.withAddToType state defName ctxName diagnostic)
+                (Diagnostics.at DiagnosticCodes.MissingContextMembers span message)
+        Error [ diagnostic ]

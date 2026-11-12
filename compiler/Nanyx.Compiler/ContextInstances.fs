@@ -373,13 +373,15 @@ let private derivedInstance
     derivableType env ctxName argTys
     |> Option.bind (fun ty -> StructuralInstances.instance rigid (partInstanceIn env state ctxName) instanceOf (InterpolationHoles.isHole calleeName) call span ctxName ty state)
     |> Option.map (Result.mapError (fun failure ->
-        let message =
-            match failure with
-            | StructuralInstances.NoInstanceOf missing when InterpolationHoles.isHole calleeName -> InterpolationHoles.undeclared (TyVar missing) annotatedDef
-            | StructuralInstances.NoInstanceOf missing -> InterpolationHoles.undeclaredPart calleeName argTys.Head (TyVar missing) annotatedDef
-            | StructuralInstances.HoldsFunction held -> InterpolationHoles.holdsFunction calleeName argTys held
-            | StructuralInstances.OpenToCaller -> InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef
-        [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]))
+        let missingContext message = Diagnostics.at DiagnosticCodes.MissingContextMembers span message
+        match failure with
+        | StructuralInstances.NoInstanceOf missing when InterpolationHoles.isHole calleeName ->
+            [ missingContext (InterpolationHoles.undeclared (TyVar missing) annotatedDef) |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
+        | StructuralInstances.NoInstanceOf missing ->
+            [ missingContext (InterpolationHoles.undeclaredPart calleeName argTys.Head (TyVar missing) annotatedDef)
+              |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
+        | StructuralInstances.HoldsFunction held -> [ missingContext (InterpolationHoles.holdsFunction calleeName argTys held) ]
+        | StructuralInstances.OpenToCaller -> [ missingContext (InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef) ]))
 
 /// The instance of the well-known context `wellKnown` the operator `op` at `span` reads on values of a type, other than
 /// the compiler's own (see `WellKnownContexts.InstanceOf`): one in scope, or else one built from the member attached to
@@ -460,7 +462,9 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                             let errors =
                                 ContextInference.varsInOrder argTys.Head
                                 |> List.truncate 1
-                                |> List.map (fun var -> Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart name argTys.Head (TyVar var) annotatedDef))
+                                |> List.map (fun var ->
+                                    Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart name argTys.Head (TyVar var) annotatedDef)
+                                    |> InterpolationHoles.addToStringFix current (TyVar var) annotatedDef)
                             let pending =
                                 { Def = def; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
                                   Context = ctxName; ArgTys = argTys; Span = calleeSpan; Errors = errors; ChecksOnly = false }

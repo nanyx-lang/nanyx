@@ -80,6 +80,9 @@ type InferState =
             /// The type each function in `ContextRequirements` declares, without its contexts, where it writes one:
             /// what a call reads the type arguments of a parameterised context from (`a` in `[Sum(a)] list(a) -> a`).
             ContextSignatures: Map<string, TypeExpr>;
+            /// The type each def that writes its type writes, contexts and all, by the def's name: where a fix adds a
+            /// context the def needs and does not declare (see `ContextFixes`).
+            WrittenTypes: Map<Identifier, TypeExpr>;
             /// The imported definitions that are an ambient context instance's members, by name: the definition's
             /// symbol and the context's name. `println` is the runtime's `Console`'s, which `@entry` imports.
             AmbientMembers: Map<string, SymbolId * Identifier>;
@@ -259,6 +262,7 @@ let emptyState =
             ContextDefs = Map.empty;
             ContextRequirements = Map.empty;
             ContextSignatures = Map.empty;
+            WrittenTypes = Map.empty;
             AmbientMembers = Map.empty;
             CarriedAmbientContexts = Set.empty;
             ContextScope = AmbientScope;
@@ -378,6 +382,12 @@ let internal registerLocalContextRequirement state (symbol: SymbolId option) nam
     match symbol with
     | Some symbol -> { registered with LocalContextRequirements = registered.LocalContextRequirements |> Map.add symbol contexts }
     | None -> registered
+
+/// Records `written` as the type the def `name` writes, if it writes one (see `WrittenTypes`).
+let internal recordWrittenType (name: Identifier) (written: TypeExpr option) (state: InferState) =
+    match written with
+    | Some written -> { state with WrittenTypes = state.WrittenTypes |> Map.add name written }
+    | None -> state
 
 /// Records `ty` as the type of the declaration `symbol`, if the parser saw one.
 let internal recordSymbolType (symbol: SymbolId option) (ty: Ty) (state: InferState) =
