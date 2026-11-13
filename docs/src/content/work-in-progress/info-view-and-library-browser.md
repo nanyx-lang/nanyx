@@ -94,8 +94,8 @@ one the calls it serves, linked. A `use` that serves no call is shown as unused.
 `InfoView.callContextsOf` finds for each call in the def, matching a provider by the span that links it (a
 signature's context, the value a `use` loads, the def's name for an inferred one, with the context's name).
 
-The same data decorates the editor: the response carries `highlights`, the ranges of the document to highlight
-(`ContextFlow.highlightsAt`). On a `use`, or a context of the def's signature, they are that provider and the calls it
+The same data decorates the editor: the response carries `highlights`, the ranges of the document to highlight, which
+`ContextFlow.at` finds from the same search of the def as the flow. On a `use`, or a context of the def's signature, they are that provider and the calls it
 serves; on a call, the call and the providers of its contexts. The extension draws them with the editor's word
 highlight colours while the view is visible and not pinned, and, as `nanyx.infoView.contextLines` says, joins them
 with lines down the left margin and across to each one (`ContextLines` in `extension/src/contextLines.ts`, drawn as

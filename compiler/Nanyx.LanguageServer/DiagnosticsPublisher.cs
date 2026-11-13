@@ -27,7 +27,7 @@ public sealed class DiagnosticsPublisher
     /// <summary>Publishes what the compiler reported for the document at <paramref name="uri"/>.</summary>
     public void Publish(DocumentUri uri, OpenDocument document, int? version)
     {
-        var diagnostics = Compute(uri, document);
+        var diagnostics = document.PublishedDiagnostics(uri);
 
         _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
         {
@@ -50,9 +50,10 @@ public sealed class DiagnosticsPublisher
     /// <summary>
     /// The LSP diagnostics for a compiled document. Each is published on the document itself, including one the
     /// compiler found in a module the document imports: that one is shown at the start of the document, says which
-    /// file it is in, and links to its place there.
+    /// file it is in, and links to its place there. Read them from <see cref="OpenDocument.PublishedDiagnostics"/>,
+    /// which converts them once.
     /// </summary>
-    public static IReadOnlyList<Diagnostic> Compute(DocumentUri uri, OpenDocument document)
+    internal static IReadOnlyList<Diagnostic> Convert(DocumentUri uri, OpenDocument document)
     {
         if (document.Compiled is null)
         {

@@ -58,9 +58,9 @@ type Info =
       Contexts: ScopedContext list
       Call: CallContext list }
 
-/// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation and the span
-/// of its statement.
-let internal defsAround (syntax: Module) (offset: int) : (Identifier * TypeExpr option * SourceSpan) list =
+/// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation, the span of its
+/// statement and its value.
+let internal defsAround (syntax: Module) (offset: int) : (Identifier * TypeExpr option * SourceSpan * Expression) list =
     let local =
         Hover.expressionsAt offset syntax
         |> List.collect (fun expr ->
@@ -69,21 +69,22 @@ let internal defsAround (syntax: Module) (offset: int) : (Identifier * TypeExpr 
                 statements
                 |> List.choose (fun statement ->
                     match statement.Kind with
-                    | DefStatement(_, name, annotation, _) when Hover.contains offset statement.Span -> Some (name, annotation, statement.Span)
+                    | DefStatement(_, name, annotation, value) when Hover.contains offset statement.Span ->
+                        Some (name, annotation, statement.Span, value)
                     | _ -> None)
             | _ -> [])
     let rec topLevel (items: TopLevelItem list) =
         items
         |> List.collect (fun item ->
             match item.Kind with
-            | Def (ValueDef(_, name, annotation, _)) when Hover.contains offset item.Span -> [ name, annotation, item.Span ]
+            | Def (ValueDef(_, name, annotation, value)) when Hover.contains offset item.Span -> [ name, annotation, item.Span, value ]
             | ModuleBlock(_, inner) -> topLevel inner
             | _ -> [])
     local @ topLevel syntax
 
 /// The symbol a def declares: the first value of its name declared in its statement, since a def's name comes before
 /// its value.
-let internal defSymbol (typed: TypedModule) (name: Identifier, _, statement: SourceSpan) : Symbol option =
+let internal defSymbol (typed: TypedModule) (name: Identifier, _, statement: SourceSpan, _) : Symbol option =
     typed.Symbols
     |> Map.values
     |> Seq.filter (fun symbol ->
@@ -134,7 +135,7 @@ let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty
             typed.ExprTypes |> Map.tryFind value.Id |> Option.map (fun ty -> ty, Use, span, referenced typed value))
     let fromDefs =
         defs
-        |> List.collect (fun (symbol, (_, annotation, _)) ->
+        |> List.collect (fun (symbol, (_, annotation, _, _)) ->
             let inferred = typed.InferredContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
             typed.ContextTypes
             |> Map.tryFind symbol.Id
@@ -230,17 +231,31 @@ let internal callContextsOf
         |> List.map (fun p -> provided p.Context p.Provider)
     declared @ others
 
-/// Each expression of `syntax` by its node, to find a value a `use` loads by (see `callContextsOf`).
-let internal expressionsById (syntax: Module) : Map<NodeId, Expression> =
-    Hover.allExpressions syntax |> List.map (fun expr -> expr.Id, expr) |> Map.ofList
+let private expressionsByIdOf =
+    System.Runtime.CompilerServices.ConditionalWeakTable<Module, System.Collections.Generic.IReadOnlyDictionary<NodeId, Expression>>()
+
+/// The expression of `syntax` at the node `node`, if any, to find a value a `use` loads by (see `callContextsOf`). The
+/// table of every expression by its node is built once for each compile, when first asked for, since the info view asks
+/// on every move of the cursor.
+let internal expressionById (syntax: Module) (node: NodeId) : Expression option =
+    let byId =
+        expressionsByIdOf.GetValue(
+            syntax,
+            fun syntax ->
+                let byId = System.Collections.Generic.Dictionary<NodeId, Expression>()
+                for expr in Hover.allExpressions syntax do
+                    byId[expr.Id] <- expr
+                byId)
+    match byId.TryGetValue node with
+    | true, expr -> Some expr
+    | false, _ -> None
 
 /// The contexts the innermost call or pipe around `offset` that requires any requires (see `callContextsOf`).
 let private callContextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * CallSource * SourceSpan * Symbol option) list =
-    let expressions = lazy (expressionsById syntax)
     Hover.expressionsAt offset syntax
     |> List.filter isCall
     |> List.tryPick (fun call ->
-        match callContextsOf typed syntax (fun node -> expressions.Value |> Map.tryFind node) call with
+        match callContextsOf typed syntax (expressionById syntax) call with
         | [] -> None
         | found -> Some found)
     |> Option.defaultValue []
@@ -277,7 +292,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let expression, instantiation =
             match Definition.typeDefinitionAt names file result offset with
             | Some info -> Some info, None
-            | None -> Hover.typeAt names result offset, Hover.instantiationAt names result offset
+            | None -> Hover.typeAndInstantiationAt names result offset
         let inScope = Completion.namesInScope result offset
         let locals =
             inScope
