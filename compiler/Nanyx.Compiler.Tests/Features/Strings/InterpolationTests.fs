@@ -75,8 +75,8 @@ let ``A hole of a type with no ToString is an error at the hole`` () =
         [ "def f = { n -> n }\ndef s = \"{f}\"\n",
           "'a -> a' cannot be interpolated: it is a function, and functions have no toString",
           "f"
-          "type $Money = private int\ndef m = $Money(5)\ndef s = \"{m}\"\n",
-          "'$Money' cannot be interpolated because it has no toString: attach '$Money.toString', or load an instance of `ToString($Money)` with `use`",
+          "type Money = private int\ndef m = Money(5)\ndef s = \"{m}\"\n",
+          "'Money' cannot be interpolated because it has no toString: attach 'Money.toString', or load an instance of `ToString(Money)` with `use`",
           "m" ]
     for source, expectedMessage, expectedAt in cases do
         let message, at = missingContext source

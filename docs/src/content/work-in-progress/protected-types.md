@@ -6,7 +6,14 @@ order: 1
 
 This page proposes declaring a nominal type with a keyword on its declaration, `type Point = protected (x: int, y: int)`,
 instead of a `$` on its name, `type $Point = (x: int, y: int)`. The name is then an ordinary type name everywhere it is
-used, and the tools show which types are nominal. It is a proposal; the compiler reads the `$` form today.
+used, and the tools show which types are nominal. The work is tracked in
+[#1221](https://github.com/nanyx-lang/nanyx/issues/1221).
+
+**Status.** The compiler reads `protected` and decides nominality from the declaration, through
+`TypeDefModifier.isNominal` and `TypeDefInfo.IsNominal`, rather than from the name. A `$` before a declared name still
+declares a protected type and a `$` before a name where it is used is read and dropped, so `$Email` is `Email`; the
+formatter writes the new form. The prelude declares `Memory` with `protected`. Still to do: the editor's styling and
+hover, the `dollarPrefixedType` linter rule, and rewriting the docs and examples.
 
 The words, as this page uses them: a *nominal* type is one whose name matters, as opposed to an alias for a structural
 record or union. There are two kinds. A *protected* type is nominal and its shape is visible everywhere, so `Email` is

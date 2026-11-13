@@ -5,7 +5,7 @@ open NyxCompiler.InferState
 
 /// Which types may attach the members of the well-known contexts (see "Equality and well-known contexts" in the docs'
 /// work in progress). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
-/// whether or not the alias it is written with is known: only a nominal or protected type, `$Email`, may attach its
+/// whether or not the alias it is written with is known: only a nominal type, `type Email = protected string`, may attach its
 /// own `==`, `compare` or `hash`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's
 /// order and hash are always the compiler's own, so a `compare` or `hash` attached to one, as the prelude's `int.compare`
 /// and `int.hash` are, is an ordinary function that the operators, `Ord` and `Hash` do not read (see
@@ -26,7 +26,7 @@ module internal AttachedOperators =
 
     let private kindOf (state: InferState) (typeName: string) =
         match state.TypeDefs |> Map.tryFind typeName with
-        | _ when Names.isNominalTypeName typeName -> Some Nominal
+        | Some info when info.IsNominal -> Some Nominal
         | Some { Underlying = TyNominal _ } -> Some Nominal
         | Some info when info.IsContext -> None
         | Some _ -> Some Structural
@@ -49,7 +49,7 @@ module internal AttachedOperators =
             else
                 match nominalOnly |> List.tryFind (fun (attached, _, _, _) -> attached = memberName), kindOf state typeName with
                 | Some (_, decides, structural, _), Some Structural ->
-                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so {structural}. Make it nominal ('${typeName}') to define its own {decides}"
+                    error $"'{name}' cannot be defined: '{typeName}' is a structural type, so {structural}. Declare it `protected` to define its own {decides}"
                 | Some (_, decides, _, false), Some (BuiltIn builtIn) ->
                     error $"'{name}' cannot be defined: '{builtIn}' is a built-in type, so its {decides} is the compiler's own. Make a nominal type of it to define its own {decides}"
                 | _ -> Ok ()

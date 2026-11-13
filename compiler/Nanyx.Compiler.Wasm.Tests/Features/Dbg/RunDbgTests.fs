@@ -165,7 +165,7 @@ type $Point = (x: int, y: int)
 dbg($Money(250))
 dbg($Point(x = 1, y = 2))
 """
-    |> printsAs "dbg: $Money(250)\ndbg: $Point(x = 1, y = 2)\n"
+    |> printsAs "dbg: Money(250)\ndbg: Point(x = 1, y = 2)\n"
 
 [<Fact>]
 let ``Run - dbg prints a protected value's shape outside its module`` () =
@@ -176,7 +176,7 @@ module ids =
 
 dbg(ids.make(42))
 """
-    |> printsAs "dbg: ids.$UserId(42)\n"
+    |> printsAs "dbg: ids.UserId(42)\n"
 
 [<Fact>]
 let ``Run - dbg ignores the ToString a type has`` () =
@@ -190,7 +190,7 @@ def price = $Money(250)
 dbg(price)
 dbg("{price}")
 """
-    |> printsAs "dbg: $Money(250)\ndbg: \"£250\"\n"
+    |> printsAs "dbg: Money(250)\ndbg: \"£250\"\n"
 
 [<Fact>]
 let ``Run - dbg prints a value of a generic function's type at the type it is called at`` () =

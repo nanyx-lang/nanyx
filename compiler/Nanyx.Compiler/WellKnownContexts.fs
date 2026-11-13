@@ -165,7 +165,7 @@ module internal WellKnownContexts =
 
     /// For a context whose member must agree with another's (see `AgreesWith`), why the compiler's own cannot be used
     /// for `ty` because of a type in it (`attaches` says whether a type attaches a member), if it cannot: a type that
-    /// attaches that other member but not this one, as a `$Email` that attaches `==` and no `hash` has no `Hash`, and
+    /// attaches that other member but not this one, as an `Email` that attaches `==` and no `hash` has no `Hash`, and
     /// nor has a list of them. A type that attaches both is hashed by its own `hash`, and a structure that holds one
     /// by a `hash` derived from its parts (see `StructuralInstances`).
     let disagreeing (wellKnown: WellKnownContext) (attaches: Ty -> Identifier -> bool) (ty: Ty) : string option =
@@ -252,8 +252,8 @@ module internal WellKnownContexts =
 
     /// `state` with `expr`, the operator `op` of `wellKnown` on two lists of the type `ty` (given as `input`, as a
     /// call's arguments are typed), calling the prelude's list helper for it (see `ListHelpers`) with the instance its
-    /// elements have, when `instanceOf` finds one other than the compiler's own: `==` on a `list($Email)` compares the
-    /// elements with `` $Email.`==` ``, and `<` on a `list(a)` in a function that requires `Ord(a)` orders them with
+    /// elements have, when `instanceOf` finds one other than the compiler's own: `==` on a `list(Email)` compares the
+    /// elements with `` Email.`==` ``, and `<` on a `list(a)` in a function that requires `Ord(a)` orders them with
     /// the `compare` it is passed. `None` for any other type, whose parts are all the compiler's own.
     let throughElements
         (wellKnown: WellKnownContext)

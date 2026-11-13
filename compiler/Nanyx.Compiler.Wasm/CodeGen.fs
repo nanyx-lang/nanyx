@@ -409,7 +409,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let nominalWrappers =
         module'
         |> List.choose (function
-            | Kind (Def (TypeDef(name, _, _, body))) when Names.isNominalTypeName name && (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
+            | Kind (Def (TypeDef(name, modifiers, _, body))) when TypeDefModifier.isNominal modifiers && (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
             | _ -> None)
         |> Set.ofList
 
@@ -627,6 +627,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 contextInstances |> Map.filter (fun _ found -> found = [ Some InstanceBuiltIn ]) |> Map.keys |> Set.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
               NominalWrappers = nominalWrappers
+              NominalTypes = typed.TypeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq
               Lifted =
                 [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) -> name, CoreIrLowerInput.LiftedLambda(origin.Lambda, origin.Captured, origin.Owner))
                   yield! functionWrappers |> Map.toList |> List.map (fun (wrapped, wrapper) -> wrapper, CoreIrLowerInput.FunctionWrapper wrapped) ]

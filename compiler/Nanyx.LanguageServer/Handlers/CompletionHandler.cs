@@ -23,7 +23,7 @@ public sealed class CompletionHandler : CompletionHandlerBase
     private static readonly string[] Keywords =
     [
         "as", "await", "context", "def", "defer", "do", "else", "except", "export", "for", "if", "import", "in", "match",
-        "module","mut", "private", "rec", "return", "then", "try", "type", "typeof", "use", "while", "with", "yield"
+        "module","mut", "private", "protected", "rec", "return", "then", "try", "type", "typeof", "use", "while", "with", "yield"
     ];
 
     private readonly DocumentStore _documents;

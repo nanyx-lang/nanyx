@@ -177,7 +177,7 @@ let private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: I
     let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
     match argTys, contextMemberTypes state ctxName argTys with
     | forType :: _, Some members ->
-        // The name a definition for the type is attached under: `Point`, `$Money`, `int`.
+        // The name a definition for the type is attached under: `Point`, `Money`, `int`.
         let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
         let found = members |> List.map (fun (memberName, memberTy) -> memberName, memberTy, tryResolveAttachedFunction env forType memberName)
         match found |> List.filter (fun (_, _, definition) -> definition.IsNone) |> List.map (fun (memberName, _, _) -> $"'{attachTo}.{memberName}'") with

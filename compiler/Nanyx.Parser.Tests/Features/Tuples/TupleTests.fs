@@ -56,11 +56,11 @@ let ``def with a nested tuple pattern destructures through member access chains`
 
 [<Fact>]
 let ``def with a pattern that may not match binds through a one-arm match`` () =
-    // `def $Money(pence) = m` is `def __tuple = match m | $Money(pence) -> pence` and `def pence = __tuple`;
+    // `def Money(pence) = m` is `def __tuple = match m | Money(pence) -> pence` and `def pence = __tuple`;
     // whether the pattern is total is the type checker's to say.
-    match parseModule "def $Money(pence) = m" with
+    match parseModule "def Money(pence) = m" with
     | Result.Ok [ Kind (Def (ValueDef (_, temp, None, Kind (Match ([ Kind (IdentifierExpr "m") ],
-                                                              [ [ Kind (RecordPattern ("$Money", [ Kind (IdentifierPattern "pence") ])) ], Kind (IdentifierExpr "pence") ])))))
+                                                              [ [ Kind (RecordPattern ("Money", [ Kind (IdentifierPattern "pence") ])) ], Kind (IdentifierExpr "pence") ])))))
                   Kind (Def (ValueDef (_, "pence", None, Kind (IdentifierExpr temp1)))) ] ->
         temp1 |> should equal temp
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
@@ -93,8 +93,8 @@ let ``def with a bare name is an ordinary def, not a destructuring one`` () =
     | Result.Ok [ Kind (Def (ValueDef (_, "x", None, Kind (LiteralExpr (IntLit64 1L))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
-    match parseModule "def $Money.new: int -> $Money = { pence -> $Money(pence) }" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "$Money.new", Some _, Kind (Lambda _)))) ] -> ()
+    match parseModule "def Money.new: int -> Money = { pence -> Money(pence) }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "Money.new", Some _, Kind (Lambda _)))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
 

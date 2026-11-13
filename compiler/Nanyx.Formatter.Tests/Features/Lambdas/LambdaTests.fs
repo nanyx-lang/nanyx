@@ -23,7 +23,7 @@ let ``A lambda's result annotation is printed after its parameters`` () =
 [<Fact>]
 let ``Pattern parameters are printed as written`` () =
     unchanged "def a = { (x, y) -> x + y }\n"
-    unchanged "def b: $Email -> string = { $Email(s) -> s }\n"
+    unchanged "def b: Email -> string = { Email(s) -> s }\n"
     unchanged "def c = pairs \\map { (k, v), n -> k }\n"
     unchanged (lines [ "def d = { [first, ...rest] ->"; "  -- the head"; "  first"; "}" ])
     unchanged "def e = { (), n -> n }\n"

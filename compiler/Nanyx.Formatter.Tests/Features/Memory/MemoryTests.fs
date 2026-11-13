@@ -50,7 +50,7 @@ def f = {
 [<Fact>]
 let ``A cell parameter, a cell argument and a cell type keep their layout`` () =
     let source = """
-def inc: [$Memory] mut int -> () = { mut cell ->
+def inc: [Memory] mut int -> () = { mut cell ->
   cell := cell + 1
 }
 

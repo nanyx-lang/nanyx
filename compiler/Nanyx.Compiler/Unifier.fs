@@ -191,7 +191,7 @@ module Unifier =
             | Some (TyPrimitive "unit") -> $"#{name}()"
             | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy spread false payload)})"
             | None -> $"#{name}"
-        // A context with no arguments is written by its name: `Console`, and `$Memory` without its scope.
+        // A context with no arguments is written by its name: `Console`, and `Memory` without its scope.
         | FunctionContexts.PlainContext name -> name
         // A cell's type is written as it is in an annotation, without its scope: `mut int`.
         | FunctionContexts.CellType(held, _) -> $"mut {grouped held}"
@@ -991,7 +991,7 @@ module Unifier =
                             | _, Ok (rMap, _) -> Error (mismatchMessage l (TyUnion(rMap |> Map.toList |> List.map snd)), origin, TypesDiffer)
                             | _ -> Error (mismatchMessage l r, origin, TypesDiffer)
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
-                        // there too: `list($Person)` is assignable to `list((name: string))`, but not the reverse.
+                        // there too: `list(Person)` is assignable to `list((name: string))`, but not the reverse.
                         // Values are immutable, so a type's arguments are covariant, and so are a record's fields:
                         // the arguments of `f(a, b)` are one tuple, each item given where its parameter is
                         // expected. A function's argument is contravariant, since the function is given values of

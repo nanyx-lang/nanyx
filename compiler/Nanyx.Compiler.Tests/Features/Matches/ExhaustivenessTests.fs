@@ -216,16 +216,16 @@ let ``Typecheck matches on an inferred tag union exhaustively`` () =
 [<Fact>]
 let ``A def takes a nominal value apart with its type's pattern`` () =
     let source =
-        "type $Money = private int\n" +
-        "def toPence: $Money -> int = { m ->\n" +
-        "  def $Money(pence) = m\n" +
+        "type Money = private int\n" +
+        "def toPence: Money -> int = { m ->\n" +
+        "  def Money(pence) = m\n" +
         "  pence\n" +
         "}\n" +
-        "def price = $Money(250)\n" +
-        "def $Money(top) = price\n" +
+        "def price = Money(250)\n" +
+        "def Money(top) = price\n" +
         "def shown = match price\n" +
-        "  | $Money(0) -> \"free\"\n" +
-        "  | $Money(p) -> \"{p}\"\n"
+        "  | Money(0) -> \"free\"\n" +
+        "  | Money(p) -> \"{p}\"\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
@@ -246,8 +246,8 @@ let ``A def with a pattern that is not total is a non-exhaustive match`` () =
 let ``A lambda's pattern parameter must be total, as a destructuring def's pattern must`` () =
     let total =
         Compiler.compile (
-            "type $Email = string\n" +
-            "def value: $Email -> string = { $Email(s) -> s }\n" +
+            "type Email = protected string\n" +
+            "def value: Email -> string = { Email(s) -> s }\n" +
             "def add = { (a, b), c -> a + b + c + 1 }\n" +
             "def ignore = { (), n -> n }\n")
     Assert.True(total.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{total.Diagnostics}")

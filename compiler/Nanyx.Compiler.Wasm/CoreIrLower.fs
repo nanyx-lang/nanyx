@@ -414,7 +414,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(_, _, [ value ]) when input.BuiltInHoles.Contains expr.Id ->
             this.Complex scope { expr with Kind = InterpolatedString [ StringExpr value ] } k
         | FunctionCall(name, _, args) when input.NominalWrappers.Contains name && not (scope.Vars.ContainsKey name) ->
-            // `$Money(pence)`: a nominal value is its shape's value.
+            // `Money(pence)`: a nominal value is its shape's value.
             match SyntaxTree.flattenCallArgs args with
             | [ single ] -> this.Complex scope single k
             | several -> this.Record scope (several |> List.mapi (fun index value -> string index, value)) (tyOf expr) k
@@ -1233,9 +1233,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         match fields |> List.tryFindIndex (fst >> (=) name) with
                         | Some slot -> slot, lowerPattern false scrutinee (snd fields.[slot]) member'
                         | None -> cannot $"a record pattern on the field '{name}', which the value does not have"))
-                // `$Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
+                // `Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
                 // local even at the top of an arm.
-                | RecordPattern(typeName, [ inner ]) when Names.isNominalTypeName typeName ->
+                | RecordPattern(typeName, [ inner ]) when input.NominalTypes.Contains typeName ->
                     lowerPattern false scrutinee valueTy inner
                 // Every part matches the value matched here, so a name at the top of the arm is still the scrutinee.
                 | AndPattern parts -> PAll(parts |> List.map (lowerPattern isTop scrutinee valueTy))

@@ -80,7 +80,7 @@ let ``Typecheck rejects a lambda annotated with a type variable alone`` () =
 
 [<Fact>]
 let ``Typecheck checks a lambda against the function a nominal type wraps`` () =
-    let source = "type $Handler = int -> int\ndef h: $Handler = { x -> x ++ \"a\" }"
+    let source = "type Handler = protected int -> int\ndef h: Handler = { x -> x ++ \"a\" }"
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     | other -> failwith $"Expected one diagnostic, got %A{other}"
@@ -89,8 +89,8 @@ let ``Typecheck checks a lambda against the function a nominal type wraps`` () =
 let ``Typecheck accepts a lambda that matches its annotation`` () =
     let typed =
         compileClean (
-            "type $Handler = int -> int\n" +
-            "def h: $Handler = { x -> x + 1 }\n" +
+            "type Handler = protected int -> int\n" +
+            "def h: Handler = { x -> x + 1 }\n" +
             "def g: int -> int = { x -> x + 1 }\n" +
             "def n = g(2)")
     Assert.Equal(TyPrimitive "int", typed.Types.["n"])

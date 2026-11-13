@@ -34,11 +34,11 @@ export def bool.fromString: string -> #some(bool) | #invalidBool = { s ->
 --| The context mutation needs: a cell can be declared with `mut` only where it is, and a lambda that uses a cell
   needs it too. It is nominal, so `memory` is the only way to get one, and scoped, so nothing that needs it
   can leave the `memory` block that supplies it.
-scoped export context $Memory = ()
+scoped export context Memory = protected ()
 
---| Runs `block` with `$Memory`, so that it can declare cells with `mut` and change them with `:=`, and
+--| Runs `block` with `Memory`, so that it can declare cells with `mut` and change them with `:=`, and
   gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block is given
   its instance, `memory { m -> ... }`, and `use m` in an inner block makes the cells after it belong to this one.
-export def memory: [c] ([$Memory & c] $Memory -> a) -> a = { block ->
-  block($Memory(()))
+export def memory: [c] ([Memory & c] Memory -> a) -> a = { block ->
+  block(Memory(()))
 }

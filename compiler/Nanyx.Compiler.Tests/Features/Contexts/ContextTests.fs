@@ -195,17 +195,17 @@ let ``A call finds an instance loaded with use by name, from a def or a paramete
 
 [<Fact>]
 let ``A loaded instance is only used for the type it is for`` () =
-    // A `Show(Point)` loaded with `use` does not make a `Show($Money)`: that one is still synthesized.
+    // A `Show(Point)` loaded with `use` does not make a `Show(Money)`: that one is still synthesized.
     let source =
         showContext +
-        "type $Money = private int\n" +
-        "def $Money.show: $Money -> string = { m -> \"money\" }\n" +
+        "type Money = private int\n" +
+        "def Money.show: Money -> string = { m -> \"money\" }\n" +
         "def main = {\n" +
         "  def showPoint: Show(Point) = ( show = { p -> \"p\" } )\n" +
         "  use showPoint\n" +
-        "  describe($Money(5))\n" +
+        "  describe(Money(5))\n" +
         "}\n"
-    Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "$Money.show" ]) ] ], instancesIn source)
+    Assert.Equal<ContextInstance option list list>([ [ Some (InstanceSynthesized [ "show", "Money.show" ]) ] ], instancesIn source)
 
 [<Fact>]
 let ``An instance is checked against the context's members at the type it is for`` () =

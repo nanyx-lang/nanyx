@@ -25,14 +25,14 @@ def unnamed = memory {
     Assert.Equal("int", Unifier.tyToString typed.Types.["unnamed"])
 
 [<Fact>]
-let ``The instance is a $Memory, as a reader sees it`` () =
+let ``The instance is a Memory, as a reader sees it`` () =
     let source = """
 def f = memory { m ->
   mut x = 1
   x
 }
 """
-    Assert.Equal(Some "m: $Memory", hoverType (source.ReplaceLineEndings "\n") "m ->")
+    Assert.Equal(Some "m: Memory", hoverType (source.ReplaceLineEndings "\n") "m ->")
 
 [<Fact>]
 let ``The instance cannot leave its block`` () =

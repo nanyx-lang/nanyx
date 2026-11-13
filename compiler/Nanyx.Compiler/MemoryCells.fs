@@ -1,6 +1,6 @@
 /// Local mutable cells (see the memory page of the docs): `mut x = e` declares one, `x := e` replaces what it holds, and its
 /// name anywhere else reads it. A cell can only be made in a `memory { ... }` block, the prelude's `memory` with a
-/// block, which is where `$Memory` is. A lambda that uses a cell of the block around it needs `$Memory` of the block's
+/// block, which is where `Memory` is. A lambda that uses a cell of the block around it needs `Memory` of the block's
 /// scope too, so it cannot outlive the block (see `ScopedCalls`).
 module internal NyxCompiler.MemoryCells
 
@@ -10,16 +10,16 @@ open NyxCompiler.InferState
 /// The context mutation needs, as the prelude declares it.
 let context = FunctionContexts.cellContext
 
-/// The function that provides `$Memory` for the block it is given, as the prelude declares it.
+/// The function that provides `Memory` for the block it is given, as the prelude declares it.
 let memoryFunction = "memory"
 
 /// The name the environment binds while a `memory` block is checked, to the block's scope (see
-/// `FunctionContexts.scoped`): what tells a `mut` declaration that `$Memory` is there, and which scope its cell belongs
+/// `FunctionContexts.scoped`): what tells a `mut` declaration that `Memory` is there, and which scope its cell belongs
 /// to. No code can write it.
 let private scopeKey = "@memory"
 
 /// Whether a call to `name` is a call to the prelude's `memory`, rather than to a definition of the same name: one
-/// declared in the file that declares `$Memory`.
+/// declared in the file that declares `Memory`.
 let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
     let fileOf (symbol: SymbolId option) = symbol |> Option.bind state.Symbols.TryFind |> Option.map _.Declaration.File
     name = memoryFunction
@@ -27,13 +27,13 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
        | Some file, Some contextFile -> file = contextFile
        | _ -> false
 
-/// The environment the arguments of a call to `name` are checked in, where the call supplies `$Memory` of `scope`: one
+/// The environment the arguments of a call to `name` are checked in, where the call supplies `Memory` of `scope`: one
 /// where cells can be made, of that scope, for the prelude's `memory`.
 let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty) : TypeEnv =
     if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono scope) env else env
 
 /// The environment after a `use` of a value of the type `ty`, `env` being the one the `use` makes: an instance of
-/// `$Memory` it loads is the innermost one, so a `mut` after it makes a cell of that instance's scope, which may be an
+/// `Memory` it loads is the innermost one, so a `mut` after it makes a cell of that instance's scope, which may be an
 /// outer block's. The `use` starts no scope of its own.
 let afterUse (state: InferState) (env: TypeEnv) (ty: Ty) : TypeEnv =
     match resolveSoFar state ty with
@@ -50,7 +50,7 @@ let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty o
 /// Whether `name`, as `env` binds it, is a cell.
 let isCell (env: TypeEnv) (state: InferState) (name: Identifier) = (scopeOf env state name).IsSome
 
-/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `$Memory` of the cell's block, which
+/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `Memory` of the cell's block, which
 /// the lambda around it requires (see `LambdaContexts`).
 let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState =
     match scopeOf env state name with
@@ -67,7 +67,7 @@ let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
         { next with Cells = next.Cells |> Map.add symbol scope }
     | None, _ -> state
 
-/// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `$Memory`.
+/// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
     if env.ContainsKey scopeKey then
         infer env state value |> Result.map (fun (typedValue, next) -> mkTypedExpr expr typedValue.Type None None None, next)
@@ -106,9 +106,9 @@ let bindParameter (symbol: SymbolId option) (typeOpt: TypeExpr option) (ty: Ty) 
             held, { constrained with Cells = constrained.Cells |> Map.add symbol scope }
     | _ -> ty, state
 
-/// The contexts the lambda `lambda`, with the parameters `args`, requires for its `mut` parameters: `$Memory` of each
+/// The contexts the lambda `lambda`, with the parameters `args`, requires for its `mut` parameters: `Memory` of each
 /// one's scope, since a function that takes a cell can only be called where its block is, whether or not it uses the
-/// cell, and `state` once they are recorded. `$Memory` is nominal, so it is required by name, as an ambient context is:
+/// cell, and `state` once they are recorded. `Memory` is nominal, so it is required by name, as an ambient context is:
 /// a def's own body adds it to what the def requires if the def does not write its type (`InferredContexts`), and
 /// otherwise the def must write it if it writes contexts at all (see `ensureMemoryWritten`). Any other lambda's type
 /// carries it. A function type that takes a cell requires it whether it says so or not (see
@@ -133,7 +133,7 @@ let parameterContexts (state: InferState) (lambda: Expression) (args: (Identifie
     | _ -> [], state
 
 /// The errors for each function type in `typeOpt`, the annotation of the def `defName`, that takes a cell and writes
-/// contexts without `$Memory`: taking a cell requires it. A function type that takes one and writes no contexts requires
+/// contexts without `Memory`: taking a cell requires it. A function type that takes one and writes no contexts requires
 /// it without saying so (see `TypeResolution`).
 let ensureMemoryWritten (state: InferState) (defName: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
     let takesCell (input: TypeExpr) =

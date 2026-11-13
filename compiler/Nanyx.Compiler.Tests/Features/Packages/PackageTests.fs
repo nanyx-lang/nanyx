@@ -131,19 +131,19 @@ let ``The example package builds cleanly`` () =
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).IsSome)
 
-/// The greeter example as it was first written with a nominal `$Person`: it named the type without the import's alias
-/// and built a `$Person` from its shape outside the module that defines it.
+/// The greeter example as it was first written with a nominal `Person`: it named the type without the import's alias
+/// and built a `Person` from its shape outside the module that defines it.
 let private greeterGotWrong (construct: string) =
     [ "greeter.nyxp", manifest ""
       "src/greetings.nyx",
-      "module greetings\n\nexport def greet: $Person -> string = { p ->\n  \"Hello, \" ++ p.name ++ \"!\"\n}\n\n"
-      + "export type $Person = (name: string)\n"
+      "module greetings\n\nexport def greet: Person -> string = { p ->\n  \"Hello, \" ++ p.name ++ \"!\"\n}\n\n"
+      + "export type Person = protected (name: string)\n"
       "src/main.nyx",
       $"module main\n\nimport greetings as greetings\n\n@entry\ndef main = {{\n  println(greetings.greet({construct}(name = \"Ada\")))\n}}\n" ]
 
 [<Fact>]
 let ``A package that names an aliased import's nominal type without the alias does not build`` () =
-    use package = new TempPackage(greeterGotWrong "$Person")
+    use package = new TempPackage(greeterGotWrong "Person")
     let build = Package.build (okOf (Package.find package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
@@ -151,7 +151,7 @@ let ``A package that names an aliased import's nominal type without the alias do
 
 [<Fact>]
 let ``A package that builds another module's nominal type from its shape does not build`` () =
-    use package = new TempPackage(greeterGotWrong "greetings.$Person")
+    use package = new TempPackage(greeterGotWrong "greetings.Person")
     let build = Package.build (okOf (Package.find package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal(DiagnosticCodes.NominalConstructedOutsideItsModule.Code, diagnostic.Code)

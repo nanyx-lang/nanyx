@@ -96,7 +96,7 @@ let ``mut x as an argument passes the cell: a call to __mut_arg spanning both`` 
 
 [<Fact>]
 let ``mut T is the type of a cell`` () =
-    match parseModule "def inc: [$Memory] mut int -> () = { mut cell -> () }" with
+    match parseModule "def inc: [Memory] mut int -> () = { mut cell -> () }" with
     | Result.Ok [ Kind (Def (ValueDef (_, "inc", Some (Kind (TypeWithContext (_, Kind (TypeFunc (Kind (TypeApply ("mut", [ Kind (TypeName "int") ])), _))))), _))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

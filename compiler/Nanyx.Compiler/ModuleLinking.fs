@@ -39,7 +39,7 @@ module internal ModuleLinking =
             | Pipe(value, name, rangeOpt, args) -> Pipe(value, rename current name, rangeOpt, args)
             | other -> other)
 
-    /// `module'` with each name a block import brought in (`zero`, `$Money.new`) written as the definition it stands
+    /// `module'` with each name a block import brought in (`zero`, `Money.new`) written as the definition it stands
     /// for (`money.zero`), which is the only name the backend knows. Only a name inference resolved to that definition
     /// is rewritten, not a local that shadows it.
     let internal writeBlockAliases (state: NyxCompiler.Infer.InferState) (module': Module) : Module =
@@ -126,7 +126,7 @@ module internal ModuleLinking =
         |> Set.ofList
 
     /// The exports of `imported` that `selection` brings in unqualified: each name it selects, and the definitions
-    /// attached to each type it selects, as `$Email.parse` with `$Email`.
+    /// attached to each type it selects, as `Email.parse` with `Email`.
     let internal selectedExports (imported: CheckedModule) (selection: (Identifier * SourceSpan) list) : Set<string> =
         let names = selection |> List.map fst |> Set.ofList
         let types = exportedTypeNames imported.Own |> Set.intersect names

@@ -28,7 +28,7 @@ module internal ExpressionRewrites =
 
     /// Every operator in an expression that inference found calls a definition (`calls`, by the operator's node, with
     /// the name it calls) written as that call, so the backend calls it: `x + y` becomes `` `+`(x, y) ``, or
-    /// `` $Vector.`+`(x, y) ``, and `-x` becomes `negate(x)`. `x != y` calls what `==` does, and becomes
+    /// `` Vector.`+`(x, y) ``, and `-x` becomes `negate(x)`. `x != y` calls what `==` does, and becomes
     /// `` not `==`(x, y) ``; the call keeps the operator's node, which is what its types are recorded by, and the
     /// operator's span as its name's. An operator that calls the member of an instance in scope (`instances`, by the
     /// operator's node) calls it through that instance, `` Add(a).`+`(x, y) ``, so that a function that requires

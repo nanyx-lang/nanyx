@@ -21,9 +21,9 @@ let ``A context's members are laid out the same way`` () =
 
 [<Fact>]
 let ``A scoped context keeps scoped, before export`` () =
-    unchanged "scoped context $Tx = ()\n"
-    unchanged "scoped export context $Memory = ()\n"
-    Assert.Equal("scoped export context $Memory = ()\n", format "scoped   export   context $Memory = ()")
+    unchanged "scoped context Tx = protected ()\n"
+    unchanged "scoped export context Memory = protected ()\n"
+    Assert.Equal("scoped export context Memory = protected ()\n", format "scoped   export   context Memory = protected ()")
 
 [<Fact>]
 let ``Mutable, defaulted, member and positional fields keep what they say`` () =
@@ -32,3 +32,16 @@ let ``Mutable, defaulted, member and positional fields keep what they say`` () =
 [<Fact>]
 let ``A record type with a comment among its fields has one field per line`` () =
     unchanged (lines [ "type Point = ("; "  x: int -- across"; "  -- and then"; "  y: int"; ")" ])
+
+[<Fact>]
+let ``A protected or private type keeps its word after the =`` () =
+    unchanged "type Email = protected string\n"
+    unchanged "export type User = protected (name: string, age: int)\n"
+    unchanged "type UserId = private int\n"
+
+[<Fact>]
+let ``A $ before a type's name is written as protected`` () =
+    Assert.Equal("type Email = protected string\n", format "type $Email = string")
+    Assert.Equal("scoped export context Memory = protected ()\n", format "scoped export context $Memory = ()")
+    Assert.Equal("type UserId = private int\n", format "type $UserId = private int")
+    Assert.Equal("def e: Email = Email(\"a\")\n", format "def e: $Email = $Email(\"a\")")

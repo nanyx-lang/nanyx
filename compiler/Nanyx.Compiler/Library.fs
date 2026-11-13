@@ -275,7 +275,7 @@ module Compiler =
                 state.TypeDefs
             else
                 state.TypeDefs |> Map.filter (fun name _ -> not (preludeTypeNames.Contains name && exportedTypeDefs.ContainsKey name))
-        // An aliased import's types are written with the alias (`m.$Email`). Their own names stay known for
+        // An aliased import's types are written with the alias (`m.Email`). Their own names stay known for
         // the signatures that name them, but cannot be written unless something else brings them in. An
         // unaliased import's types can, and replace a type only an aliased import brought in. One that selects
         // names brings in only the types it selects; the rest are as an aliased import's.
