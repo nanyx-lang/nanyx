@@ -239,324 +239,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 Ok (mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
         | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
-    | FunctionCall(name, spanOpt, args) ->
-        let calleeSpan = nameSpan spanOpt expr
-        if name = DbgSyntax.builtIn && (TypeEnv.tryFind name env).IsNone then
-            match args with
-            | [single] ->
-                match inferExpr env state single with
-                | Ok (typedArg, next) -> Ok (mkTypedExpr expr typedArg.Type None None None, next)
-                | Error err -> Error err
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan "dbg expects a single argument" ]
-        elif name = NotSyntax.builtIn then
-            // The `not` keyword: the parser represents `not x` as a call to "not" with one argument.
-            match args with
-            | [single] ->
-                match inferExpr env state single with
-                | Ok (typedArg, next) ->
-                    let constrained = addConstraint typedArg.Type (TyPrimitive "bool") next
-                    Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, constrained)
-                | Error err -> Error err
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "not expects a single operand" ]
-        elif name = NegateSyntax.builtIn then
-            match args with
-            | [ single ] ->
-                inferExpr env state single
-                |> Result.bind (fun (typedArg, next) ->
-                    let ty = typedArg.Type
-                    OperatorCalls.inferNegation (memberOfInstanceInScope env next) (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
-                    |> Result.map (fun (resultTy, negated) -> mkTypedExpr expr resultTy None None None, negated))
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "- expects a single operand" ]
-        elif name = WithSyntax.builtIn then
-            // `record with f = v, ...`: the parser represents a record update as a call to "__with" with the
-            // record and a record of the updated fields. The result has the record's type; every updated
-            // field must exist on it, at the field's type.
-            match args with
-            | [ baseExpr; Kind (RecordExpr updates) ] ->
-                match inferExpr env state baseExpr with
-                | Error err -> Error err
-                | Ok (typedBase, afterBase) ->
-                    match recordFieldsOf typedBase.Type with
-                    | None -> Error [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate baseExpr.Span "`with` needs a record whose fields are known here" ]
-                    | Some fields ->
-                        let mutable current = afterBase
-                        let mutable errors: Diagnostic list = []
-                        // Field names have no span of their own (#96): a field is reported at its new value.
-                        for update in updates do
-                            match update with
-                            | NamedField(fieldName, valueExpr) ->
-                                match fields |> Map.tryFind fieldName with
-                                | None -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.UnknownMember valueExpr.Span $"Record has no member '{fieldName}' to update" ]
-                                | Some fieldTy ->
-                                    match inferExpr env current valueExpr with
-                                    | Ok (typedValue, next) -> current <- addConstraintAt valueExpr.Span typedValue.Type fieldTy next
-                                    | Error err -> errors <- errors @ err
-                            | PositionalField valueExpr -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate valueExpr.Span "`with` updates fields by name" ]
-                        if errors.IsEmpty then Ok (mkTypedExpr expr typedBase.Type None None None, current)
-                        else Error errors
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` expects a record and the fields to update" ]
-        elif name = RangeSyntax.builtIn then
-            // `a..b`: a bounded range of ints, a `seq(int)`; `a..` has no end, so it is a `gen(int)` (see the ranges page).
-            let mutable current = state
-            let mutable errors: Diagnostic list = []
-            for arg in args do
-                match inferExpr env current arg with
-                | Ok (typedArg, next) -> current <- addConstraint typedArg.Type (TyPrimitive "int") next
-                | Error err -> errors <- errors @ err
-            let sequence = if args.Length = 1 then "gen" else "seq"
-            if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply(sequence, [ TyPrimitive "int" ])) None None None, current)
-            else Error errors
-        elif name = RecSyntax.builtIn then
-            // `rec name = value`: the value of a self-referencing local def; the block already binds the name.
-            match args with
-            | [ inner ] -> inferExpr env state inner
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
-        elif name = MutSyntax.builtIn || name = AssignSyntax.builtIn || name = CellPassingSyntax.argument then
-            match expr.Kind with
-            | MutSyntax.Call value -> MemoryCells.inferMut inferExpr env state expr value
-            | CellPassingSyntax.Argument cell -> MemoryCells.inferArgument inferExpr env state expr cell
-            | AssignSyntax.Call(target, value) -> MemoryCells.inferAssign inferExpr env state expr target value
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span $"{name} expects a cell and a value" ]
-        elif name = ForSyntax.builtIn then
-            match expr.Kind with
-            | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
-                Loops.inferFor inferExpr inferLambdaWithExpected env state expr iterables lambdaExpr lambdaArgs lambdaBody
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
-        elif name = WhileSyntax.builtIn then
-            match expr.Kind with
-            | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
-            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
-        else
-        let contextCheck =
-            match contextRequirementsOf env state name with
-            // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
-            | Some contexts -> ensureContextAvailable (Some expr.Id) true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
-            | None -> Ok state
-            |> Result.bind (fun current -> checkContextUse (Some expr.Id) env current (canonicalName env state name) calleeSpan)
-        match contextCheck with
-        | Error err -> Error err
-        | Ok state ->
-            // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
-            let state =
-                let written = contextRequirementsOf env state name |> Option.defaultValue []
-                let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
-                state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
-            match TypeEnv.tryFind name env with
-            | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
-            | Some scheme when isMap state scheme.Type -> inferMapLookup env state expr (Expression.from expr (IdentifierExpr name)) spanOpt args
-            | Some scheme ->
-                let mutable current = state
-                let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
-                let written = contextRequirementsOf env state name |> Option.defaultValue []
-                let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
-                current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
-
-                let recordFieldsOpt = recordFieldsOf funcTy
-
-                let isWorkflowCall =
-                    match args with
-                    | [Kind (Lambda(lambdaArgs, _, _))] when lambdaArgs.IsEmpty -> recordFieldsOpt
-                    | _ -> None
-
-                match isWorkflowCall with
-                | Some _ ->
-                    // A builder's block with no workflow keyword, `proc { ... }` with no `try` or `return`: the
-                    // workflow rewrite leaves it as a call, since it cannot tell a builder from a function given a
-                    // trailing lambda, but a builder is a record. The block runs where it is written, as a block
-                    // with keywords does, and its value is the block's.
-                    match args with
-                    | [Kind (Lambda(lambdaArgs, lambdaBody, _)) as lambdaExpr] ->
-                        match inferLambdaWithExpected env current lambdaExpr lambdaArgs lambdaBody (Some (TyPrimitive "unit")) None with
-                        | Ok (typedLambda, next) ->
-                            let returnTy =
-                                match Unifier.unalias typedLambda.Type with
-                                | TyFunc(_, ret, _) -> ret
-                                | other -> other
-                            Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
-                        | Error err -> Error err
-                    | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
-                | None ->
-                    // With a known signature, each argument is checked against its parameter as it is inferred,
-                    // so a lambda argument's parameters can take their types from the signature and from the
-                    // arguments before it: in `customer \map { c -> c.name }`, `c` is already a record when
-                    // `c.name` is checked.
-                    let paramTys =
-                        match Unifier.unalias funcTy, args with
-                        | TyFunc(declaredInput, _, _), [ _ ] -> Some [ declaredInput ]
-                        | TyFunc(declaredInput, _, _), _ ->
-                            match Unifier.unalias declaredInput with
-                            | TyRecord fields when fields.Count = args.Length ->
-                                let tys = args |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
-                                if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
-                            | _ -> None
-                        | _ -> None
-                    // `f(a, b)` passes its arguments as one tuple, whose items take the callee's parameters' types
-                    // the same way.
-                    let tupleParamTys (items: Expression list) =
-                        match paramTys with
-                        | Some [ declaredInput ] ->
-                            match Unifier.unalias declaredInput with
-                            | TyRecord fields when fields.Count = items.Length ->
-                                let tys = items |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
-                                if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
-                            | _ -> None
-                        | _ -> None
-                    let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
-                        inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
-                    let argResults =
-                        args
-                        |> List.mapi (fun index arg ->
-                            let inferred =
-                                match arg with
-                                | Kind (Lambda(lambdaArgs, lambdaBody, _)) ->
-                                    match LambdaArguments.expectedInput current (paramTys |> Option.bind (List.tryItem index)) arg lambdaArgs with
-                                    | Some expectedInput -> inferLambda current arg lambdaArgs lambdaBody expectedInput
-                                    | None -> inferExpr env current arg
-                                | Kind (TupleExpr items) ->
-                                    match tupleParamTys items with
-                                    | Some itemParamTys ->
-                                        LambdaArguments.inferTupleItems (inferExpr env) inferLambda current items itemParamTys
-                                        |> Result.map (fun (typedItems, next) ->
-                                            mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
-                                        |> recordExprType
-                                    | None -> inferExpr env current arg
-                                | _ -> inferExpr env current arg
-                            match inferred with
-                            | Ok (ty, next) ->
-                                current <-
-                                    match paramTys |> Option.bind (List.tryItem index) with
-                                    | Some paramTy -> addAssignableConstraintAt arg.Span ty.Type paramTy next
-                                    | None -> next
-                                Ok ty
-                            | Error err -> Error err)
-                    let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
-                    if errors.IsEmpty then
-                        let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
-                        let positionalForNamed =
-                            match Unifier.unalias (resolveSoFar current funcTy) with
-                            | TyFunc(input, _, _) -> NamedArguments.check current expr name input args typedArgs
-                            | _ -> None
-                        match positionalForNamed with
-                        | Some diagnostic -> Error [ diagnostic ]
-                        | None ->
-                        let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
-                        let current = WorkflowRests.noteCall name argTys current
-                        // A function value requires the contexts its type says where it is called. One whose type is
-                        // not known yet, such as a parameter of a def that does not write its type, requires a context
-                        // variable of its own (see `ContextVariables`).
-                        let calleeContexts, current =
-                            match Unifier.unalias funcTy with
-                            | TyFunc(_, _, contexts) -> contexts, current
-                            | _ -> let var, next = freshVar current in [ var ], next
-                        // A local def calling itself from its own lambda requires what the def does, which the lambda
-                        // uses already (see `LambdaContexts`).
-                        let selfCall = LambdaContexts.isSelfCall funcTy current
-                        let current = LambdaContexts.recordSelfCall funcTy calleeContexts current
-                        // The callee's own context variables stand for the contexts of the arguments given for them,
-                        // and the call requires those too. Both are used by the lambda around the call, if any.
-                        let requireUsed (next: InferState) =
-                            let ofVariables =
-                                match contextRequirementsOf env next name |> Option.map ContextVariables.names with
-                                | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
-                                | _ -> []
-                            let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
-                            let used = ofVariables @ ofValue |> List.distinct
-                            let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current name [ ctx ] calleeSpan
-                            ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.recordUnsupplied env used next)
-                        // When the callee's type is already a function (an annotated or already-inferred
-                        // def), its return type is the call's type directly, so a member access or match on
-                        // the result can see it without waiting for the constraint below to be solved.
-                        match Unifier.unalias funcTy, paramTys with
-                        // Each argument was checked against its parameter above, which is all a known signature
-                        // asks; constraining several arguments together as well, as one record, would make each
-                        // equal to its parameter, and undo an argument union's widening into its parameter's.
-                        | TyFunc(_, declaredRet, _), Some _ when args.Length > 1 ->
-                            requireUsed current |> Result.map (fun next -> { mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, next)
-                        | _ ->
-                        let retTy, nextState =
-                            match Unifier.unalias funcTy with
-                            | TyFunc(_, declaredRet, _) -> declaredRet, current
-                            | _ -> freshVar current
-                        // A known input is what the argument must be assignable to. A fresh variable in its place
-                        // would be bound to the argument's own type first (constraints are solved newest first),
-                        // and a nominal argument would then have to equal its parameter's shape.
-                        let expectedInput, nextState2 =
-                            match Unifier.unalias funcTy with
-                            | TyFunc(declaredInput, _, _) -> declaredInput, nextState
-                            | _ -> freshVar nextState
-                        let inputTy = inputTypeFromArgs argTys
-                        // A single argument is the call's input: a mismatch is that argument's. So is one with the
-                        // callee's type when that is known to be a function, whose result is the call's already.
-                        let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
-                        let funcSpan = if paramTys.IsSome then inputSpan else SourceSpan.none
-                        let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy, calleeContexts)) nextState2
-                        let withAssignable = addAssignableConstraintAt inputSpan inputTy expectedInput withFuncConstraint
-                        requireUsed withAssignable |> Result.map (fun next -> { mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, next)
-                    else
-                        Error errors
-            | None ->
-                match tryFindTypeDef name state with
-                // A `module name =` block can only make the types it sees.
-                | Some info when not (blockIsolationAt state name info.Symbol calleeSpan).IsEmpty ->
-                    Error (blockIsolationAt state name info.Symbol calleeSpan)
-                // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
-                | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
-                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
-                | Some info ->
-                    let mutable current = recordConstructorReference expr info state
-                    let argResults =
-                        args
-                        |> List.map (fun arg ->
-                            let inferred =
-                                match LambdaArguments.namedFields arg info.Underlying with
-                                | Some (names, values, memberTys) ->
-                                    let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
-                                        inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
-                                    LambdaArguments.inferTupleItems (inferExpr env) inferLambda current values memberTys
-                                    |> Result.map (fun (typedValues, next) ->
-                                        let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList
-                                        mkTypedExpr arg (TyRecord fieldTys) None None None, next)
-                                    |> recordExprType
-                                | None -> inferExpr env current arg
-                            match inferred with
-                            | Ok (ty, next) ->
-                                current <- next
-                                Ok ty
-                            | Error err -> Error err)
-                    let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
-                    if errors.IsEmpty then
-                        let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
-                        match NamedArguments.check current expr name info.Underlying args typedArgs with
-                        | Some diagnostic -> Error [ diagnostic ]
-                        | None ->
-                        let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
-                        let inputTy, fitted = UseDischarge.fit current expr info.Underlying args (inputTypeFromArgs argTys)
-                        let made, constrained = constructedType (addAssignableConstraint inputTy info.Underlying fitted) name info
-                        Ok (mkTypedExpr expr made None None None, constrained)
-                    else
-                        Error errors
-                | None ->
-                    // `s.contains("x")` is read as a call to a function named `s.contains`. When `s` is a value, the
-                    // dot was meant to reach a definition attached to its type, which is a pipe's to do.
-                    let dot = name.LastIndexOf '.'
-                    let receiver = if dot > 0 then name.Substring(0, dot) else ""
-                    let field = name.Substring(dot + 1)
-                    match TypeEnv.tryFind receiver env with
-                    // `machine.inventory(name)`, where the field is a map, is a lookup in it.
-                    | Some scheme when dot > 0 && not (receiver.Contains '.')
-                                       && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isMap state) ->
-                        let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
-                        inferMapLookup env state expr map spanOpt args
-                    | Some scheme when dot > 0 && not (receiver.Contains '.') ->
-                        let memberName = name.Substring(dot + 1)
-                        let receiverTy = resolveSoFar state scheme.Type
-                        let message =
-                            match tryResolveAttachedFunction env receiverTy memberName with
-                            | Some attached ->
-                                $"'{receiver}' is a value, so '{name}' is not a function's name. '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
-                            | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
-                        Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
-                    | _ -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
+    | FunctionCall(name, spanOpt, args) -> inferCall env state expr name spanOpt args
     | Lambda(args, body, _) ->
         state |> Contexts.outsideValue (fun state -> inferLambdaWithExpected env state expr args body None None)
     | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
@@ -1090,6 +773,326 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | None ->
                 let ty, next = freshVar current
                 mkTypedExpr expr ty None None None, next)
+
+/// A call of the function `name`, its name at `spanOpt`, with `args`.
+and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (name: string) (spanOpt: SourceSpan option) (args: Expression list) : Result<TypedExpr * InferState, Diagnostic list> =
+    let calleeSpan = nameSpan spanOpt expr
+    if name = DbgSyntax.builtIn && (TypeEnv.tryFind name env).IsNone then
+        match args with
+        | [single] ->
+            match inferExpr env state single with
+            | Ok (typedArg, next) -> Ok (mkTypedExpr expr typedArg.Type None None None, next)
+            | Error err -> Error err
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan "dbg expects a single argument" ]
+    elif name = NotSyntax.builtIn then
+        // The `not` keyword: the parser represents `not x` as a call to "not" with one argument.
+        match args with
+        | [single] ->
+            match inferExpr env state single with
+            | Ok (typedArg, next) ->
+                let constrained = addConstraint typedArg.Type (TyPrimitive "bool") next
+                Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, constrained)
+            | Error err -> Error err
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "not expects a single operand" ]
+    elif name = NegateSyntax.builtIn then
+        match args with
+        | [ single ] ->
+            inferExpr env state single
+            |> Result.bind (fun (typedArg, next) ->
+                let ty = typedArg.Type
+                OperatorCalls.inferNegation (memberOfInstanceInScope env next) (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
+                |> Result.map (fun (resultTy, negated) -> mkTypedExpr expr resultTy None None None, negated))
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "- expects a single operand" ]
+    elif name = WithSyntax.builtIn then
+        // `record with f = v, ...`: the parser represents a record update as a call to "__with" with the
+        // record and a record of the updated fields. The result has the record's type; every updated
+        // field must exist on it, at the field's type.
+        match args with
+        | [ baseExpr; Kind (RecordExpr updates) ] ->
+            match inferExpr env state baseExpr with
+            | Error err -> Error err
+            | Ok (typedBase, afterBase) ->
+                match recordFieldsOf typedBase.Type with
+                | None -> Error [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate baseExpr.Span "`with` needs a record whose fields are known here" ]
+                | Some fields ->
+                    let mutable current = afterBase
+                    let mutable errors: Diagnostic list = []
+                    // Field names have no span of their own (#96): a field is reported at its new value.
+                    for update in updates do
+                        match update with
+                        | NamedField(fieldName, valueExpr) ->
+                            match fields |> Map.tryFind fieldName with
+                            | None -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.UnknownMember valueExpr.Span $"Record has no member '{fieldName}' to update" ]
+                            | Some fieldTy ->
+                                match inferExpr env current valueExpr with
+                                | Ok (typedValue, next) -> current <- addConstraintAt valueExpr.Span typedValue.Type fieldTy next
+                                | Error err -> errors <- errors @ err
+                        | PositionalField valueExpr -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate valueExpr.Span "`with` updates fields by name" ]
+                    if errors.IsEmpty then Ok (mkTypedExpr expr typedBase.Type None None None, current)
+                    else Error errors
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` expects a record and the fields to update" ]
+    elif name = RangeSyntax.builtIn then
+        // `a..b`: a bounded range of ints, a `seq(int)`; `a..` has no end, so it is a `gen(int)` (see the ranges page).
+        let mutable current = state
+        let mutable errors: Diagnostic list = []
+        for arg in args do
+            match inferExpr env current arg with
+            | Ok (typedArg, next) -> current <- addConstraint typedArg.Type (TyPrimitive "int") next
+            | Error err -> errors <- errors @ err
+        let sequence = if args.Length = 1 then "gen" else "seq"
+        if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply(sequence, [ TyPrimitive "int" ])) None None None, current)
+        else Error errors
+    elif name = RecSyntax.builtIn then
+        // `rec name = value`: the value of a self-referencing local def; the block already binds the name.
+        match args with
+        | [ inner ] -> inferExpr env state inner
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
+    elif name = MutSyntax.builtIn || name = AssignSyntax.builtIn || name = CellPassingSyntax.argument then
+        match expr.Kind with
+        | MutSyntax.Call value -> MemoryCells.inferMut inferExpr env state expr value
+        | CellPassingSyntax.Argument cell -> MemoryCells.inferArgument inferExpr env state expr cell
+        | AssignSyntax.Call(target, value) -> MemoryCells.inferAssign inferExpr env state expr target value
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span $"{name} expects a cell and a value" ]
+    elif name = ForSyntax.builtIn then
+        match expr.Kind with
+        | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
+            Loops.inferFor inferExpr inferLambdaWithExpected env state expr iterables lambdaExpr lambdaArgs lambdaBody
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
+    elif name = WhileSyntax.builtIn then
+        match expr.Kind with
+        | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
+    else
+    let contextCheck =
+        match contextRequirementsOf env state name with
+        // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
+        | Some contexts -> ensureContextAvailable (Some expr.Id) true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
+        | None -> Ok state
+        |> Result.bind (fun current -> checkContextUse (Some expr.Id) env current (canonicalName env state name) calleeSpan)
+    match contextCheck with
+    | Error err -> Error err
+    | Ok state ->
+        // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
+        let state =
+            let written = contextRequirementsOf env state name |> Option.defaultValue []
+            let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
+            state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
+        match TypeEnv.tryFind name env with
+        | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
+        | Some scheme when isMap state scheme.Type -> inferMapLookup env state expr (Expression.from expr (IdentifierExpr name)) spanOpt args
+        | Some scheme ->
+            let mutable current = state
+            let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
+            let written = contextRequirementsOf env state name |> Option.defaultValue []
+            let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
+            current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
+
+            let recordFieldsOpt = recordFieldsOf funcTy
+
+            let isWorkflowCall =
+                match args with
+                | [Kind (Lambda(lambdaArgs, _, _))] when lambdaArgs.IsEmpty -> recordFieldsOpt
+                | _ -> None
+
+            match isWorkflowCall with
+            | Some _ ->
+                // A builder's block with no workflow keyword, `proc { ... }` with no `try` or `return`: the
+                // workflow rewrite leaves it as a call, since it cannot tell a builder from a function given a
+                // trailing lambda, but a builder is a record. The block runs where it is written, as a block
+                // with keywords does, and its value is the block's.
+                match args with
+                | [Kind (Lambda(lambdaArgs, lambdaBody, _)) as lambdaExpr] ->
+                    match inferLambdaWithExpected env current lambdaExpr lambdaArgs lambdaBody (Some (TyPrimitive "unit")) None with
+                    | Ok (typedLambda, next) ->
+                        let returnTy =
+                            match Unifier.unalias typedLambda.Type with
+                            | TyFunc(_, ret, _) -> ret
+                            | other -> other
+                        Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
+                    | Error err -> Error err
+                | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"Workflow '{name}' must be called with a trailing lambda" ]
+            | None ->
+                // With a known signature, each argument is checked against its parameter as it is inferred,
+                // so a lambda argument's parameters can take their types from the signature and from the
+                // arguments before it: in `customer \map { c -> c.name }`, `c` is already a record when
+                // `c.name` is checked.
+                let paramTys =
+                    match Unifier.unalias funcTy, args with
+                    | TyFunc(declaredInput, _, _), [ _ ] -> Some [ declaredInput ]
+                    | TyFunc(declaredInput, _, _), _ ->
+                        match Unifier.unalias declaredInput with
+                        | TyRecord fields when fields.Count = args.Length ->
+                            let tys = args |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
+                            if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
+                        | _ -> None
+                    | _ -> None
+                // `f(a, b)` passes its arguments as one tuple, whose items take the callee's parameters' types
+                // the same way.
+                let tupleParamTys (items: Expression list) =
+                    match paramTys with
+                    | Some [ declaredInput ] ->
+                        match Unifier.unalias declaredInput with
+                        | TyRecord fields when fields.Count = items.Length ->
+                            let tys = items |> List.mapi (fun index _ -> fields |> Map.tryFind (tupleFieldName index))
+                            if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
+                        | _ -> None
+                    | _ -> None
+                let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
+                    inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                let argResults =
+                    args
+                    |> List.mapi (fun index arg ->
+                        let inferred =
+                            match arg with
+                            | Kind (Lambda(lambdaArgs, lambdaBody, _)) ->
+                                match LambdaArguments.expectedInput current (paramTys |> Option.bind (List.tryItem index)) arg lambdaArgs with
+                                | Some expectedInput -> inferLambda current arg lambdaArgs lambdaBody expectedInput
+                                | None -> inferExpr env current arg
+                            | Kind (TupleExpr items) ->
+                                match tupleParamTys items with
+                                | Some itemParamTys ->
+                                    LambdaArguments.inferTupleItems (inferExpr env) inferLambda current items itemParamTys
+                                    |> Result.map (fun (typedItems, next) ->
+                                        mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
+                                    |> recordExprType
+                                | None -> inferExpr env current arg
+                            | _ -> inferExpr env current arg
+                        match inferred with
+                        | Ok (ty, next) ->
+                            current <-
+                                match paramTys |> Option.bind (List.tryItem index) with
+                                | Some paramTy -> addAssignableConstraintAt arg.Span ty.Type paramTy next
+                                | None -> next
+                            Ok ty
+                        | Error err -> Error err)
+                let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
+                if errors.IsEmpty then
+                    let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                    let positionalForNamed =
+                        match Unifier.unalias (resolveSoFar current funcTy) with
+                        | TyFunc(input, _, _) -> NamedArguments.check current expr name input args typedArgs
+                        | _ -> None
+                    match positionalForNamed with
+                    | Some diagnostic -> Error [ diagnostic ]
+                    | None ->
+                    let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
+                    let current = WorkflowRests.noteCall name argTys current
+                    // A function value requires the contexts its type says where it is called. One whose type is
+                    // not known yet, such as a parameter of a def that does not write its type, requires a context
+                    // variable of its own (see `ContextVariables`).
+                    let calleeContexts, current =
+                        match Unifier.unalias funcTy with
+                        | TyFunc(_, _, contexts) -> contexts, current
+                        | _ -> let var, next = freshVar current in [ var ], next
+                    // A local def calling itself from its own lambda requires what the def does, which the lambda
+                    // uses already (see `LambdaContexts`).
+                    let selfCall = LambdaContexts.isSelfCall funcTy current
+                    let current = LambdaContexts.recordSelfCall funcTy calleeContexts current
+                    // The callee's own context variables stand for the contexts of the arguments given for them,
+                    // and the call requires those too. Both are used by the lambda around the call, if any.
+                    let requireUsed (next: InferState) =
+                        let ofVariables =
+                            match contextRequirementsOf env next name |> Option.map ContextVariables.names with
+                            | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
+                            | _ -> []
+                        let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
+                        let used = ofVariables @ ofValue |> List.distinct
+                        let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current name [ ctx ] calleeSpan
+                        ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.recordUnsupplied env used next)
+                    // When the callee's type is already a function (an annotated or already-inferred
+                    // def), its return type is the call's type directly, so a member access or match on
+                    // the result can see it without waiting for the constraint below to be solved.
+                    match Unifier.unalias funcTy, paramTys with
+                    // Each argument was checked against its parameter above, which is all a known signature
+                    // asks; constraining several arguments together as well, as one record, would make each
+                    // equal to its parameter, and undo an argument union's widening into its parameter's.
+                    | TyFunc(_, declaredRet, _), Some _ when args.Length > 1 ->
+                        requireUsed current |> Result.map (fun next -> { mkTypedExpr expr declaredRet None None None with Arguments = Some typedArgs }, next)
+                    | _ ->
+                    let retTy, nextState =
+                        match Unifier.unalias funcTy with
+                        | TyFunc(_, declaredRet, _) -> declaredRet, current
+                        | _ -> freshVar current
+                    // A known input is what the argument must be assignable to. A fresh variable in its place
+                    // would be bound to the argument's own type first (constraints are solved newest first),
+                    // and a nominal argument would then have to equal its parameter's shape.
+                    let expectedInput, nextState2 =
+                        match Unifier.unalias funcTy with
+                        | TyFunc(declaredInput, _, _) -> declaredInput, nextState
+                        | _ -> freshVar nextState
+                    let inputTy = inputTypeFromArgs argTys
+                    // A single argument is the call's input: a mismatch is that argument's. So is one with the
+                    // callee's type when that is known to be a function, whose result is the call's already.
+                    let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
+                    let funcSpan = if paramTys.IsSome then inputSpan else SourceSpan.none
+                    let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy, calleeContexts)) nextState2
+                    let withAssignable = addAssignableConstraintAt inputSpan inputTy expectedInput withFuncConstraint
+                    requireUsed withAssignable |> Result.map (fun next -> { mkTypedExpr expr retTy None None None with Arguments = Some typedArgs }, next)
+                else
+                    Error errors
+        | None ->
+            match tryFindTypeDef name state with
+            // A `module name =` block can only make the types it sees.
+            | Some info when not (blockIsolationAt state name info.Symbol calleeSpan).IsEmpty ->
+                Error (blockIsolationAt state name info.Symbol calleeSpan)
+            // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
+            | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
+                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
+            | Some info ->
+                let mutable current = recordConstructorReference expr info state
+                let argResults =
+                    args
+                    |> List.map (fun arg ->
+                        let inferred =
+                            match LambdaArguments.namedFields arg info.Underlying with
+                            | Some (names, values, memberTys) ->
+                                let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
+                                    inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                                LambdaArguments.inferTupleItems (inferExpr env) inferLambda current values memberTys
+                                |> Result.map (fun (typedValues, next) ->
+                                    let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList
+                                    mkTypedExpr arg (TyRecord fieldTys) None None None, next)
+                                |> recordExprType
+                            | None -> inferExpr env current arg
+                        match inferred with
+                        | Ok (ty, next) ->
+                            current <- next
+                            Ok ty
+                        | Error err -> Error err)
+                let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
+                if errors.IsEmpty then
+                    let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                    match NamedArguments.check current expr name info.Underlying args typedArgs with
+                    | Some diagnostic -> Error [ diagnostic ]
+                    | None ->
+                    let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
+                    let inputTy, fitted = UseDischarge.fit current expr info.Underlying args (inputTypeFromArgs argTys)
+                    let made, constrained = constructedType (addAssignableConstraint inputTy info.Underlying fitted) name info
+                    Ok (mkTypedExpr expr made None None None, constrained)
+                else
+                    Error errors
+            | None ->
+                // `s.contains("x")` is read as a call to a function named `s.contains`. When `s` is a value, the
+                // dot was meant to reach a definition attached to its type, which is a pipe's to do.
+                let dot = name.LastIndexOf '.'
+                let receiver = if dot > 0 then name.Substring(0, dot) else ""
+                let field = name.Substring(dot + 1)
+                match TypeEnv.tryFind receiver env with
+                // `machine.inventory(name)`, where the field is a map, is a lookup in it.
+                | Some scheme when dot > 0 && not (receiver.Contains '.')
+                                   && recordFieldsOf (resolveSoFar state scheme.Type) |> Option.bind (Map.tryFind field) |> Option.exists (isMap state) ->
+                    let map = Expression.from expr (MemberAccess(Expression.from expr (IdentifierExpr receiver), field, spanOpt))
+                    inferMapLookup env state expr map spanOpt args
+                | Some scheme when dot > 0 && not (receiver.Contains '.') ->
+                    let memberName = name.Substring(dot + 1)
+                    let receiverTy = resolveSoFar state scheme.Type
+                    let message =
+                        match tryResolveAttachedFunction env receiverTy memberName with
+                        | Some attached ->
+                            $"'{receiver}' is a value, so '{name}' is not a function's name. '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
+                        | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
+                    Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message ]
+                | _ -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownFunction calleeSpan $"Unknown function '{name}'" env.Keys name ]
 
 /// `expr`, a call of the map `map` with `args`: a lookup, read as the call `map.get(map, args...)` (see `Maps`) and
 /// recorded in `ReadAs` to be written as it. The call keeps the node of `expr`, which is what its types and the
