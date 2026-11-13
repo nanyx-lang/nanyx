@@ -50,6 +50,15 @@ program this way, so a leak anywhere fails a test.
 `nanyx hello` takes no file: it compiles and runs a "hello world" program built into the CLI, as a
 quick check that the compiler and runtime work.
 
+# The stopwatch
+
+While `run`, `build`, `check` or `wasm` compiles, a stopwatch on stderr names the file the compiler is on and how
+long the compile has taken, rewritten in place ten times a second: `Compiling src/main.nyx… 4.7s`. When the
+compile finishes it is replaced by `Compiled greeter (12 files) in 4.7s`, or `Compiled main.nyx in 1.2s` for a
+script, and the diagnostics follow. It is shown only when stderr is a terminal: a pipe, a log file and CI see
+nothing, and the command's other output is the same either way (`CompileProgress.cs`). The compiler tells the
+CLI which file it is on through `Package.buildWith`, which takes a callback that `Package.build` leaves out.
+
 # Packages
 
 Given a directory or a `.nyxp` manifest instead of a file, or nothing at all, `run`, `build` and `check`
