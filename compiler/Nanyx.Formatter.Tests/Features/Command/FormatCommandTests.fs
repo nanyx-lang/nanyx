@@ -245,6 +245,7 @@ let ``A script's formatter directives set its options`` () =
 [<InlineData("::formatter.lineWidth = 0", "::formatter.lineWidth must be a positive integer, not 0")>]
 [<InlineData("::formatter.lineWidth = \"80\"", "::formatter.lineWidth must be a positive integer, not the string \"80\"")>]
 [<InlineData("::formatter.lineWidth", "::formatter takes a setting and its value")>]
+[<InlineData("::formatter.lineWidth = wide", "'wide' is not a TOML value; a string needs quotes, as in a manifest: \"wide\"")>]
 let ``A formatter directive that is not valid is an error naming the file and line, and the file is left alone`` (directive: string, message: string) =
     let directory = directoryWith [ "a.nyx", "-- A script.\n" + directive + "\n" + unformatted ]
     let file = Path.Combine(directory, "a.nyx")

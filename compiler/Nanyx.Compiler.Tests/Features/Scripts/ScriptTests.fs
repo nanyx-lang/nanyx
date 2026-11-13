@@ -60,7 +60,7 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
 [<InlineData("::linters.default.nope = \"error\"", "NYX0009", "unknown rule 'nope' of the linter 'default'; the rules are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'plusBetweenContexts', 'unannotatedExports', 'unusedResults', 'shadowedPreludeNames', 'semicolons', 'linterFailed'")>]
 [<InlineData("::linters.default.unusedBindings = \"loud\"", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not the string \"loud\"")>]
 [<InlineData("::linters.default.unusedBindings = 3", "NYX0009", "::linters.default.unusedBindings must be 'error', 'warning', 'info', 'hint', 'none', not 3")>]
-[<InlineData("::linters.default.unusedBindings = error", "NYX0009", "a string needs quotes, as in a manifest: \"error\"")>]
+[<InlineData("::linters.default.unusedBindings = error", "NYX0009", "'error' is not a TOML value; a string needs quotes, as in a manifest: \"error\"")>]
 [<InlineData("::linters.default.unusedBindings", "NYX0009", "::linters.default.unusedBindings needs a severity")>]
 [<InlineData("::linters.default = \"error\"", "NYX0009", "::linters.default is a table, so it takes no value")>]
 [<InlineData("::linters", "NYX0009", "::linters takes a linter")>]
