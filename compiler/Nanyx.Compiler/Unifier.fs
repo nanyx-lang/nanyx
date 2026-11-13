@@ -605,7 +605,7 @@ module Unifier =
         | TyPrimitive _ -> false
 
     /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`).
-    let unifyDetailed (constraints: ConstraintSet) : Result<Subst, Mismatch> =
+    let private unifyAfresh (constraints: ConstraintSet) : Result<Subst, Mismatch> =
         // Widening a union (below) makes up rest variables. They are numbered past every variable in the
         // constraints, and far past where inference numbers its own, so that they are new to both.
         let mutable nextRestId =
@@ -949,6 +949,20 @@ module Unifier =
                     | Equal ->
                         unifyEqual true origin l r rest
         loop empty constraints
+
+    /// The constraints this thread solved last and what solving them gave (see `unifyDetailed`).
+    let private lastSolved = new System.Threading.ThreadLocal<(ConstraintSet * Result<Subst, Mismatch>) option>(fun () -> None)
+
+    /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`). Solving is a function of the
+    /// constraints alone, and checking a def solves the same pool again and again with nothing added in between, so
+    /// what the same list solved to last time on this thread is given again rather than solved again.
+    let unifyDetailed (constraints: ConstraintSet) : Result<Subst, Mismatch> =
+        match lastSolved.Value with
+        | Some (solved, result) when obj.ReferenceEquals(solved, constraints) -> result
+        | _ ->
+            let result = unifyAfresh constraints
+            lastSolved.Value <- Some (constraints, result)
+            result
 
     /// Solves `constraints`, or gives the first that cannot be satisfied, with what was wrong and where.
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
