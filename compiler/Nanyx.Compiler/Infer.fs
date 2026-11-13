@@ -1484,6 +1484,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
         if errors.IsEmpty then errors <- BlockResult.check statements
         if errors.IsEmpty then
             current <- WorkflowRests.joinArguments env' statements current
+            let localDefs = statements |> List.choose (fun statement -> match statement.Kind with DefStatement(_, name, _, _) -> Some name | _ -> None)
+            current <- leaveLocalContextRequirements state localDefs current
             let blockExpr = mkTypedExpr block lastExpr.Type (Some lastExpr) (Some typedStatements) None
             Ok (blockExpr, current)
         else
