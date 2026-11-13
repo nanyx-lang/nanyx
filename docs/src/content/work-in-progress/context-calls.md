@@ -4,9 +4,10 @@ description: "What a call to a function that requires contexts costs, and how th
 order: 25
 ---
 
-> **Status: proposed.** This page describes what a call to a function that requires contexts compiles to today, and
-> three changes that would make it cheaper. The first, static closures, is done. It is part of the [compilation](./compilation)
-> workstream, and its issues carry the `compilation`, `wasm backend` and `performance` labels.
+> **Status: in progress.** This page describes what a call to a function that requires contexts compiles to, and
+> three changes that make it cheaper. Static closures and specialising on known members are done; inlining is not. It
+> is part of the [compilation](./compilation) workstream, and its issues carry the `compilation`, `wasm backend` and
+> `performance` labels.
 
 # Summary
 
@@ -17,25 +18,27 @@ top-level function is static data, so passing one allocates nothing. A function 
 members known at its call, so it calls them directly and is not passed the ones it never reads. An inliner could then
 fold small functions such as `println` into their callers.
 
-# What a call costs today
+# What a call costs
 
 Since printing takes any value with a `ToString` ([Printing values](./printing-values#printing)), `println` is an
-ordinary function, `[Console & ToString(a)] a -> ()`. Hello world compiles to this (from
-`Nanyx.Compiler.Wasm.Tests/E2E/twentythree/expected.wat`):
+ordinary function, `[Console & ToString(a)] a -> ()`. Before specialising on known members
+([#744](https://github.com/nanyx-lang/nanyx/issues/744)), hello world compiled to this:
 
-- **The call site passes a closure for every member.** `println("Hello, Nanyx!")` passes six closures, one for each
-  of `Console`'s five members and one for `string.toString`. Each is a closure over the wrapper of a top-level
-  function (`ContextArgument.ClosureOverWrapper` in `CoreIrLowerInput.fs`) and captures nothing, so it is static data:
-  the call passes six constant addresses, and allocates and drops nothing for them
-  ([#743](https://github.com/nanyx-lang/nanyx/issues/743)). Before that, it made the six on the heap and dropped them
-  after the call.
-- **The callee calls its members indirectly.** `println__string` takes the six closures as parameters, after its
-  own. It reads two of them, `write` and `toString`, and makes three `call_indirect`s.
-- **The module carries what makes this work.** It has a wrapper for each member (`__fn_write`), a table to call
-  them through, and a drop and a dup function for each member's function type. Hello world's WebAssembly text grew by
-  about 290 lines with #739.
+- **The call site passed a closure for every member.** `println("Hello, Nanyx!")` passed six closures, one for each
+  of `Console`'s five members and one for `string.toString`. Each was a closure over the wrapper of a top-level
+  function (`ContextArgument.ClosureOverWrapper` in `CoreIrLowerInput.fs`) and captured nothing. Static closures
+  ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) made them six constant addresses; before that, the call
+  made the six on the heap and dropped them after the call.
+- **The callee called its members indirectly.** `println__string` took the six closures as parameters, after its
+  own. It read two of them, `write` and `toString`, and made three `call_indirect`s.
+- **The module carried what made this work.** It had a wrapper for each member (`__fn_write`), a table to call
+  them through, and a drop and a dup function for each member's function type: about 290 lines of WebAssembly text.
 
-How members are passed is described under Monomorphisation in [Memory management](./memory-management).
+Now every one of those members is known where `println` is called, so the call passes only the value, to
+`println__string__known`, which calls `string.toString` and `write` directly
+(`Nanyx.Compiler.Wasm.Tests/E2E/twentythree/expected.wat`). A member that is not known is still passed as a closure,
+and costs what it did. How members are passed is described under Monomorphisation in
+[Memory management](./memory-management).
 
 ## Functions that require contexts as values
 
@@ -86,8 +89,8 @@ to 7, as predicted.
 
 ## Specialising on known members
 
-The monomorphiser already specialises a generic definition on its type arguments (`println__string`). It can
-specialise a definition that requires contexts on its context members too:
+The monomorphiser specialises a generic definition on its type arguments (`println__string`), and a definition that
+requires contexts on its context members too (`CoreIrLowerKnown.fs`):
 
 - A specialisation's key is the definition, its type arguments, and, for each context member, either the top-level
   function it is known to be or "unknown". A member is known when the call finds it as a closure over a top-level
@@ -101,9 +104,26 @@ specialise a definition that requires contexts on its context members too:
 - Specialisations on members count towards the limit on specialisations per definition (`maxSpecialisations`).
 - Debug and release builds specialise alike, since specialising changes no behaviour.
 
-Hello world's `println__string` then calls `string.toString` and `write` directly, and its call passes only the
+Hello world's `println__string__known` calls `string.toString` and `write` directly, and its call passes only the
 value. The cost is code size: a definition called with several instances has a specialisation for each, which is the
-trade monomorphisation already makes for types. ([#744](https://github.com/nanyx-lang/nanyx/issues/744))
+trade monomorphisation already makes for types. A definition that is not generic is still lowered as it is, taking
+all its members, and exported; a specialisation of it on known members is named with `__known`
+(`greet__known`), and is not exported.
+
+How it is built:
+
+- A call works out which of the members it finds are known (`FunctionLowering.KnownMembers`, from what
+  `LowerInput.ContextArguments` finds) before it lowers its arguments, and asks for the callee by a key that names them
+  (`SpecKey.Known`). It passes the others as before.
+- The specialisation binds each known member to a local, not a parameter. A call through that local is a direct call to
+  the function the member wraps (`CallValue`), with its arguments arranged as the wrapper would arrange them
+  (`directArguments`). A call that passes the local on to a function that requires the context finds it known, so the
+  callee is specialised on it too.
+- Anywhere else the local is read, it is a value: a lambda captures it, or it is passed to `list.map`. Only then is
+  the local given the member's value, a closure over the wrapper or the top-level value, at the top of the function
+  (`WithKnownValues`, which looks for the locals the body names with `usedOf`).
+
+([#744](https://github.com/nanyx-lang/nanyx/issues/744))
 
 This is what Rust does for generic functions, as against `dyn` trait objects, and what GHC's specialisation does for
 type class dictionaries.
@@ -138,8 +158,7 @@ These are about inlining, which waits on them; [#745](https://github.com/nanyx-l
 
 1. ~~Closures over top-level functions are static data~~
    ([#743](https://github.com/nanyx-lang/nanyx/issues/743), done).
-2. Specialise a function on the context members known where it is called
-   ([#744](https://github.com/nanyx-lang/nanyx/issues/744)). Its code goes in a new file: `CoreIrLower.fs` is at the
-   1,500-line limit.
+2. ~~Specialise a function on the context members known where it is called~~
+   ([#744](https://github.com/nanyx-lang/nanyx/issues/744), done: `CoreIrLowerKnown.fs`).
 3. Inline small functions in the core IR, once the open questions are settled
    ([#745](https://github.com/nanyx-lang/nanyx/issues/745)).
