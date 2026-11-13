@@ -40,12 +40,11 @@ let recordExprFields (fields: RecordField list) =
         | PositionalField value -> string index, value)
 
 /// The messages of the errors deferred to run time inside `expr` (the `__panic` calls that stand for what failed to
-/// check), in the order they are written.
+/// check), in the order they are written. What patterns hold and what a `use` loads are not looked inside.
 let rec deferredMessages (expr: Expression) : string list =
     let all (exprs: Expression list) = exprs |> List.collect deferredMessages
     match expr.Kind with
     | PanicSyntax.Call message -> [ message ]
-    | InterpolatedString parts -> parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None) |> all
     | Block statements ->
         statements
         |> List.choose (fun statement ->
@@ -54,26 +53,10 @@ let rec deferredMessages (expr: Expression) : string list =
             | ExprStatement value -> Some value
             | _ -> None)
         |> all
-    | BinaryOp(_, _, left, right) -> all [ left; right ]
-    | IfExpr(cond, ifTrue, ifFalse) -> all [ cond; ifTrue; ifFalse ]
-    | FunctionCall(_, _, args)
-    | ContextMemberCall(_, _, args) -> all args
-    | Lambda(_, body, _)
-    | UseIn(_, body)
-    | MemberAccess(body, _, _)
-    | WorkflowBindExpr(_, body)
-    | WorkflowReturnExpr body -> deferredMessages body
-    | Pipe(value, _, _, args) -> all (value :: args)
-    | TupleExpr items
-    | ListExpr items -> all items
-    | RecordExpr fields -> fields |> List.map (function NamedField(_, value) | PositionalField value -> value) |> all
+    | UseIn(_, body) -> deferredMessages body
     | ExpressionKind.Match(values, arms) -> all (values @ (arms |> List.map snd))
     | Except(value, arms) -> all (value :: (arms |> List.map snd))
-    | TagExpr(_, payload) -> payload |> Option.toList |> all
-    | ContextMemberAccess _
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
+    | _ -> SyntaxTree.childrenOf expr |> fst |> all
 
 /// The type a type annotation names, if it is a primitive or a type the module defines: `string`, `(int)`, `Point`.
 let rec typeOfAnnotation (namedTypes: Map<string, Ty>) (typeExpr: TypeExpr) : Ty option =
@@ -83,11 +66,6 @@ let rec typeOfAnnotation (namedTypes: Map<string, Ty>) (typeExpr: TypeExpr) : Ty
     | TypeUnit -> Some (TyPrimitive "unit")
     | TypeTuple [ single ] -> typeOfAnnotation namedTypes single
     | _ -> None
-
-let flattenCallArgs (args: Expression list) =
-    match args with
-    | [ Kind (TupleExpr items) ] -> items
-    | _ -> args
 
 let parametersAndBody (expr: Expression) =
     match expr.Kind with
