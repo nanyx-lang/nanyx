@@ -648,10 +648,10 @@ module Statement =
 module PipeCall =
     /// The arguments of the call that the pipe `value \f(args)` stands for. The piped value goes in front of the
     /// written arguments rather than beside them as one more value: `x \f(a, b)` is `f(x, a, b)`, and
-    /// `x \f(a, y = 1)` is `f(x, a, y = 1)`. A trailing lambda is the last positional argument.
+    /// `x \f(a, y = 1)` is `f(x, a, y = 1)`. A trailing lambda is the last positional argument. Each positional
+    /// argument is one of `args`, so a tuple among them is passed as one: `x \f((a, b))` is `f(x, (a, b))`.
     let pipeCallArguments (value: Expression) (args: Expression list) : Expression list =
         match args with
-        | Kind (TupleExpr items) :: rest -> value :: items @ rest
         | (Kind (RecordExpr fields) as record) :: rest ->
             let positional, named = fields |> List.partition (function PositionalField _ -> true | NamedField _ -> false)
             let spliced = PositionalField value :: positional @ (rest |> List.map PositionalField) @ named
