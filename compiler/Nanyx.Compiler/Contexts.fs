@@ -142,14 +142,14 @@ let internal memberType (state: InferState) (ctxExpr: TypeExpr) (memberName: Ide
         | _ -> None
     | _ -> None
 
-/// `env` with the members of each of `contexts`, the contexts a def's type declares, each provided by the signature.
-let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
+/// `env` with the members of each of `contexts`, each provided by what `provider` says provides it.
+let private extendEnvWithContextsFrom (provider: TypeExpr -> ContextProvider) (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
     let mutable current = state
     let mutable env' = env
     for ctx in contexts do
         let members, next = collectContextMembers current ctx
         current <- next
-        let memberScheme ty = { TypeEnv.mono ty with ProvidedBy = Some (FromSignature ctx.Span) }
+        let memberScheme ty = { TypeEnv.mono ty with ProvidedBy = Some (provider ctx) }
         // A context named through an import's alias (`c.Console`) also supplies its members under the alias
         // (`c.println`), which would otherwise still be the ambient instance's.
         let qualifier =
@@ -165,6 +165,36 @@ let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts:
                 | Some qualifier -> TypeEnv.declare $"{qualifier}.{name}" symbol (memberScheme ty) acc
                 | None -> acc) env'
     env', current
+
+/// `env` with the members of each of `contexts`, the contexts a def's type declares, each provided by the signature.
+let internal extendEnvWithContexts (env: TypeEnv) (state: InferState) (contexts: TypeExpr list) =
+    extendEnvWithContextsFrom (fun ctx -> FromSignature ctx.Span) env state contexts
+
+/// `env` for the body of `lambda`, passed as a parameter of the type `paramTy`: with the members of each plain context
+/// that type requires, as far as `state` says, so the body can call them and what requires them. The function the
+/// lambda is passed to supplies them, as `withLog: [Console & c] ([Log & c] () -> ()) -> ()` supplies `Log` to its
+/// block, so the lambda's type requires them and the code around it does not (see `LambdaContexts`). Each is provided
+/// by the type the lambda is checked against, at the lambda. A context variable, a parameterised context and a scoped
+/// one are not bound: a scoped context is the call's (see `ScopedCalls`). The contexts are not written in the source,
+/// so nothing refers to them: `state` keeps only the variables reading their members made.
+let internal extendEnvForLambdaArgument (env: TypeEnv) (state: InferState) (lambda: Expression) (paramTy: Ty option) : TypeEnv * InferState =
+    let required =
+        match paramTy |> Option.map (resolveSoFar state >> Unifier.unalias) with
+        | Some (TyFunc(_, _, contexts)) ->
+            contexts
+            |> List.choose (function
+                | TyApply(name, []) ->
+                    match state.TypeDefs |> Map.tryFind name with
+                    | Some info when info.IsContext && info.Parameters.IsEmpty && not (WrittenContexts.isScoped state name) ->
+                        Some (TypeExpr.synthetic (TypeName name))
+                    | _ -> None
+                | _ -> None)
+        | _ -> []
+    match required with
+    | [] -> env, state
+    | _ ->
+        let env, next = extendEnvWithContextsFrom (fun _ -> FromSignature lambda.Span) env state required
+        env, { state with NextId = next.NextId }
 
 let rec private unknownContextNames (state: InferState) (ctxExpr: TypeExpr) : Identifier list =
     match ctxExpr.Kind with

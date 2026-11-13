@@ -37,6 +37,7 @@
     <Compile Include="Features\Contexts\FunctionTypeContextTests.fs" />
     <Compile Include="Features\Contexts\ContextVariableTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
+    <Compile Include="Features\Contexts\LambdaSuppliedContextTests.fs" />
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />
     <Compile Include="Features\Contexts\ShadowedDefContextTests.fs" />
     <Compile Include="Features\Contexts\UnderscoreContextNameTests.fs" />

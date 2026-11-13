@@ -69,7 +69,22 @@ def main = {
     use Log(log = { m -> println(m) })
     body()
   }
+
+  @entry
+  def main = {
+    withConsoleLog {
+      greet("world")
+      log("done")
+    }
+  }
   ```
+
+  The lambda passed to it is checked against `[Log & c] () -> a`, so its body has `Log`: it can call `log` and what
+  requires `Log`, and its type requires `Log`, which `withConsoleLog` supplies. Contexts it uses besides bind `c`, so
+  `main` requires `Console`; where the parameter has no context variable they are NYX0227. A `[Log] () -> ()` with
+  `withLog(body)` works the same. `Contexts.extendEnvForLambdaArgument` binds the members of the plain contexts the
+  parameter's type requires, at a call whose callee's type is known
+  ([#1218](https://github.com/nanyx-lang/nanyx/issues/1218)). `RunLambdaSuppliedContextTests.fs` runs this example.
 
 - **The backend needs nothing new.** `FunctionLowering.Coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.
