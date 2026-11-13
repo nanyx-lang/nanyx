@@ -20,6 +20,23 @@ module FunctionContexts =
         | TyApply(tag, [ scope ]) when tag = scopeTag -> Some scope
         | _ -> None
 
+    /// The name of the type variable a signature's scope of the scoped context `context` is, shared by every scoped
+    /// context of that name the signature writes. No variable written in source has it.
+    let scopeVariableName (context: string) = $"@{context}"
+
+    /// The context a cell's type is of (see `cellType`): `$Memory`, as the prelude declares it.
+    let cellContext = "$Memory"
+
+    /// The type of a cell that holds `held`, of the `memory` block of the scope `scope` (see `CellPassingSyntax`): a
+    /// reader sees `mut T`, without the scope.
+    let cellType (held: Ty) (scope: Ty) : Ty = TyApply(CellPassingSyntax.typeName, [ held; scopeType scope ])
+
+    /// What a cell's type holds, and its scope (see `cellType`).
+    let (|CellType|_|) (ty: Ty) : (Ty * Ty) option =
+        match ty with
+        | TyApply(name, [ held; ScopeType scope ]) when name = CellPassingSyntax.typeName -> Some (held, scope)
+        | _ -> None
+
     /// The name of the variable a call's scope is (see `ScopedCalls.enter`). No variable written in source has it.
     let callScopeName = "@call"
 

@@ -51,3 +51,22 @@ def f = {
 }
 """
     Assert.Equal(text source, format source)
+
+
+[<Fact>]
+let ``A cell parameter, a cell argument and a cell type keep their layout`` () =
+    let source = """
+def inc: [$Memory] mut int -> () = { mut cell ->
+  cell := cell + 1
+}
+
+def add = { mut total: int, n -> total := total + n }
+
+def f = memory {
+  mut count = 0
+  inc(mut count)
+  add(mut count, 2)
+  count
+}
+"""
+    Assert.Equal(text source, format source)

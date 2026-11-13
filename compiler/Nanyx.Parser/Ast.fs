@@ -625,6 +625,33 @@ module TypeExpr =
         | TypeHole -> [ typeExpr ]
         | _ -> children typeExpr |> List.collect holes
 
+/// Passing a cell to a function (see the memory page). `mut T` is the type of a cell that holds a `T`, a `TypeApply` of
+/// `typeName`. `{ mut cell -> ... }` takes one: a parameter annotated `mut _`, or `mut T` for `mut cell: T`, with no
+/// source of its own, so that it is written back as it was. `f(mut x)` passes the cell `x`: a call to the built-in
+/// "__mut_arg" with the cell's name, spanning both.
+module CellPassingSyntax =
+    let typeName = "mut"
+    let argument = "__mut_arg"
+
+    /// The annotation of a parameter written `mut name`, or `mut name: T` when `held` is `T`.
+    let parameterType (held: TypeExpr option) : TypeExpr =
+        TypeExpr.synthetic (TypeApply(typeName, [ held |> Option.defaultWith (fun () -> TypeExpr.synthetic TypeHole) ]))
+
+    /// What a parameter's annotation says when it is written `mut name` (`None`) or `mut name: T` (`Some T`).
+    let (|CellParameter|_|) (typeOpt: TypeExpr option) : TypeExpr option option =
+        match typeOpt with
+        | Some { Kind = TypeApply(name, [ held ]); Span = span } when name = typeName && SourceSpan.isNone span ->
+            match held.Kind with
+            | TypeHole when SourceSpan.isNone held.Span -> Some None
+            | _ -> Some (Some held)
+        | _ -> None
+
+    /// The cell an argument passes.
+    let (|Argument|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ cell ]) when name = argument -> Some cell
+        | _ -> None
+
 module Pattern =
     /// A pattern written at `span`.
     let at (span: SourceSpan) (kind: PatternKind) : Pattern =

@@ -176,3 +176,58 @@ def main = {
 }
 """
     runSource source |> assertRan "10\n"
+
+[<Fact>]
+let ``Run - a cell passed to a function is changed by it, passed on, and passed twice`` () =
+    let source = """
+import nanyx/console
+
+def inc = { mut cell ->
+  cell := cell + 1
+}
+
+def f = {
+  memory {
+    mut count = 0
+    for 1..10 ->
+      inc(mut count)
+    count
+  }
+}
+
+def swap = { mut a, mut b ->
+  def held = a
+  a := b
+  b := held
+}
+
+def g = memory {
+  mut x = 1
+  mut y = 2
+  swap(mut x, mut y)
+  swap(mut x, mut x)
+  x * 10 + y
+}
+
+def accumulate = { mut total, n ->
+  total := total + n
+}
+
+def addBoth = { mut total ->
+  accumulate(mut total, 1)
+  accumulate(mut total, 2)
+}
+
+def h = memory {
+  mut sum = 0
+  addBoth(mut sum)
+  addBoth(mut sum)
+  sum
+}
+
+@entry
+def main = {
+  println("{f()} {g} {h}")
+}
+"""
+    runSource source |> assertRan "10 21 6\n"

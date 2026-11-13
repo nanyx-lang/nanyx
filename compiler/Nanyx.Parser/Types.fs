@@ -194,8 +194,12 @@ let internal fillTypeRefs () =
             typeIdentifier
         ]
 
+    // `mut int` is the type of a cell that holds an int (see `CellPassingSyntax`).
+    let typeCell =
+        spannedType (attempt (pstring CellPassingSyntax.typeName >>. keywordEnd >>. ws) >>. typeAtom |>> fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))
+
     let typePostfix =
-        typeAtom .>> noOptionalMarker "A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`"
+        (typeCell <|> typeAtom) .>> noOptionalMarker "A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`"
 
     let typeIntersection =
         singleOrCombined TypeIntersection (sepBy1 typePostfix (attempt (ws >>. pstring "&" >>. ws)))

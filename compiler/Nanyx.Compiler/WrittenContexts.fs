@@ -19,7 +19,7 @@ let private read (typeExprToTy: InferState -> TypeExpr -> Ty * InferState) (stat
         let var, next = typeExprToTy state context
         Some var, next
     | TypeName name when isScoped state name ->
-        let scope, next = typeExprToTy state (TypeExpr.synthetic (TypeVar $"@{name}"))
+        let scope, next = typeExprToTy state (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName name)))
         Some (FunctionContexts.scoped name scope), next
     | TypeName name -> Some (TyApply(name, [])), state
     | TypeApply(name, args) ->

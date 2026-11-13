@@ -178,12 +178,19 @@ module internal ExpressionRewrites =
         let cellOf (node: Expression) = state.References |> Map.tryFind node.Id |> Option.filter state.Cells.ContainsKey
         let loopBodies = within |> List.choose (fun node -> match node.Kind with ForSyntax.Call(_, loop, _, _) -> Some loop.Id | _ -> None) |> Set.ofList
         let lambdas = within |> List.filter (fun node -> match node.Kind with Lambda _ -> not (loopBodies.Contains node.Id) | _ -> false)
+        // A cell passed with `mut x` is a box too, and so is a `mut` parameter, which is given one (see
+        // `CellPassingSyntax`).
+        let passed =
+            within |> List.choose (fun node -> match node.Kind with CellPassingSyntax.Argument cell -> cellOf cell | _ -> None)
+        let parameters =
+            within |> List.choose cellOf |> List.filter (fun cell -> state.Symbols.[cell].Kind = Parameter)
         let captured =
             within
             |> List.choose (fun node -> cellOf node |> Option.map (fun cell -> node, state.Symbols.[cell].Declaration, cell))
             |> List.filter (fun (node, declared, _) ->
                 lambdas |> List.exists (fun lambda -> SourceSpan.contains lambda.Span node.Span && not (SourceSpan.contains lambda.Span declared)))
             |> List.map (fun (_, _, cell) -> cell)
+            |> List.append (passed @ parameters)
             |> Set.ofList
         let boxedValues =
             state.DeclarationSymbols
@@ -200,6 +207,8 @@ module internal ExpressionRewrites =
             | AssignSyntax.Call(Kind (FunctionCall(form, _, [ cell ])), value) when form = CellSyntax.unbox -> FunctionCall(CellSyntax.setBox, None, [ cell; value ])
             | AssignSyntax.Call(Kind (FunctionCall(form, _, [ cell ])), value) when form = CellSyntax.read -> FunctionCall(AssignSyntax.builtIn, None, [ cell; value ])
             | MutSyntax.Call value when boxedValues.Contains current.Id -> FunctionCall(CellSyntax.box, None, [ value ])
+            // Passing a cell passes its box.
+            | CellPassingSyntax.Argument(Kind (FunctionCall(form, _, [ cell ]))) when form = CellSyntax.unbox -> cell.Kind
             | other -> other)
 
     /// The parameter given to a lambda written without parameters whose type takes one (see `nameIgnoredParameters`).
