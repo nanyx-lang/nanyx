@@ -132,7 +132,8 @@ names they name are declared.
 
 Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
-again. While the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
+again. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
+the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
 newer than 0.23.0.
 
 # Running a file
