@@ -143,15 +143,16 @@ let internal fillTypeRefs () =
         |>> fun (item, span) -> { item with Span = span }
 
     // The contexts a function needs, joined with `&`: `[Eq(a) & Hash(a)]`. `+` joins them too, as an earlier spec of
-    // the language had it; the official linter's `plusBetweenContexts` rule reports it.
+    // the language had it; the official linter's `plusBetweenContexts` rule reports it. An empty set, `[]`, says on
+    // purpose that the function requires no contexts, as leaving the set out does.
     let contextSet =
         spannedType (
             between
-                (pstring "[")
+                (pstring "[" >>. wsNoNl())
                 (wsNoNl() >>. pstring "]")
-                (sepBy1
-                    (wsNoNl() >>. (attempt bracketedContextMember <|> attempt contextMember <|> attempt typeApply <|> typeIdentifier))
-                    (wsNoNl() >>. (pstring "&" <|> pstring "+") >>. wsNoNl()))
+                (sepBy
+                    (attempt bracketedContextMember <|> attempt contextMember <|> attempt typeApply <|> typeIdentifier)
+                    (attempt (wsNoNl() >>. (pstring "&" <|> pstring "+")) >>. wsNoNl()))
             |>> TypeContext)
 
     let contextsOf (contextSet: TypeExpr) =

@@ -269,9 +269,15 @@ let private recordMemberCall (call: NodeId option) (env: TypeEnv) (name: Identif
     | _ -> state
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the def `defName`, whose type does not
-/// declare it.
-let internal undeclaredContext (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
-    Diagnostics.at DiagnosticCodes.UndeclaredContext span $"{what} the context '{ctxName}', which '{defName}' does not declare: add [{ctxName}] to the type of '{defName}', or load an instance with `use`"
+/// declare it. A def whose type says it requires none, with `[]`, said so on purpose, so it isn't told to add one.
+let internal undeclaredContext (state: InferState) (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
+    let message =
+        match state.WrittenTypes |> Map.tryFind defName with
+        | Some { Kind = TypeWithContext([], _) } ->
+            $"{what} the context '{ctxName}', but the type of '{defName}' says with [] that it requires no contexts: load an instance with `use`, or call something that requires none"
+        | _ ->
+            $"{what} the context '{ctxName}', which '{defName}' does not declare: add [{ctxName}] to the type of '{defName}', or load an instance with `use`"
+    Diagnostics.at DiagnosticCodes.UndeclaredContext span message
 
 /// `what` (which ends "requires", say) the context `ctxName` at `span`, in the value `valueName` of a named module,
 /// which cannot have one.
@@ -295,7 +301,7 @@ let private needAmbientContext (state: InferState) (ctxName: Identifier) (what: 
     | DefScope(defName, true) ->
         let contexts = state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
         Ok { state with InferredContexts = state.InferredContexts |> Map.add defName (contexts.Add ctxName) }
-    | DefScope(defName, false) -> Error [ undeclaredContext defName ctxName what span |> ContextFixes.withAddToType state defName ctxName ]
+    | DefScope(defName, false) -> Error [ undeclaredContext state defName ctxName what span |> ContextFixes.withAddToType state defName ctxName ]
     | ValueScope valueName -> Error [ contextInValue valueName ctxName what span ]
 
 /// The name the definition `name` names is declared under: a block import's name (`zero`) stands for the qualified

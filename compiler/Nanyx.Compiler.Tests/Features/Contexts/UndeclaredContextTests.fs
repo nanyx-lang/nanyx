@@ -138,3 +138,34 @@ let ``An imported function's context needs nothing more where the module cannot 
 let ``A def that declares an aliased context can use its members under the alias`` () =
     let main = "module main\nimport nanyx/console as c\ndef g: [c.Console] () -> () = { c.println(\"hi\") }\n@entry\ndef main = { g() }\n"
     Assert.Equal<string list>([], undeclaredContextsWithMod main)
+
+[<Fact>]
+let ``A def whose type says with [] that it requires no contexts cannot call a function that requires one`` () =
+    let source =
+        """
+import nanyx/console
+
+def write: [] string -> () = { s -> println(s) }
+"""
+    let result = Compiler.compile source
+    match result.Diagnostics with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
+        Assert.Equal("println", textAt source (spanOf diagnostic))
+        Assert.Equal(
+            "'println' requires the context 'Console', but the type of 'write' says with [] that it requires no contexts: load an instance with `use`, or call something that requires none",
+            diagnostic.Message)
+        Assert.Empty(diagnostic.Fixes)
+    | other -> failwith $"Expected one diagnostic, got %A{other}"
+
+[<Fact>]
+let ``A def whose type says with [] that it requires no contexts can call a pure function`` () =
+    compileClean
+        """
+def inc: [] int -> int = { x -> x + 1 }
+
+def twice: [] ([] int -> int), int -> int = { f, x -> f(f(x)) }
+
+def three = twice(inc, 1)
+"""
+    |> ignore

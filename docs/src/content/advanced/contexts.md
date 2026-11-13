@@ -37,6 +37,12 @@ def sayHello: [Console] () -> () = {
 }
 ```
 
+A function whose type lists no contexts requires none, so calling `println` in its body is an error (`NYX0211`). To say on purpose that a function must stay pure, write an empty list, `[]`. It means the same as leaving the list out, and the formatter keeps it:
+
+```nanyx
+def double: [] int -> int = { x -> x * 2 }
+```
+
 # Loading a context
 
 Use the `use` keyword to load an instance of a context into scope. Once loaded, any functions that require it can be called:
