@@ -664,7 +664,7 @@ let contextMemberAccess =
 let private workflowKeywordApplication =
     let reservedWords =
         set [ "and"; "as"; "context"; "def"; "do"; "else";"except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
-              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "while"; "with" ]
+              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "typeof"; "use"; "where"; "while"; "with" ]
     let operandStart c = isLetter c || isDigit c || c = '_' || c = '"' || c = '#' || c = '(' || c = '['
     let keyword =
         identifierNoWs >>= fun name ->

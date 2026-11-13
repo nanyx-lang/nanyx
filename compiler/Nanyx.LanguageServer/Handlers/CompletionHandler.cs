@@ -19,11 +19,15 @@ namespace Nanyx.LanguageServer.Handlers;
 /// </summary>
 public sealed class CompletionHandler : CompletionHandlerBase
 {
-    /// <summary>The words the language reserves, offered wherever a name is.</summary>
+    /// <summary>
+    /// The words the language reserves, offered wherever a name is. A workflow's own keywords, such as <c>yield</c> and
+    /// <c>await</c>, are members of its builder, not reserved words.
+    /// </summary>
     private static readonly string[] Keywords =
     [
-        "as", "await", "context", "def", "defer", "do", "else", "except", "export", "for", "if", "import", "in", "match",
-        "module","mut", "private", "rec", "return", "then", "try", "type", "typeof", "use", "while", "with", "yield"
+        "and", "as", "context", "def", "do", "else", "except", "export", "for", "if", "import", "in", "is", "match",
+        "module", "mut", "not", "or", "private", "rec", "return", "then", "try", "type", "typeof", "use", "where", "while",
+        "with"
     ];
 
     private readonly DocumentStore _documents;
