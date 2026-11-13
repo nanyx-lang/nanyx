@@ -410,7 +410,13 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
         named
         |> List.filter (fun (name, _) -> (tryFindTypeDef name state).IsNone)
         |> List.distinctBy fst
-        |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
+        |> List.map (fun (typeName, span) ->
+            let own = typeName.Substring(typeName.LastIndexOf '.' + 1)
+            if own.Length > 1 && System.Char.IsLower own[0] then
+                Diagnostics.at DiagnosticCodes.InvalidTypeName span
+                    $"'{typeName}' is not a type: a type's name starts with a capital letter, and a lowercase name longer than one letter is reserved for associated types"
+            else
+                Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
     let outside =
         named
         |> List.choose (fun (name, span) -> tryFindTypeDef name state |> Option.map (fun info -> name, info, span))
