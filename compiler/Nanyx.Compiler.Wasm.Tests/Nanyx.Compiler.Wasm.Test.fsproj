@@ -35,6 +35,7 @@
     <Compile Include="Features\Contexts\RunUseInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunContextKeyTests.fs" />
     <Compile Include="Features\Contexts\RunContextMemberValueTests.fs" />
+    <Compile Include="Features\Contexts\RunGenericContextMemberTests.fs" />
     <Compile Include="Features\Contexts\RunUseDischargeTests.fs" />
     <Compile Include="Features\Contexts\RunLambdaMemberCaptureTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />

@@ -456,7 +456,7 @@ module Unifier =
 
     /// The ids of the variables in `ty` that stand for the rest of a union or record: `r` in `#some(a) | r` and
     /// in `(name: a, ...r)`; with `ofUnions` false, only a record's.
-    let private restVarIds (ofUnions: bool) (ty: Ty) : Set<int> =
+    let restVarIds (ofUnions: bool) (ty: Ty) : Set<int> =
         let rec collect ty =
             match ty with
             | TyVar _
