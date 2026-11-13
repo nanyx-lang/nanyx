@@ -902,7 +902,17 @@ do
             ((cellParameter |>> Choice1Of2) <|> attempt (bracketedParameter |>> Choice1Of2) <|> attempt patternParameter <|> (parameter |>> Choice1Of2))
             (pstring "," .>> ws)
     let arrow = wsInline >>. pstring "->" .>> wsInline
-    
+    // The lambda's result annotation, `{ (x: int): int -> ... }`, which the `->` after it ends (see
+    // `LambdaResultSyntax`).
+    let resultAnnotation = opt (attempt (wsInline >>. pstring ":" >>. ws >>. parameterType))
+    let withResult (resultType: TypeExpr option) (body: Expression) =
+        match resultType with
+        | Some resultType ->
+            let made kind = Expression.at body.Span kind
+            made (Block [ Statement.at body.Span (DefStatement(false, LambdaResultSyntax.name, Some resultType, body))
+                          Statement.at body.Span (ExprStatement (made (IdentifierExpr LambdaResultSyntax.name))) ])
+        | None -> body
+
     // Lambda body: allow multi-line statement blocks or a single expression
     let blockBody =
         let matchStatement = wsInline >>. spannedStatement (matchExpr |>> ExprStatement) |>> List.singleton
@@ -939,7 +949,7 @@ do
     // body, the lambda's, declares the names the patterns bind. `{ () -> ... }` has no parameters, as `{ ... }` has,
     // but is marked as taking unit: only `{ ... }` ignores a parameter its expected type gives it.
     let lambdaWithParams =
-        pipe2 (paramList .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun parameters body -> parameters, body)
+        pipe3 paramList (resultAnnotation .>> arrow .>> skipMany (skipAnyOf " \t")) blockBody (fun parameters resultType body -> parameters, withResult resultType body)
         >>= fun (parameters, body) ->
             let destructured =
                 parameters

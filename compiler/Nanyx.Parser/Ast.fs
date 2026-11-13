@@ -431,6 +431,20 @@ module UseInstanceSyntax =
             Some (context, members)
         | _ -> None
 
+/// `{ (x: int): int -> body }` (see the functions page): a lambda's result annotation. The lambda's body is a block that
+/// defines its value under the made-up name "__result", typed as written, and gives it back, as
+/// `{ (x: int) -> def r: int = body; r }` would.
+module LambdaResultSyntax =
+    let name = "__result"
+
+    /// The result type and the body as written, of a lambda body whose result is annotated.
+    let (|Annotated|_|) (kind: ExpressionKind) =
+        match kind with
+        | Block [ { Statement.Kind = DefStatement(false, defined, Some resultType, body) }
+                  { Statement.Kind = ExprStatement { Expression.Kind = IdentifierExpr result } } ] when defined = name && result = name ->
+            Some (resultType, body)
+        | _ -> None
+
 /// `f()(args)` (see the functions page): a call on the result of a call is a block that defines that result under the
 /// made-up name "__callee" and calls it, as `def g = f()` then `g(args)` would. `f()()()` nests: the callee of the
 /// last call is the block for `f()()`.
