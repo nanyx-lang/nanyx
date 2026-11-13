@@ -353,7 +353,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let state =
                 let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
                 let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
-                state |> LambdaContexts.recordWritten written |> LambdaContexts.record ofMember
+                state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
             match TypeEnv.tryFind name env with
             | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
             | Some scheme when isMap state scheme.Type -> inferMapLookup env state expr (Expression.from expr (IdentifierExpr name)) spanOpt args
@@ -472,7 +472,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
                             let used = ofVariables @ ofValue |> List.distinct
                             let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current name [ ctx ] calleeSpan
-                            ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.record used next)
+                            ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.recordUnsupplied env used next)
                         // When the callee's type is already a function (an annotated or already-inferred
                         // def), its return type is the call's type directly, so a member access or match on
                         // the result can see it without waiting for the constraint below to be solved.
@@ -679,7 +679,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
             | Error err -> Error err
     | UseIn(value, body) ->
-        match inferExpr env (UseDischarge.mark value state) value with
+        match inferExpr env (state |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
         | Error err -> Error err
         | Ok (typedValue, nextState) ->
             let envWithUse, nextState = useInstance (extendEnvWithRecordFields (FromUse value.Id) nextState env typedValue.Type) nextState value typedValue.Type
@@ -1475,7 +1475,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement value ->
                 if errors.IsEmpty then
-                    match inferExpr env' (UseDischarge.mark value current) value with
+                    match inferExpr env' (current |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
                     | Ok (typedExpr, next) ->
                         let withUse, next = useInstance (extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type) next value typedExpr.Type
                         current <- next

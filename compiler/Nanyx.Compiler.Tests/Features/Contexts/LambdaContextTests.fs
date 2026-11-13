@@ -230,3 +230,33 @@ def main: [Console] () -> () = {
 """
     )
     |> ignore
+[<Fact>]
+let ``A lambda does not require a context that a use inside it supplies`` () =
+    let source =
+        """
+context Log = (log: string -> ())
+
+def greet: [Log] string -> () = { name -> log("hello {name}") }
+
+def nested = {
+  { use Log(log = { m -> () }) in greet("inner") }
+}
+
+def blocky = {
+  {
+    use Log(log = { m -> () })
+    greet("block")
+  }
+}
+
+def before: [Log] () -> ([Log] () -> ()) = {
+  {
+    greet("first")
+    use Log(log = { m -> () })
+    greet("second")
+  }
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "def nested: () -> () -> ()", hoverType source "nested")
+    Assert.Equal(Some "def blocky: () -> () -> ()", hoverType source "blocky")
