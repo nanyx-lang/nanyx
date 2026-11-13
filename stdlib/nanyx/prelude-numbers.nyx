@@ -9,28 +9,36 @@ def digitValue: int -> int = { b ->
   if b >= 48 and b <= 57 then b - 48 else -1
 }
 
---| `acc` followed by the decimal digits of `s` from byte `i` on, or `#invalidInt` at the first byte
-  that is not a digit.
+--| The negative of the number the decimal digits of `s` from byte `i` on write after the digits whose
+  negative is `acc`, or `#invalidInt` at the first byte that is not a digit, or once the number is
+  past the range of `int`. It is read as a negative number because the smallest `int`,
+  -922337203685477580 * 10 - 8, has no positive, and each step is checked before it is taken.
 def parseDigits: string, int, int -> #some(int) | #invalidInt = { s, i, acc ->
   if i >= __nanyx_string_length(s)
     then #some(acc)
     else if digitValue(__nanyx_string_byte_at(s, i)) < 0
       then #invalidInt
-      else parseDigits(s, i + 1, acc * 10 + digitValue(__nanyx_string_byte_at(s, i)))
+      else if acc < -922337203685477580 or
+        acc == -922337203685477580 and digitValue(__nanyx_string_byte_at(s, i)) > 8
+        then #invalidInt
+        else parseDigits(s, i + 1, acc * 10 - digitValue(__nanyx_string_byte_at(s, i)))
 }
 
 --| The integer `s` writes in decimal, with an optional leading `-` or `+`, or `#invalidInt` for
-  anything else (an empty string, a sign alone, spaces, other characters). Overflow is not
-  detected.
+  anything else (an empty string, a sign alone, spaces, other characters, or a number past the range
+  of `int`).
 export def int.fromString: string -> #some(int) | #invalidInt = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
 
   if __nanyx_string_length(s) <= start
     then #invalidInt
-    else if first == 45
-      then mapSome(parseDigits(s, start, 0), { n -> 0 - n })
-      else parseDigits(s, start, 0)
+    else match parseDigits(s, start, 0)
+      | #some(negated) ->
+        if first == 45
+          then #some(negated)
+          else if negated == -922337203685477580 * 10 - 8 then #invalidInt else #some(0 - negated)
+      | #invalidInt -> #invalidInt
 }
 
 --| `n` as a float: `int.toFloat(3)` is 3.0. Every `int` has an exact `float`. To go back, see
