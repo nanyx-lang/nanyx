@@ -8,13 +8,6 @@ open Nanyx.Compiler.Tests.TestSupport
 let private typeOf (name: string) (source: string) =
     Unifier.tyToString ((compileClean (source.ReplaceLineEndings "\n")).Types.[name])
 
-/// The one diagnostic `source` has: its code, its message and the text it is reported at.
-let private onlyDiagnostic (source: string) =
-    let source = source.ReplaceLineEndings "\n"
-    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
-    let span = diagnostic.Span.Value
-    diagnostic.Code, diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
-
 [<Fact>]
 let ``A literal takes the numeric type the code around it expects`` () =
     let source =

@@ -2,18 +2,13 @@ module Nanyx.Compiler.Tests.Features.Maps
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 /// The type of each of `names`, as `source` compiled with no diagnostics gives it.
 let private typesOf (source: string) (names: string list) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types.[name])
-
-/// The one diagnostic `source` has: its code and its message.
-let private onlyDiagnostic (source: string) =
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] -> diagnostic.Code, diagnostic.Message
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Fact>]
 let ``A map literal is a map from its keys' type to its values' type`` () =
@@ -50,13 +45,13 @@ let ``List.groupBy gives a map from each key to its elements`` () =
 
 [<Fact>]
 let ``A lookup with a key of another type is a mismatch`` () =
-    let code, message = onlyDiagnostic "def m = [\"a\" => 1]\ndef found = m(2)\n"
+    let code, message, _ = onlyDiagnostic "def m = [\"a\" => 1]\ndef found = m(2)\n"
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.Contains("string", message)
 
 [<Fact>]
 let ``A key type with no equality is an error at the literal`` () =
-    let code, message = onlyDiagnostic "def m = [{ (x: int) -> x } => 1]\n"
+    let code, message, _ = onlyDiagnostic "def m = [{ (x: int) -> x } => 1]\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'__map' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
 
@@ -74,7 +69,7 @@ def generic: [Eq(k) & Eq(v)] map(k, v), map(k, v) -> bool = { m, n -> m == n }
 
 [<Fact>]
 let ``A map whose values are functions cannot be compared with ==`` () =
-    let code, message = onlyDiagnostic "def same = [1 => { (x: int) -> x }] == [1 => { (x: int) -> x }]\n"
+    let code, message, _ = onlyDiagnostic "def same = [1 => { (x: int) -> x }] == [1 => { (x: int) -> x }]\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'map(int, (int -> int))' cannot be compared with ==: a value it holds is a function, and functions have no equality", message)
 
@@ -86,7 +81,7 @@ let ``A map compared by a local function is an error for now`` () =
   local(["a" => 1], ["a" => 1])
 }
 """
-    let code, message = onlyDiagnostic (local.ReplaceLineEndings "\n")
+    let code, message, _ = onlyDiagnostic (local.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'local' compares values of type 'map(string, int)' with the compiler's own ==, which cannot compare a map or a set yet: a local function, or a function that compares a union's rest, is passed no other", message)
 
@@ -97,10 +92,10 @@ let ``A call generic in the types of the sets it compares is passed the == deriv
 
 [<Fact>]
 let ``Maps and sets cannot be ordered or hashed`` () =
-    let code, message = onlyDiagnostic "def less = [\"a\" => 1] < [\"a\" => 1]\n"
+    let code, message, _ = onlyDiagnostic "def less = [\"a\" => 1] < [\"a\" => 1]\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'map(string, int)' cannot be ordered with <: maps have no order", message)
-    let code, message = onlyDiagnostic "def keyed = [set.fromList([1]) => 1]\n"
+    let code, message, _ = onlyDiagnostic "def keyed = [set.fromList([1]) => 1]\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'__map' hashes values of type 'set(int)', which cannot be hashed: sets have no hash", message)
 
@@ -110,7 +105,7 @@ let ``A key whose type attaches == and no hash is an error at the literal`` () =
         "type $Email = string\n" +
         "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
         "def m = [$Email(\"a\") => 1]\n"
-    let code, message = onlyDiagnostic source
+    let code, message, _ = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'__map' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
 
@@ -125,6 +120,6 @@ let ``set(a) and Set(a) are the same type, made by the Set functions`` () =
 
 [<Fact>]
 let ``An element type with no equality is an error`` () =
-    let code, message = onlyDiagnostic "def s = set.fromList([{ (x: int) -> x }])\n"
+    let code, message, _ = onlyDiagnostic "def s = set.fromList([{ (x: int) -> x }])\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'set.fromList' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)

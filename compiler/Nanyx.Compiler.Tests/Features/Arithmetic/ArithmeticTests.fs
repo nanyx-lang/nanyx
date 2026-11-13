@@ -2,14 +2,7 @@ module Nanyx.Compiler.Tests.Features.Arithmetic
 
 open Xunit
 open NyxCompiler
-
-/// The one diagnostic `source` has: its code, its message and the text it is reported at.
-let private onlyDiagnostic (source: string) =
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] ->
-        let span = diagnostic.Span.Value
-        diagnostic.Code, diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
+open Nanyx.Compiler.Tests.TestSupport
 
 [<Fact>]
 let ``Arithmetic on a type that is not a number is an error naming the operator`` () =

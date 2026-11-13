@@ -35,7 +35,7 @@ let ``Typecheck rejects distinct nominal types`` () =
         "def email: $Email = \"a@b.com\"\n" +
         "def user: $UserId = email"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Type mismatch", message)
 

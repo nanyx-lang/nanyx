@@ -2,12 +2,7 @@ module Nanyx.Compiler.Tests.Features.ImportFixes
 
 open Xunit
 open NyxCompiler
-
-/// The diagnostic `source` compiles to: it must have just one.
-let private onlyDiagnostic (result: CompileResult) =
-    match result.Diagnostics with
-    | [ diagnostic ] -> diagnostic
-    | diagnostics -> failwith $"Expected one diagnostic, got %A{diagnostics}"
+open Nanyx.Compiler.Tests.TestSupport
 
 /// `source` with the edits of `fix` applied.
 let private applied (source: string) (fix: Fix) =
@@ -17,7 +12,7 @@ let private applied (source: string) (fix: Fix) =
 
 /// The title of each fix offered for the one diagnostic `source` compiles to, with the source that fix gives.
 let private fixesFor (source: string) =
-    (onlyDiagnostic (Compiler.compile source)).Fixes |> List.map (fun fix -> fix.Title, applied source fix)
+    (single (Compiler.compile source)).Fixes |> List.map (fun fix -> fix.Title, applied source fix)
 
 [<Fact>]
 let ``A function a standard-library module exports offers its import at the top`` () =
@@ -28,7 +23,7 @@ let ``A function a standard-library module exports offers its import at the top`
 
 [<Fact>]
 let ``The fix is for the unknown function's diagnostic`` () =
-    let diagnostic = onlyDiagnostic (Compiler.compile "def n = abs(1)\n")
+    let diagnostic = single (Compiler.compile "def n = abs(1)\n")
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
     Assert.Equal<string list>([ "Add `import nanyx/math`" ], diagnostic.Fixes |> List.map _.Title)
 
@@ -56,7 +51,7 @@ let ``The import goes after the directives when there are no imports, since dire
 [<Fact>]
 let ``The edit is an insertion where the import goes`` () =
     let source = "import nanyx/console\n\ndef n = abs(1)\n"
-    let edit = (onlyDiagnostic (Compiler.compile source)).Fixes |> List.exactlyOne |> _.Edits |> List.exactlyOne
+    let edit = (single (Compiler.compile source)).Fixes |> List.exactlyOne |> _.Edits |> List.exactlyOne
     Assert.Equal((21, 21, 1, 0, "import nanyx/math\n"), (edit.Span.Start, edit.Span.End, edit.Span.StartLine, edit.Span.StartColumn, edit.NewText))
 
 [<Fact>]
@@ -68,13 +63,13 @@ let ``A name qualified by a module's name offers that module imported under its 
 
 [<Fact>]
 let ``A name no standard-library module exports offers no fix`` () =
-    let diagnostic = onlyDiagnostic (Compiler.compile "def n = frobnicate(1)\n")
+    let diagnostic = single (Compiler.compile "def n = frobnicate(1)\n")
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
     Assert.Empty diagnostic.Fixes
 
 [<Fact>]
 let ``An unknown identifier offers its import too`` () =
-    let diagnostic = onlyDiagnostic (Compiler.compile "def f = abs\n")
+    let diagnostic = single (Compiler.compile "def f = abs\n")
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
     Assert.Equal<string list>([ "Add `import nanyx/math`" ], diagnostic.Fixes |> List.map _.Title)
 

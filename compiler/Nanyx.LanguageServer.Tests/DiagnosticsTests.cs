@@ -36,7 +36,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task Type_error_is_published_with_its_range_on_open()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "type-error.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("type-error.nyx"));
 
         Open(uri, "import nanyx/console\n\nprintln(missing)\n");
 
@@ -53,7 +53,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     public void A_compile_s_diagnostics_are_converted_once()
     {
         // The info view and code actions read them on every move of the cursor.
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "converted-once.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("converted-once.nyx"));
         const string text = "import nanyx/console\n\nprintln(missing)\n";
         var document = new OpenDocument(text, "", NyxCompiler.Compiler.compile(text), null);
 
@@ -77,7 +77,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
                     .Select(item => new Report(
                         "everyDef", item.Span, "a def",
                         FSharpList<Tuple<Parser.Program.SourceSpan, string>>.Empty, FSharpList<Fix>.Empty)))));
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "analyzed.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("analyzed.nyx"));
 
         async Task<Diagnostic> PublishedWith(FSharpMap<string, FSharpOption<Severity>> severities)
         {
@@ -102,7 +102,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task Type_mismatch_is_published_over_the_whole_expression()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "mismatch.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("mismatch.nyx"));
 
         // The `a` in the string is where searching the message's names used to put it.
         Open(uri, "def label = \"a\"\ndef a = 1\ndef b = a + \"x\"\n");
@@ -115,7 +115,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task Related_locations_are_published_as_related_information()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "private.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("private.nyx"));
 
         Open(uri, "module inner =\n  def secret = 1\n  export def open = secret + 1\ndef value = inner.secret\n");
 
@@ -129,34 +129,25 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task Diagnostic_in_an_imported_file_links_to_its_place_there()
     {
-        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
-        {
-            var imported = Path.Combine(directory, "mod.nyx");
-            File.WriteAllText(imported, "module mod\nexport def value = missing\n");
-            var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory, "main.nyx"));
+        var imported = TempPath("mod.nyx");
+        File.WriteAllText(imported, "module mod\nexport def value = missing\n");
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
 
-            Open(uri, "module main\nimport mod\ndef copy = value\n");
+        Open(uri, "module main\nimport mod\ndef copy = value\n");
 
-            var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
-            Assert.Equal("NYX0101", diagnostic.Code?.String);
-            Assert.Contains("mod.nyx", diagnostic.Message.String);
-            Assert.Equal(new Range(0, 0, 0, 0), diagnostic.Range);
-            var related = Assert.Single(diagnostic.RelatedInformation!);
-            Assert.Equal(DocumentUri.FromFileSystemPath(imported), related.Location.Uri);
-            Assert.Equal(new Range(1, 19, 1, 26), related.Location.Range);
-        }
-        finally
-        {
-            Directory.Delete(directory, true);
-        }
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("NYX0101", diagnostic.Code?.String);
+        Assert.Contains("mod.nyx", diagnostic.Message.String);
+        Assert.Equal(new Range(0, 0, 0, 0), diagnostic.Range);
+        var related = Assert.Single(diagnostic.RelatedInformation!);
+        Assert.Equal(DocumentUri.FromFileSystemPath(imported), related.Location.Uri);
+        Assert.Equal(new Range(1, 19, 1, 26), related.Location.Range);
     }
 
     [Fact]
     public async Task Diagnostics_are_cleared_when_the_change_fixes_the_error()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "fixed.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("fixed.nyx"));
 
         Open(uri, "import nanyx/console\n\nprintln(missing)\n");
         var withError = await NextPublished(uri);
@@ -171,7 +162,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task Parse_error_yields_one_diagnostic_instead_of_nothing()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "parse-error.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("parse-error.nyx"));
 
         Open(uri, "def = \n");
 
@@ -195,7 +186,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task Closing_a_document_clears_its_diagnostics()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "closed.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("closed.nyx"));
 
         Open(uri, "def = \n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
@@ -211,7 +202,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     [Fact]
     public async Task A_script_is_linted_as_its_directives_say()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "directives.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("directives.nyx"));
 
         Open(uri, "::linters.default.unusedBindings = \"error\"\n::linters.nope\nexport def f: () -> int = {\n  def unused = 1\n  2\n}\n");
 

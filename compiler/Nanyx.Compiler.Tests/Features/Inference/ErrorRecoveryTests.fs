@@ -12,7 +12,7 @@ let ``Compile reports diagnostics on parse error`` () =
     let source = "def message = "
     let result = Compiler.compile source
     Assert.Equal(CompilationPhase.Parsed, result.Phase)
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.SyntaxError result
 
 [<Fact>]
 let ``Every type mismatch in a module is reported`` () =

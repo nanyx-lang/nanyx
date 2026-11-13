@@ -39,12 +39,27 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     protected Task _serverTask = Task.CompletedTask;
     protected LanguageClient _client = null!;
 
+    /// <summary>The test's own folder for its files, made by the first <see cref="TempPath"/>, deleted after the test.</summary>
+    private string? _tempDirectory;
+
     public Task InitializeAsync() => StartAsync(ServerSettings.Default);
+
+    /// <summary>
+    /// A path in a folder of the test's own, so tests in overlapping runs never share a file. The folders the
+    /// path names are made; the file is not.
+    /// </summary>
+    protected string TempPath(params string[] segments)
+    {
+        _tempDirectory ??= Path.Combine(Path.GetTempPath(), "nanyx-lsp-tests", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine([_tempDirectory, .. segments]);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        return path;
+    }
 
     /// <summary>Replaces the server started for the test with one started with other settings.</summary>
     protected async Task RestartWithAsync(ServerSettings settings)
     {
-        await DisposeAsync();
+        await StopAsync();
         await StartAsync(settings);
     }
 
@@ -79,6 +94,15 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     }
 
     public async Task DisposeAsync()
+    {
+        await StopAsync();
+        if (_tempDirectory is not null && Directory.Exists(_tempDirectory))
+        {
+            Directory.Delete(_tempDirectory, true);
+        }
+    }
+
+    private async Task StopAsync()
     {
         // Shutdown() sends the shutdown request followed by the exit notification.
         await _client.Shutdown();

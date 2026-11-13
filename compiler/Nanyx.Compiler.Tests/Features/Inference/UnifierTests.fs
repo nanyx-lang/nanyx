@@ -86,10 +86,10 @@ let ``Unifier matches unions by set and width`` () =
     let resultOrder = Unifier.unify [ (unionA, unionB, Equal, SourceSpan.none) ]
     let resultWidth = Unifier.unify [ (unionA, unionWide, Equal, SourceSpan.none) ]
     match resultOrder with
-    | Ok _ -> Assert.True(true)
+    | Ok _ -> ()
     | Error (message, _) -> Assert.True(false, message)
     match resultWidth with
-    | Ok _ -> Assert.True(true)
+    | Ok _ -> ()
     | Error (message, _) -> Assert.True(false, message)
 
 [<Fact>]
