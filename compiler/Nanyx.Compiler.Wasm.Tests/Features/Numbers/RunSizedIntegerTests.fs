@@ -52,6 +52,50 @@ def main = {
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "255 7 5000000000 -2\n-9\n1\n2\n4 true\n"
 
+/// A program that holds `I8`, `I16`, `U8` and `U16` values, at the ends of their ranges, in record fields, list cells,
+/// tag payloads and a closure, and reads them back, compares, orders, hashes and copies them there.
+let private narrowStorageSource =
+    """
+import nanyx/console
+
+type Colour = (r: U8, g: U8, b: U8, depth: I16, wide: int)
+
+def widen = { (n: I8) -> I8.toInt(n) }
+
+def sameHash: [Hash(a)] a, a -> bool = { x, y -> hash(x) == hash(y) }
+
+@entry
+def main = {
+  def c: Colour = (r = 255, g = 0, b = 128, depth = -32_768, wide = -1)
+  println("{c.r} {c.g} {c.b} {c.depth} {c.wide}")
+  def brighter = c with b = 7, depth = 32_767
+  println("{brighter.b} {brighter.depth} {c == brighter} {c == c} {sameHash(c, c)}")
+  def bytes: list(I8) = [-128, -1, 0, 127]
+  println(list.map(bytes ++ [5], widen) \list.fold("", { acc, n -> acc ++ "{n} " }))
+  println("{[I8.fromInt(-1)] < [I8.fromInt(1)]} {bytes == bytes}")
+  match #some(U16.fromInt(65_535))
+  | #some(n) -> println("{n}")
+  | #none -> println("none")
+  def level: I16 = -2
+  def shifted = { x: I16 -> x + level }
+  println("{shifted(I16.fromInt(-5))}")
+}
+"""
+
+[<Fact>]
+let ``Run - narrow sized integers keep their values at their own width`` () =
+    runSource (narrowStorageSource.ReplaceLineEndings "\n")
+    |> assertRan "255 0 128 -32768 -1\n7 32767 false true true\n-128 -1 0 127 5 \ntrue true\n65535\n-7\n"
+
+[<Fact>]
+let ``Transpile - narrow sized integers are stored in 1 and 2 bytes`` () =
+    let wat = transpileWat (narrowStorageSource.ReplaceLineEndings "\n")
+    Assert.Contains("i32.store8", wat)
+    Assert.Contains("i32.store16", wat)
+    Assert.Contains("i32.load8_u", wat)
+    Assert.Contains("i32.load8_s", wat)
+    Assert.Contains("i32.load16_s", wat)
+
 [<Fact>]
 let ``Run - a literal is of the sized type the code around it expects`` () =
     let source =
