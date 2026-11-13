@@ -10,6 +10,7 @@
     <Compile Include="Doc.fs" />
     <Compile Include="ImportOrder.fs" />
     <Compile Include="Syntax.fs" />
+    <Compile Include="SourceText.fs" />
     <Compile Include="Formatter.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="FormatCommand.fs" />
