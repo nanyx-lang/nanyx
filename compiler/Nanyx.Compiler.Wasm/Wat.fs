@@ -1,5 +1,5 @@
-/// What the two ways of generating WebAssembly text share (`CodeGen.fs` from the syntax tree, `CoreIrEmit.fs` from the
-/// core IR): how tags are coded and which instruction an operator is. Names are in `Identifiers.fs`.
+/// The WebAssembly text that `CodeGen.fs` and `CoreIrEmit.fs` share: how tags are coded and which instruction an operator
+/// is. Names are in `Identifiers.fs`.
 module internal Transpiler.Wasm.Wat
 
 /// The i32 instruction for an operator on integers and booleans.

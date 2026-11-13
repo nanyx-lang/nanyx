@@ -66,7 +66,7 @@ let tailOffset (element: IrType) = size element
 let listCellSize (element: IrType) = size element + 4
 
 /// Where a tag cell's payload is, after its code.
-let payloadOffset = 4
+let payloadOffset = tagPayloadOffset
 
 /// How many bytes a tag cell with a payload of `payload` takes: its code, then its payload.
 let tagCellSize (payload: IrType) = payloadOffset + size payload

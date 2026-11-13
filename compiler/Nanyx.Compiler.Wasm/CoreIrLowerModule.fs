@@ -45,12 +45,7 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
                 let candidate =
                     if typeArguments.IsEmpty then sanitizeIdentifier defName
                     else
-                        let baseName = specialisationName defName typeArguments
-                        let mutable candidate = baseName
-                        let mutable index = 1
-                        while usedNames.Contains candidate do
-                            candidate <- $"{baseName}_{index}"
-                            index <- index + 1
+                        let candidate = freeName usedNames.Contains (specialisationName defName typeArguments)
                         usedNames.Add candidate |> ignore
                         candidate
                 names.[specKey] <- candidate
@@ -86,35 +81,33 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
                 | Failure reason -> Error (Internal reason, None)
             | result -> result
 
+    // Lowers `key`, then the specialisations and lifted functions it asks for, and those they ask for.
+    let lowerWithRequests (key: SpecKey) (subst: Map<int, Ty>) (how: Lowering) (functionName: string) =
+        lowerOne key subst how functionName
+        while pending.Count > 0 do
+            let key, bindings, how = pending.Dequeue()
+            lowerOne key bindings how names.[key]
+
     let isGeneric (name: string) =
         match input.DefinitionTypes |> Map.tryFind name with
         | Some ty -> not (freeVars ty).IsEmpty
         | None -> false
 
     if not input.TopLevel.IsEmpty then
-        lowerOne (startFunctionName, []) Map.empty AsStart startFunctionName
-        while pending.Count > 0 do
-            let key, bindings, how = pending.Dequeue()
-            lowerOne key bindings how names.[key]
+        lowerWithRequests (startFunctionName, []) Map.empty AsStart startFunctionName
 
     // A generic definition is only lowered at the type arguments it is used at, and a lifted function where a closure
     // over it is made: what it captures is known there.
     for (name, _) in input.Definitions do
         if not (input.Lifted.ContainsKey name) && not (isGeneric name) then
-            lowerOne (name, []) Map.empty AsDefined (sanitizeIdentifier name)
-        while pending.Count > 0 do
-            let key, bindings, how = pending.Dequeue()
-            lowerOne key bindings how names.[key]
+            lowerWithRequests (name, []) Map.empty AsDefined (sanitizeIdentifier name)
 
     // A definition may be generic only because an error left its type open. Unless it was specialised, it is lowered
     // with its type variables defaulted, so that it still exists, and reports its errors when it is called.
     for (name, expr) in input.Definitions do
         let specialised = names.Keys |> Seq.exists (fun (defName, _) -> defName = name)
         if not (input.Lifted.ContainsKey name) && isGeneric name && not specialised && not (deferredMessages expr).IsEmpty then
-            lowerOne (name, []) Map.empty AsDefined (sanitizeIdentifier name)
-            while pending.Count > 0 do
-                let key, bindings, how = pending.Dequeue()
-                lowerOne key bindings how names.[key]
+            lowerWithRequests (name, []) Map.empty AsDefined (sanitizeIdentifier name)
 
     let lowered =
         order
