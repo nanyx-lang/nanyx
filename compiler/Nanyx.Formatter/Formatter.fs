@@ -16,6 +16,7 @@ open Nanyx.Formatter.ExpressionParts
 open Nanyx.Formatter.LambdaPrinter
 open Nanyx.Formatter.BranchPrinter
 open Nanyx.Formatter.OperatorPrinter
+open Nanyx.Formatter.Destructuring
 
 type Options =
     { /// The width lines are laid out to fit.
@@ -25,8 +26,6 @@ type Options =
 
 module Options =
     let defaults = { LineWidth = 100; IndentSize = 2 }
-
-type private Def = bool * Identifier * TypeExpr option * Expression
 
 /// Prints a module as Nanyx source. The layout is plain: one construct per line where the syntax has lines (blocks,
 /// match arms, imports in brackets) and everything else on one line. The parser's sugar (`for`, `a..b`, `with`,
@@ -60,53 +59,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         fun () ->
             last.Value <- last.Value + 1
             last.Value
-
-    /// The runs of top-level items or statements that make up one def each: a destructuring `def (a, b) = value` is
-    /// parsed as a def of a temporary and one def per name, all with the same span. Each run is its first index, its
-    /// length and whether it is a destructuring def.
-    let destructuringRuns (items: (SourceSpan * Def option) list) : (int * int * bool) list =
-        let items = Array.ofList items
-        let rec rootedAt temp (e: Expression) =
-            match e.Kind with
-            | MemberAccess(target, _, _) -> rootedAt temp target
-            | IdentifierExpr n -> n = temp
-            | _ -> false
-        let runs = ResizeArray()
-        let mutable i = 0
-        while i < items.Length do
-            match items[i] with
-            | span, Some(_, temp, None, _) when DestructuringSyntax.isTemp temp ->
-                let mutable j = i + 1
-                let belongs k =
-                    match items[k] with
-                    | otherSpan, Some(_, _, None, value) -> otherSpan = span && rootedAt temp value
-                    | _ -> false
-                while j < items.Length && belongs j do
-                    j <- j + 1
-                runs.Add((i, j - i, true))
-                i <- j
-            | _ ->
-                runs.Add((i, 1, false))
-                i <- i + 1
-        List.ofSeq runs
-
-    let rebuiltPattern (bindings: Def list) =
-        let rec path (e: Expression) acc =
-            match e.Kind with
-            | MemberAccess(target, field, _) -> path target (int field :: acc)
-            | _ -> acc
-        let rec render (entries: (int list * Identifier) list) =
-            let maxIndex = entries |> List.map (fst >> List.head) |> List.fold max 0
-            let element k =
-                match entries |> List.tryFind (fun (p, _) -> p = [ k ]) with
-                | Some(_, n) -> n
-                | None ->
-                    let nested = entries |> List.filter (fun (p, _) -> List.head p = k && p.Length > 1) |> List.map (fun (p, n) -> List.tail p, n)
-                    if nested.IsEmpty then "_" else render nested
-            "(" + String.Join(", ", [ for k in 0..maxIndex -> element k ]) + ")"
-        match bindings |> List.map (fun (_, n, _, value) -> path value [], n) |> List.filter (fun (p, _) -> not p.IsEmpty) with
-        | [] -> "()"
-        | entries -> render entries
 
     let rec expr (position: Position) (e: Expression) : Doc =
         if needsParentheses position e then parens (exprBare full e) else exprBare position e
