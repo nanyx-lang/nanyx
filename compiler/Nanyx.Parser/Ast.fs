@@ -554,6 +554,10 @@ module CellSyntax =
 module WorkflowSyntax =
     let tryKeyword = "try"
     let returnKeyword = "return"
+    /// The member that is the value of a builder's block that ends without `return`.
+    let zeroMember = "zero"
+    /// The member that runs a `for` loop whose body uses a keyword: `for(items, { item, next -> ... }, { _ -> ... })`.
+    let forMember = "for"
 
 module TypeExpr =
     /// A type expression written at `span`.

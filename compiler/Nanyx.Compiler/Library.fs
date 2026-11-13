@@ -446,16 +446,16 @@ module Compiler =
             |> Result.bind (fun (ast, (items, declared, moduleBlocks)) ->
                 match WorkflowDesugaring.desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
-                | desugaredAst, [], zeros, lowered ->
+                | desugaredAst, [], memberPlaces, lowered ->
                     Attributes.applyAttributes desugaredAst
                     |> Result.map (fun (desugared, entryCalls) ->
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let lowered = entryCalls |> Map.fold (fun acc attribute calls -> Map.add attribute calls acc) lowered
-                        ast, declared, moduleBlocks, desugared, zeros, lowered, nameErrors)
+                        ast, declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros, lowered, nameErrors) ->
+        | Result.Ok (ast, declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -476,7 +476,7 @@ module Compiler =
                 { NyxCompiler.Infer.emptyState with
                     Declared = declared
                     ModuleBlocks = moduleBlocks
-                    WorkflowZeros = zeros
+                    WorkflowMemberPlaces = memberPlaces
                     Home = origin
                     StandardLibraryExports = ImportFixes.standardLibraryExportPaths }
             let mutable errors: Diagnostic list = []

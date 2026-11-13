@@ -74,12 +74,13 @@ type internal Scope =
 /// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
 /// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
 /// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then.
+let private valuesOf (input: IrType) =
+    match input, IrType.tupleElements input with
+    | IrUnit, _ -> []
+    | _, Some elements -> List.map snd elements
+    | _, None -> [ input ]
+
 let private adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
-    let valuesOf (input: IrType) =
-        match input, IrType.tupleElements input with
-        | IrUnit, _ -> []
-        | _, Some elements -> List.map snd elements
-        | _, None -> [ input ]
     match givenTy, expectedTy with
     | IrFunction(given, _, _), IrFunction(IrUnit, _, _) -> valuesOf given
     | _, IrFunction(expected, _, _) -> valuesOf expected
@@ -1442,11 +1443,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// The adapter `functionName` that lets a function value of type `givenTy` be called as one of `expectedTy` (see
     /// `Coerce`): it takes an environment that holds the value, then the members `givenTy` requires that `expectedTy`
     /// does not, and its arguments and the members `expectedTy` requires; and calls the value with the arguments and
-    /// the members it requires.
+    /// the members it requires. An argument that is a function is adapted in turn to the type the value takes it at, as
+    /// a continuation that requires no contexts is passed to a function that calls it with its members.
     member private this.Adapter (functionName: string) (givenTy: IrType) (expectedTy: IrType) : Function =
-        let given, result, wanted =
+        let givenInput, given, result, wanted =
             match givenTy, expectedTy with
-            | IrFunction(_, _, given), IrFunction(_, result, wanted) -> given, result, wanted
+            | IrFunction(givenInput, _, given), IrFunction(_, result, wanted) -> givenInput, given, result, wanted
             | _ -> internalError $"an adapter from {IrType.show givenTy} to {IrType.show expectedTy}"
         let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
         let environment = newVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
@@ -1455,9 +1457,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let passed = wanted |> List.map (fun (key, ty) -> key, newVar (contextMemberParameter key) Param ty)
         let scope = { emptyScope with Members = passed |> Map.ofList }
         let adapted = newVar "__adapted" Local givenTy
+        let givenValueTys = valuesOf givenInput
         let rec call (remaining: (ContextMemberKey * IrType) list) (members: Atom list) =
             match remaining with
-            | [] -> mk (CallClosure(adapted, (values |> List.map AVar) @ List.rev members)) result
+            | [] ->
+                let arguments = values |> List.map AVar
+                let call arguments = mk (CallClosure(adapted, arguments @ List.rev members)) result
+                if givenValueTys.Length = values.Length then this.CoerceAll scope arguments givenValueTys call else call arguments
             | (key, ty) :: rest ->
                 match missing |> List.tryFindIndex (fst >> (=) key) with
                 | Some index -> bindTemp (mk (Field(AVar environment, index + 2)) ty) (fun atom -> call rest (atom :: members))

@@ -8,7 +8,8 @@ open NyxCompiler.ExpressionRewrites
 type Unreachable =
     /// Inside a lambda, which runs when it is called, not where it is written.
     | InLambda
-    /// In the body of a `for` loop, which runs once per element.
+    /// In the body of a `for` loop that is not a statement of the block, or that walks several iterables. A loop over
+    /// one iterable that is a statement of its own is run by the builder's `for` member instead.
     | InLoopBody
     /// In the condition or the body of a `while` loop, which run again each time round.
     | InWhileLoop
@@ -35,14 +36,15 @@ module internal IdentifierNames =
 /// lone `else` and the holes of interpolated strings.
 module WorkflowDesugaring =
     /// `module'` desugared, with the errors desugaring found (a workflow keyword the rest of its builder's block cannot
-    /// follow, see `Unreachable`); where each builder block falls off its end without `return`, by the node of the
-    /// made-up read of the builder's `zero` that is the block's value there, the place in the block to report a
-    /// missing `zero` at; and the expressions of the desugared module made up for each node of `module'`, in the order
-    /// they were made: a workflow bind's are the call to its builder's member and the continuation passed to it.
+    /// follow, see `Unreachable`); the place to report a builder that lacks a member the desugaring reads at, by the
+    /// node of that made-up read: where a block falls off its end without `return`, for its `zero`, and a loop whose
+    /// body uses a keyword, for its `for`; and the expressions of the desugared module made up for each node of
+    /// `module'`, in the order they were made: a workflow bind's are the call to its builder's member and the
+    /// continuation passed to it.
     let desugarWithDiagnostics (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan> * Map<NodeId, NodeId list> =
         let isReturnKeyword keyword = keyword = WorkflowSyntax.returnKeyword
         let diagnostics = ResizeArray<Diagnostic>()
-        let mutable zeros: Map<NodeId, SourceSpan> = Map.empty
+        let mutable memberPlaces: Map<NodeId, SourceSpan> = Map.empty
 
         // The expressions made up for each node of `module'`, newest first, and the node of `module'` each one was
         // made for. One made for a made-up node was made for the node that one was.
@@ -80,7 +82,9 @@ module WorkflowDesugaring =
             let where, advice =
                 match place with
                 | InLambda -> "inside a lambda", "move it out of the lambda, or handle the value with a `match` there"
-                | InLoopBody -> "in the body of a `for` loop", "handle the value with a `match` in the loop's body"
+                | InLoopBody ->
+                    "in the body of a `for` loop that is part of an expression or walks several iterables",
+                    "make the loop a statement of its own over one list, or handle the value with a `match` in the loop's body"
                 | InWhileLoop -> "in a `while` loop", "handle the value with a `match` in the loop"
                 | InConditionalPart -> "in a part of an expression that may not run", "make the `if` or `match` it is in a statement of its own"
             diagnostics.Add(
@@ -95,17 +99,20 @@ module WorkflowDesugaring =
         // after, through a local of its own (`def m = proc.try` then `m(args)`), so that each use instantiates the
         // builder's type afresh. Outside a builder's block it is a call to a function named `k`, and an error if `k`
         // is one of the language's own keywords, `try` or `return`, which no function can be named.
+        // A call to the member `keyword` of the builder `builderName`, and the read of that member.
+        let memberCall (source: Expression) (builderName: string) (keyword: string) (args: Expression list) =
+            builderUsed <- true
+            let memberLocal = freshName $"{IdentifierNames.sanitizeIdentifier builderName}_{keyword}"
+            let memberAccess = madeFor source (MemberAccess(madeFor source (IdentifierExpr builderName), keyword, None))
+            memberAccess,
+            madeFor source (
+                Block [
+                    Statement.from source (DefStatement(false, memberLocal, None, memberAccess))
+                    Statement.from source (ExprStatement (madeFor source (FunctionCall(memberLocal, None, args))))
+                ])
         let workflowCall (source: Expression) (keyword: string) (args: Expression list) : Expression =
             match builder with
-            | Some builderName ->
-                builderUsed <- true
-                let memberLocal = freshName $"{IdentifierNames.sanitizeIdentifier builderName}_{keyword}"
-                let memberAccess = madeFor source (MemberAccess(madeFor source (IdentifierExpr builderName), keyword, None))
-                madeFor source (
-                    Block [
-                        Statement.from source (DefStatement(false, memberLocal, None, memberAccess))
-                        Statement.from source (ExprStatement (madeFor source (FunctionCall(memberLocal, None, args))))
-                    ])
+            | Some builderName -> snd (memberCall source builderName keyword args)
             | None ->
                 if keyword = WorkflowSyntax.tryKeyword || isReturnKeyword keyword then
                     let keywordSpan = { source.Span with End = source.Span.Start + keyword.Length }
@@ -128,6 +135,8 @@ module WorkflowDesugaring =
             | WorkflowBindExpr _
             | WorkflowReturnExpr _ -> true
             | Lambda _ -> false
+            // A loop's body is a lambda, but a keyword in it is the block's (see `desugarLoop`).
+            | ForSyntax.Call(iterables, _, _, body) -> List.exists usesKeyword iterables || usesKeyword body
             | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (name.StartsWith "__") -> false
             | FunctionCall(_, _, args)
             | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
@@ -412,9 +421,9 @@ module WorkflowDesugaring =
             let ending () =
                 match builder with
                 | Some builderName ->
-                    let zero = Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr builderName), "zero", None))
+                    let zero = Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr builderName), WorkflowSyntax.zeroMember, None))
                     let place = statements |> List.tryLast |> Option.map _.Span |> Option.defaultValue SourceSpan.none
-                    zeros <- zeros |> Map.add zero.Id place
+                    memberPlaces <- memberPlaces |> Map.add zero.Id place
                     builderUsed <- true
                     zero
                 | None -> Expression.synthetic UnitExpr
@@ -455,6 +464,8 @@ module WorkflowDesugaring =
                     | WorkflowBindExpr(keyword, bindExpr) ->
                         workflowCall expr keyword [desugarExpr bindExpr; madeFor expr (Lambda([("_", None)], restOfChain (), false))]
                     | _ when branchesUseKeywords expr -> desugarBranching expr None rest next
+                    | ForSyntax.Call([ iterable ], loop, parameters, body) when builder.IsSome && usesKeyword body ->
+                        desugarLoop expr iterable loop parameters body rest next
                     | _ when rest.IsEmpty -> next (Some (desugarExpr expr))
                     | _ ->
                         chainBlock statement (restOfChain ()) { statement with Kind = ExprStatement (desugarExpr expr) }
@@ -515,6 +526,30 @@ module WorkflowDesugaring =
                         Statement.from expr (DefStatement(false, restName, None, restFunction))
                         Statement.from expr (ExprStatement { expr with Kind = branched })
                     ])
+        // A `for` loop statement over `iterable` whose body uses a workflow keyword, `expr`, followed by `rest`: a call
+        // to the builder's `for` member with the iterable, the body and the rest of the block up to `next`. The body
+        // takes the loop's element and the rest of the loop, which its chain goes on to where it ends; a `try` that
+        // fails or a `return` in it ends the whole block, as one outside the loop does.
+        //
+        //   proc.for(items, { item, __next_1 -> <body, then __next_1()> }, { <rest of the block> })
+        and desugarLoop (expr: Expression) iterable (loop: Expression) parameters (body: Expression) (rest: Statement list) next =
+            let nextName = freshName "next"
+            let goOn (last: Expression option) =
+                let call = madeFor expr (FunctionCall(nextName, None, []))
+                match last with
+                | Some value -> madeFor value (Block [ Statement.from value (ExprStatement value); Statement.from call (ExprStatement call) ])
+                | None -> call
+            let statements =
+                match body.Kind with
+                | Block statements -> statements
+                | _ -> [ Statement.from body (ExprStatement body) ]
+            let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) goOn
+            let bodyFunction = { loop with Kind = Lambda(parameters @ [ nextName, None ], bodyChain, false) }
+            let restFunction = madeFor expr (Lambda([], desugarChain rest next, false))
+            let builderName = Option.get builder
+            let memberAccess, call = memberCall expr builderName WorkflowSyntax.forMember [ desugarExpr iterable; bodyFunction; restFunction ]
+            memberPlaces <- memberPlaces |> Map.add memberAccess.Id expr.Span
+            call
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =
@@ -532,6 +567,7 @@ module WorkflowDesugaring =
                     | DefStatement(_, _, _, Kind (WorkflowBindExpr _))
                     | ExprStatement (Kind (WorkflowBindExpr _))
                     | ExprStatement (Kind (WorkflowReturnExpr _)) -> true
+                    | ExprStatement (Kind (ForSyntax.Call([ _ ], _, _, body))) -> builder.IsSome && usesKeyword body
                     | DefStatement(_, _, _, value)
                     | ExprStatement value -> branchesUseKeywords value
                     | _ -> false)
@@ -558,7 +594,7 @@ module WorkflowDesugaring =
             lowered
             |> Map.map (fun _ made -> made |> List.filter kept.Contains |> List.rev)
             |> Map.filter (fun _ made -> not made.IsEmpty)
-        desugared, List.ofSeq diagnostics, zeros, lowered
+        desugared, List.ofSeq diagnostics, memberPlaces, lowered
 
     let desugar (module': Module) : Module =
         let desugared, _, _, _ = desugarWithDiagnostics module'

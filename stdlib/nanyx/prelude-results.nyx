@@ -29,8 +29,13 @@ export type Result(a, e) = #some(a) | #error(e)
   `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
   `#some(...) | #nil | #notFound`. (Two failures with the same tag must agree on its payload:
   `#error(#a)` and `#error(#b)` do not combine into `#error(#a | #b)`.)
+
+  A `for` loop over a list whose body uses `try` or `return` is run by `for`, item by item. A
+  `try` that fails in the body ends the whole block with that failure, and a `return` ends it
+  with its value, as they do outside the loop: the items after it, and what follows the loop,
+  don't run.
 export def proc
-  : (try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r)
+  : (try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r, return: a -> #some(a) | r, zero: #some() | r, for: [d] (list(x), ([d] x, ([d] () -> #some(y) | s) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s)
   = (
     try = {
       | #some(value), continue -> continue(value)
@@ -38,7 +43,17 @@ export def proc
     }
     return = { value -> #some(value) }
     zero = #some()
+    for = { items, body, rest -> procFor(items, body, rest) }
   )
+
+--| The loop of `proc`: `body` is given each item of `items` and the rest of the loop, which it
+  calls to go on to the next item; after the last item comes `rest`.
+def procFor
+  : [c] list(a), ([c] a, ([c] () -> #some(b) | r) -> #some(b) | r), ([c] () -> #some(b) | r) -> #some(b) | r
+  = {
+    | [], _, rest -> rest()
+    | [item, ...others], body, rest -> body(item, { procFor(others, body, rest) })
+  }
 
 --| Applies `f` to a success, and leaves an error as it is.
 export def Result.map: [c] Result(a, e), ([c] a -> b) -> Result(b, e) = {

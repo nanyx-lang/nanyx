@@ -93,6 +93,7 @@
     <Compile Include="Features\Tags\RunRecursiveAliasTests.fs" />
     <Compile Include="Features\TailCalls\RunTailCallTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowTests.fs" />
+    <Compile Include="Features\Workflows\RunWorkflowLoopTests.fs" />
     <Compile Include="E2E\E2ETests.fs" />
   </ItemGroup>
 

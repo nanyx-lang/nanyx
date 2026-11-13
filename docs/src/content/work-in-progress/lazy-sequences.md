@@ -166,8 +166,8 @@ as someone wants a `list(list(a))` to be a `seq(seq(a))`.
 - **`seq { ... }`** is a [workflow](../advanced/workflows) whose `yield` keyword produces an element. A keyword
   receives the rest of the block as its continuation, and that continuation becomes the rest of the sequence, so the
   code after a `yield` doesn't run until the next element is pulled. Laziness comes from the workflow rewrite with no
-  extra machinery. Loops inside the block need the builder's `for` member
-  ([#349](https://github.com/nanyx-lang/nanyx/issues/349)).
+  extra machinery. A loop inside the block whose body yields is run by the builder's `for` member (see
+  [Keywords in loops](../advanced/workflows#keywords-in-loops)), so `seq` needs one.
 - **Ranges** give sequences: `1..10` and `0..` are both `seq(int)` values that can be passed around and stored, not
   only walked by a `for` loop.
 

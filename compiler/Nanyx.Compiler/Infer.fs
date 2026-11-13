@@ -1265,12 +1265,17 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             // What failed to check was reported where it failed; reading from it is not another error.
             | None when Unifier.isError baseTy ->
                 Ok (mkTypedExpr expr Unifier.errorType None None None, { next with UnknownTypeUses = expr.Id :: next.UnknownTypeUses })
-            // A builder block that can end without `return` needs the builder's `zero` to be its value there.
-            | None when next.WorkflowZeros.ContainsKey expr.Id ->
+            // A builder block that can end without `return` needs the builder's `zero` to be its value there, and a loop
+            // whose body uses a keyword its `for` to run it.
+            | None when next.WorkflowMemberPlaces.ContainsKey expr.Id ->
                 let builderName = receiver |> Option.defaultValue "builder"
-                let place = next.WorkflowZeros.[expr.Id]
-                [ Diagnostics.at DiagnosticCodes.InvalidWorkflow place $"This `{builderName}` block can end here without `return`, and `{builderName}` has no `zero` to be its value then: end the block with `return`, or give `{builderName}` a `zero`" ]
-                |> Error
+                let place = next.WorkflowMemberPlaces.[expr.Id]
+                let message =
+                    if memberName = WorkflowSyntax.forMember then
+                        $"This loop's body uses a workflow keyword, and `{builderName}` has no `for` to run it: handle the value with a `match` in the loop's body, or give `{builderName}` a `for`"
+                    else
+                        $"This `{builderName}` block can end here without `return`, and `{builderName}` has no `zero` to be its value then: end the block with `return`, or give `{builderName}` a `zero`"
+                Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow place message ]
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
 /// Infers the value named by each `typeof` in `typeExpr`, so that reading the annotation finds their types.

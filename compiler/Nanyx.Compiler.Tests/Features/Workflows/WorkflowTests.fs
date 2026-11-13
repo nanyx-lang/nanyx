@@ -66,8 +66,8 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
             diagnostic.Message
         | other -> failwith $"Expected one diagnostic, got %A{other}"
     Assert.Equal(
-        "`try` is in the body of a `for` loop, so the rest of the `proc` block cannot follow it: handle the value with a `match` in the loop's body",
-        reported "  for xs | x -> halve(try halve(x))")
+        "`try` is in the body of a `for` loop that is part of an expression or walks several iterables, so the rest of the `proc` block cannot follow it: make the loop a statement of its own over one list, or handle the value with a `match` in the loop's body",
+        reported "  for xs, xs | x, y -> halve(try halve(x))")
     Assert.Equal(
         "`try` is inside a lambda, so the rest of the `proc` block cannot follow it: move it out of the lambda, or handle the value with a `match` there",
         reported "  def halves = list.map(xs, { x -> try halve(x) })")
