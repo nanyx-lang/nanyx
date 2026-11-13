@@ -50,6 +50,9 @@ type Storage =
     /// Every way a value is stored, each with its own variant of the storing helpers.
     static member All = [ Word; Wide; Byte; Half ]
 
+/// Where a tag cell's payload is: after its code (see the memory model at `runtimeHelpers`).
+let tagPayloadOffset = 4
+
 /// The names of the WebAssembly helper functions the backend emits on demand (see `runtimeHelpers`).
 module Helpers =
     let alloc = "__nanyx_alloc"

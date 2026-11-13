@@ -193,9 +193,9 @@ type private FunctionEmitter(context: EmitContext) =
                 let payloadKind =
                     payload
                     |> Option.map (function
-                        | IrString -> "string"
-                        | IrInt -> "int"
-                        | _ -> "bool")
+                        | IrString -> Interpolation.StringPayload
+                        | IrInt -> Interpolation.IntPayload
+                        | _ -> Interpolation.BoolPayload)
                 name, tagCode (context.TagId name), payloadKind)
             |> Interpolation.TagHole
 
@@ -652,7 +652,7 @@ type private FunctionEmitter(context: EmitContext) =
             |> String.concat "\n        "
         $"block $__while_done_{depth}\n      loop $__while_next_{depth}\n        {inLoop}\n      end\n    end\n    i32.const 0"
 
-    /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
+    /// Tests each arm's patterns in turn: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (resultTy: IrType) (scrutinees: Var list) (arms: Arm list) : string =
         // The payload of the tag `name` of a value of `ty`, with its type.
         let tagPayloadCode (ty: IrType) (name: string) valueCode =
@@ -679,11 +679,14 @@ type private FunctionEmitter(context: EmitContext) =
             $"{listTailCode ty valueCode index}\n      {CoreIrLayout.load (elementOf ty) 0}"
         let guarded first second =
             $"{first}\n      (if (result i32)\n        (then\n          {second})\n        (else i32.const 0))"
-        let allOf conditions =
-            match conditions |> List.filter (fun condition -> condition <> "i32.const 1") with
+        // 1 when every one of `conditions` is.
+        let conjunction conditions =
+            match conditions with
             | [] -> "i32.const 1"
             | [ single ] -> single
             | many -> (many |> String.concat "\n      ") + String.replicate (many.Length - 1) "\n      i32.and"
+        // The same, leaving out the conditions that always hold.
+        let allOf conditions = conditions |> List.filter (fun condition -> condition <> "i32.const 1") |> conjunction
         // Whether the value `valueCode` leaves, of type `ty`, matches `pattern`: 1 when it does.
         let rec condition (pattern: Pattern) (valueCode: string) (ty: IrType) =
             match pattern with
@@ -760,11 +763,7 @@ type private FunctionEmitter(context: EmitContext) =
             | arm :: rest ->
                 let conditions =
                     List.map2 (fun pattern (scrutinee: Var) -> condition pattern $"local.get ${localName scrutinee}" scrutinee.Type) arm.Patterns scrutinees
-                let allConditions =
-                    match conditions with
-                    | [] -> "i32.const 1"
-                    | [ single ] -> single
-                    | many -> (many |> String.concat "\n      ") + String.replicate (many.Length - 1) "\n      i32.and"
+                let allConditions = conjunction conditions
                 let bindCode =
                     List.map2 (fun pattern (scrutinee: Var) -> binds pattern $"local.get ${localName scrutinee}" scrutinee.Type) arm.Patterns scrutinees
                     |> List.concat
@@ -774,16 +773,14 @@ type private FunctionEmitter(context: EmitContext) =
                 $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {emit rest}\n      )\n    )"
         emit arms
 
-/// The locals a function declares beyond its parameters, in the order `CodeGen.fs` declares them: its own locals, the
-/// scrutinees', what patterns bind, what interpolated strings need (their scratch locals, then their holes by depth),
-/// and its scratch locals.
+/// The locals a function declares beyond its parameters, in this order: its own locals, the scrutinees', what patterns
+/// bind, what interpolated strings need (their scratch locals, then their holes by depth), and its scratch locals.
 let private declaredLocals (body: Expr) : (string * string) list =
     let found = ResizeArray<Var>()
     // The holes of the interpolated strings, by depth and place.
     let holes = ResizeArray<int * int * Var>()
     let interpolates = ref false
-    // The locals of the `for` loops, in the order the old path declares them: each loop's, then those of the loops in
-    // its body.
+    // The locals of the `for` loops: each loop's, then those of the loops in its body.
     let loops = ResizeArray<Var>()
     let rec pattern (p: Pattern) =
         match p with

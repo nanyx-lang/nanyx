@@ -1,5 +1,4 @@
-/// The code for an interpolated string, which both ways of generating WebAssembly text emit (`CodeGen.fs` from the
-/// syntax tree, `CoreIrEmit.fs` from the core IR).
+/// The code for an interpolated string, which `CoreIrEmit.fs` emits.
 ///
 /// Each `{...}` hole is evaluated exactly once, up front, into a hole local (see `holeLocalName`). A length pass then
 /// adds up the string's length from the text and those locals, the string is allocated, and a write pass writes the
@@ -11,6 +10,13 @@ open System.Text
 open Parser.Program
 open Transpiler.Wasm.WasmRuntime
 
+/// What a tag's payload is, which decides how a hole prints it.
+type PayloadKind =
+    /// A string, printed in quotes.
+    | StringPayload
+    | IntPayload
+    | BoolPayload
+
 /// What a hole holds, which decides how it is measured and written.
 type HoleKind =
     | StringHole
@@ -21,9 +27,9 @@ type HoleKind =
     /// A float, formatted to a string when the hole is evaluated (formatting allocates, which the length and write
     /// passes must not), and from then on a string.
     | FloatHole
-    /// A tag: each case the hole's type names, with its code and its payload's kind ("string", "int" or "bool") if it
-    /// has one. It prints as `#name`, or `#name(payload)` with a string payload in quotes.
-    | TagHole of (string * int * string option) list
+    /// A tag: each case the hole's type names, with its code and its payload's kind if it has one. It prints as
+    /// `#name`, or `#name(payload)`.
+    | TagHole of (string * int * PayloadKind option) list
 
 /// The scratch locals a function that builds interpolated strings declares, besides its hole locals.
 let scratchLocals =
@@ -88,35 +94,35 @@ let textWrite (text: string) = staticBytes (Encoding.UTF8.GetBytes text)
 let private stringLength exprCode =
     $"{exprCode}\n    i32.const 4\n    i32.sub\n    i32.load\n    local.get $__interp_len\n    i32.add\n    local.set $__interp_len"
 
-let private tagPayloadLength typeName payloadCode =
-    match typeName with
-    | "string" ->
+let private tagPayloadLength (kind: PayloadKind) payloadCode =
+    match kind with
+    | StringPayload ->
         let quotes = textLength "\"\""
         $"{quotes}\n    {stringLength payloadCode}"
-    | "int" -> intLength payloadCode
-    | _ -> boolLength payloadCode
+    | IntPayload -> intLength payloadCode
+    | BoolPayload -> boolLength payloadCode
 
-let private tagPayloadWrite typeName payloadCode =
-    match typeName with
-    | "string" ->
+let private tagPayloadWrite (kind: PayloadKind) payloadCode =
+    match kind with
+    | StringPayload ->
         let quote = textWrite "\""
         $"{quote}\n    {stringCopy payloadCode}\n    {quote}"
-    | "int" -> intWrite payloadCode
-    | _ -> boolWrite payloadCode
+    | IntPayload -> intWrite payloadCode
+    | BoolPayload -> boolWrite payloadCode
 
 /// Each case of a tag hole in turn: the code picks the tag at run time. Calls `Helpers.tagCode`.
-let private tagHole (valueCode: string) cases (renderText: string -> string) (renderPayload: string -> string -> string) =
+let private tagHole (valueCode: string) cases (renderText: string -> string) (renderPayload: PayloadKind -> string -> string) =
     cases
-    |> List.map (fun (name, code, payloadTypeName) ->
+    |> List.map (fun (name, code, payloadKind) ->
         let body =
-            match payloadTypeName with
+            match payloadKind with
             | None -> renderText $"#{name}"
-            | Some typeName ->
-                let load = if typeName = "int" then "i64.load" else "i32.load"
-                let payloadCode = $"{valueCode}\n    {load} offset=4"
+            | Some kind ->
+                let load = if kind = IntPayload then "i64.load" else "i32.load"
+                let payloadCode = $"{valueCode}\n    {load} offset={tagPayloadOffset}"
                 let opening = renderText ("#" + name + "(")
                 let closing = renderText ")"
-                $"{opening}\n    {renderPayload typeName payloadCode}\n    {closing}"
+                $"{opening}\n    {renderPayload kind payloadCode}\n    {closing}"
         $"{valueCode}\n    call ${Helpers.tagCode}\n    i32.const {code}\n    i32.eq\n    if\n      {body}\n    end")
     |> String.concat "\n    "
 

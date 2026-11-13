@@ -87,12 +87,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// A parameter's or local's name: as written, made unique within the function.
     let uniqueName (name: string) =
-        let baseName = sanitizeIdentifier name
-        let mutable candidate = baseName
-        let mutable index = 1
-        while usedNames.Contains candidate do
-            candidate <- $"{baseName}_{index}"
-            index <- index + 1
+        let candidate = freeName usedNames.Contains (sanitizeIdentifier name)
         usedNames.Add candidate |> ignore
         candidate
 
@@ -520,7 +515,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 this.CoerceAll scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                     this.ContextMembers scope name expr.Id instanceTy Set.empty (fun members ->
                         k (mk (Call(target, atoms @ List.map snd members)) ty)))
-            // The arguments as the callee takes them, in the shapes the old path accepts.
+            // The arguments as the callee takes them.
             match SyntaxTree.flattenCallArgs args with
             | [ Kind (IdentifierExpr record) ] when parameters.Length > 1 && scope.Vars.ContainsKey record ->
                 // A record passed to a function of several parameters: each parameter takes a field.
@@ -1053,8 +1048,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// Lowers `exprs` in order to atoms, binding each value that is not one to a temporary. An operand that stores to a
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
-    /// temporary: it is computed where it is used, as the old path computes it, so nothing computed before it waits on
-    /// the stack across its stores.
+    /// temporary: it is computed where it is used, so nothing computed before it waits on the stack across its stores.
     member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
         let rec go (acc: Atom list) (remaining: Expression list) =
             match remaining with
@@ -1179,12 +1173,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     armVars <- armVars |> Map.add name scrutinee
                     PWildcard
                 | IdentifierPattern name ->
-                    let baseName = $"__payload_{sanitizeIdentifier name}"
-                    let mutable candidate = baseName
-                    let mutable index = 1
-                    while armScope.LivePayloads.Contains candidate || payloads.Contains candidate do
-                        candidate <- $"{baseName}_{index}"
-                        index <- index + 1
+                    let candidate =
+                        $"__payload_{sanitizeIdentifier name}"
+                        |> freeName (fun candidate -> armScope.LivePayloads.Contains candidate || payloads.Contains candidate)
                     payloads <- payloads.Add candidate
                     let var = newVar candidate PatternBound valueTy
                     armVars <- armVars |> Map.add name var
@@ -1237,7 +1228,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         | Some slot -> slot, lowerPattern false scrutinee (snd fields.[slot]) member'
                         | None -> cannot $"a record pattern on the field '{name}', which the value does not have"))
                 // `$Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
-                // local even at the top of an arm, as the old path gives it one.
+                // local even at the top of an arm.
                 | RecordPattern(typeName, [ inner ]) when Names.isNominalTypeName typeName ->
                     lowerPattern false scrutinee valueTy inner
                 // Every part matches the value matched here, so a name at the top of the arm is still the scrutinee.
@@ -1363,7 +1354,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
               Result = result
               Body = body }
         match lowering with
-        | AsStart -> this.StartFunction ()
         | AsDefined ->
             let defTy =
                 match input.ExprTypes |> Map.tryFind expr.Id with
@@ -1459,6 +1449,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
         | Adapting _ -> internalError "an adapter lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"
+        | AsStart -> internalError "the start function lowered as a definition"
 
     /// The adapter `functionName` that lets a function value of type `givenTy` be called as one of `expectedTy` (see
     /// `Coerce`): it takes an environment that holds the value, then the members `givenTy` requires that `expectedTy`

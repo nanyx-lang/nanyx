@@ -50,6 +50,15 @@ let sanitizeIdentifier (name: string) =
     elif Char.IsDigit sanitized.[0] then "_" + sanitized
     else sanitized
 
+/// The first of `baseName`, `baseName_1`, `baseName_2` and so on that `taken` does not hold.
+let freeName (taken: string -> bool) (baseName: string) =
+    let mutable candidate = baseName
+    let mutable index = 1
+    while taken candidate do
+        candidate <- $"{baseName}_{index}"
+        index <- index + 1
+    candidate
+
 /// The name of the parameter a function that requires a context takes one of its members in, by the member's key.
 /// A lambda lifted out of the function captures the member under the same name.
 let contextMemberParameter (key: ContextMemberKey) = $"__ctx_{sanitizeIdentifier (ContextMemberKey.text key)}"
