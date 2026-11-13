@@ -109,11 +109,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let unconstrainedAsUnit (ty: Ty) =
         substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
 
+    /// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
+    let wrappedOf (wrapper: string) =
+        match input.Lifted |> Map.tryFind wrapper with
+        | Some (FunctionWrapper wrapped) -> wrapped
+        | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+
     /// The members of the contexts without parameters in `contexts`, in the order a function value takes them.
-    let membersOf (contexts: Ty list) =
-        match toIrType (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
-        | IrFunction(_, _, members) -> members
-        | _ -> []
+    let membersOf = contextMembersOf input.ContextLayouts
 
     /// The context variables of the definition `name`'s type (`[c]` in `[c] ([c] a -> b), a -> b`), by id.
     let contextVariables (name: string) =
@@ -761,10 +764,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// function's own type, or, for a generic function, at `memberTy`, the type of the context member it is passed as. A
     /// union's rest that nothing closes adds no tags (see `toIrType`): `ToString(#red | r)` is passed at `#red`.
     member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Atom =
-        let wrapped =
-            match input.Lifted |> Map.tryFind wrapper with
-            | Some (FunctionWrapper wrapped) -> wrapped
-            | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+        let wrapped = wrappedOf wrapper
         // A member that requires contexts of its own would need them found where the instance is.
         if input.ContextParameters.ContainsKey wrapped then cannot $"a context member '{wrapped}', which requires contexts"
         let rec withoutOpenRests (ty: Ty) =
@@ -791,10 +791,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// `memberTy`, the type of the context member it is passed as: it captures the members of the contexts the
     /// definition requires, found as for a call to it at the node `at`.
     member private this.DerivedClosure (scope: Scope) (wrapper: string) (at: NodeId) (memberTy: Ty option) (k: Atom -> Expr) : Expr =
-        let wrapped =
-            match input.Lifted |> Map.tryFind wrapper with
-            | Some (FunctionWrapper wrapped) -> wrapped
-            | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+        let wrapped = wrappedOf wrapper
         // A member whose type the context's annotation does not give (`ToString(#x(a) | r)`) is at the definition's own.
         let memberTy =
             match memberTy, input.DefinitionTypes |> Map.tryFind wrapped with
