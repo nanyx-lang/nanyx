@@ -165,9 +165,14 @@ module SyntaxTree =
         @ (children |> List.collect blocksWithin)
         @ (statements |> List.collect ofStatement |> List.collect blocksWithin)
 
-    /// Every name an expression may refer to: identifiers, callees and pipe targets, and for a member access
-    /// `a.b.c` both the dotted name and the member as `.c`, since the backend may call a definition named either
-    /// way. Shadowing is ignored, so this can only over-count.
+    /// The prelude function the binary operator `op` is a call to, when it is one: `__pow` for `**`, and the
+    /// composition functions for `>>` and `<<`.
+    let operatorFunction (op: string) =
+        if op = ArithmeticOperators.power then Some ArithmeticOperators.powerFunction else CompositionOperators.functionFor op
+
+    /// Every name an expression may refer to: identifiers, callees and pipe targets, the prelude function an operator
+    /// is a call to, and for a member access `a.b.c` both the dotted name and the member as `.c`, since the backend
+    /// may call a definition named either way. Shadowing is ignored, so this can only over-count.
     let rec referencedNames (expr: Expression) : string list =
         let rec dottedName (current: Expression) =
             match current.Kind with
@@ -179,7 +184,7 @@ module SyntaxTree =
         | FunctionCall(name, _, args) -> name :: (args |> List.collect referencedNames)
         | Pipe(value, name, _, args) -> name :: referencedNames value @ (args |> List.collect referencedNames)
         | Lambda(_, body, _) -> referencedNames body
-        | BinaryOp(_, _, left, right) -> referencedNames left @ referencedNames right
+        | BinaryOp(op, _, left, right) -> Option.toList (operatorFunction op) @ referencedNames left @ referencedNames right
         | IfExpr(cond, thenExpr, elseExpr) -> referencedNames cond @ referencedNames thenExpr @ referencedNames elseExpr
         | Block statements -> statements |> List.collect referencedNamesInStatement
         | Match(values, arms) ->
