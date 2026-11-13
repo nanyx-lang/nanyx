@@ -14,6 +14,16 @@ let internal extractContextFromTypeExpr (typeExpr: TypeExpr option) : TypeExpr l
     | Some other -> None, Some other
     | None -> None, None
 
+/// `extractContextFromTypeExpr` for the annotation `typeExpr` of a def whose value is `value`. A lambda runs in the
+/// contexts the def writes. Any other value of a function type, such as a function named point-free (`def g: [Console]
+/// int -> () = println`), runs in none: it is a function that requires them, as its type says. The backend reads a
+/// def's contexts with this too.
+let extractDefContexts (typeExpr: TypeExpr option) (value: Expression) : TypeExpr list option * TypeExpr option =
+    match typeExpr, value.Kind with
+    | _, Lambda _ -> extractContextFromTypeExpr typeExpr
+    | Some (Kind (TypeWithContext(_, Kind (TypeFunc _)))), _ -> None, typeExpr
+    | _ -> extractContextFromTypeExpr typeExpr
+
 /// `typeOpt`, a def's annotation, with each operator it requires by its member read as the prelude's context that has
 /// it (see `InlineContexts`), and the errors in how they are written, if any.
 let internal readInlineContexts (state: InferState) (typeOpt: TypeExpr option) : TypeExpr option * Result<unit, Diagnostic list> =

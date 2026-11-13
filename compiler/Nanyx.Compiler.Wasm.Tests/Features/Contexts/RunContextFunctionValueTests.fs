@@ -36,6 +36,27 @@ apply(say, "top")
     runSource source |> assertRan "top\n"
 
 [<Fact>]
+let ``Run - a def that writes its contexts, defined point-free`` () =
+    let source = """import nanyx/console
+
+def main: [Console] () -> () = {
+  def h: [Console] string -> () = println
+  g(3)
+  k(4)
+  h("five")
+}
+
+def g: [Console] int -> () = println
+
+def say: [Console] int -> () = { x -> println(x) }
+
+def k: [Console] int -> () = say
+
+main()
+"""
+    runSource source |> assertRan "3\n4\nfive\n"
+
+[<Fact>]
 let ``Run - println passed as a value at int finds ToString of int`` () =
     let source = """import nanyx/console
 

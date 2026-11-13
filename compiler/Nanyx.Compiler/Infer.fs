@@ -1295,6 +1295,11 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 finalState
                                 |> recordSymbolType symbol declaredTy
                                 |> recordAnnotated symbol expectedDeclaredOpt.IsSome
+                            // A function named point-free finds its instances at the type the def writes.
+                            if expectedDeclaredOpt.IsSome then
+                                match resolveValueInstances envWithRec current expr with
+                                | Ok resolved -> current <- resolved
+                                | Error err -> errors <- err
                             // The rest of a workflow block after an `if` or `match` with keywords in its branches
                             // is bound to a local the branches all go on to. It is one continuation, not a function
                             // to use at different types: generalised, its failures would be closed to those of the

@@ -80,19 +80,15 @@ let private ctxFnName (name: string, _, _) = name
 let private ctxFnSlot (_, slot: int, _) = slot
 let private ctxFnArity (_, _, arity: int) = arity
 
-// Extract context type expressions from a TypeWithContext or TypeContext annotation
-let private extractContextTypes (typeExpr: TypeExpr option) : TypeExpr list =
-    match typeExpr with
-    | Some (Kind (TypeWithContext(contexts, _))) -> contexts
-    | Some (Kind (TypeContext contexts)) -> contexts
-    | _ -> []
+/// The contexts the def whose annotation is `typeExpr` and whose value is `value` requires (see
+/// `Contexts.extractDefContexts`).
+let private extractContextTypes (typeExpr: TypeExpr option) (value: Expression) : TypeExpr list =
+    fst (Contexts.extractDefContexts typeExpr value) |> Option.defaultValue []
 
-// Get the inner type (without context) from a TypeWithContext or TypeContext
-let private unwrapContextType (typeExpr: TypeExpr option) : TypeExpr option =
-    match typeExpr with
-    | Some (Kind (TypeWithContext(_, inner))) -> Some inner
-    | Some (Kind (TypeContext _)) -> None  // TypeContext alone has no inner type
-    | other -> other
+/// The type the def whose annotation is `typeExpr` and whose value is `value` declares, without the contexts it
+/// requires (see `Contexts.extractDefContexts`).
+let private unwrapContextType (typeExpr: TypeExpr option) (value: Expression) : TypeExpr option =
+    snd (Contexts.extractDefContexts typeExpr value)
 
 
 /// The keys of the members of the contexts each definition in `defs` requires, by the definition's name, from the
@@ -100,9 +96,9 @@ let private unwrapContextType (typeExpr: TypeExpr option) : TypeExpr option =
 /// of `ToString(a)`), and for a plain one it is the member's name (`println`).
 let private contextMemberKeys (defs: (string * TypeExpr option * Expression) list) (typeLayouts: Map<string, string list>) : Map<string, ContextMemberKey list> =
     defs
-    |> List.choose (fun (name, typeOpt, _) ->
+    |> List.choose (fun (name, typeOpt, value) ->
         let keys =
-            extractContextTypes typeOpt
+            extractContextTypes typeOpt value
             |> List.collect (fun ctxType ->
                 let baseName =
                     match ctxType.Kind with
@@ -421,8 +417,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // `contextMemberKeys`).
     let functionContextTypes =
         defs
-        |> List.choose (fun (name, typeOpt, _) ->
-            match extractContextTypes typeOpt with
+        |> List.choose (fun (name, typeOpt, value) ->
+            match extractContextTypes typeOpt value with
             | [] -> None
             | contextTypes -> Some (name, contextTypes))
         |> Map.ofList
@@ -523,8 +519,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             (annotation, ty) :: within
         let annotated =
             match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
-            | Some (_, typeOpt, _), Some ty ->
-                match unwrapContextType typeOpt with
+            | Some (_, typeOpt, value), Some ty ->
+                match unwrapContextType typeOpt value with
                 | Some annotation -> matchAnnotation annotation ty
                 | None -> []
             | _ -> []
