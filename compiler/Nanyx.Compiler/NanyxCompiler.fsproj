@@ -73,6 +73,7 @@
     <Compile Include="Contexts.fs" />
     <Compile Include="ContextInstances.fs" />
     <Compile Include="WorkflowRests.fs" />
+    <Compile Include="DefAnnotations.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />

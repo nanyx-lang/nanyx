@@ -201,40 +201,13 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         match item.Kind with
         | Def (ValueDef(isExport, name, typeOpt, expr)) ->
             beginDef ()
-            let typeOpt, inlineContextsRead = readInlineContexts state typeOpt
-            let contextsExist =
-                match fst (extractContextFromTypeExpr typeOpt) with
-                | Some contexts -> ensureContextsExist state name (declarationSpan state DefValue expr) contexts
-                | None -> Ok ()
-            let contextsExist =
-                contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.checkCellTypes state name typeOpt)
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
-            let typeOfsInferred =
-                match typeOpt with
-                | Some typeExpr -> inferTypeOfValues (withoutTopLevel name env) state typeExpr
-                | None -> Ok state
-            match ensureAttachedTypeExists state currentModule name (declarationSpan state DefValue expr) |> Result.bind (fun () -> AttachedOperators.check state name (declarationSpan state DefValue expr)) |> Result.bind (fun () -> ensureTypesExist state (Option.toList typeOpt)) |> Result.bind (fun () -> inlineContextsRead) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+            match DefAnnotations.read inferTypeOfValues currentModule (Ok ()) (withoutTopLevel name env) env state name typeOpt expr with
             | Error err -> abandon isExport name expr err
-            | Ok inferredState ->
-                state <- inferredState
-                let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
-                let envWithCtx, nextState =
-                    match contextOpt with
-                    | Some contexts -> extendEnvWithContexts env state contexts ||> fun env state -> bindInstances env state contexts
-                    | None -> env, state
-                let expectedInputOpt, expectedReturnOpt, expectedDeclaredOpt, nextState2 =
-                    match declaredTypeExprOpt with
-                    | Some declaredExpr ->
-                        let ty, st = typeExprToTy nextState declaredExpr
-                        match Unifier.unalias ty with
-                        | TyFunc(inputTy, returnTy, _) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
-                        | _ -> None, None, Some ty, st
-                    | None -> None, None, None, nextState
-                let effectiveExpectedInputOpt =
-                    match expectedInputOpt with
-                    | Some _ -> expectedInputOpt
-                    | None when expectedDeclaredOpt.IsNone -> tryInferAttachedLambdaInput nextState2 name expr
-                    | None -> None
+            | Ok (annotation, nextState2) ->
+                state <- annotation.Checked
+                let typeOpt, contextOpt, declaredTypeExprOpt, expectedDeclaredOpt, envWithCtx =
+                    annotation.TypeOpt, annotation.Contexts, annotation.DeclaredTypeExpr, annotation.Declared, annotation.Env
                 // The name is already in `env` from the pre-binding pass: at its declared type, or at the
                 // fresh variable recorded in `preboundFreshVars`. Self-recursion sees the declared type as a
                 // monomorphic binding while the body is checked, as before.
@@ -258,10 +231,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         { nextStateWithReq with ContextScope = ValueScope name }
                     | _ -> nextStateWithReq
                 let inferResult =
-                    match expr.Kind with
-                    | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
-                        inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
-                    | _ -> inferExpr envWithRec bodyState expr
+                    inferDefValue envWithRec bodyState expr annotation
                     |> Result.map (fun (typedExpr, next) -> typedExpr, { next with ContextScope = AmbientScope })
                 match inferResult with
                 | Ok (typedExpr, next) ->
@@ -351,14 +321,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Attribute _ -> ()
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
-            match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
-            | [] ->
-                errors <-
-                    errors
-                    @ unnominalScopedContext name modifiers
-                    @ unknownTypesInTypeDef state body parameters
-                    @ unguardedSelfReferences name modifiers body
-            | typeOfErrors -> errors <- errors @ typeOfErrors
+            errors <- errors @ DefAnnotations.typeDefErrors state name modifiers parameters body
             emit (TypedDef (TypedTypeDef(name, modifiers, parameters, body)))
 
     // A def is checked after the defs it uses that are not in a cycle with it, so that it sees their types. Each item
