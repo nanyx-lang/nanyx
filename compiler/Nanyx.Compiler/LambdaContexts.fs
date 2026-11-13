@@ -113,9 +113,11 @@ let recordRunHere (lambdaTy: Ty) (state: InferState) : InferState =
 
 /// `state` with the plain contexts among `written`, contexts as a def's type writes them, recorded as used (see
 /// `recordUnsupplied`). A parameterised context, or one written by its members, is found where the lambda is made. A
-/// scoped context is of a scope of its own (see `WrittenContexts.plain`).
+/// scoped context is of the scope the callee's type has where it is called, so that is where it is recorded (see
+/// `ScopedCalls.enter`).
 let recordWritten (env: TypeEnv) (written: TypeExpr list) (state: InferState) : InferState =
-    let plain, next = WrittenContexts.plain state (TyPrimitive "unit") written
+    let unscoped = written |> List.filter (fun ctx -> match ctx.Kind with TypeName name -> not (WrittenContexts.isScoped state name) | _ -> true)
+    let plain, next = WrittenContexts.plain state (TyPrimitive "unit") unscoped
     recordUnsupplied env plain next
 
 /// The context whose member `name`, as `env` binds it, is: of the ambient instance, of one a def around declares, or of

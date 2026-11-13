@@ -1,7 +1,7 @@
 /// Local mutable cells (see the memory page of the docs): `mut x = e` declares one, `x := e` replaces what it holds, and its
 /// name anywhere else reads it. A cell can only be made in a `memory { ... }` block, the prelude's `memory` with a
-/// block, which is where `$Memory` is. A lambda that uses a cell of the block around it needs `$Memory` too, so it
-/// must not outlive the block.
+/// block, which is where `$Memory` is. A lambda that uses a cell of the block around it needs `$Memory` of the block's
+/// scope too, so it cannot outlive the block (see `ScopedCalls`).
 module internal NyxCompiler.MemoryCells
 
 open Parser.Program
@@ -27,13 +27,10 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
        | Some file, Some contextFile -> file = contextFile
        | _ -> false
 
-/// The environment the arguments of a call to `name` are checked in: one where `$Memory` is, of a scope of its own, for
-/// the prelude's `memory`.
-let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) : TypeEnv * InferState =
-    if isMemoryCall env state name then
-        let scope, next = freshVar state
-        TypeEnv.extend scopeKey (TypeEnv.mono scope) env, next
-    else env, state
+/// The environment the arguments of a call to `name` are checked in, where the call supplies `$Memory` of `scope`: one
+/// where cells can be made, of that scope, for the prelude's `memory`.
+let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty) : TypeEnv =
+    if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono scope) env else env
 
 /// The scope of the cell `name`, as `env` binds it, if it is one.
 let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty option =
@@ -85,34 +82,3 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
 /// The code of a type mismatch found at `span`: an assignment's own when it is one of the module's `:=`s.
 let mismatchCode (state: InferState) (span: SourceSpan) =
     if state.CellAssignments.Contains span then DiagnosticCodes.CellAssignmentMismatch else DiagnosticCodes.TypeMismatch
-
-/// The error, if any, for the `memory` block at `call`, whose block is `block`: its result must not be, or hold, a
-/// lambda that uses one of its cells, which would let the cell outlive the block. A lambda uses a cell when it names
-/// one from outside itself, or a local function that uses one (see `EscapingLambdas.tryFind`).
-let checkEscape (state: InferState) (call: Expression) (block: Expression) : Diagnostic list =
-    match block.Kind with
-    | Lambda([], body, _) ->
-        let result = EscapingLambdas.resultOf body
-        let declaredWithin (span: SourceSpan) (symbol: SymbolId) =
-            state.Symbols |> Map.tryFind symbol |> Option.exists (fun declared -> SourceSpan.contains span declared.Declaration)
-        let usesCell (lambda: Expression) (node: Expression) =
-            match state.References |> Map.tryFind node.Id with
-            | Some symbol -> state.Cells.ContainsKey symbol && not (declaredWithin lambda.Span symbol)
-            | None -> false
-        match EscapingLambdas.tryFind state usesCell (SyntaxTree.blocksWithin body) result with
-        | Some _ ->
-            let message =
-                $"The result of this `{memoryFunction}` block holds a lambda that uses its cells, which needs '{context}' and so cannot leave the block: return what the cells hold instead"
-            [ Diagnostics.at DiagnosticCodes.CellEscapesMemory result.Span message |> Diagnostics.withRelated call.Span "the block" ]
-        | None -> []
-    | _ -> []
-
-/// `state` once the call `call` to `name` is checked, or the error if it is a `memory` block whose cells escape it
-/// (see `checkEscape`).
-let checkCall (env: TypeEnv) (call: Expression) (name: Identifier) (state: InferState) : Result<InferState, Diagnostic list> =
-    match call.Kind with
-    | FunctionCall(_, _, [ block ]) when isMemoryCall env state name ->
-        match checkEscape state call block with
-        | [] -> Ok state
-        | errors -> Error errors
-    | _ -> Ok state

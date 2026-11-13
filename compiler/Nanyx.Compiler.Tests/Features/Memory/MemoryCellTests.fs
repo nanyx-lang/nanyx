@@ -173,8 +173,8 @@ def f = memory {
   { x := x + 1 }
 }
 """
-    Assert.Equal(DiagnosticCodes.CellEscapesMemory.Code, code)
-    Assert.Equal("{ x := x + 1 }", text)
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("x", text)
 
 [<Fact>]
 let ``Nor can a local function that uses one, or a structure that holds it`` () =
@@ -185,7 +185,7 @@ def f = memory {
   next
 }
 """
-    Assert.Equal(DiagnosticCodes.CellEscapesMemory.Code, fst (singleError named))
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, fst (singleError named))
     let held = """
 def f = memory {
   mut x = 0
@@ -193,7 +193,7 @@ def f = memory {
   (count = 1, next = next)
 }
 """
-    Assert.Equal(DiagnosticCodes.CellEscapesMemory.Code, fst (singleError held))
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, fst (singleError held))
 
 [<Fact>]
 let ``A lambda that only uses what a cell holds may leave the block`` () =

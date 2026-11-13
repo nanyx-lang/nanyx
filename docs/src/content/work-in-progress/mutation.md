@@ -30,10 +30,8 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
   scope of its block, and it is not generalised. `:=` checks that its target resolves to a cell, and adds an
   assignability constraint reported at the `:=`, whose mismatches get their own code. Each read or change of a cell
   makes the lambda around it require `$Memory` of the cell's scope (`MemoryCells.recordUse`), so a lambda over a cell
-  says so in its type. Requiring `$Memory` doesn't keep it in the block, since every block supplies one, so
-  escape is still checked syntactically: the block's result, if its type holds a function, must not hold a lambda that
-  names a cell from outside itself, or a local function that does. Scoped contexts replace that check
-  ([Context escape](./context-escape#scoped-contexts)).
+  says so in its type. `$Memory` is scoped, so the block's result must not require the block's own `$Memory`
+  (`ScopedCalls`, NYX0233; see [Context escape](./context-escape#scoped-contexts)).
 - **Backend** (`ExpressionRewrites.writeCells`, then `CoreIrLower.fs`). Once inference has resolved names, each read of
   a cell becomes a call to a `CellSyntax` built-in, and a cell some lambda other than a `for` body captures becomes a
   box: a record of one field, made with `box`, read with `unbox` and written with `setBox`. The core IR has two nodes

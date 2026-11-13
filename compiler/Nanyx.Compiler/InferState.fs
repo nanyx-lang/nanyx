@@ -281,6 +281,11 @@ type InferState =
             /// The local defs that are cells, made with `mut`, each with the scope of the `memory` block it belongs to (see
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
+            /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
+            /// starts, and the scopes the signatures around the call write (see `ScopedCalls`).
+            SupplyingCalls: Map<NodeId, (string * Ty) list * Ty list>;
+            /// The scopes of the calls whose arguments are being checked, innermost first (see `ScopedCalls`).
+            OpenScopes: Ty list;
             /// Where each `:=` is written: a type mismatch there is the assignment's (see `MemoryCells.mismatchCode`).
             CellAssignments: Set<SourceSpan>;
             /// The contexts each lambda being inferred uses so far, the innermost first (see `LambdaContexts`).
@@ -369,6 +374,8 @@ let emptyState =
             DerivedDefs = [];
             DerivedCalls = Map.empty;
             Cells = Map.empty;
+            SupplyingCalls = Map.empty;
+            OpenScopes = [];
             CellAssignments = Set.empty;
             LambdaContexts = [];
             BodyLambdas = Set.empty;
