@@ -19,7 +19,7 @@ let private nonTailRecursionIn (moduleName: string) (source: string) =
 [<Fact>]
 let ``The linter finds no recursion outside tail position in the standard library`` () =
     let modules = StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
-    Assert.Equal<string list>([ "prelude"; "console"; "math"; "result"; "text" ], modules)
+    Assert.Equal<string list>([ "prelude"; "console"; "console.host"; "host.runtime"; "math"; "result"; "text" ], modules)
     for moduleName in modules do
         Assert.Equal<(string * int) list>([], nonTailRecursionIn moduleName (StandardLibrary.tryLoadSource moduleName).Value)
 

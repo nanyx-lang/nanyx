@@ -93,7 +93,7 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 - A minor or patch release cannot break a dependant's build. The publish step checks this from the package's
   exported types, as Elm does, rather than trusting the author's version number.
 - A dependency can only do what the contexts it requires allow, and the program's host decides which contexts
-  exist. Packaging keeps that guarantee intact: no package gets `$HostRuntime` unless it is the chosen host.
+  exist. Packaging keeps that guarantee intact: no package gets `HostRuntime` unless it is the chosen host.
 - Running the package system costs close to nothing until the ecosystem is large, and can move to bigger
   infrastructure later without changing the client or invalidating existing lockfiles.
 

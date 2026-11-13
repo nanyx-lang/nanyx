@@ -57,6 +57,7 @@
     <Compile Include="Features\Functions\RunTupleArgumentTests.fs" />
     <Compile Include="Features\Functions\RunUnitFunctionValueTests.fs" />
     <Compile Include="Features\Hashing\RunHashTests.fs" />
+    <Compile Include="Features\Hosts\RunConsoleHostTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />

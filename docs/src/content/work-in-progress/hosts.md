@@ -58,7 +58,7 @@ use = "nanyx.http/host"
 port = 3000
 ```
 
-Keys other than `use` are host configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx/console/host`. Until packages resolve, the hosts that can be chosen are the standard library's, such as `nanyx/console/host`.
+Keys other than `use` are host configuration, passed to the host at startup. The CLI can override the host, for example `nanyx run --host nanyx/console.host`. Until packages resolve, the hosts that can be chosen are the standard library's, such as `nanyx/console.host`.
 
 Loose script files, which run top-level statements without a manifest, always run under `ConsoleHost`.
 
@@ -112,20 +112,34 @@ This gives capability security as a side effect. A host that doesn't provide `Fi
 
 A host is mostly ordinary Nanyx. Its core is a function that takes the program's entry and runs it. The entry's type is the host's parameter type, so checking the entry against the host is ordinary type checking:
 
-```nanyx
-module nanyx/console/host
+```nanyx fragment
+module console.host
 
-export def run
-  : [$HostRuntime] ([Console & Env] () -> ()) -> ()
-  = { entry ->
-    use Console(write = runtime.writeStdout, writeError = runtime.writeStderr, ...)
-    use Env(args = runtime.args, variable = runtime.variable, exit = runtime.exit)
+import (
+  nanyx/console as (Console, IoError)
+  nanyx/host.runtime
+)
 
-    entry()
-  }
+export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
+  use Console(
+    write = writeStdout
+    writeError = writeStderr
+    readLine = { _ -> readLineAfter("") }
+    readToEnd = { _ -> #some(readToEndAfter("")) }
+    flush = { _ -> () }
+  )
+
+  ignore(entry())
+}
 ```
 
-`$HostRuntime` is a [nominal context](../advanced/nominal-and-protected-types) that exposes the privileged layer: raw IO, sockets, the process and, on the WASM backend, the module's imports. The toolchain provides `$HostRuntime` only to the module named as the host. Libraries can't require it, so they can't bypass the capabilities the host chose to provide. (Once [protected types](./protected-types) land, it is written `HostRuntime`, declared `protected`.)
+That is `nanyx/console.host` as it is built (`stdlib/nanyx/console.host.nyx`), less the helpers that read a line. Once
+`Env` is added, `run` will `use` it as well, built on more of `HostRuntime`.
+
+`HostRuntime` is a context declared `protected` (see [nominal and protected types](../advanced/nominal-and-protected-types))
+that exposes the privileged layer: raw IO, sockets, the process and, on the WASM backend, the module's imports. The
+toolchain provides `HostRuntime` only to the module named as the host. Libraries can't require it, so they can't bypass
+the capabilities the host chose to provide.
 
 A host takes one entry shape. Arguments and the exit code, which would otherwise call for a second shape, come through a context instead.
 
@@ -211,16 +225,19 @@ The composite host runs each part under the right sub-host and coordinates start
 - **Hosts whose platform can't block are Elm-style for now.** The browser host's entry is `init`, `update` and `view`,
   and effects such as fetching and timers come back to `update` as messages. Nothing in the language suspends, so this
   can be built without async. Async is a separate design, for later.
-- **Hosts live in the standard library until packages resolve**: `nanyx/console/host` first, then
-  `nanyx/browser/host`. They are chosen with a `[host]` table in the manifest or `--host` on the CLI.
+- **Hosts live in the standard library until packages resolve**: `nanyx/console.host` first, then
+  `nanyx/browser.host`. They are chosen with a `[host]` table in the manifest or `--host` on the CLI. (The issues
+  wrote `nanyx/console/host`; a module path has one `/`, between the package and the module, so the module is
+  `console.host`.)
 - **ConsoleHost written in Nanyx comes first.** It replaces the compiler's hard-coded entry wiring with no change for
   users, and builds what every other host needs.
 
 # Plan
 
-1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): `nanyx/console/host`'s `run`
+1. **ConsoleHost in Nanyx** ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)): `nanyx/console.host`'s `run`
    takes the entry, the compiler checks `@entry` against it and starts the program with `run(entry)`, and
-   `HostRuntime` is provided only to the host.
+   `HostRuntime` is provided only to the host. Built, but for an entry that doesn't write `Console` in its type: see
+   [What's built](#whats-built).
 2. **`Env`** ([#1246](https://github.com/nanyx-lang/nanyx/issues/1246)): arguments, environment variables and the
    exit code, provided by ConsoleHost.
 3. **Choosing a host** ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)): `[host]` in the manifest and
@@ -232,6 +249,32 @@ The composite host runs each part under the right sub-host and coordinates start
 6. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
 7. **The test host**, with [Testing](./testing).
+
+# What's built
+
+- **The host is a module the compiler resolves.** `Hosts.fs` describes each host the standard library ships (`Host`:
+  the module, and the modules of the contexts it provides) and names the default, `Hosts.console`. Choosing another
+  host ([#1247](https://github.com/nanyx-lang/nanyx/issues/1247)) is choosing another `Host` there.
+- **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
+  (`__host`), so that it can't clash with the program's names, imports the modules of the contexts the host provides
+  (`nanyx/console`, so that `println` is in scope), and appends `__host.run(main)` to the module as its start. The
+  entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the host:
+  `NYX0237`, reported at `@entry`, with the type the host expects and the one the entry has.
+- **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, because an entry
+  whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
+- **`HostRuntime`** is declared in `nanyx/host.runtime`, with an instance made of the runtime's intrinsics, so it is an
+  ambient context wherever that module is imported. `Hosts.runtimeErrors` reports `NYX0238` in any module but a host
+  and `nanyx/host.runtime`: at each top-level def whose type requires it, written or inferred, and at each top-level
+  call it is provided to, other than the call of `run` that `@entry` makes. A module that calls a host's `run` itself
+  needs `HostRuntime` for it, so that is an error too.
+- **Where the entry's `Console` comes from.** An entry that writes `[Console]` in its type is passed the members of the
+  `Console` that `run` `use`s, so it reads and writes through the host. An entry that doesn't write its type, which is
+  most programs, still infers `Console` as an ambient context, and the backend calls `nanyx/console`'s definitions for
+  it directly, as before: inference only infers ambient contexts for a def that doesn't write its type, and the
+  backend never passes an ambient context. The output is the same either way. Making the host's `Console` reach those
+  entries too is the open question on [#1245](https://github.com/nanyx-lang/nanyx/issues/1245).
+- **Scripts** (files without `@entry`) still run their top level in `nanyx/console`'s ambient instance. Until they
+  run under the host, `nanyx/console.host` repeats `nanyx/console`'s line reading over `HostRuntime.readStdinByte`.
 
 # Open questions
 

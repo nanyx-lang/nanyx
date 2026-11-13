@@ -113,8 +113,8 @@ How it is produced:
 - **Desugaring keeps provenance** (done in [#99](https://github.com/nanyx-lang/nanyx/issues/99)). Every node
   `desugar` and `applyAttributes` synthesize gets the span of the syntax it replaced (`Expression.from`), and
   `Lowered` records which expressions were made for which node as written, in the order they were made
-  (`WorkflowDesugaring.desugarWithDiagnostics`, and the call `applyAttributes` makes for `@entry`, by the attribute's
-  node). One made for a made-up node counts as made for the node that one was. Linters walk `Syntax`; the type of a
+  (`WorkflowDesugaring.desugarWithDiagnostics`, and the call of the host's `run` that `applyAttributes` makes for
+  `@entry`, with the entry point passed to it, by the attribute's node). One made for a made-up node counts as made for the node that one was. Linters walk `Syntax`; the type of a
   workflow bind is found through `Lowered`: its first expression is the continuation, which takes the bound value.
   `CompileResult.Lowered` has the same table. Desugaring an `except` (`Except.asMatch`) records nothing yet. This is
   much cheaper than teaching inference to check surface syntax directly, and it can be replaced by that later

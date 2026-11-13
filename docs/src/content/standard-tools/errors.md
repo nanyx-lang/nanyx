@@ -921,6 +921,36 @@ def greet: [Log & ToString(a)] string -> () = { name -> log("hello {name}") }  -
 
 To fix it, remove the context, or give a parameter the type it is on.
 
+# NYX0237: Entry point does not fit the host
+
+The definition marked `@entry` does not have the type its [host](../work-in-progress/hosts) runs. The host is a
+function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
+under `nanyx/console.host`, whose entry point takes nothing and may require `Console`.
+
+```nanyx
+module main
+
+@entry
+def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: The entry point 'main' doesn't fit the host 'nanyx/console.host' ...
+```
+
+The error is reported at `@entry`, and shows the type the host expects and the type the entry point has. To fix it,
+give the entry point the shape the host expects: for a command-line program, a function that takes nothing.
+
+# NYX0238: HostRuntime required outside a host
+
+A definition or call requires `HostRuntime`, the context a host is written on. The toolchain provides it only to the
+host, the module that runs the program's entry point, so that a library can only reach the outside world through the
+contexts the host provides.
+
+```nanyx
+import nanyx/host.runtime
+
+def shout = { text -> writeStdout(text ++ "!") }  -- error NYX0238: 'shout' requires the context 'HostRuntime', which only a host may require. ...
+```
+
+To fix it, require the context the host provides instead, such as `Console`, and call its members.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

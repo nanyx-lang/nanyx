@@ -61,6 +61,7 @@
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Hashing\HashTests.fs" />
+    <Compile Include="Features\Hosts\ConsoleHostTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
     <Compile Include="Features\Imports\ImportFixTests.fs" />
     <Compile Include="Features\Imports\NameSuggestionTests.fs" />

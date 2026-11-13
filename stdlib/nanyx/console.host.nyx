@@ -1,0 +1,50 @@
+--| The console host: it runs a command-line program's entry point.
+
+  A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
+  [`Console`], built on the [`HostRuntime`] the toolchain provides to the host.
+module console.host
+
+import (
+  nanyx/console as (Console, IoError)
+  nanyx/host.runtime
+)
+
+--| `line` without a carriage return at its end.
+def withoutCarriageReturn: string -> string = { line ->
+  def length = __nanyx_string_length(line)
+
+  if length > 0 and __nanyx_string_byte_at(line, length - 1) == 13
+    then __nanyx_string_slice(line, 0, length - 1)
+    else line
+}
+
+--| `acc` followed by the rest of the current line of standard input.
+def readLineAfter: [HostRuntime] string -> #some(string) | #error(IoError) = { acc ->
+  def byte = readStdinByte()
+
+  if byte < 0
+    then (if __nanyx_string_length(acc) == 0 then #error(#endOfInput) else #some(acc))
+    else if byte == 10
+      then #some(withoutCarriageReturn(acc))
+      else readLineAfter(acc ++ __nanyx_string_from_byte(byte))
+}
+
+--| `acc` followed by everything left on standard input.
+def readToEndAfter: [HostRuntime] string -> string = { acc ->
+  def byte = readStdinByte()
+  if byte < 0 then acc else readToEndAfter(acc ++ __nanyx_string_from_byte(byte))
+}
+
+--| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
+  streams. What `entry` returns is ignored.
+export def run: [HostRuntime] ([Console] () -> a) -> () = { entry ->
+  use Console(
+    write = writeStdout
+    writeError = writeStderr
+    readLine = { _ -> readLineAfter("") }
+    readToEnd = { _ -> #some(readToEndAfter("")) }
+    flush = { _ -> () }
+  )
+
+  ignore(entry())
+}

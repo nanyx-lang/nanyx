@@ -437,15 +437,15 @@ module Compiler =
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
                 | desugaredAst, [], memberPlaces, lowered ->
                     Attributes.applyAttributes desugaredAst
-                    |> Result.map (fun (desugared, entryCalls) ->
+                    |> Result.map (fun (desugared, entries) ->
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
-                        let lowered = entryCalls |> Map.fold (fun acc attribute calls -> Map.add attribute calls acc) lowered
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors)
+                        let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
+                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, nameErrors) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -560,16 +560,35 @@ module Compiler =
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.
+                // A mismatch where an entry point is passed to its host's `run` is the entry point not fitting the host.
+                let entryMismatch (entry: EntryPoint) =
+                    let expected =
+                        TypeEnv.tryFind $"{Hosts.importAlias}.{Hosts.runFunction}" env
+                        |> Option.bind (fun scheme -> match Unifier.unalias scheme.Type with TyFunc(parameter, _, _) -> Some parameter | _ -> None)
+                    Hosts.entryMismatch entry (types |> Map.tryFind entry.Name |> Option.map (Unifier.apply subst)) expected
                 let mismatchErrors =
                     mismatches
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (message, span, kind) ->
-                        let code =
-                            match kind with
-                            | ContextsNotAllowed -> DiagnosticCodes.ContextsNotAllowed
-                            | TypesDiffer -> MemoryCells.mismatchCode state span
-                        Diagnostics.at code span message)
-                let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                        match entries |> List.tryFind (fun entry -> entry.Argument = span) with
+                        | Some entry -> entryMismatch entry
+                        | None ->
+                            let code =
+                                match kind with
+                                | ContextsNotAllowed -> DiagnosticCodes.ContextsNotAllowed
+                                | TypesDiffer -> MemoryCells.mismatchCode state span
+                            Diagnostics.at code span message)
+                    |> List.distinct
+                // The module's own top-level defs.
+                let ownTopLevel =
+                    state.Scopes
+                    |> Map.keys
+                    |> Seq.map (fun id -> state.Symbols.[id])
+                    |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
+                    |> List.ofSeq
+                let contextTypes = RequiredContexts.ofDefs state subst ownTopLevel
+                let runtimeErrors = Hosts.runtimeErrors origin entries state.Symbols contextTypes state.ContextProviders desugared
+                let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
@@ -594,12 +613,6 @@ module Compiler =
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.
-                let ownTopLevel =
-                    state.Scopes
-                    |> Map.keys
-                    |> Seq.map (fun id -> state.Symbols.[id])
-                    |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
-                    |> List.ofSeq
                 let declaredHere = ownTopLevel |> List.map (fun symbol -> symbol.Name) |> Set.ofList
                 let imported =
                     env
@@ -643,7 +656,7 @@ module Compiler =
                           UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
                           // Resolved for the root module only, by `compileChecked`.
                           InferredContextTypes = state.InferredContextTypes
-                          ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
+                          ContextTypes = contextTypes
                           ImportedContextTypes = merged.ImportedContextTypes
                           AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
                           AmbientMembers = ambientMembers state merged.CarriedAmbientMembers

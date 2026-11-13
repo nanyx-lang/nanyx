@@ -8,18 +8,19 @@ open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
 [<Fact>]
-let ``Entry attribute appends a call to the entry point`` () =
+let ``Entry attribute appends a call of the host's run with the entry point`` () =
     let source =
-        "module main\n" +
-        "@entry\n" +
-        "def main = {\n" +
-        "  println(\"Hello, World!\")\n" +
-        "}\n"
-    let result = Compiler.compile source
+        """module main
+@entry
+def main = {
+  println("Hello, World!")
+}
+"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let entryCalls =
         result.Typed.Value.Module
-        |> List.filter (function Kind (Expr (Kind (FunctionCall("main", _, [])))) -> true | _ -> false)
+        |> List.filter (function Kind (Expr (Kind (FunctionCall("__host.run", _, [ Kind (IdentifierExpr "main") ])))) -> true | _ -> false)
     Assert.Equal(1, entryCalls.Length)
     let hasAttribute = result.Typed.Value.Module |> List.exists (function Kind (Attribute _) -> true | _ -> false)
     Assert.False(hasAttribute)
