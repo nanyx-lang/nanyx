@@ -71,6 +71,7 @@
     <Compile Include="Features\Numbers\RunIntTests.fs" />
     <Compile Include="Features\Numbers\RunSizedIntegerTests.fs" />
     <Compile Include="Features\Numbers\RunF32Tests.fs" />
+    <Compile Include="Features\Numbers\RunSizedFromStringTests.fs" />
     <Compile Include="Features\Operators\RunOperatorTests.fs" />
     <Compile Include="Features\Operators\RunCompositionTests.fs" />
     <Compile Include="Features\Operators\RunCoalesceTests.fs" />

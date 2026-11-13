@@ -152,6 +152,9 @@ bool.fromString: string -> #some(bool) | #invalidBool
 
 `int.fromString` reads a decimal integer with an optional leading `-` or `+`, from `-9223372036854775808` to `9223372036854775807`; a number past that range, such as `"99999999999999999999"`, is `#invalidInt`, as other text it cannot read is. `float.fromString` reads an optional sign, digits with an optional `.` among them, and an optional exponent, `e` or `E` and an integer, so `"1.5"`, `"-0.25"`, `"42"`, `".5"`, `"5."` and `"1.0e-7"` are all read; it also reads `NaN`, `Infinity` and `-Infinity` as `float.toString` writes them. `""`, `"-"`, `"abc"`, `"1.2.3"` and `" 1.5"` are `#invalidFloat`. `bool.fromString` reads `true` or `false`, exactly as `bool.toString` writes them, so `"True"` and `" true"` are `#invalidBool`.
 
+The [sized number types](../advanced/sized-numbers#reading-from-text) have one each too, `I8.fromString` to
+`U64.fromString` and `F32.fromString`, each with its own tag: `U8.fromString("300")` is `#invalidU8`.
+
 ```nanyx
 def n = int.fromString("42")         -- #some(42)
 def x = float.fromString("-0.25")    -- #some(-0.25)

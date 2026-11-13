@@ -137,5 +137,27 @@ and `tryToInt`; to reach a narrower integer type from a floating-point number, g
 Narrowing integer conversions have no wrapping form that keeps only the low bits, as `wrappingAdd` does for
 arithmetic.
 
+# Reading from text
+
+Each sized type has an attached `fromString`, the mirror of its `toString`, with its own tag for text it cannot read,
+as `int.fromString` has ([Reading from text](../stdlib/standard-library#reading-from-text)):
+
+```nanyx
+I8.fromString: string -> #some(I8) | #invalidI8
+I16.fromString: string -> #some(I16) | #invalidI16
+I32.fromString: string -> #some(I32) | #invalidI32
+U8.fromString: string -> #some(U8) | #invalidU8
+U16.fromString: string -> #some(U16) | #invalidU16
+U32.fromString: string -> #some(U32) | #invalidU32
+U64.fromString: string -> #some(U64) | #invalidU64
+F32.fromString: string -> #some(F32) | #invalidF32
+```
+
+The integer types read what `int.fromString` reads, and a number past the type's range is the type's tag:
+`U8.fromString("256")` is `#invalidU8`. An unsigned type does not read a leading `-`, so `U32.fromString("-0")` is
+`#invalidU32` too. `U64.fromString` reads up to `18446744073709551615`, past the range of `int`. `F32.fromString`
+reads what `float.fromString` reads and gives the nearest `F32`, or infinity past its range. Each gives its type a
+`FromString`, so a function that requires one works at the sized types.
+
 How each of these types is held in memory is described in
 [Memory management](../work-in-progress/memory-management#value-representation).
