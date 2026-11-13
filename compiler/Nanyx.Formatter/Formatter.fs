@@ -69,15 +69,9 @@ let format (options: Options) (parsed: SourceModule) : string =
     let parens doc = cat [ text "("; doc; text ")" ]
     let commaJoin docs = Doc.join (text ", ") docs
 
-    let lineStarts =
-        [| yield 0
-           for i in 0 .. source.Length - 1 do
-               if source[i] = '\n' then yield i + 1 |]
+    let lines = LineTable source
 
-    let lineOf offset =
-        match Array.BinarySearch(lineStarts, offset) with
-        | found when found >= 0 -> found
-        | notFound -> ~~~notFound - 1
+    let lineOf (offset: int) = lines.LineOf offset
 
     let valid (span: SourceSpan) =
         not (SourceSpan.isNone span) && span.Start <= span.End && span.End <= source.Length
@@ -173,9 +167,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             last.Value
 
     /// The offset of the end of the line `offset` is on.
-    let lineEnd offset =
-        let line = lineOf offset
-        if line + 1 < lineStarts.Length then lineStarts[line + 1] - 1 else source.Length
+    let lineEnd offset = lines.End(lineOf offset)
 
     /// Children laid out one per line between the offsets `start` and `finish`, each given as its start and end offsets
     /// and a function building its document. The comments among them are put back: a comment after a child on its

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="LargeStack.fs" />
     <Compile Include="Ast.fs" />
+    <Compile Include="LineTable.fs" />
     <Compile Include="Operators.fs" />
     <Compile Include="StringEscapes.fs" />
     <Compile Include="ParseState.fs" />

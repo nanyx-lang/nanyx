@@ -36,37 +36,25 @@ type SourceModule =
 /// The comments and runs of blank lines in `source`, in source order, given the comments the parser skipped and
 /// where the text of its string literals is (each as start and end offsets).
 let internal collectTrivia (filePath: string) (source: string) (comments: (int * int) list) (stringTexts: (int * int) list) : Trivia list =
-    // The offset each line starts at.
-    let lineStarts =
-        [| yield 0
-           for i in 0 .. source.Length - 1 do
-               if source[i] = '\n' then yield i + 1 |]
-    let lineEnd line =
-        if line + 1 < lineStarts.Length then lineStarts[line + 1] - 1 else source.Length
-    let spanAt line start finish =
-        { File = filePath; Start = start; End = finish; StartLine = line; StartColumn = start - lineStarts[line] }
-    let lineOf offset =
-        match Array.BinarySearch(lineStarts, offset) with
-        | found when found >= 0 -> found
-        | notFound -> ~~~notFound - 1
+    let lines = LineTable source
     let isBlank line =
-        source.AsSpan(lineStarts[line], lineEnd line - lineStarts[line]).Trim(" \t".AsSpan()).IsEmpty
+        source.AsSpan(lines.Start line, lines.End line - lines.Start line).Trim(" \t".AsSpan()).IsEmpty
     // A line whose preceding line break is inside a string literal or a block comment is part of it.
     let inStringOrComment line =
         line > 0
-        && stringTexts @ comments |> List.exists (fun (start, finish) -> start <= lineStarts[line] - 1 && lineStarts[line] - 1 < finish)
+        && stringTexts @ comments |> List.exists (fun (start, finish) -> start <= lines.Start line - 1 && lines.Start line - 1 < finish)
 
     let commentTrivia =
         comments
         // FParsec restores the state when it backtracks, so a comment is noted once; this is only a safety net.
         |> List.distinct
         |> List.map (fun (start, finish) ->
-            let line = lineOf start
-            let before = source.AsSpan(lineStarts[line], start - lineStarts[line])
-            LineComment(source.Substring(start, finish - start), not (before.Trim(" \t".AsSpan()).IsEmpty), spanAt line start finish))
+            let lineStart = lines.Start(lines.LineOf start)
+            let before = source.AsSpan(lineStart, start - lineStart)
+            LineComment(source.Substring(start, finish - start), not (before.Trim(" \t".AsSpan()).IsEmpty), lines.Span filePath start finish))
 
     let blankTrivia =
-        [ if source.Length > 0 then yield! [ 0 .. lineStarts.Length - 1 ] ]
+        [ if source.Length > 0 then yield! [ 0 .. lines.Count - 1 ] ]
         |> List.filter (fun line -> isBlank line && not (inStringOrComment line))
         // Consecutive blank lines make one run: each run is a list of its lines, last first.
         |> List.fold
@@ -78,6 +66,6 @@ let internal collectTrivia (filePath: string) (source: string) (comments: (int *
         |> List.map (fun run ->
             let first = List.last run
             let last = List.head run
-            BlankLines(run.Length, spanAt first lineStarts[first] (lineEnd last)))
+            BlankLines(run.Length, lines.Span filePath (lines.Start first) (lines.End last)))
 
     commentTrivia @ blankTrivia |> List.sortBy (fun (trivia: Trivia) -> trivia.Span.Start)
