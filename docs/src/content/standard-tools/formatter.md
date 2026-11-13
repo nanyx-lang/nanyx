@@ -80,6 +80,18 @@ import (
 )
 ```
 
+# Statements separated by `;`
+
+Statements written on one line, separated by `;` ([Variables](../tour/variables#several-statements-on-one-line)), stay on that line while it fits the line width, with one space after each `;`. A line that doesn't fit has its statements put on lines of their own, and a match arm's, a branch's or a lambda's body becomes a block on the lines after it.
+
+```nanyx
+-- before
+def f = { x -> log(x) ;x + 1 }
+
+-- after
+def f = { x -> log(x); x + 1 }
+```
+
 # Typical workflow
 
 Format files before committing changes, and enable format-on-save in your editor where possible.

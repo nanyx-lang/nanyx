@@ -912,6 +912,60 @@ module ShadowedPreludeNames =
                   Fixes = [] })
             |> List.ofSeq
 
+/// The official linter's `semicolons` rule: statements separated by `;` on one line, rather than written one per line.
+/// Where the statements are a block's lines, its fix puts the statement after the `;` on a line of its own, at the
+/// block's indent; a match arm's or a lambda's one-line body is left to the author to lay out.
+module Semicolons =
+    let rule =
+        { Id = "semicolons"
+          Title = "Statements separated by `;`"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "Statements separated by `;` on one line. Put each statement on a line of its own; turn the rule off to write short sequences on one line." }
+
+    /// The `;` between `before` and `after`, two statements of `block`, if they are separated by one, with its fix.
+    let private separator (source: string) (block: Statement list) (before: Statement) (after: Statement) =
+        if before.Span.End < 0 || before.Span.End >= after.Span.Start || after.Span.Start > source.Length then
+            None
+        else
+            let between = source.Substring(before.Span.End, after.Span.Start - before.Span.End)
+            if between.Trim(' ', '\t') <> ";" then
+                None
+            else
+                let offset = before.Span.End + between.IndexOf ';'
+                let span =
+                    { after.Span with
+                        Start = offset
+                        End = offset + 1
+                        StartColumn = after.Span.StartColumn - (after.Span.Start - offset) }
+                let lineStart = offset - span.StartColumn
+                let indent = source.Substring(lineStart, span.StartColumn).Length - source.Substring(lineStart, span.StartColumn).TrimStart(' ', '\t').Length
+                let startsTheLine = block |> List.exists (fun s -> s.Span.StartLine = after.Span.StartLine && s.Span.StartColumn = indent)
+                let fixes =
+                    if startsTheLine then
+                        [ { Title = "Put the statement on a line of its own"
+                            Edits = [ { Span = { span with Start = before.Span.End; End = after.Span.Start; StartColumn = before.Span.End - lineStart }
+                                        NewText = "\n" + source.Substring(lineStart, indent) } ] } ]
+                    else
+                        []
+                Some(span, fixes)
+
+    let lint (model: SemanticModel) : Report list =
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.blocksWithin
+        |> List.collect (fun block ->
+            block
+            |> List.pairwise
+            |> List.choose (fun (before, after) -> separator model.Source block before after)
+            |> List.map (fun (span, fixes) ->
+                { Rule = rule.Id
+                  Span = span
+                  Message = "Put each statement on a line of its own, rather than separating them with `;`"
+                  Related = []
+                  Fixes = fixes }))
+        |> List.sortBy (fun report -> report.Span.Start)
+
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
@@ -919,13 +973,13 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule; ShadowedPreludeNames.rule ]
+              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule; ShadowedPreludeNames.rule; Semicolons.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model
-                @ UnusedResults.lint model @ ShadowedPreludeNames.lint model }
+                @ UnusedResults.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

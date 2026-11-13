@@ -35,7 +35,7 @@ let ``The official linter is registered, and runs only when turned on`` () =
     let official = Assert.Single(Linters.all)
     Assert.Equal("default", official.Name)
     Assert.Equal<string list>(
-        [ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon"; "unusedPrivateDefinitions"; "unreachableCode"; "useInBraces"; "strayDocComments"; "plusBetweenContexts"; "unannotatedExports"; "unusedResults"; "shadowedPreludeNames" ],
+        [ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon"; "unusedPrivateDefinitions"; "unreachableCode"; "useInBraces"; "strayDocComments"; "plusBetweenContexts"; "unannotatedExports"; "unusedResults"; "shadowedPreludeNames"; "semicolons" ],
         official.Rules |> List.map (fun rule -> rule.Id))
     // Linters are opt-in: compiling without saying which to run runs none.
     Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
