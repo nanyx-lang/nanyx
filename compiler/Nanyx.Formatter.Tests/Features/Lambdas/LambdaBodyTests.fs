@@ -4,16 +4,7 @@ module Nanyx.Formatter.Tests.LambdaBodyTests
 open Xunit
 open Parser.Program
 open Nanyx.Formatter
-
-let private lines (ls: string list) = String.concat "\n" ls + "\n"
-
-let private format (source: string) =
-    match Formatter.formatSource Formatter.Options.defaults "" source with
-    | Result.Ok formatted -> formatted
-    | Result.Error error -> failwith $"Parse failed: {error.Message}"
-
-/// Formatting `source` gives it back unchanged.
-let private unchanged (source: string) = Assert.Equal(source, format source)
+open Nanyx.Formatter.Tests.TestHelpers
 
 /// The formatted `source` parses to the same tree as `source`, and formatting it again changes nothing.
 let private roundTrips (source: string) =
