@@ -59,6 +59,7 @@
     <Compile Include="LambdaArguments.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
+    <Compile Include="LocalRecursion.fs" />
     <Compile Include="MatchArmFixes.fs" />
     <Compile Include="DefinitionOrder.fs" />
     <Compile Include="InitialisationCycles.fs" />

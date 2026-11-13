@@ -382,6 +382,17 @@ type SpreadPart =
     /// `name = value`.
     | SpreadField of Identifier * Expression
 
+/// `rec name = value` (see the functions page): a local def whose value is wrapped in a call to the built-in "__rec",
+/// which makes the name visible in its own value. A local def without it can't see itself.
+module RecSyntax =
+    let builtIn = "__rec"
+
+    /// The value of a `rec` def.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ value ]) when name = builtIn -> Some value
+        | _ -> None
+
 /// `record with f = v, ...` (see the records page): a call to the built-in "__with" with the record and a record of the
 /// updated fields.
 module WithSyntax =

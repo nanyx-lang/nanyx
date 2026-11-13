@@ -1163,8 +1163,8 @@ do
                 let span = match List.tryHead bindings with Some (_, value) -> endingAt value.Span span | None -> span
                 bindings |> List.mapi (fun index (name, value) -> Statement.at span (DefStatement(isExport && index > 0, name, None, value)))
     // `rec name = { ... }` is a local definition that can refer to itself (see the functions page). It is a
-    // def whose value is wrapped in a call to the built-in "__rec", which tells the backend to compile the
-    // lambda as a function that may call itself.
+    // def whose value is wrapped in a call to the built-in "__rec" (see `RecSyntax`), which makes the name visible in
+    // the value, and tells the backend to compile the lambda as a function that may call itself.
     let recStatement =
         let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         getPosition >>= fun lineStart ->
@@ -1173,7 +1173,7 @@ do
                 definableName start name
                 >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsNoNl() >>. defExprParser
                 >>= fun expr ->
-                    let value = Expression.from expr (FunctionCall("__rec", None, [ expr ]))
+                    let value = Expression.from expr (FunctionCall(RecSyntax.builtIn, None, [ expr ]))
                     declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
 
     let exprStatement =
