@@ -103,6 +103,7 @@
     <Compile Include="Features\Matches\NestedTagPatternTests.fs" />
     <Compile Include="Features\Matches\ScrutineeRestTests.fs" />
     <Compile Include="Features\Matches\UnitPatternTests.fs" />
+    <Compile Include="Features\Matches\PatternErrorTests.fs" />
     <Compile Include="Features\Ordering\OrderingTests.fs" />
     <Compile Include="Features\Packages\PackageTests.fs" />
     <Compile Include="Features\Scripts\ScriptTests.fs" />
