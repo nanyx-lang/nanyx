@@ -19,17 +19,6 @@ namespace Nanyx.LanguageServer.Handlers;
 /// </summary>
 public sealed class CompletionHandler : CompletionHandlerBase
 {
-    /// <summary>
-    /// The words the language reserves, offered wherever a name is. A workflow's own keywords, such as <c>yield</c> and
-    /// <c>await</c>, are members of its builder, not reserved words.
-    /// </summary>
-    private static readonly string[] Keywords =
-    [
-        "and", "as", "context", "def", "do", "else", "except", "export", "for", "if", "import", "in", "is", "match",
-        "module", "mut", "not", "or", "private", "rec", "return", "then", "try", "type", "typeof", "use", "where", "while",
-        "with"
-    ];
-
     private readonly DocumentStore _documents;
     private readonly ServerSettings _settings;
     private readonly StandardLibrarySource _standardLibrary;
@@ -88,7 +77,8 @@ public sealed class CompletionHandler : CompletionHandlerBase
             && document.NearestInLastGood(wordStart) is { } offset
                 ? NamesInScope(lastGood, compiled, offset, lastGood.DocReader(request.TextDocument.Uri, offset, _standardLibrary))
                 : [];
-        var keywords = Keywords.Select(keyword => new CompletionItem
+        // The words the language reserves are offered wherever a name is.
+        var keywords = Parser.Program.Keywords.reserved.Select(keyword => new CompletionItem
         {
             Label = keyword,
             Kind = CompletionItemKind.Keyword,
