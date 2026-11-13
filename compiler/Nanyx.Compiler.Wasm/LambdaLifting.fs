@@ -30,7 +30,8 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
     | ElsePattern -> []
 
 /// Every name bound anywhere inside an expression: local defs, lambda parameters and pattern variables.
-/// (An over-approximation of what a nested lambda could capture, which errs on the side of not lifting.)
+/// (An over-approximation of what a nested lambda could capture, which errs on the side of not lifting.) What a `use`
+/// loads is not looked inside: its lambdas are lifted in the scope around it.
 and private boundNames (expr: Expression) : string list =
     match expr.Kind with
     | Lambda(args, body, _) -> (args |> List.map fst) @ boundNames body
@@ -46,79 +47,24 @@ and private boundNames (expr: Expression) : string list =
     | Match(values, arms) ->
         (values |> List.collect boundNames)
         @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect boundNamesPattern) @ boundNames body))
-    | FunctionCall(_, _, args)
-    | ContextMemberCall(_, _, args) -> args |> List.collect boundNames
-    | Pipe(value, _, _, args) -> boundNames value @ (args |> List.collect boundNames)
-    | BinaryOp(_, _, left, right) -> boundNames left @ boundNames right
-    | IfExpr(cond, thenExpr, elseExpr) -> boundNames cond @ boundNames thenExpr @ boundNames elseExpr
-    | TupleExpr items
-    | ListExpr items -> items |> List.collect boundNames
-    | RecordExpr fields -> fields |> List.collect (function NamedField(_, value) | PositionalField value -> boundNames value)
-    | TagExpr(_, payload) -> payload |> Option.map boundNames |> Option.defaultValue []
-    | MemberAccess(inner, _, _) -> boundNames inner
     | UseIn(_, body) -> boundNames body
     | WorkflowBindExpr(name, value) -> name :: boundNames value
-    | WorkflowReturnExpr value -> boundNames value
-    | InterpolatedString parts -> parts |> List.collect (function StringExpr value -> boundNames value | StringText _ -> [])
-    | ContextMemberAccess _
-    | UnitExpr
-    | LiteralExpr _
-    | IdentifierExpr _ -> []
+    | _ -> SyntaxTree.childrenOf expr |> fst |> List.collect boundNames
 
 /// `expr` with every reference to the local function `from` redirected to its lifted form `to'`: a call
 /// becomes a direct call that passes the environment on, and a use as a value is the environment itself
-/// (the closure block).
+/// (the closure block). It is given a body already lifted, so it meets no `except` and no `use ... in`, and the
+/// `use`s it meets load only locals.
 let rec private redirectSelfReferences (from: string) (to': string) (expr: Expression) : Expression =
     let recur = redirectSelfReferences from to'
     let rebuild kind = { expr with Kind = kind }
-    let flatten (args: Expression list) =
-        match args with
-        | [ Kind (TupleExpr items) ] -> items
-        | _ -> args
     match expr.Kind with
     | IdentifierExpr name when name = from -> rebuild (IdentifierExpr ClosureSyntax.envParameter)
-    | IdentifierExpr _ -> expr
     | FunctionCall(name, range, args) when name = from ->
-        rebuild (FunctionCall(to', range, [ Expression.from expr (TupleExpr (Expression.from expr (IdentifierExpr ClosureSyntax.envParameter) :: (flatten args |> List.map recur))) ]))
-    | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
+        rebuild (FunctionCall(to', range, [ Expression.from expr (TupleExpr (Expression.from expr (IdentifierExpr ClosureSyntax.envParameter) :: (SyntaxTree.flattenCallArgs args |> List.map recur))) ]))
     | Pipe(value, name, range, args) when name = from ->
         recur (rebuild (FunctionCall(name, range, pipeCallArguments value args)))
-    | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
-    | Lambda(args, body, takesUnit) -> rebuild (Lambda(args, recur body, takesUnit))
-    | BinaryOp(op, opSpan, left, right) -> rebuild (BinaryOp(op, opSpan, recur left, recur right))
-    | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
-    | Block statements ->
-        statements
-        |> List.map (fun statement ->
-            match statement.Kind with
-            | DefStatement(isExport, name, typeOpt, rhs) -> { statement with Kind = DefStatement(isExport, name, typeOpt, recur rhs) }
-            | ExprStatement value -> { statement with Kind = ExprStatement(recur value) }
-            | _ -> statement)
-        |> Block
-        |> rebuild
-    | Except(value, arms) -> redirectSelfReferences from to' { expr with Kind = Match([ value ], arms) }
-    | Match(values, arms) ->
-        rebuild (Match(values |> List.map recur, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions recur), recur body)))
-    | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
-    | ListExpr items -> rebuild (ListExpr(items |> List.map recur))
-    | RecordExpr fields ->
-        fields
-        |> List.map (function
-            | NamedField(name, value) -> NamedField(name, recur value)
-            | PositionalField value -> PositionalField(recur value))
-        |> RecordExpr
-        |> rebuild
-    | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
-    | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
-    | UseIn(binding, body) -> rebuild (UseIn(binding, recur body))
-    | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
-    | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(recur value))
-    | InterpolatedString parts ->
-        parts |> List.map (function StringExpr value -> StringExpr(recur value) | text -> text) |> InterpolatedString |> rebuild
-    | ContextMemberCall(ctx, name, args) -> rebuild (ContextMemberCall(ctx, name, args |> List.map recur))
-    | ContextMemberAccess _
-    | UnitExpr
-    | LiteralExpr _ -> expr
+    | _ -> SyntaxTree.mapChildren recur expr
 
 /// Where a lifted function came from: the top-level def it was written in, its local name there if it
 /// was a `rec` def, and the names of the variables it captures, in the order they sit in its environment.
@@ -335,10 +281,6 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
         // A top-level function used as a value: a closure over a wrapper that takes an environment.
         | IdentifierExpr name when topLevelArities.ContainsKey name && not (scope.Contains name) ->
             closureOf expr (wrapperOf name) []
-        | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, args |> List.map recur))
-        | Pipe(value, name, range, args) -> rebuild (Pipe(recur value, name, range, args |> List.map recur))
-        | BinaryOp(op, opSpan, left, right) -> rebuild (BinaryOp(op, opSpan, recur left, recur right))
-        | IfExpr(cond, thenExpr, elseExpr) -> rebuild (IfExpr(recur cond, recur thenExpr, recur elseExpr))
         | Block statements ->
             // The records defined in this block, for `use ctx` where `ctx` is one of them.
             let localRecords =
@@ -469,38 +411,14 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 | _ -> recur predicate
             let liftArm (patterns, body) = patterns |> List.map (Pattern.mapExpressions liftGuard), recur body
             rebuild (Match(values |> List.map recur, arms |> List.map liftArm))
-        | TupleExpr items -> rebuild (TupleExpr(items |> List.map recur))
-        | ListExpr items -> rebuild (ListExpr(items |> List.map recur))
-        | RecordExpr fields ->
-            fields
-            |> List.map (function
-                | NamedField(name, value) -> NamedField(name, recur value)
-                | PositionalField value -> PositionalField(recur value))
-            |> RecordExpr
-            |> rebuild
-        | TagExpr(name, payload) -> rebuild (TagExpr(name, payload |> Option.map recur))
         // An attached function used as a value, `int.toString`: the parser reads it as a member access.
         | MemberAccess(Kind (IdentifierExpr qualifier), field, _) when
             topLevelArities.ContainsKey $"{qualifier}.{field}" && not (scope.Contains qualifier) ->
             closureOf expr (wrapperOf $"{qualifier}.{field}") []
-        | MemberAccess(inner, field, range) -> rebuild (MemberAccess(recur inner, field, range))
         // `use value in body` is the block `{ use value; body }`: what it loads is in scope for `body` only.
         | UseIn(value, body) ->
             recur { expr with Kind = Block [ Statement.from value (UseStatement value); Statement.from body (ExprStatement body) ] }
-        | WorkflowBindExpr(name, value) -> rebuild (WorkflowBindExpr(name, recur value))
-        | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(recur value))
-        | InterpolatedString parts ->
-            parts
-            |> List.map (function
-                | StringExpr value -> StringExpr(recur value)
-                | text -> text)
-            |> InterpolatedString
-            |> rebuild
-        | ContextMemberCall(ctx, name, args) -> rebuild (ContextMemberCall(ctx, name, args |> List.map recur))
-        | ContextMemberAccess _
-        | UnitExpr
-        | LiteralExpr _
-        | IdentifierExpr _ -> expr
+        | _ -> SyntaxTree.mapChildren recur expr
 
     /// Lifts `{ args -> body }` to a fresh top-level function and returns its closure.
     and liftLambda (scope: Set<string>) (lambda: Expression) (args: (string * TypeExpr option) list) (body: Expression) : Expression =

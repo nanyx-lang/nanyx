@@ -5,6 +5,7 @@
 /// refers to, and the uses of a local through the closures that capture it, are found here too.
 module internal Transpiler.Wasm.ClosureSyntax
 
+open NyxCompiler
 open Parser.Program
 
 let builtIn = "__closure"
@@ -34,55 +35,14 @@ let rec references (expr: Expression) : (string * Expression) list =
     | IdentifierExpr name -> [ name, expr ]
     | FunctionCall(name, _, args) -> (name, expr) :: (args |> List.collect references)
     | Pipe(value, name, _, args) -> (name, expr) :: references value @ (args |> List.collect references)
-    | Lambda(_, body, _) -> references body
-    | BinaryOp(_, _, left, right) -> references left @ references right
-    | IfExpr(cond, thenExpr, elseExpr) -> references cond @ references thenExpr @ references elseExpr
-    | Block statements -> statements |> List.collect referencesInStatement
     | Except(value, arms) -> references { expr with Kind = Match([ value ], arms) }
+    // Each arm's patterns, then its body.
     | Match(values, arms) ->
         (values |> List.collect references)
-        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect referencesInPattern) @ references body))
-    | TupleExpr items
-    | ListExpr items -> items |> List.collect references
-    | RecordExpr fields ->
-        fields |> List.collect (function NamedField(_, value) | PositionalField value -> references value)
-    | TagExpr(_, payload) -> payload |> Option.map references |> Option.defaultValue []
-    | MemberAccess(inner, _, _) -> references inner
-    | UseIn(value, body) -> references value @ references body
-    | WorkflowBindExpr(_, value)
-    | WorkflowReturnExpr value -> references value
-    | InterpolatedString parts ->
-        parts |> List.collect (function StringExpr value -> references value | StringText _ -> [])
-    | ContextMemberCall(_, _, args) -> args |> List.collect references
-    | ContextMemberAccess _
-    | UnitExpr
-    | LiteralExpr _ -> []
-
-and private referencesInStatement (statement: Statement) : (string * Expression) list =
-    match statement.Kind with
-    | DefStatement(_, _, _, rhs) -> references rhs
-    | ExprStatement value
-    | UseStatement value -> references value
-    | ImportStatement _
-    | TypeDefStatement _ -> []
-
-and private referencesInPattern (pattern: Pattern) : (string * Expression) list =
-    match pattern.Kind with
-    | GuardPattern predicate -> references predicate
-    | RangePattern(startValue, endValue) -> references startValue @ references endValue
-    | TagPattern(_, Some payload) -> referencesInPattern payload
-    | TuplePattern patterns
-    | AndPattern patterns
-    | ListPattern(patterns, _) -> patterns |> List.collect referencesInPattern
-    | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencesInPattern
-    | RecordPattern(_, patterns) -> patterns |> List.collect referencesInPattern
-    | RecordMemberPattern(members, _) -> members |> List.collect (snd >> referencesInPattern)
-    | TagPattern(_, None)
-    | LiteralPattern _
-    | IdentifierPattern _
-    | WildcardPattern
-    | UnitPattern
-    | ElsePattern -> []
+        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect Pattern.expressions |> List.collect references) @ references body))
+    | _ ->
+        let children, statements = SyntaxTree.childrenOf expr
+        (children @ (statements |> List.collect SyntaxTree.ofStatement)) |> List.collect references
 
 /// The nodes in `expr`, after lifting, that use the local `name`: each reference to it, and, for a closure that captures
 /// it, the uses in the lifted function the closure is over (its definition, which `definitionOf` finds), which binds it

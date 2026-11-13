@@ -41,6 +41,60 @@ module SyntaxTree =
         | TypeDefStatement _
         | ImportStatement _ -> []
 
+    /// The arguments of a call, with a call of one tuple, `f((a, b))` as the backend sees `f(a, b)`, taken as its items.
+    let flattenCallArgs (args: Expression list) =
+        match args with
+        | [ Kind (TupleExpr items) ] -> items
+        | _ -> args
+
+    /// `expr` with `f` applied to each expression directly within it: those `childrenOf` gives, the values of its
+    /// statements among them. An expression with none is returned as it is.
+    let mapChildren (f: Expression -> Expression) (expr: Expression) : Expression =
+        let inStatement (statement: Statement) =
+            match statement.Kind with
+            | DefStatement(isExport, name, typeOpt, value) -> { statement with Kind = DefStatement(isExport, name, typeOpt, f value) }
+            | ExprStatement value -> { statement with Kind = ExprStatement(f value) }
+            | UseStatement value -> { statement with Kind = UseStatement(f value) }
+            | TypeDefStatement _
+            | ImportStatement _ -> statement
+        let inArms (arms: MatchArm list) = arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions f), f body)
+        let rebuild kind = { expr with Kind = kind }
+        match expr.Kind with
+        | LiteralExpr _
+        | UnitExpr
+        | IdentifierExpr _
+        | ContextMemberAccess _ -> expr
+        | FunctionCall(name, range, args) -> rebuild (FunctionCall(name, range, List.map f args))
+        | ContextMemberCall(context, name, args) -> rebuild (ContextMemberCall(context, name, List.map f args))
+        | TupleExpr items -> rebuild (TupleExpr(List.map f items))
+        | ListExpr items -> rebuild (ListExpr(List.map f items))
+        | Lambda(parameters, body, takesUnit) -> rebuild (Lambda(parameters, f body, takesUnit))
+        | BinaryOp(op, opSpan, left, right) -> rebuild (BinaryOp(op, opSpan, f left, f right))
+        | Pipe(value, name, range, args) -> rebuild (Pipe(f value, name, range, List.map f args))
+        | Block statements -> rebuild (Block(List.map inStatement statements))
+        | Match(values, arms) -> rebuild (Match(List.map f values, inArms arms))
+        | Except(value, arms) -> rebuild (Except(f value, inArms arms))
+        | RecordExpr fields ->
+            fields
+            |> List.map (function
+                | NamedField(name, value) -> NamedField(name, f value)
+                | PositionalField value -> PositionalField(f value))
+            |> RecordExpr
+            |> rebuild
+        | TagExpr(name, payload) -> rebuild (TagExpr(name, Option.map f payload))
+        | IfExpr(condition, ifTrue, ifFalse) -> rebuild (IfExpr(f condition, f ifTrue, f ifFalse))
+        | MemberAccess(target, field, range) -> rebuild (MemberAccess(f target, field, range))
+        | UseIn(value, body) -> rebuild (UseIn(f value, f body))
+        | WorkflowBindExpr(keyword, value) -> rebuild (WorkflowBindExpr(keyword, f value))
+        | WorkflowReturnExpr value -> rebuild (WorkflowReturnExpr(f value))
+        | InterpolatedString parts ->
+            parts
+            |> List.map (function
+                | StringExpr value -> StringExpr(f value)
+                | text -> text)
+            |> InterpolatedString
+            |> rebuild
+
     /// `expr` and every expression within it.
     let rec expressionsWithin (expr: Expression) : Expression list =
         let children, statements = childrenOf expr

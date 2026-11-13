@@ -9,62 +9,7 @@ module internal ExpressionRewrites =
     /// (for its id) and its kind with the children already visited, and returns the node's new kind.
     let mapExpressionKinds (visit: Expression -> ExpressionKind -> ExpressionKind) (expr: Expression) : Expression =
         let rec mapExpr (current: Expression) : Expression =
-            { current with Kind = visit current (mapKind current) }
-        and mapKind current =
-            match current.Kind with
-            | IdentifierExpr _ -> current.Kind
-            | FunctionCall(name, rangeOpt, args) ->
-                FunctionCall(name, rangeOpt, args |> List.map mapExpr)
-            | Lambda(parameters, body, takesUnit) ->
-                Lambda(parameters, mapExpr body, takesUnit)
-            | BinaryOp(op, opSpan, left, right) ->
-                BinaryOp(op, opSpan, mapExpr left, mapExpr right)
-            | Pipe(value, name, rangeOpt, args) ->
-                Pipe(mapExpr value, name, rangeOpt, args |> List.map mapExpr)
-            | Block statements ->
-                Block(statements |> List.map mapStatement)
-            | Match(values, arms) ->
-                let mappedValues = values |> List.map mapExpr
-                let mappedArms = arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr)
-                Match(mappedValues, mappedArms)
-            | Except(value, arms) ->
-                Except(mapExpr value, arms |> List.map (fun (patterns, armExpr) -> patterns |> List.map (Pattern.mapExpressions mapExpr), mapExpr armExpr))
-            | TupleExpr items -> TupleExpr(items |> List.map mapExpr)
-            | RecordExpr fields ->
-                RecordExpr(
-                    fields
-                    |> List.map (function
-                        | NamedField(name, value) -> NamedField(name, mapExpr value)
-                        | PositionalField value -> PositionalField(mapExpr value)))
-            | ListExpr items -> ListExpr(items |> List.map mapExpr)
-            | TagExpr(tagName, payloadOpt) -> TagExpr(tagName, payloadOpt |> Option.map mapExpr)
-            | IfExpr(cond, thenExpr, elseExpr) ->
-                IfExpr(mapExpr cond, mapExpr thenExpr, mapExpr elseExpr)
-            | MemberAccess(baseExpr, fieldName, rangeOpt) -> MemberAccess(mapExpr baseExpr, fieldName, rangeOpt)
-            | ContextMemberCall(ctxType, memberName, args) ->
-                ContextMemberCall(ctxType, memberName, args |> List.map mapExpr)
-            | UseIn(value, body) ->
-                UseIn(mapExpr value, mapExpr body)
-            | InterpolatedString parts ->
-                InterpolatedString(
-                    parts
-                    |> List.map (function
-                        | StringText text -> StringText text
-                        | StringExpr value -> StringExpr(mapExpr value)))
-            | WorkflowBindExpr(keyword, value) -> WorkflowBindExpr(keyword, mapExpr value)
-            | WorkflowReturnExpr value -> WorkflowReturnExpr(mapExpr value)
-            | ContextMemberAccess _
-            | UnitExpr
-            | LiteralExpr _ -> current.Kind
-        and mapStatement (statement: Statement) =
-            { statement with Kind = mapStatementKind statement.Kind }
-        and mapStatementKind kind =
-            match kind with
-            | DefStatement(isExport, name, typeOpt, value) -> DefStatement(isExport, name, typeOpt, mapExpr value)
-            | ExprStatement value -> ExprStatement(mapExpr value)
-            | UseStatement value -> UseStatement(mapExpr value)
-            | ImportStatement _
-            | TypeDefStatement _ -> kind
+            { current with Kind = visit current (SyntaxTree.mapChildren mapExpr current).Kind }
         mapExpr expr
 
     /// Every pipe in an expression that inference resolved to an attached definition (`targets`, by the pipe's

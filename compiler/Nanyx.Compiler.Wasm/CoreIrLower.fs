@@ -432,11 +432,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Complex scope { expr with Kind = InterpolatedString [ StringExpr value ] } k
         | FunctionCall(name, _, args) when input.NominalWrappers.Contains name && not (scope.Vars.ContainsKey name) ->
             // `$Money(pence)`: a nominal value is its shape's value.
-            match flattenCallArgs args with
+            match SyntaxTree.flattenCallArgs args with
             | [ single ] -> this.Complex scope single k
             | several -> this.Record scope (several |> List.mapi (fun index value -> string index, value)) (tyOf expr) k
         | FunctionCall(name, _, args) when input.RecordConstructors.Contains name && not (scope.Vars.ContainsKey name) ->
-            match flattenCallArgs args with
+            match SyntaxTree.flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
             | _ -> cannot $"the type constructor {name} without a record of its fields"
         | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) ->
@@ -450,7 +450,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name.
             let ty = tyOf expr
-            this.Atoms scope (flattenCallArgs args) (fun atoms ->
+            this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 k (mk (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
         | ClosureSyntax.Closure(target, captured) ->
             // A function value: the closure block of a lifted function over what it captures.
@@ -481,7 +481,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match this.LocalAt scope scope.Vars.[name] (input.CalleeTypes |> Map.tryFind expr.Id) with
             | { Type = IrFunction _ } as var -> this.CallValue scope var args ty k
             | var -> cannot $"a call to '{name}', a value of type {IrType.show var.Type}"
-        | FunctionCall(name, _, args) when definitions.ContainsKey name && not (isFunction name) && not (flattenCallArgs args).IsEmpty ->
+        | FunctionCall(name, _, args) when definitions.ContainsKey name && not (isFunction name) && not (SyntaxTree.flattenCallArgs args).IsEmpty ->
             // A call through a function value a top-level value holds. The value is evaluated once, into a local, which
             // the call reads twice: as the environment, and for the table slot.
             let ty = tyOf expr
@@ -497,7 +497,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // A `rec` local function calling itself, directly, with its environment passed on.
             if name <> fst self then cannot $"a call to the lifted function '{name}' from another function"
             let ty = tyOf expr
-            this.Atoms scope (flattenCallArgs args) (fun atoms ->
+            this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 this.MemberAtoms scope selfMembers (fun members -> k (mk (Call(selfName, atoms @ members)) ty)))
         | FunctionCall(name, _, args) ->
             if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
@@ -509,7 +509,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     // A call the type checker did not record as one (a built-in property, such as `xs.length`, is
                     // written as a call to the function that reads it): its type is its arguments' and its own.
                     let argumentTys =
-                        flattenCallArgs args
+                        SyntaxTree.flattenCallArgs args
                         |> List.map (fun arg ->
                             match input.ExprTypes |> Map.tryFind arg.Id with
                             | Some ty -> ty
@@ -534,7 +534,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     this.ContextMembers scope name expr.Id instanceTy Set.empty (fun members ->
                         k (mk (Call(target, atoms @ List.map snd members)) ty)))
             // The arguments as the callee takes them, in the shapes the old path accepts.
-            match flattenCallArgs args with
+            match SyntaxTree.flattenCallArgs args with
             | [ Kind (IdentifierExpr record) ] when parameters.Length > 1 && scope.Vars.ContainsKey record ->
                 // A record passed to a function of several parameters: each parameter takes a field.
                 let var = scope.Vars.[record]
@@ -1013,7 +1013,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input
             | _ -> None
-        match elements, flattenCallArgs args with
+        match elements, SyntaxTree.flattenCallArgs args with
         | _, flatArgs when (match closure.Type with IrFunction(IrUnit, _, _) -> true | _ -> false) ->
             // What the argument does is done first; its value, the unit, isn't passed.
             let rec run (remaining: Expression list) =
