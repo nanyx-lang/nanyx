@@ -997,7 +997,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         this.Atoms scope (List.map snd fields) (fun atoms -> k (mk (MakeRecord(List.zip (List.map fst fields) atoms)) ty))
 
     /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple
-    /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it. The members
+    /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it. A function
+    /// whose input is unit takes nothing, so `f()` and `f(())` are the same call (see `ValueParameters`). The members
     /// of the contexts the value requires follow, as they are in scope here.
     member this.CallValue (scope: Scope) (closure: Var) (args: Expression list) (ty: IrType) (k: Expr -> Expr) : Expr =
         let members, parameterTys =
@@ -1013,6 +1014,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | IrFunction(input, _, _) -> IrType.tupleElements input
             | _ -> None
         match elements, flattenCallArgs args with
+        | _, flatArgs when (match closure.Type with IrFunction(IrUnit, _, _) -> true | _ -> false) ->
+            // What the argument does is done first; its value, the unit, isn't passed.
+            let rec run (remaining: Expression list) =
+                match remaining with
+                | [] -> call []
+                | { Kind = UnitExpr } :: rest -> run rest
+                | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in mk (Do(value, after)) after.Type)
+            run flatArgs
         | Some elements, [ tuple ] ->
             this.Atoms scope [ tuple ] (fun atoms ->
                 let rec loadElements (remaining: (int * IrType) list) (acc: Atom list) =
@@ -1025,13 +1034,18 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The parameters a lifted function takes for its parameters `names` of types `tys` (its environment aside), and
     /// how to bind those names around its body. A lone parameter whose type is a tuple takes the tuple's elements, which
-    /// the body then has as one tuple again (see `IrType.tupleElements`).
+    /// the body then has as one tuple again (see `IrType.tupleElements`). A lone parameter of type unit, as in
+    /// `{ _ -> ... }`, takes nothing, as a function written without parameters does, so that calls through a function
+    /// value of type `() -> a` agree however its lambda was written (see `CallValue`).
     member private this.ValueParameters (names: string list) (tys: IrType list) : Var list * (Expr -> Expr) * Var list =
         let tupleElements =
             match tys with
             | [ ty ] -> IrType.tupleElements ty
             | _ -> None
         match names, tys, tupleElements with
+        | [ name ], [ IrUnit ], _ ->
+            let unit = newVar (uniqueName name) Local IrUnit
+            [], (fun body -> mk (Let(unit, mk (Atom AUnit) IrUnit, body)) body.Type), [ unit ]
         | [ name ], [ tupleTy ], Some elementTys ->
             let elements = elementTys |> List.mapi (fun index (_, ty) -> newVar (uniqueName $"{name}_{index}") Param ty)
             let tuple = newVar (uniqueName name) Local tupleTy

@@ -711,25 +711,31 @@
   )
   (export "__fn_writeError" (func $__fn_writeError))
 
-  (func $__fn_readLine (param $__env i32) (param $__arg1 i32) (result i32)
+  (func $__fn_readLine (param $__env i32) (result i32) (local $__arg1 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
+    i32.const 0
+    local.set $__arg1
     local.get $__arg1
     return_call $readLine
   )
   (export "__fn_readLine" (func $__fn_readLine))
 
-  (func $__fn_readToEnd (param $__env i32) (param $__arg1 i32) (result i32)
+  (func $__fn_readToEnd (param $__env i32) (result i32) (local $__arg1 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
+    i32.const 0
+    local.set $__arg1
     local.get $__arg1
     return_call $readToEnd
   )
   (export "__fn_readToEnd" (func $__fn_readToEnd))
 
-  (func $__fn_flush (param $__env i32) (param $__arg1 i32) (result i32)
+  (func $__fn_flush (param $__env i32) (result i32) (local $__arg1 i32)
     local.get $__env
     call $__nanyx_drop_rec_0_word
+    i32.const 0
+    local.set $__arg1
     local.get $__arg1
     return_call $flush
   )
