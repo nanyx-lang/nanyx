@@ -14,8 +14,7 @@ type Rule =
       Description: string }
 
 /// What linters know about the module they check: the module as written, and what type checking found out about
-/// it. Desugaring does not yet record which surface node each desugared node came from (#99), so the types of nodes
-/// only desugaring made (a workflow bind's call, say) cannot be looked up from the surface tree.
+/// it. The types of nodes only desugaring made (a workflow bind's call, say) are found through `Lowered`.
 type SemanticModel =
     { /// The file the module was compiled as, as its spans name it: empty for source compiled directly.
       File: string
@@ -23,8 +22,11 @@ type SemanticModel =
       Syntax: Module
       /// The module's text, with its line endings made `\n` as for the offsets of spans: what a fix's edits apply to.
       Source: string
-      /// The type of each expression of `Syntax`, by node.
+      /// The type of each expression of `Syntax`, by node, and of each expression desugaring made up.
       Types: Map<NodeId, Ty>
+      /// The expressions desugaring and `@entry` made up for each node of `Syntax`, by its node, in the order they
+      /// were made: a workflow bind's are the call to its builder's member and the continuation passed to it.
+      Lowered: Map<NodeId, NodeId list>
       /// The type of each declaration the module makes, by its symbol.
       SymbolTypes: Map<SymbolId, Ty>
       /// The contexts each of the module's own top-level defs requires, written or inferred, by its symbol, as
@@ -45,13 +47,14 @@ type SemanticModel =
 
 module SemanticModel =
     /// The model of a type-checked module, from the file it was compiled as (empty for source compiled directly), its
-    /// text, the module as parsed, and what checking it found.
-    let ofTyped (file: string) (source: string) (syntax: Module) (typed: TypedModule) =
+    /// text, the module as parsed, the expressions made up for its nodes, and what checking it found.
+    let ofTyped (file: string) (source: string) (syntax: Module) (lowered: Map<NodeId, NodeId list>) (typed: TypedModule) =
         let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
         { File = file
           Syntax = syntax
           Source = source
           Types = typed.ExprTypes
+          Lowered = lowered
           SymbolTypes = typed.SymbolTypes
           ContextTypes = typed.ContextTypes
           Symbols = typed.Symbols
