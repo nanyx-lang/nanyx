@@ -114,10 +114,6 @@ let private contextMemberKeys (defs: (string * TypeExpr option * Expression) lis
     |> Map.ofList
 
 
-///// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`).
-let private isNominalTypeName (name: string) =
-    let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
-    own.StartsWith "$"
 
 /// The function-table slot of a top-level function used as a value, assigning one on first use.
 let private functionValueSlot (table: FunctionTable) (name: string) (arity: int) : int =
@@ -404,7 +400,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let nominalWrappers =
         module'
         |> List.choose (function
-            | Kind (Def (TypeDef(name, _, _, body))) when isNominalTypeName name && (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
+            | Kind (Def (TypeDef(name, _, _, body))) when Names.isNominalTypeName name && (match body.Kind with TypeRecord _ -> false | _ -> true) -> Some name
             | _ -> None)
         |> Set.ofList
 
