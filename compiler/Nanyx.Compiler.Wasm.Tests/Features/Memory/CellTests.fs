@@ -13,7 +13,7 @@ import nanyx/console
 
 def sum: list(int) -> int = { xs ->
   memory {
-    def total = mut 0
+    mut total = 0
     for xs | x -> total := total + x
     total
   }
@@ -21,8 +21,8 @@ def sum: list(int) -> int = { xs ->
 
 def counts = { xs ->
   memory {
-    def evens = mut 0
-    def odds = mut 0
+    mut evens = 0
+    mut odds = 0
     for xs | x ->
       if x % 2 == 0 then evens := evens + 1 else odds := odds + 1
     (evens, odds)
@@ -31,7 +31,7 @@ def counts = { xs ->
 
 def longest: list(string) -> string = { names ->
   memory {
-    def best = mut ""
+    mut best = ""
     for names | name ->
       match name.length > best.length
         | true -> best := name
@@ -42,7 +42,7 @@ def longest: list(string) -> string = { names ->
 
 def pairs = { n ->
   memory {
-    def found = mut 0
+    mut found = 0
     for 1..n | i ->
       for 1..n | j -> if i < j then found := found + 1 else ()
     found
@@ -68,7 +68,7 @@ import nanyx/console
 @entry
 def main = {
   def (before, after) = memory {
-    def x = mut "one"
+    mut x = "one"
     def kept = x
     x := "two"
     (kept, x)
@@ -85,8 +85,8 @@ import nanyx/console
 
 def tally = { words ->
   memory {
-    def seen = mut []
-    def count = mut 0
+    mut seen = []
+    mut count = 0
     def note = { word ->
       seen := seen ++ [word]
       count := count + 1
@@ -109,7 +109,7 @@ let ``Counting - a captured cell's box is freed with what it holds`` () =
     let source = """
 def build: int -> list(string) = { n ->
   memory {
-    def names = mut []
+    mut names = []
     def add = { s -> names := names ++ [s] }
     add("a {n}")
     add("b {n}")
@@ -127,7 +127,7 @@ let ``Counting - a cell assigned in an arm of a match on it frees what it held``
     let source = """
 def build: int -> list(string) = { n ->
   memory {
-    def names = mut ["a {n}", "b {n}", "c {n}"]
+    mut names = ["a {n}", "b {n}", "c {n}"]
     match names
       | [_, ...rest] -> names := rest
       | [] -> ()
@@ -144,7 +144,7 @@ let ``Counting - a local cell drops each value it is given`` () =
     let source = """
 def build: int -> string = { n ->
   memory {
-    def text = mut ""
+    mut text = ""
     for 1..n | i -> text := text ++ "{i}"
     text
   }

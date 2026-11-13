@@ -13,7 +13,7 @@ import nanyx/console
 
 def f = {{
   memory {{
-    def remaining = mut 3
+    mut remaining = 3
     while {condition} ->
       println("{{remaining}}...")
       remaining := remaining - 1

@@ -90,7 +90,7 @@ A lambda over a cell must not leave its `memory` block. Today NYX0224 rejects th
 ```nanyx
 def tryToFool = {
   memory {
-    def y = mut 0
+    mut y = 0
 
     { y := y + 1 }
   }
@@ -101,7 +101,7 @@ Requiring `$Memory` isn't enough, because every `memory` block supplies one. The
 `memory: [c] ([$Memory & c] () -> a) -> a`, and nothing stops `a` being `[$Memory] () -> int`:
 
 ```nanyx
-def counter = memory { def y = mut 0; { y := y + 1; y } }   -- [$Memory] () -> int
+def counter = memory { mut y = 0; { y := y + 1; y } }   -- [$Memory] () -> int
 
 def a = memory { counter() }   -- 1
 def b = memory { counter() }   -- 2: two pure expressions now differ
@@ -141,7 +141,7 @@ inner block can make cells that belong to the outer one:
 memory { m1 ->
   memory {
     use m1
-    def z = mut 0   -- belongs to m1's block
+    mut z = 0   -- belongs to m1's block
     ...
   }
 }

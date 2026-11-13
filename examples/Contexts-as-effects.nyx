@@ -85,7 +85,7 @@ def sumdown: [State(int)] int -> int = { sum ->
 
 def runState: [c] (a, [State(a) & c] () -> b) -> b = { init, action ->
   memory {
-    def cell = mut init
+    mut cell = init
     use State(a)(
       get = { cell }
       put = { v -> cell := v }

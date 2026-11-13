@@ -46,7 +46,7 @@ def range
   = { start, end ->
       seq {
         memory {
-          def current = mut start
+          mut current = start
 
           while current <= end ->
             yield current

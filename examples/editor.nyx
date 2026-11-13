@@ -39,7 +39,7 @@ export def iterLines: (TextDocument, start: int, direction: Direction) -> seq(Te
     def advance = directionToDelta(direction)
     seq {
       memory {
-        def current = mut start
+        mut current = start
         while current >= 0 and current < document.lineCount ->
           yield document.lineAt(current)
           current := advance(current)
@@ -53,8 +53,8 @@ type Neighbours = (#some(TextLine) | #none, #some(TextLine) | #none)
 export def iterLinesOutwards: (TextDocument, int) -> seq(Neighbours) = { document, lineNumber ->
   seq {
     memory {
-      def back = mut lineNumber - 1
-      def forward = mut lineNumber + 1
+      mut back = lineNumber - 1
+      mut forward = lineNumber + 1
 
       while back >= 0 or forward < document.lineCount ->
         def backLine = if back >= 0 then #some(document.lineAt(back)) else #none

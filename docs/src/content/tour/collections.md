@@ -19,7 +19,7 @@ def numbers = [1, 2, 3]
 
 def addItems = {
   memory {
-    def items: MList(int) = mut []
+    mut items: MList(int) = []
     items += 1
     items += 2
     MList.toList(items)
@@ -71,7 +71,7 @@ context ListBuilder(a) = (
 
 def MyList.apply: ([ListBuilder(a)] () -> ()) -> MyList(a) = { f ->
   memory {
-    def listRef = mut MyList()
+    mut listRef = MyList()
 
     use (
       yield = { element -> listRef := listRef \add(element) }
@@ -92,7 +92,7 @@ context MapBuilder(k, v) = (
 
 def MyMap.apply: ([MapBuilder(k, v)] () -> ()) -> MyMap(k, v) = { f ->
   memory {
-    def mapRef = mut MyMap()
+    mut mapRef = MyMap()
 
     use (
       `=>` = { k, v -> mapRef := mapRef \add(k, v) }

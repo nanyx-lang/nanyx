@@ -502,8 +502,8 @@ module NegateSyntax =
 module DbgSyntax =
     let builtIn = "dbg"
 
-/// `mut e` (see the memory page): a call to the built-in "__mut" with `e`. A def whose value it is makes a cell that
-/// holds the value of `e`.
+/// `mut x = e` (see the memory page) declares a cell that holds the value of `e`: a def of `x` whose value is a call to
+/// the built-in "__mut" with `e`, spanning the declaration. Nothing else makes such a call: `mut` is not an expression.
 module MutSyntax =
     let builtIn = "__mut"
 
