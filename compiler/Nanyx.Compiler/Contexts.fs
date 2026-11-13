@@ -87,25 +87,30 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
             match infoOpt with
             | Some info -> members |> List.map (fun (memberName, ty, _) -> memberName, ty, info.Members |> Map.tryFind memberName)
             | None -> members
-        match state.ContextDefs |> Map.tryFind name with
-        | Some ctxDef ->
+        // The members of the type `info` defines, with the context's parameters the types it is applied to here: an
+        // imported context's own variables are another module's, and mean nothing in this one.
+        let appliedMembers (info: TypeDefInfo) =
+            match Unifier.unalias info.Underlying with
+            | TyRecord fields ->
+                let argTys, state =
+                    match ctxExpr.Kind with
+                    | TypeApply(_, args) when args.Length = info.Parameters.Length -> args |> List.mapFold typeExprToTy state
+                    | _ -> [], state
+                Some (fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.applyToParameters info.Parameters argTys ty, None) |> withSymbols, state)
+            | _ -> None
+        // `Ask(int)`'s `ask` is the definition's `() -> a` with `a` the `int` it is applied to.
+        let applied =
+            match ctxExpr.Kind, infoOpt with
+            | TypeApply(_, args), Some info when not info.Parameters.IsEmpty && args.Length = info.Parameters.Length -> appliedMembers info
+            | _ -> None
+        match state.ContextDefs |> Map.tryFind name, applied, infoOpt with
+        | _, Some members, _ -> members
+        | Some ctxDef, None, _ ->
             let members, next = collectContextMembers state ctxDef
             withSymbols members, next
-        | None ->
-            // Also check TypeDefs for non-context types used as contexts
-            match infoOpt with
-            | Some info ->
-                match Unifier.unalias info.Underlying with
-                | TyRecord fields ->
-                    // The context's parameters are the types it is applied to here: an imported context's own
-                    // variables are another module's, and mean nothing in this one.
-                    let argTys, state =
-                        match ctxExpr.Kind with
-                        | TypeApply(_, args) when args.Length = info.Parameters.Length -> args |> List.mapFold typeExprToTy state
-                        | _ -> [], state
-                    fields |> Map.toList |> List.map (fun (memberName, ty) -> memberName, Unifier.applyToParameters info.Parameters argTys ty, None) |> withSymbols, state
-                | _ -> [], state
-            | None -> [], state
+        // Also check TypeDefs for non-context types used as contexts
+        | None, None, Some info -> appliedMembers info |> Option.defaultValue ([], state)
+        | None, None, None -> [], state
     | _ -> [], state
 
 /// The type of the member `memberName` of the context `ctxExpr` names, `C(T)` as `C(T).member` writes it: the member's

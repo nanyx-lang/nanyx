@@ -36,3 +36,16 @@ def filled = {
 }
 """
     compileClean (source.ReplaceLineEndings "\n") |> ignore
+
+[<Fact>]
+let ``A def that requires a context applied to a type reads its members at that type`` () =
+    // `ask` is `() -> a` in `Ask`, and `() -> int` in a def that requires `Ask(int)`, so adding two of its results
+    // needs no `Add(a)` (#1102).
+    let source = """context Ask(a) = (ask: () -> a)
+
+def addTwice: [Ask(int)] () -> int = { ask() + ask() }
+def joinTwice: [Ask(string)] () -> string = { ask() ++ ask() }
+def answer = use Ask(int)(ask = { 21 }) in addTwice()
+"""
+    let typed = compileClean (source.ReplaceLineEndings "\n")
+    Assert.Equal("int", Unifier.tyToString typed.Types.["answer"])
