@@ -594,12 +594,35 @@ internal static class CliCommands
         }
 
         // As compilers usually write them, so editors and terminals can link to the place:
-        // `path/to/file.nyx:3:9: error NYX0201: message`.
+        // `path/to/file.nyx:3:9: error NYX0201: message`, then the line of source with the span underlined (see
+        // `SourceExcerpt`). On a terminal, the severity and the underline are in its colour.
+        var colour = Terminal.InColour(writer);
+        var sources = new Dictionary<string, string?>();
         foreach (var diagnostic in diagnostics)
         {
             var severity = diagnostic.Severity.ToString().ToLowerInvariant();
+            var escape = colour ? SeverityColour(diagnostic.Severity) : null;
+            string Coloured(string text) => escape is null ? text : $"\u001b[{escape}m{text}\u001b[0m";
             var location = diagnostic.Span is null ? string.Empty : $"{FormatLocation(shell, diagnostic.Span.Value)}: ";
-            writer.WriteLine($"{location}{severity} {diagnostic.Code}: {diagnostic.Message}");
+            writer.WriteLine($"{location}{Coloured(severity)} {diagnostic.Code}: {diagnostic.Message}");
+
+            if (diagnostic.Span is not null)
+            {
+                var span = diagnostic.Span.Value;
+                if (!sources.TryGetValue(span.File, out var source))
+                {
+                    source = SourceExcerpt.SourceOf(span.File);
+                    sources[span.File] = source;
+                }
+
+                if (source is not null)
+                {
+                    foreach (var line in SourceExcerpt.Lines(span, source, Coloured))
+                    {
+                        writer.WriteLine(line);
+                    }
+                }
+            }
 
             foreach (var related in diagnostic.Related)
             {
@@ -607,6 +630,10 @@ internal static class CliCommands
             }
         }
     }
+
+    /// <summary>The ANSI colour a diagnostic of <paramref name="severity"/> is shown in: bold red, yellow or cyan.</summary>
+    private static string SeverityColour(Severity severity) =>
+        severity.IsError || severity.IsCritical ? "1;31" : severity.IsWarning ? "33" : "36";
 
     /// <summary>"path/to/file.nyx:3:9": where a span starts, its path as the shell shows it, with lines and columns from 1.</summary>
     private static string FormatLocation(Shell shell, Parser.Program.SourceSpan span) =>

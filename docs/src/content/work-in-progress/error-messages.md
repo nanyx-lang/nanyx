@@ -48,7 +48,11 @@ need it first. This workstream fills it with content.
   modules.
 - **Wording is inconsistent.** Messages range from `Unknown identifier 'x'` to `dbg expects a single argument`
   and `` `with` updates fields by name``; quoting, capitalisation and voice vary.
-- **The CLI prints one line per diagnostic**, `file:line:col: error NYX0201: message`, with no source excerpt.
+- **The CLI shows each diagnostic with its source** ([#880](https://github.com/nanyx-lang/nanyx/issues/880)):
+  `file:line:col: error NYX0201: message`, then the line the span starts on, after its number, with the span
+  underlined in carets (to the end of that line when the span goes on past it), as `SourceExcerpt.cs` lays it out.
+  On a terminal that takes ANSI escapes, and when `NO_COLOR` is not set, the severity and the underline are coloured.
+  A related location is still one line, with no excerpt.
 - **Some errors have fixes.** An unknown name that a standard library module exports offers to import it, and a
   named parameter passed by position (NYX0218) offers to name the arguments when each fits just one parameter.
 - **An unknown name asks "did you mean"** (`NameSuggestions.fs`): the names in scope closest to it by edit distance
@@ -82,7 +86,8 @@ _To do._ Candidate items, not yet filed:
 1. **Inventory.** List every error the parser and type checker can produce, with an example program for each.
 2. **Codes and wording.** Allocate codes and rewrite messages to the house style, as each error moves to the
    structured `Diagnostic` (after [#97](https://github.com/nanyx-lang/nanyx/issues/97)).
-3. **CLI rendering.** File, source excerpt and underline; colour when the output is a terminal.
+3. ~~**CLI rendering.** File, source excerpt and underline; colour when the output is a terminal.~~ Done
+   ([#880](https://github.com/nanyx-lang/nanyx/issues/880)); see Where the compiler is today.
 4. ~~**Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.~~
    Done ([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see Where the compiler is today.
 5. **Error reference.** A docs page per code, generated or checked against the compiler's table.

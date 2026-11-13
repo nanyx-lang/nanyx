@@ -53,7 +53,7 @@ let ``Run - a context member generic over its payload, called at int, is reporte
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
     Assert.Matches(
-        ":21:11: error NYX0301: The WebAssembly backend cannot compile a call to the context member 'bind' with one of its own type variables at int yet\\r?\\n$",
+        ":21:11: error NYX0301: The WebAssembly backend cannot compile a call to the context member 'bind' with one of its own type variables at int yet\\r?\\n",
         outcome.StandardError)
 
 [<Fact>]

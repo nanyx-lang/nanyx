@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.FSharp.Core;
 using NyxCompiler;
@@ -37,12 +36,12 @@ internal sealed class CompileProgress : CompileListener, IDisposable
     private CompileProgress(TextWriter errors, string what, Func<string, string> display, bool timings)
     {
         _errors = errors;
-        _terminal = errors == Console.Error && !Console.IsErrorRedirected ? errors : null;
+        _terminal = errors == Console.Error && Terminal.IsTerminal(errors) ? errors : null;
         _display = display;
         _what = what;
         _current = what;
         _timings = timings ? new CompileTimings(this) : null;
-        _live = _timings is not null && _terminal is not null && TryEnableEscapes();
+        _live = _timings is not null && _terminal is not null && Terminal.TakesEscapes(_terminal);
         if (_terminal is not null)
         {
             _timer = new Timer(_ => Redraw(), null, Tick, Tick);
@@ -237,30 +236,4 @@ internal sealed class CompileProgress : CompileListener, IDisposable
             return (80, 24);
         }
     }
-
-    /// <summary>
-    /// Whether stderr's terminal takes ANSI escapes, turning on virtual terminal processing for a Windows console first.
-    /// </summary>
-    private static bool TryEnableEscapes()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return true;
-        }
-
-        const int StandardError = -12;
-        const uint VirtualTerminalProcessing = 0x0004;
-        var handle = GetStdHandle(StandardError);
-        return GetConsoleMode(handle, out var mode)
-            && ((mode & VirtualTerminalProcessing) != 0 || SetConsoleMode(handle, mode | VirtualTerminalProcessing));
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GetStdHandle(int handle);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetConsoleMode(IntPtr handle, out uint mode);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetConsoleMode(IntPtr handle, uint mode);
 }
