@@ -152,13 +152,14 @@ Not done yet, as for `Eq`:
 - **Only nominal and protected types attach `hash`** (decision 6), as for `==` and `compare`.
 - **Generic code says it hashes**, as for `Eq`: a def that passes a value of its type variable to a function that
   requires `Hash` needs `[Hash(a)]`, written or inferred.
+- **A structure is hashed through its parts' own `Hash`** ([#641](https://github.com/nanyx-lang/nanyx/issues/641)), as
+  `==` compares through their `Eq`: where a part has a `hash` of its own, attached (`list($Email)`) or the `Hash(a)`
+  a function is passed, `StructuralInstances` derives a `hash` for the structure, which hashes each part with
+  `__hashOf` and folds the hashes with `__hashCombine`, after the tag's name for a tag, and a list's with
+  `__listHashBy`. A built-in type's attached `hash` is the compiler's own, so a structure of only those keeps it.
 
 Not done yet:
 
-- **Structural derivation that looks up each part.** The compiler's own hash hashes every part by its structure, so
-  a type that holds a part with its own `hash`, such as a `list($Email)` where `$Email` attaches `==` and `hash`, has
-  no `Hash` for now, since `==` on it compares the elements through `` $Email.`==` ``
-  ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
 - **Maps and sets keyed by `Hash`** are done in the prelude, but do not use the hash yet; see [Maps and sets](./maps-and-sets).
 
 # What existed before

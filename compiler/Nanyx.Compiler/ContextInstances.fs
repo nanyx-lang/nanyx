@@ -302,15 +302,24 @@ let private derivableType (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list)
 let internal partInstanceIn (env: TypeEnv) (state: InferState) (ctxName: Identifier) (ty: Ty) : (TypeExpr * ContextProvider) option =
     instanceInScope env state ctxName [ ty ]
 
-/// Whether comparing two values of the structure `ty` compares a part with an `==` of its own (see
-/// `StructuralInstances.comparesParts`): one attached to the part's type, an `Eq` of it in scope that `partInstance`
-/// finds, or the `Eq` of a type variable that `hasInstance` says is in scope.
-let internal comparesOwnParts (env: TypeEnv) (rigid: Set<int>) (partInstance: Ty -> (TypeExpr * ContextProvider) option) (hasInstance: TyVar -> bool) (ty: Ty) : bool =
+/// Whether comparing, or hashing, values of the structure `ty` reads a part with a `memberName` (`==` or `hash`) of
+/// its own (see `StructuralInstances.comparesParts`): one attached to the part's type, if not a built-in one, an instance of it in scope that
+/// `partInstance` finds, or the instance of a type variable that `hasInstance` says is in scope.
+let internal comparesOwnParts
+    (env: TypeEnv)
+    (rigid: Set<int>)
+    (memberName: Identifier)
+    (partInstance: Ty -> (TypeExpr * ContextProvider) option)
+    (hasInstance: TyVar -> bool)
+    (ty: Ty)
+    : bool =
     ty
     |> StructuralInstances.comparesParts rigid (fun part ->
         match part with
         | TyVar var -> hasInstance var
-        | _ -> (tryResolveAttachedFunction env part EqualityOperators.equals).IsSome || (partInstance part).IsSome)
+        // A built-in type's attached `hash` is the compiler's own (see `WellKnownContexts.isBuiltIn`).
+        | _ when WellKnownContexts.isBuiltIn part -> (partInstance part).IsSome
+        | _ -> (tryResolveAttachedFunction env part memberName).IsSome || (partInstance part).IsSome)
 
 /// `state` with the comparison `call`, at `span`, of two values of the type `ty` calling the `==` the type has of its
 /// own, if it has one: the `==` attached to it, or, for a structure that compares a part with an `==` of its own,
@@ -325,16 +334,17 @@ let internal derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyV
     match tryResolveAttachedFunction env ty EqualityOperators.equals, state.ContextScope with
     | Some attached, DefScope(name, _) when name = attached -> None
     | Some attached, _ -> Some (calling (attached, state))
-    | None, _ when comparesOwnParts env rigid partInstance (instanceOf >> Option.isSome) ty ->
+    | None, _ when comparesOwnParts env rigid EqualityOperators.equals partInstance (instanceOf >> Option.isSome) ty ->
         StructuralInstances.comparison rigid partInstance instanceOf call span ty state |> Option.map calling
     | None, _ -> None
 
-/// The instance of `Eq` the call `call` to `calleeName`, at `span` in `env`, finds for the structure `ty` in place of
-/// the compiler's own (`wellKnown` is `Eq`, found as `instance`), when `ty` compares a part with an `==` of its own, or
-/// holds a map or a set: the derived definition, as the context's member. A variable of `ty` is compared with the
-/// instance `instanceOf` finds for it, and `rigid` holds the variables of the function around the call (see
-/// `StructuralInstances.instance`). A type with variables in it that holds a map or a set and has no derived `==` is an
-/// error, since the compiler's own cannot compare it.
+/// The instance of `Eq` or `Hash` (`wellKnown`, found as `instance`) the call `call` to `calleeName`, at `span` in
+/// `env`, finds for the structure `ty` in place of the compiler's own, when `ty` compares or hashes a part with an `==`
+/// or `hash` of its own, or, for `Eq`, holds a map or a set: the derived definition, as the context's member. A
+/// variable of `ty` is read with the instance `instanceOf` finds for it, and `rigid` holds the variables of the
+/// function around the call (see `StructuralInstances.instance`). A type with variables in it that holds a map or a set
+/// and has no derived `==` is an error, since the compiler's own cannot compare it, and so is one whose parts' own
+/// `hash` cannot be read, a union open to the caller's tags, since the compiler's own would not read them.
 let private derivedEquality
     (env: TypeEnv)
     (state: InferState)
@@ -347,16 +357,20 @@ let private derivedEquality
     (span: SourceSpan)
     (ty: Ty)
     : Result<ContextInstance * InferState, Diagnostic list> option =
-    let partInstance = partInstanceIn env state EqualityOperators.context
-    if wellKnown.Context <> EqualityOperators.context || instance <> WellKnownContexts.BuiltIn then None
+    let partInstance = partInstanceIn env state wellKnown.Context
+    let isHash = wellKnown.Context = WellKnownContexts.hashing.Context
+    if (wellKnown.Context <> EqualityOperators.context && not isHash) || instance <> WellKnownContexts.BuiltIn then None
     else
+        let readsParts = comparesOwnParts env rigid wellKnown.Member partInstance (instanceOf >> Option.isSome) ty
         let derived =
-            if comparesOwnParts env rigid partInstance (instanceOf >> Option.isSome) ty then
-                StructuralInstances.instance rigid partInstance instanceOf false call span EqualityOperators.context ty state
+            if readsParts then
+                StructuralInstances.instance rigid partInstance instanceOf false call span wellKnown.Context ty state
                 |> Option.bind Result.toOption
             else None
         match derived with
         | Some derived -> Some (Ok derived)
+        | None when isHash && readsParts ->
+            Some (Error (WellKnownContexts.error span (WellKnownContexts.noInstanceAtCall wellKnown calleeName ty "its parts' own hash cannot be read where the caller chooses more of its tags")))
         | None when not (TypeEnv.freeTyVars ty).IsEmpty && StructuralInstances.holdsCollection ty ->
             Some (Error (WellKnownContexts.error span (EqualityOperators.collectionAtGenericCall calleeName ty)))
         | None -> None

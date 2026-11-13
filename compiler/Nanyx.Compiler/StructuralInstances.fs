@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Instances of `ToString` and `Eq` the compiler derives from a type's structure, part by part (see "Printing values"
+/// Instances of `ToString`, `Eq` and `Hash` the compiler derives from a type's structure, part by part (see "Printing values"
 /// and "Equality and well-known contexts" in the docs' work in progress).
 ///
 /// A tag union, a tuple, a record or a list has no `toString` attached, so a hole of such a
@@ -45,6 +45,10 @@ open NyxCompiler.InferState
 /// A comparison of a union with a rest the function around chooses, `#some($Email) | r`, is derived the same way, with
 /// the rest kept in its type: two values of a tag the rest holds, or of different tags, are compared with the
 /// compiler's own `__equals`, and the definition requires no `Eq(r)` (see `WellKnownContexts.comparedRests`).
+///
+/// `Hash` is derived where `Eq` is, so that values a derived `==` finds equal have the same hash: a structure with a
+/// part that has a `hash` of its own is hashed by a definition that hashes each part with `__hashOf`, which finds the
+/// part's own `Hash`, and folds the hashes with `__hashCombine`.
 module internal StructuralInstances =
     /// Whether a call that requires the context `ctxName` of a structure with no instance of its own finds a derived
     /// one: `ToString`. `Eq` has the compiler's own, and a derived one only as `comparesParts` says.
@@ -52,7 +56,9 @@ module internal StructuralInstances =
 
     /// The member of the context `ctxName` a derived definition is.
     let private memberOf (ctxName: Identifier) =
-        if ctxName = EqualityOperators.context then EqualityOperators.equals else InterpolationHoles.memberName
+        if ctxName = EqualityOperators.context then EqualityOperators.equals
+        elif ctxName = WellKnownContexts.hashing.Context then WellKnownContexts.hashing.Member
+        else InterpolationHoles.memberName
 
     /// What a type is built from, as far as writing a value of it goes.
     type private Shape =
@@ -318,6 +324,45 @@ module internal StructuralInstances =
                 | _ -> EqualityOperators.listFunction
             expr (FunctionCall(helper, None, [ value; other; compare ]))
 
+    /// The prelude functions that hash a value through its `Hash`, make two hashes one, and hash a list through its
+    /// elements' hashes.
+    let private hashOfFunction, hashCombine, listHash = "__hashOf", "__hashCombine", "__listHashBy"
+
+    /// The hash of `value`, a value of the type `shape` is, as a derived `hash` works it out: each part hashed with
+    /// `__hashOf`, which finds the part's own `Hash`, and the hashes folded with `__hashCombine`, after the tag's name for a
+    /// tag, so that values a derived `==` finds equal have the same hash.
+    let private hashBody (span: SourceSpan) (shape: Shape) : Expression =
+        let expr = Expression.at span
+        let name (identifier: Identifier) = expr (IdentifierExpr identifier)
+        let field (target: Expression) (fieldName: Identifier) = expr (MemberAccess(target, fieldName, None))
+        let pattern = Pattern.at span
+        let hashOf (part: Expression) = expr (FunctionCall(hashOfFunction, None, [ part ]))
+        let builtIn (value: Expression) = expr (FunctionCall(WellKnownContexts.hashing.BuiltInFunction, None, [ value ]))
+        let folded (seed: Expression) (parts: Expression list) =
+            parts |> List.fold (fun hash part -> expr (FunctionCall(hashCombine, None, [ hash; hashOf part ]))) seed
+        let seed = builtIn (expr (LiteralExpr (IntLit 0I)))
+        let positions (count: int) = pattern (TuplePattern (List.init count (partName >> IdentifierPattern >> pattern)))
+        let value = name valueName
+        match shape with
+        | TagShape tags ->
+            let arm (tagName: string, payload: Ty option) : MatchArm =
+                let tag (payloadPattern: PatternKind option) = pattern (TagPattern(tagName, payloadPattern |> Option.map pattern))
+                let named = builtIn (expr (LiteralExpr (StringLit $"#{tagName}")))
+                match payload with
+                | None -> [ tag None ], named
+                | Some (TyPrimitive "unit") -> [ tag (Some UnitPattern) ], named
+                | Some _ -> [ tag (Some (IdentifierPattern (partName 0))) ], folded named [ name (partName 0) ]
+            expr (Match([ value ], tags |> List.map arm))
+        | TupleShape items ->
+            expr (Match([ value ], [ [ positions items.Length ], folded seed (List.init items.Length (partName >> name)) ]))
+        | RecordShape fields -> folded seed (fields |> List.map (fun (fieldName, _) -> field value fieldName))
+        | ListShape _ ->
+            let hashPart = expr (Lambda([ partName 0, None ], hashOf (name (partName 0)), false))
+            expr (FunctionCall(listHash, None, [ seed; value; hashPart ]))
+        | OpenTagShape _
+        | MapShape _
+        | SetShape _ -> invalidOp "Hash is never derived for a map, a set or an open union (see shapeFor)"
+
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
     /// requires `ctxName` of each of `varNames`: its name is `name`, and it is reported at `span`.
     let private definition (span: SourceSpan) (ctxName: Identifier) (name: Identifier) (written: TypeExpr) (varNames: string list) (shape: Shape) : TopLevelItem =
@@ -327,6 +372,8 @@ module internal StructuralInstances =
             if ctxName = EqualityOperators.context then
                 typeExpr (TypeFunc(typeExpr (TypeTuple [ written; written ]), typeExpr (TypeName "bool"))),
                 expr (Lambda([ valueName, None; otherName, None ], equalsBody span shape, false))
+            elif ctxName = WellKnownContexts.hashing.Context then
+                typeExpr (TypeFunc(written, typeExpr (TypeName "int"))), expr (Lambda([ valueName, None ], hashBody span shape, false))
             else
                 typeExpr (TypeFunc(written, typeExpr (TypeName "string"))), expr (Lambda([ valueName, None ], toStringBody span shape, false))
         let annotation =
@@ -351,7 +398,10 @@ module internal StructuralInstances =
                 | Some name -> name, vars, state
                 | None ->
                     // No two modules of a program write a definition of the same name.
-                    let prefix = if ctxName = EqualityOperators.context then EqualityOperators.builtInFunction else "__toString"
+                    let prefix =
+                        if ctxName = EqualityOperators.context then EqualityOperators.builtInFunction
+                        elif ctxName = WellKnownContexts.hashing.Context then WellKnownContexts.hashing.BuiltInFunction
+                        else "__toString"
                     let name = $"{prefix}_{NodeId.next ()}"
                     let item = definition span ctxName name written (vars |> List.map (fun var -> names.[var.Id])) shape
                     name, vars,

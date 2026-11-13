@@ -401,7 +401,7 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                     if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
                         joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
                     else leftExpr.Type, constrained
-                let comparesParts = comparesOwnParts env Set.empty (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
+                let comparesParts = comparesOwnParts env Set.empty EqualityOperators.equals (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
                 let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
                 EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
                 |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)

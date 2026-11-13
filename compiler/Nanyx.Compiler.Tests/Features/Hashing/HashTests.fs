@@ -32,9 +32,14 @@ let ``A type that attaches == and no hash has no Hash, and nor has anything that
     Assert.Equal("'h' hashes values of type 'list($Email)', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
 
 [<Fact>]
-let ``A type that holds one with its own hash has no Hash yet (#641)`` () =
-    let message, _ = missingContext (hashing + email true + "def a = h([$Email(\"x\")])\n")
-    Assert.Equal("'h' hashes values of type 'list($Email)', which cannot be hashed: its part '$Email' has its own hash, which the compiler's own hash of the whole does not read yet", message)
+let ``A structure that holds a part with its own hash is passed a hash derived from its parts`` () =
+    let typed = compileClean (hashing + email true + "def a = h([$Email(\"x\")])\ndef b = h((who = $Email(\"x\"), n = 1))\n")
+    // The derived definitions' own calls, which hash each part, come after the module's.
+    match instancesOf typed |> List.truncate 2 with
+    | [ InstanceSynthesized [ "hash", list ]; InstanceSynthesized [ "hash", record ] ] ->
+        Assert.StartsWith("__hash_", list)
+        Assert.StartsWith("__hash_", record)
+    | other -> failwith $"Expected two derived hashes, got %A{other}"
 
 [<Fact>]
 let ``Functions have no hash`` () =

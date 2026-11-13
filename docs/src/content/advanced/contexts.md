@@ -329,7 +329,7 @@ def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
 def $Email.hash: $Email -> int = { e -> string.hash(lower(e)) }
 ```
 
-As with `==`, only a nominal or protected type can attach `hash`. The built-in types have theirs attached as functions, `int.hash` and `string.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `$Email`s, has no `Hash` yet ([#641](https://github.com/nanyx-lang/nanyx/issues/641)).
+As with `==`, only a nominal or protected type can attach `hash`. The built-in types have theirs attached as functions, `int.hash` and `string.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `$Email`s, is hashed through it: each part is hashed with its own `Hash` and the hashes are folded together, so two lists that `==` finds equal have the same hash.
 
 ## Default(a)
 
