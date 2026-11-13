@@ -142,6 +142,25 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> None)
         |> Map.ofSeq
 
+    /// Stops at a call, at the node `node`, to the member of the key `key` of a context without parameters, when the call
+    /// has one of the member's own type variables at another type than unit. The member's value is made once, where its
+    /// instance is, at the type the context declares with those variables unit (see `unconstrainedAsUnit`), so the call
+    /// would pass and read its values as unit's: `ret: a -> #some(a) | r` called as `ret(1)` (#1152). The rests of its
+    /// unions and records, and its context variables, change nothing in how its values are laid out.
+    let checkMemberCall (key: ContextMemberKey) (node: NodeId) =
+        match declaredMemberTypes |> Map.tryFind key, input.CalleeTypes |> Map.tryFind node with
+        | Some memberTy, Some calledTy when not (freeVars memberTy).IsEmpty ->
+            let layoutFree = Set.union (Unifier.restVarIds true memberTy) (FunctionContexts.variablesIn memberTy |> Map.keys |> Set.ofSeq)
+            let bindings =
+                try bindScheme Map.empty memberTy (substitute subst calledTy)
+                with CannotLower _ -> Map.empty
+            bindings
+            |> Map.iter (fun id ty ->
+                let irTy = toIrType (unconstrainedAsUnit ty)
+                if not (layoutFree.Contains id) && irTy <> IrUnit then
+                    cannot $"a call to the context member '{ContextMemberKey.text key}' with one of its own type variables at {IrType.show irTy}")
+        | _ -> ()
+
     /// The contexts a function of type `fnTy` requires where it is called.
     let requiredContexts (fnTy: Ty) =
         match Unifier.unalias fnTy with
@@ -424,6 +443,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, args) when scope.Members.ContainsKey (NamedMember name) ->
             // A context member in scope: a function value like any other.
             let ty = tyOf expr
+            checkMemberCall (NamedMember name) expr.Id
             this.CallValue scope scope.Members.[NamedMember name] args ty k
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
@@ -589,6 +609,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // `C(T).f(args)`: the member of that instance of the context, which must be in scope.
             let key = contextMemberKey (Some contextType) memberName
             let ty = tyOf expr
+            checkMemberCall key expr.Id
             match scope.Members |> Map.tryFind key with
             | Some memberVar -> this.CallValue scope memberVar args ty k
             | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
