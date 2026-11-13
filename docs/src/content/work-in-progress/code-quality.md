@@ -77,9 +77,10 @@ The large test files are now split into `Features/<Area>/` files.
 | `Infer.fs` | 1,462 | `TypeResolution.fs`, `Contexts.fs` and `ContextInstances.fs` moved out before the chain, `InferModule.fs` after it |
 
 What is left in `Infer.fs` is a few small helpers and the recursive chain, from `inferExpr` to `inferBlock`. Most of
-the chain was `inferExprKind`, a single match of about 1,000 lines. Its long arms are becoming `and` functions of
-their own ([#910](https://github.com/nanyx-lang/nanyx/issues/910)): a call is `inferCall` and a `match` is
-`inferMatch`, each about 300 lines.
+the chain was `inferExprKind`, a single match of about 1,000 lines. Its long arms are now `and` functions of their own
+([#910](https://github.com/nanyx-lang/nanyx/issues/910)): an operator is `inferOperator`, a pipe `inferPipe`, a
+`match` `inferMatch` and a call `inferCall`. No arm left inline is over about 25 lines, but `inferCall` and
+`inferMatch` are each about 300.
 
 **2026-11-12.** `Program.fs` (parser) had grown back to the limit, at 1,498 lines:
 

@@ -246,111 +246,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
         inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
     | CoalesceOperator.Call(left, right) -> CoalesceOperator.infer (inferExpr env) state expr left right
-    | BinaryOp(_, _, left, right) ->
-        match inferExpr env state left with
-        | Error err -> Error err
-        | Ok (leftExpr, next) ->
-            match inferExpr env next right |> Result.bind (fun (rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
-            | Error err -> Error err
-            | Ok (leftExpr, rightExpr, nextState) ->
-                let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
-                let nextState, constrained = NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
-                let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
-                // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
-                let attached (name: Identifier) =
-                    tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type) name
-                    |> Option.filter (fun found ->
-                        name <> EqualityOperators.equals
-                        || (nextState.ContextScope <> DefScope(found, false) && nextState.ContextScope <> DefScope(found, true)))
-                match OperatorCalls.definition (memberOfInstanceInScope env nextState) attached env nextState expr leftExpr.Type input with
-                | Some (callee, scheme, instance) ->
-                    let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
-                    Ok (mkTypedExpr expr resultTy None None None, called)
-                | None ->
-                match expr.Kind with
-                | BinaryOp(op, _, _, _) when op = AppendOperator.operator ->
-                    AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
-                    |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
-                | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
-                    ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
-                    |> Result.map (fun numericConstrained -> mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
-                | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op ->
-                    OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
-                    |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
-                | BinaryOp(op, _, _, _) when EqualityOperators.isOperator op ->
-                    // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
-                    // tags. Anything else is made equal.
-                    let operandTy, joined =
-                        if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
-                            joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
-                        else leftExpr.Type, constrained
-                    let comparesParts = comparesOwnParts env Set.empty (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
-                    let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
-                    EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
-                    |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
-                | BinaryOp(op, _, _, _) when ["and"; "or"] |> List.contains op ->
-                    // Both operands are already unified with each other; pin them to bool.
-                    let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
-                    Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)
-                // A spare operator (`^`, `<>`, ...) means only what a definition of it gives it.
-                | BinaryOp(op, opSpan, _, _) ->
-                    let operandTy = Unifier.tyToString (resolveSoFar nextState leftExpr.Type)
-                    let message =
-                        $"`{op}` has no built-in meaning, and `{operandTy}` has no `{op}` attached. A type gets one by attaching it: def $Money.`{op}` = ..."
-                    Error [ Diagnostics.at DiagnosticCodes.UnknownFunction (opSpan |> Option.defaultValue expr.Span) message ]
-                | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
-    | Pipe(value, name, spanOpt, args) ->
-        match inferExpr env state value with
-        | Error err -> Error err
-        | Ok (typedValue, nextState) ->
-            // A pipe resolves left to right: the value's type as the code before the pipe settles it picks the
-            // attached function, even where that type is still a variable waiting on the module's constraints. A
-            // number literal the code before it has not settled is of its default type, `3 \toFloat` an int's.
-            let nextState = NumericLiterals.settleWithin [ typedValue.Type ] nextState
-            let valueTy = resolveSoFar nextState typedValue.Type
-            let resolvedName =
-                tryResolveAttachedFunction env valueTy name
-                |> Option.defaultValue name
-            let nextState =
-                if resolvedName = name then nextState
-                else { nextState with PipeTargets = nextState.PipeTargets |> Map.add expr.Id resolvedName }
-            let callArgs = pipeCallArguments value args
-            let lookup : PipeLookups.Lookup =
-                { PipedType = valueTy; AttachedUnder = attachedTypeNames valueTy; Written = name; Called = resolvedName; At = nameSpan spanOpt expr }
-            let checkArgumentsOnly () =
-                let mutable current = nextState
-                for arg in args do
-                    match inferExpr env current arg with
-                    | Ok (_, next) -> current <- next
-                    | Error _ -> ()
-                current
-            // Piping what failed to check to a name attached to nothing is not another error: the name may be
-            // attached to the type it was meant to have. Its arguments are still checked.
-            if resolvedName = name && Unifier.isError valueTy && (TypeEnv.tryFind name env).IsNone then
-                let current = checkArgumentsOnly ()
-                Ok (mkTypedExpr expr Unifier.errorType None None None, { current with UnknownTypeUses = expr.Id :: current.UnknownTypeUses })
-            else
-            match PipeLookups.misfit env nextState lookup (not args.IsEmpty) with
-            | Some misfit ->
-                // A plain function the value's type attaches nothing in place of, which does not take the value, is
-                // the pipe's error, on its name, rather than the call's mismatch.
-                let current = checkArgumentsOnly ()
-                Ok (mkTypedExpr expr Unifier.errorType None None None, { current with FailedExprs = (expr.Id, [ misfit ]) :: current.FailedExprs })
-            | None ->
-            match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
-            | Ok (typedCall, finalState) ->
-                // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
-                // than one of, is the pipe's, which says what the pipe looked for.
-                let finalState =
-                    match finalState.FailedExprs with
-                    | (id, diagnostics) :: rest when id = expr.Id && rest.Length = nextState.FailedExprs.Length ->
-                        let isTypeName typeName =
-                            (nextState.TypeDefs.ContainsKey typeName && not (nextState.HiddenTypeNames.Contains typeName))
-                            || isBuiltInTypeName typeName
-                        { finalState with FailedExprs = (id, PipeLookups.explain env nextState isTypeName lookup diagnostics) :: rest }
-                    | _ -> finalState
-                Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
-            | Error err -> Error err
+    | BinaryOp(_, _, left, right) -> inferOperator env state expr left right
+    | Pipe(value, name, spanOpt, args) -> inferPipe env state expr value name spanOpt args
     | UseIn(value, body) ->
         match inferExpr env (state |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
         | Error err -> Error err
@@ -458,6 +355,117 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | None ->
                 let ty, next = freshVar current
                 mkTypedExpr expr ty None None None, next)
+
+/// An operator applied to `left` and `right` that is neither `**`, a composition nor `??`: read through a definition
+/// of it if one is found, or else as the operator built in.
+and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) (left: Expression) (right: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
+    match inferExpr env state left with
+    | Error err -> Error err
+    | Ok (leftExpr, next) ->
+        match inferExpr env next right |> Result.bind (fun (rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
+        | Error err -> Error err
+        | Ok (leftExpr, rightExpr, nextState) ->
+            let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
+            let nextState, constrained = NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
+            let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
+            // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
+            let attached (name: Identifier) =
+                tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type) name
+                |> Option.filter (fun found ->
+                    name <> EqualityOperators.equals
+                    || (nextState.ContextScope <> DefScope(found, false) && nextState.ContextScope <> DefScope(found, true)))
+            match OperatorCalls.definition (memberOfInstanceInScope env nextState) attached env nextState expr leftExpr.Type input with
+            | Some (callee, scheme, instance) ->
+                let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
+                Ok (mkTypedExpr expr resultTy None None None, called)
+            | None ->
+            match expr.Kind with
+            | BinaryOp(op, _, _, _) when op = AppendOperator.operator ->
+                AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
+                |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
+            | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
+                ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type (numericOperandType constrained leftExpr.Type rightExpr.Type)
+                |> Result.map (fun numericConstrained -> mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
+            | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op ->
+                OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
+                |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
+            | BinaryOp(op, _, _, _) when EqualityOperators.isOperator op ->
+                // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
+                // tags. Anything else is made equal.
+                let operandTy, joined =
+                    if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
+                        joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
+                    else leftExpr.Type, constrained
+                let comparesParts = comparesOwnParts env Set.empty (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
+                let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
+                EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
+                |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
+            | BinaryOp(op, _, _, _) when ["and"; "or"] |> List.contains op ->
+                // Both operands are already unified with each other; pin them to bool.
+                let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
+                Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)
+            // A spare operator (`^`, `<>`, ...) means only what a definition of it gives it.
+            | BinaryOp(op, opSpan, _, _) ->
+                let operandTy = Unifier.tyToString (resolveSoFar nextState leftExpr.Type)
+                let message =
+                    $"`{op}` has no built-in meaning, and `{operandTy}` has no `{op}` attached. A type gets one by attaching it: def $Money.`{op}` = ..."
+                Error [ Diagnostics.at DiagnosticCodes.UnknownFunction (opSpan |> Option.defaultValue expr.Span) message ]
+            | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
+
+/// `value` piped to the function `name`, its name at `spanOpt`, with `args`: a call of the function attached to
+/// `value`'s type under that name, if there is one, or else of `name` itself.
+and private inferPipe (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) (name: string) (spanOpt: SourceSpan option) (args: Expression list) : Result<TypedExpr * InferState, Diagnostic list> =
+    match inferExpr env state value with
+    | Error err -> Error err
+    | Ok (typedValue, nextState) ->
+        // A pipe resolves left to right: the value's type as the code before the pipe settles it picks the
+        // attached function, even where that type is still a variable waiting on the module's constraints. A
+        // number literal the code before it has not settled is of its default type, `3 \toFloat` an int's.
+        let nextState = NumericLiterals.settleWithin [ typedValue.Type ] nextState
+        let valueTy = resolveSoFar nextState typedValue.Type
+        let resolvedName =
+            tryResolveAttachedFunction env valueTy name
+            |> Option.defaultValue name
+        let nextState =
+            if resolvedName = name then nextState
+            else { nextState with PipeTargets = nextState.PipeTargets |> Map.add expr.Id resolvedName }
+        let callArgs = pipeCallArguments value args
+        let lookup : PipeLookups.Lookup =
+            { PipedType = valueTy; AttachedUnder = attachedTypeNames valueTy; Written = name; Called = resolvedName; At = nameSpan spanOpt expr }
+        let checkArgumentsOnly () =
+            let mutable current = nextState
+            for arg in args do
+                match inferExpr env current arg with
+                | Ok (_, next) -> current <- next
+                | Error _ -> ()
+            current
+        // Piping what failed to check to a name attached to nothing is not another error: the name may be
+        // attached to the type it was meant to have. Its arguments are still checked.
+        if resolvedName = name && Unifier.isError valueTy && (TypeEnv.tryFind name env).IsNone then
+            let current = checkArgumentsOnly ()
+            Ok (mkTypedExpr expr Unifier.errorType None None None, { current with UnknownTypeUses = expr.Id :: current.UnknownTypeUses })
+        else
+        match PipeLookups.misfit env nextState lookup (not args.IsEmpty) with
+        | Some misfit ->
+            // A plain function the value's type attaches nothing in place of, which does not take the value, is
+            // the pipe's error, on its name, rather than the call's mismatch.
+            let current = checkArgumentsOnly ()
+            Ok (mkTypedExpr expr Unifier.errorType None None None, { current with FailedExprs = (expr.Id, [ misfit ]) :: current.FailedExprs })
+        | None ->
+        match inferExpr env nextState { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
+        | Ok (typedCall, finalState) ->
+            // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
+            // than one of, is the pipe's, which says what the pipe looked for.
+            let finalState =
+                match finalState.FailedExprs with
+                | (id, diagnostics) :: rest when id = expr.Id && rest.Length = nextState.FailedExprs.Length ->
+                    let isTypeName typeName =
+                        (nextState.TypeDefs.ContainsKey typeName && not (nextState.HiddenTypeNames.Contains typeName))
+                        || isBuiltInTypeName typeName
+                    { finalState with FailedExprs = (id, PipeLookups.explain env nextState isTypeName lookup diagnostics) :: rest }
+                | _ -> finalState
+            Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
+        | Error err -> Error err
 
 /// A `match` of `scrutinees` with `arms`.
 and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : Result<TypedExpr * InferState, Diagnostic list> =
