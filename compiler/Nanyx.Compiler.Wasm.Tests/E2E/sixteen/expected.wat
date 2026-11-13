@@ -227,27 +227,20 @@
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i64 (func (param i32 i64) (result i64)))
-  (table $ctx_table 3 funcref)
-  (elem (i32.const 0) $__lambda_0 $__nanyx_drop_env $__lambda_1)
+  (table $ctx_table 2 funcref)
+  (elem (i32.const 0) $__lambda_0 $__lambda_1)
+
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 268) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
   (func $main (result i64) (local $ctx i32) (local $__use_f_2 i32) (local $__use_g_3 i32)
     i32.const 8
     i32.const 1
     call $__nanyx_new_object
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 0
+    i32.const 264
     i32.const 0
     call $__nanyx_record_set
-    i32.const 0
-    call $__nanyx_record_set
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 2
-    i32.const 0
-    call $__nanyx_record_set
+    i32.const 276
     i32.const 4
     call $__nanyx_record_set
     local.set $ctx
@@ -293,6 +286,36 @@
   )
   (export "__lambda_1" (func $__lambda_1))
 
+  (func $__nanyx_drop_rec_f_fn_int_to_int_g_fn_int_to_int (param $p i32)
+    ;; (f: (int -> int), g: (int -> int))
+    local.get $p
+    i32.const 8
+    i32.sub
+    call $__nanyx_release
+    if
+      local.get $p
+      i32.load
+      call $__nanyx_drop_fn_int_to_int
+      local.get $p
+      i32.load offset=4
+      call $__nanyx_drop_fn_int_to_int
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_free
+    end
+  )
+
+  (func $__nanyx_dup_rec_f_fn_int_to_int_g_fn_int_to_int (param $p i32) (result i32)
+    block $shared
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_retain
+    end
+    local.get $p
+  )
+
   (func $__nanyx_drop_fn_int_to_int (param $p i32)
     ;; (int -> int)
     local.get $p
@@ -324,36 +347,6 @@
     local.get $p
   )
 
-  (func $__nanyx_drop_rec_f_fn_int_to_int_g_fn_int_to_int (param $p i32)
-    ;; (f: (int -> int), g: (int -> int))
-    local.get $p
-    i32.const 8
-    i32.sub
-    call $__nanyx_release
-    if
-      local.get $p
-      i32.load
-      call $__nanyx_drop_fn_int_to_int
-      local.get $p
-      i32.load offset=4
-      call $__nanyx_drop_fn_int_to_int
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_free
-    end
-  )
-
-  (func $__nanyx_dup_rec_f_fn_int_to_int_g_fn_int_to_int (param $p i32) (result i32)
-    block $shared
-      local.get $p
-      i32.const 8
-      i32.sub
-      call $__nanyx_retain
-    end
-    local.get $p
-  )
-
   (func $__nanyx_drop_rec_0_word (param $p i32)
     ;; (0: word)
     local.get $p
@@ -376,9 +369,5 @@
       call $__nanyx_retain
     end
     local.get $p
-  )
-
-  (func $__nanyx_drop_env (param $p i32) (result i32)
-    i32.const 0
   )
 )

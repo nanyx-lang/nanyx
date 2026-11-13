@@ -292,7 +292,9 @@ five runs, minus a one-iteration run for compiling and start-up, and runs differ
   the backend wraps it in an adapter closure (`__adapt_...`), and calling it makes a third `call_indirect`. C's other
   allocations are the block lambda and the two member closures at `procH`'s `use`.
 - **With [#743](https://github.com/nanyx-lang/nanyx/issues/743)**, `bind` and `ret` at `procH`'s `use` capture nothing and become static: C drops to 7 allocations per
-  block (the block lambda, three continuations and three adapters) and keeps 11 `call_indirect`s. [#744](https://github.com/nanyx-lang/nanyx/issues/744) doesn't help
+  block (the block lambda, three continuations and three adapters) and keeps 11 `call_indirect`s. Measured once #743
+  was done, by the allocation counter of a `--check-memory` build over 100 blocks: C's blocks allocate 2 fewer each
+  (13 to 11, counting the `#some` cells the table leaves out), so 9 to 7, as predicted. [#744](https://github.com/nanyx-lang/nanyx/issues/744) doesn't help
   C: the members reach the block as closure parameters through `f`.
 - **With [#745](https://github.com/nanyx-lang/nanyx/issues/745) as well**, inlining `procH` into its caller exposes `f` as the block lambda and the members as top-level
   functions. The block lambda isn't made, `f()`, `bind` and `ret` become direct calls, and a continuation no longer
