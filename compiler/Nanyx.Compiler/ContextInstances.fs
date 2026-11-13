@@ -413,7 +413,7 @@ let internal orderingInstance (op: string) (span: SourceSpan) = wellKnownInstanc
 /// be found by its members' names, as one that is not parameterised is. A function named as a value whose type is not
 /// settled there finds no instance, and is not an error (see `resolveReferenceInstances`).
 let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
-    let contexts = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+    let contexts = contextRequirementsOf env state name |> Option.defaultValue []
     match TypeEnv.tryFind name env, calleeTy with
     | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
         contexts

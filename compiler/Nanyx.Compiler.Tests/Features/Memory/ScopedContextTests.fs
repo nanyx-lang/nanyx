@@ -164,6 +164,31 @@ def leaked = run(mk)
     Assert.Equal(Some "run(mk)", related)
 
 [<Fact>]
+let ``A parameter named as a top-level def does not take the def's contexts`` () =
+    let message, text, related = escapeOf """
+def run = { mk -> memory { mk() } }
+
+def mk: [$Memory] () -> ([$Memory] () -> int) = { { 1 } }
+
+def leaked = run(mk)
+"""
+    Assert.Equal("mk", text)
+    Assert.Contains("'run' call", message)
+    Assert.Equal(Some "run(mk)", related)
+
+[<Fact>]
+let ``A local def named as a top-level def does not take the def's contexts`` () =
+    let typed = compileClean """
+def mk: [$Memory] () -> ([$Memory] () -> int) = { { 1 } }
+
+def two: () -> int = {
+  def mk = { 2 }
+  mk()
+}
+"""
+    Assert.Equal("() -> int", Unifier.tyToString typed.Types.["two"])
+
+[<Fact>]
 let ``A call to a function that requires $Memory gives a result of the scope it is called in`` () =
     let message, text, _ = escapeOf """
 def mk: [$Memory] () -> ([$Memory] () -> int) = { { 1 } }
