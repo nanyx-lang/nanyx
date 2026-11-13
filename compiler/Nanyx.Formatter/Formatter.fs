@@ -1251,16 +1251,19 @@ let format (options: Options) (parsed: SourceModule) : string =
     and typeDefDoc (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) : Doc =
         let isPrivate = List.contains Private modifiers
         // `context Name = ...` and `context type Name = ...` both give `[Context]`; the modifiers' order is kept.
+        // `scoped` only comes before `context`, and is written first.
+        let scoped = if List.exists TypeDefModifier.isScoped modifiers then text "scoped " else Doc.empty
         let head =
-            match modifiers |> List.filter ((<>) Private) with
-            | [ Context ] -> text $"context {name}"
-            | [ Context; Export ] -> text $"export context {name}"
+            match modifiers |> List.filter (fun m -> m <> Private && not (TypeDefModifier.isScoped m)) with
+            | [ Context ] -> cat [ scoped; text $"context {name}" ]
+            | [ Context; Export ] -> cat [ scoped; text $"export context {name}" ]
             | others ->
                 let modifier m =
                     match m with
                     | Export -> text "export "
                     | Context -> text "context "
-                    | Private -> Doc.empty
+                    | Private
+                    | Scoped _ -> Doc.empty
                 cat [ cat (List.map modifier others); text $"type {name}" ]
         let parameter (p, typeOpt) =
             match typeOpt with

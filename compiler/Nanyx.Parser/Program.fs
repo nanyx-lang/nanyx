@@ -160,16 +160,21 @@ let typeDefCore: Parser<Definition, ParseState> =
             else
                 preturn name
 
+    // `scoped export context $Memory = ()`: `scoped` comes first, then `export`.
+    let contextModifiers =
+        opt (attempt (withSpan (pstring "scoped" .>> keywordEnd) .>> ws)) .>>. opt (attempt (pstring "export" >>. ws))
+        |>> fun (scopedOpt, exportOpt) ->
+            (scopedOpt |> Option.map (snd >> Scoped) |> Option.toList) @ (if exportOpt.IsSome then [Export] else [])
+
     let contextDef =
         pipe5
-            (opt (attempt (pstring "export" >>. ws)))
+            contextModifiers
             (pstring "context" >>. ws >>. (getPosition .>>. contextName))
             (opt (attempt (wsNoNl() >>. typeParams)))
             (wsNoNl() >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
             typeExprWithWhere
-            (fun exportOpt (start, name) paramsOpt privateOpt typeValue ->
+            (fun baseMods (start, name) paramsOpt privateOpt typeValue ->
                 let typeParams = defaultArg paramsOpt []
-                let baseMods = if exportOpt.IsSome then [Export] else []
                 let modifiers = applyPrivate (Context :: baseMods) privateOpt
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName

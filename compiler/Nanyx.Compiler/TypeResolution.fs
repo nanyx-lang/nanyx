@@ -401,6 +401,7 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               Underlying = RecursiveAliases.selfMarker paramVars
               IsPrivate = false
               IsContext = false
+              IsScoped = false
               Symbol = None
               Members = Map.empty }
         let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add name self } body
@@ -413,6 +414,15 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
 /// `RecursiveAliases.unguardedReferences`).
 let internal unguardedSelfReferences (name: Identifier) (modifiers: TypeDefModifier list) (body: TypeExpr) : Diagnostic list =
     if isNominalName name || isContextDef modifiers then [] else RecursiveAliases.unguardedReferences name body
+
+/// The error for a scoped context whose name isn't nominal: only the context's own module may make its instances,
+/// so that each one comes from the function that supplies it.
+let internal unnominalScopedContext (name: Identifier) (modifiers: TypeDefModifier list) : Diagnostic list =
+    match TypeDefModifier.scopedSpan modifiers with
+    | Some span when not (isNominalName name) ->
+        [ Diagnostics.at DiagnosticCodes.ScopedContextNotNominal span
+            $"The scoped context '{name}' must be nominal, written '${name}', so that only its own module can make its instances" ]
+    | _ -> []
 
 let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
     let originalTypeVars = state.TypeVars
@@ -467,6 +477,7 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           Underlying = underlyingTy
           IsPrivate = isPrivate
           IsContext = isContextDef modifiers
+          IsScoped = List.exists TypeDefModifier.isScoped modifiers
           Symbol = symbol
           Members = members }
     // A name of the type in its own definition refers to it, as any other does.

@@ -187,7 +187,10 @@ checks, since a lambda with no parameters ignores one.
 1. Let a `use` give a member a lambda that needs more contexts, required where the `use` is written
    ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)).
 2. Make a lambda that uses a cell require `$Memory` ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
-3. Parse and format `scoped context`, which must be nominal ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)):
+   done. The parser records `Scoped` (with the keyword's span) among the definition's modifiers, `TypeDefInfo.IsScoped`
+   carries it, a scoped context that isn't nominal is NYX0232, and `$Memory` is declared `scoped`. Nothing checks
+   escape by it yet.
 4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3).
 5. Give a `memory` block its instance, `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058),

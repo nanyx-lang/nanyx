@@ -19,6 +19,14 @@ context Console = (
 
 Contexts are structural by default: any record whose members match the declared shape can be loaded as an instance. Prefixing the name with `$` (for example `$Memory`) makes the context nominal, so that only its home module can create instances; see [Nominal and protected types](./nominal-and-protected-types).
 
+The full form of a context definition is `scoped export context $Name(params) = ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `$Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
+
+```nanyx fragment
+scoped export context $Memory = ()
+```
+
+A scoped context must be nominal, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. The compiler doesn't yet check that nothing requiring a scoped context leaves its scope ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)).
+
 # Requiring a context
 
 A function can specify required contexts in its type signature. Here, `sayHello` can call `println` because it runs in `Console`. The real `Console`, in `nanyx/console`, has a few more members, and `println` is a function written on top of its `write`:

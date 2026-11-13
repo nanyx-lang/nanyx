@@ -1459,7 +1459,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters
                 current <- registerTypeDef current name modifiers parameters body
                 // Checked once the type is registered, so it can name itself.
-                if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters @ unguardedSelfReferences name modifiers body
+                if errors.IsEmpty then
+                    errors <- unnominalScopedContext name modifiers @ unknownTypesInTypeDef current body parameters @ unguardedSelfReferences name modifiers body
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement value ->
                 if errors.IsEmpty then
