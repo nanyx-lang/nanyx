@@ -284,3 +284,16 @@ let ``A module whose entry point is marked with @entry can be imported`` () =
     let modSource = "module mod\nexport def helper = 1\n@entry\ndef main = { helper }\n"
     let result = compileImporting modSource "module main\nimport mod\ndef value = helper"
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+[<Fact>]
+let ``An error in a module imported through another names the import that brings it in`` () =
+    withTempDir (fun dir ->
+        let mainPath = Path.Combine(dir, "main.nyx")
+        File.WriteAllText(Path.Combine(dir, "mod.nyx"), "module mod\nimport sub\nexport def value = 1")
+        File.WriteAllText(Path.Combine(dir, "sub.nyx"), "module sub\nexport def other = missing")
+        let main = "module main\nimport mod\ndef copy = value"
+        File.WriteAllText(mainPath, main)
+        let result = Compiler.compileFile mainPath
+        let diagnostic = Assert.Single(result.Diagnostics)
+        Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
+        Assert.Equal(Some (Path.Combine(dir, "sub.nyx")), diagnostic.Span |> Option.map _.File)
+        Assert.Equal(Some "mod", diagnostic.Import |> Option.map (fun span -> main.Substring(span.Start, span.End - span.Start))))

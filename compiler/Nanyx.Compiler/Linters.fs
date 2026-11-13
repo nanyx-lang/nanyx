@@ -1018,7 +1018,8 @@ module Linters =
               Span = span |> Option.filter (SourceSpan.isNone >> not)
               Related = related |> List.filter (fst >> SourceSpan.isNone >> not)
               Suggestions = []
-              Fixes = fixes })
+              Fixes = fixes
+              Import = None })
 
     let private failed (options: LinterOptions) (linter: Linter) (reason: string) =
         diagnostic options linter failedRule None $"The linter '{linter.Name}' failed: {reason}" [] []
