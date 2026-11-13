@@ -81,7 +81,7 @@ Not done yet:
 
 # What existed before
 
-- **Parsing.** `*`, `/` and `%` bind tighter than `+` and `-` (`Nanyx.Parser/Program.fs:714-722`). There is no `**`,
+- **Parsing.** `*`, `/` and `%` bind tighter than `+` and `-` (`binaryOperators` in `Nanyx.Parser/Operators.fs`). There is no `**`,
   although [operators.md](../tour/operators) lists it, and no prefix `-`: `-5` is one literal token
   (`Lexical.fs:26`), but `-x` does not parse, so `math.abs` writes `0 - n` (`stdlib/nanyx/math.nyx:15`).
 - **Literals** have one type each, whatever is expected: an integer literal is `int` and a decimal one `float`

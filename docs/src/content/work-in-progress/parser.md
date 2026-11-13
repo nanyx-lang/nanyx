@@ -10,7 +10,7 @@ all at once. Nothing on it is decided yet: [#846](https://github.com/nanyx-lang/
 
 # Today
 
-The parser (`compiler/Nanyx.Parser`, about 3,200 lines, 1,376 of them in `Program.fs`) is written with
+The parser (`compiler/Nanyx.Parser`, about 4,200 lines, 1,089 of them in `Expressions.fs`) is written with
 [FParsec](https://www.quanttec.com/fparsec/) combinators. It reads characters directly: there is no lexer. It
 backtracks with `attempt`, which appears 169 times, and layout (where a block, a match or a pipeline ends) is decided
 by the individual parsers, each measuring indentation itself.
@@ -74,8 +74,8 @@ formatter and the language server need no change until the parser underneath the
   (done: the `...Syntax` modules in `Ast.fs`, [#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
   ([#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
   list (done: `binaryOperators` in `Operators.fs`, [#370](https://github.com/nanyx-lang/nanyx/issues/370)), and split
-  the parser out of `Program.fs`
-  ([#366](https://github.com/nanyx-lang/nanyx/issues/366)).
+  the parser out of `Program.fs` (done: `Expressions.fs`, `TopLevel.fs`, `Api.fs` and the files before them,
+  [#366](https://github.com/nanyx-lang/nanyx/issues/366)).
 
 ## Stage 1: a lexer, used alongside the parser
 

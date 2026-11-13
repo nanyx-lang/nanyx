@@ -12,7 +12,7 @@ module MatchArmFixes =
     let unplaced (arms: MatchArm list) (missing: string list list) : Fix list =
         match List.tryLast arms, missing with
         | Some (_, body), _ :: _ when not (SourceSpan.isNone body.Span) ->
-            let lines = missing |> List.map (fun patterns -> $"""{'\n'}| {String.concat ", " patterns} -> {Api.notImplemented}""")
+            let lines = missing |> List.map (fun patterns -> $"""{'\n'}| {String.concat ", " patterns} -> {Expressions.notImplemented}""")
             [ { Title = (if missing.Length = 1 then "Add the missing arm" else "Add the missing arms")
                 Edits = [ { Span = { body.Span with Start = body.Span.End }; NewText = String.concat "" lines } ] } ]
         | _ -> []

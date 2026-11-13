@@ -22,7 +22,9 @@
     <Compile Include="SourceTrivia.fs" />
     <Compile Include="Destructuring.fs" />
     <Compile Include="Directives.fs" />
-    <Compile Include="Program.fs" />
+    <Compile Include="Expressions.fs" />
+    <Compile Include="TopLevel.fs" />
+    <Compile Include="Api.fs" />
     <Compile Include="DocComments.fs" />
   </ItemGroup>
 

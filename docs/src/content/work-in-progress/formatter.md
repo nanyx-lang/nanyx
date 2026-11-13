@@ -40,7 +40,7 @@ Out of scope here:
 
 # Where the compiler is today
 
-- **Comments are discarded.** The parser (FParsec, `compiler/Nanyx.Parser/Program.fs`) skips `--` comments as
+- **Comments are discarded.** The parser (FParsec, `compiler/Nanyx.Parser`) skips `--` comments as
   whitespace (`ws`, `comment`, `inlineCommentNoNl`). Nothing records where they were. Blank lines are skipped the
   same way. A `---` block comment (`lineComment` in `ParseState.fs`) is recorded as one comment whose text spans
   lines.
