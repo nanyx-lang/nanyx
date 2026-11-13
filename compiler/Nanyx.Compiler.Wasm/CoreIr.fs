@@ -446,20 +446,54 @@ module ForLoop =
         loop.Streams |> List.collect (fun stream -> [ stream.Cursor; stream.End; stream.Element ])
 
 module Pattern =
-    /// The guards in `pattern`, each with the variable that holds the value it tests.
-    let rec guards (pattern: Pattern) : (Var * Expr) list =
+    /// The patterns directly inside `pattern`, in the order they are tested: a tag's payload, the fields, the parts of
+    /// an and-pattern, a list's elements and then its rest.
+    let parts (pattern: Pattern) : Pattern list =
         match pattern with
-        | PGuard(var, guard) -> [ var, guard ]
-        | PTag(_, Some inner) -> guards inner
-        | PFields fields -> fields |> List.collect (snd >> guards)
-        | PAll parts -> parts |> List.collect guards
-        | PList(elements, rest) -> (elements |> List.collect guards) @ (rest |> Option.map guards |> Option.defaultValue [])
+        | PTag(_, Some inner) -> [ inner ]
+        | PFields fields -> fields |> List.map snd
+        | PAll parts -> parts
+        | PList(elements, rest) -> elements @ Option.toList rest
         | PTag(_, None)
         | PBind _
+        | PGuard _
         | PWildcard
         | PInt _
         | PBool _
         | PString _ -> []
+
+    /// `pattern` with `f` applied to each pattern directly inside it: those `parts` gives.
+    let mapParts (f: Pattern -> Pattern) (pattern: Pattern) : Pattern =
+        match pattern with
+        | PTag(name, Some inner) -> PTag(name, Some (f inner))
+        | PFields fields -> PFields(fields |> List.map (fun (slot, inner) -> slot, f inner))
+        | PAll parts -> PAll(List.map f parts)
+        | PList(elements, rest) -> PList(List.map f elements, Option.map f rest)
+        | PTag(_, None)
+        | PBind _
+        | PGuard _
+        | PWildcard
+        | PInt _
+        | PBool _
+        | PString _ -> pattern
+
+    /// The guards in `pattern`, each with the variable that holds the value it tests.
+    let rec guards (pattern: Pattern) : (Var * Expr) list =
+        match pattern with
+        | PGuard(var, guard) -> [ var, guard ]
+        | _ -> parts pattern |> List.collect guards
+
+    /// `pattern` with `f` applied to each of its guards.
+    let rec mapGuards (f: Expr -> Expr) (pattern: Pattern) : Pattern =
+        match pattern with
+        | PGuard(var, guard) -> PGuard(var, f guard)
+        | _ -> mapParts (mapGuards f) pattern
+
+    /// The variables `pattern` binds, in order. A guard's variable is not one: it holds the value only for its test.
+    let rec binds (pattern: Pattern) : Var list =
+        match pattern with
+        | PBind var -> [ var ]
+        | _ -> parts pattern |> List.collect binds
 
 /// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s and `Release`s, each followed by the next. A
 /// function's body is a chain as long as the function, so a pass walks one in a loop, and recurses only as deep as an

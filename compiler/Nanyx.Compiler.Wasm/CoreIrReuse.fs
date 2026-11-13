@@ -119,15 +119,7 @@ type private Rewriter() =
     /// An arm with each scrutinee it takes apart and drops released instead, and the first released object's block
     /// reused by an allocation of the same size, if the arm always makes one.
     member this.Arm (scrutinees: Var list) (arm: Arm) : Arm =
-        let rec guarded (pattern: Pattern) =
-            match pattern with
-            | PGuard(var, guard) -> PGuard(var, this.Expr guard)
-            | PTag(name, Some inner) -> PTag(name, Some(guarded inner))
-            | PFields fields -> PFields(fields |> List.map (fun (slot, inner) -> slot, guarded inner))
-            | PAll parts -> PAll(parts |> List.map guarded)
-            | PList(elements, rest) -> PList(elements |> List.map guarded, rest |> Option.map guarded)
-            | _ -> pattern
-        let patterns = arm.Patterns |> List.map guarded
+        let patterns = arm.Patterns |> List.map (Pattern.mapGuards this.Expr)
         let dupped, inner =
             match arm.Body.Kind with
             | Dup(vars, body) -> vars, body
