@@ -122,6 +122,11 @@ value against it `inferDefValue`, and a type definition's checks `DefAnnotations
 What a def does once its value is inferred (generalising, and what an unannotated top-level def requires) still
 differs between the two, as the two kinds of def do.
 
+The loops that inferred each of a list of expressions in turn, threading the state and gathering every error, are
+now `inferAll` (a tuple's, record's and list's items, a match's values, an interpolated string's holes, a context
+member call's arguments), and those over patterns `inferPatterns`, beside `inferPattern`. A fresh variable for each
+item of a list is `InferState.freshVars`. `Infer.fs` is at 1,331 lines.
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review
