@@ -50,6 +50,20 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     }
 
     [Fact]
+    public void A_compile_s_diagnostics_are_converted_once()
+    {
+        // The info view and code actions read them on every move of the cursor.
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "converted-once.nyx"));
+        const string text = "import nanyx/console\n\nprintln(missing)\n";
+        var document = new OpenDocument(text, "", NyxCompiler.Compiler.compile(text), null);
+
+        var first = document.PublishedDiagnostics(uri);
+
+        Assert.Equal("NYX0101", Assert.Single(first).Code?.String);
+        Assert.Same(first, document.PublishedDiagnostics(uri));
+    }
+
+    [Fact]
     public async Task Linter_diagnostics_are_published_at_their_configured_severity()
     {
         // A test linter that reports every top-level def, at a warning by default.

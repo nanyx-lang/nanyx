@@ -15,7 +15,7 @@ let private compiled (source: string) =
 /// The flow of the def around the `occurrence`th appearance of `text` in `source`: the def's name, and each provider as
 /// its context, its source, the text of its span, and the names of the calls it serves.
 let private flowAt (source: string) (text: string) (occurrence: int) =
-    ContextFlow.at Ascii (compiled source) (offsetOf source text occurrence 0)
+    (ContextFlow.at Ascii (compiled source) (offsetOf source text occurrence 0)).Flow
     |> Option.map (fun flow ->
         flow.Def,
         flow.Entries
@@ -31,7 +31,7 @@ let private flowAt (source: string) (text: string) (occurrence: int) =
 /// The texts the editor highlights at the `occurrence`th appearance of `text` in `source`: the providers', then the
 /// calls'.
 let private highlightsAt (source: string) (text: string) (occurrence: int) =
-    let highlights = ContextFlow.highlightsAt (compiled source) (offsetOf source text occurrence 0)
+    let highlights = (ContextFlow.at Ascii (compiled source) (offsetOf source text occurrence 0)).Highlights
     highlights.Providers |> List.map (textAt source), highlights.Calls |> List.map (textAt source)
 
 let private logAndClock =
