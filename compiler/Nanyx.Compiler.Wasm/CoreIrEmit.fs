@@ -564,7 +564,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Drop(vars, body) -> join "\n    " [ dropVars localOf vars; this.Value tail deferred onStack body ]
         | Release(released, body) -> join "\n    " [ this.Release released; this.Value tail deferred onStack body ]
         // An allocation into the block a reuse token holds, if it holds one (see `CoreIrReuse`).
-        | Reuse(token, { Kind = CallRuntime(_, ([ head; _ ] as args), _) }) ->
+        | Reuse(token, { Kind = CallRuntime(name, ([ head; _ ] as args), _) }) when Helpers.reusingVariant name = Some Helpers.listConsAt ->
             join "\n    " [ $"local.get ${localName token}"; atomsAfter true args; $"call ${storing Helpers.listConsAt (atomType head)}" ]
         | Reuse(token, { Kind = MakeTag(name, payload) }) ->
             join "\n    " [

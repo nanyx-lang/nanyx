@@ -30,15 +30,6 @@ let rec isHeapType (ty: IrType) =
     | IrError
     | IrWord -> false
 
-/// How far before an object's pointer its count is: 8 for an object with an info word (a string, a record, a
-/// closure), else 4.
-let countOffset (ty: IrType) =
-    match IrType.unfold ty with
-    | IrString
-    | IrRecord _
-    | IrFunction _ -> 8
-    | _ -> 4
-
 /// The name of the drop function of a type on the heap.
 let dropName (ty: IrType) = "__nanyx_drop_" + sanitizeIdentifier (IrType.mangle ty)
 
@@ -166,12 +157,12 @@ let private dropField (ty: IrType) (load: string list) =
 
 /// The code that frees the object at `$p`, a value of type `ty`, once its count has run out.
 let private free (ty: IrType) =
-    [ "local.get $p"; $"i32.const {countOffset ty}"; "i32.sub"; $"call ${Helpers.free}" ]
+    [ "local.get $p"; $"i32.const {CoreIrLayout.headerSize ty}"; "i32.sub"; $"call ${Helpers.free}" ]
 
 /// Gives up the reference `$p` and, when it was the last, runs `fields` and frees the object.
 let private releaseThen (ty: IrType) (fields: string list) =
     [ "local.get $p"
-      $"i32.const {countOffset ty}"
+      $"i32.const {CoreIrLayout.headerSize ty}"
       "i32.sub"
       $"call ${Helpers.release}"
       "if"
@@ -192,12 +183,12 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
         |> releaseThen ty
     | IrFunction _ ->
         // The function in the closure's info word drops what it captures.
-        releaseThen ty [ "local.get $p"; "local.get $p"; "i32.const 4"; "i32.sub"; "i32.load"; "call_indirect (type $ctx_fn_1)"; "drop" ]
+        releaseThen ty [ "local.get $p"; "local.get $p"; $"i32.const {Header.infoBefore}"; "i32.sub"; "i32.load"; "call_indirect (type $ctx_fn_1)"; "drop" ]
     | IrTags tags ->
         // A code is not on the heap. A cell holds the code, then the payload: when every tag with a payload has one of
         // the same type, the payload needs no code to tell its type.
         let payloads = tags |> List.choose (fun (name, payload) -> payload |> Option.map (fun payloadTy -> name, payloadTy))
-        let payloadDrop payloadTy = dropField payloadTy [ "local.get $p"; "i32.load offset=4" ]
+        let payloadDrop payloadTy = dropField payloadTy [ "local.get $p"; CoreIrLayout.load IrWord CoreIrLayout.payloadOffset ]
         let dropPayload =
             match payloads |> List.map snd |> List.distinct with
             | [ single ] -> payloadDrop single
@@ -224,7 +215,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
           "    i32.eqz"
           "    br_if $done"
           "    local.get $p"
-          "    i32.const 4"
+          $"    i32.const {CoreIrLayout.headerSize ty}"
           "    i32.sub"
           $"    call ${Helpers.release}"
           "    i32.eqz"
@@ -258,7 +249,7 @@ let private dupBody (ty: IrType) : string list =
     [ "block $shared"
       yield! notOnHeap |> List.map (fun line -> "  " + line)
       "  local.get $p"
-      $"  i32.const {countOffset ty}"
+      $"  i32.const {CoreIrLayout.headerSize ty}"
       "  i32.sub"
       $"  call ${Helpers.retain}"
       "end"

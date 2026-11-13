@@ -71,6 +71,15 @@ let payloadOffset = tagPayloadOffset
 /// How many bytes a tag cell with a payload of `payload` takes: its code, then its payload.
 let tagCellSize (payload: IrType) = payloadOffset + size payload
 
+/// How many bytes the header in front of an object of `ty` on the heap takes, which is how far before its pointer its
+/// count is: an info word follows the count of a string, a record and a closure (see `Header`).
+let headerSize (ty: IrType) =
+    match IrType.unfold ty with
+    | IrString
+    | IrRecord _
+    | IrFunction _ -> Header.withInfo
+    | _ -> Header.countOnly
+
 /// Where each value a closure block holds is: its function's table slot, then what it captures, of `captured`.
 let closureOffsets (captured: IrType list) = offsets (IrWord :: captured)
 

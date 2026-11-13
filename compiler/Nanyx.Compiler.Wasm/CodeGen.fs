@@ -149,7 +149,7 @@ let private buildStringLiteralMap (literals: string list) =
             let currentOffset = offset
             offset <- offset + dataBytes.Length
             value, currentOffset, dataBytes)
-    let map = entries |> List.map (fun (value, baseOffset, _) -> value, baseOffset + 8) |> Map.ofList
+    let map = entries |> List.map (fun (value, baseOffset, _) -> value, baseOffset + Header.withInfo) |> Map.ofList
     map, entries
 
 /// Where the string literals laid out as `entries` (see `buildStringLiteralMap`) end.

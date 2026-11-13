@@ -13,19 +13,13 @@ open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrDrop
 
-/// How an instruction uses an operand: it takes the reference over (a call that owns the parameter, a field of a new
-/// object, a value returned), or only borrows it while it runs.
-type private Use =
-    | Owned
-    | Borrowed
+/// How each function uses its parameters, by its name. A function not here owns all of them.
+type internal Ownership = Map<string, Use list>
 
-/// Which parameters each function owns, by its name. A function not here owns all of them.
-type Ownership = Map<string, bool list>
-
-let private ownsParameter (ownership: Ownership) (name: string) (index: int) =
+let private parameterUse (ownership: Ownership) (name: string) (index: int) =
     match ownership |> Map.tryFind name with
-    | Some owned when index < owned.Length -> owned.[index]
-    | _ -> true
+    | Some uses when index < uses.Length -> uses.[index]
+    | _ -> Owned
 
 /// The operands of an instruction, in the order its code evaluates them, with how it uses each. What a `for` loop's
 /// body, an `if`'s branches and a `match`'s arms use is not among them.
@@ -34,7 +28,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     match e.Kind with
     | Atom atom -> [ atom, Owned ]
     | Prim(_, atoms) -> all Borrowed atoms
-    | Call(name, args) -> args |> List.mapi (fun index arg -> arg, (if ownsParameter ownership name index then Owned else Borrowed))
+    | Call(name, args) -> args |> List.mapi (fun index arg -> arg, parameterUse ownership name index)
     | MakeTag(_, payload) -> [ payload, Owned ]
     | MakeRecord fields -> fields |> List.map snd |> all Owned
     | Field(record, _) -> [ record, Borrowed ]
@@ -43,10 +37,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Assign(cell, value) -> [ value, Owned; AVar cell, Borrowed ]
     | SetField(record, _, value) -> [ value, Owned; AVar record, Borrowed ]
     | MakeList items -> all Owned items
-    | CallRuntime(name, args, _) when name = Helpers.listCons -> all Owned args
-    // The first list's cells are copied, and the second becomes the tail of the copy.
-    | CallRuntime(name, [ first; second ], _) when name = Helpers.listConcat -> [ first, Borrowed; second, Owned ]
-    | CallRuntime(_, args, _) -> all Borrowed args
+    | CallRuntime(name, args, _) -> args |> List.mapi (fun index arg -> arg, Helpers.operandUse name index)
     | MakeClosure(_, _, captured) -> all Owned captured
     // The closure is the environment, which the function it holds owns. Its code reads the closure again for the
     // table slot after the arguments, so the closure counts as used last.
@@ -113,7 +104,7 @@ let rec private tailCalls (e: Expr) : (string * Atom list) list =
 /// returns it, matches on it), and borrows it when it only reads it. A parameter that a tail call passes something
 /// the caller owns to is owned as well: the caller could otherwise only drop it after the call, which would then not
 /// be a tail call (see "Reference counting" in `docs/src/content/work-in-progress/tail-calls.md`).
-let inferOwnership (functions: Function list) : Ownership =
+let internal inferOwnership (functions: Function list) : Ownership =
     let indirect =
         functions
         |> Seq.collect (fun f -> nodes f.Body)
@@ -122,23 +113,23 @@ let inferOwnership (functions: Function list) : Ownership =
             let static' = operands Map.empty e |> List.choose (function AStaticClosure(name, _, _), _ -> Some name | _ -> None)
             made @ static')
         |> Set.ofSeq
-    let owned = Dictionary<string, bool array>()
+    let uses = Dictionary<string, Use array>()
     for f in functions do
         if not (indirect.Contains f.Name) then
-            owned.[f.Name] <- f.Params |> List.map (fun p -> not (isHeapType p.Type)) |> Array.ofList
-    let current () = owned |> Seq.map (fun pair -> pair.Key, List.ofArray pair.Value) |> Map.ofSeq
+            uses.[f.Name] <- f.Params |> List.map (fun p -> if isHeapType p.Type then Borrowed else Owned) |> Array.ofList
+    let current () = uses |> Seq.map (fun pair -> pair.Key, List.ofArray pair.Value) |> Map.ofSeq
     let mutable changed = true
     while changed do
         changed <- false
         let ownership = current ()
         let own (name: string) (index: int) =
-            match owned.TryGetValue name with
-            | true, flags when index < flags.Length && not flags.[index] ->
-                flags.[index] <- true
+            match uses.TryGetValue name with
+            | true, parameters when index < parameters.Length && parameters.[index] = Borrowed ->
+                parameters.[index] <- Owned
                 changed <- true
             | _ -> ()
         for f in functions do
-            let borrowedParams = f.Params |> List.indexed |> List.filter (fun (index, _) -> not (ownsParameter ownership f.Name index))
+            let borrowedParams = f.Params |> List.indexed |> List.filter (fun (index, _) -> parameterUse ownership f.Name index = Borrowed)
             let takenOver =
                 nodes f.Body
                 |> Seq.collect (operands ownership)
@@ -375,13 +366,13 @@ type private Counter(ownership: Ownership, func: Function) =
         if dups.IsEmpty then dropped else Expr.make (Dup(dups, dropped)) e.Type
 
 /// `functions` with reference counting inserted, by the parameters `ownership` says each owns.
-let insert (ownership: Ownership) (functions: Function list) : Function list =
+let internal insert (ownership: Ownership) (functions: Function list) : Function list =
     functions
     |> List.map (fun func ->
         let owned =
             func.Params
             |> List.indexed
-            |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && ownsParameter ownership func.Name index)
+            |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Owned)
             |> List.map (snd >> _.Id)
             |> Set.ofList
         { func with Body = Counter(ownership, func).Count owned Set.empty func.Body })
