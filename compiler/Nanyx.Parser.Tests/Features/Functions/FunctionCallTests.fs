@@ -43,7 +43,7 @@ let ``Parse function call with no arguments`` () =
 
 [<Fact>]
 let ``Parse function call with one argument`` () =
-    let result = parseModule "def x = println(\"Hello\")"
+    let result = parseModule """def x = println("Hello")"""
     
     result |> isOk |> should equal true
     match result with

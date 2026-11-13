@@ -413,7 +413,7 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
             | BinaryOp(op, opSpan, _, _) ->
                 let operandTy = Unifier.tyToString (resolveSoFar nextState leftExpr.Type)
                 let message =
-                    $"`{op}` has no built-in meaning, and `{operandTy}` has no `{op}` attached. A type gets one by attaching it: def $Money.`{op}` = ..."
+                    $"`{op}` has no built-in meaning, and `{operandTy}` has no `{op}` attached. A type gets one by attaching it: def Money.`{op}` = ..."
                 Error [ Diagnostics.at DiagnosticCodes.UnknownFunction (opSpan |> Option.defaultValue expr.Span) message ]
             | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
 
@@ -626,7 +626,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 let constrained = addConstraint scrutineeTy (listType elementTy) nextState
                 inferPatterns armBody env' constrained (prefix @ suffix |> List.map (fun pat -> pat, elementTy))
                 |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
-            // `$Email(raw)` takes a nominal value apart: the payload pattern matches the value's shape. A protected
+            // `Email(raw)` takes a nominal value apart: the payload pattern matches the value's shape. A protected
             // type's shape is hidden outside its home module, so only that module can look inside one.
             | RecordPattern(typeName, [ payload ]) when (tryFindTypeDef typeName state' |> Option.exists isNominal) ->
                 let info = (tryFindTypeDef typeName state').Value
@@ -634,7 +634,7 @@ and private inferMatch (env: TypeEnv) (state: InferState) (expr: Expression) (sc
                 if not isolation.IsEmpty then
                     Error isolation
                 elif info.IsPrivate && not (inNominalHome state' (TypeDefInfo.nominalId info) pattern.Span) then
-                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The protected type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
+                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule pattern.Span $"The private type '{typeName}' can only be taken apart in the module that defines it; use a function that module exports instead" ]
                 else
                     let constrained = addConstraint scrutineeTy (namedType typeName info) state'
                     match inferPattern armBody env' constrained info.Underlying payload with
@@ -1060,7 +1060,8 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                 Error (blockIsolationAt state name info.Symbol calleeSpan)
             // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
             | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
-                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The nominal type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
+                let kind = if info.IsPrivate then "private" else "protected"
+                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan $"The {kind} type '{name}' can only be constructed in the module that defines it; use a function that module exports instead" ]
             | Some info ->
                 let mutable current = recordConstructorReference expr info state
                 let argResults =

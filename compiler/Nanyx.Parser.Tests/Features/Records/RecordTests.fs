@@ -70,7 +70,7 @@ let ``call arguments can be written one per line without commas`` () =
 [<Fact>]
 let ``positional fields can be written one per line without commas`` () =
     lines [ "def t = ("; "  1"; "  \"two\""; ")" ]
-    |> parsesLike "def t = (1, \"two\")"
+    |> parsesLike """def t = (1, "two")"""
 
 [<Fact>]
 let ``commas and newlines can be mixed`` () =
@@ -102,7 +102,7 @@ let ``a field may run over several lines`` () =
               "  },"
               "  pick = match n"
               "    | 0 -> \"zero\""
-              "    | _ -> \"many\","
+              """    | _ -> "many","""
               "  last = 3"
               ")" ])
 
@@ -111,11 +111,13 @@ let ``fields on their own lines nest inside an indented call`` () =
     lines
         [ "def decode = {"
           "  json.decode(text, json.record("
-          "    name = json.field(\"name\", json.string)"
-          "    age = json.field(\"age\", json.int)"
+          """    name = json.field("name", json.string)"""
+          """    age = json.field("age", json.int)"""
           "  ))"
           "}" ]
-    |> parsesLike "def decode = {\n  json.decode(text, json.record(name = json.field(\"name\", json.string), age = json.field(\"age\", json.int)))\n}"
+    |> parsesLike (normalized """def decode = {
+  json.decode(text, json.record(name = json.field("name", json.string), age = json.field("age", json.int)))
+}""")
 
 [<Fact>]
 let ``a field on a line indented differently from the first field needs a comma`` () =

@@ -380,7 +380,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let bindings = List.tail group
         let isExport = bindings |> List.exists (fun (isExport, _, _, _) -> isExport)
         match value.Kind with
-        // A pattern that may fail to match (`def $Money(pence) = m`) is bound through a one-arm match on the
+        // A pattern that may fail to match (`def Money(pence) = m`) is bound through a one-arm match on the
         // value; the def is printed from that arm's pattern.
         | Match([ scrutinee ], [ [ p ], _ ]) -> defDocNamed isExport "def" (pattern p) None scrutinee
         | _ ->
@@ -399,12 +399,15 @@ let format (options: Options) (parsed: SourceModule) : string =
     and recordTypeField (field: TypeRecordField) : Doc = (types ()).RecordTypeField field
 
     and typeDefDoc (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) : Doc =
-        let isPrivate = List.contains Private modifiers
+        let kind =
+            if List.contains Private modifiers then text "private "
+            elif List.contains Protected modifiers then text "protected "
+            else Doc.empty
         // `context Name = ...` and `context type Name = ...` both give `[Context]`; the modifiers' order is kept.
         // `scoped` only comes before `context`, and is written first.
         let scoped = if List.exists TypeDefModifier.isScoped modifiers then text "scoped " else Doc.empty
         let head =
-            match modifiers |> List.filter (fun m -> m <> Private && not (TypeDefModifier.isScoped m)) with
+            match modifiers |> List.filter (fun m -> m <> Private && m <> Protected && not (TypeDefModifier.isScoped m)) with
             | [ Context ] -> cat [ scoped; text $"context {name}" ]
             | [ Context; Export ] -> cat [ scoped; text $"export context {name}" ]
             | others ->
@@ -413,6 +416,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                     | Export -> text "export "
                     | Context -> text "context "
                     | Private
+                    | Protected
                     | Scoped _ -> Doc.empty
                 cat [ cat (List.map modifier others); text $"type {name}" ]
         let parameter (p, typeOpt) =
@@ -423,7 +427,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             match parameters with
             | [] -> Doc.empty
             | _ -> cat [ text "("; commaJoin (List.map parameter parameters); text ")" ]
-        cat [ head; parametersDoc; text " = "; (if isPrivate then text "private " else Doc.empty); typeBody body ]
+        cat [ head; parametersDoc; text " = "; kind; typeBody body ]
 
     /// The type a type or context definition stands for. A record of more than three fields, or with a comment among
     /// them, has one field per line, named fields separated by newlines and positional ones followed by commas (the

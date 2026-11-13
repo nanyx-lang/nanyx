@@ -33,10 +33,10 @@ let ``A selection's names may be types and attached definitions, one per line`` 
     let source = """
 import shapes as (
   Shape
-  $Email
+  Email
   string.shout
 )"""
-    Assert.Equal<(string option * string list option) list>([ None, Some [ "Shape"; "$Email"; "string.shout" ] ], importsOf (source.Trim()))
+    Assert.Equal<(string option * string list option) list>([ None, Some [ "Shape"; "Email"; "string.shout" ] ], importsOf (source.Trim()))
 
 [<Fact>]
 let ``Selections parse among bracketed imports`` () =

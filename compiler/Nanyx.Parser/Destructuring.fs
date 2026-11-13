@@ -1,4 +1,4 @@
-/// Destructuring defs, `def (x, y) = value` and `def $Money(pence) = m`, desugared into plain defs as they are parsed.
+/// Destructuring defs, `def (x, y) = value` and `def Money(pence) = m`, desugared into plain defs as they are parsed.
 [<AutoOpen>]
 module Parser.Program.Destructuring
 
@@ -26,7 +26,7 @@ let private destructuringBindings (position: Position) (pattern: Pattern) (value
     bind pattern (Expression.from value (IdentifierExpr temp))
     |> Option.map (fun bindings -> (temp, value) :: bindings)
 
-// `def pattern = value` with any other pattern (`def $Money(pence) = m`, `def [first, ...rest] = xs`,
+// `def pattern = value` with any other pattern (`def Money(pence) = m`, `def [first, ...rest] = xs`,
 // `def #some(x) = get(key)`) is a match with one arm: the whole value is bound to a temporary under the name
 // the tuple form uses, as the match's result, which is the tuple of the names the pattern binds, and then one
 // `def` per name takes its element. Whether the pattern is total is for the type checker to say, as it does

@@ -65,7 +65,7 @@ type ModuleOrigin =
     | InMemory
 
 /// What makes a nominal type the type it is: the module that defines it, and the name it is defined under there
-/// (`$Person`, or `money.$Money` in a `module money =` block). Two modules that each define a `$Person` define two
+/// (`Person`, or `money.Money` in a `module money =` block). Two modules that each define a `Person` define two
 /// types.
 type NominalId =
     { Home: ModuleOrigin
@@ -80,7 +80,7 @@ type Ty =
     | TyVar of TyVar
     | TyPrimitive of string
     /// A nominal type: its identity, the type it is made from, and whether that is private to its home module. It is
-    /// written by its own name, `$Person`.
+    /// written by its own name, `Person`.
     | TyNominal of NominalId * Ty * bool
     /// A function: its input, its result, and the contexts it requires where it is called (see `FunctionContexts`).
     /// Each context is one applied to its arguments, `TyApply("Console", [])` or `TyApply("Show", [a])`, or a context
@@ -131,13 +131,15 @@ type TypedTopLevelItem =
 /// A type definition: its parameters, the type it stands for, and the symbol it declares (`None` for one the
 /// compiler made up, which has no name written in the source). Each parameter's variable is named as the parameter
 /// is written. A context's `Members` are its members' symbols, by name; any other type has none. `Name` is the name
-/// the type is defined under in `Home`, the module that defines it, whatever it is written as elsewhere (`m.$Email`
+/// the type is defined under in `Home`, the module that defines it, whatever it is written as elsewhere (`m.Email`
 /// under an alias): the two are a nominal type's identity (see `TypeDefInfo.nominalId`).
 type TypeDefInfo =
     { Name: string
       Home: ModuleOrigin
       Parameters: TyVar list
       Underlying: Ty
+      /// Declared `protected` or `private`: a nominal type, as opposed to an alias of its shape.
+      IsNominal: bool
       IsPrivate: bool
       IsContext: bool
       /// Declared `scoped context`.

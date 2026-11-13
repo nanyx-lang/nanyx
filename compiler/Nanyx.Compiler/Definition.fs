@@ -67,7 +67,8 @@ let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol optio
     symbolAndNameAt file result offset |> Option.map fst
 
 /// What hovering a type's name shows: its definition, as `type Name(params) = <the type it stands for>` (or
-/// `context Name = ...` or `scoped context Name = ...`), with made-up type variables named by `names`, over the span of the name. The name can be
+/// `context Name = ...` or `scoped context Name = ...`), with `protected` or `private` before the type a nominal one
+/// stands for, and made-up type variables named by `names`, over the span of the name. The name can be
 /// in an annotation, a type definition (its own or another's) or a signature's contexts, and the type can be the
 /// module's own or an imported one. `None` when no type's name is at `offset`.
 let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Hover.HoverInfo option =
@@ -84,7 +85,11 @@ let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult
                 match info.Parameters |> List.choose (fun var -> var.Name) with
                 | [] -> ""
                 | parameterNames -> "(" + String.concat ", " parameterNames + ")"
-            { Type = $"{keyword} {symbol.Name}{parameters} = {Unifier.tyToDisplayString names info.Underlying}"; Span = span })
+            let kind =
+                if info.IsPrivate then "private "
+                elif info.IsNominal then "protected "
+                else ""
+            { Type = $"{keyword} {symbol.Name}{parameters} = {kind}{Unifier.tyToDisplayString names info.Underlying}"; Span = span })
     | _ -> None
 
 /// The span of every name in the compiled root module that refers to `symbol`, in the order they are written: a

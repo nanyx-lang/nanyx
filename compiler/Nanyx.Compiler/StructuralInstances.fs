@@ -42,7 +42,7 @@ open NyxCompiler.InferState
 ///         | _, _ -> false
 ///     }
 ///
-/// A comparison of a union with a rest the function around chooses, `#some($Email) | r`, is derived the same way, with
+/// A comparison of a union with a rest the function around chooses, `#some(Email) | r`, is derived the same way, with
 /// the rest kept in its type: two values of a tag the rest holds, or of different tags, are compared with the
 /// compiler's own `__equals`, and the definition requires no `Eq(r)` (see `WellKnownContexts.comparedRests`).
 ///

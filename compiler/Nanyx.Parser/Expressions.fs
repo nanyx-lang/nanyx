@@ -105,22 +105,42 @@ let typeDefCore: Parser<Definition, ParseState> =
     // The body declares the type's name, written at `start`, in the definition written from `defStart`.
     let declaringTypeName (defStart: Position) ((start: Position, name), def) =
         match def with
-        | TypeDef(_, _, _, body) -> declare TypeDefBody body.Id [ name, nameSpan start name ] >>. noteDocumentable defStart (int start.Index) >>% def
+        | TypeDef(_, _, _, body) ->
+            writtenNameSpan start name >>= fun span -> declare TypeDefBody body.Id [ name, span ] >>. noteDocumentable defStart (int start.Index) >>% def
         | ValueDef _ -> preturn def
 
-    let applyPrivate modifiers privateOpt =
-        match privateOpt with
-        | Some _ -> Private :: modifiers
+    /// What a type's declaration says after its `=`, before its body: `private`, `protected`, or neither. Both is an
+    /// error: a private type is nominal already, so `private` says all that `protected` would.
+    let kindModifier =
+        let word text modifier = attempt (pstring text .>> keywordEnd .>> ws) >>% modifier
+        opt (getPosition .>>. (word "private" Private <|> word "protected" Protected))
+        >>= function
+            | Some (start, first) ->
+                opt (getPosition .>> followedBy (attempt (pstring (if first = Private then "protected" else "private") .>> keywordEnd)))
+                >>= function
+                    | Some second when first = Private ->
+                        reportFocused second "A private type is nominal already, so it is not also `protected`: keep `private`"
+                    | Some _ ->
+                        reportFocused start "A private type is nominal already, so it is not also `protected`: keep `private`"
+                    | None -> preturn (Some first)
+            | None -> preturn None
+
+    /// The modifiers of a type declared `name`, `$` before it or not (see `declaredTypeName`), and `kind` after its
+    /// `=`: a `$` declares a protected type, as `protected` does, unless the type is private.
+    let withKind modifiers (dollar: bool) (kind: TypeDefModifier option) =
+        match kind with
+        | Some kind -> kind :: modifiers
+        | None when dollar -> Protected :: modifiers
         | None -> modifiers
 
     let contextName =
-        typeNameIdentifier >>= fun name ->
+        declaredTypeName >>= fun (name, dollar) ->
             if name = "type" then
                 fail "expected context name"
             else
-                preturn name
+                preturn (name, dollar)
 
-    // `scoped export context $Memory = ()`: `scoped` comes first, then `export`.
+    // `scoped export context Memory = protected ()`: `scoped` comes first, then `export`.
     let contextModifiers =
         opt (attempt (withSpan (pstring "scoped" .>> keywordEnd) .>> ws)) .>>. opt (attempt (pstring "export" >>. ws))
         |>> fun (scopedOpt, exportOpt) ->
@@ -131,24 +151,24 @@ let typeDefCore: Parser<Definition, ParseState> =
             contextModifiers
             (pstring "context" >>. ws >>. (getPosition .>>. contextName))
             (opt (attempt (wsInline >>. typeParams)))
-            (wsInline >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
+            (wsInline >>. pstring "=" >>. ws >>. kindModifier)
             typeExprWithWhere
-            (fun baseMods (start, name) paramsOpt privateOpt typeValue ->
+            (fun baseMods (start, (name, dollar)) paramsOpt kind typeValue ->
                 let typeParams = defaultArg paramsOpt []
-                let modifiers = applyPrivate (Context :: baseMods) privateOpt
+                let modifiers = withKind (Context :: baseMods) dollar kind
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName defStart
 
     let typeDefWithModifiers defStart =
         pipe5
             typeModifiers
-            (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
+            (pstring "type" >>. ws >>. (getPosition .>>. declaredTypeName))
             (opt (attempt (wsInline >>. typeParams)))
-            (wsInline >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
+            (wsInline >>. pstring "=" >>. ws >>. kindModifier)
             typeExprWithWhere
-            (fun modifiers (start, name) paramsOpt privateOpt typeValue ->
+            (fun modifiers (start, (name, dollar)) paramsOpt kind typeValue ->
                 let typeParams = defaultArg paramsOpt []
-                let modifiers = applyPrivate modifiers privateOpt
+                let modifiers = withKind modifiers dollar kind
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
         >>= declaringTypeName defStart
 
@@ -918,7 +938,7 @@ do
                      reportFocused position "`mut` on a parameter takes a single name, not a pattern: take the cell as `mut cell`, and its value apart in the body"))
         >>. parameterOf parameterType
         |>> fun (name, held) -> name, Some (CellPassingSyntax.parameterType held)
-    // A parameter may be a pattern, `{ (a, b) -> a + b }`, `{ $Email(s) -> s }`, with the names it binds. A name or
+    // A parameter may be a pattern, `{ (a, b) -> a + b }`, `{ Email(s) -> s }`, with the names it binds. A name or
     // `_` alone is an ordinary parameter.
     let patternParameter =
         collectingNames pattern >>= fun (parameter, names) ->

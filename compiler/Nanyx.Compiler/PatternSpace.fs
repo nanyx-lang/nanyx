@@ -25,7 +25,7 @@ module PatternSpace =
         | _ -> patterns
 
     /// Whether `pattern` matches every value of its type. `(a, _)` matches every tuple: a tuple pattern is irrefutable
-    /// when each element is. So is a record pattern (`$Money(pence)`, `(x = a)`) whose parts all are: the type says the
+    /// when each element is. So is a record pattern (`Money(pence)`, `(x = a)`) whose parts all are: the type says the
     /// value has that shape.
     let rec isCatchAll (pattern: Pattern) =
         match pattern.Kind with

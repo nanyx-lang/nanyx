@@ -52,7 +52,7 @@ export def int.toFloat: int -> float = { n ->
 --| The values of type `a` that add and subtract. `x + y`, `x - y` and `-x` are read through it, and
   so is `0` beside a value of type `a` in a function whose type requires it:
   `def total: [Add(a)] list(a) -> a`. A type gets one by attaching the four members,
-  `def $Money.zero = ...`, `` def $Money.`+` = ... ``, and so on.
+  `def Money.zero = ...`, `` def Money.`+` = ... ``, and so on.
 export context Add(a) = (
   zero: a
   `+`: (a, a) -> a

@@ -1,6 +1,6 @@
 /// Keeping what requires a scoped context inside the call that supplies it (see the Context escape page). A function
 /// _supplies_ a scoped context to a parameter when the parameter's type requires it and the function's own contexts
-/// don't: `memory: [c] ([$Memory & c] () -> a) -> a` supplies `$Memory` to its block. Each call to such a function
+/// don't: `memory: [c] ([Memory & c] () -> a) -> a` supplies `Memory` to its block. Each call to such a function
 /// starts a scope of its own, a variable that stands where the callee's type has its scope, and every requirement of
 /// the context its arguments make belongs to it. Once the arguments are checked, the scope must not be one of the
 /// scopes around the call, or one a signature writes, and the call's result must not mention it. The scope is an

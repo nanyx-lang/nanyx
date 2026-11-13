@@ -13,7 +13,7 @@ let implicitArgument = "<arg>"
 let implicitSecondArgument = "<arg2>"
 
 /// The parameter a lambda takes in place of the pattern written as its `position`th (counted from 1) parameter,
-/// `{ $Email(s) -> s }`, which a match at the top of its body takes apart. Like `implicitArgument`, no code can
+/// `{ Email(s) -> s }`, which a match at the top of its body takes apart. Like `implicitArgument`, no code can
 /// write it.
 let patternArgument (position: int) = $"<pattern{position}>"
 

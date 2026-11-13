@@ -6,7 +6,7 @@
 /// tuple, a record, a list, a map and a set are written as they would be made, each part through the printer of its
 /// own type: `#some(5)`, `(1, "a")`, `(age = 36, name = "Ada")`, `[1, 2]`, `Map["tea" => 3]`, `Set[1, 2]`.
 /// A record's fields are in alphabetical order, as a record type keeps no other. A nominal type is written by its name
-/// around its shape, `$Money(250)`, inside its module or out; unit is `()`; and a function, which has nothing to show,
+/// around its shape, `Money(250)`, inside its module or out; unit is `()`; and a function, which has nothing to show,
 /// says that it is one and of what type, `<function int -> string>`.
 module internal Transpiler.Wasm.CoreIrLowerDbg
 

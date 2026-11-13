@@ -68,10 +68,10 @@ let ``++ on a type known to have no ++ is a type mismatch`` () =
 let ``A type that attaches ++ has an Append`` () =
     let source =
         """
-type $Path = (parts: list(string))
-def $Path.`++`: $Path, $Path -> $Path = { p, q -> $Path(parts = p.parts ++ q.parts) }
+type Path = protected (parts: list(string))
+def Path.`++`: Path, Path -> Path = { p, q -> Path(parts = p.parts ++ q.parts) }
 def join = { x, y -> x ++ y }
-def p = join($Path(parts = ["a"]), $Path(parts = ["b"]))
+def p = join(Path(parts = ["a"]), Path(parts = ["b"]))
 """
     let typed = compileClean source
-    Assert.Equal("$Path", Unifier.tyToString typed.Types.["p"])
+    Assert.Equal("Path", Unifier.tyToString typed.Types.["p"])

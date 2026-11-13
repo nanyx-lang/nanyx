@@ -24,8 +24,8 @@ module FunctionContexts =
     /// context of that name the signature writes. No variable written in source has it.
     let scopeVariableName (context: string) = $"@{context}"
 
-    /// The context a cell's type is of (see `cellType`): `$Memory`, as the prelude declares it.
-    let cellContext = "$Memory"
+    /// The context a cell's type is of (see `cellType`): `Memory`, as the prelude declares it.
+    let cellContext = "Memory"
 
     /// The type of a cell that holds `held`, of the `memory` block of the scope `scope` (see `CellPassingSyntax`): a
     /// reader sees `mut T`, without the scope.
@@ -52,7 +52,7 @@ module FunctionContexts =
         | TyApply(_, [ ScopeType l ]), TyApply(_, [ ScopeType r ]) -> isCallScope l && isCallScope r && l <> r
         | _ -> false
 
-    /// The scoped context `name` (`scoped context $Memory = ()`) of the scope `scope`, a type variable: the call that
+    /// The scoped context `name` (`scoped context Memory = ()`) of the scope `scope`, a type variable: the call that
     /// supplies the context starts the scope, and every requirement of it inside belongs to it. A reader never sees the
     /// scope (see `withoutScope`), and the backend leaves it out.
     let scoped (name: string) (scope: Ty) : Ty = TyApply(name, [ scopeType scope ])
@@ -71,9 +71,9 @@ module FunctionContexts =
         | ScopedContext(name, _) -> Some name
         | _ -> None
 
-    /// `contexts`, those of a function type whose input is `input`, with `$Memory` of the scope of each cell the function
-    /// takes: a function that takes a cell requires it, whether its type says so or not, since `$Memory` is nominal and
-    /// only the cell's block has it. `mut int -> ()` is `[$Memory] mut int -> ()`.
+    /// `contexts`, those of a function type whose input is `input`, with `Memory` of the scope of each cell the function
+    /// takes: a function that takes a cell requires it, whether its type says so or not, since `Memory` is nominal and
+    /// only the cell's block has it. `mut int -> ()` is `[Memory] mut int -> ()`.
     let withCellMemory (input: Ty) (contexts: Ty list) : Ty list =
         let parameters =
             match input with
@@ -142,7 +142,7 @@ module FunctionContexts =
                 | Some index -> go matches rest (List.removeAt index remaining) ((context, remaining.[index]) :: pairs) unmatched
                 | None -> go matches rest remaining pairs (context :: unmatched)
         let same, leftOver, rightOver = go (=) leftContexts rightContexts [] []
-        // An outer block's `$Memory` is not an inner block's: it goes into a variable instead.
+        // An outer block's `Memory` is not an inner block's: it goes into a variable instead.
         let paired, leftExtra, rightExtra = go (fun l r -> key l = key r && not (ofTwoCalls l r)) leftOver rightOver [] []
         let leftOnly = leftVars |> List.filter (fun v -> not (List.contains v rightVars))
         let rightOnly = rightVars |> List.filter (fun v -> not (List.contains v leftVars))
@@ -195,7 +195,7 @@ module FunctionContexts =
         | _ ->
             // A variable of `given` takes the scoped contexts `expected` has besides: a block given to `memory` that
             // calls a function it is not told the type of, as `{ mk -> memory { mk() } }` does, gives it the block's
-            // `$Memory`. The variable of `expected` takes only what it has besides, so the call that supplies the
+            // `Memory`. The variable of `expected` takes only what it has besides, so the call that supplies the
             // context does not require it too.
             let scoped = expectedExtra |> List.filter (function ScopedContext _ -> true | _ -> false)
             match givenVars with

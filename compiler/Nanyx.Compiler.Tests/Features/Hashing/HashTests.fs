@@ -9,9 +9,9 @@ let private hashing = "def h: [Hash(a)] a -> int = { x -> hash(x) }\n"
 
 /// A nominal type that attaches its own `==`, and `hash` when `withHash` is set.
 let private email (withHash: bool) =
-    "type $Email = string\n" +
-    "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
-    (if withHash then "def $Email.hash: $Email -> int = { e -> 7 }\n" else "")
+    "type Email = protected string\n" +
+    "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
+    (if withHash then "def Email.hash: Email -> int = { e -> 7 }\n" else "")
 
 [<Fact>]
 let ``A call that requires Hash of a type with no hash of its own is passed the compiler's own`` () =
@@ -20,20 +20,20 @@ let ``A call that requires Hash of a type with no hash of its own is passed the 
 
 [<Fact>]
 let ``A call that requires Hash of a nominal type that attaches hash is passed it`` () =
-    let typed = compileClean (hashing + email true + "def a = h($Email(\"x\"))\n")
-    Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "hash", "$Email.hash" ] ], instancesOf typed)
+    let typed = compileClean (hashing + email true + "def a = h(Email(\"x\"))\n")
+    Assert.Equal<ContextInstance list>([ InstanceSynthesized [ "hash", "Email.hash" ] ], instancesOf typed)
 
 [<Fact>]
 let ``A type that attaches == and no hash has no Hash, and nor has anything that holds it`` () =
-    let message, at = missingContext (hashing + email false + "def a = h($Email(\"x\"))\n")
-    Assert.Equal("'h' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
+    let message, at = missingContext (hashing + email false + "def a = h(Email(\"x\"))\n")
+    Assert.Equal("'h' hashes values of type 'Email', which cannot be hashed: 'Email' defines its own ==, so its hash must agree with it: attach 'Email.hash'", message)
     Assert.Equal("h", at)
-    let message, _ = missingContext (hashing + email false + "def a = h([$Email(\"x\")])\n")
-    Assert.Equal("'h' hashes values of type 'list($Email)', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'", message)
+    let message, _ = missingContext (hashing + email false + "def a = h([Email(\"x\")])\n")
+    Assert.Equal("'h' hashes values of type 'list(Email)', which cannot be hashed: 'Email' defines its own ==, so its hash must agree with it: attach 'Email.hash'", message)
 
 [<Fact>]
 let ``A structure that holds a part with its own hash is passed a hash derived from its parts`` () =
-    let typed = compileClean (hashing + email true + "def a = h([$Email(\"x\")])\ndef b = h((who = $Email(\"x\"), n = 1))\n")
+    let typed = compileClean (hashing + email true + "def a = h([Email(\"x\")])\ndef b = h((who = Email(\"x\"), n = 1))\n")
     // The derived definitions' own calls, which hash each part, come after the module's.
     match instancesOf typed |> List.truncate 2 with
     | [ InstanceSynthesized [ "hash", list ]; InstanceSynthesized [ "hash", record ] ] ->
@@ -62,5 +62,5 @@ let ``Only a nominal type may attach hash`` () =
     match (Compiler.compile "type Point = (x: int, y: int)\ndef Point.hash: Point -> int = { p -> p.x }\n").Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
-        Assert.Equal("'Point.hash' cannot be defined: 'Point' is a structural type, so its hash is always that of its structure. Make it nominal ('$Point') to define its own hash", diagnostic.Message)
+        Assert.Equal("'Point.hash' cannot be defined: 'Point' is a structural type, so its hash is always that of its structure. Declare it `protected` to define its own hash", diagnostic.Message)
     | other -> failwith $"Expected one diagnostic, got %A{other}"

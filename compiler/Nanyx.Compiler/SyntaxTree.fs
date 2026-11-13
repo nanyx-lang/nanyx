@@ -146,6 +146,14 @@ module SyntaxTree =
         | ReExport _
         | Attribute _ -> []
 
+    /// The names of the values `module'` exports: each `export def`.
+    let exportedValueNames (module': Module) : Set<Identifier> =
+        module'
+        |> List.choose (function
+            | Kind (Def (ValueDef(true, name, _, _))) -> Some name
+            | _ -> None)
+        |> Set.ofList
+
     /// The names a module writes as values of their own rather than calls: `add` in `fold(0, add)`, not in
     /// `add(1, 2)` or `1 \add(2)`.
     let namedAsValues (items: Module) : Set<Identifier> =

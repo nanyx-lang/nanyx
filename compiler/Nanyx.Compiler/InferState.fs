@@ -97,7 +97,7 @@ type InferState =
             TypeVars: Map<string, TyVar>;
             TypeDefs: Map<string, TypeDefInfo>;
             /// The names in `TypeDefs` that cannot be written: the types only an aliased import brings in, which are
-            /// written with the alias (`m.$Email`). They stay in `TypeDefs` for what the imported definitions' own
+            /// written with the alias (`m.Email`). They stay in `TypeDefs` for what the imported definitions' own
             /// signatures name.
             HiddenTypeNames: Set<string>;
             ContextDefs: Map<string, TypeExpr>;
@@ -209,8 +209,8 @@ type InferState =
             /// they export it under: where a pipe's error says to find a definition it could not reach.
             StandardLibraryExports: Lazy<Map<string, string list>>;
             /// The operators that call a definition, by the operator's node, with the name they call it by: `x + y`
-            /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
-            /// `` $Vector.`+` `` when that is attached.
+            /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `Vector` it calls
+            /// `` Vector.`+` `` when that is attached.
             OperatorCalls: Map<NodeId, Identifier>;
             /// The instance in scope whose member each of those operators calls, by the operator's node, as written
             /// where it is put in scope, where the operator calls one: in a function that requires
@@ -491,18 +491,19 @@ let internal recordAnnotated (symbol: SymbolId option) (isAnnotated: bool) (stat
     | Some symbol when isAnnotated -> { state with AnnotatedSymbols = state.AnnotatedSymbols |> Set.add symbol }
     | _ -> state
 
+/// The `module name =` block innermost around `span`, with its name, if `span` is in one.
+let blockAround (moduleBlocks: (ModuleName * SourceSpan) list) (span: SourceSpan) : (ModuleName * SourceSpan) option =
+    moduleBlocks
+    |> List.filter (fun (_, block) -> SourceSpan.contains block span)
+    |> List.sortBy (fun (_, block) -> block.End - block.Start)
+    |> List.tryHead
+
 /// `state.ImportReferences`, with the node `node`, written at `span`, recorded as naming `symbol` through its import
 /// if it was imported. Of the imports that bring `symbol` in, it is the one written in the innermost `module name =`
 /// block around `span`, a block's imports being its own; among imports in the same place, the last.
 let private importReferenceOf (node: NodeId) (span: SourceSpan) (symbol: SymbolId) (state: InferState) =
-    let blockAround (inner: SourceSpan) =
-        state.ModuleBlocks
-        |> List.map snd
-        |> List.filter (fun block -> SourceSpan.contains block inner)
-        |> List.sortBy (fun block -> block.End - block.Start)
-        |> List.tryHead
     let reaches (import: SymbolId) =
-        match state.Symbols |> Map.tryFind import |> Option.map (fun symbol -> blockAround symbol.Declaration) with
+        match state.Symbols |> Map.tryFind import |> Option.map (fun symbol -> blockAround state.ModuleBlocks symbol.Declaration |> Option.map snd) with
         | Some (Some block) -> if SourceSpan.contains block span then Some (block.End - block.Start) else None
         | Some None
         | None -> Some System.Int32.MaxValue

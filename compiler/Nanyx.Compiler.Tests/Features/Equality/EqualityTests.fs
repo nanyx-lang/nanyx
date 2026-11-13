@@ -172,11 +172,11 @@ let ``A call that requires Eq of a type with no == attached passes the compiler'
 let ``A call that requires Eq of a type with == attached passes that`` () =
     let typed =
         compileClean (
-            "type $Email = string\n" +
-            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+            "type Email = protected string\n" +
+            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
             "def same = { x, y -> x == y }\n" +
-            "def b = same($Email(\"a\"), $Email(\"b\"))\n")
-    Assert.Contains(InstanceSynthesized [ "==", "$Email.==" ], instancesOf typed)
+            "def b = same(Email(\"a\"), Email(\"b\"))\n")
+    Assert.Contains(InstanceSynthesized [ "==", "Email.==" ], instancesOf typed)
 
 [<Fact>]
 let ``A call that requires Eq of a list of a type variable needs Eq of the variable`` () =
@@ -203,9 +203,9 @@ let ``Comparing tags with payloads of different types is still an error`` () =
 let ``A concrete comparison calls the == attached to its type, except in that definition`` () =
     let typed =
         compileClean (
-            "type $Point = (x: int, y: int)\n" +
-            "def $Point.`==`: $Point, $Point -> bool = { p, q -> p == q }\n" +
-            "def b = $Point(x = 1, y = 2) != $Point(x = 1, y = 3)\n")
+            "type Point = protected (x: int, y: int)\n" +
+            "def Point.`==`: Point, Point -> bool = { p, q -> p == q }\n" +
+            "def b = Point(x = 1, y = 2) != Point(x = 1, y = 3)\n")
     let calls =
         typed.Module
         |> List.collect (function
@@ -218,17 +218,17 @@ let ``A concrete comparison calls the == attached to its type, except in that de
                     | _ -> []
                 calledIn value |> List.map (fun callee -> name, callee)
             | _ -> [])
-        |> List.filter (fun (_, callee) -> callee = "$Point.==")
-    Assert.Equal<(string * string) list>([ "b", "$Point.==" ], calls)
+        |> List.filter (fun (_, callee) -> callee = "Point.==")
+    Assert.Equal<(string * string) list>([ "b", "Point.==" ], calls)
 
 [<Fact>]
 let ``A list of a type with its own == is compared through it, element by element`` () =
     let typed =
         compileClean (
-            "type $Email = string\n" +
-            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
-            "def b = [$Email(\"a\")] != [$Email(\"b\")]\n" +
+            "type Email = protected string\n" +
+            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
+            "def b = [Email(\"a\")] != [Email(\"b\")]\n" +
             "def same: [Eq(a)] list(a), list(a) -> bool = { xs, ys -> xs == ys }\n")
-    Assert.Contains(InstanceSynthesized [ "==", "$Email.==" ], instancesOf typed)
+    Assert.Contains(InstanceSynthesized [ "==", "Email.==" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
     Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Eq", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

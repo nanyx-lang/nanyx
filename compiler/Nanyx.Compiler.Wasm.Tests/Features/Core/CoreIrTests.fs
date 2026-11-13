@@ -377,6 +377,7 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       BuiltInHoles = Set.empty
       RecordConstructors = Set.empty
       NominalWrappers = Set.empty
+      NominalTypes = Set.empty
       Lifted = Map.empty
       TopLevel = []
       NamedTypes = Map.empty }

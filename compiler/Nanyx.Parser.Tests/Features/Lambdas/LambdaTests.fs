@@ -304,7 +304,7 @@ let ``a shorthand lambda's body may continue after a member access`` () =
 
 [<Fact>]
 let ``a member access shorthand compared with a string is a pipe's trailing lambda`` () =
-    match (onlyValue "def bs = ps \\list.filter { .name == \"b\" }").Kind with
+    match (onlyValue """def bs = ps \list.filter { .name == "b" }""").Kind with
     | Pipe (Kind (IdentifierExpr "ps"), "list.filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", _, Kind (MemberAccess (Kind target, "name", _)), Kind (LiteralExpr (StringLit "b")))), _)) ])
         when target = implicit -> ()
     | other -> failwith $"Unexpected pipe: %A{other}"
@@ -343,12 +343,12 @@ let ``a shorthand lambda is a pipe's trailing lambda`` () =
 
 [<Fact>]
 let ``a pattern parameter is taken apart by a match at the top of the body`` () =
-    let source = "def f = { $Email(s) -> s }"
+    let source = "def f = { Email(s) -> s }"
     match (onlyValue source).Kind with
-    | Lambda ([ (parameter, None) ], Kind (Match ([ scrutinee ], [ [ Kind (RecordPattern ("$Email", [ Kind (IdentifierPattern "s") ])) ], Kind (IdentifierExpr "s") ])), _)
+    | Lambda ([ (parameter, None) ], Kind (Match ([ scrutinee ], [ [ Kind (RecordPattern ("Email", [ Kind (IdentifierPattern "s") ])) ], Kind (IdentifierExpr "s") ])), _)
         when parameter = patternArgument 1 && scrutinee.Kind = IdentifierExpr parameter ->
         // The scrutinee is made up where the pattern is written.
-        source.Substring(scrutinee.Span.Start, scrutinee.Span.End - scrutinee.Span.Start) |> should equal "$Email(s)"
+        source.Substring(scrutinee.Span.Start, scrutinee.Span.End - scrutinee.Span.Start) |> should equal "Email(s)"
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
@@ -414,7 +414,7 @@ let ``named parameters followed by arms match the arms against the parameters`` 
 
 [<Fact>]
 let ``arms after parameters may follow on the arrow's line, after one parameter or an operator's`` () =
-    match (onlyValue "def name = { o -> | #some(s) -> s | #none -> \"none\" }").Kind with
+    match (onlyValue """def name = { o -> | #some(s) -> s | #none -> "none" }""").Kind with
     | Lambda ([ ("o", None) ], Kind (Match ([ Kind (IdentifierExpr "o") ], [ _; _ ])), false) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     match (onlyValue "def `>>=` = { m, (f: int -> int) -> | #some(v), f -> f(v) | other, _ -> other }").Kind with

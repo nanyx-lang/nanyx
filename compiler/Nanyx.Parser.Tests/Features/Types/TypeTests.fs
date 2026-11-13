@@ -26,10 +26,11 @@ let ``Parse type definition feature files`` () =
 [<Fact>]
 let ``def annotation can start an indented continuation line`` () =
     let source =
-        "def mapSome\n" +
-        "  : (#some(a) | r), (a -> b) -> (#some(b) | r)\n" +
-        "  = { | #some(a), f -> #some(f(a))\n" +
-        "      | other, _ -> other }\n"
+        normalized """def mapSome
+  : (#some(a) | r), (a -> b) -> (#some(b) | r)
+  = { | #some(a), f -> #some(f(a))
+      | other, _ -> other }
+"""
     let optionOf payload = ty (TypeUnion [ tag "some" (Some (var payload)); var "r" ])
     let expected = func (tuple [ optionOf "a"; func (var "a") (var "b") ]) (optionOf "b")
     match parseModule source with
@@ -178,9 +179,10 @@ let ``a record field's name may start with a keyword`` () =
 [<Fact>]
 let ``typeof in a module block names the block's own value`` () =
     let source =
-        "module config =\n" +
-        "  def defaults = (port = 80)\n" +
-        "  def custom: typeof defaults = (port = 8080)\n"
+        normalized """module config =
+  def defaults = (port = 80)
+  def custom: typeof defaults = (port = 8080)
+"""
     match parseModule source with
     | Result.Ok items ->
         let annotation =

@@ -49,26 +49,26 @@ let ``Typecheck infers attached receiver type for unannotated lambda`` () =
 [<Fact>]
 let ``Typecheck infers nominal attached receiver type for unannotated lambda`` () =
     let source =
-        "type $Email = string\n" +
-        "def $Email.toString = { e -> \"ok\" }"
+        "type Email = protected string\n" +
+        "def Email.toString = { e -> \"ok\" }"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    match typed.Types.["$Email.toString"] with
-    | TyFunc(TyNominal({ Name = name }, _, _), TyPrimitive "string", _) when name = "$Email" ->
+    match typed.Types.["Email.toString"] with
+    | TyFunc(TyNominal({ Name = name }, _, _), TyPrimitive "string", _) when name = "Email" ->
         ()
     | other -> Assert.True(false, $"Unexpected inferred nominal attached def type: %A{other}")
 
 [<Fact>]
 let ``Typecheck infers nominal attached receiver as argument in body`` () =
     let source =
-        "type $Email = string\n" +
-        "def $Email.toDisplay = { e -> e }"
+        "type Email = protected string\n" +
+        "def Email.toDisplay = { e -> e }"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let typed = result.Typed.Value
-    match typed.Types.["$Email.toDisplay"] with
-    | TyFunc(TyNominal({ Name = nameIn }, _, _), TyNominal({ Name = nameOut }, _, _), _) when nameIn = "$Email" && nameOut = "$Email" ->
+    match typed.Types.["Email.toDisplay"] with
+    | TyFunc(TyNominal({ Name = nameIn }, _, _), TyNominal({ Name = nameOut }, _, _), _) when nameIn = "Email" && nameOut = "Email" ->
         ()
     | other -> Assert.True(false, $"Unexpected inferred nominal identity attached def type: %A{other}")
 
@@ -154,10 +154,10 @@ let ``Typecheck pipe resolves attached functions`` () =
 [<Fact>]
 let ``Typecheck pipe resolves attached functions on nominals`` () =
     let source =
-        "type $Email = string\n" +
-        "def $Email.toString: $Email -> string = { e -> \"\" }\n" +
-        "def $Email.format: $Email -> string = { e -> \"\" }\n" +
-        "def email: $Email = \"a@b.com\"\n" +
+        "type Email = protected string\n" +
+        "def Email.toString: Email -> string = { e -> \"\" }\n" +
+        "def Email.format: Email -> string = { e -> \"\" }\n" +
+        "def email: Email = \"a@b.com\"\n" +
         "def s = email \\ toString\n" +
         "def s2 = email \\ format"
     let result = Compiler.compile source
@@ -275,19 +275,19 @@ let ``nanyx/text imported with as is only reached qualified from a pipe`` () =
 [<Fact>]
 let ``An operator on a type that attaches it calls the attached definition`` () =
     let source =
-        "type $V = (x: int, y: int)\n" +
-        "def $V.`+`: $V, $V -> $V = { p, q -> $V(x = p.x + q.x, y = p.y + q.y) }\n" +
-        "def $V.`*`: $V, int -> $V = { p, k -> $V(x = p.x * k, y = p.y * k) }\n" +
-        "def $V.`==`: $V, $V -> bool = { p, q -> p.x == q.x }\n" +
-        "def a = $V(x = 1, y = 2)\n" +
+        "type V = protected (x: int, y: int)\n" +
+        "def V.`+`: V, V -> V = { p, q -> V(x = p.x + q.x, y = p.y + q.y) }\n" +
+        "def V.`*`: V, int -> V = { p, k -> V(x = p.x * k, y = p.y * k) }\n" +
+        "def V.`==`: V, V -> bool = { p, q -> p.x == q.x }\n" +
+        "def a = V(x = 1, y = 2)\n" +
         "def sum = a + a\n" +
         "def scaled = a * 3\n" +
         "def same = a != a\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let types = result.Typed.Value.Types
-    Assert.Equal("$V", Unifier.tyToString types.["sum"])
-    Assert.Equal("$V", Unifier.tyToString types.["scaled"])
+    Assert.Equal("V", Unifier.tyToString types.["sum"])
+    Assert.Equal("V", Unifier.tyToString types.["scaled"])
     Assert.Equal("bool", Unifier.tyToString types.["same"])
     // The right operand is checked against the attached definition's parameter.
     let wrong = Compiler.compile (source + "def bad = a * \"three\"\n")

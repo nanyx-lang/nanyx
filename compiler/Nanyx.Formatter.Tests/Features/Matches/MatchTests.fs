@@ -68,6 +68,6 @@ let ``Or-patterns, rec and destructuring defs are printed as written`` () =
     unchanged "def a, (b, _) = pair\n"
     unchanged "def low, high = sort(3, -1)\n"
     unchanged (lines [ "def f = { pair ->"; "  def a, b = pair"; "  a + b"; "}" ])
-    unchanged "def $Money(pence) = m\n"
+    unchanged "def Money(pence) = m\n"
     unchanged "def [first, ...rest] = xs\n"
-    unchanged (lines [ "def f = { m ->"; "  def $Money(pence) = m"; "  pence"; "}" ])
+    unchanged (lines [ "def f = { m ->"; "  def Money(pence) = m"; "  pence"; "}" ])

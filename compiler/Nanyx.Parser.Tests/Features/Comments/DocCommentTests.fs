@@ -122,7 +122,7 @@ let ``A doc comment documents what a def, a cell, a destructuring def or a field
 export def (first, second) = (1, 2)
 
 --| A scope.
-scoped export context $Memory = ()
+scoped export context Memory = protected ()
 
 --| A record.
 type Counter = (
@@ -145,7 +145,7 @@ def f = {
 """
     Assert.Equal<_ list>(
         [ "A pair.", "first"
-          "A scope.", "$Memory"
+          "A scope.", "Memory"
           "A record.", "Counter"
           "How many.", "count"
           "On one line.", "Point"
