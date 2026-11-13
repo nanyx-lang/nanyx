@@ -129,35 +129,6 @@ The argument has no name, so a name written in the body always means what it mea
 
 # Parameters
 
-## Optional parameters
-
-Suffix a parameter name with `?` to make it optional. If the parameter would otherwise have type `T`, its type becomes `#some(T) | #none`, and `#none` is passed when the caller omits it.
-
-```nanyx skip=#953
-def printMessage = { message? ->
-  message
-    \match
-      | #none -> "You didn't say anything"
-      | #some(msg) -> "You said -> {msg}"
-    \println
-}
-```
-
-## Default values
-
-A parameter with a default value is also optional at the call site, but inside the function it has its plain type, with the default used when the caller omits it:
-
-```nanyx skip=#953
-def printResults = { left = "left", middle, right = "right" ->
-  println("{left}, {middle}, {right}")
-}
-
-printResults(middle = "centre")
--- left, centre, right
-```
-
-Parameters with defaults are named fields, so callers pass them by name (see [Named parameters](#named-parameters)).
-
 ## Named parameters
 
 If you name parameters in the signature, callers _must_ pass those fields by name, and the function body must destructure them by name too. When the local name is the same as the field name, `field = field` can be shortened to just `field`:
