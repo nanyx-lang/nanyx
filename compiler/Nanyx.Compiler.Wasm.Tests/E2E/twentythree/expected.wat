@@ -385,14 +385,6 @@
       end
     end
   )
-  (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)
-    local.get $base
-    local.get $offset
-    i32.add
-    local.get $value
-    i32.store
-    local.get $base
-  )
   (func $__nanyx_tag_box (param $code i32) (param $payload i32) (result i32)
     (local $cell i32)
     i32.const 8
@@ -449,11 +441,17 @@
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
-  (table $ctx_table 7 funcref)
-  (elem (i32.const 0) $__fn_flush $__nanyx_drop_env $__fn_readLine $__fn_readToEnd $__fn_write $__fn_writeError $__fn_string_toString)
+  (table $ctx_table 6 funcref)
+  (elem (i32.const 0) $__fn_flush $__fn_readLine $__fn_readToEnd $__fn_write $__fn_writeError $__fn_string_toString)
 
   (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 268) "\00\00\00\00\0d\00\00\00Hello, Nanyx!\00\00\00")
+  (data (i32.const 292) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 304) "\00\00\00\00\00\00\00\00\01\00\00\00")
+  (data (i32.const 316) "\00\00\00\00\00\00\00\00\02\00\00\00")
+  (data (i32.const 328) "\00\00\00\00\00\00\00\00\03\00\00\00")
+  (data (i32.const 340) "\00\00\00\00\00\00\00\00\04\00\00\00")
+  (data (i32.const 352) "\00\00\00\00\00\00\00\00\05\00\00\00")
 
   (func $write (param $text i32) (result i32)
     local.get $text
@@ -985,61 +983,15 @@
     local.get $p
   )
 
-  (func $__nanyx_drop_env (param $p i32) (result i32)
-    i32.const 0
-  )
-
-  (func $__nanyx_start (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
+  (func $__nanyx_start
     i32.const 276
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 0
-    i32.const 0
-    call $__nanyx_record_set
-    local.tee $__owned_0
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 2
-    i32.const 0
-    call $__nanyx_record_set
-    local.tee $__owned_1
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 3
-    i32.const 0
-    call $__nanyx_record_set
-    local.tee $__owned_2
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 4
-    i32.const 0
-    call $__nanyx_record_set
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 5
-    i32.const 0
-    call $__nanyx_record_set
-    local.tee $__owned_3
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 6
-    i32.const 0
-    call $__nanyx_record_set
+    i32.const 300
+    i32.const 312
+    i32.const 324
+    i32.const 336
+    i32.const 348
+    i32.const 360
     call $println__string
-    local.get $__owned_0
-    call $__nanyx_drop_fn_unit_to_unit
-    local.get $__owned_1
-    call $__nanyx_drop_fn_unit_to_tags_error_tags_endOfInput_some_string
-    local.get $__owned_2
-    call $__nanyx_drop_fn_unit_to_tags_error_tags_endOfInput_some_string
-    local.get $__owned_3
-    call $__nanyx_drop_fn_string_to_unit
     drop
   )
 

@@ -141,9 +141,16 @@ allocator's size word). The drop function for the object's type knows the rest, 
 information is needed. `__nanyx_new_object` and `__nanyx_new_cell` allocate an object of each kind with a count of
 one, and `__nanyx_release` gives up a reference, telling the caller whether it was the last.
 
-Static data (string literals) gets a header too, with a count of 0, which marks it as immortal: `release` leaves it
-alone, so it is never freed. A literal in the data segment is laid out as a string on the heap is (the count, the
-length, the bytes and a 0 byte), padded to 4 bytes so that the next one is aligned.
+Static data (string literals, and closures that capture nothing) gets a header too, with a count of 0, which marks it
+as immortal: `release` leaves it alone, so it is never freed. A literal in the data segment is laid out as a string
+on the heap is (the count, the length, the bytes and a 0 byte), padded to 4 bytes so that the next one is aligned.
+
+A closure that captures nothing is the same block every time it is made: a closure over a top-level function passed
+as a value (`list.map(xs, double)`), over a context member's function passed at a call (the six that `println`
+takes), or over a lambda that captures nothing. So it is static data ([#743](https://github.com/nanyx-lang/nanyx/issues/743)):
+one block per lifted function in the data segment, after the string literals, laid out as a closure on the heap is
+(the count, the info word, the table slot), with an info word of 0, since nothing drops it. In the core IR it is an
+atom, `AStaticClosure`, so reference counting gives it no dup or drop, and making one is an `i32.const`.
 
 **Drop functions.** `CoreIrDrop.fs` generates one for each type on the heap that the module's functions use
 (`__nanyx_drop_list_string`, named by the type), together with the types of their fields. Each gives up a reference
@@ -155,8 +162,9 @@ and, when it was the last, drops the fields that are on the heap and frees the o
   unless every tag with a payload has a payload of the same type;
 - a function value's calls the function whose table slot is in the closure's info word, which drops what the
   closure captures. There is one such function per list of captured types (`__nanyx_drop_env__string`), and one,
-  `__nanyx_drop_env`, for closures that capture nothing on the heap. It is called through the function table, so it
-  has the type of a closure of one parameter, and returns 0.
+  `__nanyx_drop_env`, for closures whose captures are none of them on the heap (a closure that captures nothing at
+  all is static data, and is never dropped). It is called through the function table, so it has the type of a
+  closure of one parameter, and returns 0.
 
 ## Allocator
 
@@ -178,7 +186,8 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   size Perceus will next ask for. Larger blocks share one list, searched first-fit; a block found there is not
   split and keeps its own size.
 - **Lists.** The heads are a table of 9 words at the start of the heap, and `$heap_ptr` starts after it. The
-  string literals run from address 256, and the table goes at 4096 or, when they end past that, after them,
+  string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
+  after them,
   8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. `free` pushes onto the front of the
   list and `alloc` takes from the front, so the most recently freed block is reused first.
 
@@ -208,7 +217,7 @@ shape. A body is an expression with a type on every node:
 
 | Node | Meaning |
 |------|---------|
-| atom | a variable or a constant (an int, a bool, unit, a string literal, a tag without a payload) |
+| atom | a variable or a constant (an int, a bool, unit, a string literal, a tag without a payload, a closure that captures nothing) |
 | `prim(op, atoms)` | an operator on ints or booleans |
 | `call(f, atoms)` | a call to a top-level function, by its name in WebAssembly text |
 | `makeTag(tag, atom)` | allocates the cell of a tag with a payload |
@@ -219,7 +228,7 @@ shape. A body is an expression with a type on every node:
 | `x[slot] := atom` | writes a field of a box a lambda shares, dropping the value it held: how a captured cell changes |
 | `makeList(atoms)` | builds a list |
 | `callRuntime(helper, atoms)` | calls a runtime helper: an intrinsic, or what `++` and `==` on strings, lists and tags need |
-| `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures |
+| `makeClosure(f, atoms)` | allocates a closure block: the lifted function's table slot, then what it captures (one or more) |
 | `callClosure(closure, atoms)` | calls through a function value, passing the closure block as the environment |
 | `boxFloat(value)` | boxes a float constant (floats are boxed, and `prim` on floats unboxes its operands) |
 | `forEach(loop)` | a `for` loop over lists and ranges in step, its body run for each step until one of them ends |

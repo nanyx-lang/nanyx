@@ -1,5 +1,5 @@
 /// What a module needs besides its functions, worked out from the core IR it is emitted from: the tags it numbers,
-/// the string literals in its data segment, and whether `dbg` prints.
+/// the string literals and static closures in its data segment, and whether `dbg` prints.
 module Transpiler.Wasm.CoreIrFacts
 
 open System.Collections.Generic
@@ -10,6 +10,9 @@ type ModuleFacts =
       Tags: string list
       /// Every string the emitter asks the data-segment offset of, in the order the functions' IR first names them.
       Strings: string list
+      /// Every closure that captures nothing (see `AStaticClosure`), by its function's name and arity, in the order the
+      /// functions' IR first names them.
+      StaticClosures: (string * int) list
       /// Whether some `dbg` prints through `$dbg_str`.
       UsesDbgHelpers: bool }
 
@@ -17,6 +20,7 @@ type ModuleFacts =
 let collect (functions: Function list) : ModuleFacts =
     let tags = HashSet<string>()
     let strings = ResizeArray<string>()
+    let staticClosures = ResizeArray<string * int>()
     let usesDbgHelpers = ref false
 
     // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
@@ -36,6 +40,7 @@ let collect (functions: Function list) : ModuleFacts =
         match a with
         | AString value -> strings.Add value
         | ATag name -> tags.Add name |> ignore
+        | AStaticClosure(name, arity, _) -> staticClosures.Add((name, arity))
         | AVar v when v.Kind = Temp ->
             match deferred.TryGetValue v.Id with
             | true, value ->
@@ -125,4 +130,5 @@ let collect (functions: Function list) : ModuleFacts =
 
     { Tags = tags |> Seq.sort |> List.ofSeq
       Strings = strings |> Seq.distinct |> List.ofSeq
+      StaticClosures = staticClosures |> Seq.distinct |> List.ofSeq
       UsesDbgHelpers = usesDbgHelpers.Value }

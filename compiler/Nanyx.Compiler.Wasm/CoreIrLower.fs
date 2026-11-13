@@ -475,7 +475,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let key = target, (if specialised then [ toIrType instanceTy ] else [])
                 this.ContextMembers scope wrapped expr.Id instanceTy passed (fun captured ->
                     let name = request key subst (WrapperCalling(wrapped, instanceTy, captured |> List.map (fun (memberKey, atom) -> memberKey, atomType atom)))
-                    k (mk (MakeClosure(name, arity, List.map snd captured)) ty))
+                    k (closureOver name arity (List.map snd captured) ty))
             | None -> cannot $"a closure over '{target}', which lambda lifting did not make"
         | FunctionCall(name, _, args) when scope.Vars.ContainsKey name ->
             // A call through a function value in a parameter or local.
@@ -707,9 +707,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | [] -> this.MemberAtoms scope variables (fun atoms -> k (List.rev acc @ List.zip (List.map fst variables) atoms))
                 | (_, PassedByCaller, _) :: rest -> pass rest acc
                 | (key, MemberInScope inScope, memberTy) :: rest -> next key (AVar scope.Members.[inScope]) memberTy rest
-                | (key, ClosureOverWrapper wrapper, memberTy) :: rest ->
-                    let closure = this.WrapperClosure wrapper memberTy
-                    bindTemp closure (fun atom -> next key atom memberTy rest)
+                | (key, ClosureOverWrapper wrapper, memberTy) :: rest -> next key (this.WrapperClosure wrapper memberTy) memberTy rest
                 | (key, DerivedClosure(wrapper, at), memberTy) :: rest ->
                     this.DerivedClosure scope wrapper at memberTy (fun atom -> next key atom memberTy rest)
                 | (key, DefinitionValue definition, _) :: rest ->
@@ -734,7 +732,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let found (atom: Atom) = this.Coerce scope atom ty (fun atom -> go rest (atom :: acc))
                 match scope.Members |> Map.tryFind key, input.AmbientMembers |> Map.tryFind key with
                 | Some var, _ -> found (AVar var)
-                | None, Some wrapper -> bindTemp (this.WrapperClosure wrapper None) found
+                | None, Some wrapper -> found (this.WrapperClosure wrapper None)
                 | None, None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
         go members []
 
@@ -759,10 +757,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 bindTemp (mk (MakeClosure(name, arity, atom :: captured)) expected) k)
         | _ -> k atom
 
-    /// A closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for a generic
-    /// function, at `memberTy`, the type of the context member it is passed as. A union's rest that nothing closes adds
-    /// no tags (see `toIrType`): `ToString(#red | r)` is passed at `#red`.
-    member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Expr =
+    /// The closure over the wrapper `wrapper` of a top-level function, static data since it captures nothing: at the
+    /// function's own type, or, for a generic function, at `memberTy`, the type of the context member it is passed as. A
+    /// union's rest that nothing closes adds no tags (see `toIrType`): `ToString(#red | r)` is passed at `#red`.
+    member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Atom =
         let wrapped =
             match input.Lifted |> Map.tryFind wrapper with
             | Some (FunctionWrapper wrapped) -> wrapped
@@ -787,7 +785,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | Some _, Some ty -> (wrapper, [ toIrType ty ]), ty
             | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
         let name = request key subst (WrapperCalling(wrapped, wrappedTy, []))
-        mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) (toIrType wrappedTy), [])) (toIrType wrappedTy)
+        AStaticClosure(name, IrType.closureArity (parameterNames wrapper) (toIrType wrappedTy), toIrType wrappedTy)
 
     /// A closure over the wrapper `wrapper` of a definition derived from the parts of a type (see `DerivedClosure`), at
     /// `memberTy`, the type of the context member it is passed as: it captures the members of the contexts the
@@ -806,7 +804,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let ty = toIrType memberTy
         this.ContextMembers scope wrapped at memberTy Set.empty (fun captured ->
             let name = request (wrapper, [ ty ]) subst (WrapperCalling(wrapped, memberTy, captured |> List.map (fun (key, atom) -> key, atomType atom)))
-            bindTemp (mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) ty, List.map snd captured)) ty) k)
+            match closureOver name (IrType.closureArity (parameterNames wrapper) ty) (List.map snd captured) ty with
+            | { Kind = Atom atom } -> k atom
+            | closure -> bindTemp closure k)
 
     /// The type of `expr` where it is: a name in scope has its variable's type, and a field of one the field's, which
     /// may be more than the type checker recorded at the node (for a parameter lambda lifting annotated, say).
@@ -841,7 +841,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.CapturedInstances scope target bindings captured atoms (fun atoms capturedLocals ->
                 let capturedTys = atoms |> List.map atomType
                 let name = request (target, snd self @ typeArguments) subst (LiftedCapturing(capturedTys, capturedLocals))
-                k (mk (MakeClosure(name, arity, atoms)) ty)))
+                k (closureOver name arity atoms ty)))
 
     /// `atoms`, what a closure over the lifted lambda `target` captures (`captured`, lowered), with each local function
     /// generic in variables of its own among them captured at each type arguments the lambda uses it at, where
