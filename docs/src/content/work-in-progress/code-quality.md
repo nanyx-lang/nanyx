@@ -92,6 +92,8 @@ which was at 1,518 lines:
 | File | Lines | What changed |
 |---|---|---|
 | `Library.fs` | 1,020 | Workflow desugaring (`desugarWithDiagnostics`, `desugar`) moved out to `WorkflowDesugaring.fs` |
+| `Library.fs` | 1,063 | `@attribute` resolution (`applyAttributes`, `entryAttribute`, `entryContextModule`) moved out to `Attributes.fs`, and `collectImports` to `SyntaxTree.fs` |
+| `Library.fs` | 1,021 | Compiling errors to traps (`deferErrors`, `deferredMessage`) moved out to `DeferredErrors.fs` |
 
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 

@@ -69,3 +69,15 @@ module internal LambdaArguments =
                 | Error err -> inferred, current, errors @ err)
                 ([], state, [])
         if errors.IsEmpty then Ok (inferred |> List.rev |> List.map fst, next) else Error errors
+
+    /// The fields of `arg`, the argument of a call to a constructor whose input is `input`, when it is a record written
+    /// with each field named and each a field of `input`: their names, their values and the types `input` gives them.
+    /// So `Log(log = { m -> println(m) })` gives `m` the input of `log`'s type, as `inferTupleItems` does.
+    let namedFields (arg: Expression) (input: Ty) : (string list * Expression list * Ty list) option =
+        match arg.Kind, recordFieldsOf input with
+        | RecordExpr fields, Some members ->
+            let named = fields |> List.choose (function NamedField(name, value) when members.ContainsKey name -> Some (name, value) | _ -> None)
+            if named.Length = fields.Length then
+                Some (named |> List.map fst, named |> List.map snd, named |> List.map (fun (name, _) -> members.[name]))
+            else None
+        | _ -> None

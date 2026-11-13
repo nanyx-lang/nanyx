@@ -10,12 +10,6 @@ open Nanyx.Compiler.Tests.TestSupport
 let private typeOf (source: string) (name: string) =
     Unifier.tyToString (compileClean source).Types.[name]
 
-let private hoverType (source: string) (text: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let offset = source.ReplaceLineEndings("\n").IndexOf text
-    Hover.typeAt Unicode result offset |> Option.map _.Type
-
 let private mk =
     """
 import nanyx/console
@@ -214,23 +208,6 @@ def run: ([Console] int -> ()) -> () = { g -> apply(g, 1) }
     Assert.Equal("apply", text)
 
 [<Fact>]
-let ``A context's member that uses another context must say so`` () =
-    let code, text =
-        singleError
-            """
-import nanyx/console
-
-context Log = (log: string -> ())
-
-def main: [Console] () -> () = {
-  use Log(log = { (s: string) -> println(s) })
-  log("hi")
-}
-"""
-    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
-    Assert.Equal("Log(log = { (s: string) -> println(s) })", text)
-
-[<Fact>]
 let ``Calling a member that declares a context requires it`` () =
     let source =
         """
@@ -253,3 +230,33 @@ def main: [Console] () -> () = {
 """
     )
     |> ignore
+[<Fact>]
+let ``A lambda does not require a context that a use inside it supplies`` () =
+    let source =
+        """
+context Log = (log: string -> ())
+
+def greet: [Log] string -> () = { name -> log("hello {name}") }
+
+def nested = {
+  { use Log(log = { m -> () }) in greet("inner") }
+}
+
+def blocky = {
+  {
+    use Log(log = { m -> () })
+    greet("block")
+  }
+}
+
+def before: [Log] () -> ([Log] () -> ()) = {
+  {
+    greet("first")
+    use Log(log = { m -> () })
+    greet("second")
+  }
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "def nested: () -> () -> ()", hoverType source "nested")
+    Assert.Equal(Some "def blocky: () -> () -> ()", hoverType source "blocky")

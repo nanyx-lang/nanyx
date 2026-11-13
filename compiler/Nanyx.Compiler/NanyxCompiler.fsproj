@@ -57,6 +57,7 @@
     <Compile Include="OperatorCalls.fs" />
     <Compile Include="NamedArguments.fs" />
     <Compile Include="LambdaArguments.fs" />
+    <Compile Include="UseDischarge.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
     <Compile Include="LocalRecursion.fs" />
@@ -76,6 +77,7 @@
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
+    <Compile Include="Attributes.fs" />
     <Compile Include="TailPosition.fs" />
     <Compile Include="Signatures.fs" />
     <Compile Include="Linters.fs" />
@@ -86,6 +88,7 @@
     <Compile Include="PackageModules.fs" />
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
+    <Compile Include="DeferredErrors.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />

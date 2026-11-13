@@ -85,27 +85,34 @@ editor) opens the secondary side bar if it is closed, shows the view and moves t
 editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to the primary side bar or to the panel,
 and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
 
-It shows three groups of sections, with a rule between them: what is at the cursor, the names in scope, and the
-contexts.
+It is organised by scope, innermost first, with a rule between one scope and the next: the cursor, each lambda around
+it, each definition around it (a local one as well as a top-level one), and the module. Each scope's heading names it
+and links to it: a lambda by its parameters and line, `{ message -> … } (line 4)`, a definition by its name,
+`def greet`, the module by its name. Click the heading's arrow to open or close a scope. The module starts closed, and
+so does every scope after the third, since the side bar is narrow. A `memory` block or a `use` is part of the scope it
+is in.
 
-- **At the cursor**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it
-  shows the function's declared signature first (its annotation, or the generic type it was inferred to have), then its
-  type at this use, then what this use fills in each type variable with, such as `a = string, b = #some(int) | #nothing`.
-  Each links to the function's definition. A function that is not generic is shown once. On a module's name (in its
-  `module` line, an import, an import's alias, or an alias that qualifies a name), it shows `module name` and the
-  module's doc comment.
-- **Messages**: the errors and warnings on the cursor's line.
-- **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
-- **Top level**: the top-level definitions and imports in scope, the file's own first. It starts closed.
-- **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the
-  definition around it, a definition that does not write its type and was inferred to need it, or, at the top level of
-  the file, the runtime (`Console`, once `nanyx/console` is imported).
-- **This call**: on a call that requires contexts, the innermost one around the cursor, each context the call needs and
-  where it finds it: one of the sources above, linked to the `use` or the signature, or an instance the compiler builds,
-  from the definitions attached to the type (`attached Point.show`), derived from the type's parts, or its own
-  (`built in`).
-- **Context flow**: in a definition, each context its signature writes or it was inferred to need, and each `use` in
-  it, with the calls each one serves under it. A `use` that serves no call is marked `unused`.
+- **At the cursor**:
+  - **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it
+    shows the function's declared signature first (its annotation, or the generic type it was inferred to have), then
+    its type at this use, then what this use fills in each type variable with, such as
+    `a = string, b = #some(int) | #nothing`. Each links to the function's definition. A function that is not generic is
+    shown once. On a module's name (in its `module` line, an import, an import's alias, or an alias that qualifies a
+    name), it shows `module name` and the module's doc comment.
+  - **Messages**: the errors and warnings on the cursor's line.
+  - **This call**: on a call that requires contexts, the innermost one around the cursor, each context the call needs
+    and where it finds it: a `use`, a definition's signature, a definition that does not write its type and was
+    inferred to need it, or the runtime, linked, or an instance the compiler builds, from the definitions attached to
+    the type (`attached Point.show`), derived from the type's parts, or its own (`built in`).
+- **A lambda**: its type, with the contexts it carries, such as `[Log] int -> ()`; its parameters, locals and pattern
+  variables, each with its type, nearest first; and each `use` in it, with the context it gives.
+- **A definition**: its signature, marked `declared` if it writes its type and `inferred` if not, with its doc
+  comment; its parameters and locals; its contexts, each with where it comes from (its signature, inference, or a
+  `use` in it); and, in the innermost definition, its **Context flow**: each context its signature writes or it was
+  inferred to need, and each `use` in it, with the calls each one serves under it. A `use` that serves no call is
+  marked `unused`.
+- **The module**: its doc comment, the top-level definitions and imports in scope, the file's own first, and the
+  contexts the runtime supplies (`Console`, once `nanyx/console` is imported).
 
 While the view is visible and not pinned, it also highlights in the editor how contexts flow: with the cursor on a
 `use`, or on a context in a definition's signature, the calls it serves are highlighted; with the cursor on a call,

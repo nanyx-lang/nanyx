@@ -17,13 +17,33 @@ public sealed record InfoViewParams : IRequest<InfoViewResult?>
 }
 
 /// <summary>
-/// What <c>nanyx/infoView</c> returns: its sections, always all of them and in this order, and the ranges of the
-/// document for the editor to highlight at the position (see <see cref="InfoViewHighlight"/>).
+/// What <c>nanyx/infoView</c> returns: the scopes at the position, innermost first (see <see cref="InfoViewScope"/>),
+/// and the ranges of the document for the editor to highlight there (see <see cref="InfoViewHighlight"/>).
 /// </summary>
 public sealed record InfoViewResult
 {
-    public required IReadOnlyList<InfoViewSection> Sections { get; init; }
+    public required IReadOnlyList<InfoViewScope> Scopes { get; init; }
     public IReadOnlyList<InfoViewHighlight> Highlights { get; init; } = [];
+}
+
+/// <summary>
+/// A scope at the position. <see cref="Kind"/> is one of <c>cursor</c> (always first, with the sections
+/// <c>expression</c>, <c>messages</c> and <c>call</c>, even when they are empty), <c>lambda</c> (<c>type</c>,
+/// <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and
+/// <c>module</c> (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each
+/// lambda or def around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the
+/// scope and <see cref="Location"/> is where it links: a lambda by its parameters and line, a def by its name, the
+/// module by its declared name. <see cref="Documentation"/> is the module's doc comment. <see cref="Collapsed"/> says
+/// whether a client shows it closed at first: the module, and the scopes after the third.
+/// </summary>
+public sealed record InfoViewScope
+{
+    public required string Kind { get; init; }
+    public required string Heading { get; init; }
+    public Location? Location { get; init; }
+    public string? Documentation { get; init; }
+    public bool Collapsed { get; init; }
+    public required IReadOnlyList<InfoViewSection> Sections { get; init; }
 }
 
 /// <summary>
@@ -37,19 +57,11 @@ public sealed record InfoViewHighlight
     public required string Kind { get; init; }
 }
 
-/// <summary>
-/// A section of the info view. <see cref="Id"/> is one of <c>cursor</c>, <c>messages</c>, <c>inScope</c>,
-/// <c>topLevel</c>, <c>contexts</c>, <c>call</c> and <c>flow</c>; <see cref="Group"/> is what the section is about, for
-/// a client to set the groups apart: <c>cursor</c> (what is at the position and the messages on its line),
-/// <c>scope</c> (the names in scope) or <c>contexts</c>; <see cref="Collapsed"/> says whether a client shows it closed
-/// at first.
-/// </summary>
+/// <summary>A section of a scope in the info view: <see cref="Id"/> is one of those <see cref="InfoViewScope"/> lists.</summary>
 public sealed record InfoViewSection
 {
     public required string Id { get; init; }
     public required string Title { get; init; }
-    public required string Group { get; init; }
-    public bool Collapsed { get; init; }
     public required IReadOnlyList<InfoViewItem> Items { get; init; }
 }
 
@@ -69,17 +81,19 @@ public sealed record InfoViewItem
 }
 
 /// <summary>
-/// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel. What is at the cursor: on a
-/// module's name, as hover finds it, the module and its doc comment (see <see cref="ModuleItem"/>); otherwise the
-/// expression there with its type, as hover shows it, and on a use of a generic def the def's declared signature and
-/// how the use fills in its type variables (see <see cref="ExpressionItems"/>); the diagnostics on the position's
-/// line; the locals, parameters and pattern variables in scope, nearest first; the top-level defs
-/// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
-/// that was inferred to require it, or the runtime); the contexts the innermost call around the position that requires
-/// any requires, each with where it finds it (one of those, or an instance the compiler builds: from attached
-/// definitions, derived from the type's parts, or its own); the flow of contexts through the def around the position,
-/// each provider with the calls it serves (see <see cref="NyxCompiler.ContextFlow"/>). It also gives the ranges to highlight: a provider at the position and the calls it serves, or a
-/// call and what provides its contexts. Read from the
+/// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel, by scope, innermost first.
+/// The cursor: on a module's name, as hover finds it, the module and its doc comment (see <see cref="ModuleItem"/>);
+/// otherwise the expression there with its type, as hover shows it, and on a use of a generic def the def's declared
+/// signature and how the use fills in its type variables (see <see cref="ExpressionItems"/>); the diagnostics on the
+/// position's line; and the contexts the innermost call around the position that requires any requires, each with
+/// where it finds it (a def's signature, a <c>use</c>, a def that was inferred to require it, the runtime, or an
+/// instance the compiler builds: from attached definitions, derived from the type's parts, or its own). Then each
+/// lambda and def around the position (see <see cref="InfoView.Scope"/>): a lambda's type, with the contexts it
+/// carries, a def's signature and doc comment, the parameters, locals and pattern variables each declares, the
+/// contexts each provides, and in the innermost def the flow of contexts through it, each provider with the calls it
+/// serves (see <see cref="NyxCompiler.ContextFlow"/>). Last the module: its doc comment, its top-level defs and imports
+/// in scope, and the runtime's contexts. It also gives the ranges to highlight: a provider at the position and the
+/// calls it serves, or a call and what provides its contexts. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
 /// item whose name or context has a doc comment carries it, read as hover reads it (see
@@ -117,8 +131,10 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         NyxCompiler.ContextFlow.Flow? flow = null;
         NyxCompiler.ContextFlow.Highlights? highlights = null;
         NyxCompiler.Documentation.Reader? docs = null;
+        string? fileName = null;
         if (document.LastGood is { Compiled: { } compiled } lastGood && document.NearestInLastGood(offset) is { } nearest)
         {
+            fileName = lastGood.FileName;
             info = InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest);
             var contexts = NyxCompiler.ContextFlow.at(_settings.TypeNotation, compiled, nearest);
             flow = contexts.Flow?.Value;
@@ -157,65 +173,112 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             Documentation = DocOf(name.Symbol)
         };
 
+        InfoViewItem Context(InfoView.ScopedContext context) => new()
+        {
+            Text = context.Context,
+            Detail = Describe(context.Source),
+            Location = Locate(context.Span),
+            Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
+        };
+
+        var call = info?.Call
+            .Select(context => new InfoViewItem
+            {
+                Text = context.Context,
+                Detail = Describe(context.Source),
+                Location = Locate(context.Span),
+                Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
+            })
+            .ToList() ?? [];
+        var scopes = new List<InfoViewScope>
+        {
+            new()
+            {
+                Kind = "cursor",
+                Heading = "At the cursor",
+                Sections =
+                [
+                    new InfoViewSection { Id = "expression", Title = "Expression", Items = cursor },
+                    new InfoViewSection { Id = "messages", Title = "Messages", Items = messages },
+                    new InfoViewSection { Id = "call", Title = "This call", Items = call }
+                ]
+            }
+        };
+        // The flow of contexts is through the innermost def around the position.
+        var flowShown = false;
+        foreach (var scope in info?.Scopes ?? [])
+        {
+            var names = scope.Names.Select(Name).ToList();
+            var contexts = scope.Contexts.Select(Context).ToList();
+            var sections = new List<InfoViewSection>();
+            void Add(string id, string title, IReadOnlyList<InfoViewItem> items)
+            {
+                if (items.Count > 0)
+                {
+                    sections.Add(new InfoViewSection { Id = id, Title = title, Items = items });
+                }
+            }
+
+            string kind;
+            string heading = scope.Heading;
+            string? documentation = null;
+            if (scope.Kind.IsLambdaScope)
+            {
+                kind = "lambda";
+                if (Locate(scope.Span) is { } at)
+                {
+                    heading = $"{scope.Heading} (line {at.Range.Start.Line + 1})";
+                }
+
+                Add("type", "Type", scope.Type?.Value is { } type ? [new InfoViewItem { Text = type, Location = Locate(scope.Span) }] : []);
+                Add("names", "Parameters and locals", names);
+                Add("uses", "Uses", contexts);
+            }
+            else if (scope.Kind.IsFunctionScope)
+            {
+                kind = "function";
+                var signature = scope.Type?.Value is { } type
+                    ? new InfoViewItem
+                    {
+                        Text = $"{scope.Symbol?.Value.Name}: {type}",
+                        Detail = scope.Declared ? "declared" : "inferred",
+                        Location = Locate(scope.Span),
+                        Documentation = scope.Symbol?.Value is { } def ? DocOf(def) : null
+                    }
+                    : null;
+                Add("signature", "Signature", signature is null ? [] : [signature]);
+                Add("names", "Parameters and locals", names);
+                Add("contexts", "Contexts", contexts);
+                if (!flowShown && flow is not null)
+                {
+                    flowShown = true;
+                    Add("flow", "Context flow", flow.Entries.Select(entry => FlowItem(entry, Locate)).ToList());
+                }
+            }
+            else
+            {
+                kind = "module";
+                documentation = docs?.ForModule(fileName!)?.Value;
+                Add("names", "Definitions and imports", names);
+                Add("contexts", "Contexts", contexts);
+            }
+
+            scopes.Add(new InfoViewScope
+            {
+                Kind = kind,
+                Heading = heading,
+                Location = Locate(scope.Span),
+                Documentation = documentation,
+                Sections = sections
+            });
+        }
+
         return new InfoViewResult
         {
-            Sections =
-            [
-                new InfoViewSection { Id = "cursor", Title = "At the cursor", Group = "cursor", Items = cursor },
-                new InfoViewSection { Id = "messages", Title = "Messages", Group = "cursor", Items = messages },
-                new InfoViewSection
-                {
-                    Id = "inScope",
-                    Title = "In scope",
-                    Group = "scope",
-                    Items = info?.Locals.Select(Name).ToList() ?? []
-                },
-                new InfoViewSection
-                {
-                    Id = "topLevel",
-                    Title = "Top level",
-                    Group = "scope",
-                    Collapsed = true,
-                    Items = info?.TopLevel.Select(Name).ToList() ?? []
-                },
-                new InfoViewSection
-                {
-                    Id = "contexts",
-                    Title = "Contexts",
-                    Group = "contexts",
-                    Items = info?.Contexts
-                        .Select(context => new InfoViewItem
-                        {
-                            Text = context.Context,
-                            Detail = Describe(context.Source),
-                            Location = Locate(context.Span),
-                            Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
-                        })
-                        .ToList() ?? []
-                },
-                new InfoViewSection
-                {
-                    Id = "call",
-                    Title = "This call",
-                    Group = "contexts",
-                    Items = info?.Call
-                        .Select(context => new InfoViewItem
-                        {
-                            Text = context.Context,
-                            Detail = Describe(context.Source),
-                            Location = Locate(context.Span),
-                            Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
-                        })
-                        .ToList() ?? []
-                },
-                new InfoViewSection
-                {
-                    Id = "flow",
-                    Title = flow is null ? "Context flow" : $"Context flow in {flow.Def}",
-                    Group = "contexts",
-                    Items = flow?.Entries.Select(entry => FlowItem(entry, Locate)).ToList() ?? []
-                }
-            ],
+            // The side bar is narrow: past the third scope they start closed, as the module always does.
+            Scopes = scopes
+                .Select((scope, index) => scope with { Collapsed = index >= 3 || scope.Kind == "module" })
+                .ToList(),
             Highlights = highlights is null
                 ? []
                 :

@@ -32,10 +32,24 @@ interface InfoViewItem {
 interface InfoViewSection {
   id: string;
   title: string;
-  /** What the section is about (`cursor`, `scope` or `contexts`); the view draws a rule between groups. */
-  group: string;
-  collapsed?: boolean;
   items: InfoViewItem[];
+}
+
+/**
+ * A scope around the position, innermost first: the cursor, each lambda, each def, the module. The view draws a rule
+ * between one scope and the next.
+ */
+interface InfoViewScope {
+  kind: "cursor" | "lambda" | "function" | "module";
+  heading: string;
+  /** Where the heading links: the lambda, the def's name, the module's declaration. */
+  location?: LspLocation;
+  /** The module's doc comment, as Markdown. */
+  documentation?: string;
+  /** `documentation` rendered to HTML by VS Code's Markdown renderer, filled in by the extension. */
+  documentationHtml?: string;
+  collapsed?: boolean;
+  sections: InfoViewSection[];
 }
 
 /** A range to highlight in the editor: a provider of contexts, or a call it serves. */
@@ -45,13 +59,13 @@ interface InfoViewHighlight {
 }
 
 interface InfoViewResult {
-  sections: InfoViewSection[];
+  scopes: InfoViewScope[];
   highlights?: InfoViewHighlight[];
 }
 
 /** What the view shows, posted to its webview. */
 type Shown =
-  | { kind: "info"; where: string; pinned: boolean; sections: InfoViewSection[] }
+  | { kind: "info"; where: string; pinned: boolean; scopes: InfoViewScope[] }
   | { kind: "message"; where: string; pinned: boolean; text: string };
 
 /** A position in a document, for the view to show. */
@@ -223,7 +237,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
           position: client.code2ProtocolConverter.asPosition(target.position)
         });
         shown = result
-          ? { kind: "info", where, pinned, sections: await withRenderedDocumentation(result.sections) }
+          ? { kind: "info", where, pinned, scopes: await withRenderedDocumentation(result.scopes) }
           : { kind: "message", where, pinned, text: "The language server has not compiled this document yet." };
         // A pinned position is elsewhere than the cursor, so it highlights nothing.
         highlights = pinned ? [] : result?.highlights ?? [];
@@ -273,24 +287,30 @@ async function openLink(href: string): Promise<void> {
 }
 
 /**
- * The sections with each item's documentation rendered to HTML by VS Code's Markdown renderer (the built-in Markdown
- * extension's `markdown.api.render`). Without that renderer, the webview shows the Markdown as it is.
+ * The scopes with their documentation and each item's rendered to HTML by VS Code's Markdown renderer (the built-in
+ * Markdown extension's `markdown.api.render`). Without that renderer, the webview shows the Markdown as it is.
  */
-async function withRenderedDocumentation(sections: InfoViewSection[]): Promise<InfoViewSection[]> {
-  return Promise.all(sections.map(async (section) => ({
-    ...section,
-    items: await Promise.all(section.items.map(async (item) => {
-      if (!item.documentation) {
-        return item;
-      }
-      try {
-        const html = await vscode.commands.executeCommand<string>("markdown.api.render", item.documentation);
-        return { ...item, documentationHtml: html };
-      } catch {
-        return item;
-      }
-    }))
+async function withRenderedDocumentation(scopes: InfoViewScope[]): Promise<InfoViewScope[]> {
+  return Promise.all(scopes.map(async (scope) => ({
+    ...scope,
+    documentationHtml: await rendered(scope.documentation),
+    sections: await Promise.all(scope.sections.map(async (section) => ({
+      ...section,
+      items: await Promise.all(section.items.map(async (item) => ({ ...item, documentationHtml: await rendered(item.documentation) })))
+    })))
   })));
+}
+
+/** `markdown` rendered to HTML by VS Code's Markdown renderer, if there is any and the renderer is there. */
+async function rendered(markdown: string | undefined): Promise<string | undefined> {
+  if (!markdown) {
+    return undefined;
+  }
+  try {
+    return await vscode.commands.executeCommand<string>("markdown.api.render", markdown);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The view's page: it draws what the extension posts to it, and posts back pins and clicks on links. */
@@ -312,7 +332,11 @@ function page(webview: vscode.Webview): string {
   details { margin: 8px 0; }
   hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 12px 0; }
   summary { font-weight: 600; cursor: pointer; }
-  summary .count { font-weight: normal; color: var(--vscode-descriptionForeground); }
+  summary .kind { font-weight: normal; color: var(--vscode-descriptionForeground); margin-right: 6px; }
+  summary a { font-family: var(--vscode-editor-font-family); }
+  details.scope > .doc { padding-left: 12px; }
+  h4 { font-size: 0.9em; font-weight: 600; margin: 8px 0 0 12px; color: var(--vscode-descriptionForeground); }
+  .count { font-weight: normal; color: var(--vscode-descriptionForeground); }
   ul { list-style: none; margin: 4px 0; padding-left: 12px; }
   ul.children { flex-basis: 100%; margin: 0; }
   li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 1px 0; }
@@ -337,7 +361,7 @@ function page(webview: vscode.Webview): string {
   const main = document.getElementById("main");
   const where = document.getElementById("where");
   const pin = document.getElementById("pin");
-  // Which sections are open, by id, so that a section stays as it was left from one position to the next.
+  // Which scopes are open, by kind and heading, so that a scope stays as it was left from one position to the next.
   const open = {};
   pin.textContent = "Pin";
   pin.addEventListener("click", () => vscode.postMessage({ type: "pin" }));
@@ -362,9 +386,21 @@ function page(webview: vscode.Webview): string {
       li.appendChild(code);
     }
     if (entry.detail) li.appendChild(element("span", "detail", entry.detail));
-    if (entry.documentationHtml) {
-      const doc = element("div", "doc");
-      doc.innerHTML = entry.documentationHtml;
+    const doc = documentation(entry, expanded);
+    if (doc) li.appendChild(doc);
+    if (entry.children && entry.children.length > 0) {
+      const children = element("ul", "children");
+      entry.children.forEach((child) => children.appendChild(item(child, expanded)));
+      li.appendChild(children);
+    }
+    return li;
+  }
+
+  // The doc comment of an item or a scope, if it has one: rendered, or else its Markdown as it is, one paragraph each.
+  function documentation(data, expanded) {
+    const doc = element("div", "doc");
+    if (data.documentationHtml) {
+      doc.innerHTML = data.documentationHtml;
       doc.addEventListener("click", (event) => {
         const link = event.target.closest("a");
         if (link && link.getAttribute("href")) {
@@ -373,18 +409,12 @@ function page(webview: vscode.Webview): string {
           vscode.postMessage({ type: "openLink", href: link.getAttribute("href") });
         }
       });
-      li.appendChild(collapsible(doc, expanded));
-    } else if (entry.documentation) {
-      const doc = element("div", "doc");
-      entry.documentation.split(/\\n\\s*\\n/).forEach((paragraph) => doc.appendChild(element("p", "", paragraph)));
-      li.appendChild(collapsible(doc, expanded));
+    } else if (data.documentation) {
+      data.documentation.split(/\\n\\s*\\n/).forEach((paragraph) => doc.appendChild(element("p", "", paragraph)));
+    } else {
+      return undefined;
     }
-    if (entry.children && entry.children.length > 0) {
-      const children = element("ul", "children");
-      entry.children.forEach((child) => children.appendChild(item(child, expanded)));
-      li.appendChild(children);
-    }
-    return li;
+    return collapsible(doc, expanded);
   }
 
   // A doc comment of more than one paragraph (or other block) shows its first until it is clicked, which shows all of
@@ -403,34 +433,61 @@ function page(webview: vscode.Webview): string {
     return doc;
   }
 
-  function section(data) {
-    const details = element("details");
-    details.open = open[data.id] ?? !data.collapsed;
-    details.addEventListener("toggle", () => { open[data.id] = details.open; });
-    const summary = element("summary", "", data.title + " ");
-    summary.appendChild(element("span", "count", "(" + data.items.length + ")"));
-    details.appendChild(summary);
+  // A section of a scope: its title, with how many items it has, and its items. Only the cursor's sections can be
+  // empty; the server leaves out the others' empty ones.
+  function section(data, expanded) {
+    const part = element("section");
+    const title = element("h4", "", data.title + " ");
+    title.appendChild(element("span", "count", "(" + data.items.length + ")"));
+    part.appendChild(title);
     if (data.items.length === 0) {
-      details.appendChild(element("p", "empty", "Nothing here."));
+      part.appendChild(element("p", "empty", "Nothing here."));
     } else {
       const list = element("ul");
-      data.items.forEach((entry) => list.appendChild(item(entry, data.id === "cursor")));
-      details.appendChild(list);
+      data.items.forEach((entry) => list.appendChild(item(entry, expanded && data.id === "expression")));
+      part.appendChild(list);
     }
+    return part;
+  }
+
+  // A scope: its heading, which links to it, then its doc comment and its sections. It starts closed if the server says
+  // so, and stays as it was left from one position to the next.
+  function scope(data) {
+    const key = data.kind + " " + data.heading.replace(/ \\(line \\d+\\)$/, "");
+    const details = element("details", "scope");
+    details.open = open[key] ?? !data.collapsed;
+    details.addEventListener("toggle", () => { open[key] = details.open; });
+    const summary = element("summary");
+    // A def's and the module's headings say what they are; a lambda's is only its parameters.
+    if (data.kind === "lambda") summary.appendChild(element("span", "kind", "lambda"));
+    if (data.location) {
+      const link = element("a", "", data.heading);
+      link.title = "Go to " + data.location.uri + ":" + (data.location.range.start.line + 1);
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        vscode.postMessage({ type: "open", location: data.location });
+      });
+      summary.appendChild(link);
+    } else {
+      summary.appendChild(document.createTextNode(data.heading));
+    }
+    details.appendChild(summary);
+    const doc = documentation(data, false);
+    if (doc) details.appendChild(doc);
+    data.sections.forEach((part) => details.appendChild(section(part, data.kind === "cursor")));
     return details;
   }
 
-  // The sections, with a rule between one group and the next.
-  function sections(all) {
-    return all.flatMap((data, index) =>
-      index > 0 && data.group !== all[index - 1].group ? [element("hr"), section(data)] : [section(data)]);
+  // The scopes, innermost first, with a rule between one and the next.
+  function scopes(all) {
+    return all.flatMap((data, index) => index > 0 ? [element("hr"), scope(data)] : [scope(data)]);
   }
 
   window.addEventListener("message", (event) => {
     const shown = event.data;
     where.textContent = (shown.pinned ? "Pinned: " : "") + shown.where;
     pin.textContent = shown.pinned ? "Unpin" : "Pin";
-    main.replaceChildren(...(shown.kind === "info" ? sections(shown.sections) : [element("p", "message", shown.text)]));
+    main.replaceChildren(...(shown.kind === "info" ? scopes(shown.scopes) : [element("p", "message", shown.text)]));
   });
 </script>
 </body>

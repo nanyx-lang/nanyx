@@ -16,12 +16,6 @@ def apply: [c] ([c] int -> int), int -> int = { f, x -> f(x) }
 
 let private withApply (source: string) = $"{apply}{source}"
 
-let private hoverType (source: string) (text: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let offset = source.ReplaceLineEndings("\n").IndexOf text
-    Hover.typeAt Unicode result offset |> Option.map _.Type
-
 [<Fact>]
 let ``A context variable the def does not bind is an error`` () =
     let code, text =

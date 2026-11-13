@@ -86,15 +86,6 @@ module Compiler =
     let private importQualifier (item: ImportItem) =
         item.Alias |> Option.map IdentifierNames.sanitizeIdentifier
 
-    /// The module's imports, a re-export's among them: a re-export imports what it exports again.
-    let private collectImports (module': Module) =
-        module'
-        |> List.choose (function
-            | Kind (Import items) -> Some items
-            | Kind (ReExport item) -> Some [ item ]
-            | _ -> None)
-        |> List.collect id
-
     let private reExportsOf (module': Module) =
         module'
         |> List.choose (function
@@ -327,52 +318,6 @@ module Compiler =
         | Result.Ok parsed -> Ok parsed
         | Result.Error err -> Error [ syntaxError err ]
 
-    /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
-    let entryAttribute = "entry"
-
-    /// The standard-library module the entry point runs inside: `@entry` is called by the runtime with its
-    /// `Console` instance, so the module that declares the entry point sees `nanyx/console` without importing it.
-    let entryContextModule = StandardLibrary.importPrefix + "console"
-
-    let private importsModule (moduleName: string) (module': Module) =
-        collectImports module'
-        |> List.exists (fun item ->
-            match item.Source with
-            | ModuleImport name -> name = moduleName
-            | PathImport _ -> false)
-
-    /// Resolves `@attribute` lines. `@entry` on a definition appends a call to that definition at the end
-    /// of the module, so it runs as the program's start function, and imports `nanyx/console` for the module
-    /// (the context the runtime supplies to the entry point); any other attribute, or an attribute that does
-    /// not precede a value definition, is an error. `@entry` takes no argument. With the module, the call made up for
-    /// each `@entry`, by the node of the attribute.
-    let applyAttributes (module': Module) : Result<Module * Map<NodeId, NodeId list>, Diagnostic list> =
-        let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entryCalls: (NodeId * TopLevelItem) list) (errors: Diagnostic list) =
-            match remaining with
-            | [] -> List.rev acc, List.rev entryCalls, List.rev errors
-            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute ->
-                loop rest acc entryCalls (Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span $"Unknown attribute '@{name}'" :: errors)
-            | Kind (Attribute(name, Some argument)) :: rest ->
-                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span $"Attribute '@{name}' takes no argument"
-                loop rest acc entryCalls (error :: errors)
-            | Kind (Attribute _) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest ->
-                // The call is made up for the def, and reported there.
-                let call = TopLevelItem.at def.Span (Expr (Expression.from value (FunctionCall(name, None, []))))
-                loop rest (def :: acc) ((attribute.Id, call) :: entryCalls) errors
-            | Kind (Attribute(name, _)) as attribute :: rest ->
-                loop rest acc entryCalls (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
-            | item :: rest -> loop rest (item :: acc) entryCalls errors
-        match loop module' [] [] [] with
-        | items, entryCalls, [] ->
-            let entryImport =
-                if not entryCalls.IsEmpty && not (importsModule entryContextModule items) then
-                    [ TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport entryContextModule) None ]) ]
-                else
-                    []
-            let lowered = entryCalls |> List.map (fun (attribute, call) -> attribute, SyntaxTree.ofItem call |> List.map _.Id) |> Map.ofList
-            Ok (entryImport @ items @ List.map snd entryCalls, lowered)
-        | _, _, errors -> Error errors
-
     /// Applies the substitution found by unification to everything inference produced.
     /// A definition's type is reported with the rest variables that only stand for tags it gives out closed (see
     /// `Unifier.outputOnlyRestVars`): a union widened by a call, as a `proc` block's is by each `try`, is left
@@ -439,48 +384,6 @@ module Compiler =
                 | FunctionCall(_, _, [ Kind (Lambda([], body, _)) ]) when blocks.Contains current.Id -> body.Kind
                 | other -> other)
 
-    /// Where `span` is, as `nanyx` prints a diagnostic's place: `file:line:column: `.
-    let private deferredLocation (span: SourceSpan) =
-        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
-        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-
-    /// What a deferred error writes when it is reached: the diagnostic as `nanyx` prints it, marked as deferred.
-    let private deferredMessage (diagnostic: Diagnostic) =
-        let location = diagnostic.Span |> Option.map deferredLocation |> Option.defaultValue ""
-        $"{location}error {diagnostic.Code}: {diagnostic.Message} (deferred from compile time)\n"
-
-    /// `expr` with each expression that failed to check replaced by a call to `__panic`, which writes the errors
-    /// and traps when it is reached, so a debug build runs the code around it. An expression in `failed` is found
-    /// by its node. A conflict among the constraints is only known by where it was found, the expression whose
-    /// constraints conflicted, so one in `mismatches` replaces the outermost expression written there. Each
-    /// diagnostic placed is added to `placed`, by `deferredMessage`. A match in `unhandled`, which does not handle
-    /// every case, is given a last arm that catches the rest and traps.
-    ///
-    /// An expression in `unknownTypeUses` needs the type of a value that has none, because of an error (piping it,
-    /// or reading a member of it): the backend could not compile it, so it traps too. It is not an error of its own,
-    /// so it writes why it stopped without a code.
-    let private deferErrors (failed: Map<NodeId, Diagnostic list>) (mismatches: Map<SourceSpan, Diagnostic>) (unhandled: Map<NodeId, Diagnostic list>) (unknownTypeUses: Set<NodeId>) (placed: System.Collections.Generic.HashSet<string>) (expr: Expression) =
-        let panicWith (node: Expression) (message: string) =
-            FunctionCall("__panic", None, [ Expression.from node (LiteralExpr (StringLit message)) ])
-        let panic (node: Expression) (diagnostics: Diagnostic list) =
-            let messages = diagnostics |> List.map deferredMessage
-            messages |> List.iter (placed.Add >> ignore)
-            panicWith node (String.concat "" messages)
-        expr
-        |> mapExpressionKinds (fun node kind ->
-            let diagnostics =
-                match failed |> Map.tryFind node.Id with
-                | Some diagnostics -> diagnostics
-                | None -> mismatches |> Map.tryFind node.Span |> Option.toList
-            match diagnostics, kind, unhandled |> Map.tryFind node.Id with
-            | _ :: _, _, _ -> panic node diagnostics
-            | [], Match(values, arms), Some missing ->
-                let catchAll = values |> List.map (fun _ -> Pattern.at node.Span WildcardPattern)
-                Match(values, arms @ [ catchAll, Expression.from node (panic node missing) ])
-            | [], _, _ when unknownTypeUses.Contains node.Id ->
-                panicWith node $"{deferredLocation node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
-            | _ -> kind)
-
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
     /// attached function, and each hole that calls a derived definition, written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
     /// that call (`operatorCalls`, through the instance `operatorInstances` gives where it has one), each expression inference read as another as that one (`readAs`),
@@ -544,7 +447,7 @@ module Compiler =
                 match WorkflowDesugaring.desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
                 | desugaredAst, [], zeros, lowered ->
-                    applyAttributes desugaredAst
+                    Attributes.applyAttributes desugaredAst
                     |> Result.map (fun (desugared, entryCalls) ->
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let lowered = entryCalls |> Map.fold (fun acc attribute calls -> Map.add attribute calls acc) lowered
@@ -557,7 +460,7 @@ module Compiler =
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
             let blockImported = NyxCompiler.Infer.blockImports moduleBlocks desugared |> List.map _.Import
-            let fileImports = collectImports desugared |> List.filter (fun item -> not (List.contains item blockImported))
+            let fileImports = SyntaxTree.collectImports desugared |> List.filter (fun item -> not (List.contains item blockImported))
             let imports =
                 if key = preludeKey then
                     fileImports
@@ -876,10 +779,10 @@ module Compiler =
                         let failed = state.FailedExprs |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         let bySpan = mismatchErrors |> List.choose (fun diagnostic -> diagnostic.Span |> Option.map (fun span -> span, diagnostic)) |> Map.ofList
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
-                        deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
+                        DeferredErrors.deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
-                let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
+                let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (DeferredErrors.deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                 let instances = inlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances

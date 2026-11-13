@@ -126,7 +126,7 @@ How it is built:
 - **A trap stands for any value,** which makes the first rule above unnecessary. A trap's `unreachable` stands in for
   an expression of any type, an `i64` int as well as an `i32` (an immediate or a pointer; a float is boxed), and the
   code after it still validates. Nothing is cut off after a trap.
-- **The deferral pass** is `Compiler.deferErrors` in [Library.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Library.fs), run as the typed
+- **The deferral pass** is `DeferredErrors.deferErrors` in [DeferredErrors.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/DeferredErrors.fs), run as the typed
   module's items are lowered for the backend. Each node in `FailedExprs` becomes `__panic("<message>")`. A conflict
   among the constraints is only known by where it was found, so it replaces the outermost expression at that span.
   A match in `UnhandledMatches` gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message
