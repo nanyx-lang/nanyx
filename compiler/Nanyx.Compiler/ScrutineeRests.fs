@@ -43,13 +43,7 @@ module internal ScrutineeRests =
     /// The error for a match with no catch-all arm on a union that can still have tags it does not name, given the
     /// scrutinees' types from `resolve`, reported at `headSpan`.
     let missingCatchAll (resolved: Ty list) (arms: MatchArm list) (headSpan: SourceSpan) : Diagnostic option =
-        let hasCatchAll =
-            arms
-            |> List.exists (fun (patterns, _) ->
-                patterns
-                |> List.exists (function
-                    | Kind (WildcardPattern | ElsePattern | IdentifierPattern _) -> true
-                    | _ -> false))
+        let hasCatchAll = arms |> List.exists (fst >> List.exists PatternSpace.isCatchAll)
         if resolved |> List.exists hasRest && not hasCatchAll then
             Some (Diagnostics.at DiagnosticCodes.MissingCatchAllArm headSpan "Tag union rest parameters require a catch-all match arm")
         else
