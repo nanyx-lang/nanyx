@@ -119,10 +119,10 @@ let ``Typecheck gives a lambda argument's parameter its type from the callee`` (
 let ``Typecheck rejects a lambda of several parameters whose signature's input is not a record`` () =
     let messages source = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Message)
     Assert.Equal<string list>(
-        [ "Type mismatch: #some(x: string, y: string) vs (t2, t4)." ],
+        [ "Type mismatch: #some(x: string, y: string) vs (t0, t1)." ],
         messages "def g: #some(x: string, y: string) -> string = { x, y -> \"{x}{y}\" }\n")
     Assert.Equal<string list>(
-        [ "Type mismatch: #some(x: string, y: string) vs (t3, t5)." ],
+        [ "Type mismatch: #some(x: string, y: string) vs (t1, t2)." ],
         messages (
             "def a: #some(x: string, y: string) = #some(x = \"\", y = \"\")\n" +
             "def g: typeof a -> string = { x, y -> \"{x}{y}\" }\n"))

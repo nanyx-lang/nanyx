@@ -62,10 +62,9 @@ let ``A composition whose functions do not fit together is a type error`` () =
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
 
 [<Fact>]
-// 200 levels is past what a 1 MB stack held in a Debug build. Not 10,000, as #839 asks: checking a chain takes time
-// that grows faster than the square of its length (#374), so 10,000 would take hours.
+// 200 levels was past what a 1 MB stack held in a Debug build (#839).
 let ``A long chain of operators is checked without running out of stack`` () =
-    let source = "def total = 1" + String.replicate 199 " + 1" + "\n"
+    let source = "def total = 1" + String.replicate 9_999 " + 1" + "\n"
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
     Assert.True(result.TypeChecked)
