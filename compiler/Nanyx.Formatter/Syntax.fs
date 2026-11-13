@@ -139,20 +139,15 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
 
     // Imports in a row are one import of all their items, as the formatter writes them, sorted. The formatter sorts
     // only within a run that no comment interrupts, but its sort is stable, so sorting the whole of each side gives the
-    // same list whenever the formatter neither dropped nor added an import.
+    // same list whenever the formatter neither dropped nor added an import. The formatter keeps imports apart where a
+    // blank line separates them; merging them here regardless gives both sides the same items either way.
     and items' (items: TopLevelItem list) =
         items
         |> List.map item
-        |> List.fold
-            (fun (merged: TopLevelItem list) (i: TopLevelItem) ->
-                match i.Kind, merged with
-                | Import imports, previous :: rest ->
-                    match previous.Kind with
-                    | Import run -> { previous with Kind = Import(run @ imports) } :: rest
-                    | _ -> i :: merged
-                | _ -> i :: merged)
-            []
-        |> List.rev
+        |> ImportOrder.mergeRuns
+            (fun i -> match i.Kind with Import imports -> Some imports | _ -> None)
+            (fun _ _ -> true)
+            (fun run imports -> { List.head run with Kind = Import imports })
         |> List.map (fun i ->
             match i.Kind with
             | Import imports -> { i with Kind = Import(ImportOrder.sort imports) }

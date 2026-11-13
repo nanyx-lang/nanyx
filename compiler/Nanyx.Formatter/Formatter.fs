@@ -1073,19 +1073,14 @@ let format (options: Options) (parsed: SourceModule) : string =
                 first.Span.Start, first.Span.End, first, fun () -> destructuringDef [ for k in index .. index + count - 1 -> (defOf all[k]).Value ] first.Span
             else
                 first.Span.Start, first.Span.End, first, fun () -> item first)
-        // Imports in a row, with no blank line between them, go in one bracketed import:
-        // `import nanyx/math` and `import nanyx/text` become `import (` / `nanyx/math` / `nanyx/text` / `)`.
-        |> List.fold
-            (fun merged (childStart, childEnd, first: TopLevelItem, build) ->
-                match first.Kind, merged with
-                | Import imports, (runStart, runEnd, runFirst, _, Some run) :: rest when not (blankLineBetween runEnd childStart) ->
-                    let run = run @ imports
-                    (runStart, childEnd, runFirst, (fun () -> importDoc runStart childEnd run), Some run) :: rest
-                | Import imports, _ -> (childStart, childEnd, first, build, Some imports) :: merged
-                | _ -> (childStart, childEnd, first, build, None) :: merged)
-            []
-        |> List.rev
-        |> List.map (fun (childStart, childEnd, first, build, _) -> childStart, childEnd, first, build)
+        // Imports in a row, with no blank line between them, go in one bracketed import (see `ImportOrder.mergeRuns`).
+        |> ImportOrder.mergeRuns
+            (fun (_, _, first: TopLevelItem, _) -> match first.Kind with Import imports -> Some imports | _ -> None)
+            (fun (_, previousEnd, _, _) (childStart, _, _, _) -> not (blankLineBetween previousEnd childStart))
+            (fun run imports ->
+                let runStart, _, runFirst, _ = List.head run
+                let _, runEnd, _, _ = List.last run
+                runStart, runEnd, runFirst, fun () -> importDoc runStart runEnd imports)
         // An attribute line belongs to the item after it, so nothing comes between them. `@partial` is written on the
         // line of the module declaration it marks.
         |> List.foldBack
