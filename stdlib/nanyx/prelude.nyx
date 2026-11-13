@@ -37,7 +37,8 @@ export def bool.fromString: string -> #some(bool) | #invalidBool = { s ->
 scoped export context $Memory = ()
 
 --| Runs `block` with `$Memory`, so that it can declare cells with `mut` and change them with `:=`, and
-  gives back its result. Nothing that uses a cell can leave the block: only what the cells hold.
-export def memory: [c] ([$Memory & c] () -> a) -> a = { block ->
-  block()
+  gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block is given
+  its instance, `memory { m -> ... }`, and `use m` in an inner block makes the cells after it belong to this one.
+export def memory: [c] ([$Memory & c] $Memory -> a) -> a = { block ->
+  block($Memory(()))
 }

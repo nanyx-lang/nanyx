@@ -717,6 +717,10 @@ module Unifier =
                     | Some restVar when exact && restVar.Name.IsNone -> [ (TyVar restVar, TyUnion [], Equal, origin) ]
                     | _ -> []
                 match l, r with
+                // A variable a call's scope meets becomes the scope, which stays the call's (see
+                // `FunctionContexts.isCallScope`).
+                | TyVar _, TyVar v when FunctionContexts.isCallScope l && not (FunctionContexts.isCallScope r) ->
+                    loop (subst |> Map.add v.Id l) rest
                 // Of two variables inference made up, the newer stands for the older, so a variable that many others
                 // stand for stays where they point: in `1 + 1 + ... + 1`, each operand's would otherwise stand for the
                 // next one's, and resolving the first would walk the whole chain (#839).

@@ -1151,6 +1151,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                                 mk (Let(var, mk (Atom adapted) var.Type, body)) body.Type)
                     | _ -> adapt others vars
             adapt bindings scope.Vars
+        // A `use` of a scoped context's instance, `use m` for a `memory` block's `m`, loads no members: it only says
+        // whose cells a `mut` after it makes, which the type checker has settled.
+        | UseStatement value :: rest when
+            (match input.ExprTypes |> Map.tryFind value.Id |> Option.map Unifier.unalias with
+             | Some (TyNominal(_, FunctionContexts.ScopeType _, _)) -> true
+             | _ -> false)
+            ->
+            this.Block scope rest k
         | UseStatement _ :: _ -> cannot "this kind of `use`"
         | _ -> cannot "this kind of statement"
 

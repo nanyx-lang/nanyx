@@ -153,3 +153,26 @@ def build: int -> string = { n ->
     use program = instantiateWasm source [ IrString ]
     program.Drop(IrString, program.Call("build", 5))
     Assert.Equal(0, program.LiveBlocks)
+
+
+[<Fact>]
+let ``Run - a cell made through use of an outer block's instance outlives the inner block`` () =
+    let source = """
+import nanyx/console
+
+def total = memory { m1 ->
+  def get = memory {
+    use m1
+    mut z = 0
+    z := 5
+    { z }
+  }
+  get() + get()
+}
+
+@entry
+def main = {
+  println("{total}")
+}
+"""
+    runSource source |> assertRan "10\n"

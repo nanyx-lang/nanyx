@@ -10,15 +10,40 @@ module FunctionContexts =
     /// What a scoped context's scope is wrapped in (see `scoped`). No name written in source can be it.
     let private scopeTag = "@scope"
 
+    /// The scope `scope`, a type variable, as a scoped context holds it: the argument of the context, and the type a
+    /// value of the context's type is made from (see `TypeResolution.scopedValueType`).
+    let scopeType (scope: Ty) : Ty = TyApply(scopeTag, [ scope ])
+
+    /// The scope a scope type holds (see `scopeType`).
+    let (|ScopeType|_|) (ty: Ty) : Ty option =
+        match ty with
+        | TyApply(tag, [ scope ]) when tag = scopeTag -> Some scope
+        | _ -> None
+
+    /// The name of the variable a call's scope is (see `ScopedCalls.enter`). No variable written in source has it.
+    let callScopeName = "@call"
+
+    /// Whether `scope` is the scope a call starts, rather than one that may become any (see `callScopeName`).
+    let isCallScope (scope: Ty) =
+        match scope with
+        | TyVar { Name = Some name } -> name = callScopeName
+        | _ -> false
+
+    /// Whether `left` and `right` are scoped contexts of two scopes that calls start, which are never the same.
+    let private ofTwoCalls (left: Ty) (right: Ty) =
+        match left, right with
+        | TyApply(_, [ ScopeType l ]), TyApply(_, [ ScopeType r ]) -> isCallScope l && isCallScope r && l <> r
+        | _ -> false
+
     /// The scoped context `name` (`scoped context $Memory = ()`) of the scope `scope`, a type variable: the call that
     /// supplies the context starts the scope, and every requirement of it inside belongs to it. A reader never sees the
     /// scope (see `withoutScope`), and the backend leaves it out.
-    let scoped (name: string) (scope: Ty) : Ty = TyApply(name, [ TyApply(scopeTag, [ scope ]) ])
+    let scoped (name: string) (scope: Ty) : Ty = TyApply(name, [ scopeType scope ])
 
     /// A scoped context's name and its scope (see `scoped`).
     let (|ScopedContext|_|) (context: Ty) : (string * Ty) option =
         match context with
-        | TyApply(name, [ TyApply(tag, [ scope ]) ]) when tag = scopeTag -> Some (name, scope)
+        | TyApply(name, [ ScopeType scope ]) -> Some (name, scope)
         | _ -> None
 
     /// The name of a context that takes no arguments a reader writes: `Console`, or a scoped context, whose scope is not
@@ -89,7 +114,8 @@ module FunctionContexts =
                 | Some index -> go matches rest (List.removeAt index remaining) ((context, remaining.[index]) :: pairs) unmatched
                 | None -> go matches rest remaining pairs (context :: unmatched)
         let same, leftOver, rightOver = go (=) leftContexts rightContexts [] []
-        let paired, leftExtra, rightExtra = go (fun l r -> key l = key r) leftOver rightOver [] []
+        // An outer block's `$Memory` is not an inner block's: it goes into a variable instead.
+        let paired, leftExtra, rightExtra = go (fun l r -> key l = key r && not (ofTwoCalls l r)) leftOver rightOver [] []
         let leftOnly = leftVars |> List.filter (fun v -> not (List.contains v rightVars))
         let rightOnly = rightVars |> List.filter (fun v -> not (List.contains v leftVars))
         let shared = leftVars |> List.filter (fun v -> List.contains v rightVars)
