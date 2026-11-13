@@ -293,7 +293,8 @@ helpers `dbg` calls. The heap is set up when some function calls `$alloc`.
 (a local function, `==` on records and lists, and the like) is an error,
 `UnsupportedByBackend`, reported where it is written: `tryTranspileTypedModuleToWat` gives the first one. `==` is built
 in only for numbers, strings and tags; comparing and printing records and lists structurally is
-[#424](https://github.com/nanyx-lang/nanyx/issues/424). Only a type-checked module is compiled.
+[#424](https://github.com/nanyx-lang/nanyx/issues/424). A broken invariant of the backend is reported apart from these, as
+`BackendInternalError`, which asks for a bug report. Only a type-checked module is compiled.
 `transpileTypedModuleWithReport` also lists the functions it was compiled into, specialisations among them.
 
 ## Inserting counts

@@ -1,9 +1,10 @@
 /// Lowers the typed AST to the core IR (`CoreIr.fs`), specialising generic functions as it goes.
 ///
 /// Each definition whose type is concrete is lowered as a root. A call to a generic definition asks for its
-/// specialisation at the call's type arguments, which is lowered in turn (and may ask for more). A definition the IR
-/// cannot lower yet is left to `CodeGen.fs`, which compiles it as it always has: see "Core IR" in
-/// `docs/src/content/work-in-progress/memory-management.md` for this fallback.
+/// specialisation at the call's type arguments, which is lowered in turn (and may ask for more). Every function is
+/// compiled from the IR. What it cannot lower yet (`cannot`) is reported by `CodeGen.fs` as `UnsupportedByBackend`
+/// where it is written, and a broken invariant of the backend (`internalError`) as `BackendInternalError`: see "What
+/// cannot be compiled" in `docs/src/content/work-in-progress/memory-management.md`.
 module Transpiler.Wasm.CoreIrLower
 
 open NyxCompiler
