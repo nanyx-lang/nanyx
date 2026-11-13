@@ -96,20 +96,25 @@ module Compiler =
     /// that call (`operatorCalls`, through the instance `operatorInstances` gives where it has one), each expression inference read as another as that one (`readAs`),
     /// each read of a built-in property as a call (`properties`), each builder block that uses no keyword as its block
     /// (`workflowBlocks`), and without import statements. `defer` compiles the module's errors to traps first, for a
-    /// debug build.
-    let private moduleFromTypedItems (defer: Expression -> Expression) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (operatorInstances: Map<NodeId, TypeExpr>) (readAs: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module =
+    /// debug build, and gives the diagnostics it placed, which are returned with the module.
+    let private moduleFromTypedItems (defer: Expression -> Expression * Diagnostic list) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (operatorInstances: Map<NodeId, TypeExpr>) (readAs: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module * Diagnostic list =
         let lower (expr: Expression) =
-            expr |> defer |> retargetPipes pipeTargets |> callOperators operatorCalls operatorInstances |> writeAsRead readAs |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks
-        items
-        |> List.choose (function
-            | TypedModuleDecl name -> Some (ModuleDecl name)
-            | TypedImport _ -> None
-            | TypedDef (TypedValueDef(isExport, name, typeOpt, expr)) ->
-                Some (Def (ValueDef(isExport, name, typeOpt, lower expr.Expr)))
-            | TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ->
-                Some (Def (TypeDef(name, modifiers, parameters, body)))
-            | TypedExprItem expr -> Some (Expr (lower expr.Expr)))
-        |> List.map TopLevelItem.synthetic
+            let deferred, placed = defer expr
+            deferred |> retargetPipes pipeTargets |> callOperators operatorCalls operatorInstances |> writeAsRead readAs |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks, placed
+        let lowered =
+            items
+            |> List.choose (function
+                | TypedModuleDecl name -> Some (ModuleDecl name, [])
+                | TypedImport _ -> None
+                | TypedDef (TypedValueDef(isExport, name, typeOpt, expr)) ->
+                    let value, placed = lower expr.Expr
+                    Some (Def (ValueDef(isExport, name, typeOpt, value)), placed)
+                | TypedDef (TypedTypeDef(name, modifiers, parameters, body)) ->
+                    Some (Def (TypeDef(name, modifiers, parameters, body)), [])
+                | TypedExprItem expr ->
+                    let value, placed = lower expr.Expr
+                    Some (Expr value, placed))
+        lowered |> List.map (fst >> TopLevelItem.synthetic), lowered |> List.collect snd
 
     let internal originKey (origin: ModuleOrigin) =
         match origin with
@@ -536,17 +541,15 @@ module Compiler =
                         Diagnostics.at code span message)
                 let moduleErrors = nameErrors @ inferErrors @ mismatchErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
-                let placed = System.Collections.Generic.HashSet<string>()
                 let defer =
-                    if moduleErrors.IsEmpty then id
-                    else
-                        let failed = state.FailedExprs |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
-                        let bySpan = mismatchErrors |> List.choose (fun diagnostic -> diagnostic.Span |> Option.map (fun span -> span, diagnostic)) |> Map.ofList
-                        let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
-                        DeferredErrors.deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
+                    if moduleErrors.IsEmpty then fun expr -> expr, []
+                    else DeferredErrors.deferErrors (DeferredErrors.sitesOf state mismatchErrors)
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
-                let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> ModuleLinking.writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
-                let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (DeferredErrors.deferredMessage diagnostic)))
+                let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
+                let own = own |> ModuleLinking.writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
+                // An error is deferred when the diagnostic itself was placed, its place included.
+                let placed = Set.ofList placed
+                let undeferred = moduleErrors |> List.filter (placed.Contains >> not)
                 // The module's own definitions win over imported ones of the same name.
                 let exported = ModuleLinking.exportedValueNames own
                 let ownNames = exported |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)

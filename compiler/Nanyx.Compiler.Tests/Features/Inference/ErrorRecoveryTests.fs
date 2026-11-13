@@ -63,6 +63,22 @@ let ``An error in a type definition is not deferred`` () =
     Assert.False(result.ErrorsDeferred)
 
 [<Fact>]
+let ``Of two errors with the same message, one deferred does not make the other deferred`` () =
+    // An error was taken as deferred when one with the same text was placed (#449).
+    let result = Compiler.compile "type T = (a: Missing)\ndef f: Missing -> int = { x -> 1 }\ndef g = 1"
+    let unknown = result.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UnknownType.Code)
+    Assert.Equal<int list>([ 0; 1 ], unknown |> List.map (fun diagnostic -> diagnostic.Span.Value.StartLine))
+    Assert.Equal(unknown.[0].Message, unknown.[1].Message)
+    Assert.False(result.ErrorsDeferred)
+
+[<Fact>]
+let ``Two errors with the same message in different defs are both deferred`` () =
+    let result = Compiler.compile "def f = { x -> missing(x) }\ndef g = { x -> missing(x) }"
+    Assert.Equal(2, result.Diagnostics.Length)
+    Assert.Equal(result.Diagnostics.[0].Message, result.Diagnostics.[1].Message)
+    Assert.True(result.ErrorsDeferred)
+
+[<Fact>]
 let ``A module that imports one with errors is not typed`` () =
     let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport mod\ndef value = foo"
     Assert.True(result.Typed.IsNone)
