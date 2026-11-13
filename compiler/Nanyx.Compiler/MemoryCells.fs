@@ -95,12 +95,73 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
 /// of the scope of the cell given for it, and its name reads a `T`.
 let bindParameter (symbol: SymbolId option) (typeOpt: TypeExpr option) (ty: Ty) (state: InferState) : Ty * InferState =
     match symbol, typeOpt with
+    // A type that says what the cell holds already, as an expected type does, gives the cell its scope.
     | Some symbol, CellPassingSyntax.CellParameter _ ->
-        let held, next = freshVar state
-        let scope, next = freshVar next
-        let constrained = addConstraint ty (FunctionContexts.cellType held scope) next
-        held, { constrained with Cells = constrained.Cells |> Map.add symbol scope }
+        match resolveSoFar state ty with
+        | FunctionContexts.CellType(held, scope) -> held, { state with Cells = state.Cells |> Map.add symbol scope }
+        | _ ->
+            let held, next = freshVar state
+            let scope, next = freshVar next
+            let constrained = addConstraint ty (FunctionContexts.cellType held scope) next
+            held, { constrained with Cells = constrained.Cells |> Map.add symbol scope }
     | _ -> ty, state
+
+/// The contexts the lambda `lambda`, with the parameters `args`, requires for its `mut` parameters: `$Memory` of each
+/// one's scope, since a function that takes a cell can only be called where its block is, whether or not it uses the
+/// cell, and `state` once they are recorded. `$Memory` is nominal, so it is required by name, as an ambient context is:
+/// a def's own body adds it to what the def requires if the def does not write its type (`InferredContexts`), and
+/// otherwise the def must write it if it writes contexts at all (see `ensureMemoryWritten`). Any other lambda's type
+/// carries it. A function type that takes a cell requires it whether it says so or not (see
+/// `FunctionContexts.withCellMemory`).
+let parameterContexts (state: InferState) (lambda: Expression) (args: (Identifier * TypeExpr option) list) : Ty list * InferState =
+    let required =
+        args
+        |> List.choose (fun (name, typeOpt) ->
+            match typeOpt with
+            | CellPassingSyntax.CellParameter _ ->
+                state.DeclarationSymbols
+                |> Map.tryFind (lambda.Id, LambdaParameters, name)
+                |> Option.bind state.Cells.TryFind
+                |> Option.map (FunctionContexts.scoped context)
+            | _ -> None)
+    match required, state.ContextScope with
+    | [], _ -> [], state
+    | _ when not (state.BodyLambdas.Contains lambda.Id) -> required, state
+    | _, DefScope(defName, true) ->
+        let inferred = state.InferredContexts |> Map.tryFind defName |> Option.defaultValue Set.empty
+        [], { state with InferredContexts = state.InferredContexts |> Map.add defName (inferred.Add context) }
+    | _ -> [], state
+
+/// The errors for each function type in `typeOpt`, the annotation of the def `defName`, that takes a cell and writes
+/// contexts without `$Memory`: taking a cell requires it. A function type that takes one and writes no contexts requires
+/// it without saying so (see `TypeResolution`).
+let ensureMemoryWritten (state: InferState) (defName: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+    let takesCell (input: TypeExpr) =
+        let parameters =
+            match input.Kind with
+            | TypeTuple items -> items
+            | _ -> [ input ]
+        parameters |> List.exists (fun parameter -> match parameter.Kind with TypeApply(name, [ _ ]) -> name = CellPassingSyntax.typeName | _ -> false)
+    let writesMemory (contexts: TypeExpr list) = contexts |> List.exists (fun ctx -> ctx.Kind = TypeName context)
+    let missing =
+        typeOpt
+        |> Option.map TypeExpr.within
+        |> Option.defaultValue []
+        |> List.choose (fun typeExpr ->
+            match typeExpr.Kind with
+            | TypeWithContext((first :: _) as contexts, { Kind = TypeFunc(input, _) }) when takesCell input && not (writesMemory contexts) ->
+                let names = contexts |> List.map (fun ctx -> match ctx.Kind with TypeName name | TypeApply(name, _) | TypeVar name -> name | _ -> "...")
+                Some (SourceSpan.between first.Span (List.last contexts).Span, String.concat " & " names)
+            | _ -> None)
+    match missing with
+    | [] -> Ok ()
+    | spans ->
+        spans
+        |> List.map (fun (span, written) ->
+            Diagnostics.at DiagnosticCodes.UndeclaredContext span
+                $"'{defName}' takes a cell, a `mut` parameter, so it requires '{context}' too: write '[{written} & {context}]'"
+            |> ContextFixes.withAddToType state defName context)
+        |> Error
 
 /// `mut cell` as an argument, at `expr` (see `CellPassingSyntax`): the cell `cell` names, of the type `mut T`. Passing it
 /// uses it, as reading it does. Only a cell can be passed so.
@@ -145,6 +206,11 @@ let ensureCellTypesPlaced (typeOpt: TypeExpr option) : Result<unit, Diagnostic l
             Diagnostics.at DiagnosticCodes.MisplacedCellType typeExpr.Span
                 "A cell's type, `mut T`, can only be a function's parameter for now: a cell can be passed to a function, but nothing can hold one")
         |> Error
+
+/// The errors for the cells' types in `typeOpt`, the annotation of the def `defName` (see `ensureCellTypesPlaced` and
+/// `ensureMemoryWritten`).
+let checkCellTypes (state: InferState) (defName: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+    ensureCellTypesPlaced typeOpt |> Result.bind (fun () -> ensureMemoryWritten state defName typeOpt)
 
 /// The code of a type mismatch found at `span`: an assignment's own when it is one of the module's `:=`s.
 let mismatchCode (state: InferState) (span: SourceSpan) =

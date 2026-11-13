@@ -262,11 +262,13 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Sets.ofType argTys.[0], current
         // `mut T`: a cell of the `memory` block whose `$Memory` the signature writes, as `[$Memory] mut int -> ()` says
         // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
-        // its own: the cell given for it says which.
+        // its own: the cell given for it says which. A signature inference writes out has no source either, but what
+        // its cells hold is written by inference too, and its cells share the signature's scope.
         elif name = CellPassingSyntax.typeName && argTys.Length = 1 then
             let scope, current =
-                if SourceSpan.isNone typeExpr.Span then freshVar current
-                else typeExprToTy current (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName FunctionContexts.cellContext)))
+                match Some typeExpr with
+                | CellPassingSyntax.CellParameter held when held |> Option.forall (fun held -> not (SourceSpan.isNone held.Span)) -> freshVar current
+                | _ -> typeExprToTy current (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName FunctionContexts.cellContext)))
             FunctionContexts.cellType argTys.[0] scope, current
         else
             match tryFindTypeDef name current with

@@ -48,6 +48,14 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
   scope, `MemoryCells.inferArgument` types `mut x` (NYX0234 when `x` is not a cell), and
   `MemoryCells.ensureCellTypesPlaced` reports a `mut T` anywhere but a function's parameter (NYX0235). In the backend a
   cell that is passed is a box, a cell parameter is the box it is given, and `mut x` passes the box.
+- **A `mut` parameter implies `$Memory`** ([#1075](https://github.com/nanyx-lang/nanyx/issues/1075)). `$Memory` is
+  nominal and has no members, so the member-based inference of a def's contexts never sees it: a top-level def that
+  writes no type and whose own lambda takes a cell has it added by name to `InferredContexts`, as an ambient context
+  is (`MemoryCells.parameterContexts`); any other lambda's type carries it. The unifier treats every function type that
+  takes a cell as requiring `$Memory` of the cell's scope (`FunctionContexts.withCellMemory`), so `mut int -> ()` is
+  `[$Memory] mut int -> ()` written or not. A def that writes contexts without `$Memory` and takes a cell is NYX0211
+  (`MemoryCells.ensureMemoryWritten`). Not yet: a def that writes no type and only calls a function that requires
+  `$Memory`, outside any `memory` block, is not inferred to require it, since nothing tracks `$Memory` by name there.
 
 # Planned
 

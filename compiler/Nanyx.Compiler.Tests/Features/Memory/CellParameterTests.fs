@@ -83,3 +83,61 @@ let ``A cell's type inside another type is an error for now`` () =
     let codes, text = errorsOf "def bad: list(mut int) -> () = { xs -> () }\n"
     Assert.Equal<string list>([ DiagnosticCodes.MisplacedCellType.Code ], codes)
     Assert.Equal(Some "mut int", text)
+
+
+// A function that takes a cell requires `$Memory` (#1075): `$Memory` is nominal, so a def that writes no contexts is
+// inferred to require it by name, whether or not its body uses the cell.
+
+[<Fact>]
+let ``A def that writes no type and takes a cell is inferred to require $Memory, even if it only passes the cell on`` () =
+    let source = """
+def inc = { mut cell ->
+  cell := cell + 1
+}
+
+def passOn = { mut cell -> inc(mut cell) }
+
+def stub = { mut cell -> () }
+
+def f = memory {
+  mut count = 0
+  for 1..10 -> inc(mut count)
+  passOn(mut count)
+  stub(mut count)
+  count
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    Assert.Equal(Some "def inc: [$Memory] mut int -> ()", hoverType source "inc")
+    Assert.Equal(Some "def passOn: [$Memory] mut int -> ()", hoverType source "passOn")
+    Assert.Equal(Some "def f: int", hoverType source "f = memory")
+
+[<Fact>]
+let ``A lambda that takes a cell, passed to a higher-order function, requires $Memory`` () =
+    let typed = compileClean """
+def update: [$Memory] (mut int -> ()), mut int -> () = { change, mut cell -> change(mut cell) }
+
+def f = memory {
+  mut x = 0
+  update({ mut c -> c := c + 5 }, mut x)
+  x
+}
+"""
+    let lambdaTypes =
+        typed.Module
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.expressionsWithin
+        |> List.choose (fun expr ->
+            match expr.Kind with
+            | Parser.Program.Lambda([ ("c", _) ], _, _) -> typed.ExprTypes |> Map.tryFind expr.Id |> Option.map Unifier.tyToString
+            | _ -> None)
+    Assert.Equal<string list>([ "[$Memory] mut int -> ()" ], lambdaTypes)
+
+[<Fact>]
+let ``A def that writes contexts without $Memory and takes a cell is an error that says to add it`` () =
+    let source = "import nanyx/console\n\ndef inc: [Console] mut int -> () = { mut cell -> cell := cell + 1 }\n"
+    let result = Compiler.compile source
+    Assert.Equal<string list>([ DiagnosticCodes.UndeclaredContext.Code ], result.Diagnostics |> List.map _.Code)
+    let diagnostic = result.Diagnostics.Head
+    Assert.Contains("'[Console & $Memory]'", diagnostic.Message)
+    Assert.Equal("Console", source.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))

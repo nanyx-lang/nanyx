@@ -71,6 +71,17 @@ module FunctionContexts =
         | ScopedContext(name, _) -> Some name
         | _ -> None
 
+    /// `contexts`, those of a function type whose input is `input`, with `$Memory` of the scope of each cell the function
+    /// takes: a function that takes a cell requires it, whether its type says so or not, since `$Memory` is nominal and
+    /// only the cell's block has it. `mut int -> ()` is `[$Memory] mut int -> ()`.
+    let withCellMemory (input: Ty) (contexts: Ty list) : Ty list =
+        let parameters =
+            match input with
+            | TyRecord fields -> List.ofSeq fields.Values
+            | single -> [ single ]
+        let memory = parameters |> List.choose (function CellType(_, scope) -> Some (scoped cellContext scope) | _ -> None)
+        if memory.IsEmpty then contexts else contexts @ memory |> List.distinct
+
     /// `context` as a reader writes it: a scoped context without its scope.
     let withoutScope (context: Ty) : Ty =
         match context with
