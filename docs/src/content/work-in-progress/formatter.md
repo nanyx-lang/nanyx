@@ -167,9 +167,9 @@ issue):
   is indented under them (shown above).
 - A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
   body is only a name or a literal (decided 2026-11-07), or a statement could not take it without parentheses. A
-  body on its own line is read as a statement, whose operators leave out `%`, `..`, `and`, `or` and `not`, so a body
-  of one of those stays on the `->`'s line rather than being bracketed
-  ([#312](https://github.com/nanyx-lang/nanyx/issues/312)); a block of only that body in brackets is written the
+  body on its own line is read as a statement, which takes every operator but `..`, so a range stays on the `->`'s
+  line rather than being bracketed ([#312](https://github.com/nanyx-lang/nanyx/issues/312),
+  [#960](https://github.com/nanyx-lang/nanyx/issues/960)); a block of only that body in brackets is written the
   same way, unless there is a comment in it:
 
   ```nanyx
@@ -179,7 +179,7 @@ issue):
 
   def id: a -> a = { x -> x }
 
-  def isWhitespace: int -> bool = { b -> b == 32 or b == 9 or b == 10 or b == 13 }
+  def upTo: int -> list(int) = { n -> 1..n }
   ```
 
 - A record, tuple or call's arguments with an element that spans lines (a lambda with a block) also puts each
