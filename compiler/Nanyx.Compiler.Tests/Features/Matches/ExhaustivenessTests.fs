@@ -197,7 +197,6 @@ let ``Match rejects non-exhaustive tag unions with multiple scrutinees`` () =
 [<Fact>]
 let ``Typecheck matches on an inferred tag union exhaustively`` () =
     // Exhaustiveness is checked against the scrutinee's known type; an inferred union counts as known.
-    // (Scrutinees that are call results or local bindings are not checked today, inferred or annotated.)
     let source =
         "def message = if false then #some(\"hi\") else #noMessage\n" +
         "def describe = {\n" +

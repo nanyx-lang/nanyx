@@ -2,6 +2,7 @@ module Nanyx.Compiler.Tests.Features.RecordPatterns
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 // Record patterns: a name alone in a pattern takes the record's field of that name, as `name = name`.
 
@@ -9,7 +10,7 @@ open NyxCompiler
 let private typesOf (source: string) =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    TypeHints.inlayHints Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
+    localInlayHints Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
 
 [<Fact>]
 let ``A name alone in a pattern binds the field of that name`` () =

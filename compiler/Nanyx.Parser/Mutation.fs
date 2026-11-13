@@ -10,7 +10,6 @@ open Parser.Program
 /// passes the cell `x` (see `CellPassingSyntax`). Anywhere else it is an error, as in `def x = mut 0`: a cell is
 /// declared on a line of its own, `mut x = 0` (see `MutSyntax`).
 let mutExpr: Parser<Expression, ParseState> =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let cellArgument =
         attempt (
             pstring "mut" >>. keywordEnd >>. wsInline >>. spanned (identifierNoWs |>> IdentifierExpr)

@@ -26,8 +26,8 @@ let internal fillTypeRefs () =
 
     let typeMemberField =
         pipe2
-            (pstring "type" >>. keywordEnd >>. ws >>. identifierNoWs .>> wsNoNl())
-            (opt (attempt (pstring "=" >>. wsNoNl() >>. typeExpr)))
+            (pstring "type" >>. keywordEnd >>. ws >>. identifierNoWs .>> wsInline)
+            (opt (attempt (pstring "=" >>. wsInline >>. typeExpr)))
             (fun name typeOpt -> TypeMember(name, typeOpt))
 
     // `name?: T` and `T?` are not Nanyx: a value that may be absent has its absence in its type, as everywhere else
@@ -43,7 +43,7 @@ let internal fillTypeRefs () =
         pipe4
             (opt (attempt (pstring "mut" >>. keywordEnd >>. ws)))
             (getPosition .>>. nameNoWs >>= fun (start, name) -> noteName start name >>. noOptionalField name >>% name)
-            (wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
+            (wsInline >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
             (fun mutOpt name typeValue defaultOpt -> TypeField(name, mutOpt.IsSome, Some typeValue, defaultOpt))
 
@@ -95,7 +95,7 @@ let internal fillTypeRefs () =
         let namedField =
             pipe2
                 (identifierNoWs >>= fun name -> noOptionalField name >>% name)
-                ((wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr))
+                ((wsInline >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr))
                 (fun name typeValue -> TypeField(name, false, Some typeValue, None))
         // A payload is a record of named fields, or the types in the brackets: `#pair(int, string)` carries a
         // tuple and `#apply(a, b -> c)` a function. Empty brackets, `#some()`, carry the unit type.
@@ -134,7 +134,7 @@ let internal fillTypeRefs () =
     let contextMember =
         spannedType (
             pipe2
-                (nameNoWs .>> wsNoNl() .>> pstring ":" .>> ws)
+                (nameNoWs .>> wsInline .>> pstring ":" .>> ws)
                 typeSignature
                 (fun name memberType -> TypeRecord [ TypeField(name, false, Some memberType, None) ]))
 
@@ -148,11 +148,11 @@ let internal fillTypeRefs () =
     let contextSet =
         spannedType (
             between
-                (pstring "[" >>. wsNoNl())
-                (wsNoNl() >>. pstring "]")
+                (pstring "[" >>. wsInline)
+                (wsInline >>. pstring "]")
                 (sepBy
                     (attempt bracketedContextMember <|> attempt contextMember <|> attempt typeApply <|> typeIdentifier)
-                    (attempt (wsNoNl() >>. (pstring "&" <|> pstring "+")) >>. wsNoNl()))
+                    (attempt (wsInline >>. (pstring "&" <|> pstring "+")) >>. wsInline))
             |>> TypeContext)
 
     let contextsOf (contextSet: TypeExpr) =
@@ -268,12 +268,12 @@ let typedQualifiedIdentifier: Parser<Identifier * TypeExpr option, ParseState> =
 // A def's name and type annotation. The annotation may follow the name on the same line or start an
 // indented continuation line (`def f` / `  : T` / `  = ...`), like the `=` does.
 let defNameAndType (lineStartCol: int64) (identParser: Parser<Identifier * TypeExpr option, ParseState>) =
-    identParser .>> wsNoNl()
+    identParser .>> wsInline
     >>= fun (name, typeOpt) ->
         match typeOpt with
         | Some _ -> preturn (name, typeOpt)
         | None ->
-            opt (attempt (newlineIndentedContinuation lineStartCol >>. pstring ":" >>. ws >>. typeSignature .>> wsNoNl()))
+            opt (attempt (newlineIndentedContinuation lineStartCol >>. pstring ":" >>. ws >>. typeSignature .>> wsInline))
             |>> fun continuationType -> (name, continuationType)
 
 /// Fails, at the operator, when `name`, a def's name written from `start`, defines an operator Nanyx does not have:
@@ -295,7 +295,7 @@ let parseDefWith (lineStartCol: int64) (identParser: Parser<Identifier * TypeExp
     (pstring "def" >>. ws >>. getPosition .>>. defNameAndType lineStartCol identParser)
     >>= fun (start, (name, typeOpt)) ->
         definableName start name
-        >>. defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser
+        >>. defEqualsContinuation lineStartCol >>. pstring "=" >>. wsInline >>. exprParser
         >>= fun expr -> declare DefValue expr.Id [ name, nameSpan start name ] >>% (name, typeOpt, expr)
 
 /// A type's or a context's parameter, with an optional bound: `a`, `a :: Shape`. It is a type variable in the
