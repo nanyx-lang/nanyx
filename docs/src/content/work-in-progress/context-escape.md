@@ -201,6 +201,10 @@ The proposal draws the line there, and makes every helper a function that takes 
   a `use`. It can't be a parameter's, a result's or a field's type, so `() -> Log` is an error.
 - **No def holds an instance.** `def inst = Log(...)` is an error, and so is a function that returns one. A constructor
   call is valid only as the instance of a `use`.
+- **`use` loads only a declared context.** Its instance is always a context's constructor, `use Log(log = ...)`. A plain
+  record, `use (log = ...)`, can no longer be loaded, so loose members are never in scope. Contexts are their own kind
+  of thing: not types and not records, so whether they are structural or nominal, as types are, doesn't apply to them.
+  A context is what its declaration says, and `use` and a context list both name it.
 - **A reusable handler is a function that runs a lambda under a `use`.** This is the form the section above calls "a
   reusable handler", and the only one:
 
@@ -319,14 +323,24 @@ member's own type variables unit, so it reports a call that has one of them at a
   longer needed: both become type errors.
 - [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
   contexts because they are never values. It stays open for records.
+- A `use` of a record written out becomes a declared context and its constructor. The tour's collection builders in
+  `collections.md` (`use (yield = ...)` and ``use (`=>` = ...)``) and the examples in
+  [Context-qualified types](./context-qualified-types) change with it. The Contexts page's "contexts are structural by
+  default", and its `use addInt` loading a record as each context it has the shape of, go.
 
 ## Questions
 
 - **`memory { m -> ... }`.** The block is given its `$Memory` instance as a value, and `use m` loads it in an inner
   block ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)). Under the proposal `m` can't be a value. It could
   stay as a name only `use` accepts, as an exception, or the block could be named another way, such as a label.
-- **Whether `use` still takes a plain record.** `use (log = { m -> println(m) })` works today. Taking only a declared
-  context's constructor gives one answer to what `use` loads.
+- **Whether one context can serve for another.** Today contexts are structural, so a function that requires `Add(a)`
+  is given the `Num(a)` in scope, because a `Num` has every member an `Add` has (the Contexts page's `mean`, and the
+  [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member). If
+  contexts are their own thing, that needs a rule of its own: a declared relation (`Num` includes `Add`), matching by
+  members kept as a rule about contexts, or none, so that `mean` requires `Add` and `Div` separately.
+- **What `$` means on a context.** On a type, `$` makes it nominal: only its home module can construct one. On a
+  context it would mean only its home module can write its constructor in a `use`, which is what `$Memory` and a
+  `scoped context` need.
 - **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
   It isn't today: a context member's type variables are fixed once in a function that requires the context, so
   `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, is NYX0201 (`int vs
