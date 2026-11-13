@@ -1078,6 +1078,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match statements with
         | [] -> cannot "an empty block"
         | [ ExprStatement last ] -> this.Complex scope last k, None
+        // A lambda's annotated result is the value it names (see `LambdaResultSyntax`), so a call there stays a tail call.
+        | [ DefStatement(_, defined, _, value); ExprStatement(Kind (IdentifierExpr result)) ] when defined = LambdaResultSyntax.name && result = defined ->
+            this.Complex scope value k, None
         | DefStatement(_, _, _, Kind (Lambda _)) :: _ -> cannot "a local function"
         | DefStatement(_, name, _, (Kind (ClosureSyntax.Closure(target, captured)) as rhs)) :: rest
             when (genericLocalType target rhs).IsSome ->
