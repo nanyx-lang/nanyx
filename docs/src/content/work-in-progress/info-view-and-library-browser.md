@@ -54,34 +54,44 @@ The first cut is built ([#715](https://github.com/nanyx-lang/nanyx/issues/715)),
 
 ## What it shows
 
-The panel follows the cursor. It shows, from top to bottom, in three groups with a rule between them (each section's
-`Group`: `cursor`, `scope`, `contexts`):
+The panel follows the cursor. It is organised by scope, innermost first, with a rule between one scope and the next
+([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)): the cursor, each lambda around it, each def around it
+(a local def as well as a top-level one), and the module. `InfoView.at` gives the lambdas and defs as `Scope`s,
+innermost first, each with the names it declares and the contexts it provides: a name or context belongs to the
+innermost lambda or def whose value it is declared or provided in. A def's value is the def's scope, not a lambda of
+its own, and a `memory` block and a `use` are part of the scope they are in. Each scope's heading names it and links to
+it: a lambda by its parameters and line (`{ message -> … } (line 4)`), a def by its name (`def greet`), the module by
+its declared name (`module library.lending`, or `this module`). From the fourth scope on, and the module always, a
+scope starts collapsed, since the side bar is narrow.
 
-- **At the cursor.** On a module's name, as `Hover.moduleAt` finds it, `module name` and the module's doc comment.
-  Otherwise the type of the narrowest typed expression at the cursor, as hover shows it. On a name that refers
-  to a generic def, the def's declared signature comes first, as hover writes the def (`def name: [contexts] type`),
-  then the type at this use, then the bindings of the signature's type variables at this use (`a = string`, and a
-  context variable as the contexts it stands for, `c = Console`), each linking to the def; `Hover.instantiationAt`
-  works them out ([#929](https://github.com/nanyx-lang/nanyx/issues/929)). A def that is not generic shows its type once.
-- **Messages.** The diagnostics at the cursor's line.
-- **In scope.** The locals, parameters and pattern variables in scope, each with its type, nearest first. Top-level
-  and imported names are collapsed by default.
-- **Contexts.** The contexts in scope at the cursor. For each one, where it comes from:
-  - the function's signature (`[Console]` in `def greet: [Console] ...`)
-  - a `use` (a link to its line)
-  - an inferred requirement (`[Show(α)]`, from `InferredContextTypes`)
-  - the runtime, at the top level of a module
+- **At the cursor.**
+  - **Expression.** On a module's name, as `Hover.moduleAt` finds it, `module name` and the module's doc comment.
+    Otherwise the type of the narrowest typed expression at the cursor, as hover shows it. On a name that refers
+    to a generic def, the def's declared signature comes first, as hover writes the def (`def name: [contexts] type`),
+    then the type at this use, then the bindings of the signature's type variables at this use (`a = string`, and a
+    context variable as the contexts it stands for, `c = Console`), each linking to the def; `Hover.instantiationAt`
+    works them out ([#929](https://github.com/nanyx-lang/nanyx/issues/929)). A def that is not generic shows its type
+    once.
+  - **Messages.** The diagnostics at the cursor's line.
+  - **This call.** On the innermost call or pipe around the cursor that requires contexts, each context it requires
+    and where it finds that context: a provider (a signature, a `use`, inference or the runtime), linked, or an
+    instance the compiler builds, from attached definitions (named, `attached Point.show`), derived from the type's
+    parts, or its own (`built in`) ([#989](https://github.com/nanyx-lang/nanyx/issues/989)). `InfoView.callContextsOf`
+    reads the contexts the callee's type declares, at the types of the call, beside the call's `ContextInstances` in
+    order, then the others `ContextProviders` records for it (a member's context, or one a function value it runs
+    requires).
+- **A lambda**, for each one around the cursor: its type, with the contexts it carries (`[Log] int -> ()`), its
+  parameters, locals and pattern variables with their types, nearest first, and each `use` in it with the context it
+  gives.
+- **A def**, for each one around the cursor: its signature, `declared` if it writes its type and `inferred` if not,
+  with its doc comment; its parameters and locals; the contexts its signature writes or it was inferred to require
+  (`[Show(α)]`, from `InferredContextTypes`), and each `use` in it outside a lambda; and, in the innermost def, its
+  *Context flow* (see below).
+- **The module**: its doc comment, its top-level definitions and imports in scope, the file's own first, and the
+  contexts the runtime supplies, such as `Console`.
 
-  A `use` comes first, nearest first, then the signature or inferred contexts of each def around the cursor,
-  innermost first. Each context is written as hover writes it, with its type variables named together with the
-  types of the locals.
-- **This call.** On the innermost call or pipe around the cursor that requires contexts, each context it requires and
-  where it finds that context: the provider from the list above, linked, or an instance the compiler builds, from
-  attached definitions (named, `attached Point.show`), derived from the type's parts, or its own (`built in`)
-  ([#989](https://github.com/nanyx-lang/nanyx/issues/989)). `InfoView.callContextsOf` reads the contexts the callee's
-  type declares, at the types of the call, beside the call's `ContextInstances` in order, then the others
-  `ContextProviders` records for it (a member's context, or one a function value it runs requires).
-- **Context flow.** See below.
+Each type and context is written as hover writes it, with the type variables of the locals, the lambdas and the
+contexts named together.
 
 Every span in the panel is a link: clicking a `use` or a signature jumps to it.
 
@@ -143,8 +153,11 @@ no provider, and has no entry in `ContextProviders`; "This call" shows those fro
 ## Protocol and client
 
 - **Request.** A custom request, `nanyx/infoView`, with a document and a position. It returns structured JSON:
-  sections (`expression`, `inScope`, `topLevel`, `contexts`, `call`, `flow`, `messages`, always all of them, in that
-  order), each with a title, whether it starts collapsed, and items, and the ranges to highlight (`highlights`). An
+  scopes, innermost first, and the ranges to highlight (`highlights`). A scope has its kind (`cursor`, `lambda`,
+  `function`, `module`), its heading, the location the heading links to, the module's doc comment, whether it starts
+  collapsed, and its sections, each with an id, a title and items. The cursor's sections are always `expression`,
+  `messages` and `call`; a lambda's are `type`, `names` and `uses`, a def's `signature`, `names`, `contexts` and
+  `flow`, and the module's `names` and `contexts`, each left out when it has nothing in it. An
   item has its text, a detail (`parameter`, `use`, `error NYX0101`), a location to link to, the items under it (the
   calls a provider in the flow serves), and the doc comment of what it names, as Markdown with its links written
   out, as hover shows it ([#917](https://github.com/nanyx-lang/nanyx/issues/917)): for an import, its module's.
@@ -158,9 +171,10 @@ no provider, and has no entry in `ContextProviders`; "This call" shows those fro
   VS Code 1.106), revealed by *Nanyx: Show info view* (Ctrl+Shift+Enter, as in Lean). It sends the request when the
   selection or the document changes, debounced, while the view is visible, and drops an answer a later request has
   overtaken. It can pin a position, so the view keeps showing that position while you edit elsewhere; the pinned
-  position does not move with edits above it yet. It shows each doc comment under its item, cut to its first
-  paragraph until clicked, except that of what is at the cursor, which it shows in full. Plain TypeScript and
-  HTML; no framework.
+  position does not move with edits above it yet. It draws each scope as a collapsible section under its heading,
+  with a rule between scopes, and remembers which are open by kind and heading. It shows each doc comment under its
+  item, cut to its first paragraph until clicked, except that of what is at the cursor, which it shows in full. Plain
+  TypeScript and HTML; no framework.
 - **Other editors.** The request is plain LSP, so another client can show the same thing. A text rendering in an
   output buffer would do for Neovim.
 
@@ -178,8 +192,8 @@ server shows a symbol's doc comment on hover and in completion items, read with 
 parses the file the symbol is declared in (the document, a file beside it, or a standard-library module) for its doc
 comments and keeps them by file. It turns each `` [`name`] `` into a link to the name's definition, looked up among
 the names in scope where the comment is, then the top-level names of the comment's own file. A module's doc comment
-is shown on hover over the module's name, in completion of import paths and with an import in the info view's
-top-level list (`Documentation.Reader.ForModule`, [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
+is shown on hover over the module's name, in completion of import paths, under the info view's module heading and
+with an import in its list of the module's definitions and imports (`Documentation.Reader.ForModule`, [#937](https://github.com/nanyx-lang/nanyx/issues/937)).
 
 Still open:
 
@@ -276,6 +290,10 @@ In order. Each item is one PR:
    call" in the info view ([#989](https://github.com/nanyx-lang/nanyx/issues/989)).
 7. **Context flow view** ([#717](https://github.com/nanyx-lang/nanyx/issues/717)). Done: the info view's *Context
    flow* section, and the editor highlights between a provider and its calls.
+8. **Scopes** ([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)). Done: the info view organised by scope,
+   from the cursor out to the module. A `memory` block is part of the scope it is in for now; once
+   `memory { m -> … }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)) lands, it may become a scope of its
+   own, since it is where a scoped context lives ([#1035](https://github.com/nanyx-lang/nanyx/issues/1035)).
 
 # Open questions
 
