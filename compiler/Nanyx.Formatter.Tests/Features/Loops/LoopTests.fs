@@ -13,7 +13,7 @@ let ``Loops, ranges and with are printed as written`` () =
 [<Fact>]
 let ``While loops are printed as written`` () =
     unchanged """memory {
-  def remaining = mut 3
+  mut remaining = 3
 
   while remaining > 0 ->
     println("{remaining}...")

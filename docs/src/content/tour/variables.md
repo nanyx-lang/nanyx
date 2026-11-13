@@ -21,7 +21,7 @@ def x = 10
 x = 20  -- ✗ error NYX0001: cannot reassign a value
 ```
 
-> **Mutation:** In Nanyx mutation is considered an advanced topic and makes use of a context called `$Memory`. Inside a `memory { ... }` block, `def total = mut 0` makes a cell, and `total := total + 1` changes what it holds; a `def` without `mut` still cannot be reassigned. See [Memory](../advanced/memory) for more on how mutation works and how to use it safely.
+> **Mutation:** In Nanyx mutation is considered an advanced topic and makes use of a context called `$Memory`. Inside a `memory { ... }` block, `mut total = 0` makes a cell, and `total := total + 1` changes what it holds; a `def` without `mut` still cannot be reassigned. See [Memory](../advanced/memory) for more on how mutation works and how to use it safely.
 
 # Type annotations
 

@@ -12,34 +12,36 @@ This page is about mutating values. For how Nanyx frees memory, and updates immu
 
 # Local mutation
 
-`mut e` makes a cell holding the value of `e`, and `:=` replaces what it holds. Reading a cell is implicit: using the cell's name anywhere but on the left of `:=` reads what it holds now.
+`mut x = e` declares a cell, `x`, holding the value of `e`, and `:=` replaces what it holds. Reading a cell is implicit: using the cell's name anywhere but on the left of `:=` reads what it holds now.
 
 ```nanyx
 def sum: list(int) -> int = { xs ->
   memory {
-    def total = mut 0
+    mut total = 0
     for xs | x -> total := total + x
     total
   }
 }
 ```
 
-`memory` runs its block and gives back the block's result. A cell holds values of one type, which an annotation on its `def` can write: `def names: list(string) = mut []`. The value given to `:=` must have that type.
+`memory` runs its block and gives back the block's result. A cell holds values of one type, which an annotation on its declaration can write: `mut names: list(string) = []`. The value given to `:=` must have that type.
+
+A `mut` declares one name: it takes no pattern, so `mut (a, b) = pair` is an error. To make cells from the parts of a value, take it apart with `def` first, then declare a cell for each part. `mut` is not an expression either, so a cell is never made without a name.
 
 A cell is not a value of its own. `def y = x` copies what `x` holds into `y`, which a later `x := ...` leaves as it is, and passing `x` to a function passes what it holds. Nothing can hold a cell, only what is in it.
 
 # Mutability requires context
 
-`mut` makes a cell only inside a `memory { ... }` block, where `$Memory` is:
+A cell can be declared only inside a `memory { ... }` block, where `$Memory` is:
 
 ```nanyx
 def main = {
-  def x = mut 0 -- Error NYX0221: `mut` needs the context '$Memory'
+  mut x = 0 -- Error NYX0221: `mut` needs the context '$Memory'
 }
 
 def main = {
   memory {
-    def x = mut 0 -- OK
+    mut x = 0 -- OK
     x := x + 1
     println("{x}") -- prints 1
   }
@@ -55,7 +57,7 @@ A lambda in the block may read and change the block's cells. A `for` loop's body
 ```nanyx
 def tally = { words ->
   memory {
-    def count = mut 0
+    mut count = 0
     def note = { word -> count := count + 1 }
     for words | word -> note(word)
     count
@@ -72,7 +74,7 @@ Because a cell is not a value, what a `memory` block gives back is always plain 
 ```nanyx
 def bad = {
   memory {
-    def count = mut 0
+    mut count = 0
     { count := count + 1 } -- Error NYX0224: the lambda uses `count`, so it cannot leave the block
   }
 }
@@ -83,7 +85,7 @@ To return data, return what the cells hold:
 ```nanyx
 def good = {
   memory {
-    def count = mut 0
+    mut count = 0
     count := count + 1
     count -- OK: an int
   }

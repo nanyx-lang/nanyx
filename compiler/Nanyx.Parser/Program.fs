@@ -1195,6 +1195,25 @@ do
                     let value = Expression.from expr (FunctionCall(RecSyntax.builtIn, None, [ expr ]))
                     declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
 
+    // `mut name = value` declares a cell (see the memory page): a def whose value is a call to the built-in "__mut",
+    // spanning the declaration (see `MutSyntax`). It declares one name, so a pattern after `mut` is an error: a value's
+    // parts are taken apart with `def` first.
+    let mutStatement =
+        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
+        let named =
+            followedBy (satisfy (fun c -> Char.IsLetter c || c = '_' || c = '`'))
+            <|> (getPosition >>= fun position ->
+                    reportFocused position "`mut` declares one cell, by name: take a value apart with `def` first, then declare a cell for each part")
+        getPosition >>= fun lineStart ->
+            (pstring "mut" >>. keywordEnd >>. ws >>. named >>. getPosition .>>. defNameAndType lineStart.Column typedQualifiedIdentifier)
+            >>= fun (start, (name, typeOpt)) ->
+                definableName start name
+                >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsNoNl() >>. defExprParser
+                >>= fun expr ->
+                    let span = spanOf lineStart expr.Span.End
+                    let value = Expression.at span (FunctionCall(MutSyntax.builtIn, None, [ expr ]))
+                    declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
+
     let exprStatement =
         wsNoNl()
         >>. exprWithoutCrossingNewlines
@@ -1203,7 +1222,7 @@ do
     
     statementItemsRef := (attempt destructuringDefStatement <|> (statement |>> List.singleton)) <?> "statement"
     statementRef :=
-        spannedStatement (attempt importStatement <|> attempt typeDefStatement <|> attempt defStatement <|> attempt recStatement <|> attempt useStatement <|> exprStatement)
+        spannedStatement (attempt importStatement <|> attempt typeDefStatement <|> attempt defStatement <|> attempt recStatement <|> attempt mutStatement <|> attempt useStatement <|> exprStatement)
         <?> "statement"
 
 /// Runs `p` and makes what it built a top-level item spanning the text it consumed.

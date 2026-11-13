@@ -10,8 +10,10 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
 # What works
 
 - The prelude declares the nominal context `$Memory` and `memory`, which runs a block with it.
-- `mut e` makes a cell in a `memory` block, `:=` changes one, and a cell's name reads it. Cells are not values: nothing
-  can hold one.
+- `mut x = e` declares a cell in a `memory` block, `:=` changes one, and a cell's name reads it. Cells are not values:
+  nothing can hold one. `mut` declares one name and is not an expression ([#1071](https://github.com/nanyx-lang/nanyx/issues/1071)):
+  the parser reads `mut x = e` as a def whose value is a call to `__mut` (`MutSyntax`), as `rec` does with `__rec`,
+  and `mut` anywhere else, `def x = mut e` included, is a parse error that says to write `mut x = e`.
 - A lambda in the block may use the block's cells, and its type then requires `$Memory`: `{ word -> count := count + 1 }`
   is `[$Memory] string -> ()`. A block whose result is, or holds, a lambda that uses one is an error.
 - A cell no lambda captures is a WebAssembly local; a captured one is a reference-counted box the lambdas share.
@@ -23,8 +25,8 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
 # How it works
 
 - **Type checking** (`compiler/Nanyx.Compiler/MemoryCells.fs`). The block of a call to the prelude's `memory` is
-  checked with a name in the environment no code can write, which is what `mut` looks for. A def whose value is
-  `mut e` is a cell: its symbol is in `InferState.Cells`, and it is not generalised. `:=` checks that its target
+  checked with a name in the environment no code can write, which is what a `mut` declaration looks for. A def whose
+  value is a call to `__mut` is a cell: its symbol is in `InferState.Cells`, and it is not generalised. `:=` checks that its target
   resolves to a cell, and adds an assignability constraint reported at the `:=`, whose mismatches get their own code.
   Each read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so a lambda over
   a cell says so in its type. Requiring `$Memory` doesn't keep it in the block, since every block supplies one, so

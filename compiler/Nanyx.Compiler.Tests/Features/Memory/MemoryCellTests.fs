@@ -16,7 +16,7 @@ let ``A memory block's cells are read by name and changed with :=`` () =
     let types = typesOf """
 def sum: list(int) -> int = { xs ->
   memory {
-    def total = mut 0
+    mut total = 0
     for xs | x -> total := total + x
     total
   }
@@ -24,8 +24,8 @@ def sum: list(int) -> int = { xs ->
 
 def count = { xs ->
   memory {
-    def evens = mut 0
-    def odds = mut 0
+    mut evens = 0
+    mut odds = 0
     for xs | x ->
       if x % 2 == 0 then evens := evens + 1 else odds := odds + 1
     (evens, odds)
@@ -34,7 +34,7 @@ def count = { xs ->
 
 def longest: list(string) -> string = { names ->
   memory {
-    def best = mut ""
+    mut best = ""
     for names | name ->
       match name.length > best.length
         | true -> best := name
@@ -51,7 +51,7 @@ def longest: list(string) -> string = { names ->
 let ``A cell's type is its value's, and an annotation says what it holds`` () =
     let types = typesOf """
 def tags = memory {
-  def found: list(string) = mut []
+  mut found: list(string) = []
   found := found ++ ["a"]
   found
 }
@@ -62,7 +62,7 @@ def tags = memory {
 let ``A lambda in the block may read and change its cells`` () =
     let types = typesOf """
 def counted = memory {
-  def n = mut 0
+  mut n = 0
   def bump = { by -> n := n + by }
   bump(2)
   bump(3)
@@ -82,7 +82,7 @@ let ``A lambda that reads or changes a cell requires $Memory`` () =
     let source = """
 def tally = { words: list(string) ->
   memory {
-    def count = mut 0
+    mut count = 0
     def note = { word: string -> count := count + 1 }
     def current = { count }
     for words | word -> note(word)
@@ -98,7 +98,7 @@ def tally = { words: list(string) ->
 let ``A lambda that calls a local function over a cell requires $Memory too`` () =
     let source = """
 def f = memory {
-  def n = mut 0
+  mut n = 0
   def bump = { n := n + 1 }
   def twice = {
     bump()
@@ -114,7 +114,7 @@ def f = memory {
 let ``A lambda that only uses what a cell holds requires nothing`` () =
     let source = """
 def f = memory {
-  def n = mut 1
+  mut n = 1
   def held = n
   def add = { m: int -> m + held }
   add(n)
@@ -123,16 +123,16 @@ def f = memory {
     Assert.Equal(Some "add: int -> int", hoverOn source "add" 0)
 
 [<Fact>]
-let ``mut outside a memory block is an error that names the context`` () =
+let ``A mut declaration outside a memory block is an error that names the context`` () =
     let source = """
 def f = {
-  def x = mut 0
+  mut x = 0
   x
 }
 """
     let code, text = singleError source
     Assert.Equal(DiagnosticCodes.MutOutsideMemory.Code, code)
-    Assert.Equal("mut 0", text)
+    Assert.Equal("mut x = 0", text)
     let result = Compiler.compile source
     Assert.Contains("$Memory", result.Diagnostics.Head.Message)
 
@@ -157,7 +157,7 @@ def f = memory {
 let ``Assigning a value of another type to a cell is an error`` () =
     let code, text = singleError """
 def f = memory {
-  def x = mut 0
+  mut x = 0
   x := "one"
   x
 }
@@ -169,7 +169,7 @@ def f = memory {
 let ``A lambda that uses a cell cannot be the result of its block`` () =
     let code, text = singleError """
 def f = memory {
-  def x = mut 0
+  mut x = 0
   { x := x + 1 }
 }
 """
@@ -180,7 +180,7 @@ def f = memory {
 let ``Nor can a local function that uses one, or a structure that holds it`` () =
     let named = """
 def f = memory {
-  def x = mut 0
+  mut x = 0
   def next = { x }
   next
 }
@@ -188,7 +188,7 @@ def f = memory {
     Assert.Equal(DiagnosticCodes.CellEscapesMemory.Code, fst (singleError named))
     let held = """
 def f = memory {
-  def x = mut 0
+  mut x = 0
   def next = { x }
   (count = 1, next = next)
 }
@@ -199,7 +199,7 @@ def f = memory {
 let ``A lambda that only uses what a cell holds may leave the block`` () =
     let types = typesOf """
 def adder = memory {
-  def x = mut 1
+  mut x = 1
   x := x + 1
   def held = x
   { n -> n + held }
@@ -211,7 +211,7 @@ def adder = memory {
 let ``Hover on a cell shows the type of what it holds`` () =
     let source = """
 def f = memory {
-  def total = mut 0
+  mut total = 0
   total := total + 1
   total
 }

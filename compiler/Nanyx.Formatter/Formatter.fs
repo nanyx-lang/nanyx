@@ -374,7 +374,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         | FunctionCall("__with", _, [ _; _ ]) -> true
         | ForSyntax.Call _
         | WhileSyntax.Call _
-        | MutSyntax.Call _
         | AssignSyntax.Call _ -> true
         | _ -> false
 
@@ -418,7 +417,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         | WhileSyntax.Call(condition, body) -> cat [ text "while "; expr { full with Tail = false } condition; armBody true body ]
         | MapSyntax.Call entries -> mapDoc e.Span entries
         | FunctionCall(n, _, [ Kind (RecordExpr fields) ]) when n = SpreadSyntax.builtIn -> recordFieldsDoc true e.Span.Start e.Span.End fields
-        | MutSyntax.Call value -> cat [ text "mut "; expr { full with Tail = position.Tail } value ]
         | AssignSyntax.Call(target, value) -> cat [ expr operandPosition target; text " := "; expr { full with Tail = position.Tail } value ]
         | FunctionCall(n, nameSpan, args) ->
             let written = Names.written n
@@ -997,6 +995,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             match value.Kind with
             | FunctionCall(_, _, [ inner ]) -> defDoc false "rec" n t inner
             | _ -> defDoc false "def" n t value
+        | DefStatement(false, n, t, Kind (MutSyntax.Call inner)) -> defDoc false "mut" n t inner
         | DefStatement(isExport, n, t, value) -> defDoc isExport "def" n t value
         | TypeDefStatement(n, modifiers, parameters, body) -> typeDefDoc n modifiers parameters body
         | ImportStatement items -> importDoc s.Span.Start s.Span.End items

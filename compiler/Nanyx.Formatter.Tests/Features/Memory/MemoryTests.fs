@@ -17,7 +17,7 @@ let ``A memory block with mut and := keeps its layout`` () =
     let source = """
 def sum: list(int) -> int = { xs ->
   memory {
-    def total = mut 0
+    mut total = 0
     for xs | x -> total := total + x
     total
   }
@@ -29,14 +29,14 @@ def sum: list(int) -> int = { xs ->
 let ``Spacing around mut and := is made regular`` () =
     let source = """
 def f = {
-  def a = mut   x +  1
+  mut   a:int =   x +  1
   a:=a  *  2
   a
 }
 """
     let expected = """
 def f = {
-  def a = mut x + 1
+  mut a: int = x + 1
   a := a * 2
   a
 }
@@ -47,8 +47,7 @@ def f = {
 let ``An assignment or mut before the last argument is bracketed`` () =
     let source = """
 def f = {
-  g((a := 1), mut 2)
-  g((mut 1), a := 2)
+  g((a := 1), 2)
 }
 """
     Assert.Equal(text source, format source)

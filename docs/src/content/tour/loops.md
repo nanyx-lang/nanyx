@@ -87,7 +87,7 @@ for dict | _, value ->
 
 ```nanyx
 memory {
-  def remaining = mut 3
+  mut remaining = 3
 
   while remaining > 0 ->
     println("{remaining}...")

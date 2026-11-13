@@ -456,7 +456,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 log("x")
               }, n)
               memory {
-                def sum = mut 0
+                mut sum = 0
                 sum := sum + n
                 sum
               }

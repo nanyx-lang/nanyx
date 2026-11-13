@@ -91,7 +91,7 @@ import nanyx/console
 
 def countdown = {
   memory {
-    def remaining = mut 3
+    mut remaining = 3
 
     while remaining > 0 ->
       println("{remaining}...")
@@ -101,9 +101,9 @@ def countdown = {
 
 def pairs = { n ->
   memory {
-    def i = mut 0
+    mut i = 0
     while i < n ->
-      def j = mut 0
+      mut j = 0
       while j < i ->
         println("{i},{j}")
         j := j + 1
@@ -113,7 +113,7 @@ def pairs = { n ->
 
 def drain = {
   memory {
-    def items = mut ["a", "b", "c"]
+    mut items = ["a", "b", "c"]
     while list.length(items) > 0 ->
       match items
         | [first, ...rest] ->

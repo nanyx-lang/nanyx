@@ -6,14 +6,13 @@ open FParsec
 // After the libraries, so that the parser's names shadow theirs (`identifier`, `Attribute`) as they did in one file.
 open Parser.Program
 
-/// `mut e`: a cell holding the value of `e`, a call to the built-in "__mut" (see `MutSyntax`). The value is on the same
-/// line, and takes the rest of the expression, as `return` does: `mut x + 1` holds `x + 1`.
-let mutExpr =
+/// `mut` where an expression is expected, as in `def x = mut 0`: an error. A cell is declared on a line of its own,
+/// `mut x = 0` (see `MutSyntax`).
+let mutExpr: Parser<Expression, ParseState> =
     let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
-    spanned (
-        attempt (pstring "mut" .>> keywordEnd) >>. wsInline >>. expression
-        |>> fun value -> FunctionCall(MutSyntax.builtIn, None, [ value ]))
-    <?> "mut expression"
+    attempt (getPosition .>> pstring "mut" .>> keywordEnd)
+    >>= fun position ->
+        reportFocused position "`mut` is not an expression: declare a cell on a line of its own, as `mut count = 0` in place of `def count = mut 0`"
 
 /// What `valueParser` parses, and then `:= value` (`rhs`) if it is assigned to: a call to the built-in "__assign" with
 /// the two, spanning both, whose name span is the `:=` (see `AssignSyntax`). `:=` binds looser than every operator, pipe

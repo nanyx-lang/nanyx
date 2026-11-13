@@ -60,8 +60,8 @@ export def createProtocol: [TodoStore & Clock] () -> TodoProtocol = {
 -- cells never leave the `memory` scope; only plain values come out.
 export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
   memory {
-    def todos: map(TodoId, Todo) = mut []
-    def nextId = mut 1
+    mut todos: map(TodoId, Todo) = []
+    mut nextId = 1
 
     use TodoStore(
       findAll = { todos \map.values }

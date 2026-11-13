@@ -1,4 +1,4 @@
-/// Local mutable cells (see the memory page of the docs): `mut e` makes one, `x := e` replaces what it holds, and its
+/// Local mutable cells (see the memory page of the docs): `mut x = e` declares one, `x := e` replaces what it holds, and its
 /// name anywhere else reads it. A cell can only be made in a `memory { ... }` block, the prelude's `memory` with a
 /// block, which is where `$Memory` is. A lambda that uses a cell of the block around it needs `$Memory` too, so it
 /// must not outlive the block.
@@ -13,7 +13,7 @@ let context = "$Memory"
 /// The function that provides `$Memory` for the block it is given, as the prelude declares it.
 let memoryFunction = "memory"
 
-/// The name the environment binds while a `memory` block is checked: what tells `mut` that `$Memory` is there. No code
+/// The name the environment binds while a `memory` block is checked: what tells a `mut` declaration that `$Memory` is there. No code
 /// can write it.
 let private scopeKey = "@memory"
 
@@ -47,7 +47,7 @@ let declareCell (symbol: SymbolId option) (state: InferState) =
     | Some symbol -> { state with Cells = state.Cells.Add symbol }
     | None -> state
 
-/// `mut value`, at `expr`: a cell holding `value`, of its type. It needs `$Memory`.
+/// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `$Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
     if env.ContainsKey scopeKey then
         infer env state value |> Result.map (fun (typedValue, next) -> mkTypedExpr expr typedValue.Type None None None, next)
@@ -67,8 +67,8 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
                 mkTypedExpr expr (TyPrimitive "unit") None None None,
                 { assigned with CellAssignments = assigned.CellAssignments.Add expr.Span }))
     | IdentifierExpr name when env.ContainsKey name ->
-        Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"'{name}' is not a cell, so `:=` cannot change it: only a def whose value is `mut ...` makes one" ]
-    | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span "Only a cell can be assigned with `:=`: a name a def gave the value `mut ...`" ]
+        Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"'{name}' is not a cell, so `:=` cannot change it: only a name declared with `mut` is one" ]
+    | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span "Only a cell can be assigned with `:=`: a name declared with `mut name = value`" ]
 
 /// The code of a type mismatch found at `span`: an assignment's own when it is one of the module's `:=`s.
 let mismatchCode (state: InferState) (span: SourceSpan) =
