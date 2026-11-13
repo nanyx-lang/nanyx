@@ -121,6 +121,20 @@ src/main.nyx
     Assert.Equal(expected.ReplaceLineEndings "\n", shape)
 
 [<Fact>]
+let ``Check --timings - to a pipe, writes only the finished tree, with no live view`` () =
+    let outcome, _ =
+        nanyxOnPackage
+            [ "main.nyx", "module main\n\nimport util\n\n@entry\ndef main = {\n  println(\"{one}\")\n}\n"
+              "util.nyx", "module util\n\nexport def one = 1\n" ]
+            [ "check"; "--timings"; "{package}" ]
+    assertSucceeded outcome
+    // No escape character: a culture-aware substring search would ignore it, so look for the character itself.
+    Assert.False(outcome.StandardError.Contains '\u001b', outcome.StandardError)
+    // Every line is one of the tree's, as it is written at the end: no stopwatch, and no check's time so far.
+    for line in (normalizeOutput outcome.StandardError).TrimEnd('\n').Split('\n') do
+        Assert.Matches(@"^[│├└─ ]*\S+ \((\d+\.\d\ds of \d+\.\d\ds|cached)\)$", line)
+
+[<Fact>]
 let ``Check - a package with an error fails, even one that a debug build would defer`` () =
     let outcome, wrote = nanyxOnPackage [ "main.nyx", "module main\n\n@entry\ndef main = { missing() }\n" ] [ "check"; "{package}" ]
     Assert.Equal(1, outcome.ExitCode)

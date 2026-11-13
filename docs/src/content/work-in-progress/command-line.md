@@ -76,7 +76,8 @@ checked once per process, so only the first compile that needs it reports its ch
 ## Timings
 
 `run --timings`, `build --timings` and `check --timings` also record how long each module's check took, and write
-them to stderr as a tree after the stopwatch's final line, whether or not stderr is a terminal:
+them to stderr as a tree after the stopwatch's final line, whether or not stderr is a terminal (on a terminal, the tree
+is also shown while the compile runs: see [the live view](#the-live-view)):
 
 ```
 src/greetings.nyx (0.05s of 1.28s)
@@ -99,6 +100,30 @@ source file, in the order it compiles them. A module is checked once per build, 
 per process, so where one is needed again it is `name (cached)`, with nothing under it: the compiler tells the
 listener `ModuleReused` there. Emitting the program to WebAssembly happens per file after checking, not per module, so
 it is one line of its own after the tree.
+
+### The live view
+
+When stderr is a terminal, `--timings` also replaces the stopwatch's line with the tree as it grows, redrawn in place
+on the same tick:
+
+```
+src/catalogue.nyx (0.09s of 1.24s)
+src/logging.nyx (0.1s…)
+├── nanyx/prelude (cached)
+└── nanyx/text (0.1s…)
+    └── nanyx/prelude (cached)
+```
+
+A check under way shows how long it has taken so far, `(0.1s…)`, and takes its final form, `(self of total)`, when it
+finishes. A finished check is one line, without what it needed, so the live view is the chain of checks under way,
+each with its finished imports, and stays short however many modules there are. When it is taller than the terminal,
+the lines nearest the check under way are kept and the rest are one line at the top, `… 12 more`. When the compile
+ends, the live view is erased and the `Compiled …` line and the full tree are written as above.
+
+The frame is built by `ModuleCheck.live` from `CompileTimings.SoFar`, the checks finished and under way at a moment,
+and `CompileProgress` draws it with ANSI escapes (cursor up, clear line), cutting each line to the terminal's width so
+none wraps. On Windows it turns on virtual terminal processing for the console first; where that can't be done, the
+stopwatch stays the single line it is without `--timings`. A pipe or a log sees only the finished tree, as before.
 
 # Packages
 

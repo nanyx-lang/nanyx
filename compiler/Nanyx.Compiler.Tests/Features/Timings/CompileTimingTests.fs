@@ -187,3 +187,79 @@ let ``The timings tree shows each module's own and total time, with what it need
 nanyx/prelude (0.80s of 1.10s)
 └── nanyx/list (0.30s of 0.30s)"""
     Assert.Equal(expected.ReplaceLineEndings "\n", tree)
+let private runningCheck name started imports = { Name = name; Started = seconds started; Imports = imports }
+
+[<Fact>]
+let ``The live view shows each check under way with its time so far, and its finished imports on one line each`` () =
+    let frame =
+        ModuleCheck.live
+            (fun name -> name.Replace("/work/", ""))
+            { Finished = []
+              Running =
+                [ runningCheck "/work/src/main.nyx" 0.0 [ Checked(timing "/work/src/dependencyA.nyx" 0.25 0.05, [ Checked(timing "/work/src/dependencyC.nyx" 0.2 0.2, []) ]) ]
+                  runningCheck "/work/src/dependencyB.nyx" 0.3 []
+                  runningCheck "nanyx/prelude" 0.4 [] ]
+              Now = seconds 1.2 }
+            24
+    let expected =
+        """src/main.nyx (1.2s…)
+├── src/dependencyA.nyx (0.05s of 0.25s)
+└── src/dependencyB.nyx (0.9s…)
+    └── nanyx/prelude (0.8s…)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", String.concat "\n" frame)
+
+[<Fact>]
+let ``The live view's times tick on as the checks under way go on`` () =
+    let soFar now =
+        { Finished = []; Running = [ runningCheck "main" 0.5 []; runningCheck "util" 1.0 [] ]; Now = seconds now }
+    Assert.Equal<string list>([ "main (1.0s…)"; "└── util (0.5s…)" ], ModuleCheck.live id (soFar 1.5) 24)
+    Assert.Equal<string list>([ "main (4.2s…)"; "└── util (3.7s…)" ], ModuleCheck.live id (soFar 4.7) 24)
+
+[<Fact>]
+let ``The live view draws a finished check, and a cached module, on one line under the check under way`` () =
+    let frame =
+        ModuleCheck.live
+            id
+            { Finished = [ Checked(timing "a" 2.0 1.0, [ Checked(timing "c" 1.0 1.0, []) ]) ]
+              Running = [ runningCheck "main" 0.0 [ Checked(timing "b" 1.0 0.5, [ Reused "c" ]); Reused "a" ] ]
+              Now = seconds 3.0 }
+            24
+    let expected =
+        """a (1.00s of 2.00s)
+main (3.0s…)
+├── b (0.50s of 1.00s)
+└── a (cached)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", String.concat "\n" frame)
+
+[<Fact>]
+let ``The live view keeps the lines nearest the check under way when it is taller than the terminal`` () =
+    let frame =
+        ModuleCheck.live
+            id
+            { Finished = [ for name in [ "a"; "b"; "c"; "d" ] -> Checked(timing name 1.0 1.0, []) ]
+              Running = [ runningCheck "main" 0.0 [ Reused "a"; Reused "b" ]; runningCheck "util" 1.0 [] ]
+              Now = seconds 2.0 }
+            4
+    let expected =
+        """… 5 more
+├── a (cached)
+├── b (cached)
+└── util (1.0s…)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", String.concat "\n" frame)
+
+[<Fact>]
+let ``Timings so far are the finished checks and the chain of checks under way, outermost first`` () =
+    let timings = CompileTimings()
+    let listener = timings :> CompileListener
+    listener.ModuleStarted "done"
+    listener.ModuleFinished("done", seconds 1.0)
+    listener.ModuleStarted "main"
+    listener.ModuleStarted "a"
+    listener.ModuleFinished("a", seconds 1.0)
+    listener.ModuleReused "done"
+    listener.ModuleStarted "b"
+    let soFar = timings.SoFar
+    Assert.Equal<ModuleCheck list>([ Checked(timing "done" 1.0 1.0, []) ], soFar.Finished)
+    Assert.Equal<string list>([ "main"; "b" ], soFar.Running |> List.map _.Name)
+    Assert.Equal<ModuleCheck list>([ Checked(timing "a" 1.0 1.0, []); Reused "done" ], soFar.Running.Head.Imports)
+    Assert.True(soFar.Running |> List.forall (fun check -> check.Started <= soFar.Now))
