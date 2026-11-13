@@ -25,9 +25,8 @@ module internal AttachedOperators =
         | Structural
 
     let private kindOf (state: InferState) (typeName: string) =
-        let lastSegment = typeName.Substring(typeName.LastIndexOf '.' + 1)
         match state.TypeDefs |> Map.tryFind typeName with
-        | _ when lastSegment.StartsWith "$" -> Some Nominal
+        | _ when Names.isNominalTypeName typeName -> Some Nominal
         | Some { Underlying = TyNominal _ } -> Some Nominal
         | Some info when info.IsContext -> None
         | Some _ -> Some Structural
