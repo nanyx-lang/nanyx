@@ -44,7 +44,7 @@ const DEBOUNCE_MILLISECONDS = 150;
  * The info view: a view in the secondary side bar that shows what the compiler knows at the cursor, as Lean's infoview
  * does. It is the webview view `nanyx.infoView`, in the `nanyx` view container that `package.json` contributes to the
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
- * the document does, once it has stayed put for a moment. Every item that has a place links to it, and shows the doc
+ * the document does, once it has stayed put for a moment, and again when the server has compiled the document. Every item that has a place links to it, and shows the doc
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
  * while you edit elsewhere. While it is visible and not pinned, it highlights in the editor what the server says to: on
  * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts.
@@ -81,6 +81,14 @@ class InfoView {
         vscode.window.onDidChangeActiveTextEditor(() => this.schedule(), undefined, this.listeners);
         vscode.workspace.onDidChangeTextDocument((event) => {
             if (event.document.languageId === "nanyx") {
+                this.schedule();
+            }
+        }, undefined, this.listeners);
+        // The server publishes a document's diagnostics when it has compiled the document, which after an edit is well after
+        // the request the edit scheduled: that one was answered from the compile before. Ask again then.
+        vscode.languages.onDidChangeDiagnostics((event) => {
+            const shown = (this.pinned ?? this.cursor())?.uri.toString();
+            if (shown !== undefined && event.uris.some((uri) => uri.toString() === shown)) {
                 this.schedule();
             }
         }, undefined, this.listeners);
