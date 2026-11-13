@@ -81,6 +81,36 @@ let ``Run - workflow keywords in the branches of an if or match end or continue 
         "big half 6\nsome(done with half)\nsome(done with half)\nodd\nkept 9\nsome(done with same)\nunknown\n")
 
 [<Fact>]
+let ``Run - an if or match with a keyword in a branch, nested in a statement, ends or continues the whole block`` () =
+    // The value of a destructuring def, and an operand of `+`, are not statements of their own.
+    let source = """
+import nanyx/console
+
+def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+
+def pair: int -> #some(int) = { n -> proc {
+  def (a, b) = if n < 0 then return 0 else (n, n * 2)
+  return a + b
+} }
+
+def plusHalf: int -> #some(int) | #odd = { n -> proc {
+  def m = 1 + (match n
+    | 0 -> return 100
+    | _ -> try halve(n))
+  return m
+} }
+
+def show: #some(int) | #odd -> string = {
+  | #some(v) -> "some({v})"
+  | #odd -> "odd"
+}
+
+println("{pair(3)} {pair(-1)}")
+println("{show(plusHalf(4))} {show(plusHalf(0))} {show(plusHalf(3))}")
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(9) #some(0)\nsome(3) some(100) odd\n"
+
+[<Fact>]
 let ``Run - a proc block continues past each #some and stops at the first #error`` () =
     // `run(7)` fails at its first `try`, so nothing after it runs; `run(3)` fails at its second. `sum` binds two
     // `try`s nested in its `return`.
