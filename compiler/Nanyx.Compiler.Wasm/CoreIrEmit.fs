@@ -892,10 +892,11 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
           $"(result {CoreIrLayout.valueType func.Result})"
           localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) ]
         |> join " "
+    let definition = $"  (func ${func.Name} {header}\n    {bodyCode}\n  )"
     let text =
         match exportName with
-        | Some exported -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )\n  (export \"{exported}\" (func ${func.Name}))"
-        | None -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )"
+        | Some exported -> definition + "\n" + $"""  (export "{exported}" (func ${func.Name}))"""
+        | None -> definition
     { Text = text; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
 
 /// The start function, `func` (see `CoreIrLower.StartFunction`): each top-level expression in turn, its value
