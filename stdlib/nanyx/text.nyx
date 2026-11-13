@@ -32,6 +32,21 @@ export def string.substring: (string, start: int, length: int) -> string = { s, 
   __nanyx_string_slice(s, start, length)
 }
 
+--| The first `n` bytes of `s`, or all of `s` when it is shorter. A negative `n` takes none. Bytes are
+  counted as `substring` and `indexOf` count them, so `s \take(i)` cuts at an index `indexOf` gave.
+export def string.take: string, int -> string = { s, n ->
+  if n <= 0 then "" else string.substring(s, start = 0, length = n)
+}
+
+--| All but the first `n` bytes of `s`, or `""` when it is shorter. A negative `n` skips none.
+export def string.skip: string, int -> string = { s, n ->
+  if n <= 0
+    then s
+    else if n >= string.length(s)
+      then ""
+      else string.substring(s, start = n, length = string.length(s) - n)
+}
+
 --| Whether `s` begins with `prefix`.
 export def string.startsWith: string, string -> bool = { s, prefix ->
   if string.length(prefix) > string.length(s)
