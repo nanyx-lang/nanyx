@@ -108,6 +108,19 @@ While the view is visible and not pinned, it also highlights in the editor how c
 `use`, or on a context in a definition's signature, the calls it serves are highlighted; with the cursor on a call,
 the `use` or signature context it draws on is.
 
+It can also join them with lines. A line runs down the left margin from the first highlighted line to the last, and
+from it a line runs across to each highlight. A highlight with only spaces before it is met halfway up its line;
+one further along a line, such as a context in a signature, is underlined, so the line does not strike through the
+text before it.
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `nanyx.infoView.contextLines` | `full` | `full` (**Full context lines**) draws the line down and a line across to each highlight. `stubs` (**Context line stubs**) draws the line down with a short tick at each highlighted line. `highlight-only` (**Highlight only**) draws no lines. |
+
+The lines are drawn in the `nanyx.contextLine` theme colour, which you can change under
+`workbench.colorCustomizations`. VS Code has no API for drawing in the editor, so the extension draws them with
+decorations and CSS, as extensions that draw indent guides do. They do not follow a wrapped or folded line.
+
 Under each item that has one comes its [doc comment](../getting-started/basics#doc-comments), as hover shows it: a name's own, an
 import's module's, a context's own, or, for a context a `use` gives, that of the definition the `use` names if it has one. A doc comment of
 more than one paragraph shows its first; click it to show the rest, and again to cut it back. Its links go where the

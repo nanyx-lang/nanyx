@@ -95,7 +95,9 @@ signature's context, the value a `use` loads, the def's name for an inferred one
 The same data decorates the editor: the response carries `highlights`, the ranges of the document to highlight
 (`ContextFlow.highlightsAt`). On a `use`, or a context of the def's signature, they are that provider and the calls it
 serves; on a call, the call and the providers of its contexts. The extension draws them with the editor's word
-highlight colours while the view is visible and not pinned. They come with the info view's request, not
+highlight colours while the view is visible and not pinned, and, as `nanyx.infoView.contextLines` says, joins them
+with lines down the left margin and across to each one (`ContextLines` in `extension/src/contextLines.ts`, drawn as
+absolutely placed `before`/`after` pieces of empty decorations). They come with the info view's request, not
 `textDocument/documentHighlight`: a server that answers that request replaces VS Code's own highlighting of the word
 under the cursor everywhere else.
 

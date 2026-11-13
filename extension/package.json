@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -169,9 +169,41 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show an inlay hint with the inferred type of each variable a pattern binds. Turning it off passes `--no-pattern-variable-type-hints` to `nanyx lsp`, which needs a compiler that has it."
+        },
+        "nanyx.infoView.contextLines": {
+          "type": "string",
+          "enum": [
+            "highlight-only",
+            "stubs",
+            "full"
+          ],
+          "enumItemLabels": [
+            "Highlight only",
+            "Context line stubs",
+            "Full context lines"
+          ],
+          "enumDescriptions": [
+            "Highlight the provider and its calls, and draw no lines.",
+            "Also draw a line down the left margin from the provider to its last call, with a short tick at each.",
+            "Also draw a line down the left margin, and from it a line across to the provider and to each call."
+          ],
+          "default": "full",
+          "markdownDescription": "How the editor shows the flow of contexts that the info view highlights, with the cursor on a `use`, a context in a signature, or a call. The lines are drawn in the `nanyx.contextLine` colour, which `workbench.colorCustomizations` can change."
         }
       }
-    }
+    },
+    "colors": [
+      {
+        "id": "nanyx.contextLine",
+        "description": "The lines the info view draws in the editor between a provider of contexts and the calls it serves.",
+        "defaults": {
+          "dark": "#4FC1FFA0",
+          "light": "#0070C1A0",
+          "highContrast": "#4FC1FF",
+          "highContrastLight": "#0070C1"
+        }
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./",
