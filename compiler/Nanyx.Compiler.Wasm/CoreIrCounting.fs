@@ -176,8 +176,6 @@ type private Counter(ownership: Ownership, func: Function) =
                         vars.[var.Id] <- var
             | _ -> ()
 
-    let mk (kind: ExprKind) (ty: IrType) = { Kind = kind; Type = ty }
-
     let sortedVars (ids: Set<int>) = ids |> Set.toList |> List.map (fun id -> vars.[id])
 
     /// The variables `e` uses that it does not bind itself, with each temporary standing for its value. A chain is
@@ -257,7 +255,7 @@ type private Counter(ownership: Ownership, func: Function) =
         while last.IsNone do
             let dead = Set.difference (Set.difference owned (this.Free current)) after
             let ownedHere = Set.difference owned dead
-            let dropDead (body: Expr) = if dead.IsEmpty then body else mk (Drop(sortedVars dead, body)) body.Type
+            let dropDead (body: Expr) = if dead.IsEmpty then body else Expr.make (Drop(sortedVars dead, body)) body.Type
             let ty = current.Type
             match current.Kind with
             | Let(var, value, body) when var.Kind = Temp ->
@@ -267,20 +265,20 @@ type private Counter(ownership: Ownership, func: Function) =
                         match counted.TryGetValue var.Id with
                         | true, value -> value
                         | _ -> internalError "a temporary in the core IR is never used"
-                    dropDead (mk (Let(var, value, body)) ty))
+                    dropDead (Expr.make (Let(var, value, body)) ty))
                 owned <- ownedHere
                 current <- body
             | Let(var, value, body) ->
                 let afterValue = Set.union (this.Free body) after
                 let value = this.Count ownedHere afterValue value
-                rebuilds.Add(fun body -> dropDead (mk (Let(var, value, body)) ty))
+                rebuilds.Add(fun body -> dropDead (Expr.make (Let(var, value, body)) ty))
                 let kept = Set.intersect ownedHere afterValue
                 owned <- if isHeapType var.Type then kept.Add var.Id else kept
                 current <- body
             | Do(value, rest) ->
                 let afterValue = Set.union (this.Free rest) after
                 let value = this.Count ownedHere afterValue value
-                rebuilds.Add(fun rest -> dropDead (mk (Do(value, rest)) ty))
+                rebuilds.Add(fun rest -> dropDead (Expr.make (Do(value, rest)) ty))
                 owned <- Set.intersect ownedHere afterValue
                 current <- rest
             | _ -> last <- Some (dropDead (this.Core ownedHere after current))
@@ -292,7 +290,7 @@ type private Counter(ownership: Ownership, func: Function) =
             let afterCond = Set.unionMany [ this.Free ifTrue; this.Free ifFalse; after ]
             this.Operands owned afterCond [ cond, Borrowed ] |> ignore
             let owned = Set.intersect owned afterCond
-            mk (If(cond, this.Count owned after ifTrue, this.Count owned after ifFalse)) e.Type
+            Expr.make (If(cond, this.Count owned after ifTrue, this.Count owned after ifFalse)) e.Type
         | Match(scrutinees, arms) ->
             // An arm takes a reference to each name its patterns bind that it uses: they are fields of the scrutinee,
             // which the arm then drops if it does not use it either.
@@ -303,15 +301,15 @@ type private Counter(ownership: Ownership, func: Function) =
                 let owned = Set.union owned (used |> List.map _.Id |> Set.ofList)
                 let body = this.Count owned after arm.Body
                 { Patterns = patterns
-                  Body = if used.IsEmpty then body else mk (Dup(used, body)) body.Type }
-            mk (Match(scrutinees, List.map countArm arms)) e.Type
+                  Body = if used.IsEmpty then body else Expr.make (Dup(used, body)) body.Type }
+            Expr.make (Match(scrutinees, List.map countArm arms)) e.Type
         | ForEach loop ->
             // The body only borrows what it uses from outside, which lives on until the loop is done.
             let loopVars = ForLoop.locals loop |> List.map _.Id |> Set.ofList
             let fromOutside = Set.difference (this.Free loop.Body) loopVars |> sortedVars |> List.map (fun var -> AVar var, Borrowed)
             let dups, drops = this.Operands owned after (operands ownership e @ fromOutside)
             let body = this.Count Set.empty Set.empty loop.Body
-            this.Wrap dups drops (mk (ForEach { loop with Body = body }) e.Type)
+            this.Wrap dups drops (Expr.make (ForEach { loop with Body = body }) e.Type)
         | While loop ->
             // The condition and the body run again each time round, so they only borrow what they use, which lives on
             // until the loop is done.
@@ -319,7 +317,7 @@ type private Counter(ownership: Ownership, func: Function) =
             let dups, drops = this.Operands owned after fromOutside
             let condition = this.Count Set.empty Set.empty loop.Condition
             let body = this.Count Set.empty Set.empty loop.Body
-            this.Wrap dups drops (mk (While { loop with Condition = condition; Body = body }) e.Type)
+            this.Wrap dups drops (Expr.make (While { loop with Condition = condition; Body = body }) e.Type)
         | Dup _
         | Drop _
         | DropAfter _
@@ -373,8 +371,8 @@ type private Counter(ownership: Ownership, func: Function) =
         List.ofSeq dups, List.ofSeq drops
 
     member private _.Wrap (dups: Var list) (drops: Var list) (e: Expr) : Expr =
-        let dropped = if drops.IsEmpty then e else mk (DropAfter(e, drops)) e.Type
-        if dups.IsEmpty then dropped else mk (Dup(dups, dropped)) e.Type
+        let dropped = if drops.IsEmpty then e else Expr.make (DropAfter(e, drops)) e.Type
+        if dups.IsEmpty then dropped else Expr.make (Dup(dups, dropped)) e.Type
 
 /// `functions` with reference counting inserted, by the parameters `ownership` says each owns.
 let insert (ownership: Ownership) (functions: Function list) : Function list =

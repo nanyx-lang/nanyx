@@ -207,8 +207,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     let callee (name: string) (instanceTy: Ty) = calleeKnowing name instanceTy []
 
-    let mk kind ty : Expr = { Kind = kind; Type = ty }
-
     /// A scope with nothing in it, as at the top of the start function.
     let emptyScope =
         { Vars = Map.empty
@@ -234,7 +232,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let bindTemp (value: Expr) (k: Atom -> Expr) : Expr =
         let temp = newTemp value.Type
         let body = k (AVar temp)
-        mk (Let(temp, value, body)) body.Type
+        Expr.make (Let(temp, value, body)) body.Type
 
     /// Where the expression being lowered is written, for reporting what cannot be lowered.
     member _.CurrentSpan = current
@@ -248,30 +246,30 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             current <- around
             k value
         match expr.Kind with
-        | UnitExpr -> k (mk (Atom AUnit) IrUnit)
-        | LiteralExpr(IntLit value) -> k (mk (Atom(intAtom value (tyOf expr))) (tyOf expr))
-        | LiteralExpr(BoolLit value) -> k (mk (Atom(ABool value)) IrBool)
-        | LiteralExpr(StringLit value) -> k (mk (Atom(AString value)) IrString)
-        | LiteralExpr(FloatLit value) -> k (mk (BoxFloat value) (tyOf expr))
+        | UnitExpr -> k (Expr.make (Atom AUnit) IrUnit)
+        | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
+        | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
+        | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
+        | LiteralExpr(FloatLit value) -> k (Expr.make (BoxFloat value) (tyOf expr))
         | IdentifierExpr name ->
             match scope.Vars |> Map.tryFind name with
             | Some var ->
                 let var = this.LocalAt scope var (input.ExprTypes |> Map.tryFind expr.Id)
-                k (mk (Atom(AVar var)) var.Type)
+                k (Expr.make (Atom(AVar var)) var.Type)
             // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
             | None when scope.Members.ContainsKey (NamedMember name) ->
                 let memberVar = scope.Members.[NamedMember name]
-                k (mk (Atom(AVar memberVar)) memberVar.Type)
+                k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
             | None when definitions.ContainsKey name && not (isFunction name) ->
                 // A top-level value is compiled to a function of no parameters: evaluate it.
                 let ty = tyOf expr
-                k (mk (Call(callee name input.ExprTypes.[expr.Id], [])) ty)
+                k (Expr.make (Call(callee name input.ExprTypes.[expr.Id], [])) ty)
             | None when definitions.ContainsKey name -> cannot $"the function '{name}' used as a value"
             | None -> cannot $"a reference to '{name}'"
-        | TagExpr(name, None) -> k (mk (Atom(ATag name)) (tyOf expr))
+        | TagExpr(name, None) -> k (Expr.make (Atom(ATag name)) (tyOf expr))
         | TagExpr(name, Some payload) ->
             let ty = tyOf expr
-            this.Atoms scope [ payload ] (fun atoms -> k (mk (MakeTag(name, atoms.Head)) ty))
+            this.Atoms scope [ payload ] (fun atoms -> k (Expr.make (MakeTag(name, atoms.Head)) ty))
         | BinaryOp("++", _, Kind (ListExpr items), rest) when not items.IsEmpty ->
             // `[a, b] ++ rest`, which is what `[a, b, ...rest]` is: a cell for each element, put in front of `rest`
             // rather than copied from a list of their own. The elements are evaluated first, then `rest`, as `++`
@@ -279,7 +277,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let ty = tyOf expr
             this.Atoms scope (items @ [ rest ]) (fun atoms ->
                 let tail = List.last atoms
-                let cons head tail = mk (CallRuntime(Helpers.listCons, [ head; tail ], true)) ty
+                let cons head tail = Expr.make (CallRuntime(Helpers.listCons, [ head; tail ], true)) ty
                 let rec build (heads: Atom list) (k: Expr -> Expr) =
                     match heads with
                     | [ head ] -> k (cons head tail)
@@ -294,7 +292,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrList _ -> Helpers.listConcat
                 | other -> cannot $"the operator ++ on a value of type {IrType.show other}"
             let ty = tyOf expr
-            this.Atoms scope [ left; right ] (fun atoms -> k (mk (CallRuntime(helper, atoms, true)) ty))
+            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (CallRuntime(helper, atoms, true)) ty))
         | BinaryOp(("==" | "!=") as op, _, left, right) when (match tyOf left with
                                                               | IrString | IrTags _ | IrRecord _ | IrList _ | IrRecursive _ -> true
                                                               | _ -> false) ->
@@ -305,9 +303,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrString -> Helpers.stringEquals
                 | _ -> Helpers.valueEquals
             this.Atoms scope [ left; right ] (fun atoms ->
-                let equal = mk (CallRuntime(helper, atoms, true)) IrBool
+                let equal = Expr.make (CallRuntime(helper, atoms, true)) IrBool
                 if op = "==" then k equal
-                else bindTemp equal (fun result -> k (mk (Prim(Not, [ result ])) IrBool)))
+                else bindTemp equal (fun result -> k (Expr.make (Prim(Not, [ result ])) IrBool)))
         | BinaryOp(("<" | "<=" | ">" | ">=") as op, _, left, right) when (match tyOf left with
                                                                          | IrString | IrList _ -> true
                                                                          | IrRecord fields -> IrType.isTuple fields
@@ -318,14 +316,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // function orders a `list(a)`, see `CoreIrOrdering`.)
             if IrType.holdsUnordered (tyOf left) then cannot $"the operator {op} on a value of type {IrType.show (tyOf left)}"
             this.Atoms scope [ left; right ] (fun atoms ->
-                let order = mk (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
-                bindTemp order (fun result -> k (mk (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
+                let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
+                bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
         | BinaryOp(op, _, left, right) when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
             // Floats are boxed: the operands are unboxed, and an arithmetic result boxed.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
             if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator {op} on floats"
             let ty = tyOf expr
-            this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(FloatBinary op, atoms)) ty))
+            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(FloatBinary op, atoms)) ty))
         | BinaryOp(op, _, left, right) ->
             if (wasmBinaryInstruction op).IsNone then cannot $"the operator {op}"
             for operand in [ left; right ] do
@@ -333,18 +331,18 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrInt | IrSized _ | IrBool | IrUnit | IrError -> ()
                 | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
             let ty = tyOf expr
-            this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
+            this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(Binary op, atoms)) ty))
         | FunctionCall(name, _, [ operand ]) when name = NotSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
-            this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
+            this.Atoms scope [ operand ] (fun atoms -> k (Expr.make (Prim(Not, atoms)) IrBool))
         | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
             // `-x` on a built-in number (on any other type it calls a `negate`). An integer is `0 - x`, and a float
             // `-0.0 - x`, which is IEEE 754's negation: `-0.0 - 0.0` is `-0.0`, and `-0.0 - -0.0` is `0.0`.
             let ty = tyOf expr
             this.Atoms scope [ operand ] (fun atoms ->
                 match ty with
-                | IrFloat | IrF32 -> bindTemp (mk (BoxFloat -0.0) ty) (fun zero -> k (mk (Prim(FloatBinary "-", zero :: atoms)) ty))
-                | IrInt -> k (mk (Prim(Binary "-", AInt 0L :: atoms)) ty)
-                | IrSized integer -> k (mk (Prim(Binary "-", ASized(integer, 0L) :: atoms)) ty)
+                | IrFloat | IrF32 -> bindTemp (Expr.make (BoxFloat -0.0) ty) (fun zero -> k (Expr.make (Prim(FloatBinary "-", zero :: atoms)) ty))
+                | IrInt -> k (Expr.make (Prim(Binary "-", AInt 0L :: atoms)) ty)
+                | IrSized integer -> k (Expr.make (Prim(Binary "-", ASized(integer, 0L) :: atoms)) ty)
                 | other -> cannot $"the operator - on a value of type {IrType.show other}")
         | ForSyntax.Call(iterables, _, parameters, body) when parameters.Length = iterables.Length ->
             let depth = scope.ForDepth
@@ -359,24 +357,24 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(form, _, [ Kind (IdentifierExpr name) ]) when (form = CellSyntax.read || form = CellSyntax.unbox) && scope.Vars.ContainsKey name ->
             let cell = scope.Vars.[name]
             let value =
-                if form = CellSyntax.read then mk (Atom(AVar cell)) cell.Type
+                if form = CellSyntax.read then Expr.make (Atom(AVar cell)) cell.Type
                 else
                     match cell.Type with
-                    | IrRecord [ _, held ] -> mk (Field(AVar cell, 0)) held
+                    | IrRecord [ _, held ] -> Expr.make (Field(AVar cell, 0)) held
                     | other -> internalError $"a box of type {IrType.show other}"
             let copy = newVar (uniqueName name) Local value.Type
-            let body = k (mk (Atom(AVar copy)) value.Type)
-            mk (Let(copy, value, body)) body.Type
+            let body = k (Expr.make (Atom(AVar copy)) value.Type)
+            Expr.make (Let(copy, value, body)) body.Type
         | AssignSyntax.Call(Kind (IdentifierExpr name), value) when scope.Vars.ContainsKey name ->
-            this.Atoms scope [ value ] (fun atoms -> k (mk (Assign(scope.Vars.[name], atoms.Head)) IrUnit))
+            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (Assign(scope.Vars.[name], atoms.Head)) IrUnit))
         | FunctionCall(form, _, [ value ]) when form = CellSyntax.box ->
-            this.Atoms scope [ value ] (fun atoms -> k (mk (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
+            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
-            this.Atoms scope [ value ] (fun atoms -> k (mk (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
+            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
         | PanicSyntax.Call message ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
-            k (mk (Panic [ message ]) ty)
+            k (Expr.make (Panic [ message ]) ty)
         | FunctionCall(name, _, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             // Prints the value's text, which the printer of its type writes, and leaves the value.
             // The one argument, which may be a tuple, as the type checker has it.
@@ -389,9 +387,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Complex scope value (fun lowered ->
                 let held = newVar (uniqueName "__dbg_value") Local lowered.Type
                 let text = newTemp IrString
-                let rest = k (mk (Atom(AVar held)) held.Type)
-                let printed = mk (Let(text, mk (Call(printer, [ AVar held ])) IrString, mk (Dbg(AVar text)) IrUnit)) IrUnit
-                mk (Let(held, lowered, mk (Do(printed, rest)) rest.Type)) rest.Type)
+                let rest = k (Expr.make (Atom(AVar held)) held.Type)
+                let printed = Expr.make (Let(text, Expr.make (Call(printer, [ AVar held ])) IrString, Expr.make (Dbg(AVar text)) IrUnit)) IrUnit
+                Expr.make (Let(held, lowered, Expr.make (Do(printed, rest)) rest.Type)) rest.Type)
         | WithSyntax.Call(record, Kind (RecordExpr updates)) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.
             let ty = tyOf expr
@@ -409,7 +407,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | PositionalField _ -> cannot "a positional field in a record update")
             this.Atoms scope (record :: List.map snd slotsAndValues) (fun atoms ->
                 let updated = List.zip (List.map fst slotsAndValues) atoms.Tail
-                k (mk (UpdateRecord(atoms.Head, updated)) ty))
+                k (Expr.make (UpdateRecord(atoms.Head, updated)) ty))
         | SpreadSyntax.Call parts ->
             CoreIrLowerSpread.record (fun ty -> newVar (uniqueName "__spread") Local ty) (this.Complex scope) (tyOf expr) parts k
         // The hole function called outside a string, at a built-in type: the value as a hole would write it.
@@ -437,7 +435,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // `s.length` is one): the runtime helper of the same name.
             let ty = tyOf expr
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
-                k (mk (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
+                k (Expr.make (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty))
         | ClosureSyntax.Closure(target, captured) ->
             // A function value: the closure block of a lifted function over what it captures.
             match input.Lifted |> Map.tryFind target with
@@ -475,16 +473,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match input.CalleeTypes |> Map.tryFind expr.Id with
                 | Some ty -> ty
                 | None -> cannot $"a call to '{name}' whose type is not known"
-            let value = mk (Call(callee name instanceTy, [])) (toIrType instanceTy)
+            let value = Expr.make (Call(callee name instanceTy, [])) (toIrType instanceTy)
             let closure = newVar (uniqueName name) Local value.Type
             let body = this.CallValue scope closure args ty k
-            mk (Let(closure, value, body)) body.Type
+            Expr.make (Let(closure, value, body)) body.Type
         | FunctionCall(name, _, args) when input.Lifted.ContainsKey name ->
             // A `rec` local function calling itself, directly, with its environment passed on.
             if name <> self.Definition then cannot $"a call to the lifted function '{name}' from another function"
             let ty = tyOf expr
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
-                this.MemberAtoms scope selfMembers (fun members -> k (mk (Call(selfName, atoms @ members)) ty)))
+                this.MemberAtoms scope selfMembers (fun members -> k (Expr.make (Call(selfName, atoms @ members)) ty)))
         | FunctionCall(name, _, args) ->
             if not (definitions.ContainsKey name) then cannot $"a call to '{name}'"
             if not (isFunction name) then cannot $"a call to the value '{name}'"
@@ -519,7 +517,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let call atoms =
                 this.CoerceAll scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                     this.ContextMembers scope name expr.Id instanceTy Set.empty knownMembers (fun members ->
-                        k (mk (Call(target, atoms @ List.map snd members)) ty)))
+                        k (Expr.make (Call(target, atoms @ List.map snd members)) ty)))
             // The arguments as the callee takes them.
             match SyntaxTree.flattenCallArgs args with
             | [ Kind (RecordExpr fields) ] when parameters.Length > 1 && fields.Length = parameters.Length ->
@@ -544,7 +542,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     this.Complex scope record (fun value ->
                         let local = newVar (uniqueName "__arguments") Local value.Type
                         let body = fieldsOf (AVar local)
-                        mk (Let(local, value, body)) body.Type)
+                        Expr.make (Let(local, value, body)) body.Type)
             | several when parameters.Length = 1 && several.Length > 1 ->
                 // `f(a, b)` and `f((a, b))` parse alike; a function of one parameter takes the whole tuple.
                 let tupleTy = IrRecord(several |> List.mapi (fun index value -> string index, tyOf value))
@@ -563,7 +561,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match ty with
                 | IrList elementTy -> items |> List.map (fun _ -> elementTy)
                 | _ -> []
-            this.Atoms scope items (fun atoms -> this.CoerceAll scope atoms elementTys (fun atoms -> k (mk (MakeList atoms) ty)))
+            this.Atoms scope items (fun atoms -> this.CoerceAll scope atoms elementTys (fun atoms -> k (Expr.make (MakeList atoms) ty)))
         | RecordExpr fields -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
         | MemberAccess(Kind (IdentifierExpr qualifier), fieldName, _) when
             not (scope.Vars.ContainsKey qualifier) && definitions.ContainsKey $"{qualifier}.{fieldName}" ->
@@ -583,11 +581,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | Some slot -> slot, snd fields.[slot]
                     | None -> cannot $"the field '{fieldName}', which the record does not have"
                 | other -> cannot $"the field '{fieldName}' of a value of type {IrType.show other}"
-            this.Atoms scope [ record ] (fun atoms -> k (mk (Field(atoms.Head, slot)) ty))
+            this.Atoms scope [ record ] (fun atoms -> k (Expr.make (Field(atoms.Head, slot)) ty))
         | IfExpr(cond, ifTrue, ifFalse) ->
             let ty = tyOf expr
             this.Atoms scope [ cond ] (fun atoms ->
-                k (mk (If(atoms.Head, this.Tail scope ifTrue, this.Tail scope ifFalse)) ty))
+                k (Expr.make (If(atoms.Head, this.Tail scope ifTrue, this.Tail scope ifFalse)) ty))
         | Block statements -> this.Block scope (statements |> List.map _.Kind) k
         | ExpressionKind.Match(values, arms) -> this.Match scope expr values arms k
         | ContextMemberCall(contextType, memberName, args) ->
@@ -602,7 +600,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // `C(T).m`: the member of that instance of the context as a value.
             let key = contextMemberKey (Some contextType) memberName
             match scope.Members |> Map.tryFind key with
-            | Some memberVar -> k (mk (Atom(AVar memberVar)) memberVar.Type)
+            | Some memberVar -> k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
             | None -> cannot $"the context member {ContextMemberKey.text key}, which is not in scope"
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
@@ -622,10 +620,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
             let before = holes |> List.takeWhile (fun hole -> tyOf hole <> IrError)
             let unknown = holes |> List.find (fun hole -> tyOf hole = IrError)
-            let stop = mk (Panic [ Interpolation.unknownHoleMessage unknown.Span ]) IrString
+            let stop = Expr.make (Panic [ Interpolation.unknownHoleMessage unknown.Span ]) IrString
             (before @ [ unknown ])
             |> List.rev
-            |> List.fold (fun (rest: Expr) hole -> this.Complex insideHole hole (fun value -> mk (Do(value, rest)) rest.Type)) stop
+            |> List.fold (fun (rest: Expr) hole -> this.Complex insideHole hole (fun value -> Expr.make (Do(value, rest)) rest.Type)) stop
             |> k
         | InterpolatedString parts ->
             // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
@@ -647,22 +645,22 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                                 match held with
                                 | Some (var, holeType) -> Hole(var, holeType)
                                 | None -> Text "()")
-                    k (mk (Interpolate irParts) IrString)
+                    k (Expr.make (Interpolate irParts) IrString)
                 // The unit value is written `()`, as a derived `toString` writes it. It is still evaluated, for what it does:
                 // the instance passed for the elements of `[]` writes one (see `unconstrainedAsUnit`).
                 | hole :: rest when tyOf hole = IrUnit ->
                     let body = evaluateHoles (index + 1) rest (None :: evaluated)
-                    this.Complex insideHole hole (fun value -> mk (Do(value, body)) body.Type)
+                    this.Complex insideHole hole (fun value -> Expr.make (Do(value, body)) body.Type)
                 | hole :: rest ->
                     let holeType = this.HoleType scope hole
                     // A float or an `F32` is formatted to a string as its hole is evaluated, since that allocates.
                     let local = newVar (Interpolation.holeLocalName depth index) (InterpolationHole(depth, index)) (if holeType = HoleFloat then IrString else tyOf hole)
                     let store (value: Expr) =
                         let body = evaluateHoles (index + 1) rest (Some (local, holeType) :: evaluated)
-                        mk (Let(local, value, body)) body.Type
+                        Expr.make (Let(local, value, body)) body.Type
                     if holeType = HoleFloat then
                         let format = if tyOf hole = IrF32 then Helpers.f32ToString else Helpers.floatToString
-                        this.Atoms insideHole [ hole ] (fun atoms -> store (mk (CallRuntime(format, atoms, true)) IrString))
+                        this.Atoms insideHole [ hole ] (fun atoms -> store (Expr.make (CallRuntime(format, atoms, true)) IrString))
                     else this.Complex insideHole hole store
             evaluateHoles 0 holes []
         | Lambda _ -> cannot "a lambda"
@@ -749,7 +747,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.MemberAtoms scope missing (fun captured ->
                 let name = request (SpecKey.plain $"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}" []) subst (Adapting(givenTy, expected))
                 let arity = 1 + (adaptedValueTypes givenTy expected).Length + wanted.Length
-                bindTemp (mk (MakeClosure(name, arity, atom :: captured)) expected) k)
+                bindTemp (Expr.make (MakeClosure(name, arity, atom :: captured)) expected) k)
         | _ -> k atom
 
     /// The closure over the wrapper `wrapper` of a top-level function, as a context member of type `memberTy` (see
@@ -763,7 +761,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     member this.ValueOfKnown (knownMember: KnownMember) (k: Atom -> Expr) : Expr =
         match knownMember with
         | KnownFunction(wrapper, _, at) -> k (this.WrapperClosure wrapper (Some at))
-        | KnownValue(definition, ty) -> bindTemp (mk (Call(callee definition ty, [])) (toIrType ty)) k
+        | KnownValue(definition, ty) -> bindTemp (Expr.make (Call(callee definition ty, [])) (toIrType ty)) k
 
     /// `body` with each local that stands for a known member and that it uses given the member's value first.
     member private this.WithKnownValues (body: Expr) : Expr =
@@ -771,7 +769,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         |> Seq.fold (fun (body: Expr) id ->
             let var, knownMember = known.[id]
             this.ValueOfKnown knownMember (fun value ->
-                this.Coerce emptyScope value var.Type (fun value -> mk (Let(var, mk (Atom value) var.Type, body)) body.Type))) body
+                this.Coerce emptyScope value var.Type (fun value -> Expr.make (Let(var, Expr.make (Atom value) var.Type, body)) body.Type))) body
 
     /// A closure over the wrapper `wrapper` of a definition derived from the parts of a type (see `DerivedClosure`), at
     /// `memberTy`, the type of the context member it is passed as: it captures the members of the contexts the
@@ -875,7 +873,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     make bindings typeArguments (fun value ->
                         let local = newVar localName Local value.Type
                         let body = go others (local :: acc)
-                        mk (Let(local, value, body)) body.Type)
+                        Expr.make (Let(local, value, body)) body.Type)
                 | None, None -> go others (var :: acc)
         go used []
 
@@ -944,7 +942,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 closure (fun value ->
                     let local = newVar localName Local value.Type
                     let body = bind others ((typeArguments, local) :: bound)
-                    mk (Let(local, value, body)) body.Type)
+                    Expr.make (Let(local, value, body)) body.Type)
         bind closures []
 
     /// How the hole `hole` of an interpolated string is printed, from its type. A tag's cases are in the order its type
@@ -980,7 +978,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`.
     member this.Record (scope: Scope) (fields: (string * Expression) list) (ty: IrType) (k: Expr -> Expr) : Expr =
-        this.Atoms scope (List.map snd fields) (fun atoms -> k (mk (MakeRecord(List.zip (List.map fst fields) atoms)) ty))
+        this.Atoms scope (List.map snd fields) (fun atoms -> k (Expr.make (MakeRecord(List.zip (List.map fst fields) atoms)) ty))
 
     /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple
     /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it. A function
@@ -997,8 +995,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.CoerceAll scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                 match known.TryGetValue closure.Id, closure.Type with
                 | (true, (_, KnownFunction(wrapper, wrapped, at))), IrFunction(input, _, _) ->
-                    directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (mk (Call(callee wrapped at, atoms)) ty))
-                | _ -> this.MemberAtoms scope members (fun memberAtoms -> k (mk (CallClosure(closure, atoms @ memberAtoms)) ty)))
+                    directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (Expr.make (Call(callee wrapped at, atoms)) ty))
+                | _ -> this.MemberAtoms scope members (fun memberAtoms -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms)) ty)))
         let elements =
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input
@@ -1010,7 +1008,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match remaining with
                 | [] -> call []
                 | { Kind = UnitExpr } :: rest -> run rest
-                | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in mk (Do(value, after)) after.Type)
+                | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in Expr.make (Do(value, after)) after.Type)
             run flatArgs
         | Some elements, [ tuple ] ->
             this.Atoms scope [ tuple ] (fun atoms ->
@@ -1018,7 +1016,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match remaining with
                     | [] -> call (List.rev acc)
                     | (slot, elementTy) :: rest ->
-                        bindTemp (mk (Field(atoms.Head, slot)) elementTy) (fun atom -> loadElements rest (atom :: acc))
+                        bindTemp (Expr.make (Field(atoms.Head, slot)) elementTy) (fun atom -> loadElements rest (atom :: acc))
                 loadElements elements [])
         | _, flatArgs -> this.Atoms scope flatArgs call
 
@@ -1035,7 +1033,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match names, tys, tupleElements with
         | [ name ], [ IrUnit ], _ ->
             let unit = newVar (uniqueName name) Local IrUnit
-            [], (fun body -> mk (Let(unit, mk (Atom AUnit) IrUnit, body)) body.Type), [ unit ]
+            [], (fun body -> Expr.make (Let(unit, Expr.make (Atom AUnit) IrUnit, body)) body.Type), [ unit ]
         | [ name ], [ tupleTy ], Some elementTys ->
             let elements = elementTys |> List.mapi (fun index (_, ty) -> newVar (uniqueName $"{name}_{index}") Param ty)
             let tuple = newVar (uniqueName name) Local tupleTy
@@ -1045,7 +1043,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 |> List.mapi (fun index ((slot, _), element) -> slot, (string index, AVar element))
                 |> List.sortBy fst
                 |> List.map snd
-            let bind (body: Expr) = mk (Let(tuple, mk (MakeRecord fieldValues) tupleTy, body)) body.Type
+            let bind (body: Expr) = Expr.make (Let(tuple, Expr.make (MakeRecord fieldValues) tupleTy, body)) body.Type
             elements, bind, [ tuple ]
         | _ ->
             let parameters = List.map2 (fun name ty -> newVar (uniqueName name) Param ty) names tys
@@ -1119,9 +1117,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
                         | None -> scope.Members
                     restScope.Value <- { scope with Vars = scope.Vars |> Map.add name local; Members = members }
-                    mk (Let(local, value, hole)) hole.Type)
+                    Expr.make (Let(local, value, hole)) hole.Type)
             statement, Some (hole, restScope.Value, rest)
-        | ExprStatement first :: rest -> this.Complex scope first (fun value -> mk (Do(value, hole)) hole.Type), Some (hole, scope, rest)
+        | ExprStatement first :: rest -> this.Complex scope first (fun value -> Expr.make (Do(value, hole)) hole.Type), Some (hole, scope, rest)
         | UseStatement(Kind (RecordExpr fields)) :: rest ->
             // Lambda lifting has evaluated each binding into a local; the members are those locals. A function that
             // requires contexts its member's type does not is adapted to the type, with their members as they are here,
@@ -1147,7 +1145,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                             | adapted ->
                                 let var = newVar (uniqueName local) Local (atomType adapted)
                                 let body = adapt others (vars |> Map.add local var)
-                                mk (Let(var, mk (Atom adapted) var.Type, body)) body.Type)
+                                Expr.make (Let(var, Expr.make (Atom adapted) var.Type, body)) body.Type)
                     | _ -> adapt others vars
             let statement = adapt bindings scope.Vars
             statement, Some (hole, restScope.Value, rest)
@@ -1251,21 +1249,21 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // The scrutinees are evaluated in order, each into its local, before any arm is tested.
         let rec bindScrutinees (remaining: (Var * Expression) list) =
             match remaining with
-            | [] -> k (mk (Match(scrutinees, arms |> List.choose lowerArm)) ty)
+            | [] -> k (Expr.make (Match(scrutinees, arms |> List.choose lowerArm)) ty)
             | (scrutinee, value) :: rest ->
                 this.Complex scope value (fun lowered ->
                     let body = bindScrutinees rest
-                    mk (Let(scrutinee, lowered, body)) body.Type)
+                    Expr.make (Let(scrutinee, lowered, body)) body.Type)
         match values |> List.tryFindIndex (fun value -> tyOf value = IrError) with
         | Some unknown ->
             // A value of no known type cannot be matched. The values are evaluated in order up to it, for what they do
             // (it most likely stops the program itself, through the deferred error that left its type unknown), and
             // if the program is still running then, it stops there.
-            let stop = mk (Panic [ Interpolation.unknownScrutineeMessage values.[unknown].Span ]) ty
+            let stop = Expr.make (Panic [ Interpolation.unknownScrutineeMessage values.[unknown].Span ]) ty
             values
             |> List.take (unknown + 1)
             |> List.rev
-            |> List.fold (fun (rest: Expr) value -> this.Complex scope value (fun lowered -> mk (Do(lowered, rest)) rest.Type)) stop
+            |> List.fold (fun (rest: Expr) value -> this.Complex scope value (fun lowered -> Expr.make (Do(lowered, rest)) rest.Type)) stop
             |> k
         | None -> bindScrutinees (List.zip scrutinees values)
 
@@ -1277,9 +1275,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // when it is reached instead.
         let lowerExpression (expr: Expression) =
             try this.Tail scope expr
-            with CannotLower _ when not (deferredMessages expr).IsEmpty -> mk (Panic(deferredMessages expr)) IrError
+            with CannotLower _ when not (deferredMessages expr).IsEmpty -> Expr.make (Panic(deferredMessages expr)) IrError
         let body =
-            List.foldBack (fun (expr: Expression) (rest: Expr) -> mk (Do(lowerExpression expr, rest)) IrUnit) input.TopLevel (mk (Atom AUnit) IrUnit)
+            List.foldBack (fun (expr: Expression) (rest: Expr) -> Expr.make (Do(lowerExpression expr, rest)) IrUnit) input.TopLevel (Expr.make (Atom AUnit) IrUnit)
         { Name = startFunctionName
           Source = startFunctionName
           TypeArguments = []
@@ -1304,7 +1302,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeArguments = typeArguments
           Params = parameters
           Result = IrError
-          Body = mk (Panic messages) IrError }
+          Body = Expr.make (Panic messages) IrError }
 
     /// The types of the parameters of the lifted lambda `name` (its environment aside), whose type where it was written
     /// is `lambdaTy`, and of its result. A lambda bound to a context member in a `use` may have parameters the type
@@ -1379,7 +1377,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let result = toIrType resultTy
             let adapted (value: Expr) =
                 match value.Type with
-                | IrFunction _ when value.Type <> result -> bindTemp value (fun atom -> this.Coerce scope atom result (fun atom -> mk (Atom atom) result))
+                | IrFunction _ when value.Type <> result -> bindTemp value (fun atom -> this.Coerce scope atom result (fun atom -> Expr.make (Atom atom) result))
                 | _ -> value
             let parameters = parameters @ (members |> List.map snd |> List.filter (fun var -> var.Kind = Param))
             make parameters result (this.WithKnownValues (this.Complex scope body adapted))
@@ -1436,11 +1434,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let order = declared @ (variableMembers wrapped (bindingsAt wrapped instanceTy) |> List.map fst)
             let rec call (remaining: ContextMemberKey list) (members: Atom list) =
                 match remaining with
-                | [] -> mk (Call(callee wrapped instanceTy, (named |> List.map AVar) @ List.rev members)) (toIrType resultTy)
+                | [] -> Expr.make (Call(callee wrapped instanceTy, (named |> List.map AVar) @ List.rev members)) (toIrType resultTy)
                 | key :: rest ->
                     match captured |> List.tryFindIndex (fst >> (=) key), passed |> List.tryFind (fst >> (=) key) with
                     | Some index, _ ->
-                        bindTemp (mk (Field(AVar environmentParameter, index + 1)) (snd captured.[index])) (fun atom -> call rest (atom :: members))
+                        bindTemp (Expr.make (Field(AVar environmentParameter, index + 1)) (snd captured.[index])) (fun atom -> call rest (atom :: members))
                     | None, Some (_, var) -> call rest (AVar var :: members)
                     | None, None -> internalError $"the context member {ContextMemberKey.text key} of '{wrapped}' is neither captured nor passed"
             make (environmentParameter :: valueParameters @ List.map snd passed) (toIrType resultTy) (bind (call order []))
@@ -1470,13 +1468,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match remaining with
             | [] ->
                 let arguments = values |> List.map AVar
-                let call arguments = mk (CallClosure(adapted, arguments @ List.rev members)) result
+                let call arguments = Expr.make (CallClosure(adapted, arguments @ List.rev members)) result
                 if givenValueTys.Length = values.Length then this.CoerceAll scope arguments givenValueTys call else call arguments
             | (key, ty) :: rest ->
                 match missing |> List.tryFindIndex (fst >> (=) key) with
-                | Some index -> bindTemp (mk (Field(AVar environment, index + 2)) ty) (fun atom -> call rest (atom :: members))
+                | Some index -> bindTemp (Expr.make (Field(AVar environment, index + 2)) ty) (fun atom -> call rest (atom :: members))
                 | None -> this.Coerce scope (AVar scope.Members.[key]) ty (fun atom -> call rest (atom :: members))
-        let body = mk (Let(adapted, mk (Field(AVar environment, 1)) givenTy, call given [])) result
+        let body = Expr.make (Let(adapted, Expr.make (Field(AVar environment, 1)) givenTy, call given [])) result
         { Name = functionName
           Source = functionName
           TypeArguments = []

@@ -87,10 +87,9 @@ let key (printer: Printer) : string =
 
 /// The function `name` that is `printer`.
 let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Function =
-    let mk kind ty : Expr = { Kind = kind; Type = ty }
-    let text (parts: InterpolationPart list) = mk (Interpolate parts) IrString
+    let text (parts: InterpolationPart list) = Expr.make (Interpolate parts) IrString
     let local (prefix: string) (ty: IrType) = tools.NewVar prefix Local ty
-    let bind (var: Var) (value: Expr) (body: Expr) = mk (Let(var, value, body)) body.Type
+    let bind (var: Var) (value: Expr) (body: Expr) = Expr.make (Let(var, value, body)) body.Type
 
     /// Passes `k` the text of `value`, a value of `ty`: a local that holds it, or a constant's text.
     let show (ty: Ty) (value: Atom) (k: InterpolationPart -> Expr) : Expr =
@@ -98,7 +97,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
         | Some constant -> k (Text constant)
         | None ->
             let written = local "__dbg_part" IrString
-            bind written (mk (Call(tools.PrinterOf (Showing ty), [ value ])) IrString) (k (Hole(written, HoleString)))
+            bind written (Expr.make (Call(tools.PrinterOf (Showing ty), [ value ])) IrString) (k (Hole(written, HoleString)))
 
     /// The text of `value`, a value of `ty`, after `prefix`: in brackets unless it has its own.
     let wrapped (prefix: string) (ty: Ty) (value: Atom) : Expr =
@@ -115,7 +114,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | (fieldName, ty) :: rest ->
                 let slot = slots |> List.findIndex ((=) fieldName)
                 let field = tools.NewTemp (tools.ToIrType ty)
-                bind field (mk (Field(AVar record, slot)) field.Type) (show ty (AVar field) (fun part -> next rest (part :: acc)))
+                bind field (Expr.make (Field(AVar record, slot)) field.Type) (show ty (AVar field) (fun part -> next rest (part :: acc)))
         next fields []
 
     /// `parts`, with `, ` between each two.
@@ -125,7 +124,7 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
     /// Matches `value`, a parameter, against `arms`, as a `match` holds its scrutinee.
     let matching (value: Var) (arms: Arm list) (resultTy: IrType) =
         let scrutinee = tools.NewVar "__match_tmp_0" MatchTemp value.Type
-        bind scrutinee (mk (Atom(AVar value)) value.Type) (mk (Match([ scrutinee ], arms)) resultTy)
+        bind scrutinee (Expr.make (Atom(AVar value)) value.Type) (Expr.make (Match([ scrutinee ], arms)) resultTy)
 
     let bound (prefix: string) (ty: IrType) = tools.NewVar prefix PatternBound ty
 
@@ -144,10 +143,10 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 let written = local "__dbg_first" IrString
                 let others = local "__dbg_rest" IrString
                 bind written (text parts) (
-                    bind others (mk (Call(tools.PrinterOf rest, [ AVar tail; AVar written ])) IrString) (
+                    bind others (Expr.make (Call(tools.PrinterOf rest, [ AVar tail; AVar written ])) IrString) (
                         text [ Text $"{prefix}["; Hole(others, HoleString); Text "]" ])))
         matching list
-            [ { Patterns = [ PList([], None) ]; Body = mk (Atom(AString $"{prefix}[]")) IrString }
+            [ { Patterns = [ PList([], None) ]; Body = Expr.make (Atom(AString $"{prefix}[]")) IrString }
               { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = nonEmpty } ]
             IrString
 
@@ -181,18 +180,18 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             element (fun parts ->
                 let longer = local "__dbg_text" IrString
                 bind longer (text (Hole(written, HoleString) :: Text ", " :: parts)) (
-                    mk (Call(name, [ AVar tail; AVar longer ])) IrString))
+                    Expr.make (Call(name, [ AVar tail; AVar longer ])) IrString))
         make
             [ list; written ]
             (matching list
-                [ { Patterns = [ PList([], None) ]; Body = mk (Atom(AVar written)) IrString }
+                [ { Patterns = [ PList([], None) ]; Body = Expr.make (Atom(AVar written)) IrString }
                   { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = next } ]
                 IrString)
     | Showing ty ->
         let value = tools.NewVar "__dbg_value" Param (tools.ToIrType ty)
         let body =
             match constantText ty with
-            | Some constant -> mk (Atom(AString constant)) IrString
+            | Some constant -> Expr.make (Atom(AString constant)) IrString
             | None ->
             match ty with
             | TyNominal(nominal, shape, _) -> wrapped nominal.Name shape (AVar value)
@@ -201,20 +200,20 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | TyPrimitive "int" -> text [ Hole(value, HoleInt) ]
             | SizedIntegerType integer -> text [ Hole(value, HoleSized integer) ]
             | TyPrimitive "bool" -> text [ Hole(value, HoleBool) ]
-            | TyPrimitive "float" -> mk (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
-            | TyPrimitive "F32" -> mk (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString
-            | TyPrimitive "string" -> mk (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString
+            | TyPrimitive "float" -> Expr.make (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
+            | TyPrimitive "F32" -> Expr.make (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString
+            | TyPrimitive "string" -> Expr.make (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString
             | TyTag _
             | TyUnion _ as union ->
                 let arm (tagName: string, payload: Ty option) =
                     match payload with
-                    | None -> { Patterns = [ PTag(tagName, None) ]; Body = mk (Atom(AString $"#{tagName}")) IrString }
+                    | None -> { Patterns = [ PTag(tagName, None) ]; Body = Expr.make (Atom(AString $"#{tagName}")) IrString }
                     | Some payloadTy ->
                         let held = bound "__dbg_payload" (tools.ToIrType payloadTy)
                         { Patterns = [ PTag(tagName, Some (PBind held)) ]; Body = wrapped $"#{tagName}" payloadTy (AVar held) }
                 match tagsOf union with
                 // A union of no tags has no values.
-                | [] -> mk (Atom(AString "undefined")) IrString
+                | [] -> Expr.make (Atom(AString "undefined")) IrString
                 | tags -> matching value (tags |> List.map arm) IrString
             | TyRecord fields when Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->
                 let items = List.init fields.Count (fun index -> string index, fields.[string index])

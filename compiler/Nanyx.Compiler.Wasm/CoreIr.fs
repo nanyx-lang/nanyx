@@ -432,6 +432,10 @@ let closureOver (name: string) (arity: int) (captured: Atom list) (ty: IrType) :
     | [] -> { Kind = Atom(AStaticClosure(name, arity, ty)); Type = ty }
     | _ -> { Kind = MakeClosure(name, arity, captured); Type = ty }
 
+module Expr =
+    /// The expression of `kind`, of type `ty`.
+    let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty }
+
 module ForLoop =
     /// The atoms a loop's streams start from, in the order its code reads them.
     let sourceAtoms (loop: ForLoop) =

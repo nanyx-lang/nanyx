@@ -53,15 +53,13 @@ let private allocationSize (value: Expr) =
     | MakeRecord fields -> Some(8 + CoreIrLayout.totalSize (fields |> List.map (snd >> atomType)))
     | _ -> None
 
-let private mk (kind: ExprKind) (ty: IrType) = { Kind = kind; Type = ty }
-
 /// `e` with the first allocation of a block of `size` that it always makes (not one in a branch, a loop or a guard)
 /// writing into the block `token` holds, if there is one.
 let private reuseFirst (token: Var) (size: int) (e: Expr) : Expr option =
     let rec here (value: Expr) =
         match value.Kind with
-        | Dup(vars, inner) -> here inner |> Option.map (fun inner -> mk (Dup(vars, inner)) value.Type)
-        | _ when allocationSize value = Some size -> Some(mk (Reuse(token, value)) value.Type)
+        | Dup(vars, inner) -> here inner |> Option.map (fun inner -> Expr.make (Dup(vars, inner)) value.Type)
+        | _ when allocationSize value = Some size -> Some(Expr.make (Reuse(token, value)) value.Type)
         | _ -> None
     // The links of the chain passed on the way to the allocation, innermost first, and the link that makes it.
     let mutable passed = []
@@ -72,8 +70,8 @@ let private reuseFirst (token: Var) (size: int) (e: Expr) : Expr option =
         let link = current
         let reused =
             match link.Kind with
-            | Let(var, value, body) -> here value |> Option.map (fun value -> mk (Let(var, value, body)) link.Type)
-            | Do(value, rest) -> here value |> Option.map (fun value -> mk (Do(value, rest)) link.Type)
+            | Let(var, value, body) -> here value |> Option.map (fun value -> Expr.make (Let(var, value, body)) link.Type)
+            | Do(value, rest) -> here value |> Option.map (fun value -> Expr.make (Do(value, rest)) link.Type)
             | Drop _
             | Release _ -> None
             | _ -> here link
@@ -155,7 +153,7 @@ type private Rewriter() =
                     let rest =
                         match dead |> List.filter (fun var -> not (releasedIds.Contains var.Id)) with
                         | [] -> rest
-                        | others -> mk (Drop(others, rest)) rest.Type
+                        | others -> Expr.make (Drop(others, rest)) rest.Type
                     // The first released object's block goes to the first allocation of its size the arm makes.
                     let first = releases.Head
                     let token = this.NewToken()
@@ -166,10 +164,10 @@ type private Rewriter() =
                     let body =
                         (firstRelease :: releases.Tail)
                         |> List.rev
-                        |> List.fold (fun body released -> mk (Release(released, body)) body.Type) rest
+                        |> List.fold (fun body released -> Expr.make (Release(released, body)) body.Type) rest
                     match dupped |> List.filter (fun var -> not (takenOver.Contains var.Id)) with
                     | [] -> body
-                    | others -> mk (Dup(others, body)) body.Type
+                    | others -> Expr.make (Dup(others, body)) body.Type
             | _ -> this.Expr arm.Body
         { Patterns = patterns; Body = body }
 
