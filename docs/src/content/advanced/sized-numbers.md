@@ -1,15 +1,8 @@
 ---
 title: "Sized numbers"
 description: "Numeric types of fixed widths, and what int and float mean"
-order: 6
+order: 3.5
 ---
-
-> **Status: implemented** ([#342](https://github.com/nanyx-lang/nanyx/issues/342),
-> [#343](https://github.com/nanyx-lang/nanyx/issues/343)). Every type below exists, with the compiler's own `Add` and
-> `Num`; integer arithmetic stops the program when the result does not fit; literals take the expected type; and the
-> wrapping operations and conversions are the prelude's. Still open: the integers narrower than 32 bits take 4 bytes in
-> a field rather than their own width (see [Memory management](./memory-management#value-representation)), and floats,
-> `F32` among them, are still boxed.
 
 Nanyx has a few short built-in names for the types almost every program uses: `int`, `float`, `bool`, `string` and
 `list`. Numbers also come in fixed widths, for binary data, compact records and talking to hosts, as ordinary named
@@ -44,8 +37,9 @@ Sixty-four-bit arithmetic is native on every target, WebAssembly included, so th
 
 # Literals
 
-A number literal takes the numeric type the code around it expects, and is `int` (or `float`, with a decimal point)
-when nothing says otherwise:
+A number literal takes the numeric type the code around it expects (an annotation, a parameter's type, the other
+operand of an operator, a pattern's scrutinee), and is `int` (or `float`, with a decimal point) when nothing says
+otherwise:
 
 ```nanyx
 def small: U8 = 200      -- a U8
@@ -57,26 +51,16 @@ A literal that does not fit its type is a compile error: `def small: U8 = 300` i
 `'300' does not fit in U8 (0 to 255)`. So is an integer literal past the largest `int` where nothing says otherwise.
 
 An integer literal is only ever of an integer type, and a literal with a decimal point only of a floating-point type:
-`def x: float = 1` is a type error, as in Rust, which says to write `1.0` and has a fix that does. (Settled: the alternative, Swift's, lets `1` be a float wherever one is expected.)
+`def x: float = 1` is a type error, as in Rust, and the error says to write `1.0`.
 
-**How the checker does it.** Each number literal's type is a variable of its own while the def it is in is inferred
-(`NumericLiterals.fs`), which the code around it settles: an annotation, a parameter's type, the other operand of an
-operator, a pattern's scrutinee. One that nothing has settled is `int` or `float`:
+A local def takes its literal's type where it is defined: `def n = 5` is an `int`, whatever the code after it does
+with `n`.
 
-- **when the def it is in is generalised**, since a literal is not of every type: a local def such as `def n = 5` is an
-  `int`, whatever the code after it does with `n`, as it is in a top-level def;
-- **where a call needs a context of its type**, as `2.0 ** n` needs `Num` of its base: the instance is found there, so the
-  type cannot wait for the rest of the def.
-
-Once every type is known, each literal is checked against its own: its range, or the kind of number it is.
 # Arithmetic
 
-Arithmetic and comparison work on two values of the same type, through the [`Add(a)` and `Num(a)`](../advanced/contexts)
-contexts, which every numeric type will have (a measured type has only `Add`; see [numeric
-contexts](./numeric-contexts#units-and-dimensions)). Nothing is converted implicitly, so adding an `I32` to an `int` is
-a type error until one side is [converted](#conversions).
-
-[Units](./units-and-dimensions) attach to any of these types: `I64(Bytes)`, `F32(Time)`.
+Arithmetic and comparison work on two values of the same type, through the [`Add(a)` and `Num(a)`](./contexts)
+contexts, which every numeric type has. Nothing is converted implicitly, so adding an `I32` to an `int` is a type
+error until one side is [converted](#conversions).
 
 ## Overflow
 
@@ -85,7 +69,7 @@ does. It never wraps around silently:
 
 ```nanyx
 def big: I32 = 2_000_000_000
-def bigger = big + big  -- runtime error: I32 overflow
+def bigger = big + big  -- runtime error: the sum does not fit in an I32
 ```
 
 This holds for every integer type, unsigned ones included: subtracting a larger `U32` from a smaller one is an
@@ -94,8 +78,11 @@ first.
 
 Code that wants arithmetic that wraps on purpose, such as a hash function, asks for it by name: `I32.wrappingAdd`,
 `I32.wrappingSub` and `I32.wrappingMul`, on each integer type. That is the only way to get it, so a wrap is always
-visible in the code. They are the prelude's, over three intrinsics the backend compiles at the type they are used at:
-the `i64` or `i32` instruction, then the low bits the type holds (`i32.extend8_s` for an `I8`, a mask for a `U16`).
+visible in the code:
+
+```nanyx
+def wrapped = I32.wrappingAdd(2_000_000_000, 2_000_000_000)  -- -294967296
+```
 
 Swift checks every operation in the same way; Rust checks in debug builds and wraps in release builds. Nanyx checks
 in every build, so a program behaves the same however it was compiled. Checking costs a compare and a branch per
@@ -104,15 +91,12 @@ silently.
 
 Floating-point arithmetic does not stop: it follows IEEE 754, giving infinities and NaN.
 
-An `F32` is held as a `float` is: in a box of its own, here holding an `f32`, so that both floating-point types are
-unboxed together once floats are ([Memory management](./memory-management#value-representation)).
-
 # Conversions
 
-Conversions are [attached definitions](../advanced/attached-definitions) on the type being converted, named after
-the type converted to: `I32.toInt`, `U8.toI32`, `I64.toFloat`, `F64.toF32`. The target is named by its short name
-where it has one (`toInt` and `toFloat`, not `toI64` and `toF64`). Like any attached definition, a conversion can be
-called by its qualified name or piped into:
+Conversions are [attached definitions](./attached-definitions) on the type being converted, named after the type
+converted to: `I32.toInt`, `U8.toI32`, `I64.toFloat`, `F64.toF32`. The target is named by its short name where it has
+one (`toInt` and `toFloat`, not `toI64` and `toF64`). Like any attached definition, a conversion can be called by its
+qualified name or piped into:
 
 ```nanyx
 def count: I32 = 7
@@ -132,7 +116,8 @@ What a conversion takes and gives depends on what it can lose:
 | Floating point to a narrower floating point | `float` to `F32` | `F64.toF32: F64 -> F32` |
 
 - **A narrowing integer conversion** is the one that can fail outright, so it returns a tag union and the caller
-  decides what to do when the value doesn't fit.
+  decides what to do when the value doesn't fit: `int.toU8(300)` is `#outOfRange`, and `int.toU8(30)` is
+  `#some(30)`.
 - **Integer to floating point** rounds to the nearest representable value. A `float` holds integers exactly up to
   2<sup>53</sup>; past that it rounds, as in every language with IEEE 754 floats.
 - **Floating point to integer** takes a tag saying how to drop the fraction: `x \toInt(#round)`. A value that is
@@ -146,10 +131,11 @@ whichever name the value's type was written with.
 **Which conversions there are.** Every integer type, `int` among them, converts to every other: as the value where the
 target holds every value of the source (`U8.toI16`), and as `#some(T) | #outOfRange` where it may not (`int.toU8`,
 `I8.toU64`). Each also has `toFloat` and `toF32`. `float` and `F32` convert to each other, and to `int` with `toInt`
-and `tryToInt`; to reach a narrower integer type from a floating-point number, go through `int`. They are written over
-two intrinsics the backend compiles at the types they are used at: `__nanyx_int_cast`, which keeps or extends the bits
-once a conversion that may lose the value has checked it fits, and `__nanyx_to_float`. `nanyx/math`'s `floor`, `ceil`,
-`round` and `truncate` are `float.toInt` with each mode.
+and `tryToInt`; to reach a narrower integer type from a floating-point number, go through `int`. `nanyx/math`'s
+`floor`, `ceil`, `round` and `truncate` are `float.toInt` with each mode.
 
 Narrowing integer conversions have no wrapping form that keeps only the low bits, as `wrappingAdd` does for
-arithmetic. One can be added later if code needs it.
+arithmetic.
+
+How each of these types is held in memory is described in
+[Memory management](../work-in-progress/memory-management#value-representation).

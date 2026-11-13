@@ -178,7 +178,7 @@ not a length, so a measured type cannot have a `` `*`: (a, a) -> a ``. Splitting
 
 - on integer types, `/` truncates towards zero and `%` takes the sign of the left operand, as `int` does today
   (`i64.div_s`, `i64.rem_s`). Division by zero stops the program, and so does the one overflowing case, the most negative value
-  divided by `-1`, as [sized numbers](./sized-numbers#overflow) requires;
+  divided by `-1`, as [sized numbers](../advanced/sized-numbers#overflow) requires;
 - on floating-point types they follow IEEE 754, and `%` is the truncated remainder (C's `fmod`): `7.5 % 2.0` is
   `1.5`.
 
@@ -213,7 +213,7 @@ including the user types that `Num` synthesis is meant to make cheap, for a func
 
 # Literals
 
-A literal already takes the numeric type its context expects ([sized numbers](./sized-numbers#literals)):
+A literal already takes the numeric type its context expects ([sized numbers](../advanced/sized-numbers#literals)):
 `def small: U8 = 200`. This proposal adds one case, a type variable:
 
 - **Only in a function that writes its type.** Where the expected type is a variable `a` of the signature, `0` is
@@ -323,7 +323,7 @@ The language server's code action for the second and fourth adds the requirement
 - **[operators.md](../tour/operators)** lines 45 and 53: built-in operators are sugar for `Add` and `Num`, and `use`
   does change `1 + 2`. It gains prefix `-` and `**`.
 - **[types.md](../tour/types)**, [contexts-vs-interfaces](../coming-from-other-languages/contexts-vs-interfaces) and
-  [sized numbers](./sized-numbers#arithmetic) name `Add` and `Num` instead of a single `Num`.
+  [sized numbers](../advanced/sized-numbers#arithmetic) name `Add` and `Num` instead of a single `Num`.
 - **`list.sum: [Add(a)] list(a) -> a`** (#475).
 - **`OperatorCalls.fs`'s rule** (an operator calls whatever its name is bound to) is replaced by the lookup; a user
   context may no longer give `+` a meaning other than `Add`'s.
