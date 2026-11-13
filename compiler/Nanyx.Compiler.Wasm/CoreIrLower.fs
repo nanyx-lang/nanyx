@@ -96,6 +96,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         { var with Name = $"__t{var.Id}" }
 
     let toIrType = toIrTypeIn input.ContextLayouts
+    let declaredMemberTypes = declaredMemberTypes input.ContextLayouts
 
     /// What a `dbg` printer needs from this function's lowering (see `CoreIrLowerDbg`).
     let printerTools: CoreIrLowerDbg.PrinterTools =
@@ -104,10 +105,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           PrinterOf = fun printer -> request (CoreIrLowerDbg.key printer, []) Map.empty (Printing printer)
           ToIrType = toIrType }
 
-    /// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in
-    /// the instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
-    let unconstrainedAsUnit (ty: Ty) =
-        substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
 
     /// The members of the contexts without parameters in `contexts`, in the order a function value takes them.
     let membersOf (contexts: Ty list) =
@@ -129,18 +126,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         |> membersOf
         |> List.filter (fst >> declared.Contains >> not)
 
-    /// The type each context without parameters declares for its member of each key, where only one declares a member
-    /// of that key.
-    let declaredMemberTypes =
-        input.ContextLayouts
-        |> Map.values
-        |> Seq.concat
-        |> Seq.groupBy fst
-        |> Seq.choose (fun (key, declared) ->
-            match declared |> Seq.map snd |> Seq.distinct |> List.ofSeq with
-            | [ memberTy ] -> Some (key, memberTy)
-            | _ -> None)
-        |> Map.ofSeq
 
     /// Stops at a call, at the node `node`, to the member of the key `key` of a context without parameters, when the call
     /// has one of the member's own type variables at another type than unit. The member's value is made once, where its
@@ -161,11 +146,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     cannot $"a call to the context member '{ContextMemberKey.text key}' with one of its own type variables at {IrType.show irTy}")
         | _ -> ()
 
-    /// The contexts a function of type `fnTy` requires where it is called.
-    let requiredContexts (fnTy: Ty) =
-        match Unifier.unalias fnTy with
-        | TyFunc(_, _, contexts) -> contexts
-        | _ -> []
 
     let tyOf (expr: Expression) : IrType =
         match input.ExprTypes |> Map.tryFind expr.Id with
@@ -528,7 +508,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let parameters = parameterNames name
             // A function value given for a parameter whose type requires other contexts is adapted to it (see `Coerce`).
             let parameterTys =
-                try this.ParameterTypes parameters (substitute subst instanceTy) true |> fst |> List.map toIrType
+                try parameterTypes parameters (substitute subst instanceTy) true |> fst |> List.map toIrType
                 with CannotLower _ -> []
             // The context members the callee requires follow its arguments.
             let call atoms =
@@ -1325,7 +1305,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match definitions.[name].Kind with
             | Lambda(parameters, _, _) -> parameters.Tail
             | _ -> []
-        let parameterTys, resultTy = this.ParameterTypes (List.map fst parameters) lambdaTy true
+        let parameterTys, resultTy = parameterTypes (List.map fst parameters) lambdaTy true
         let annotated =
             List.map2 (fun (ty: Ty) (_, annotation) ->
                 match annotation |> Option.bind (typeOfAnnotation input.NamedTypes) with
@@ -1333,25 +1313,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | _ -> ty) parameterTys parameters
         annotated, resultTy
 
-    /// The types of the parameters `names` of a function of type `fnTy`, and of its result. Several parameters are the
-    /// fields of the input, each named by its position or by its own name when the type names it
-    /// (`(int, step: int) -> int`).
-    member private this.ParameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * Ty =
-        match names, Unifier.unalias fnTy with
-        | [], TyFunc(_, result, _) when isLambda -> [], result
-        | [], _ -> [], fnTy
-        | [ _ ], TyFunc(input, result, _) -> [ input ], result
-        | several, TyFunc(input, result, _) ->
-            match Unifier.unalias input with
-            | TyRecord fields when fields.Count = several.Length ->
-                several
-                |> List.mapi (fun index parameterName ->
-                    match fields |> Map.tryFind (string index), fields |> Map.tryFind parameterName with
-                    | Some ty, _
-                    | None, Some ty -> ty
-                    | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
-            | _ -> cannot "a function whose parameters are not a tuple"
-        | _ -> cannot "a definition whose type is not a function"
 
     /// Lowers the definition `name` to a function called `functionName`, as `lowering` says.
     member this.Function (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) : Function =
@@ -1380,7 +1341,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match input.ExprTypes |> Map.tryFind expr.Id with
                 | Some ty -> substitute subst ty
                 | None -> cannot "a definition without a type"
-            let parameterTys, resultTy = this.ParameterTypes parameterNames defTy isLambda
+            let parameterTys, resultTy = parameterTypes parameterNames defTy isLambda
             let parameters = List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames parameterTys
             // The members of the contexts it requires follow, each a closure in a parameter of its own.
             let contextParameters, aliases = input.ContextParameters |> Map.tryFind name |> Option.defaultValue ([], Map.empty)
@@ -1448,7 +1409,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // Takes an environment, which holds after its table slot the members of the contexts the function requires
             // that the closure captured, and after its other parameters those its value's type requires; and calls the
             // function with the rest and them all, in the order it takes them.
-            let parameterTys, resultTy = this.ParameterTypes parameterNames.Tail instanceTy true
+            let parameterTys, resultTy = parameterTypes parameterNames.Tail instanceTy true
             let environment = IrRecord(("0", IrWord) :: (captured |> List.mapi (fun index (_, ty) -> string (index + 1), ty)))
             let environmentParameter = parameterOf parameterNames.Head environment
             let valueParameters, bind, named = this.ValueParameters parameterNames.Tail (List.map toIrType parameterTys)
