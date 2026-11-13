@@ -206,7 +206,7 @@ module Compiler =
         let state = merged.State
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
-        let exportedValues = ModuleLinking.exportedValueNames imported.Own
+        let exportedValues = SyntaxTree.exportedValueNames imported.Own
         // An import brings in every export, or only those it selects.
         let selected = item.Selection |> Option.map (ModuleLinking.selectedExports imported)
         let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
@@ -581,7 +581,7 @@ module Compiler =
                 let placed = Set.ofList placed
                 let undeferred = moduleErrors |> List.filter (placed.Contains >> not)
                 // The module's own definitions win over imported ones of the same name.
-                let exported = ModuleLinking.exportedValueNames own
+                let exported = SyntaxTree.exportedValueNames own
                 let ownNames = exported |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                 let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =

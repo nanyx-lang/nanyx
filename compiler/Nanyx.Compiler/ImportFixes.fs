@@ -18,11 +18,7 @@ module ImportFixes =
                 StandardLibrary.moduleSources moduleName
                 |> List.collect (fun (_, source) ->
                     match parseModuleFileWithNames "" source with
-                    | Result.Ok (items, _, _) ->
-                        items
-                        |> List.choose (function
-                            | Kind (Def (ValueDef(true, name, _, _))) -> Some (name, moduleName)
-                            | _ -> None)
+                    | Result.Ok (items, _, _) -> SyntaxTree.exportedValueNames items |> Set.toList |> List.map (fun name -> name, moduleName)
                     | Result.Error _ -> []))
             |> List.groupBy fst
             |> List.map (fun (name, pairs) -> name, pairs |> List.map snd |> List.distinct)
