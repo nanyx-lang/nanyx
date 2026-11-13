@@ -1244,6 +1244,10 @@ let attributeItem: Parser<TopLevelItem, ParseState> =
 let private importLine: Parser<TopLevelItem, ParseState> =
     spannedItem (attempt (pstring "import" >>. wsNoNl() >>. importItems) |>> Import)
 
+// Tried before the definitions, which start with `export` too: `export def f` has no bracket after `def f`.
+let private reExportLine: Parser<TopLevelItem, ParseState> =
+    spannedItem (attempt (pstring "export" >>. keywordEnd >>. wsNoNl() >>. reExportItem) |>> ReExport)
+
 let private moduleBlockItem: Parser<TopLevelItem, ParseState> =
     choice [
         importLine
@@ -1297,6 +1301,7 @@ let topLevelItem: Parser<TopLevelItem, ParseState> =
         attempt moduleBlockDecl
         moduleDecl
         importLine
+        reExportLine
         attributeItem
         attempt typeDef
         valueDef

@@ -250,6 +250,9 @@ and TopLevelItemKind =
     | ModuleBlock of ModuleName * TopLevelItem list
     | Def of Definition
     | Import of ImportItem list
+    /// `export m (a, b)`: the module exports `a` and `b`, which `m` exports, as if they were its own. The item is an
+    /// import of `m` that selects them.
+    | ReExport of ImportItem
     | Expr of Expression
     /// An `@name` attribute line; it applies to the top-level item that follows it (e.g. `@entry`). An argument is
     /// written in parentheses straight after the name, like a tag's payload: `@test(#io)`.

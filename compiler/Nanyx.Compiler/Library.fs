@@ -68,7 +68,16 @@ type internal CheckedModule =
       CheckedRests: Map<SymbolId, Map<Identifier, int list>>
       /// The ambient contexts (the runtime's, as `Console`) by the names the module knows them by, with their
       /// definitions: an importer that cannot name one still needs it where it calls a function that requires it.
-      AmbientContexts: Map<string, TypeDefInfo> }
+      AmbientContexts: Map<string, TypeDefInfo>
+      /// What the module re-exports (`export m (a, b)`), each with the module it re-exports from, for its importers to
+      /// import too.
+      ReExports: ReExported list }
+
+/// A re-export, `export m (a, b)`: the import of `m` that selects what is exported again, and `m` as checked.
+and internal ReExported =
+    { Origin: ModuleOrigin
+      Item: ImportItem
+      Module: CheckedModule }
 
 module Compiler =
     let private normalizeSource (source: string) =
@@ -77,18 +86,20 @@ module Compiler =
     let private importQualifier (item: ImportItem) =
         item.Alias |> Option.map IdentifierNames.sanitizeIdentifier
 
+    /// The module's imports, a re-export's among them: a re-export imports what it exports again.
     let private collectImports (module': Module) =
         module'
         |> List.choose (function
             | Kind (Import items) -> Some items
+            | Kind (ReExport item) -> Some [ item ]
             | _ -> None)
         |> List.collect id
 
-    let private removeImportStatements (module': Module) =
+    let private reExportsOf (module': Module) =
         module'
-        |> List.filter (function
-            | Kind (Import _) -> false
-            | _ -> true)
+        |> List.choose (function
+            | Kind (ReExport item) -> Some item
+            | _ -> None)
 
     /// Renames every reference to a name in `renames` throughout an expression. Used when a module is
     /// inlined into its importer, so that its definitions keep pointing at each other under their new names.
@@ -233,7 +244,8 @@ module Compiler =
 
     /// The error for each name `item` selects that `imported` does not export, with the exports closest to it.
     let private unexportedSelections (item: ImportItem) (imported: CheckedModule) : Diagnostic list =
-        let exports = Set.union (exportedValueNames imported.Own) (exportedTypeNames imported.Own)
+        let reExported = imported.ReExports |> List.collect (fun reExport -> reExport.Item.Selection |> Option.defaultValue [] |> List.map fst)
+        let exports = Set.union (exportedValueNames imported.Own) (exportedTypeNames imported.Own) |> Set.union (Set.ofList reExported)
         let shown =
             match item.Source with
             | ModuleImport name -> name
@@ -580,12 +592,18 @@ module Compiler =
             // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
             let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
             let mutable importedFiles: Map<SymbolId, ImportedFile> = Map.empty
-            let mergeImport (importedOrigin: ModuleOrigin) (item: ImportItem) (imported: CheckedModule) =
+            // The module's re-exports, and each as it is merged, with the module it re-exports from.
+            let reExportItems = reExportsOf desugared
+            let mutable reExports: ReExported list = []
+            // Merges the import `item` of `imported`, and gives back the import's symbol, if it has one. A made-up import
+            // has none; what it brings in is used through `through`, if given, as a re-export's names are used through
+            // the import of the module that re-exports them.
+            let mergeImport (importedOrigin: ModuleOrigin) (item: ImportItem) (through: SymbolId option) (imported: CheckedModule) : SymbolId option =
                 let importedKey = originKey importedOrigin
                 let qualifier = importQualifier item
                 let exportedValues = exportedValueNames imported.Own
-                // An import without an alias brings in every export unqualified, or only those it selects.
-                let selected = if qualifier.IsNone then item.Selection |> Option.map (selectedExports imported) else None
+                // An import brings in every export, or only those it selects.
+                let selected = item.Selection |> Option.map (selectedExports imported)
                 let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
                 if qualifier.IsNone && importedKey <> preludeKey then
                     let moduleName =
@@ -619,9 +637,13 @@ module Compiler =
                     |> Map.ofSeq
                 env <- extendEnvWithImport env qualifier (exportedValueTypes |> Map.filter (fun name _ -> isSelected name)) (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
                 // The import is a symbol of its own, unless the compiler made it up (for `@entry`).
+                let importedThroughSymbol (importId: SymbolId) =
+                    Seq.append exportedSymbols exportedTypeSymbols
+                    |> Seq.fold (fun acc (KeyValue(id, _)) ->
+                        acc |> Map.add id ((acc |> Map.tryFind id |> Option.defaultValue []) @ [ importId ])) state.ImportedThrough
                 let importSymbols, importedThrough =
                     if SourceSpan.isNone item.Span then
-                        Map.empty, state.ImportedThrough
+                        Map.empty, (through |> Option.map importedThroughSymbol |> Option.defaultValue state.ImportedThrough)
                     else
                         let name =
                             match item.Alias, item.Source with
@@ -633,10 +655,7 @@ module Compiler =
                         // Only an alias is written as a name: an import without one has no name to write.
                         if item.Alias.IsSome then
                             state <- { state with Scopes = state.Scopes |> Map.add import.Id (Scope.wholeModule item.Span.File) }
-                        Map.ofList [ import.Id, import ],
-                        Seq.append exportedSymbols exportedTypeSymbols
-                        |> Seq.fold (fun acc (KeyValue(id, _)) ->
-                            acc |> Map.add id ((acc |> Map.tryFind id |> Option.defaultValue []) @ [ import.Id ])) state.ImportedThrough
+                        Map.ofList [ import.Id, import ], importedThroughSymbol import.Id
                 // A type an explicit import exports replaces the prelude's type of the same name.
                 let typeDefs =
                     if importedKey = preludeKey then
@@ -651,7 +670,10 @@ module Compiler =
                 let typeDefs, hiddenTypeNames =
                     match qualifier with
                     | Some qualifier ->
-                        let qualified = exportedTypeDefs |> Map.fold (fun acc name info -> acc |> Map.add $"{qualifier}.{name}" info) typeDefs
+                        let qualified =
+                            exportedTypeDefs
+                            |> Map.filter (fun name _ -> isSelected name)
+                            |> Map.fold (fun acc name info -> acc |> Map.add $"{qualifier}.{name}" info) typeDefs
                         let hidden = exportedTypeDefs.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
                         qualified, Set.union state.HiddenTypeNames hidden
                     | None ->
@@ -741,15 +763,33 @@ module Compiler =
                 importedContextTypes <-
                     RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
                     |> Map.fold (fun acc id found -> acc |> Map.add id found) importedContextTypes
+                importSymbols |> Map.keys |> Seq.tryHead
+            // The import `item`, then what `imported` re-exports, as made-up imports of the modules it re-exports from,
+            // under the same alias and limited to what `item` selects. Each is used through the import `item` is.
+            let rec mergeWithReExports (importedOrigin: ModuleOrigin) (item: ImportItem) (through: SymbolId option) (imported: CheckedModule) =
+                let through = mergeImport importedOrigin item through imported |> Option.orElse through
+                for reExported in imported.ReExports do
+                    let names =
+                        reExported.Item.Selection
+                        |> Option.defaultValue []
+                        |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name)))
+                    if not names.IsEmpty then
+                        let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = Some names; Span = SourceSpan.none }
+                        mergeWithReExports reExported.Origin reImport through reExported.Module |> ignore
+                through
             // `as m & (a, b)` is an import under `m` and an import of `a` and `b` alone. The second is made up, so it
-            // is not an import symbol of its own. A name the module does not export is an error.
+            // is not an import symbol of its own. A name the module does not export is an error. A re-export is an
+            // import that selects the names it exports again, which the module's importers are given.
             let mergeWritten (importedOrigin: ModuleOrigin) (item: ImportItem) (imported: CheckedModule) =
                 match unexportedSelections item imported, item.Alias, item.Selection with
                 | _ :: _ as unexported, _, _ -> errors <- errors @ unexported
                 | [], Some _, Some _ ->
-                    mergeImport importedOrigin { item with Selection = None } imported
-                    mergeImport importedOrigin { item with Alias = None; Span = SourceSpan.none } imported
-                | [], _, _ -> mergeImport importedOrigin item imported
+                    let through = mergeWithReExports importedOrigin { item with Selection = None } None imported
+                    mergeWithReExports importedOrigin { item with Alias = None; Span = SourceSpan.none } through imported |> ignore
+                | [], _, _ ->
+                    mergeWithReExports importedOrigin item None imported |> ignore
+                    if reExportItems |> List.contains item then
+                        reExports <- reExports @ [ { Origin = importedOrigin; Item = item; Module = imported } ]
             for item in imports do
                 // An import of a module that is still being checked, because it imports this one, is a cycle.
                 let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
@@ -942,7 +982,8 @@ module Compiler =
                         |> Set.ofSeq
                         |> Set.union state.CarriedAmbientContexts
                         |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
-                        |> Map.ofSeq }
+                        |> Map.ofSeq
+                     ReExports = reExports }
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
     /// standard-library module is checked once per process (see `checkedStandardLibrary`), and the modules it imports

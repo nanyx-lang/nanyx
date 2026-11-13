@@ -153,6 +153,7 @@ let rec private expandModuleBlock (prefix: string) (items: TopLevelItem list) : 
             let nestedPrefix = qualifyModuleName prefix name
             TopLevelItem.at item.Span (ModuleDecl nestedPrefix) :: expandModuleBlock nestedPrefix nested
         | Import _
+        | ReExport _
         | Attribute _ -> [ item ]
         | Expr expr -> keep (Expr (rewriteExpressionInModule valueMap typeMap expr))
         | Def (ValueDef(isExport, name, typeOpt, expr)) ->

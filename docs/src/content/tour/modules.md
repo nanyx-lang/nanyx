@@ -214,6 +214,8 @@ export collections.list (map, filter, fold)
 export collections.map (empty, insert, lookup)
 ```
 
+A module that imports `collections` gets `map`, `insert` and the rest as if `collections` had defined them, under the alias it imports `collections` with, if any. They are still the definitions in `collections.list` and `collections.map`, which is where the editor goes to find them. A re-export also imports what it names into the module that writes it, as `import collections.list as (map, filter, fold)` would. What it names follows the rules for [selective imports](#selective-imports): a type brings the definitions attached to it, and a name the module doesn't export is an error.
+
 # Declaration order
 
 Inside a named module, textual declaration order has no semantic significance. Every declaration in the module — public or private, wherever it sits in the file — participates in the same module-wide scope, so a definition may refer to another definition declared later in the same module:

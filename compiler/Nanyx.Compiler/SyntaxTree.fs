@@ -55,6 +55,7 @@ module SyntaxTree =
         | Def (TypeDef _)
         | ModuleDecl _
         | Import _
+        | ReExport _
         | Attribute _ -> []
 
     /// The types written in a definition: its annotation, or a type definition's parameters' constraints and body.
@@ -88,6 +89,7 @@ module SyntaxTree =
         | Expr _
         | ModuleDecl _
         | Import _
+        | ReExport _
         | Attribute _ -> []
 
     /// The names a module writes as values of their own rather than calls: `add` in `fold(0, add)`, not in

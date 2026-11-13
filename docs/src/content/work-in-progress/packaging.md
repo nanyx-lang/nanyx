@@ -69,9 +69,11 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
   import by file path, in a package or not, must have an alias (`NYX0014`) and must name a script module, not one
   that declares `module name` (`NYX0015`), and no import may name an entrypoint, a file with top-level statements
   (`NYX0016`), as the [modules page](../tour/modules#importing-modules-by-file-path) says (`FileImports.fs`).
-- **Re-exports don't parse yet.** `import x as m`, grouped imports and selections (`as (a, b)`, `as m & (a, b)`)
-  work; a selection brings in only the exports it names, and the rest are inlined as private definitions are
-  (`selectedExports`, `inlinedRenames`). Re-exports (`export collections.list (map, filter)`) do not parse.
+- **The documented import syntax works.** `import x as m`, grouped imports, selections (`as (a, b)`,
+  `as m & (a, b)`) and re-exports (`export collections.list (map, filter)`). A selection brings in only the exports
+  it names, and the rest are inlined as private definitions are (`selectedExports`, `inlinedRenames`). A module
+  keeps its re-exports (`CheckedModule.ReExports`), and an importer merges each as a made-up import of the module
+  re-exported from, under its own alias (`mergeWithReExports`), so the names keep their original symbols.
 - **A program compiles to one WebAssembly module.** Imported modules are type-checked separately and their items
   inlined into the root (`inlinedItemsForImport`), so there is no linking step and no compiled artifact per
   module or package.
@@ -222,8 +224,8 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 
 1. **Imports by module name within a package.** Done ([#287](https://github.com/nanyx-lang/nanyx/issues/287)) but
    for `public-modules`, which only matters once another package can import this one.
-2. **The rest of the import syntax.** Selections, `as (a, b)` and `as m & (a, b)`, are done. Re-exports, which
-   `public-modules` relies on, are left ([#289](https://github.com/nanyx-lang/nanyx/issues/289)).
+2. **The rest of the import syntax.** Done ([#289](https://github.com/nanyx-lang/nanyx/issues/289)): selections and
+   re-exports, which `public-modules` relies on.
 3. **Local dependencies and projects.** `.nyxproj`, project references and path dependencies; one version per
    package; only direct dependencies importable; diagnostics for each rule.
 4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested

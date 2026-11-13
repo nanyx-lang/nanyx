@@ -1298,20 +1298,26 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text "("; nest (cat [ hard; sequence false body.Span.Start body.Span.End children ]); hard; text ")" ]
         | _ -> typeExpr body
 
+    and importSource (source: ImportSource) : Doc =
+        match source with
+        | ModuleImport m -> text m
+        | PathImport p -> text ("\"" + p + "\"")
+
+    /// The names an import or a re-export selects, on one line: `(sqrt, pi)`.
+    and importSelection (names: (Identifier * SourceSpan) list) : Doc =
+        text ("(" + (names |> List.map (fst >> Names.written) |> String.concat ", ") + ")")
+
     /// An import, its names sorted (see `ImportOrder`) within each run of them that no comment on a line of its own
     /// interrupts. A comment at the end of a name's line moves with the name; a comment on a line of its own stays
     /// where it is, ahead of the names after it.
     and importDoc (start: int) (finish: int) (items: ImportItem list) : Doc =
         let item (i: ImportItem) =
             cat [
-                (match i.Source with
-                 | ModuleImport m -> text m
-                 | PathImport p -> text ("\"" + p + "\""))
-                (let selection names = "(" + (names |> List.map (fst >> Names.written) |> String.concat ", ") + ")"
-                 match i.Alias, i.Selection with
-                 | Some alias, Some names -> text $" as {alias} & {selection names}"
+                importSource i.Source
+                (match i.Alias, i.Selection with
+                 | Some alias, Some names -> cat [ text $" as {alias} & "; importSelection names ]
                  | Some alias, None -> text $" as {alias}"
-                 | None, Some names -> text $" as {selection names}"
+                 | None, Some names -> cat [ text " as "; importSelection names ]
                  | None, None -> Doc.empty)
             ]
         match items with
@@ -1407,6 +1413,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items
+        | ReExport item -> cat [ text "export "; importSource item.Source; text " "; importSelection (Option.defaultValue [] item.Selection) ]
         | Expr value -> expr statementPosition value
         | Attribute(n, None) -> text $"@{n}"
         | Attribute(n, Some (Kind UnitExpr)) -> text $"@{n}()"

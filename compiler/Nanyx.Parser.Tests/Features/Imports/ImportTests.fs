@@ -52,3 +52,16 @@ let ``A name that starts with as after an import is not an alias`` () =
     match parseModule "import util\nassert(true)" with
     | Ok [ Kind (Import [ item ]); _ ] -> Assert.Equal(None, item.Alias)
     | other -> failwith $"Unexpected parse: %A{other}"
+[<Fact>]
+let ``A re-export names a module and what it exports again`` () =
+    match parseModule "export util (double, triple)" with
+    | Ok [ Kind (ReExport item) ] ->
+        Assert.Equal(ModuleImport "util", item.Source)
+        Assert.Equal<string list option>(Some [ "double"; "triple" ], item.Selection |> Option.map (List.map fst))
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``An exported definition is not a re-export`` () =
+    match parseModule "export def double = { x: int -> x * 2 }\nexport type Point = (x: int, y: int)" with
+    | Ok [ Kind (Def (ValueDef (true, "double", _, _))); Kind (Def (TypeDef ("Point", _, _, _))) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
