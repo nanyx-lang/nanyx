@@ -62,6 +62,8 @@ The other fields get a name, as `…ω` does in `keep`, only where the type uses
 | `nanyx.inlayHints.parameters` | on | Show the inferred type of each lambda parameter that does not write its type. |
 | `nanyx.inlayHints.patternVariables` | on | Show the inferred type of each variable a pattern binds. |
 
+Double-click an inlay hint to write its type into the file as an annotation: `def offset = 1` becomes `def offset: int = 1`, and `def apply = { f -> f(1) }` becomes `def apply = { f: ([c] int -> a) -> f(1) }`. What is written is source, whatever `nanyx.asciiTypes` says, so it type-checks to the same type. A pattern variable, or a name a destructuring `def (a, b) = ...` binds, can't be annotated, so its hint writes nothing; neither does a hint with `???` in it. Needs compiler 0.28.0 or later.
+
 VS Code's own `editor.codeLens` and `editor.inlayHints.enabled` settings turn all lenses and inlay hints off. To change them, or any other editor setting, for Nanyx files only, put them under `"[nanyx]"`:
 
 ```json

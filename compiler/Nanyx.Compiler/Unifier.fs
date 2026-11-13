@@ -22,6 +22,9 @@ type TypeNotation =
     | Unicode
     /// Only ASCII: type variables are `a`, `b`, `c`, ... and a spread is three dots, `(name: a, ...)`.
     | Ascii
+    /// As source writes it, for an annotation an editor inserts: as `Ascii`, except that the rest of a union is always
+    /// named, as source can't spread one: `#some(a) | z`.
+    | Source
 
 module Unifier =
     /// The type an alias stands for, looking through any number of aliases; any other type as it is. Only the
@@ -143,12 +146,12 @@ module Unifier =
             // A result that requires contexts is bracketed, so that its contexts read as its own.
             let retText =
                 match ret with
-                | TyFunc(_, _, _ :: _) -> $"({printTy spread false ret})"
+                | TyFunc(_, _, contexts) when not (writtenContexts contexts).IsEmpty -> $"({printTy spread false ret})"
                 | _ -> printTy spread false ret
             match writtenContexts contexts |> List.map FunctionContexts.withoutScope with
             | [] -> $"{argText} -> {retText}"
             | written ->
-                $"""[{written |> List.map (printTy spread false) |> String.concat ", "}] {argText} -> {retText}"""
+                $"""[{written |> List.map (printTy spread false) |> String.concat " & "}] {argText} -> {retText}"""
         | TyRecord fields ->
             match tryTupleLikeRecord fields with
             | Some tupleItems, namedFields ->
@@ -477,8 +480,8 @@ module Unifier =
 
     /// The ids of the made-up variables in `ty` that stand for the rest of an open record or union and appear nowhere
     /// else in it. Such a rest only says there may be more fields or tags, so it needs no name: `(name: α, …) -> α`,
-    /// `#some(int) | … -> int`.
-    let private loneRests (ty: Ty) : Set<int> =
+    /// `#some(int) | … -> int`. In `Source`, only an open record's: source can't spread a union.
+    let private loneRests (notation: TypeNotation) (ty: Ty) : Set<int> =
         let occurrences = varOccurrences ty
         let once =
             occurrences
@@ -486,7 +489,7 @@ module Unifier =
             |> List.choose (fun (id, count) -> if count = 1 then Some id else None)
             |> Set.ofList
         let unnamed = occurrences |> List.filter (fun v -> v.Name.IsNone) |> List.map (fun v -> v.Id) |> Set.ofList
-        restVarIds true ty |> Set.intersect once |> Set.intersect unnamed
+        restVarIds (notation <> Source) ty |> Set.intersect once |> Set.intersect unnamed
 
     /// Replaces the type variables the compiler made up in `ty` with primitives that print as their names for a
     /// reader. They are named in the order they appear, through the Greek (`α`, `β`, ...) or Latin (`a`, `b`, ...)
@@ -501,7 +504,8 @@ module Unifier =
         let alphabet, suffix =
             match notation with
             | Unicode -> greekLetters, subscript
-            | Ascii -> latinLetters, string
+            | Ascii
+            | Source -> latinLetters, string
         let vars = varsInPrintOrder ty
         let taken = vars |> List.choose (fun v -> v.Name) |> Set.ofList
         // The letters an annotation took are left out before the alphabet is shared between its two ends.
@@ -538,16 +542,16 @@ module Unifier =
 
     /// `ty` as `tyToString` writes it, with a spread written in `notation`.
     let private printIn (notation: TypeNotation) (ty: Ty) : string =
-        printTy (match notation with Unicode -> "…" | Ascii -> "...") true ty
+        printTy (match notation with Unicode -> "…" | Ascii | Source -> "...") true ty
 
     /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
     /// describes, and a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`.
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string =
-        printIn notation (apply (displayRenaming notation (loneRests ty) ty) ty)
+        printIn notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
 
     /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
-    let private loneAcross (tys: Ty list) : Set<int> =
-        let loneIn = tys |> List.map (fun ty -> loneRests ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
+    let private loneAcross (notation: TypeNotation) (tys: Ty list) : Set<int> =
+        let loneIn = tys |> List.map (fun ty -> loneRests notation ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
         loneIn
         |> List.map fst
         |> Set.unionMany
@@ -558,13 +562,13 @@ module Unifier =
     /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list =
-        let renamed = displayRenaming notation (loneAcross tys) (TyApply("", tys))
+        let renamed = displayRenaming notation (loneAcross notation tys) (TyApply("", tys))
         tys |> List.map (apply renamed >> printIn notation)
 
     /// The type variables `tysToDisplayStrings` writes in `tys`, in the order it names them, each with the name it
     /// writes. A rest it writes as a bare spread is not among them.
     let displayedVars (notation: TypeNotation) (tys: Ty list) : (TyVar * string) list =
-        let lone = loneAcross tys
+        let lone = loneAcross notation tys
         let renamed = displayRenaming notation lone (TyApply("", tys))
         varsInPrintOrder (TyApply("", tys))
         |> List.filter (fun v -> not (lone.Contains v.Id))
