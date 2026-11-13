@@ -86,6 +86,13 @@ own.
 |---|---|---|
 | `Program.fs` (parser) | 1,420 | `SourceTrivia.fs` (the parse error, the comments and blank lines the formatter puts back) moved out |
 
+**2026-11-13.** The first part of splitting `Library.fs` ([#365](https://github.com/nanyx-lang/nanyx/issues/365)),
+which was at 1,518 lines:
+
+| File | Lines | What changed |
+|---|---|---|
+| `Library.fs` | 1,020 | Workflow desugaring (`desugarWithDiagnostics`, `desugar`) moved out to `WorkflowDesugaring.fs` |
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review
