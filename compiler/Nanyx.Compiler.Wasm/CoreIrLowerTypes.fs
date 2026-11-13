@@ -251,3 +251,18 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
+
+/// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
+/// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
+/// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then.
+let valuesOf (input: IrType) =
+    match input, IrType.tupleElements input with
+    | IrUnit, _ -> []
+    | _, Some elements -> List.map snd elements
+    | _, None -> [ input ]
+
+let adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
+    match givenTy, expectedTy with
+    | IrFunction(given, _, _), IrFunction(IrUnit, _, _) -> valuesOf given
+    | _, IrFunction(expected, _, _) -> valuesOf expected
+    | _ -> []

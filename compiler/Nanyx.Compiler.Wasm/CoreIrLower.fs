@@ -71,20 +71,6 @@ type internal Scope =
       /// type, and the field of the environment that holds its closure at each type arguments it is used at here.
       CapturedLocals: Map<string, Ty * (IrType list * int) list> }
 
-/// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
-/// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
-/// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then.
-let private valuesOf (input: IrType) =
-    match input, IrType.tupleElements input with
-    | IrUnit, _ -> []
-    | _, Some elements -> List.map snd elements
-    | _, None -> [ input ]
-
-let private adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
-    match givenTy, expectedTy with
-    | IrFunction(given, _, _), IrFunction(IrUnit, _, _) -> valuesOf given
-    | _, IrFunction(expected, _, _) -> valuesOf expected
-    | _ -> []
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
