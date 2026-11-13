@@ -38,13 +38,17 @@ public sealed record InfoViewHighlight
 }
 
 /// <summary>
-/// A section of the info view. <see cref="Id"/> is one of <c>expression</c>, <c>inScope</c>, <c>topLevel</c>,
-/// <c>contexts</c>, <c>call</c>, <c>flow</c> and <c>messages</c>; <see cref="Collapsed"/> says whether a client shows it closed at first.
+/// A section of the info view. <see cref="Id"/> is one of <c>cursor</c>, <c>messages</c>, <c>inScope</c>,
+/// <c>topLevel</c>, <c>contexts</c>, <c>call</c> and <c>flow</c>; <see cref="Group"/> is what the section is about, for
+/// a client to set the groups apart: <c>cursor</c> (what is at the position and the messages on its line),
+/// <c>scope</c> (the names in scope) or <c>contexts</c>; <see cref="Collapsed"/> says whether a client shows it closed
+/// at first.
 /// </summary>
 public sealed record InfoViewSection
 {
     public required string Id { get; init; }
     public required string Title { get; init; }
+    public required string Group { get; init; }
     public bool Collapsed { get; init; }
     public required IReadOnlyList<InfoViewItem> Items { get; init; }
 }
@@ -65,15 +69,16 @@ public sealed record InfoViewItem
 }
 
 /// <summary>
-/// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel. The expression there with
-/// its type, as hover shows it, and on a use of a generic def the def's declared signature and how the use fills in
-/// its type variables (see <see cref="ExpressionItems"/>); the locals, parameters and pattern variables in scope, nearest first; the top-level defs
+/// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel. What is at the cursor: on a
+/// module's name, as hover finds it, the module and its doc comment (see <see cref="ModuleItem"/>); otherwise the
+/// expression there with its type, as hover shows it, and on a use of a generic def the def's declared signature and
+/// how the use fills in its type variables (see <see cref="ExpressionItems"/>); the diagnostics on the position's
+/// line; the locals, parameters and pattern variables in scope, nearest first; the top-level defs
 /// and imports in scope; the contexts in scope, each with where it comes from (a def's signature, a <c>use</c>, a def
 /// that was inferred to require it, or the runtime); the contexts the innermost call around the position that requires
 /// any requires, each with where it finds it (one of those, or an instance the compiler builds: from attached
 /// definitions, derived from the type's parts, or its own); the flow of contexts through the def around the position,
-/// each provider with the calls it serves (see <see cref="NyxCompiler.ContextFlow"/>); and the diagnostics on the
-/// position's line. It also gives the ranges to highlight: a provider at the position and the calls it serves, or a
+/// each provider with the calls it serves (see <see cref="NyxCompiler.ContextFlow"/>). It also gives the ranges to highlight: a provider at the position and the calls it serves, or a
 /// call and what provides its contexts. Read from the
 /// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
@@ -123,10 +128,15 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         Location? Locate(Parser.Program.SourceSpan span) => LocationOf(uri, document, span);
         string? DocOf(NyxCompiler.Symbol symbol) => docs?.ForSymbol(symbol)?.Value;
 
-        // The expression's type is only shown where the text has not been edited since it was typed.
-        var expression = info?.Expression?.Value is { } hover && document.ToLastGood(offset) is not null
-            ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value is { } symbol ? DocOf(symbol) : null)
-            : [];
+        // What is at the cursor is only shown where the text has not been edited since it was typed.
+        IReadOnlyList<InfoViewItem> cursor = document.ToLastGood(offset) is not { } typed
+            ? []
+            : document.LastGood is { Compiled: { } typedCompile } typedDocument
+              && NyxCompiler.Hover.moduleAt(typedDocument.FileName, typedCompile, typed)?.Value is { } module
+                ? [ModuleItem(module, typedDocument.DocReader(uri, typed, _standardLibrary), Locate)]
+                : info?.Expression?.Value is { } hover
+                    ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value is { } symbol ? DocOf(symbol) : null)
+                    : [];
         var line = request.Position.Line;
         var messages = DiagnosticsPublisher.Compute(uri, document)
             .Where(diagnostic => diagnostic.Range.Start.Line <= line && line <= diagnostic.Range.End.Line)
@@ -150,12 +160,20 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         {
             Sections =
             [
-                new InfoViewSection { Id = "expression", Title = "Expression", Items = expression },
-                new InfoViewSection { Id = "inScope", Title = "In scope", Items = info?.Locals.Select(Name).ToList() ?? [] },
+                new InfoViewSection { Id = "cursor", Title = "At the cursor", Group = "cursor", Items = cursor },
+                new InfoViewSection { Id = "messages", Title = "Messages", Group = "cursor", Items = messages },
+                new InfoViewSection
+                {
+                    Id = "inScope",
+                    Title = "In scope",
+                    Group = "scope",
+                    Items = info?.Locals.Select(Name).ToList() ?? []
+                },
                 new InfoViewSection
                 {
                     Id = "topLevel",
                     Title = "Top level",
+                    Group = "scope",
                     Collapsed = true,
                     Items = info?.TopLevel.Select(Name).ToList() ?? []
                 },
@@ -163,6 +181,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 {
                     Id = "contexts",
                     Title = "Contexts",
+                    Group = "contexts",
                     Items = info?.Contexts
                         .Select(context => new InfoViewItem
                         {
@@ -177,6 +196,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 {
                     Id = "call",
                     Title = "This call",
+                    Group = "contexts",
                     Items = info?.Call
                         .Select(context => new InfoViewItem
                         {
@@ -191,9 +211,9 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 {
                     Id = "flow",
                     Title = flow is null ? "Context flow" : $"Context flow in {flow.Def}",
+                    Group = "contexts",
                     Items = flow?.Entries.Select(entry => FlowItem(entry, Locate)).ToList() ?? []
-                },
-                new InfoViewSection { Id = "messages", Title = "Messages", Items = messages }
+                }
             ],
             Highlights = highlights is null
                 ? []
@@ -240,7 +260,23 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             .Select(location => new InfoViewHighlight { Range = location!.Range, Kind = kind });
 
     /// <summary>
-    /// The items of the expression section: the expression's type, as hover shows it, linking to the expression. On a
+    /// The item of a module's name at the cursor (see <see cref="NyxCompiler.Hover.moduleAt"/>): <c>module name</c>,
+    /// linking to the name, with the module's doc comment, as hover shows it.
+    /// </summary>
+    private static InfoViewItem ModuleItem(
+        NyxCompiler.Hover.ModuleHover module,
+        NyxCompiler.Documentation.Reader docs,
+        Func<Parser.Program.SourceSpan, Location?> locate) =>
+        new()
+        {
+            Text = $"module {module.Name}",
+            Detail = "module",
+            Location = locate(module.Span),
+            Documentation = docs.ForModule(module.File)?.Value
+        };
+
+    /// <summary>
+    /// The items of the cursor section on an expression: the expression's type, as hover shows it, linking to the expression. On a
     /// use of a generic def, the def's declared signature (<c>declared</c>) comes first, then the type at this use
     /// (<c>at this use</c>), then what the use fills each of the signature's type variables with
     /// (<c>a = string, b = int</c>), each linking to the def. The first carries <paramref name="documentation"/>, the

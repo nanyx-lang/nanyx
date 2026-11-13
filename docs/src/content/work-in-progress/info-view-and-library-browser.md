@@ -54,13 +54,16 @@ The first cut is built ([#715](https://github.com/nanyx-lang/nanyx/issues/715)),
 
 ## What it shows
 
-The panel follows the cursor. It shows, from top to bottom:
+The panel follows the cursor. It shows, from top to bottom, in three groups with a rule between them (each section's
+`Group`: `cursor`, `scope`, `contexts`):
 
-- **Expression.** The type of the narrowest typed expression at the cursor, as hover shows it. On a name that refers
+- **At the cursor.** On a module's name, as `Hover.moduleAt` finds it, `module name` and the module's doc comment.
+  Otherwise the type of the narrowest typed expression at the cursor, as hover shows it. On a name that refers
   to a generic def, the def's declared signature comes first, as hover writes the def (`def name: [contexts] type`),
   then the type at this use, then the bindings of the signature's type variables at this use (`a = string`, and a
   context variable as the contexts it stands for, `c = Console`), each linking to the def; `Hover.instantiationAt`
   works them out ([#929](https://github.com/nanyx-lang/nanyx/issues/929)). A def that is not generic shows its type once.
+- **Messages.** The diagnostics at the cursor's line.
 - **In scope.** The locals, parameters and pattern variables in scope, each with its type, nearest first. Top-level
   and imported names are collapsed by default.
 - **Contexts.** The contexts in scope at the cursor. For each one, where it comes from:
@@ -79,7 +82,6 @@ The panel follows the cursor. It shows, from top to bottom:
   type declares, at the types of the call, beside the call's `ContextInstances` in order, then the others
   `ContextProviders` records for it (a member's context, or one a function value it runs requires).
 - **Context flow.** See below.
-- **Messages.** The diagnostics at the cursor's line.
 
 Every span in the panel is a link: clicking a `use` or a signature jumps to it.
 
@@ -157,7 +159,7 @@ no provider, and has no entry in `ContextProviders`; "This call" shows those fro
   selection or the document changes, debounced, while the view is visible, and drops an answer a later request has
   overtaken. It can pin a position, so the view keeps showing that position while you edit elsewhere; the pinned
   position does not move with edits above it yet. It shows each doc comment under its item, cut to its first
-  paragraph until clicked. Plain TypeScript and
+  paragraph until clicked, except that of what is at the cursor, which it shows in full. Plain TypeScript and
   HTML; no framework.
 - **Other editors.** The request is plain LSP, so another client can show the same thing. A text rendering in an
   output buffer would do for Neovim.

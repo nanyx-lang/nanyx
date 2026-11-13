@@ -26,7 +26,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 2, 3);
 
-        var expression = Assert.Single(Section(view, "expression").Items);
+        var expression = Assert.Single(Section(view, "cursor").Items);
         Assert.Equal("shout: string", expression.Text);
         Assert.Equal(new Range(2, 2, 2, 7), expression.Location?.Range);
         Assert.Equal(
@@ -117,7 +117,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 0, 32);
 
-        Assert.Equal("n: int", Assert.Single(Section(view, "expression").Items).Text);
+        Assert.Equal("n: int", Assert.Single(Section(view, "cursor").Items).Text);
         Assert.Equal("n: int", Assert.Single(Section(view, "inScope").Items).Text);
     }
 
@@ -135,7 +135,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var annotated = Section(await InfoViewAt(uri, 2, 9), "expression").Items;
+        var annotated = Section(await InfoViewAt(uri, 2, 9), "cursor").Items;
         Assert.Equal(
             [
                 ("def pair: a, b -> (a, b)", "declared"),
@@ -145,7 +145,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
             annotated.Select(item => (item.Text, item.Detail)));
         Assert.All(annotated, item => Assert.Equal(new Range(0, 4, 0, 8), item.Location?.Range));
 
-        var inferred = Section(await InfoViewAt(uri, 3, 9), "expression").Items;
+        var inferred = Section(await InfoViewAt(uri, 3, 9), "cursor").Items;
         Assert.Equal(
             [
                 ("def first: α, β -> α", "declared"),
@@ -167,10 +167,10 @@ public sealed class InfoViewTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var expression = Assert.Single(Section(await InfoViewAt(uri, 1, 12), "expression").Items);
+        var expression = Assert.Single(Section(await InfoViewAt(uri, 1, 12), "cursor").Items);
         Assert.Equal(("def double: int -> int", null), (expression.Text, expression.Detail));
         // The def's own name shows its signature once too.
-        Assert.Single(Section(await InfoViewAt(uri, 0, 5), "expression").Items);
+        Assert.Single(Section(await InfoViewAt(uri, 0, 5), "cursor").Items);
     }
 
     [Fact]
@@ -194,14 +194,14 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 ("def apply: (int -> int), int -> int", "at this use"),
                 ("a = int, b = int", "type variables")
             ],
-            Section(await InfoViewAt(uri, 2, 10), "expression").Items.Select(item => (item.Text, item.Detail)));
+            Section(await InfoViewAt(uri, 2, 10), "cursor").Items.Select(item => (item.Text, item.Detail)));
         Assert.Equal(
             [
                 ("def apply: [c] ([c] a -> b), a -> b", "declared"),
                 ("def apply: [Console] ([Console] string -> ()), string -> ()", "at this use"),
                 ("c = Console, a = string, b = ()", "type variables")
             ],
-            Section(await InfoViewAt(uri, 3, 14), "expression").Items.Select(item => (item.Text, item.Detail)));
+            Section(await InfoViewAt(uri, 3, 14), "cursor").Items.Select(item => (item.Text, item.Detail)));
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 """.ReplaceLineEndings("\n"));
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-            var items = Section(await InfoViewAt(uri, 2, 11), "expression").Items;
+            var items = Section(await InfoViewAt(uri, 2, 11), "cursor").Items;
             Assert.Equal(
                 [
                     ("def wrap: a -> #some(a) | #nothing", "declared"),
@@ -262,7 +262,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 ("def max: [Ord(int)] int, int -> int", "at this use"),
                 ("a = int", "type variables")
             ],
-            Section(await InfoViewAt(uri, 1, 17), "expression").Items.Select(item => (item.Text, item.Detail)));
+            Section(await InfoViewAt(uri, 1, 17), "cursor").Items.Select(item => (item.Text, item.Detail)));
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 13, 7);
 
-        Assert.Equal("The message, shouted.", Assert.Single(Section(view, "expression").Items).Documentation);
+        Assert.Equal("The message, shouted.", Assert.Single(Section(view, "cursor").Items).Documentation);
         Assert.Equal(
             [("loud: string", "The message, shouted."), ("message: string", null)],
             Section(view, "inScope").Items.Select(item => (item.Text, item.Documentation)));
@@ -326,7 +326,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 """.ReplaceLineEndings("\n"));
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-            var items = Section(await InfoViewAt(uri, 2, 11), "expression").Items;
+            var items = Section(await InfoViewAt(uri, 2, 11), "cursor").Items;
             Assert.Equal(
                 [("declared", "Wraps `x` in a `#some`."), ("at this use", null), ("type variables", null)],
                 items.Select(item => (item.Detail, item.Documentation)));
@@ -349,8 +349,46 @@ public sealed class InfoViewTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var declared = Section(await InfoViewAt(uri, 1, 17), "expression").Items[0];
+        var declared = Section(await InfoViewAt(uri, 1, 17), "cursor").Items[0];
         Assert.Equal("The larger of `a` and `b`.", declared.Documentation);
+    }
+
+    [Fact]
+    public async Task Info_view_shows_a_module_and_its_doc_comment_at_its_name()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-13");
+
+        Open(uri, """
+            import nanyx/math as m
+            def biggest = m.max(1, 2)
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        foreach (var (line, character, range) in new[] { (0, 10, new Range(0, 7, 0, 22)), (1, 14, new Range(1, 14, 1, 15)) })
+        {
+            var view = await InfoViewAt(uri, line, character);
+            var module = Assert.Single(Section(view, "cursor").Items);
+            Assert.Equal(("module math", "module", range), (module.Text, module.Detail, module.Location?.Range));
+            Assert.NotNull(module.Documentation);
+            Assert.Equal("At the cursor", Section(view, "cursor").Title);
+        }
+    }
+
+    [Fact]
+    public async Task Info_view_groups_its_sections_with_the_cursor_and_its_messages_first()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-14");
+
+        Open(uri, "def one = 1\n");
+        await NextPublished(uri);
+
+        Assert.Equal(
+            [
+                ("cursor", "cursor"), ("messages", "cursor"), ("inScope", "scope"), ("topLevel", "scope"),
+                ("contexts", "contexts"), ("call", "contexts"), ("flow", "contexts")
+            ],
+            (await InfoViewAt(uri, 0, 5)).Sections.Select(section => (section.Id, section.Group)));
     }
 
     [Fact]
