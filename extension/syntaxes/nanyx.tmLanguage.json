@@ -12,7 +12,6 @@
     { "include": "#keywords" },
     { "include": "#constants" },
     { "include": "#tags" },
-    { "include": "#nominal" },
     { "include": "#pipes" },
     { "include": "#backtick-names" },
     { "include": "#types" },
@@ -149,7 +148,7 @@
       "patterns": [
         {
           "comment": "def name, rec name, def Type.name, def Type.`op`, def string.name",
-          "match": "\\b(def|rec)\\s+(?:(\\$?[A-Z][A-Za-z0-9_]*|int|float|bool|string|unit|list|seq|map|set)(\\.))?(?:(`[^`]+`)|([a-z_][A-Za-z0-9_]*))(?![A-Za-z0-9_])",
+          "match": "\\b(def|rec)\\s+(?:([A-Z][A-Za-z0-9_]*|int|float|bool|string|unit|list|seq|map|set)(\\.))?(?:(`[^`]+`)|([a-z_][A-Za-z0-9_]*))(?![A-Za-z0-9_])",
           "captures": {
             "1": { "name": "keyword.declaration.nanyx" },
             "2": { "name": "entity.name.type.nanyx" },
@@ -159,12 +158,11 @@
           }
         },
         {
-          "comment": "type Name, context Name, type $Nominal",
-          "match": "\\b(type|context)\\s+(\\$?)([A-Z][A-Za-z0-9_]*)",
+          "comment": "type Name, context Name",
+          "match": "\\b(type|context)\\s+([A-Z][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.declaration.nanyx" },
-            "2": { "name": "punctuation.definition.nominal.nanyx" },
-            "3": { "name": "entity.name.type.nanyx" }
+            "2": { "name": "entity.name.type.nanyx" }
           }
         },
         {
@@ -227,7 +225,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.nanyx",
-          "match": "\\b(def|type|context|module|import|export|use|rec|mut|private|as|in|typeof)\\b"
+          "match": "\\b(def|type|context|module|import|export|use|rec|mut|private|protected|as|in|typeof)\\b"
         },
         {
           "name": "keyword.control.nanyx",
@@ -280,23 +278,11 @@
         }
       ]
     },
-    "nominal": {
-      "patterns": [
-        {
-          "comment": "$Name is a nominal type or context",
-          "match": "(\\$)([A-Z][A-Za-z0-9_]*)",
-          "captures": {
-            "1": { "name": "punctuation.definition.nominal.nanyx" },
-            "2": { "name": "entity.name.type.nominal.nanyx" }
-          }
-        }
-      ]
-    },
     "pipes": {
       "patterns": [
         {
           "comment": "x \\Type.f, x \\string.f  or  x \\f",
-          "match": "(\\\\)\\s*(?:(\\$?[A-Z][A-Za-z0-9_]*|int|float|bool|string|unit|list|seq|map|set)(\\.))?([a-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_.])",
+          "match": "(\\\\)\\s*(?:([A-Z][A-Za-z0-9_]*|int|float|bool|string|unit|list|seq|map|set)(\\.))?([a-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_.])",
           "captures": {
             "1": { "name": "keyword.operator.pipe.nanyx" },
             "2": { "name": "entity.name.type.nanyx" },

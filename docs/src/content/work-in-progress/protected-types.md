@@ -12,8 +12,11 @@ used, and the tools show which types are nominal. The work is tracked in
 **Status.** The compiler reads `protected` and decides nominality from the declaration, through
 `TypeDefModifier.isNominal` and `TypeDefInfo.IsNominal`, rather than from the name. A `$` before a declared name still
 declares a protected type and a `$` before a name where it is used is read and dropped, so `$Email` is `Email`; the
-formatter writes the new form. The prelude declares `Memory` with `protected`. Still to do: the editor's styling and
-hover, the `dollarPrefixedType` linter rule, and rewriting the docs and examples.
+formatter writes the new form. The prelude declares `Memory` with `protected`. The language server marks nominal
+types' names as semantic tokens with a `nominal` modifier, and `private` for private ones (`NominalNames.inModule`),
+which the extension shows in italics, and hover names the kind and the home module. Still to do: the
+`dollarPrefixedType` linter rule, and rewriting the docs and examples. The info view does not list a module's types,
+so it has nothing to show the kind on yet.
 
 The words, as this page uses them: a *nominal* type is one whose name matters, as opposed to an alias for a structural
 record or union. There are two kinds. A *protected* type is nominal and its shape is visible everywhere, so `Email` is

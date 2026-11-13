@@ -238,7 +238,7 @@ module Unifier =
         varOccurrences ty |> List.distinctBy (fun v -> v.Id)
 
     /// The module `origin` is, as a reader knows it: its file's name, or the standard library's module's.
-    let private moduleText (origin: ModuleOrigin) =
+    let internal moduleText (origin: ModuleOrigin) =
         match origin with
         | SourceFile fullPath -> $"'{System.IO.Path.GetFileName fullPath}'"
         | StandardLibraryModule name -> $"the standard library's '{name}'"
