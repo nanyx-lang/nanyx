@@ -517,6 +517,33 @@ module NegateSyntax =
 module DbgSyntax =
     let builtIn = "dbg"
 
+/// `def (x, y) = value` or `def $Money(pence) = m` (see the parser's `Destructuring`): the whole value is bound to a
+/// temporary named from where the def is written, as `__tuple_3_1`, and each name the pattern binds to its part of it.
+module DestructuringSyntax =
+    let private tempName = System.Text.RegularExpressions.Regex(@"^__tuple_\d+_\d+$")
+
+    /// The temporary of a destructuring def written at `line` and `column`.
+    let temp (line: int64) (column: int64) = $"__tuple_{line}_{column}"
+
+    /// Whether `name` is the temporary of a destructuring def.
+    let isTemp (name: Identifier) = tempName.IsMatch name
+
+/// The names the compiler makes up: the built-ins syntax is desugared into (`__for`, `__with`) and the temporaries
+/// desugared code binds (`__tuple_3_1`) all start with "__".
+module MadeUpNames =
+    let isMadeUp (name: Identifier) = name.StartsWith "__"
+
+/// An error deferred to run time (see the deferred errors page): a call to the built-in "__panic" with the message it
+/// writes before it stops the program. The compiler makes it in place of code that failed to check; no code can write it.
+module PanicSyntax =
+    let builtIn = "__panic"
+
+    /// The message a deferred error writes.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ Kind (LiteralExpr(StringLit message)) ]) when name = builtIn -> Some message
+        | _ -> None
+
 /// `mut x = e` (see the memory page) declares a cell that holds the value of `e`: a def of `x` whose value is a call to
 /// the built-in "__mut" with `e`, spanning the declaration. Nothing else makes such a call: `mut` is not an expression.
 module MutSyntax =

@@ -2,14 +2,9 @@
 module Nanyx.Formatter.Syntax
 
 open System.Collections.Generic
-open System.Text.RegularExpressions
 open Parser.Program
 
-/// The name a destructuring `def (a, b) = ...` binds its whole value to is made from where the def is written
-/// (`__tuple_3_1`), so it changes when the def moves.
-let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
-
-/// The items with what formatting may change taken out: each destructuring temporary is renamed by the order it first
+/// The items with what formatting may change taken out: each destructuring temporary, whose name says where its def is written, is renamed by the order it first
 /// appears in, imports lose their spans (the only spans syntax equality looks at), imports in a row become one and are
 /// sorted (see `ImportOrder`), and a
 /// lambda whose body is a block of one expression has that expression as its body.
@@ -17,7 +12,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
     let temps = Dictionary<string, string>()
 
     let name (n: Identifier) =
-        if tupleTemp.IsMatch n then
+        if DestructuringSyntax.isTemp n then
             match temps.TryGetValue n with
             | true, renamed -> renamed
             | false, _ ->

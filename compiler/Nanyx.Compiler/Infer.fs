@@ -257,7 +257,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | Ok (typedArg, next) -> Ok (mkTypedExpr expr typedArg.Type None None None, next)
                 | Error err -> Error err
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan "dbg expects a single argument" ]
-        elif name = "not" then
+        elif name = NotSyntax.builtIn then
             // The `not` keyword: the parser represents `not x` as a call to "not" with one argument.
             match args with
             | [single] ->
@@ -276,7 +276,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     OperatorCalls.inferNegation (memberOfInstanceInScope env next) (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
                     |> Result.map (fun (resultTy, negated) -> mkTypedExpr expr resultTy None None None, negated))
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "- expects a single operand" ]
-        elif name = "__with" then
+        elif name = WithSyntax.builtIn then
             // `record with f = v, ...`: the parser represents a record update as a call to "__with" with the
             // record and a record of the updated fields. The result has the record's type; every updated
             // field must exist on it, at the field's type.

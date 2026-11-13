@@ -71,7 +71,7 @@ formatter and the language server need no change until the parser underneath the
 - **A differential test.** It parses each corpus file with two parsers and asserts that the syntax trees are equal,
   ignoring node ids. Every later stage is checked by it.
 - **The refactors already filed**, which shrink what has to be ported: name the desugared calls in one place
-  ([#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
+  (done: the `...Syntax` modules in `Ast.fs`, [#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
   ([#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
   list (done: `binaryOperators` in `Operators.fs`, [#370](https://github.com/nanyx-lang/nanyx/issues/370)), and split
   the parser out of `Program.fs`

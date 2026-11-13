@@ -27,7 +27,8 @@ label.
 
 - **Name built-in syntax once.** The parser desugars some syntax into calls with reserved names (`__for`,
   `__with`, `__range`, `__rec`, `dbg`, `not`). Don't add new string matches on these names. Use or extend
-  the shared constants and active patterns ([#367](https://github.com/nanyx-lang/nanyx/issues/367)).
+  the shared constants and active patterns, the `...Syntax` modules in the parser's `Ast.fs`
+  ([#367](https://github.com/nanyx-lang/nanyx/issues/367)).
 - **Report user errors as diagnostics, with a span.** A bare `failwith` is never the way to tell users
   something. In the backend, a feature that isn't supported yet and a broken compiler invariant are
   different things, so report them differently

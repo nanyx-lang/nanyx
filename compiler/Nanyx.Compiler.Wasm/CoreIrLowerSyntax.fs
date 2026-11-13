@@ -16,8 +16,7 @@ let rec storesBeforeValue (expr: Expression) =
     | BinaryOp(_, _, left, right) -> storesBeforeValue left || storesBeforeValue right
     // `dbg` holds its value in a local while it prints it, a `for` loop stores its elements, and a `while` loop's
     // condition and body run again each time round.
-    | FunctionCall("dbg", _, _)
-    | FunctionCall("__for", _, _)
+    | FunctionCall(name, _, _) when name = DbgSyntax.builtIn || name = ForSyntax.builtIn -> true
     | WhileSyntax.Call _ -> true
     // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).
     | FunctionCall(name, _, [ _ ]) when name = CellSyntax.read || name = CellSyntax.unbox -> true
@@ -45,7 +44,7 @@ let recordExprFields (fields: RecordField list) =
 let rec deferredMessages (expr: Expression) : string list =
     let all (exprs: Expression list) = exprs |> List.collect deferredMessages
     match expr.Kind with
-    | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) -> [ message ]
+    | PanicSyntax.Call message -> [ message ]
     | InterpolatedString parts -> parts |> List.choose (function StringExpr value -> Some value | StringText _ -> None) |> all
     | Block statements ->
         statements

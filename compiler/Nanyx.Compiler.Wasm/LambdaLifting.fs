@@ -372,7 +372,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 // `rec name = { ... }`: a local function that calls itself. It is lifted under a fresh
                 // name with its self-references redirected there (a self-call passes the environment on),
                 // and the local is bound to its closure.
-                | DefStatement(isExport, name, _, Kind (FunctionCall("__rec", _, [ Kind (Lambda(args, body, _)) as lambda ]))) when not args.IsEmpty ->
+                | DefStatement(isExport, name, _, Kind (RecSyntax.Call (Kind (Lambda(args, body, _)) as lambda))) when not args.IsEmpty ->
                     let liftedName = $"__rec_{sanitizeIdentifier name}_{counter}"
                     counter <- counter + 1
                     let parameterNames = args |> List.map fst |> Set.ofList
@@ -386,7 +386,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                     lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
                     origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda }
                     [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
-                | DefStatement(isExport, name, typeOpt, Kind (FunctionCall("__rec", _, [ rhs ]))) ->
+                | DefStatement(isExport, name, typeOpt, Kind (RecSyntax.Call rhs)) ->
                     [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
                 // A record a `use` binds below: its fields are context members.
                 | DefStatement(isExport, name, typeOpt, (Kind (RecordExpr fields) as record)) when usedRecords.ContainsKey name ->
