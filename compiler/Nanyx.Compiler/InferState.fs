@@ -271,6 +271,9 @@ type InferState =
             LambdaContexts: Ty list list;
             /// The lambdas that are a def's own body: the def's contexts are its, not its type's (see `LambdaContexts`).
             BodyLambdas: Set<NodeId>;
+            /// The instances a `use` loads that are written at it, by the node of each: their members' lambdas may
+            /// need more contexts than the members' types declare (see `UseDischarge`).
+            UseInstances: Set<NodeId>;
             /// The unannotated local defs whose values are being inferred, by the id of the variable each is bound at
             /// meanwhile (see `LambdaContexts.enterSelf`).
             SelfTypes: Map<int, SelfDef>;
@@ -348,6 +351,7 @@ let emptyState =
             CellAssignments = Set.empty;
             LambdaContexts = [];
             BodyLambdas = Set.empty;
+            UseInstances = Set.empty;
             SelfTypes = Map.empty;
             InferredContextVars = Map.empty }
 

@@ -7,8 +7,8 @@ order: 1
 This page settles two related questions, now that function types carry contexts
 ([#768](https://github.com/nanyx-lang/nanyx/issues/768)): how a `use` can implement one context in terms of another,
 and what replaces NYX0224, the escape check for `memory` blocks. The design was decided in
-[#1035](https://github.com/nanyx-lang/nanyx/issues/1035). None of it is implemented yet; the plan at the end lists the
-issues.
+[#1035](https://github.com/nanyx-lang/nanyx/issues/1035). Discharging at a `use` is implemented; the plan at the end
+lists the issues for the rest.
 
 NYX0225, the escape check for other contexts, is gone: since [#836](https://github.com/nanyx-lang/nanyx/issues/836)
 each call passes a function value the instances in scope where it is called, so a lambda that requires a context may
@@ -74,6 +74,11 @@ def main = {
 
 - **The backend needs nothing new.** `FunctionLowering.Coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.
+
+`UseDischarge.fs` does this in the type checker ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). A `use`
+marks the instance it loads; the constructor call checks each lambda it is given against its member's type without
+the contexts the lambda needs besides, and records those as used where the `use` is written, so a lambda around the
+`use` requires them too. The lambda's parameters take their types from the member wherever the constructor is called.
 
 A `use` of a record written out, `use (log = { m: string -> println(m) })`, already checks and runs, because its
 members have no declared types to fit: `log` is `[Console] string -> ()`, and a lambda that calls it requires
@@ -184,8 +189,8 @@ checks, since a lambda with no parameters ignores one.
 
 # Plan
 
-1. Let a `use` give a member a lambda that needs more contexts, required where the `use` is written
-   ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)).
+1. ~~Let a `use` give a member a lambda that needs more contexts, required where the `use` is written
+   ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)).~~ Done.
 2. Make a lambda that uses a cell require `$Memory` ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
 3. Parse and format `scoped context`, which must be nominal ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
 4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
