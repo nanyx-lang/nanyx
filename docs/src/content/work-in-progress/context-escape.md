@@ -177,13 +177,123 @@ checks, since a lambda with no parameters ignores one.
 - **`use` loads a `$Memory`; it can't make one.** `use` loads any context instance you have. `$Memory` is nominal, so
   only the standard library can construct one, and `memory` is the only way to get one.
 
+# Proposal: contexts are not types
+
+_Proposed in [#1141](https://github.com/nanyx-lang/nanyx/issues/1141), not yet decided._
+
+A context instance can be built only where a `use` loads it, so it is never a value. Today the rule above (only an
+instance written at the `use` discharges) means a handler can't be moved into a function of its own:
+
+```nanyx fragment
+def consoleLogger: [Console] () -> Log = {
+  Log(log = { m -> println(m) })   -- NYX0227: 'log' is 'string -> ()'
+}
+
+def main = {
+  use consoleLogger()
+  log("hello")
+}
+```
+
+The proposal draws the line there, and makes every helper a function that takes the code to run:
+
+- **A context is not a type.** A context's name may appear only in a context list (`[Log]`) and as the constructor in
+  a `use`. It can't be a parameter's, a result's or a field's type, so `() -> Log` is an error.
+- **No def holds an instance.** `def inst = Log(...)` is an error, and so is a function that returns one. A constructor
+  call is valid only as the instance of a `use`.
+- **A reusable handler is a function that runs a lambda under a `use`.** This is the form the section above calls "a
+  reusable handler", and the only one:
+
+  ```nanyx fragment
+  def withDefaultLogger = { prefix, f ->
+    use Log(log = { msg -> println("[{prefix}] {msg}") }) in f()
+  }
+  ```
+
+  It takes parameters as any function does, and its members' extra contexts are discharged at its `use`, so
+  `withDefaultLogger` requires `Console`.
+
+## Workflows
+
+A workflow builder is a record value today: `proc` in `prelude-results.nyx` is a `def` of a structural record type,
+and `proc { ... }` desugars to `proc.apply({ use proc in ... })`. Under the proposal a builder is a declared context
+and a function that runs the block under it:
+
+```nanyx fragment
+context Proc = (try: ..., return: ..., zero: ..., for: ...)
+
+def proc = { f ->
+  use Proc(
+    try = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    return = { value -> #some(value) }
+    zero = #some()
+    for = { items, body, rest -> procFor(items, body, rest) }
+  ) in f()
+}
+```
+
+- **The desugaring is a call.** `proc { ... }` is `proc({ ... })`. Inside the block, `try x`, `return x`, `zero` and
+  `for` are rewritten into calls of the members with continuations, as now. The block lambda then requires `[Proc]`,
+  which `proc`'s `use` discharges.
+- **`apply` and `@workflow` go.** The function's body is what `apply` did, and the helper `@workflow` generates is the
+  function itself.
+- **Builders take parameters for free.** `retrying(3) { ... }` is `retrying(3, { ... })`, a trailing lambda.
+- **A builder may need contexts.** An `async` that needs a scheduler is `def async: [Scheduler] ...`, discharged at its
+  `use` as above.
+- **`@customKeywordType` moves to the member's declaration** in the `context`, since there is no builder record left
+  to put it on.
+
+## What it costs
+
+There is no instance at run time. The backend passes a context's members one by one, as closures, to each function
+that requires it ([Context calls](./context-calls)), and a `use` binds each member's lambda to a local. So a `use`
+makes one closure per member: four for `Proc`.
+
+- **Allocation.** Members that capture nothing, as `Proc`'s do, are lifted to top-level functions, so each is a
+  closure over a top-level function. Today that is a small heap allocation per member, per block. With
+  [#743](https://github.com/nanyx-lang/nanyx/issues/743) they become static data and cost nothing.
+- **Calls.** Today a block's `use proc` names a top-level definition, so with
+  [#744](https://github.com/nanyx-lang/nanyx/issues/744) the block could call `try` directly. Under the proposal the
+  members come from `proc`'s `use`, outside the block, so they stay closure parameters of the block and its calls stay
+  indirect, unless `proc` is inlined where it is called. A function of the form `use ... in f()` is the smallest case
+  for an inliner ([#745](https://github.com/nanyx-lang/nanyx/issues/745)); inlined, the block compiles as it does
+  today.
+- **The real cost of a workflow is unchanged.** Each `try` makes a continuation closure over the block's live locals
+  and calls a member indirectly, in both forms. An experiment compiling `proc` both ways is to measure this.
+
+## What changes
+
+- The prelude's builders (`proc` and any others) become a `context` and a function. The cookbook's `OptionChain` and
+  the `@workflow` and `@customKeywordType` docs change with them, and `[typeof optionChain]` goes.
+- Named instances become handlers: `def perfect = Move(...)` and `def cheating = Move(...)` in `examples/Nim.nyx`,
+  `bobChooses` there, the monoid instances in `examples/traitsAndTypeclasses.nyx`, and `connection` in
+  `examples/sql-utils.nyx`.
+- [#1137](https://github.com/nanyx-lang/nanyx/issues/1137) (the backend can't compile `use f()` or `use x`) is no
+  longer needed: both become type errors.
+- [#1059](https://github.com/nanyx-lang/nanyx/issues/1059) is settled for context instances, which never carry
+  contexts because they are never values. It stays open for records.
+
+## Questions
+
+- **`memory { m -> ... }`.** The block is given its `$Memory` instance as a value, and `use m` loads it in an inner
+  block ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)). Under the proposal `m` can't be a value. It could
+  stay as a name only `use` accepts, as an exception, or the block could be named another way, such as a label.
+- **Whether `use` still takes a plain record.** `use (log = { m -> println(m) })` works today. Taking only a declared
+  context's constructor gives one answer to what `use` loads.
+- **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
+  The cookbook's `context OptionChain` declares such a member, but `proc` and the other builders need to check it.
+
 # Open questions
 
 - **Whether a record holding a lambda takes on its contexts**
   ([#1059](https://github.com/nanyx-lang/nanyx/issues/1059)). `(f = { m: string -> println(m) })` would be
   `[Console] (f: string -> ())`, and `Log(log = { m -> println(m) })` would be `[Console] Log`, which `use` would
   require. That is the general design in [Context-qualified types](./context-qualified-types), and it would let an
-  instance built as a value discharge a context, as one written at a `use` can.
+  instance built as a value discharge a context, as one written at a `use` can. Under the proposal above, context
+  instances are never values, and this is about records only.
 
 # Plan
 
