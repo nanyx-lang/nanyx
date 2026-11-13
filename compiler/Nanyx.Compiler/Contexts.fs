@@ -316,6 +316,15 @@ let internal canonicalName (env: TypeEnv) (state: InferState) (name: Identifier)
     | Some qualified when (TypeEnv.tryFind name env |> Option.bind _.Symbol) = (TypeEnv.tryFind qualified env |> Option.bind _.Symbol) -> qualified
     | _ -> name
 
+/// The contexts the function `name` names where `env` is the environment requires, as written or inferred. A local
+/// def's are its own, by its symbol, and a parameter or a pattern's variable has none: neither takes those of a
+/// top-level def it shadows, which `ContextRequirements` holds under the same name.
+let internal contextRequirementsOf (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr list option =
+    match TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+    | Some symbol when symbol.Kind = LocalValue -> state.LocalContextRequirements |> Map.tryFind symbol.Id
+    | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
+    | _ -> state.ContextRequirements |> Map.tryFind (canonicalName env state name)
+
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
 /// of an unannotated top-level def is kept to check once its contexts are known. Where the use is the call `call`, what
 /// provides the context of a member it calls is recorded, as is, once known, what provides each context of the def.

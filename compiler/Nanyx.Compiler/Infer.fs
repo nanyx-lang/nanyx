@@ -231,7 +231,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             // `ContextVariables.ofNamedValue`), so they need not be available where it is named. A parameterised context
             // is found where it is named, but by type, once a call settles it (see `resolveCallInstances`).
             let contextCheck =
-                match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
+                match contextRequirementsOf env state name with
                 | Some contexts ->
                     let parameterized = contexts |> List.filter (isParameterizedContext state)
                     ensureContextAvailable None false env state name parameterized expr.Span
@@ -242,7 +242,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Ok state ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
                 let ty, next =
-                    match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
+                    match contextRequirementsOf env state name with
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
                     | None -> ty, next
                 Ok (mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
@@ -337,7 +337,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
         else
         let contextCheck =
-            match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
+            match contextRequirementsOf env state name with
             // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
             | Some contexts -> ensureContextAvailable (Some expr.Id) true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
             | None -> Ok state
@@ -347,7 +347,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Ok state ->
             // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
             let state =
-                let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+                let written = contextRequirementsOf env state name |> Option.defaultValue []
                 let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
                 state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
             match TypeEnv.tryFind name env with
@@ -356,7 +356,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme ->
                 let mutable current = state
                 let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
-                let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+                let written = contextRequirementsOf env state name |> Option.defaultValue []
                 let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
                 current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
 
@@ -465,7 +465,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         // and the call requires those too. Both are used by the lambda around the call, if any.
                         let requireUsed (next: InferState) =
                             let ofVariables =
-                                match next.ContextRequirements |> Map.tryFind (canonicalName env next name) |> Option.map ContextVariables.names with
+                                match contextRequirementsOf env next name |> Option.map ContextVariables.names with
                                 | Some vars when not vars.IsEmpty -> ContextVariables.boundAt (resolveSoFar next) vars scheme.Type funcTy
                                 | _ -> []
                             let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
@@ -1197,7 +1197,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
                 let ty, next =
-                    match state.ContextRequirements |> Map.tryFind (canonicalName env state qualifiedName) with
+                    match contextRequirementsOf env state qualifiedName with
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
                     | None -> ty, next
                 Ok (mkTypedExpr expr ty None None None, next)
