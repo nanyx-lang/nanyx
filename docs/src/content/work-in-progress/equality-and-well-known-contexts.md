@@ -80,6 +80,14 @@ operators call, and `Hash(a)` and `__hash`.
   compared by the compiler's own. `ToString` is derived the same way (see
   [printing values](./printing-values#structures)).
 
+- **A union with a rest is compared through the tags it names**
+  ([#830](https://github.com/nanyx-lang/nanyx/issues/830)). `{ o -> o == #some($Email("a")) }` compares at
+  `#some($Email) | r`, where `r` is the function's own. Its `==` is derived as it would be for the closed union, with
+  the rest kept in the definition's type, and two values of a tag the rest holds, or of different tags, are compared
+  by the compiler's own `__equals` (`OpenTagShape` in `StructuralInstances.fs`). The definition requires no `Eq(r)`:
+  the rest is checked at each call, as above. Only a comparison derives one. A call that requires `Eq` of an open
+  union, as `same(v, w)` with `v: #x(a) | r` does, is still passed the compiler's own.
+
 - **A derived `==` is built from the instances where it is used**
   ([#630](https://github.com/nanyx-lang/nanyx/issues/630)). A part of a concrete type with an `Eq` loaded by `use` in
   the block is compared through it: the derived definition is written for the structure with that part as a type

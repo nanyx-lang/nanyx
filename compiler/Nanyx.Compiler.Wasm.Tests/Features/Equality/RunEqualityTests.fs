@@ -198,6 +198,29 @@ let ``Run - comparing with a tag takes a value of any union that has it`` () =
     |> assertRan "T\nF\nF\n"
 
 [<Fact>]
+let ``Run - comparing an open union with a tag compares its payload with the == attached to the payload's type`` () =
+    // The tags the union does not name, and two different tags, are compared by the compiler's own == (#830).
+    comparing
+        [ "type $Email = string"
+          "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }"
+          "def same = { o -> o == #some($Email(\"a\")) }"
+          "def differ = { o -> o != #some($Email(\"a\")) }"
+          "def either = { o -> o == #some($Email(\"a\")) or o == #other(2) }"
+          "def sameClosed: #some($Email) -> bool = { o -> o == #some($Email(\"a\")) }"
+          "def opened: [Eq(a)] (#x(a) | r), (#x(a) | r) -> bool = { v, w -> v == w }" ]
+        [ "same(#some($Email(\"b\")))"
+          "same(#none)"
+          "differ(#some($Email(\"b\")))"
+          "differ(#other(1))"
+          "either(#other(2))"
+          "either(#other(3))"
+          "sameClosed(#some($Email(\"b\")))"
+          "opened(#x($Email(\"a\")), #x($Email(\"b\")))"
+          "opened(#x(1), #y)" ]
+    |> runSource
+    |> assertRan "T\nF\nF\nT\nT\nF\nT\nT\nF\n"
+
+[<Fact>]
 let ``Run - a function that passes a union on to one that compares it with a tag compares at each type`` () =
     comparing
         [ "def isNone = { o -> o == #none }"
