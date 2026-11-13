@@ -1307,9 +1307,12 @@ let format (options: Options) (parsed: SourceModule) : string =
                 (match i.Source with
                  | ModuleImport m -> text m
                  | PathImport p -> text ("\"" + p + "\""))
-                (match i.Alias with
-                 | Some alias -> text $" as {alias}"
-                 | None -> Doc.empty)
+                (let selection names = "(" + (names |> List.map (fst >> Names.written) |> String.concat ", ") + ")"
+                 match i.Alias, i.Selection with
+                 | Some alias, Some names -> text $" as {alias} & {selection names}"
+                 | Some alias, None -> text $" as {alias}"
+                 | None, Some names -> text $" as {selection names}"
+                 | None, None -> Doc.empty)
             ]
         match items with
         | [ single ] -> cat [ text "import "; item single ]

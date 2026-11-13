@@ -129,9 +129,27 @@ let importSource: Parser<ImportSource, ParseState> =
             | _ -> failwith "Expected string literal for import path"
     ) <|> (modulePath |>> ModuleImport)
 
+/// The names an import selects, in brackets, separated by commas or line breaks: `(sqrt, pi)`. A name may be a type's
+/// (`$Email`) or an attached definition's (`string.shout`).
+let private importSelection: Parser<(Identifier * SourceSpan) list, ParseState> =
+    let name = withSpan qualifiedIdentifier
+    between
+        (pstring "(" >>. ws)
+        (ws >>. pstring ")")
+        (pipe2 name (many (attempt (ws >>. optional (pstring "," >>. ws) >>. name))) (fun first rest -> first :: rest))
+
+/// What follows `as`: an alias, a selection, or both, as `m & (a, b)`. `as` is a keyword, so once it is read, what
+/// follows it is one of these and never a call of a function named `as`.
+let private importAs: Parser<Identifier option * (Identifier * SourceSpan) list option, ParseState> =
+    (importSelection |>> fun selection -> None, Some selection)
+    <|> (identifierNoWs .>>. opt (attempt (ws >>. pstring "&") >>. ws >>. importSelection)
+         |>> fun (alias, selection) -> Some alias, selection)
+
 let importItem: Parser<ImportItem, ParseState> =
-    withSpan (importSource .>>. opt (attempt (ws >>. pstring "as" >>. ws >>. identifierNoWs)))
-    |>> fun ((source, alias), span) -> { Source = source; Alias = alias; Span = span }
+    withSpan (importSource .>>. opt (attempt (ws >>. pstring "as" >>. keywordEnd) >>. ws >>. importAs))
+    |>> fun ((source, written), span) ->
+        let alias, selection = written |> Option.defaultValue (None, None)
+        { Source = source; Alias = alias; Selection = selection; Span = span }
 
 let importItems: Parser<ImportItem list, ParseState> =
     let importParenItems =

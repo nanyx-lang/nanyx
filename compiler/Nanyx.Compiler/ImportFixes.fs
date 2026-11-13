@@ -41,7 +41,7 @@ module ImportFixes =
     let candidates (exports: Map<string, string list>) (name: string) : ImportItem list =
         let exportersOf name = exports |> Map.tryFind name |> Option.defaultValue []
         let import moduleName alias =
-            { Source = ModuleImport (StandardLibrary.importPrefix + moduleName); Alias = alias; Span = SourceSpan.none }
+            ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + moduleName)) alias
         let qualified =
             match name.IndexOf '.' with
             | dot when dot > 0 ->

@@ -136,15 +136,17 @@ An aliased import brings nothing into scope unqualified, types included: a type 
 
 Import specific items from a module using deconstruction syntax on the import:
 
-```nanyx skip=#289
+```nanyx
 import nanyx/math as (sqrt, pi, abs)
 
 def result = sqrt(16.0)  -- No need for an m. prefix
 ```
 
+Only the names in the brackets come into scope. A selected name can be a definition or a type; a type brings the definitions attached to it along with it, so `import shapes as (Shape)` brings in `Shape.area` too. Naming something the module does not export is an error: `import nanyx/math as (sqrtt)` says that `nanyx/math` does not export `sqrtt`, and suggests `sqrt`. The names can also be written one per line, without commas.
+
 It's even possible to both deconstruct and alias an import, although the need to do this is rare:
 
-```nanyx skip=#289
+```nanyx
 import nanyx/math as m & (sqrt, pi)
 
 def a = sqrt(16.0)

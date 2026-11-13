@@ -37,6 +37,15 @@ let ``An import used unqualified is not reported`` () =
     Assert.Empty(reported "import nanyx/math\ndef x = abs(3)\n")
 
 [<Fact>]
+let ``An import used through a name it selects is not reported`` () =
+    Assert.Empty(reported "import nanyx/math as (abs)\ndef x = abs(3)\n")
+    Assert.Empty(reported "import nanyx/math as m & (abs)\ndef x = abs(3)\n")
+
+[<Fact>]
+let ``An import that selects names nothing uses is reported`` () =
+    Assert.Equal<(string * string) list>([ "`nanyx/math` is imported but never used", "nanyx/math as (abs)" ], reported "import nanyx/math as (abs)\ndef x = 3\n")
+
+[<Fact>]
 let ``An import used only in a type is not reported`` () =
     Assert.Empty(reported "import nanyx/console as c\ndef e: c.IoError = #endOfInput\n")
     Assert.Empty(reported "import nanyx/console\ndef e: IoError = #endOfInput\n")
