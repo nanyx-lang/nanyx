@@ -46,6 +46,19 @@ let ``A match on a union whose rest an annotation names needs a catch-all`` () =
     Assert.Equal(DiagnosticCodes.MissingCatchAllArm.Code, diagnostic.Code)
 
 [<Fact>]
+let ``An and-pattern of catch-alls is the catch-all a union with a rest needs`` () =
+    // The rest check took only `_`, `else` and a name as a catch-all, unlike the exhaustiveness check (#450).
+    let source =
+        """
+def value: (#some(int) | r) -> int = { x ->
+  match x
+    | #some(n) -> n
+    | _ & _ -> 0
+}
+"""
+    compileClean (source.ReplaceLineEndings "\n") |> ignore
+
+[<Fact>]
 let ``A match on a call whose rest is its caller's parameter's needs a catch-all`` () =
     // `keep(x)` has the rest of `x`, which whoever calls `describe` can give more tags.
     let source =

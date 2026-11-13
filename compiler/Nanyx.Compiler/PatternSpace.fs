@@ -59,11 +59,6 @@ module PatternSpace =
         | TyAlias(_, _, underlying) -> unwrap underlying
         | _ -> ty
 
-    let rec private unalias (ty: Ty) =
-        match ty with
-        | TyAlias(_, _, underlying) -> unalias underlying
-        | _ -> ty
-
     /// The tags of `ty`, if it is a union of tags and nothing else (no rest left open), or a single tag.
     let private tagsOf (ty: Ty) : Set<string> option =
         match unwrap ty with
@@ -115,6 +110,18 @@ module PatternSpace =
         | HNamed of string * int
         | HNil
         | HCons
+
+    /// The kind of value a column of patterns is of, as its heads and ranges say: a column whose patterns are of one
+    /// kind is checked as that kind's values are.
+    type private ValueKind =
+        | TagValue
+        | BoolValue
+        | IntValue
+        | StringValue
+        | FloatValue
+        | FieldsValue
+        | NamedValue
+        | ListValue
 
     /// Whether `value` is a value an `int` can be, which the ranges of `Ints` are of. A literal past them, of a `U64`,
     /// is matched as a literal of its own.
@@ -233,7 +240,7 @@ module PatternSpace =
                 | _ -> Map.empty
             names |> List.map fields.TryFind
         | HNamed(_, count) ->
-            match ty |> Option.map unalias with
+            match ty |> Option.map Unifier.unalias with
             | Some (TyNominal(_, underlying, _)) when count = 1 -> [ Some underlying ]
             | _ -> List.replicate count None
         | HCons ->
@@ -319,49 +326,49 @@ module PatternSpace =
                 let heads = column |> List.choose headOf |> List.distinct
                 let hasFields = column |> List.exists (function Fields _ -> true | _ -> false)
                 let kinds =
-                    [ if not ranges.IsEmpty then "int"
-                      if hasFields then "fields"
+                    [ if not ranges.IsEmpty then IntValue
+                      if hasFields then FieldsValue
                       yield!
                           heads
                           |> List.map (function
-                              | HTag _ -> "tag"
-                              | HBool _ -> "bool"
-                              | HLit (StringLit _) -> "string"
-                              | HLit _ -> "float"
-                              | HNamed _ -> "named"
+                              | HTag _ -> TagValue
+                              | HBool _ -> BoolValue
+                              | HLit (StringLit _) -> StringValue
+                              | HLit _ -> FloatValue
+                              | HNamed _ -> NamedValue
                               | HNil
-                              | HCons -> "list"
-                              | HInts _
-                              | HFields _ -> "") ]
+                              | HCons -> ListValue
+                              | HInts _ -> IntValue
+                              | HFields _ -> FieldsValue) ]
                     |> List.distinct
                 match kinds with
                 | [] -> otherwise Anything
-                | [ "tag" ] ->
+                | [ TagValue ] ->
                     let present = heads |> List.choose (function HTag name -> Some name | _ -> None) |> Set.ofList
                     match ty |> Option.bind tagsOf with
                     | Some union when Set.isSubset union present -> anyOf (present |> Set.toList |> List.map HTag)
                     | Some union -> otherwise (OneOfTags (Set.difference union present |> Set.toList))
                     | None when trustTags -> anyOf (present |> Set.toList |> List.map HTag)
                     | None -> otherwise Anything
-                | [ "bool" ] ->
+                | [ BoolValue ] ->
                     match heads with
                     | [ HBool value ] -> otherwise (BoolCase (not value))
                     | _ -> anyOf [ HBool true; HBool false ]
-                | [ "int" ] ->
+                | [ IntValue ] ->
                     let all = runs Int64.MinValue Int64.MaxValue ranges
                     let covered (low, high) = ranges |> List.exists (fun (start, finish) -> start <= low && high <= finish)
                     match all |> List.filter (covered >> not) with
                     | [] -> anyOf (all |> List.map HInts)
                     | gaps -> otherwise (gaps |> List.map (fun gap -> witnessOf (HInts gap) []) |> List.minBy (function IntCase value -> value < 0L, (if value = Int64.MinValue then Int64.MaxValue else abs value) | _ -> false, 0L))
-                | [ "string" ]
-                | [ "float" ] ->
+                | [ StringValue ]
+                | [ FloatValue ] ->
                     let present = heads |> List.choose (function HLit literal -> Some literal | _ -> None)
                     otherwise (LiteralCase (otherLiteral present present.Head))
-                | [ "fields" ] ->
+                | [ FieldsValue ] ->
                     let names = fieldsOf []
                     through (HFields names) (names |> List.map (fun _ -> Any))
-                | [ "named" ] when heads.Length = 1 -> anyOf heads
-                | [ "list" ] ->
+                | [ NamedValue ] when heads.Length = 1 -> anyOf heads
+                | [ ListValue ] ->
                     match heads with
                     | [ HNil ] -> otherwise (ListCons(Anything, Anything))
                     | [ HCons ] -> otherwise EmptyList
