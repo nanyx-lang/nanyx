@@ -6,7 +6,7 @@ order: 6
 
 The `string` module provides functions for working with UTF-8 strings. Import it as `nanyx/text`.
 
-These functions are [attached definitions](../advanced/attached-definitions) on `string`, so when the receiver is known to be a string they can be piped into without qualification: `s \split(on = ",")`, `s \startsWith("nan")`. They are called as `string.length(s)` or `s \length`; a dot on a value never reaches an attached definition, so `s.length` is an error.
+These functions are [attached definitions](../advanced/attached-definitions) on `string`, so when the receiver is known to be a string they can be piped into without qualification: `s \split(on = ",")`, `s \startsWith("nan")`. They are called as `string.trim(s)` or `s \trim`; a dot on a value never reaches an attached definition, so `s.trim` is an error. `length` is the exception: it is also a built-in property of strings and lists, so `s.length` is the string's length, as `string.length(s)` is.
 
 For now most of these functions work byte by byte. `length` counts bytes, indices and widths are byte offsets, `uppercase` and `lowercase` change only ASCII letters, and the trimming functions and `words` treat only ASCII whitespace as whitespace. Characters outside ASCII pass through unchanged, except that `padStart` and `padEnd` cut their fill at a byte count, so a `fill` of such characters can be cut in the middle of one.
 
