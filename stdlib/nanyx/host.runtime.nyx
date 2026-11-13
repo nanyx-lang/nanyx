@@ -1,0 +1,32 @@
+--| The privileged layer a host is written on: the raw reads and writes the runtime does for it.
+
+  [`HostRuntime`] is provided only to the host, the module that runs the program's entry point (as
+  [`nanyx/console.host`] does). Anywhere else, requiring it is an error, so a library can only reach
+  the outside world through the contexts the host chose to provide.
+module host.runtime
+
+--| What the runtime does for the host. On the WebAssembly backend each member is one of the
+  module's imports. The definitions of the members below are the instance the toolchain supplies.
+export context HostRuntime = protected (
+  --| Writes `text` to standard output, as it is.
+  writeStdout: string -> ()
+  --| Writes `text` to standard error, as it is.
+  writeStderr: string -> ()
+  --| The next byte of standard input, or -1 when the input has ended.
+  readStdinByte: () -> int
+)
+
+--| Writes `text` to standard output, as it is.
+export def writeStdout: string -> () = { text ->
+  __nanyx_write_stdout(text)
+}
+
+--| Writes `text` to standard error, as it is.
+export def writeStderr: string -> () = { text ->
+  __nanyx_write_stderr(text)
+}
+
+--| The next byte of standard input, or -1 when the input has ended.
+export def readStdinByte: () -> int = { _ ->
+  __nanyx_read_stdin_byte()
+}

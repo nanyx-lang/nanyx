@@ -19,10 +19,11 @@ let ``A function that passes a known member on passes it as known`` () =
 
 def greet: [Console] string -> () = { name -> println("hi " ++ name) }
 
-@entry
 def main = {
   greet("Ada")
 }
+
+main()
 """
     let wat = transpileWat source
     // The ambient `Console` is known where `main` calls `greet`, and where `greet` calls `println`: neither is passed
@@ -50,11 +51,12 @@ def Size.show: Size -> string = { s -> "size {s.width}x{s.height}" }
 
 def describe: [Show(a)] a -> string = { value -> "<" ++ show(value) ++ ">" }
 
-@entry
 def main = {
   println(describe(Point(x = 1, y = 2)))
   println(describe(Size(width = 3, height = 4)))
 }
+
+main()
 """
     let wat = transpileWat source
     Assert.Contains("""call $Point_show""", wat)
@@ -75,10 +77,11 @@ def Point.show: Point -> string = { p -> "({p.x}, {p.y})" }
 
 def showAll: [Show(a)] list(a) -> list(string) = { values -> values \list.map(show) }
 
-@entry
 def main = {
   for showAll([Point(x = 1, y = 2), Point(x = 3, y = 4)]) | s -> println(s)
 }
+
+main()
 """
     let wat = transpileWat source
     // `showAll` is not passed the member, but makes the closure over it that `list.map` takes.
@@ -94,12 +97,13 @@ context Greet = (greet: string -> string)
 
 def shout: [Greet] string -> string = { name -> greet(name) ++ "!" }
 
-@entry
 def main = {
   def suffix = "?"
   use (greet = { s -> s ++ suffix })
   println(shout("a"))
 }
+
+main()
 """
     let wat = transpileWat source
     Assert.Contains("""(func $shout (param $name i32) (param $__ctx_greet i32) (result i32)""", wat)

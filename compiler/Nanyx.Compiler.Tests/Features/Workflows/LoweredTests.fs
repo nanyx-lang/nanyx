@@ -57,7 +57,8 @@ def main = { 1 }"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
     let attribute = result.Syntax.Value |> List.find (function Kind (Attribute _) -> true | _ -> false)
-    Assert.Equal<string list>([ "int" ], loweredTypes result attribute.Id)
+    // The call of the host's `run`, and the entry point passed to it.
+    Assert.Equal<string list>([ "()"; "() -> int" ], loweredTypes result attribute.Id)
 
 [<Fact>]
 let ``A type error in a workflow bind is reported at the bind`` () =

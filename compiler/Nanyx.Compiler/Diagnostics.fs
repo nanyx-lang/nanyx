@@ -127,6 +127,8 @@ module DiagnosticCodes =
     let NotACellArgument = code 234 "mut argument is not a cell" Severity.Error
     let MisplacedCellType = code 235 "Cell type inside another type" Severity.Error
     let UndeterminedContextType = code 236 "Context on a type no parameter or result has" Severity.Error
+    let EntryDoesNotFitHost = code 237 "Entry point does not fit the host" Severity.Error
+    let HostRuntimeOutsideHost = code 238 "HostRuntime required outside a host" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -149,7 +151,7 @@ module DiagnosticCodes =
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
           UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal; ScopedContextEscapes
-          NotACellArgument; MisplacedCellType; UndeterminedContextType
+          NotACellArgument; MisplacedCellType; UndeterminedContextType; EntryDoesNotFitHost; HostRuntimeOutsideHost
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

@@ -221,7 +221,7 @@ public sealed class CompletionTests : LanguageServerTestBase
         Change(uri, version: 2, "import nanyx/co\n");
         await NextPublished(uri);
         var modules = await CompletionsAt(uri, 0, 15);
-        Assert.Equal(["console", "math", "result", "text"], modules.Select(item => item.Label));
+        Assert.Equal(["console", "host", "math", "result", "text"], modules.Select(item => item.Label));
         var console = modules[0];
         Assert.Equal(new Range(0, 13, 0, 15), console.TextEdit?.TextEdit?.Range);
         Assert.StartsWith("How a program talks to the terminal.\n", console.Documentation?.MarkupContent?.Value);
