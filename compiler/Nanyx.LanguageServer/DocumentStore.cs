@@ -28,7 +28,7 @@ public sealed record OpenDocument(
 {
     private EditedRegion? _editsSinceLastGood;
     private Lazy<Outline.OutlineItem[]?>? _outline;
-    private Lazy<Parser.Program.DocCommentParsing.FileDocComments>? _docComments;
+
     private Lazy<IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic>>? _published;
 
     /// <summary>Converts positions in <see cref="Text"/>, built once per change rather than on every request.</summary>
@@ -41,12 +41,6 @@ public sealed record OpenDocument(
     public Outline.OutlineItem[]? Outline =>
         (_outline ??= new Lazy<Outline.OutlineItem[]?>(() => NyxCompiler.Outline.ofSource(FileName, Text)?.Value.ToArray())).Value;
 
-    /// <summary>
-    /// The doc comments in <see cref="Text"/>, each with what it documents (see <c>NyxCompiler.Documentation</c>).
-    /// Parsed once, when first asked for.
-    /// </summary>
-    public Parser.Program.DocCommentParsing.FileDocComments DocComments =>
-        (_docComments ??= new Lazy<Parser.Program.DocCommentParsing.FileDocComments>(() => Documentation.ofSource(FileName, Text))).Value;
 
     /// <summary>
     /// The LSP diagnostics of this text's compile, as published on <paramref name="uri"/>, the document's own (see
@@ -60,10 +54,11 @@ public sealed record OpenDocument(
     /// <summary>
     /// Reads the doc comments of the names in <see cref="Compiled"/>, for a request at <paramref name="offset"/>,
     /// with each link in them made a link to where the name it names is declared (see
-    /// <see cref="SourceLocations.LinkTo"/>). The document must have been typed.
+    /// <see cref="SourceLocations.LinkTo"/>). The document must have been typed. Its own doc comments are those the
+    /// compile found in <see cref="Text"/>.
     /// </summary>
     public Documentation.Reader DocReader(DocumentUri uri, int offset, StandardLibrarySource standardLibrary) =>
-        new(FileName, DocComments, Compiled!, offset, span => SourceLocations.LinkTo(uri, this, span, standardLibrary)!);
+        new(FileName, Compiled!.DocComments.Value, Compiled, offset, span => SourceLocations.LinkTo(uri, this, span, standardLibrary)!);
 
     /// <summary>
     /// Whether <see cref="Compiled"/> has the types and symbols editor features read. A text with type or name errors

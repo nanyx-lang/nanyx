@@ -20,10 +20,13 @@ module Compiler =
             if error.Message.StartsWith "Error in " && lineEnd >= 0 then error.Message.Substring(lineEnd + 1)
             else error.Message
         Diagnostics.at DiagnosticCodes.SyntaxError error.Span message
-    let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =
-        match parseModuleFileWithNames filePath source with
+    /// The source of the file at `filePath` parsed, with its doc comments (see `parseModuleFileWithDocs`), or the syntax error.
+    let private parseWithDocs (filePath: string) (source: string) =
+        match parseModuleFileWithDocs filePath source with
         | Result.Ok parsed -> Ok parsed
         | Result.Error err -> Error [ syntaxError err ]
+    let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =
+        parseWithDocs filePath source |> Result.map fst
 
     /// Applies the substitution found by unification to everything inference produced.
     /// A definition's type is reported with the rest variables that only stand for tags it gives out closed (see
@@ -423,13 +426,13 @@ module Compiler =
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         let resolved =
-            parseWithDiagnostics (checkedModules.FileName origin) source
+            parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
-            |> Result.bind (fun parsed ->
+            |> Result.bind (fun (parsed, docComments) ->
                 PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package checkedModules.Edited origin) parsed
-                |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), assembled))
+                |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
-            |> Result.bind (fun (ast, (items, declared, moduleBlocks)) ->
+            |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks)) ->
                 match WorkflowDesugaring.desugarWithDiagnostics items with
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
                 | desugaredAst, [], memberPlaces, lowered ->
@@ -437,11 +440,11 @@ module Compiler =
                     |> Result.map (fun (desugared, entryCalls) ->
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let lowered = entryCalls |> Map.fold (fun acc attribute calls -> Map.add attribute calls acc) lowered
-                        ast, declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors)
+                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok (ast, declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -648,6 +651,7 @@ module Compiler =
                      Inlined = inlined
                      Name = FileImports.declaredName moduleBlocks desugared
                      Syntax = ast
+                     DocComments = docComments
                      Lowered = lowered
                      Subst = subst
                      RawExprTypes = state.ExprTypes
@@ -723,7 +727,8 @@ module Compiler =
               TypeChecked = false
               ErrorsDeferred = false
               Syntax = None
-              Lowered = Map.empty }
+              Lowered = Map.empty
+              DocComments = lazy DocComments.none }
         | Result.Ok checkedModule ->
             // Types by node are only read for the root module, so only its are resolved: not those of every
             // imported module (the standard library included) on every compile.
@@ -757,13 +762,14 @@ module Compiler =
             // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered typed)
+                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
                   else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax
-              Lowered = checkedModule.Lowered }
+              Lowered = checkedModule.Lowered
+              DocComments = checkedModule.DocComments }
 
     /// The module from `origin`, in no package, checked and compiled (see `compileChecked`), with each module's check
     /// reported to `listener`.
@@ -794,7 +800,8 @@ module Compiler =
               TypeChecked = false
               ErrorsDeferred = false
               Syntax = None
-              Lowered = Map.empty }
+              Lowered = Map.empty
+              DocComments = lazy DocComments.none }
         else
             compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)
 

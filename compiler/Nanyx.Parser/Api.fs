@@ -40,11 +40,19 @@ let internal runModuleParser (filePath: string) (normalized: string) : Result<To
         | None, Some (position, messages) when position.Index > error.Position.Index -> reportAt position messages
         | None, _ -> Result.Error (errorAt error.Position errorMsg)
 
+/// Parses the source of the file at `filePath`, as `parseModuleFileWithNames` does, together with its doc comments,
+/// each attached to what it documents, which are found the first time they are asked for.
+let parseModuleFileWithDocs (filePath: string) (input: string) : Result<(Module * DeclaredNames * (ModuleName * SourceSpan) list) * Lazy<FileDocComments>, ParseError> =
+    let normalized = normalizeSource input
+    runModuleParser filePath normalized
+    |> Result.map (fun (items, state) ->
+        (expandMidFileModules items, state.Declared, state.ModuleBlocks),
+        lazy (DocComments.attach filePath normalized items state.Declared state.Comments))
+
 /// Parses the source of the file at `filePath`, as `parseModuleFile` does, together with the names its nodes
 /// declare and the text of each `module name =` block in it.
 let parseModuleFileWithNames (filePath: string) (input: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, ParseError> =
-    runModuleParser filePath (normalizeSource input)
-    |> Result.map (fun (items, state) -> expandMidFileModules items, state.Declared, state.ModuleBlocks)
+    parseModuleFileWithDocs filePath input |> Result.map fst
 
 /// Parses the source of the file at `filePath` as it is written, keeping its comments and blank lines, for tools
 /// that print it back (the formatter). The items are not rewritten: see `SourceModule`.

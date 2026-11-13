@@ -27,7 +27,10 @@ type CompileResult =
       Syntax: Module option
       /// The expressions desugaring and `@entry` made up for each node of `Syntax`, by its node, in the order they were
       /// made: how the type of a workflow bind is found, through `ExprTypes`. Empty when `Syntax` is absent.
-      Lowered: Map<NodeId, NodeId list> }
+      Lowered: Map<NodeId, NodeId list>
+      /// The doc comments of the root module's file, each with what it documents, found the first time they are asked
+      /// for. None when it did not parse.
+      DocComments: Lazy<FileDocComments> }
 
 /// A type-checked module together with what an importer needs from it.
 type internal CheckedModule =
@@ -47,6 +50,8 @@ type internal CheckedModule =
       Syntax: Module
       /// The expressions made up for each node of `Syntax` (see `CompileResult.Lowered`).
       Lowered: Map<NodeId, NodeId list>
+      /// The doc comments of the module's file (see `CompileResult.DocComments`).
+      DocComments: Lazy<FileDocComments>
       /// The substitution unification found, which resolves the types inference recorded by node.
       Subst: Subst
       /// The types inference recorded by node, unresolved: only the root module's are resolved (see `compileChecked`).
