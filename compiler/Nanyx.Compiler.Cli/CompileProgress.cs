@@ -1,31 +1,41 @@
 using System.Diagnostics;
+using NyxCompiler;
 
 /// <summary>
-/// A stopwatch that runs on stderr while the compiler works, so a slow compile shows which file it is on and for how
-/// long: <c>Compiling src/main.nyx… 4.7s</c>, rewritten in place ten times a second, then replaced by
-/// <c>Compiled greeter (12 files) in 4.7s</c> when it finishes. It writes only when stderr is a terminal: a log or a
-/// pipe sees nothing, so output under CI and in tests is unchanged. Stop it with <see cref="Finish"/> before anything
-/// else is written, or the next line lands on top of the stopwatch.
+/// A stopwatch that runs on stderr while the compiler works, so a slow compile shows which file it is on, which module
+/// that file's compile is checking, and for how long: <c>Compiling src/main.nyx › nanyx/list… 4.7s</c>, rewritten in
+/// place ten times a second, then replaced by <c>Compiled greeter (12 files) in 4.7s</c> when it finishes. It writes
+/// only when stderr is a terminal: a log or a pipe sees nothing, so output under CI and in tests is unchanged. With
+/// <c>timings</c>, it also records how long each module's check took and writes the table to stderr after the final
+/// line, whether or not stderr is a terminal. Stop it with <see cref="Finish"/> before anything else is written, or the
+/// next line lands on top of the stopwatch. Give the compiler <see cref="Listener"/> to hear from it.
 /// </summary>
-internal sealed class CompileProgress : IDisposable
+internal sealed class CompileProgress : CompileListener, IDisposable
 {
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(100);
 
+    private readonly TextWriter _errors;
     private readonly TextWriter? _terminal;
+    private readonly Func<string, string> _display;
     private readonly string _what;
+    private readonly CompileTimings? _timings;
     private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
     private readonly object _gate = new();
+    private readonly List<string> _checking = new();
     private Timer? _timer;
     private string _current;
     private int _written;
     private bool _finished;
 
-    private CompileProgress(TextWriter? terminal, string what)
+    private CompileProgress(TextWriter errors, string what, Func<string, string> display, bool timings)
     {
-        _terminal = terminal;
+        _errors = errors;
+        _terminal = errors == Console.Error && !Console.IsErrorRedirected ? errors : null;
+        _display = display;
         _what = what;
         _current = what;
-        if (terminal is not null)
+        _timings = timings ? new CompileTimings(this) : null;
+        if (_terminal is not null)
         {
             _timer = new Timer(_ => Redraw(), null, Tick, Tick);
         }
@@ -34,25 +44,60 @@ internal sealed class CompileProgress : IDisposable
     /// <summary>
     /// Starts the stopwatch for a compile of <paramref name="what"/> ("greeter (12 files)", "main.nyx"), shown on
     /// <paramref name="errors"/> when that is a terminal; the stopwatch writes nothing when it is any other writer.
+    /// <paramref name="display"/> shortens the paths the compiler names for the user. With <paramref name="timings"/>,
+    /// <see cref="Finish"/> writes each module's time to <paramref name="errors"/>.
     /// </summary>
-    public static CompileProgress Start(TextWriter errors, string what) =>
-        new(errors == Console.Error && !Console.IsErrorRedirected ? errors : null, what);
+    public static CompileProgress Start(TextWriter errors, string what, Func<string, string> display, bool timings = false) =>
+        new(errors, what, display, timings);
+
+    /// <summary>What the compiler reports to: the stopwatch itself, through the timings when they are recorded.</summary>
+    public CompileListener Listener => _timings ?? (CompileListener)this;
 
     /// <summary>How long the compile has taken so far, or took: "0.3s", "4.7s".</summary>
     public string Elapsed => $"{_stopwatch.Elapsed.TotalSeconds:0.0}s";
 
     /// <summary>Notes that the compile has moved on to <paramref name="file"/>, which the stopwatch names from now on.</summary>
-    public void Compiling(string file)
+    public void FileStarted(string file)
     {
         lock (_gate)
         {
-            _current = file;
+            _current = _display(file);
+            _checking.Clear();
         }
 
         Redraw();
     }
 
-    /// <summary>Stops the stopwatch and leaves "Compiled {what} in {elapsed}" where it was. A second call does nothing.</summary>
+    /// <summary>Notes that the check of <paramref name="name"/> has started, which the stopwatch names after the file.</summary>
+    public void ModuleStarted(string name)
+    {
+        lock (_gate)
+        {
+            _checking.Add(_display(name));
+        }
+
+        Redraw();
+    }
+
+    /// <summary>Notes that the check of <paramref name="name"/> has finished, so the stopwatch names its importer again.</summary>
+    public void ModuleFinished(string name, TimeSpan elapsed)
+    {
+        lock (_gate)
+        {
+            var index = _checking.LastIndexOf(_display(name));
+            if (index >= 0)
+            {
+                _checking.RemoveRange(index, _checking.Count - index);
+            }
+        }
+
+        Redraw();
+    }
+
+    /// <summary>
+    /// Stops the stopwatch and leaves "Compiled {what} in {elapsed}" where it was, then the timings table when timings
+    /// are recorded. A second call does nothing.
+    /// </summary>
     public void Finish()
     {
         Timer? timer;
@@ -77,13 +122,19 @@ internal sealed class CompileProgress : IDisposable
             done.WaitOne();
         }
 
-        if (_terminal is not null)
+        lock (_gate)
         {
-            lock (_gate)
+            if (_terminal is not null)
             {
                 Overwrite($"Compiled {_what} in {Elapsed}");
                 _terminal.WriteLine();
                 _written = 0;
+            }
+
+            if (_timings is not null)
+            {
+                var timings = _timings.Timings.Select(timing => new ModuleTiming(_display(timing.Name), timing.Total, timing.Self));
+                _errors.WriteLine(ModuleTimingModule.table(Microsoft.FSharp.Collections.ListModule.OfSeq(timings)));
             }
         }
     }
@@ -104,7 +155,9 @@ internal sealed class CompileProgress : IDisposable
                 return;
             }
 
-            Overwrite($"Compiling {_current}… {Elapsed}");
+            // The file's own module is checked first, under its own name: only its imports are worth a mention.
+            var imports = string.Concat(_checking.Where(name => name != _current).Select(name => $" › {name}"));
+            Overwrite($"Compiling {_current}{imports}… {Elapsed}");
         }
     }
 

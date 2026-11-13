@@ -96,7 +96,12 @@ let ``A build tells its caller each source file as it starts on it, in order`` (
               "src/util.nyx", "module util\n\nexport def one = 1\n" ])
     let found = okOf (Package.find package.Root)
     let started = Collections.Generic.List<string>()
-    let build = Package.buildWith started.Add found
+    let listener =
+        { new CompileListener with
+            member _.FileStarted file = started.Add file
+            member _.ModuleStarted _ = ()
+            member _.ModuleFinished(_, _) = () }
+    let build = Package.buildReporting listener found
     Assert.Empty(build.Diagnostics)
     Assert.Equal<string list>(found.Sources, List.ofSeq started)
 

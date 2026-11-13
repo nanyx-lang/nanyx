@@ -52,11 +52,17 @@ internal static class CliCommands
     /// Check a Nanyx source file, or every source file of a package, and write nothing.
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    /// <param name="timings">Write how long each module took to check to stderr, slowest first.</param>
     [Consolo("check")]
-    public static int Check(params string[] path) => CheckIn(Shell.Process, path);
+    public static int Check(
+        [Consolo("timings")] bool timings = false,
+        params string[] path)
+    {
+        return CheckIn(Shell.Process, path, timings);
+    }
 
     /// <summary>What <c>nanyx check</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int CheckIn(Shell shell, string[] path)
+    internal static int CheckIn(Shell shell, string[] path, bool timings = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -65,7 +71,7 @@ internal static class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(shell, single, Target.Check, outputPath: null);
+            return Execute(shell, single, Target.Check, outputPath: null, timings: timings);
         }
 
         if (!TryFindPackage(shell, single, out var package, out var failed))
@@ -73,7 +79,7 @@ internal static class CliCommands
             return failed;
         }
 
-        var build = BuildPackage(shell, package);
+        var build = BuildPackage(shell, package, timings);
         PrintDiagnostics(shell, build.Diagnostics, shell.Out);
         shell.Out.WriteLine($"{Checked(package)}.");
         return HasErrors(build.Diagnostics) ? 1 : 0;
@@ -130,16 +136,18 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
+    /// <param name="timings">Write how long each module took to check to stderr, slowest first, and how long the program took to emit.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
+        [Consolo("timings")] bool timings = false,
         params string[] path)
     {
-        return RunIn(Shell.Process, checkMemory, path);
+        return RunIn(Shell.Process, checkMemory, path, timings);
     }
 
     /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int RunIn(Shell shell, bool checkMemory, string[] path)
+    internal static int RunIn(Shell shell, bool checkMemory, string[] path, bool timings = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -148,7 +156,7 @@ internal static class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory);
+            return Execute(shell, single, Target.Run, outputPath: null, checkMemory: checkMemory, timings: timings);
         }
 
         if (!TryFindPackage(shell, single, out var package, out var failed))
@@ -157,7 +165,7 @@ internal static class CliCommands
         }
 
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
-        var build = BuildPackage(shell, package);
+        var build = BuildPackage(shell, package, timings);
         PrintDiagnostics(shell, WorthStoppingFor(build.Diagnostics), shell.Error);
         var deferred = ErrorsDeferred(build);
         if (HasErrors(build.Diagnostics) && !deferred)
@@ -173,7 +181,7 @@ internal static class CliCommands
         }
 
         ReportDeferredRun(shell, deferred, build.Diagnostics);
-        return RunProgram(shell, entry.Value, deferred, checkMemory);
+        return RunProgram(shell, entry.Value, deferred, checkMemory, timings);
     }
 
     /// <summary>
@@ -182,17 +190,19 @@ internal static class CliCommands
     /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
+    /// <param name="timings">Write how long each module took to check to stderr, slowest first, and how long the program took to emit.</param>
     [Consolo("build")]
     public static int Build(
         [Consolo("out", Alias = "o")] string? outputPath = null,
         [Consolo("release")] bool release = false,
+        [Consolo("timings")] bool timings = false,
         params string[] path)
     {
-        return BuildIn(Shell.Process, outputPath, release, path);
+        return BuildIn(Shell.Process, outputPath, release, path, timings);
     }
 
     /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path)
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -204,7 +214,7 @@ internal static class CliCommands
             return failed;
         }
 
-        var build = BuildPackage(shell, package);
+        var build = BuildPackage(shell, package, timings);
         PrintDiagnostics(shell, build.Diagnostics, shell.Out);
         var deferred = !release && ErrorsDeferred(build);
         if (HasErrors(build.Diagnostics) && !deferred)
@@ -220,7 +230,7 @@ internal static class CliCommands
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, CodeGen.WasmOptions.Default, deferred, timings))
         {
             return 1;
         }
@@ -274,25 +284,25 @@ internal static class CliCommands
         package.Sources.Length == 1 ? "1 file" : $"{package.Sources.Length} files";
 
     /// <summary>
-    /// Builds the package, with a stopwatch on stderr naming the file the build is on while stderr is a terminal (see
-    /// <see cref="CompileProgress"/>).
+    /// Builds the package, with a stopwatch on stderr naming the file and module the build is on while stderr is a
+    /// terminal, and each module's time after it with <paramref name="timings"/> (see <see cref="CompileProgress"/>).
     /// </summary>
-    private static PackageBuild BuildPackage(Shell shell, Package package)
+    private static PackageBuild BuildPackage(Shell shell, Package package, bool timings)
     {
-        using var progress = CompileProgress.Start(shell.Error, $"{package.Manifest.Name} ({FileCount(package)})");
-        var build = PackageModule.buildWith(FuncConvert.FromAction<string>(file => progress.Compiling(shell.DisplayPath(file))), package);
+        using var progress = CompileProgress.Start(shell.Error, $"{package.Manifest.Name} ({FileCount(package)})", shell.DisplayPath, timings);
+        var build = PackageModule.buildReporting(progress.Listener, package);
         progress.Finish();
         return build;
     }
 
     /// <summary>
     /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on the shell's stderr while that is
-    /// a terminal (see <see cref="CompileProgress"/>).
+    /// a terminal, and each module's time after it with <paramref name="timings"/> (see <see cref="CompileProgress"/>).
     /// </summary>
-    private static CompileResult CompileScript(Shell shell, string inputFile)
+    private static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
     {
-        using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)));
-        var result = Script.compileFile(shell.FullPath(inputFile));
+        using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
+        var result = Script.compileFileReporting(progress.Listener, shell.FullPath(inputFile));
         progress.Finish();
         return result;
     }
@@ -419,6 +429,7 @@ internal static class CliCommands
     /// <param name="noLocalTypeHints">Show no inlay hints for local defs' inferred types.</param>
     /// <param name="noParameterTypeHints">Show no inlay hints for lambda parameters' inferred types.</param>
     /// <param name="noPatternVariableTypeHints">Show no inlay hints for pattern variables' inferred types.</param>
+    /// <param name="timings">Log how long each module took to check with each compile, slowest first, not only how long the compile took.</param>
     [Consolo("lsp")]
     public static int Lsp(
         [Consolo("stdio")] bool stdio = false,
@@ -426,7 +437,8 @@ internal static class CliCommands
         [Consolo("top-level-type-hints")] string topLevelTypeHints = "lens",
         [Consolo("no-local-type-hints")] bool noLocalTypeHints = false,
         [Consolo("no-parameter-type-hints")] bool noParameterTypeHints = false,
-        [Consolo("no-pattern-variable-type-hints")] bool noPatternVariableTypeHints = false)
+        [Consolo("no-pattern-variable-type-hints")] bool noPatternVariableTypeHints = false,
+        [Consolo("timings")] bool timings = false)
     {
         Nanyx.LanguageServer.TopLevelTypeHints? topLevel = topLevelTypeHints switch
         {
@@ -446,7 +458,8 @@ internal static class CliCommands
             topLevel.Value,
             LocalTypeHints: !noLocalTypeHints,
             ParameterTypeHints: !noParameterTypeHints,
-            PatternVariableTypeHints: !noPatternVariableTypeHints);
+            PatternVariableTypeHints: !noPatternVariableTypeHints,
+            Timings: timings);
         Nanyx.LanguageServer.NanyxLanguageServer.RunStdioAsync(settings).GetAwaiter().GetResult();
         return 0;
     }
@@ -481,7 +494,7 @@ internal static class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false, bool timings = false)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -502,11 +515,11 @@ internal static class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, checkMemory);
+            return RunScript(shell, inputFile, checkMemory, timings);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
-        var result = CompileScript(shell, inputFile);
+        var result = CompileScript(shell, inputFile, timings);
 
         shell.Out.WriteLine($"Phase: {result.Phase}");
         PrintDiagnostics(shell, result.Diagnostics, shell.Out);
@@ -524,10 +537,10 @@ internal static class CliCommands
     /// <paramref name="shell"/>, and gives the exit code. The compiler's diagnostics and the run's own errors go to the
     /// shell's stderr. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, bool checkMemory)
+    internal static int RunScript(Shell shell, string inputFile, bool checkMemory, bool timings = false)
     {
         // Script mode: the file's :: directives say what a package's manifest would.
-        var result = CompileScript(shell, inputFile);
+        var result = CompileScript(shell, inputFile, timings);
 
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
         PrintDiagnostics(shell, WorthStoppingFor(result.Diagnostics), shell.Error);
@@ -535,7 +548,7 @@ internal static class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(shell, deferred, result.Diagnostics);
-        return RunProgram(shell, result, deferred, checkMemory);
+        return RunProgram(shell, result, deferred, checkMemory, timings);
     }
 
     private static int RunParse(Shell shell, string inputFile)
@@ -649,11 +662,11 @@ internal static class CliCommands
     /// Runs a compiled program with the shell's standard streams, reporting what stops it to the shell's stderr, and
     /// gives the exit code.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false, bool timings = false)
     {
         var errors = shell.Error;
         var options = new CodeGen.WasmOptions(checkMemory);
-        if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred))
+        if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;
         }
@@ -707,10 +720,11 @@ internal static class CliCommands
     /// <summary>
     /// Lowers a successfully type-checked program to WebAssembly text with <paramref name="options"/>, reporting failures
     /// to <paramref name="errors"/>. With <paramref name="errorsDeferred"/>, a program whose errors were all deferred to
-    /// traps is lowered too.
+    /// traps is lowered too. With <paramref name="timings"/>, how long the lowering took goes to the shell's stderr,
+    /// after the modules' times (see <see cref="CompileProgress"/>).
     /// </summary>
     private static bool TryEmitWat(
-        Shell shell, CompileResult result, TextWriter errors, out string wat, CodeGen.WasmOptions options, bool errorsDeferred = false)
+        Shell shell, CompileResult result, TextWriter errors, out string wat, CodeGen.WasmOptions options, bool errorsDeferred = false, bool timings = false)
     {
         wat = string.Empty;
 
@@ -720,7 +734,13 @@ internal static class CliCommands
         }
 
         // What the backend cannot compile is reported where it is written, like any other error.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var emitted = CodeGen.tryTranspileTypedModuleWith(options, result.Typed.Value);
+        if (timings)
+        {
+            shell.Error.WriteLine($"Emitted the program in {stopwatch.Elapsed.TotalSeconds:0.000}s");
+        }
+
         if (emitted.IsError)
         {
             PrintDiagnostics(shell, ListModule.OfSeq(new[] { emitted.ErrorValue }), errors);

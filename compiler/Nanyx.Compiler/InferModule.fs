@@ -395,8 +395,3 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         |> List.distinct
         |> List.sortBy (fun diag -> diag.Span |> Option.map (fun span -> span.Start) |> Option.defaultValue System.Int32.MaxValue)
     types, items |> List.sortBy fst |> List.map snd, state, allErrors
-
-/// Infers a module, carrying on past an item that fails to check: the types and items of those that do, and the
-/// diagnostics of those that do not. The constraints are not solved here, so a type mismatch is not among them.
-let inferModule (module': Module) : Map<string, Ty> * TypedTopLevelItem list * InferState * Diagnostic list =
-    inferModuleWithEnv TypeEnv.empty emptyState module'

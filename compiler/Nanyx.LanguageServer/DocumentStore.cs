@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using NyxCompiler;
 using OmniSharp.Extensions.LanguageServer.Protocol;
@@ -198,19 +199,29 @@ public sealed class DocumentStore
     private static string FileNameOf(DocumentUri uri) =>
         uri.Scheme == "file" ? Path.GetFullPath(uri.GetFileSystemPath()) : string.Empty;
 
-    /// <summary>Compiles a text of a document, without recording it.</summary>
+    /// <summary>
+    /// Compiles a text of a document, without recording it, and logs how long it took, with each module's time when
+    /// <see cref="ServerSettings.Timings"/> asks for them.
+    /// </summary>
     public OpenDocument Compile(DocumentUri uri, string text)
     {
         _settings.CompileStarted?.Invoke(uri);
         // A file on disk gets its imports resolved through its package's modules if it is a source file of one, or
-        // else relative to itself; anything else (an untitled buffer, say) can still import the standard library.
+        // else relative to itself; anything else (an untitled buffer, say) can still import the standard library. A
+        // file of the standard library is checked as the library module it is, as a build of the library checks it.
         // The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? FileNameOf(uri) : null;
         try
         {
             var directives = Script.read(path ?? string.Empty, text);
             var linters = _settings.LinterOptionsFor(path, directives);
-            var result = path is null ? Compiler.compileWith(linters, text) : PackageModule.compileSourceWith(linters, path, text);
+            var stopwatch = Stopwatch.StartNew();
+            var timings = new CompileTimings();
+            var result = path is null
+                ? Compiler.compileReporting(timings, linters, text)
+                : Compiler.compileStandardLibraryFileReporting(timings, linters, path, text)?.Value
+                    ?? PackageModule.compileSourceReporting(timings, linters, path, text);
+            LogCompiled(uri, stopwatch.Elapsed, timings);
             return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null);
         }
         catch (Exception ex)
@@ -218,6 +229,23 @@ public sealed class DocumentStore
             // A compiler bug must not take the server down with it: it is reported as a diagnostic instead.
             _logger.LogError(ex, "The compiler failed on {Uri}", uri);
             return new OpenDocument(text, path ?? string.Empty, null, ex);
+        }
+    }
+
+    /// <summary>
+    /// Logs that a document compiled in <paramref name="elapsed"/>: one line, for the editor's output channel to show
+    /// how long each compile takes, with the modules' times under it when the server was started with
+    /// <c>--timings</c>.
+    /// </summary>
+    private void LogCompiled(DocumentUri uri, TimeSpan elapsed, CompileTimings timings)
+    {
+        if (_settings.Timings)
+        {
+            _logger.LogInformation("Compiled {Uri} in {Seconds:0.000}s\n{Table}", uri, elapsed.TotalSeconds, ModuleTimingModule.table(timings.Timings));
+        }
+        else
+        {
+            _logger.LogInformation("Compiled {Uri} in {Seconds:0.000}s", uri, elapsed.TotalSeconds);
         }
     }
 }

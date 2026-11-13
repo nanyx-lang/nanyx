@@ -267,6 +267,10 @@ async function restartClient(context, executable) {
     if (!config.get("inlayHints.patternVariables", true)) {
         args.push("--no-pattern-variable-type-hints");
     }
+    // Working on the compiler, the output channel shows what each compile cost, module by module.
+    if (config.get("developmentMode", false)) {
+        args.push("--timings");
+    }
     // No `transport`: stdio is the default, and naming it makes the client append `--stdio` to the args.
     const serverOptions = {
         run: { command: executable, args },

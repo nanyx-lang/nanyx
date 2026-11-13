@@ -887,13 +887,13 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
 /// dropped. It takes nothing and returns nothing.
 let emitStart (context: EmitContext) (func: Function) : Emitted =
     let emitter = FunctionEmitter(context)
-    let rec expressions (expr: Expr) =
-        match expr.Kind with
-        | Do(value, rest) -> value :: expressions rest
-        | Atom AUnit -> []
-        | _ -> internalError "the start function is not a sequence of top-level expressions"
+    let notExpressions () = internalError "the start function is not a sequence of top-level expressions"
+    let expressions =
+        match Chain.split func.Body with
+        | links, { Kind = Atom AUnit } -> links |> List.map (fun link -> match link.Kind with Do(value, _) -> value | _ -> notExpressions ())
+        | _ -> notExpressions ()
     let bodyCode =
-        expressions func.Body
+        expressions
         |> List.map (fun value -> $"{emitter.Sequence false value}\n    {dropValue value.Type}")
         |> String.concat "\n    "
     let header =

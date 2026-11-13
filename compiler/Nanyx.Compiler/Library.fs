@@ -126,10 +126,21 @@ module Compiler =
 
     /// The modules one compilation has checked, by `originKey`, so that a module imported along several paths is
     /// checked once and every importer sees the same symbols; with the package whose files' imports are resolved
-    /// through its module table, if the compilation is of a package's file.
-    type internal CheckedModules(package: PackageModules option) =
+    /// through its module table, if the compilation is of a package's file; with the standard-library file open in
+    /// the editor, if the compilation is of one (see `compileStandardLibraryFile`); and the listener each module's check
+    /// is reported to.
+    type internal CheckedModules(package: PackageModules option, edited: EditedLibraryFile option, listener: CompileListener) =
         inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
+        new(package) = CheckedModules(package, None, CompileListener.none)
         member _.Package = package
+        member _.Listener = listener
+        member _.Edited = edited
+
+        /// The file the syntax nodes of the module from `origin` are reported in: the editor's, for the file it has open.
+        member _.FileName(origin: ModuleOrigin) =
+            match edited with
+            | Some edited when origin = StandardLibraryModule edited.Module -> edited.Path
+            | _ -> sourceFileName origin
 
     /// The standard-library modules this process has checked, by `originKey` and source, each with the modules it
     /// imports, which a compilation that imports it needs too (`compileFrom` resolves inlined definitions' types by
@@ -373,14 +384,24 @@ module Compiler =
                 merged
 
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
-    /// error says which phase it came from.
+    /// error says which phase it came from. The check is reported to the listener of `checkedModules` as it starts
+    /// and ends, by the module's `originKey`, with the imports' checks inside it.
     let rec internal typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
+        checkedModules.Listener.ModuleStarted key
+        let stopwatch = System.Diagnostics.Stopwatch.StartNew()
+        let checkedModule = checkModule checkedModules origin source visited
+        checkedModules.Listener.ModuleFinished(key, stopwatch.Elapsed)
+        checkedModule
+
+    /// `typecheckModule`, unreported.
+    and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
+        let key = originKey origin
         let resolved =
-            parseWithDiagnostics (sourceFileName origin) source
+            parseWithDiagnostics (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
             |> Result.bind (fun parsed ->
-                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package origin) parsed
+                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package checkedModules.Edited origin) parsed
                 |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             |> Result.bind (fun (ast, (items, declared, moduleBlocks)) ->
@@ -558,7 +579,7 @@ module Compiler =
                 let scopes =
                     imported
                     |> List.filter (fun (name, _, _) -> not (name.Contains '.'))
-                    |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (sourceFileName origin))) state.Scopes
+                    |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (checkedModules.FileName origin))) state.Scopes
                 // A def a `module name =` block does not export can only be named inside the block.
                 let keptToItsBlock (symbol: Symbol) =
                     not symbol.IsExported
@@ -642,7 +663,7 @@ module Compiler =
                     let source = readSource ()
                     let check _ =
                         lazy
-                            (let own = CheckedModules None
+                            (let own = CheckedModules(None, None, checkedModules.Listener)
                              let checkedModule = typecheckModule own origin source visited
                              checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
                     let checkedModule, imports = checkedStandardLibrary.GetOrAdd((key, source), check).Value
@@ -707,7 +728,7 @@ module Compiler =
             // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax checkedModule.Lowered typed)
+                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered typed)
                   else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
@@ -715,14 +736,25 @@ module Compiler =
               Syntax = Some checkedModule.Syntax
               Lowered = checkedModule.Lowered }
 
-    /// The module from `origin`, in no package, checked and compiled (see `compileChecked`).
-    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        let checkedModules = CheckedModules None in Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
-
-    /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules.
-    let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules (Some package)
+    /// The module from `origin`, in no package, checked and compiled (see `compileChecked`), with each module's check
+    /// reported to `listener`.
+    let compileFromReporting (listener: CompileListener) (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        let checkedModules = CheckedModules(None, None, listener)
         Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
+
+    /// `compileFromReporting`, telling nobody.
+    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        compileFromReporting CompileListener.none options origin source
+
+    /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules, with each
+    /// module's check reported to `listener`.
+    let compileSourceInReporting (listener: CompileListener) (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules(Some package, None, listener)
+        Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
+
+    /// `compileSourceInReporting`, telling nobody.
+    let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileSourceInReporting CompileListener.none package options filePath source
 
     /// `compileFile` with the linters and severities `options` gives.
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
@@ -746,10 +778,32 @@ module Compiler =
     let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         compileFrom options (SourceFile (Path.GetFullPath filePath)) source
 
+    /// Compiles `source`, the editor's text of the standard-library file at `filePath` (`stdlib/nanyx/text.nyx` in a
+    /// checkout, or the copy the editor opens a definition in), as the library module it is a file of, as a build of the
+    /// library checks it: with the intrinsics in scope, without importing the prelude if it is the prelude, and with the
+    /// module's other files if it is split across files. Its syntax nodes are reported in `filePath`. None if the file is
+    /// not one of the library's (see `StandardLibrary.isModuleFile`). Each module's check is reported to `listener`.
+    let compileStandardLibraryFileReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult option =
+        let resource = StandardLibrary.importPrefix + Path.GetFileName filePath
+        match StandardLibrary.tryModuleOfFile resource with
+        | Some moduleName when StandardLibrary.isModuleFile filePath ->
+            let origin = StandardLibraryModule moduleName
+            let checkedModules = CheckedModules(None, Some { Module = moduleName; Resource = resource; Path = Path.GetFullPath filePath }, listener)
+            Some (Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty)))
+        | _ -> None
+
+    /// `compileStandardLibraryFileReporting`, telling nobody.
+    let compileStandardLibraryFile (options: LinterOptions) (filePath: string) (source: string) : CompileResult option =
+        compileStandardLibraryFileReporting CompileListener.none options filePath source
+
     /// Compiles `source` as if it were the contents of the file at `filePath` (which need not exist, or may hold
     /// older text: an editor's unsaved buffer, say). Imports are resolved exactly as `compileFile` resolves them.
     let compileSource (filePath: string) (source: string) : CompileResult =
         compileSourceWith Linters.none filePath source
+
+    /// `compileWith`, with each module's check reported to `listener`.
+    let compileReporting (listener: CompileListener) (options: LinterOptions) (source: string) : CompileResult =
+        compileFromReporting listener options InMemory source
 
     /// `compile` with the linters and severities `options` gives.
     let compileWith (options: LinterOptions) (source: string) : CompileResult =

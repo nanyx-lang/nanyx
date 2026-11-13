@@ -57,24 +57,35 @@ let private mk (kind: ExprKind) (ty: IrType) = { Kind = kind; Type = ty }
 
 /// `e` with the first allocation of a block of `size` that it always makes (not one in a branch, a loop or a guard)
 /// writing into the block `token` holds, if there is one.
-let rec private reuseFirst (token: Var) (size: int) (e: Expr) : Expr option =
+let private reuseFirst (token: Var) (size: int) (e: Expr) : Expr option =
     let rec here (value: Expr) =
         match value.Kind with
         | Dup(vars, inner) -> here inner |> Option.map (fun inner -> mk (Dup(vars, inner)) value.Type)
         | _ when allocationSize value = Some size -> Some(mk (Reuse(token, value)) value.Type)
         | _ -> None
-    match e.Kind with
-    | Let(var, value, body) ->
-        match here value with
-        | Some value -> Some(mk (Let(var, value, body)) e.Type)
-        | None -> reuseFirst token size body |> Option.map (fun body -> mk (Let(var, value, body)) e.Type)
-    | Do(value, rest) ->
-        match here value with
-        | Some value -> Some(mk (Do(value, rest)) e.Type)
-        | None -> reuseFirst token size rest |> Option.map (fun rest -> mk (Do(value, rest)) e.Type)
-    | Drop(vars, body) -> reuseFirst token size body |> Option.map (fun body -> mk (Drop(vars, body)) e.Type)
-    | Release(released, body) -> reuseFirst token size body |> Option.map (fun body -> mk (Release(released, body)) e.Type)
-    | _ -> here e
+    // The links of the chain passed on the way to the allocation, innermost first, and the link that makes it.
+    let mutable passed = []
+    let mutable current = e
+    let mutable found = None
+    let mutable searching = true
+    while searching do
+        let link = current
+        let reused =
+            match link.Kind with
+            | Let(var, value, body) -> here value |> Option.map (fun value -> mk (Let(var, value, body)) link.Type)
+            | Do(value, rest) -> here value |> Option.map (fun value -> mk (Do(value, rest)) link.Type)
+            | Drop _
+            | Release _ -> None
+            | _ -> here link
+        match reused, Chain.next link with
+        | Some reused, _ ->
+            found <- Some reused
+            searching <- false
+        | None, Some following when (match link.Kind with Dup _ -> false | _ -> true) ->
+            passed <- link :: passed
+            current <- following
+        | None, _ -> searching <- false
+    found |> Option.map (fun reused -> passed |> List.fold (fun following link -> Chain.relink link following) reused)
 
 type private Rewriter() =
     let mutable tokens = 0
@@ -83,23 +94,27 @@ type private Rewriter() =
         tokens <- tokens + 1
         { Id = -tokens; Name = $"__reuse_{tokens}"; Kind = Scratch; Type = IrWord }
 
+    /// `e` rewritten: a chain's values from the first, then what it ends in.
     member this.Expr(e: Expr) : Expr =
+        let links, last = Chain.split e
+        let links =
+            links
+            |> List.map (fun link ->
+                match link.Kind with
+                | Let(var, value, body) -> { link with Kind = Let(var, this.Expr value, body) }
+                | Do(value, rest) -> { link with Kind = Do(this.Expr value, rest) }
+                | _ -> link)
         let recur = this.Expr
         let kind =
-            match e.Kind with
-            | Let(var, value, body) -> Let(var, recur value, recur body)
-            | Do(value, rest) -> Do(recur value, recur rest)
+            match last.Kind with
             | If(cond, ifTrue, ifFalse) -> If(cond, recur ifTrue, recur ifFalse)
             | Match(scrutinees, arms) -> Match(scrutinees, arms |> List.map (this.Arm scrutinees))
             | ForEach loop -> ForEach { loop with Body = recur loop.Body }
             | While loop -> While { loop with Condition = recur loop.Condition; Body = recur loop.Body }
-            | Dup(vars, body) -> Dup(vars, recur body)
-            | Drop(vars, body) -> Drop(vars, recur body)
             | DropAfter(body, vars) -> DropAfter(recur body, vars)
-            | Release(released, body) -> Release(released, recur body)
             | Reuse(token, body) -> Reuse(token, recur body)
             | other -> other
-        { e with Kind = kind }
+        Chain.rebuild Chain.relink links { last with Kind = kind }
 
     /// An arm with each scrutinee it takes apart and drops released instead, and the first released object's block
     /// reused by an allocation of the same size, if the arm always makes one.

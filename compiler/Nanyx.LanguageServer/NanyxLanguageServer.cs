@@ -56,8 +56,11 @@ public static class NanyxLanguageServer
             .ConfigureLogging(logging =>
             {
                 // Logs go to the client as window/logMessage (VS Code shows them in the Output panel), never to stdout.
+                // The server's own information, such as how long each compile took, is shown; the protocol library's
+                // is not.
                 logging.AddLanguageProtocolLogging();
                 logging.SetMinimumLevel(LogLevel.Warning);
+                logging.AddFilter("Nanyx.LanguageServer", LogLevel.Information);
             })
             .WithHandler<TextDocumentSyncHandler>()
             .WithHandler<HoverHandler>()

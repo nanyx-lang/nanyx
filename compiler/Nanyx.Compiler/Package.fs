@@ -295,24 +295,25 @@ module Package =
         | errors -> { result with Diagnostics = errors @ result.Diagnostics; ErrorsDeferred = false }
 
     /// Compiles `source` as the source file at `filePath` of the package `modules`: its imports name the package's
-    /// modules, and it must be a named module of its own (see `PackageModules.fileErrors`).
-    let private compileIn (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        Compiler.compileSourceIn modules options filePath source |> withFileErrors modules filePath source
+    /// modules, and it must be a named module of its own (see `PackageModules.fileErrors`). Each module's check is
+    /// reported to `listener`.
+    let private compileIn (listener: CompileListener) (modules: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        Compiler.compileSourceInReporting listener modules options filePath source |> withFileErrors modules filePath source
 
     /// Each of `files`, a source file of the package `modules` with its text, compiled as `compileIn` compiles one, but
     /// with each module checked once (#698). A module that checked, for one file or as an import of one, is not checked
     /// again for a later file that imports it, nor for its own file. One that failed to check is checked again where it
-    /// is needed, since an import cycle is reported where the file being compiled enters it. `progress` is told each
-    /// file's path as its compile starts.
-    let private compileAll (progress: string -> unit) (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
+    /// is needed, since an import cycle is reported where the file being compiled enters it. `listener` is told each
+    /// file's path as its compile starts, and each module's check as it starts and ends.
+    let private compileAll (listener: CompileListener) (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
         let checkedOnce = Collections.Generic.Dictionary<string, CheckedModule>()
         Nanyx.LargeStack.run <| fun () ->
         files
         |> List.map (fun (file, source) ->
-            progress file
+            listener.FileStarted file
             let origin = SourceFile (Path.GetFullPath file)
             let key = Compiler.originKey origin
-            let checkedModules = Compiler.CheckedModules (Some modules)
+            let checkedModules = Compiler.CheckedModules(Some modules, None, listener)
             for KeyValue(checkedKey, checkedModule) in checkedOnce do
                 checkedModules.[checkedKey] <- Result.Ok checkedModule
             let checkedModule =
@@ -327,19 +328,24 @@ module Package =
 
     /// Compiles `source` as the file at `filePath` (which need not hold it yet: an editor's unsaved buffer, say) with
     /// the linters `options` gives: as a source file of the package it is in, if it is in one, or else on its own.
-    let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+    /// Each module's check is reported to `listener`.
+    let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         match modulesFor filePath with
-        | Some modules -> compileIn modules options filePath source
-        | None -> Compiler.compileSourceWith options filePath source
+        | Some modules -> compileIn listener modules options filePath source
+        | None -> Compiler.compileFromReporting listener options (SourceFile (Path.GetFullPath filePath)) source
 
-    /// Checks every source file of `package`, running the linters its manifest turns on over each. `progress` is told
-    /// each file's full path as its compile starts, in the order the files are compiled, so a caller can show which
-    /// file a slow build is on.
-    let buildWith (progress: string -> unit) (package: Package) : PackageBuild =
+    /// `compileSourceReporting`, telling nobody.
+    let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileSourceReporting CompileListener.none options filePath source
+
+    /// Checks every source file of `package`, running the linters its manifest turns on over each. `listener` is told
+    /// each file's full path as its compile starts, in the order the files are compiled, and each module's check as it
+    /// starts and ends, so a caller can show where a slow build is and how long each module took.
+    let buildReporting (listener: CompileListener) (package: Package) : PackageBuild =
         let modules = modules package
         let sources = package.Sources |> List.map (fun file -> file, File.ReadAllText file)
         let results =
-            compileAll progress modules package.Manifest.Linters sources
+            compileAll listener modules package.Manifest.Linters sources
             |> List.map2 (fun (_, source) (file, result) ->
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
@@ -355,8 +361,8 @@ module Package =
           Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics) |> List.distinct
           ErrorsDeferred = results |> List.forall (snd >> deferred) }
 
-    /// `buildWith`, telling nobody which file it is on.
-    let build (package: Package) : PackageBuild = buildWith ignore package
+    /// `buildReporting`, telling nobody.
+    let build (package: Package) : PackageBuild = buildReporting CompileListener.none package
 
     /// The compile of the package's `@entry` file, if it has one.
     let entryResult (build: PackageBuild) : CompileResult option =
