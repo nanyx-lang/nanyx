@@ -27,9 +27,10 @@ let ``except takes one arm on the line of its value`` () =
 [<Fact>]
 let ``except takes the arms of a match on the lines after it`` () =
     let source =
-        "def v = load(n) except\n" +
-        "  | #error(#notFound) -> #some(0)\n" +
-        "  | #error(#io(message)) -> #some(1)\n"
+        normalized """def v = load(n) except
+  | #error(#notFound) -> #some(0)
+  | #error(#io(message)) -> #some(1)
+"""
     match valueOf source with
     | Kind (Except (Kind (FunctionCall ("load", _, _)), arms)) ->
         match armsOf arms with
@@ -57,9 +58,10 @@ let ``except binds looser than pipes and operators`` () =
 [<Fact>]
 let ``except may start the line after its value, as a pipe may`` () =
     let source =
-        "def v = xs\n" +
-        "  \\find(p)\n" +
-        "  except #notFound -> #none\n"
+        normalized """def v = xs
+  \find(p)
+  except #notFound -> #none
+"""
     match valueOf source with
     | Kind (Except (Kind (Pipe (_, "find", _, _)), [ _ ])) -> ()
     | other -> failwith $"Unexpected value: %A{other}"
@@ -67,10 +69,11 @@ let ``except may start the line after its value, as a pipe may`` () =
 [<Fact>]
 let ``except works as a statement and inside a lambda`` () =
     let source =
-        "def parseNumber = { s ->\n" +
-        "  def n = int.fromString(s) except #invalidInt -> #some(0)\n" +
-        "  n\n" +
-        "}\n"
+        normalized """def parseNumber = { s ->
+  def n = int.fromString(s) except #invalidInt -> #some(0)
+  n
+}
+"""
     match valueOf source with
     | Kind (Lambda (_, Kind (Block [ Kind (DefStatement (_, "n", _, Kind (Except _))); _ ]), _)) -> ()
     | other -> failwith $"Unexpected value: %A{other}"

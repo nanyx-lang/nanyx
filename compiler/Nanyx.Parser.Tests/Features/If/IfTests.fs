@@ -46,11 +46,12 @@ let ``multi-branch if desugars to nested ifs ending in the else arm`` () =
 [<Fact>]
 let ``multi-branch if arms may test patterns with is, and a missing else is unit`` () =
     let source =
-        "def x = { s ->\n" +
-        "  if | int.fromString(s) is #some(i) -> i\n" +
-        "     | s == \"\" ->\n" +
-        "       0\n" +
-        "}\n"
+        normalized """def x = { s ->
+  if | int.fromString(s) is #some(i) -> i
+     | s == "" ->
+       0
+}
+"""
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match ([ Kind (FunctionCall _) ],
                                                                                       [ [ Kind (TagPattern ("some", Some (Kind (IdentifierPattern "i")))) ], Kind (IdentifierExpr "i")
@@ -61,9 +62,10 @@ let ``multi-branch if arms may test patterns with is, and a missing else is unit
 [<Fact>]
 let ``multi-branch if inside a match arm stops at its else arm`` () =
     let source =
-        "def x = match n\n" +
-        "  | 0 -> if | a -> 1 | else -> 2\n" +
-        "  | _ -> 3\n"
+        normalized """def x = match n
+  | 0 -> if | a -> 1 | else -> 2
+  | _ -> 3
+"""
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match (_, [ [ Kind (LiteralPattern (IntLit64 0L)) ], Kind (IfExpr _)
                                                                     [ Kind WildcardPattern ], Kind (LiteralExpr (IntLit64 3L)) ]))))) ] -> ()

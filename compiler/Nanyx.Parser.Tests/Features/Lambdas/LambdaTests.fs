@@ -304,7 +304,7 @@ let ``a shorthand lambda's body may continue after a member access`` () =
 
 [<Fact>]
 let ``a member access shorthand compared with a string is a pipe's trailing lambda`` () =
-    match (onlyValue "def bs = ps \\list.filter { .name == \"b\" }").Kind with
+    match (onlyValue """def bs = ps \list.filter { .name == "b" }""").Kind with
     | Pipe (Kind (IdentifierExpr "ps"), "list.filter", _, [ Kind (Lambda ([ _ ], Kind (BinaryOp ("==", _, Kind (MemberAccess (Kind target, "name", _)), Kind (LiteralExpr (StringLit "b")))), _)) ])
         when target = implicit -> ()
     | other -> failwith $"Unexpected pipe: %A{other}"
@@ -414,7 +414,7 @@ let ``named parameters followed by arms match the arms against the parameters`` 
 
 [<Fact>]
 let ``arms after parameters may follow on the arrow's line, after one parameter or an operator's`` () =
-    match (onlyValue "def name = { o -> | #some(s) -> s | #none -> \"none\" }").Kind with
+    match (onlyValue """def name = { o -> | #some(s) -> s | #none -> "none" }""").Kind with
     | Lambda ([ ("o", None) ], Kind (Match ([ Kind (IdentifierExpr "o") ], [ _; _ ])), false) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
     match (onlyValue "def `>>=` = { m, (f: int -> int) -> | #some(v), f -> f(v) | other, _ -> other }").Kind with

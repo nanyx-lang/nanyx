@@ -65,11 +65,11 @@ let ``Parse module with definition`` () =
 [<Fact>]
 let ``Parse ws-sensitive mid-file module block`` () =
     let input =
-        "module Root\n" +
-        "module Inner =\n" +
-        "  type Person = (firstName: string)\n" +
-        "  def Person.toString = { p -> \"person\" }\n" +
-        "  def value = 1"
+        normalized """module Root
+module Inner =
+  type Person = (firstName: string)
+  def Person.toString = { p -> "person" }
+  def value = 1"""
     let result = parseModule input
 
     result |> isOk |> should equal true

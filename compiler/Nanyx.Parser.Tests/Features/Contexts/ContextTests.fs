@@ -46,7 +46,7 @@ let ``a name that starts with use or in is not the use keyword`` () =
 
 [<Fact>]
 let ``use C(T) = expr does not parse, and the error says to write the call form where the context is named`` () =
-    for line, head in [ "  use Show(int) = (show = { n -> \"n\" })", "Show(int)"; "  use Console = (println = log)", "Console" ] do
+    for line, head in [ """  use Show(int) = (show = { n -> "n" })""", "Show(int)"; "  use Console = (println = log)", "Console" ] do
         let source = $"def main = {{\n{line}\n  1\n}}"
         match parseModuleFileWithNames "t.nyx" source with
         | Result.Error err ->
