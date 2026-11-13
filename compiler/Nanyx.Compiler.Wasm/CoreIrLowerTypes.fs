@@ -207,6 +207,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "float" -> IrFloat
     | TyPrimitive "F32" -> IrF32
     | TyPrimitive "?error" -> IrError
+    // A scoped context's scope means nothing at run time: a value of the context's type is unit.
+    | FunctionContexts.ScopeType _ -> IrUnit
     | TyTag _
     | TyUnion _ as tags ->
         let rec members ty =
