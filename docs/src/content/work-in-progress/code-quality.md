@@ -106,6 +106,7 @@ changing 13 captured mutables. `Library.fs` holds only the compiling job now, at
 | File | Lines | What changed |
 |---|---|---|
 | `Program.fs` (parser) | 1,431 | The script header (`Directive`, `Directives`) moved out to `Directives.fs`, module `Parser.Program.Header` |
+| `Program.fs` (parser) | 1,358 | Destructuring defs (`destructuringDefWith` and the bindings it desugars to) moved out to `Destructuring.fs` |
 
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 

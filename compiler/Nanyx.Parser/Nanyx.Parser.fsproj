@@ -20,6 +20,7 @@
     <Compile Include="Mutation.fs" />
     <Compile Include="OperatorTables.fs" />
     <Compile Include="SourceTrivia.fs" />
+    <Compile Include="Destructuring.fs" />
     <Compile Include="Directives.fs" />
     <Compile Include="Program.fs" />
     <Compile Include="DocComments.fs" />
