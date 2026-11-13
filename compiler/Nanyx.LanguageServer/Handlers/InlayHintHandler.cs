@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using TextEdit = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextEdit;
 
 namespace Nanyx.LanguageServer.Handlers;
 
@@ -11,6 +12,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// write its own, read from the document's last compile that was typed, as <c>: int</c>; with
 /// <see cref="TopLevelTypeHints.Inlay"/>, after each such top-level def too. Each kind of declaration can be turned off
 /// (<see cref="ServerSettings.ShowsInlayHintFor"/>). Nothing is shown in a top-level item edited since that compile.
+/// A hint whose type source can write as an annotation carries the edit that writes it, which VS Code applies when the
+/// hint is double-clicked.
 /// </summary>
 public sealed class InlayHintHandler : InlayHintsHandlerBase
 {
@@ -60,12 +63,21 @@ public sealed class InlayHintHandler : InlayHintsHandlerBase
             return null;
         }
 
+        var position = document.Positions.ToPosition(span.End);
         return new InlayHint
         {
-            Position = document.Positions.ToPosition(span.End),
+            Position = position,
             Label = new StringOrInlayHintLabelParts(context is null ? $": {hint.Type}" : hint.Type),
             PaddingLeft = context is not null,
-            Kind = InlayHintKind.Type
+            Kind = InlayHintKind.Type,
+            TextEdits = hint.Annotation?.Value is { } annotation
+                ? new Container<TextEdit>(new TextEdit
+                {
+                    Range = new Range(position, position),
+                    NewText = context is null ? $": {annotation}" : $" {annotation}"
+                })
+                : null,
+            Tooltip = hint.Annotation is null ? null : new StringOrMarkupContent("Double-click to insert this type")
         };
     }
 
