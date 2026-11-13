@@ -958,18 +958,20 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                             if tys |> List.forall Option.isSome then Some (tys |> List.choose id) else None
                         | _ -> None
                     | _ -> None
-                let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
-                    inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                // A lambda can use the contexts its parameter's type requires, which the callee supplies.
+                let inferLambda state lambda lambdaArgs lambdaBody expectedInput paramTy =
+                    let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
+                    match expectedInput with
+                    | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                    | None -> inferExpr lambdaEnv state lambda
                 let argResults =
                     args
                     |> List.mapi (fun index arg ->
                         let inferred =
-                            match arg with
-                            | Kind (Lambda(lambdaArgs, lambdaBody, _)) ->
-                                match LambdaArguments.expectedInput current (paramTys |> Option.bind (List.tryItem index)) arg lambdaArgs with
-                                | Some expectedInput -> inferLambda current arg lambdaArgs lambdaBody expectedInput
-                                | None -> inferExpr env current arg
-                            | Kind (TupleExpr items) ->
+                            match arg, paramTys |> Option.bind (List.tryItem index) with
+                            | Kind (Lambda(lambdaArgs, lambdaBody, _)), Some paramTy ->
+                                inferLambda current arg lambdaArgs lambdaBody (LambdaArguments.expectedInput current (Some paramTy) arg lambdaArgs) paramTy
+                            | Kind (TupleExpr items), _ ->
                                 match tupleParamTys items with
                                 | Some itemParamTys ->
                                     LambdaArguments.inferTupleItems (inferExpr env) inferLambda current items itemParamTys
@@ -1067,8 +1069,10 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
                         let inferred =
                             match LambdaArguments.namedFields arg info.Underlying with
                             | Some (names, values, memberTys) ->
-                                let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
-                                    inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                                let inferLambda state lambda lambdaArgs lambdaBody expectedInput _ =
+                                    match expectedInput with
+                                    | Some expectedInput -> inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                                    | None -> inferExpr env state lambda
                                 LambdaArguments.inferTupleItems (inferExpr env) inferLambda current values memberTys
                                 |> Result.map (fun (typedValues, next) ->
                                     let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList

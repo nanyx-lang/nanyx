@@ -41,6 +41,7 @@
     <Compile Include="Features\Contexts\RunUseDischargeTests.fs" />
     <Compile Include="Features\Contexts\RunLambdaMemberCaptureTests.fs" />
     <Compile Include="Features\Contexts\RunKnownMemberTests.fs" />
+    <Compile Include="Features\Contexts\RunLambdaSuppliedContextTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunTourExampleTests.fs" />
