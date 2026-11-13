@@ -127,7 +127,7 @@ let leave (call: Expression) (state: InferState) : InferState =
     | Some (supplied, written) ->
         let opened = List.map snd supplied
         let state = { state with OpenScopes = state.OpenScopes |> List.filter (fun scope -> not (List.contains scope opened)) }
-        let resolve = Unifier.apply (fst (Unifier.solve state.Constraints))
+        let resolve = Unifier.applySolved (fst (Unifier.solve state.Constraints))
         let callee = match call.Kind with FunctionCall(name, _, _) -> name | _ -> "the function"
         let result =
             match state.CalleeTypes |> Map.tryFind call.Id |> Option.map Unifier.unalias with
