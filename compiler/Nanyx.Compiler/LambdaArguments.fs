@@ -38,12 +38,13 @@ module internal LambdaArguments =
         | _ -> None
 
     /// Infers `items`, the arguments of a call written as one tuple, whose callee takes them as `paramTys`. Each is
-    /// inferred with `inferItem`, but a lambda with `inferLambda` and the input `expectedInput` gives it, as far as the
-    /// items before it say. Those say it only for that: their constraints against their parameters are added to a
-    /// copy of the state, and the call still constrains the whole tuple to its input afterwards, as it does any.
+    /// inferred with `inferItem`, but a lambda with `inferLambda`, the input `expectedInput` gives it, as far as the
+    /// items before it say, and its parameter's type. Those say it only for that: their constraints against their
+    /// parameters are added to a copy of the state, and the call still constrains the whole tuple to its input
+    /// afterwards, as it does any.
     let inferTupleItems
         (inferItem: InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
-        (inferLambda: InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty -> Result<TypedExpr * InferState, Diagnostic list>)
+        (inferLambda: InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty -> Result<TypedExpr * InferState, Diagnostic list>)
         (state: InferState)
         (items: Expression list)
         (paramTys: Ty list)
@@ -55,9 +56,7 @@ module internal LambdaArguments =
                     inferred
                     |> List.rev
                     |> List.fold (fun scratch (typed: TypedExpr, earlierTy) -> addAssignableConstraintAt typed.Expr.Span typed.Type earlierTy scratch) current
-                match expectedInput earlier (Some paramTy) item lambdaArgs with
-                | Some input -> inferLambda current item lambdaArgs body input
-                | None -> inferItem current item
+                inferLambda current item lambdaArgs body (expectedInput earlier (Some paramTy) item lambdaArgs) paramTy
             | _ -> inferItem current item
         let inferred, next, errors =
             List.zip items paramTys
