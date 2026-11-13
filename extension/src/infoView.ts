@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
+import { ContextLines, contextLinesMode } from "./contextLines";
 
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
 const INFO_VIEW_REQUEST = "nanyx/infoView";
@@ -83,6 +84,8 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly callHighlight = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor("editor.wordHighlightBackground")
   });
+  /** The lines that join a provider to its calls, as `nanyx.infoView.contextLines` says. */
+  private readonly contextLines = new ContextLines();
 
   constructor(private readonly client: () => LanguageClient | undefined) {
     this.registration = vscode.window.registerWebviewViewProvider(InfoView.viewId, this, {
@@ -106,6 +109,11 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
         this.schedule();
       }
     }, undefined, this.listeners);
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("nanyx.infoView.contextLines")) {
+        this.schedule();
+      }
+    }, undefined, this.listeners);
     this.schedule();
   }
 
@@ -120,6 +128,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
     this.registration.dispose();
     this.providerHighlight.dispose();
     this.callHighlight.dispose();
+    this.contextLines.dispose();
   }
 
   /** Asks again, after the language server has restarted say. */
@@ -137,16 +146,20 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /**
    * Highlights `highlights` in each editor that shows `uri`, and nothing anywhere else: with no `uri`, nothing at all.
+   * The highlights are joined by lines as `nanyx.infoView.contextLines` says.
    */
   private highlight(uri: vscode.Uri | undefined, highlights: InfoViewHighlight[]): void {
     const ranges = (kind: InfoViewHighlight["kind"]) =>
       highlights
         .filter((highlight) => highlight.kind === kind)
         .map(({ range: { start, end } }) => new vscode.Range(start.line, start.character, end.line, end.character));
+    const starts = highlights.map(({ range: { start } }) => new vscode.Position(start.line, start.character));
+    const mode = contextLinesMode();
     for (const editor of vscode.window.visibleTextEditors) {
       const here = uri !== undefined && editor.document.uri.toString() === uri.toString();
       editor.setDecorations(this.providerHighlight, here ? ranges("provider") : []);
       editor.setDecorations(this.callHighlight, here ? ranges("call") : []);
+      this.contextLines.draw(editor, here ? starts : [], mode);
     }
   }
 

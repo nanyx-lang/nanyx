@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InfoView = void 0;
 const vscode = __importStar(require("vscode"));
+const contextLines_1 = require("./contextLines");
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
 const INFO_VIEW_REQUEST = "nanyx/infoView";
 /** How long the selection must stay put before the view asks the server about it. */
@@ -61,6 +62,8 @@ class InfoView {
         this.callHighlight = vscode.window.createTextEditorDecorationType({
             backgroundColor: new vscode.ThemeColor("editor.wordHighlightBackground")
         });
+        /** The lines that join a provider to its calls, as `nanyx.infoView.contextLines` says. */
+        this.contextLines = new contextLines_1.ContextLines();
         this.registration = vscode.window.registerWebviewViewProvider(InfoView.viewId, this, {
             webviewOptions: { retainContextWhenHidden: true }
         });
@@ -81,6 +84,11 @@ class InfoView {
                 this.schedule();
             }
         }, undefined, this.listeners);
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration("nanyx.infoView.contextLines")) {
+                this.schedule();
+            }
+        }, undefined, this.listeners);
         this.schedule();
     }
     /** Reveals the view, opening the secondary side bar if need be, and focuses it. */
@@ -93,6 +101,7 @@ class InfoView {
         this.registration.dispose();
         this.providerHighlight.dispose();
         this.callHighlight.dispose();
+        this.contextLines.dispose();
     }
     /** Asks again, after the language server has restarted say. */
     refresh() {
@@ -107,15 +116,19 @@ class InfoView {
     }
     /**
      * Highlights `highlights` in each editor that shows `uri`, and nothing anywhere else: with no `uri`, nothing at all.
+     * The highlights are joined by lines as `nanyx.infoView.contextLines` says.
      */
     highlight(uri, highlights) {
         const ranges = (kind) => highlights
             .filter((highlight) => highlight.kind === kind)
             .map(({ range: { start, end } }) => new vscode.Range(start.line, start.character, end.line, end.character));
+        const starts = highlights.map(({ range: { start } }) => new vscode.Position(start.line, start.character));
+        const mode = (0, contextLines_1.contextLinesMode)();
         for (const editor of vscode.window.visibleTextEditors) {
             const here = uri !== undefined && editor.document.uri.toString() === uri.toString();
             editor.setDecorations(this.providerHighlight, here ? ranges("provider") : []);
             editor.setDecorations(this.callHighlight, here ? ranges("call") : []);
+            this.contextLines.draw(editor, here ? starts : [], mode);
         }
     }
     receive(message) {
