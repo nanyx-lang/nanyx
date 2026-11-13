@@ -304,8 +304,9 @@ five runs, minus a one-iteration run for compiling and start-up, and runs differ
 C runs today only with workarounds. The checker doesn't give a lambda the contexts its expected type requires, so
 the block can't name `bind` unless the function around it requires `[Proc]`; C's `step` does, `procH` takes
 `[c] () -> ...`, and `main` loads a `Proc` that is never called. And a generic `Proc`, with `bind` over `a` and `b`
-as `proc`'s `try` is, type-checks but traps in the backend (`indirect call type mismatch`,
-[#1152](https://github.com/nanyx-lang/nanyx/issues/1152)), so C's `Proc` is on `int`.
+as `proc`'s `try` is, type-checks but the backend can't compile it: it makes a member's value once, with the
+member's own type variables unit, so it reports a call that has one of them at another type as `NYX0301`
+([#1152](https://github.com/nanyx-lang/nanyx/issues/1152); before, the call trapped). C's `Proc` is on `int`.
 
 ## What changes
 
