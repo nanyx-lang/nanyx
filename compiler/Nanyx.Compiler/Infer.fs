@@ -315,7 +315,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let sequence = if args.Length = 1 then "gen" else "seq"
             if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply(sequence, [ TyPrimitive "int" ])) None None None, current)
             else Error errors
-        elif name = "__rec" then
+        elif name = RecSyntax.builtIn then
             // `rec name = value`: the value of a self-referencing local def; the block already binds the name.
             match args with
             | [ inner ] -> inferExpr env state inner
@@ -1354,11 +1354,15 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         | Some contexts -> ensureContextsExist current name (declarationSpan current DefValue expr) contexts
                         | None -> Ok ()
                     let contextsExist = contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
+                    let notSelfReferenced =
+                        match LocalRecursion.selfReferences env' name expr with
+                        | [] -> Ok ()
+                        | selfReferences -> Error selfReferences
                     let typeOfsInferred =
                         match typeOpt with
                         | Some typeExpr -> inferTypeOfValues env' current typeExpr
                         | None -> Ok current
-                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> AttachedOperators.check current name (declarationSpan current DefValue expr)) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> inlineContextsRead) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> typeOfsInferred) with
+                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> AttachedOperators.check current name (declarationSpan current DefValue expr)) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> inlineContextsRead) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> notSelfReferenced) |> Result.bind (fun () -> typeOfsInferred) with
                     | Error err -> errors <- err
                     | Ok inferredState ->
                         current <- inferredState
@@ -1381,12 +1385,14 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | None when expectedDeclaredOpt.IsNone -> tryInferAttachedLambdaInput nextState2 name expr
                             | None -> None
                         let symbol, declaredState = declareSymbol DefValue expr.Id name LocalValue false (Some block.Span.End) nextState2
+                        // Only a `rec` def's value can name the def (see `LocalRecursion`).
+                        let selfVisible ty = if LocalRecursion.isRec expr then TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx else envWithCtx
                         let preboundTy, preboundState, envWithRec, preboundFresh =
                             match expectedDeclaredOpt with
-                            | Some declaredTy -> declaredTy, declaredState, TypeEnv.declare name symbol (TypeEnv.mono declaredTy) envWithCtx, false
+                            | Some declaredTy -> declaredTy, declaredState, selfVisible declaredTy, false
                             | None ->
                                 let ty, st = freshVar declaredState
-                                ty, st, TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx, true
+                                ty, st, selfVisible ty, true
                         let nextStateWithReq =
                             let written = recordWrittenType name typeOpt preboundState
                             match contextOpt with

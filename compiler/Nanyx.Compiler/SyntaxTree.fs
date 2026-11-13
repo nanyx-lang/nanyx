@@ -173,12 +173,13 @@ module SyntaxTree =
         | UnitPattern
         | ElsePattern -> []
 
-    /// The names `expr` refers to that nothing within it binds, as `referencedNames` gives them but without those a
-    /// lambda's parameters, a match arm's patterns or a def of an enclosing block bind. A block's def is taken to bind
-    /// its name in its own value too, so this can only under-count.
-    let freeNames (expr: Expression) : string list =
-        let rec free (bound: Set<Identifier>) (expr: Expression) : string list =
-            let named name = if bound.Contains name then [] else [ name ]
+    /// The names `expr` refers to that nothing within it binds, each with the expression that names it, as
+    /// `referencedNames` gives them but without those a lambda's parameters, a match arm's patterns or a def of an
+    /// enclosing block bind. A block's def binds its name in the statements after it, and in its own value only when it
+    /// is `rec`.
+    let freeReferences (expr: Expression) : (string * Expression) list =
+        let rec free (bound: Set<Identifier>) (expr: Expression) : (string * Expression) list =
+            let named name = if bound.Contains name then [] else [ name, expr ]
             let inArms (arms: MatchArm list) =
                 arms
                 |> List.collect (fun (patterns, body) ->
@@ -197,8 +198,8 @@ module SyntaxTree =
                 |> List.fold (fun (bound: Set<Identifier>, names) statement ->
                     match statement.Kind with
                     | DefStatement(_, name, _, value) ->
-                        let bound = bound.Add name
-                        bound, names @ free bound value
+                        let inValue = match value.Kind with RecSyntax.Call _ -> bound.Add name | _ -> bound
+                        bound.Add name, names @ free inValue value
                     | _ -> bound, names @ (ofStatement statement |> List.collect (free bound))) (bound, [])
                 |> snd
             | MemberAccess(inner, _, _) ->
@@ -209,7 +210,10 @@ module SyntaxTree =
                     | MemberAccess(inner, memberName, _) -> dotted inner |> Option.map (fun (root, prefix) -> root, $"{prefix}.{memberName}")
                     | _ -> None
                 match dotted expr with
-                | Some(root, path) when not (bound.Contains root) -> path :: free bound inner
+                | Some(root, path) when not (bound.Contains root) -> (path, expr) :: free bound inner
                 | _ -> free bound inner
             | _ -> childrenOf expr |> fst |> List.collect (free bound)
         free Set.empty expr
+
+    /// The names `expr` refers to that nothing within it binds (see `freeReferences`).
+    let freeNames (expr: Expression) : string list = freeReferences expr |> List.map fst
