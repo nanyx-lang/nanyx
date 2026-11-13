@@ -189,6 +189,28 @@ export def __hash: a -> int = { x ->
   __nanyx_hash(x)
 }
 
+--| The hash of `x` through its `Hash`, whichever that is. The `hash` the compiler derives for a
+  structure whose parts have a `hash` of their own hashes each part with it.
+export def __hashOf: [Hash(a)] a -> int = { x ->
+  hash(x)
+}
+
+--| `seed` and `part`, two hashes, made one, in an order that tells `(a, b)` from `(b, a)`. The
+  `hash` the compiler derives for a structure whose parts have a `hash` of their own folds its
+  parts' hashes with it.
+export def __hashCombine: int, int -> int = { seed, part ->
+  int.wrappingAdd(int.wrappingMul(seed, 31), part)
+}
+
+--| The hash of the list `xs`, its elements' hashes, as `hashOf` gives them, folded in order into
+  `seed`. The `hash` the compiler derives for a list whose elements have a `hash` of their own
+  calls it.
+export def __listHashBy: [c] int, list(a), ([c] a -> int) -> int = { seed, xs, hashOf ->
+  match xs
+    | [] -> seed
+    | [x, ...rest] -> __listHashBy(__hashCombine(seed, hashOf(x)), rest, hashOf)
+}
+
 -- Each built-in type has its hash attached as `hash`, so that a type's own `hash` can be built from
 -- its parts' hashes. A built-in type's hash is always the compiler's own: `Hash` does not read
 -- these.

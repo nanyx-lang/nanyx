@@ -166,34 +166,30 @@ module internal WellKnownContexts =
     /// For a context whose member must agree with another's (see `AgreesWith`), why the compiler's own cannot be used
     /// for `ty` because of a type in it (`attaches` says whether a type attaches a member), if it cannot: a type that
     /// attaches that other member but not this one, as a `$Email` that attaches `==` and no `hash` has no `Hash`, and
-    /// nor has a list of them. A type that attaches both is hashed by its own `hash`, but only as the whole: the
-    /// compiler's own hash of a type that holds one hashes it by its structure, so it has none until a structure is
-    /// hashed through its parts' instances (#641).
+    /// nor has a list of them. A type that attaches both is hashed by its own `hash`, and a structure that holds one
+    /// by a `hash` derived from its parts (see `StructuralInstances`).
     let disagreeing (wellKnown: WellKnownContext) (attaches: Ty -> Identifier -> bool) (ty: Ty) : string option =
         match wellKnown.AgreesWith with
         | None -> None
         | Some other ->
             let mustAgree (part: Ty) =
                 $"'{display part}' defines its own {other}, so its {wellKnown.Member} must agree with it: attach '{display part}.{wellKnown.Member}'"
-            let rec find (outermost: bool) (ty: Ty) =
-                if attaches ty wellKnown.Member then
-                    if outermost then None
-                    else Some $"its part '{display ty}' has its own {wellKnown.Member}, which the compiler's own {wellKnown.Member} of the whole does not read yet"
+            let rec find (ty: Ty) =
+                if attaches ty wellKnown.Member then None
                 elif attaches ty other then Some (mustAgree ty)
                 else
-                    let inPart = find false
                     match ty with
                     | TyAlias(_, _, underlying)
-                    | TyNominal(_, underlying, _) -> find outermost underlying
+                    | TyNominal(_, underlying, _) -> find underlying
                     | TyRecord fields
-                    | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> inPart)
-                    | TyTag(_, payload) -> payload |> Option.bind inPart
-                    | TyApply(_, args) -> args |> List.tryPick inPart
-                    | TyUnion items -> items |> List.tryPick (find outermost)
+                    | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (snd >> find)
+                    | TyTag(_, payload) -> payload |> Option.bind find
+                    | TyApply(_, args) -> args |> List.tryPick find
+                    | TyUnion items -> items |> List.tryPick find
                     | TyFunc _
                     | TyVar _
                     | TyPrimitive _ -> None
-            find true ty
+            find ty
     /// The error for using `op` on values of the type `ty`, which have no instance of `wellKnown` for `reason`.
     let cannotUse (wellKnown: WellKnownContext) (op: string) (ty: Ty) (reason: string) =
         $"'{display ty}' cannot be {wellKnown.Participle} with {op}: {reason}"

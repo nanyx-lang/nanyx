@@ -51,3 +51,23 @@ let ``Run - a nominal type's own hash is used, and the built-in types' hashes ca
           "float.hash(0.0) == float.hash(-0.0)" ]
     |> runSource
     |> assertRan "T\nT\nT\nT\nT\n"
+
+[<Fact>]
+let ``Run - a structure is hashed through its parts' own hashes`` () =
+    // Every `$Name` is equal to every other, so every structure of them that `==` finds equal must hash the same.
+    comparing
+        [ sameHash
+          "type $Name = string"
+          "def $Name.`==`: $Name, $Name -> bool = { a, b -> true }"
+          "def $Name.hash: $Name -> int = { n -> 7 }"
+          "def inList: [Hash(a)] a, a -> bool = { x, y -> same([x], [y]) }" ]
+        [ "same([$Name(\"Ada\")], [$Name(\"Grace\")])"
+          "same(($Name(\"Ada\"), 1), ($Name(\"Grace\"), 1))"
+          "same((who = $Name(\"Ada\"), n = 1), (who = $Name(\"Grace\"), n = 1))"
+          "same(#to($Name(\"Ada\")), #to($Name(\"Grace\")))"
+          "same([#to([$Name(\"Ada\")])], [#to([$Name(\"Grace\")])])"
+          "inList($Name(\"Ada\"), $Name(\"Grace\"))"
+          "same(($Name(\"Ada\"), 1), ($Name(\"Ada\"), 2))"
+          "same([$Name(\"Ada\")], [$Name(\"Ada\"), $Name(\"Ada\")])" ]
+    |> runSource
+    |> assertRan "T\nT\nT\nT\nT\nT\nF\nF\n"
