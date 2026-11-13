@@ -5,6 +5,7 @@ open System
 open System.Globalization
 open System.Text.RegularExpressions
 open Parser.Program
+open Nanyx.Formatter.SourceText
 
 type Options =
     { /// The width lines are laid out to fit.
@@ -69,66 +70,8 @@ let format (options: Options) (parsed: SourceModule) : string =
     let parens doc = cat [ text "("; doc; text ")" ]
     let commaJoin docs = Doc.join (text ", ") docs
 
-    let lines = LineTable source
+    let sourceText = SourceText(source)
 
-    let lineOf (offset: int) = lines.LineOf offset
-
-    let valid (span: SourceSpan) =
-        not (SourceSpan.isNone span) && span.Start <= span.End && span.End <= source.Length
-
-    let startsWith (span: SourceSpan) (s: string) =
-        valid span && span.Start + s.Length <= source.Length && String.CompareOrdinal(source, span.Start, s, 0, s.Length) = 0
-
-    /// The first character at or after `offset` that is not whitespace.
-    let nextChar offset =
-        let mutable i = offset
-        while i < source.Length && Char.IsWhiteSpace source[i] do
-            i <- i + 1
-        if i >= 0 && i < source.Length then source[i] else '\000'
-
-    /// The last character before `offset` that is not whitespace.
-    let previousChar offset =
-        let mutable i = offset - 1
-        while i >= 0 && i < source.Length && Char.IsWhiteSpace source[i] do
-            i <- i - 1
-        if i >= 0 && i < source.Length then source[i] else '\000'
-
-    /// The text of a double-quoted string that starts at `start` in the source, as it is written there, escapes and all:
-    /// up to the next `"` or `{` that is not escaped. The parser decodes escapes, so where that is not found, or does
-    /// not stand for `decoded`, the text is written with escapes of its own.
-    let writtenStringText (start: int option) (decoded: string) =
-        let written =
-            start
-            |> Option.bind (fun start ->
-                let mutable i = start
-                while i < source.Length && source[i] <> '"' && source[i] <> '{' do
-                    i <-
-                        if source[i] <> '\\' then i + 1
-                        // `\u{...}` runs to its `}`.
-                        elif String.CompareOrdinal(source, i + 1, "u{", 0, 2) = 0 && source.IndexOf('}', i) > i then source.IndexOf('}', i) + 1
-                        else i + 2
-                let raw = source.Substring(start, min i source.Length - start)
-                if StringEscapes.decode raw = Some decoded then Some raw else None)
-        Doc.textOrVerbatim (written |> Option.defaultWith (fun () -> StringEscapes.escape decoded))
-
-    /// Where the text after the interpolation hole `value` starts: past the `}` that closes the hole.
-    let afterHole (value: Expression) =
-        let mutable i = value.Span.End
-        while valid value.Span && i < source.Length && Char.IsWhiteSpace source[i] do
-            i <- i + 1
-        if valid value.Span && i < source.Length && source[i] = '}' then Some (i + 1) else None
-
-    /// Where the `\match` is, if the match `e` on `value` was written `value \match | ...`, rather than `match value | ...`.
-    let pipedMatchAt (e: Expression) (value: Expression) =
-        if not (valid e.Span && valid value.Span) || startsWith e.Span "match" then
-            None
-        else
-            let mutable i = value.Span.End
-            while i < e.Span.End && (Char.IsWhiteSpace source[i] || source[i] = ')') do
-                i <- i + 1
-            if i + 6 <= source.Length && String.CompareOrdinal(source, i, "\\match", 0, 6) = 0 then Some i else None
-
-    let isPipedMatch (e: Expression) (value: Expression) = (pipedMatchAt e value).IsSome
 
     // Comments are placed once each; whatever no construct places goes before the line it was in. A doc comment's
     // continuation lines are set one indent step past its first line.
@@ -165,9 +108,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         fun () ->
             last.Value <- last.Value + 1
             last.Value
-
-    /// The offset of the end of the line `offset` is on.
-    let lineEnd offset = lines.End(lineOf offset)
 
     /// Children laid out one per line between the offsets `start` and `finish`, each given as its start and end offsets
     /// and a function building its document. The comments among them are put back: a comment after a child on its
@@ -220,7 +160,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             for i in before do
                 placeComment true i
             let trailing =
-                match unplacedIn childEnd (lineEnd (max childStart (childEnd - 1)) + 1) with
+                match unplacedIn childEnd (sourceText.LineEnd (max childStart (childEnd - 1)) + 1) with
                 | i :: _ when childEnd > childStart -> Some i
                 | _ -> None
             match trailing with
@@ -265,33 +205,6 @@ let format (options: Options) (parsed: SourceModule) : string =
                 i <- i + 1
         List.ofSeq runs
 
-    /// The pattern of a destructuring def as written, from after `def` to the `=` outside any brackets, with its
-    /// spacing made regular. It keeps the form it was written in: `def (x, y) =` or `def x, y =`.
-    let writtenPattern (span: SourceSpan) =
-        if not (valid span) then
-            None
-        else
-            let defAt = source.IndexOf("def", span.Start, StringComparison.Ordinal)
-            if defAt < 0 || defAt >= span.End then
-                None
-            else
-                let startAt = defAt + 3
-                let mutable depth = 0
-                let mutable equalsAt = -1
-                let mutable i = startAt
-                while equalsAt < 0 && i < span.End do
-                    match source[i] with
-                    | '(' -> depth <- depth + 1
-                    | ')' -> depth <- depth - 1
-                    | '=' when depth = 0 -> equalsAt <- i
-                    | _ -> ()
-                    i <- i + 1
-                if equalsAt < 0 then
-                    None
-                else
-                    Some(Regex.Replace(source.Substring(startAt, equalsAt - startAt), @"\s+", "").Replace(",", ", "))
-
-    /// The pattern of a destructuring def, rebuilt from the defs it stands for when the source cannot be read.
     let rebuiltPattern (bindings: Def list) =
         let rec path (e: Expression) acc =
             match e.Kind with
@@ -316,7 +229,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     let writtenLambda (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) =
         let plain () = parameters |> List.map (fun parameter -> parameter, None), body
         match body.Kind with
-        | Match(scrutinees, [ patterns, inner ]) when valid e.Span && body.Span = e.Span && scrutinees.Length = patterns.Length ->
+        | Match(scrutinees, [ patterns, inner ]) when sourceText.Valid e.Span && body.Span = e.Span && scrutinees.Length = patterns.Length ->
             let taken =
                 List.zip scrutinees patterns
                 |> List.choose (fun (scrutinee, p) ->
@@ -341,7 +254,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         // A pipe binds tighter than every binary operator, but not than a prefix one: `-(x \abs)` keeps its brackets, as `-x \abs` is `(-x) \abs`.
         | Pipe _ -> position.Prec >= prefixPrecedence
         // `(r with (x = 1)).x`: nothing follows a `with` but an operator, though its updates are bracketed.
-        | WithSyntax.Call(_, updates) when startsWith updates.Span "(" -> position.Prec >= prefixPrecedence
+        | WithSyntax.Call(_, updates) when sourceText.StartsWith updates.Span "(" -> position.Prec >= prefixPrecedence
         | _ when isOpenEnded e -> not position.Tail || position.Prec >= prefixPrecedence
         | _ -> false
 
@@ -385,7 +298,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".."; expr { position with Prec = rangePrecedence + 1 } b ]
         | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".." ]
         // Updates written in parentheses, `record with (x = 1, y = 2)`, stay there, laid out as a record's fields are.
-        | WithSyntax.Call(record, updates) when startsWith updates.Span "(" ->
+        | WithSyntax.Call(record, updates) when sourceText.StartsWith updates.Span "(" ->
             cat [ expr operandPosition record; text " with "; exprBare full updates ]
         | WithSyntax.Call(record, updates) when (match updates.Kind with RecordExpr fields -> fields |> List.forall (function NamedField _ -> true | _ -> false) | _ -> false) ->
             let fields = match updates.Kind with RecordExpr fields -> fields | _ -> []
@@ -411,7 +324,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ exprBare full callee; callArguments call callee.Span.End args ]
         // A block where a def's value, an arm's body or a branch would not take one is a `do` block.
         | Block _ -> cat [ text "do"; nest (cat [ hard; block e ]) ]
-        | Match([ scrutinee ], arms) when isPipedMatch e scrutinee -> pipeChain position e
+        | Match([ scrutinee ], arms) when sourceText.IsPipedMatch e scrutinee -> pipeChain position e
         | Match(scrutinees, arms) ->
             match ifArm e with
             | Some _ -> ifDoc e
@@ -438,20 +351,20 @@ let format (options: Options) (parsed: SourceModule) : string =
             if isWrittenBlock body then cat [ head; nest (cat [ hard; block body ]) ]
             else cat [ head; text " "; expr full body ]
         | WorkflowBindExpr(n, value) ->
-            let keyword = if n = WorkflowSyntax.tryKeyword && not (startsWith e.Span (n + "!")) then n + " " else n + "! "
+            let keyword = if n = WorkflowSyntax.tryKeyword && not (sourceText.StartsWith e.Span (n + "!")) then n + " " else n + "! "
             cat [ text keyword; expr full value ]
         | WorkflowReturnExpr value -> cat [ text (WorkflowSyntax.returnKeyword + " "); expr full value ]
         | InterpolatedString parts ->
             // Each part of text starts after the opening quote or the hole before it.
             let part start p =
                 match p with
-                | StringText s -> writtenStringText start s, None
-                | StringExpr inner -> cat [ text "{"; expr full inner; text "}" ], afterHole inner
-            let opening = if startsWith e.Span "\"" then Some (e.Span.Start + 1) else None
+                | StringText s -> sourceText.WrittenStringText start s, None
+                | StringExpr inner -> cat [ text "{"; expr full inner; text "}" ], sourceText.AfterHole inner
+            let opening = if sourceText.StartsWith e.Span "\"" then Some (e.Span.Start + 1) else None
             cat [ text "\""; cat (List.mapFold part opening parts |> fst); text "\"" ]
 
     and literalDoc (span: SourceSpan) (literal: Literal) : Doc =
-        if valid span && span.End > span.Start then
+        if sourceText.Valid span && span.End > span.Start then
             Doc.textOrVerbatim (source.Substring(span.Start, span.End - span.Start))
         else
             match literal with
@@ -531,7 +444,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// run of elements or a list spread, when `e` is such a literal.
     and spreadSegments (e: Expression) : Choice<Expression list, Expression> list option =
         match e.Kind with
-        | BinaryOp("++", _, l, r) when valid e.Span && source[e.Span.Start] = '[' && (l.Span = e.Span || (valid l.Span && l.Span.Start > e.Span.Start)) ->
+        | BinaryOp("++", _, l, r) when sourceText.Valid e.Span && source[e.Span.Start] = '[' && (l.Span = e.Span || (sourceText.Valid l.Span && l.Span.Start > e.Span.Start)) ->
             let segment (x: Expression) =
                 match x.Kind with
                 | ListExpr items when x.Span = e.Span -> Choice1Of2 items
@@ -552,7 +465,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let count = items.Length
         let itemDoc index (spread, item: Expression) =
             cat [ (if spread then text "..." else Doc.empty); expr { full with Tail = (index = count - 1) } item ]
-        if valid span && hasCommentsIn span.Start span.End then
+        if sourceText.Valid span && hasCommentsIn span.Start span.End then
             let children =
                 items
                 |> List.mapi (fun index ((_, item: Expression) as entry) -> item.Span.Start, item.Span.End, fun () -> itemDoc index entry)
@@ -565,7 +478,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let count = entries.Length
         let entryDoc index (key: Expression, value: Expression) =
             cat [ expr { full with Tail = false } key; text " => "; expr { full with Tail = (index = count - 1) } value ]
-        if valid span && hasCommentsIn span.Start span.End then
+        if sourceText.Valid span && hasCommentsIn span.Start span.End then
             let children =
                 entries
                 |> List.mapi (fun index ((key: Expression, value: Expression) as entry) -> key.Span.Start, value.Span.End, fun () -> entryDoc index entry)
@@ -627,14 +540,14 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// Where the name of a call or a pipe's target ends.
     and nameEnd (nameSpan: SourceSpan option) (fallback: int) =
         match nameSpan with
-        | Some span when valid span -> span.End
+        | Some span when sourceText.Valid span -> span.End
         | _ -> fallback
 
     /// Whether a lambda argument follows the brackets of a call whose name ends at `afterName` (`f { x -> x }`), rather
     /// than being in them.
     and isTrailingLambda (afterName: int) (argument: Expression) =
         match argument.Kind with
-        | Lambda _ -> not (valid argument.Span && afterName <= argument.Span.Start && nextChar afterName = '(')
+        | Lambda _ -> not (sourceText.Valid argument.Span && afterName <= argument.Span.Start && sourceText.NextChar afterName = '(')
         | _ -> false
 
     and callArguments (call: Expression) (afterName: int) (args: Expression list) : Doc =
@@ -646,7 +559,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// trailing lambda ends where its call does, and one in the brackets ends before the `)`.
     and endsCall (call: Expression) (argument: Expression) =
         match argument.Kind with
-        | Lambda _ -> valid argument.Span && valid call.Span && argument.Span.End >= call.Span.End
+        | Lambda _ -> sourceText.Valid argument.Span && sourceText.Valid call.Span && argument.Span.End >= call.Span.End
         | _ -> false
 
     and pipeArguments (call: Expression) (afterName: int) (args: Expression list) : Doc =
@@ -704,7 +617,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let body =
                 match body.Kind with
                 | Block [ { Kind = ExprStatement single } ] when
-                    bodyOnOwnLine && bracketedAsStatement single && not (valid e.Span && hasCommentsIn e.Span.Start e.Span.End) -> single
+                    bodyOnOwnLine && bracketedAsStatement single && not (sourceText.Valid e.Span && hasCommentsIn e.Span.Start e.Span.End) -> single
                 | _ -> body
             match body.Kind with
             // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
@@ -737,7 +650,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     /// `{ .name }`, which the implicit argument is printed as nothing in), `{ | pattern -> ... }` and
     /// `{ m -> | pattern -> ... }`.
     and shorthand (e: Expression) parameters (body: Expression) : Doc option =
-        let made (x: Expression) = valid e.Span && x.Span = e.Span
+        let made (x: Expression) = sourceText.Valid e.Span && x.Span = e.Span
         match parameters, body.Kind with
         | [], UnitExpr when made body -> Some(text "{ }")
         | [ (first, None); (second, None) ], BinaryOp(op, _, l, r) when
@@ -780,7 +693,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         |> List.mapi (fun index (alternatives, body) ->
             let armStart =
                 match alternatives with
-                | (first :: _) :: _ when valid first.Span -> first.Span.Start
+                | (first :: _) :: _ when sourceText.Valid first.Span -> first.Span.Start
                 | _ -> body.Span.Start
             armStart, body.Span.End, fun () ->
                 let patterns = alternatives |> List.map (fun ps -> commaJoin (List.map pattern ps)) |> Doc.join (text " | ")
@@ -820,11 +733,11 @@ let format (options: Options) (parsed: SourceModule) : string =
         let rec collect (e: Expression) steps =
             match e.Kind with
             | Pipe(value, n, nameSpan, args) ->
-                let at = match nameSpan with Some span when valid span -> span.Start | _ -> -1
+                let at = match nameSpan with Some span when sourceText.Valid span -> span.Start | _ -> -1
                 let doc = cat [ text "\\"; text n; pipeArguments e (nameEnd nameSpan value.Span.End) args ]
                 collect value ((value, at, false, doc) :: steps)
             | Match([ value ], arms) ->
-                match pipedMatchAt e value with
+                match sourceText.PipedMatchAt e value with
                 | Some at ->
                     let doc = cat [ text "\\match"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
                     collect value ((value, at, true, doc) :: steps)
@@ -841,20 +754,20 @@ let format (options: Options) (parsed: SourceModule) : string =
         let isMatch = steps |> List.map (fun (_, _, isMatch, _) -> isMatch)
         let afterMatch = false :: List.truncate (steps.Length - 1) isMatch
         // Whether the step at `at` starts a line of its own after the value it pipes.
-        let startsLine (value: Expression) at = at >= 0 && valid value.Span && value.Span.End > 0 && lineOf at > lineOf (value.Span.End - 1)
+        let startsLine (value: Expression) at = at >= 0 && sourceText.Valid value.Span && value.Span.End > 0 && sourceText.LineOf at > sourceText.LineOf (value.Span.End - 1)
         let writtenOnLines =
             List.zip steps afterMatch |> List.exists (fun ((value, at, _, _), afterMatch) -> not afterMatch && startsLine value at)
         let stepDocs = steps |> List.map (fun (_, _, _, doc) -> doc)
         // The comments between a step and the value it pipes: one at the end of the value's last line stays there, and
         // any other goes on a line of its own before the step.
         let commentsBefore (value: Expression) at =
-            if at < 0 || not (valid value.Span) then
+            if at < 0 || not (sourceText.Valid value.Span) then
                 Doc.empty
             else
                 cat [ for i in unplacedIn value.Span.End at ->
                           placed[i] <- true
                           let commentText, span = comments[i]
-                          if lineOf span.Start = lineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
+                          if sourceText.LineOf span.Start = sourceText.LineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
                           else cat [ hard; Doc.comment commentText ] ]
         if position.Tail && writtenOnLines then
             cat [ rootDoc; nest (cat [ for value, at, _, doc in steps -> cat [ commentsBefore value at; hard; doc ] ]) ]
@@ -889,7 +802,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Match([ value ], [ [ p ], thenBranch; [ wildcard ], elseBranch ]) when
             wildcard.Kind = WildcardPattern
             && wildcard.Span = elseBranch.Span
-            && (startsWith e.Span "if" || startsWith e.Span "|")
+            && (sourceText.StartsWith e.Span "if" || sourceText.StartsWith e.Span "|")
             && not (obj.ReferenceEquals(thenBranch, elseBranch))
             ->
             Some(Binding(value, p), thenBranch, elseOf thenBranch elseBranch)
@@ -903,10 +816,10 @@ let format (options: Options) (parsed: SourceModule) : string =
     and ifDoc (e: Expression) : Doc =
         let head, thenBranch, elseBranch = (ifArm e).Value
         // `if | a -> x | b -> y | else -> z` is parsed as nested ifs, each after the first spanning from its `|`.
-        if startsWith e.Span "if" && nextChar (e.Span.Start + 2) = '|' then
+        if sourceText.StartsWith e.Span "if" && sourceText.NextChar (e.Span.Start + 2) = '|' then
             let rec chain arms (head, body, rest: Expression option) =
                 match rest with
-                | Some r when startsWith r.Span "|" && (ifArm r).IsSome -> chain ((head, body) :: arms) (ifArm r).Value
+                | Some r when sourceText.StartsWith r.Span "|" && (ifArm r).IsSome -> chain ((head, body) :: arms) (ifArm r).Value
                 | _ -> List.rev ((head, body) :: arms), rest
             let arms, elseBranch = chain [] (head, thenBranch, elseBranch)
             let headStart head =
@@ -1052,7 +965,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         // value; the def is printed from that arm's pattern.
         | Match([ scrutinee ], [ [ p ], _ ]) -> defDocNamed isExport "def" (pattern p) None scrutinee
         | _ ->
-            let patternText = writtenPattern span |> Option.defaultWith (fun () -> rebuiltPattern bindings)
+            let patternText = sourceText.WrittenPattern span |> Option.defaultWith (fun () -> rebuiltPattern bindings)
             defDocNamed isExport "def" (text patternText) None value
 
     and pattern (p: Pattern) : Doc =
@@ -1079,7 +992,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | RangePattern(a, b) -> cat [ expr full a; text ".."; expr full b ]
         // The bare `> 5` is kept bare: it is the shorthand lambda `{ > 5 }` without its braces.
         | GuardPattern(Kind (Lambda([ (only, None) ], body, _))) when
-            only = implicitArgument && valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' ->
+            only = implicitArgument && sourceText.Valid p.Span && p.Span.Start < source.Length && source[p.Span.Start] <> '{' ->
             expr full body
         | GuardPattern predicate -> expr full predicate
         | AndPattern parts -> parts |> List.map pattern |> List.reduce (fun left right -> cat [ left; text " & "; right ])
@@ -1087,7 +1000,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TagPattern(n, Some (Kind UnitPattern)) -> text $"#{n}()"
         | TagPattern(n, Some payload) ->
             let afterName = p.Span.Start + 1 + n.Length
-            if valid p.Span && afterName < source.Length && source[afterName] <> '(' then
+            if sourceText.Valid p.Span && afterName < source.Length && source[afterName] <> '(' then
                 match payload.Kind with
                 // `#n (a & b)`: without its brackets, the and-pattern would take in the tag.
                 | AndPattern _ -> cat [ text $"#{n} ("; pattern payload; text ")" ]
@@ -1288,7 +1201,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     ///   )
     and typeBody (body: TypeExpr) : Doc =
         match body.Kind with
-        | TypeRecord fields when fields.Length > 3 || (valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
+        | TypeRecord fields when fields.Length > 3 || (sourceText.Valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
             let isPositional field =
                 match field with
                 | TypeField(n, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
@@ -1297,7 +1210,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let spanOf field =
                 match field with
                 | TypeField(_, _, Some t, defaultValue) ->
-                    let finish = match defaultValue with Some value when valid value.Span -> value.Span.End | _ -> t.Span.End
+                    let finish = match defaultValue with Some value when sourceText.Valid value.Span -> value.Span.End | _ -> t.Span.End
                     t.Span.Start, finish
                 | TypeMember(_, Some t) -> t.Span.Start, t.Span.End
                 | _ -> -1, -1
@@ -1337,7 +1250,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let items = Array.ofList items
             // Where a comment at the end of the line `items[k]` ends on would have to start before.
             let lineFinish k =
-                let afterLine = lineEnd (max items[k].Span.Start (items[k].Span.End - 1)) + 1
+                let afterLine = sourceText.LineEnd (max items[k].Span.Start (items[k].Span.End - 1)) + 1
                 if k + 1 < items.Length then min items[k + 1].Span.Start afterLine else afterLine
             let runs =
                 [ 0 .. items.Length - 1 ]
