@@ -99,6 +99,13 @@ let compileClean (source: string) =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value
 
+/// The type a hover shows at the first `text` in `source`, which must compile with no diagnostics.
+let hoverType (source: string) (text: string) =
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let offset = source.ReplaceLineEndings("\n").IndexOf text
+    Hover.typeAt Unicode result offset |> Option.map _.Type
+
 /// The code of the one diagnostic `source` compiles to, and the text it is reported at.
 let singleError (source: string) =
     let result = Compiler.compile source

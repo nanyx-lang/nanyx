@@ -51,7 +51,24 @@ def main = {
 }
 ```
 
-A member that uses another context has to say so in the context's definition, as any function type does. To give `Log` a member that prints, write `context Log = (log: [Console] string -> ())`: then `use Log(log = { s -> println(s) })` checks, and calling `log` requires `Console` as well as `Log`. With `log: string -> ()`, that lambda is an error (`NYX0227`), since it requires `Console` and `log`'s type says it requires nothing.
+A `use` can implement one context in terms of others, as an effect handler does. A member given at the `use` may need more contexts than its type declares, and those are required where the `use` is written:
+
+```nanyx
+context Log = (log: string -> ())
+
+def greet: [Log] string -> () = { name ->
+  log("hello {name}")
+}
+
+def main = {
+  use Log(log = { message -> println(message) })   // main requires Console here
+  greet("world")
+}
+```
+
+`log` keeps its type, `string -> ()`, so `greet` knows nothing of `Console`, and `message` is a `string`. The member runs with the instances in scope at the `use`, so `use Log(log = { m -> log("[app] {m}") })` calls the `Log` loaded before it.
+
+This works only for an instance written at the `use`. One built as a value, `def inst = Log(log = { m -> println(m) })`, is an error (`NYX0227`): it has nowhere to say that it needs `Console`. To make such a value, say so on the member, `context Log = (log: [Console] string -> ())`; calling `log` then requires `Console` as well as `Log`.
 
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
