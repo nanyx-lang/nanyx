@@ -86,6 +86,7 @@
     <Compile Include="ImportFixes.fs" />
     <Compile Include="ExpressionRewrites.fs" />
     <Compile Include="BuiltinTypeNames.fs" />
+    <Compile Include="TypeNames.fs" />
     <Compile Include="FileImports.fs" />
     <Compile Include="PackageModules.fs" />
     <Compile Include="PartialModules.fs" />

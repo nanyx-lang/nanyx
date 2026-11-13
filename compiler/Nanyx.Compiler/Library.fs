@@ -439,6 +439,7 @@ module Compiler =
                     Attributes.applyAttributes desugaredAst
                     |> Result.map (fun (desugared, entryCalls) ->
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
+                        let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entryCalls |> Map.fold (fun acc attribute calls -> Map.add attribute calls acc) lowered
                         (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))

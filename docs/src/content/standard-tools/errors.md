@@ -472,6 +472,19 @@ def b: int = a + 1
 
 To fix it, break the cycle: build one of the values without the other, or make one of them a function.
 
+# NYX0116: Invalid type name
+
+A type or a context is defined with a name that does not start with a capital letter, or a lowercase name longer than
+one letter is used in a type. In a type, a lowercase name is a type variable if it is one letter, such as `a`, or a
+built-in type, such as `int` or `list`; longer lowercase names are reserved for associated types
+([Type names](../tour/types#type-names)).
+
+```nanyx
+type point = (x: int, y: int)  -- error NYX0116: 'point' cannot be a type's name, which starts with a capital letter: write 'Point'
+```
+
+To fix it, start the type's name with a capital letter, after the `$` of a nominal type: `Point`, `$Money`.
+
 # NYX0201: Type mismatch
 
 A value's type is not the type its place needs: an argument is not what the function takes, a definition's value is
