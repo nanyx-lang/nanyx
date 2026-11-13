@@ -14,8 +14,8 @@ used, and the tools show which types are nominal. The work is tracked in
 declares a protected type and a `$` before a name where it is used is read and dropped, so `$Email` is `Email`; the
 formatter writes the new form. The prelude declares `Memory` with `protected`. The language server marks nominal
 types' names as semantic tokens with a `nominal` modifier, and `private` for private ones (`NominalNames.inModule`),
-which the extension shows in italics, and hover names the kind and the home module. Still to do: the
-`dollarPrefixedType` linter rule, and rewriting the docs and examples. The info view does not list a module's types,
+which the extension shows in italics, and hover names the kind and the home module. The official
+linter's `dollarPrefixedType` rule reports each `$`, with a fix. Still to do: rewriting the docs and examples. The info view does not list a module's types,
 so it has nothing to show the kind on yet.
 
 The words, as this page uses them: a *nominal* type is one whose name matters, as opposed to an alias for a structural
