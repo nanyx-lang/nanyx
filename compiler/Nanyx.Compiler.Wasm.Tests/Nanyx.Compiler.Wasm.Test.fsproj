@@ -43,6 +43,7 @@
     <Compile Include="Features\Except\RunExceptTests.fs" />
     <Compile Include="Features\Floats\RunFloatTextTests.fs" />
     <Compile Include="Features\Functions\RunArmsAfterParametersTests.fs" />
+    <Compile Include="Features\Functions\RunCallResultTests.fs" />
     <Compile Include="Features\Functions\RunDefinitionOrderTests.fs" />
     <Compile Include="Features\Functions\RunFunctionTests.fs" />
     <Compile Include="Features\Functions\RunTupleArgumentTests.fs" />

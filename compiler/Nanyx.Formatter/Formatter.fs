@@ -423,6 +423,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
         | Lambda(parameters, body, _) -> lambdaDoc e parameters body false
         | Pipe _ -> pipeChain position e
+        | CallResultSyntax.Call(callee, ({ Kind = FunctionCall(_, _, args) } as call)) ->
+            cat [ exprBare full callee; callArguments call callee.Span.End args ]
         // A block where a def's value, an arm's body or a branch would not take one is a `do` block.
         | Block _ -> cat [ text "do"; nest (cat [ hard; block e ]) ]
         | Match([ scrutinee ], arms) when isPipedMatch e scrutinee -> pipeChain position e
@@ -449,9 +451,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ contextHead context; text "."; text (Names.written field); text "("; commaJoin (List.mapi argument args); text ")" ]
         | UseIn(value, body) ->
             let head = cat [ text "use "; useValue { full with Tail = false } value; text " in" ]
-            match body.Kind with
-            | Block _ -> cat [ head; nest (cat [ hard; block body ]) ]
-            | _ -> cat [ head; text " "; expr full body ]
+            if isWrittenBlock body then cat [ head; nest (cat [ hard; block body ]) ]
+            else cat [ head; text " "; expr full body ]
         | WorkflowBindExpr(n, value) ->
             let keyword = if n = WorkflowSyntax.tryKeyword && not (startsWith e.Span (n + "!")) then n + " " else n + "! "
             cat [ text keyword; expr full value ]
@@ -720,7 +721,8 @@ let format (options: Options) (parsed: SourceModule) : string =
             match body.Kind with
             // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
             // its braces go among them.
-            | Block statements -> cat [ head; nest (cat [ hard; statementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
+            | Block statements when isWrittenBlock body ->
+                cat [ head; nest (cat [ hard; statementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
             | _ when bodyOnOwnLine && not (bracketedAsStatement body) -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
             | _ ->
                 let bodyDoc = expr full body
@@ -796,9 +798,16 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     /// `-> body`: an indented block on the lines after it, or an expression on the same line.
     and armBody (isLast: bool) (body: Expression) : Doc =
-        match body.Kind with
-        | Block _ -> cat [ text " ->"; nest (cat [ hard; block body ]) ]
-        | _ -> cat [ text " -> "; expr { statementPosition with Tail = isLast } body ]
+        if isWrittenBlock body then cat [ text " ->"; nest (cat [ hard; block body ]) ]
+        else cat [ text " -> "; expr { statementPosition with Tail = isLast } body ]
+
+    /// Whether `e` is a block of statements as written, not one the parser made up for a call on a call's result (see
+    /// `CallResultSyntax`), which is written as that call.
+    and isWrittenBlock (e: Expression) =
+        match e.Kind with
+        | CallResultSyntax.Call _ -> false
+        | Block _ -> true
+        | _ -> false
 
     and matchDoc (e: Expression) (scrutinees: Expression list) (arms: MatchArm list) : Doc =
         let armsDoc = nest (cat [ hard; armsInSequence e.Span.Start e.Span.End arms ])
@@ -1041,7 +1050,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | TagExpr(_, None) -> true
             | _ -> false
         match value.Kind with
-        | Block _ -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
+        | Block _ when isWrittenBlock value -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
         | Lambda(parameters, body, _) when typeOpt.IsSome && not (isTrivial (snd (writtenLambda value parameters body))) ->
             cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
         | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]

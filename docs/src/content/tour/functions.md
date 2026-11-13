@@ -327,6 +327,16 @@ def add5 = add(5)
 def result = add5(10)  -- 15
 ```
 
+The function a call gives back can be called straight away, without naming it first:
+
+```nanyx
+def add: int -> (int -> int) = { x ->
+  { y -> x + y }
+}
+
+def result = add(5)(10)  -- 15
+```
+
 # Partial application
 
 With records, you can simulate partial application:

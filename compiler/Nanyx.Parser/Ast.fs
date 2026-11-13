@@ -431,6 +431,21 @@ module UseInstanceSyntax =
             Some (context, members)
         | _ -> None
 
+/// `f()(args)` (see the functions page): a call on the result of a call is a block that defines that result under the
+/// made-up name "__callee" and calls it, as `def g = f()` then `g(args)` would. `f()()()` nests: the callee of the
+/// last call is the block for `f()()`.
+module CallResultSyntax =
+    let name = "__callee"
+
+    /// The expression called, and the call of it by the made-up name, of `callee(args)` where `callee` is not a name.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | Block [ { Statement.Kind = DefStatement(false, defined, None, callee) }
+                  { Statement.Kind = ExprStatement ({ Expression.Kind = FunctionCall(called, None, _) } as call) } ] when
+            defined = name && called = name ->
+            Some (callee, call)
+        | _ -> None
+
 /// `record with f = v, ...` (see the records page): a call to the built-in "__with" with the record and a record of the
 /// updated fields.
 module WithSyntax =

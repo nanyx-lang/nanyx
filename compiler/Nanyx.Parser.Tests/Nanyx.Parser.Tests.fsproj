@@ -20,6 +20,7 @@
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\FieldAccess\FieldAccessTests.fs" />
     <Compile Include="Features\Functions\FunctionCallTests.fs" />
+    <Compile Include="Features\Functions\CallResultTests.fs" />
     <Compile Include="Features\Functions\TrailingLambdaTests.fs" />
     <Compile Include="Features\If\IfTests.fs" />
     <Compile Include="Features\Imports\ImportTests.fs" />
