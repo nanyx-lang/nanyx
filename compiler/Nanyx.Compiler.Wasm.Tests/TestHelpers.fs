@@ -155,6 +155,50 @@ let checkScript (source: string) =
     File.WriteAllText(path, source)
     nanyxWithInput "" [ "check"; path ]
 
+/// The docs site's pages, under docs/src/content.
+let docsContentDirectory =
+    Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "docs", "src", "content"))
+
+/// What a docs example's fence says it is: the words after `nanyx` on its opening line. The conventions are in
+/// docs/src/content/work-in-progress/compilation.md#tour-examples.
+type DocExampleKind =
+    /// A whole program, which compiles.
+    | Program
+    /// Part of a program, such as code that uses names defined elsewhere, which is not compiled.
+    | Fragment
+    /// A program the compiler gets wrong, which is skipped until the issue is fixed.
+    | Skip of issue: int
+
+type DocExample =
+    { Kind: DocExampleKind
+      /// The block's code, with nothing added.
+      Code: string }
+
+let private docExampleKind (page: string) (line: int) (info: string) =
+    match info.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray with
+    | [ "nanyx" ] -> Program
+    | [ "nanyx"; "fragment" ] -> Fragment
+    | [ "nanyx"; tag ] when tag.StartsWith "skip=#" -> Skip(int (tag.Substring "skip=#".Length))
+    | _ -> failwith $"{page}:{line}: a docs example's fence is ```nanyx, ```nanyx fragment or ```nanyx skip=#<issue>, not ```{info}"
+
+/// The ```nanyx blocks of the page at `path`, by the line of their opening fence.
+let docExamplesOf (path: string) : Map<int, DocExample> =
+    let page = Path.GetFileName path
+    let lines = File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n')
+    let rec collect (index: int) (found: (int * DocExample) list) =
+        if index >= lines.Length then
+            List.rev found
+        else
+            let fence = lines.[index].Trim()
+            if fence.StartsWith "```nanyx" then
+                let close = Array.FindIndex(lines, index + 1, fun line -> line.Trim().StartsWith "```")
+                let line = index + 1
+                let example = { Kind = docExampleKind page line (fence.Substring 3); Code = String.Join("\n", lines.[index + 1 .. close - 1]) + "\n" }
+                collect (close + 1) ((line, example) :: found)
+            else
+                collect (index + 1) found
+    collect 0 [] |> Map.ofList
+
 let runE2E testName =
     runFile (Path.Combine(__SOURCE_DIRECTORY__, "E2E", testName, "input.nyx"))
 
