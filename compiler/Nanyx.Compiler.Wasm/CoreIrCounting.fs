@@ -59,33 +59,17 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Reuse _ -> []
 
 /// Every expression in `e` that is a node of its own: `e`, the values and bodies of its lets, branches, arms, guards
-/// and loop bodies, and so on down.
+/// and loop bodies, and so on down (see `Expr.children`). The last child is yielded in tail position, so a chain as long
+/// as a function takes no stack to walk.
 let rec private nodes (e: Expr) : Expr seq =
     seq {
         yield e
-        match e.Kind with
-        | Let(_, value, body)
-        | Do(value, body) ->
-            yield! nodes value
-            yield! nodes body
-        | If(_, ifTrue, ifFalse) ->
-            yield! nodes ifTrue
-            yield! nodes ifFalse
-        | Match(_, arms) ->
-            for arm in arms do
-                for _, guard in arm.Patterns |> List.collect Pattern.guards do
-                    yield! nodes guard
-                yield! nodes arm.Body
-        | ForEach loop -> yield! nodes loop.Body
-        | While loop ->
-            yield! nodes loop.Condition
-            yield! nodes loop.Body
-        | Dup(_, body)
-        | Drop(_, body)
-        | DropAfter(body, _)
-        | Release(_, body)
-        | Reuse(_, body) -> yield! nodes body
-        | _ -> ()
+        match Expr.children e with
+        | [] -> ()
+        | children ->
+            for child in List.take (children.Length - 1) children do
+                yield! nodes child
+            yield! nodes (List.last children)
     }
 
 /// The calls `e` makes in tail position, by the rules of `docs/src/content/work-in-progress/tail-calls.md`.
