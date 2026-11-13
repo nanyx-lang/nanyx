@@ -107,3 +107,17 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "6 3\n"
+
+[<Fact>]
+let ``Run - a record in brackets of its own is one argument of a pipe (#1031)`` () =
+    let source =
+        """
+import nanyx/console
+
+def show = { r: int, opts: (width: int) -> "{r} {opts.width}" }
+def three = { r: int, opts: (width: int), s: string -> "{r} {opts.width} {s}" }
+
+println(1 \show((width = 3)))
+println(1 \three((width = 4), "x"))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "1 3\n1 4 x\n"

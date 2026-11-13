@@ -61,6 +61,14 @@ let ``A tuple in brackets of its own is one argument of a pipe`` () =
     | [ IdentifierExpr "x"; TupleExpr [ Kind (IdentifierExpr "a"); Kind (IdentifierExpr "b") ]; Lambda _ ] -> ()
     | other -> failwith $"Expected x, the tuple and the lambda, got: {other}"
 
+[<Fact>]
+let ``A record in brackets of its own is one argument of a pipe`` () =
+    match callArgumentsOf "def r = x \\f((y = z), b)" with
+    | [ RecordExpr [ PositionalField (Kind (IdentifierExpr "x"))
+                     PositionalField (Kind (RecordExpr [ NamedField ("y", Kind (IdentifierExpr "z")) ]))
+                     PositionalField (Kind (IdentifierExpr "b")) ] ] -> ()
+    | other -> failwith $"Expected one record of x, the record and b, got: {other}"
+
 /// The one expression statement of the lambda in `def f = { n -> <body> }`.
 let private lambdaStatementOf (body: string) =
     match parseModule ("def f = { n ->\n" + body + "\n}") with

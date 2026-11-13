@@ -39,7 +39,7 @@ def result = 1
   \add(3)
 ```
 
-To pass a tuple as one argument, write it in brackets of its own, as in a call: `x \f((y, z))` is `f(x, (y, z))`.
+To pass a tuple or a record as one argument, write it in brackets of its own, as in a call: `x \f((y, z))` is `f(x, (y, z))`, and `x \f((width = 3))` is `f(x, (width = 3))`, where `x \f(width = 3)` names the argument `width`.
 
 ```nanyx
 def totals = [1, 2, 3] \fold((0, 0)) { (sum, count), x -> (sum + x, count + 1) }
