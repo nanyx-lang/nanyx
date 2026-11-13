@@ -63,6 +63,13 @@ let ``Operators on two type variables require the contexts of each`` () =
         Assert.Equal(ty, Unifier.tyToDisplayString Ascii typed.Types.["r"])
 
 [<Fact>]
+let ``A def whose type has an open record in it requires the contexts its calls need`` () =
+    // #958: the requirement is kept as the annotation the def would write, which can write an open record.
+    let typed = compileClean """def total = { items -> items \list.map { .price } \list.sum }"""
+    Assert.Equal<string list>([ "Add" ], inferredContexts typed |> List.map fst)
+    Assert.Equal("list(price: a, ...) -> a", Unifier.tyToDisplayString Ascii typed.Types.["total"])
+
+[<Fact>]
 let ``A def that writes two contexts with a member of one name calls each instance's member`` () =
     let source =
         """

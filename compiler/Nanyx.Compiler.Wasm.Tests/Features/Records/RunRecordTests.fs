@@ -318,3 +318,18 @@ def main = {
 main()
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n30\na 2 2\n"
+
+[<Fact>]
+let ``Run - a def that sums a field of its argument's records requires Add at the field's type`` () =
+    // #958: the def's type has an open record in it, `list((price: b, ...a)) -> b`.
+    let source = """
+import nanyx/console
+
+def total = { items -> items \list.map { .price } \list.sum }
+
+def total2 = { items -> list.sum(list.map(items, { x -> x.price })) }
+
+println(total([(price = 1), (price = 2)]))
+println(total2([(price = 1.5, name = "a"), (price = 2.0, name = "b")]))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n3.5\n"
