@@ -12,8 +12,9 @@ type Directive =
     { /// The parts of the dotted key after `::`: `[ "linters"; "default" ]`. Empty when the key is missing or is not
       /// a dotted key of names.
       Key: string list
-      /// What comes after `=`, as written: a TOML value such as `80` or `"error"`. None for a table, which has no `=`.
-      Value: string option
+      /// What comes after `=`: the TOML value it is, such as `80L` or `"error"`, or why it is not one. None for a
+      /// table, which has no `=`.
+      Value: Result<obj, string> option
       /// The line, from `::` to its end.
       Span: SourceSpan }
 
@@ -45,8 +46,55 @@ module Directives =
 
     let private normalize (source: string) = source.Replace("\r\n", "\n").Replace("\r", "\n")
 
-    /// One part of a directive's dotted key: a bare TOML key.
-    let private keyPart = System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9_-]+$")
+    /// The parts of a TOML dotted key, bare or quoted.
+    let private keyPath (key: Tomlyn.Syntax.KeySyntax) =
+        let part (syntax: Tomlyn.Syntax.BareKeyOrStringValueSyntax) =
+            match syntax with
+            | :? Tomlyn.Syntax.BareKeySyntax as bare when not (isNull bare.Key) -> Some bare.Key.Text
+            | :? Tomlyn.Syntax.StringValueSyntax as quoted -> Some quoted.Value
+            | _ -> None
+        if isNull key || isNull key.Key then
+            []
+        else
+            let parts = part key.Key :: [ for dotted in key.DotKeys -> if isNull dotted.Key then None else part dotted.Key ]
+            if List.forall Option.isSome parts then List.choose id parts else []
+
+    /// The value at `path` in `table`.
+    let rec private valueAt (path: string list) (table: Tomlyn.Model.TomlTable) : obj option =
+        match path with
+        | [] -> None
+        | [ last ] -> match table.TryGetValue last with | true, value -> Some value | false, _ -> None
+        | first :: rest ->
+            match table.TryGetValue first with
+            | true, (:? Tomlyn.Model.TomlTable as inner) -> valueAt rest inner
+            | _ -> None
+
+    /// The key and value of a directive, the text after its `::`: a table's dotted key, `linters.default`, or a TOML
+    /// key and value, `formatter.lineWidth = 80`. The key is empty when it is missing or is not a TOML key.
+    let private parse (body: string) : string list * Result<obj, string> option =
+        let table = Tomlyn.Parsing.SyntaxParser.Parse($"[{body}]", "", false)
+        match List.ofSeq table.Tables with
+        | [ header ] when not table.HasErrors && header.Items.ChildrenCount = 0 -> keyPath header.Name, None
+        | _ ->
+            let document = Tomlyn.Parsing.SyntaxParser.Parse(body, "", false)
+            match List.ofSeq document.KeyValues with
+            // The key is read even when what follows the value is not TOML, so the directive is still known by it.
+            | keyValue :: rest when not (isNull keyValue.EqualToken) ->
+                let path = keyPath keyValue.Key
+                let text = body.Substring(min body.Length (keyValue.EqualToken.Span.End.Offset + 1)).Trim()
+                let notAValue () = Result.Error $"'{text}' is not a TOML value; a string needs quotes, as in a manifest: \"{text}\""
+                let value =
+                    if document.HasErrors || path.IsEmpty || not rest.IsEmpty || not (Seq.isEmpty document.Tables) then
+                        notAValue ()
+                    else
+                        try
+                            match valueAt path (Tomlyn.TomlSerializer.Deserialize<Tomlyn.Model.TomlTable>(body, Tomlyn.TomlSerializerOptions())) with
+                            | Some value -> Result.Ok value
+                            | None -> notAValue ()
+                        with :? Tomlyn.TomlException ->
+                            notAValue ()
+                path, Some value
+            | _ -> [], None
 
     /// The directives at the top of the file at `filePath`, whose text is `source`.
     let read (filePath: string) (source: string) : Directive list =
@@ -55,13 +103,8 @@ module Directives =
         |> List.filter (fun (_, (start, _)) -> String.CompareOrdinal(source, start, "::", 0, 2) = 0)
         |> List.map (fun (line, (start, finish)) ->
             let text = source.Substring(start, finish - start).TrimEnd()
-            let body = text.Substring 2
-            let keyText, value =
-                match body.IndexOf '=' with
-                | -1 -> body, None
-                | equals -> body.Substring(0, equals), Some(body.Substring(equals + 1).Trim())
-            let key = keyText.Trim().Split '.' |> Array.map _.Trim() |> List.ofArray
-            { Key = if key |> List.forall keyPart.IsMatch then key else []
+            let key, value = parse (text.Substring 2)
+            { Key = key
               Value = value
               Span = { File = filePath; Start = start; End = start + text.Length; StartLine = line; StartColumn = 0 } })
 

@@ -2,8 +2,6 @@ namespace NyxCompiler
 
 open System.IO
 open Parser.Program
-open Tomlyn
-open Tomlyn.Model
 
 /// What a script's `::` directives say: what a package's manifest would, for a file run on its own, which has none.
 type ScriptDirectives =
@@ -22,14 +20,6 @@ module Script =
 
     let private tableList = quoted (tables |> List.map ((+) "::"))
 
-    /// The TOML value written after a directive's `=`.
-    let value (text: string) : Result<obj, string> =
-        try
-            match TomlSerializer.Deserialize<TomlTable>("value = " + text, TomlSerializerOptions()).TryGetValue "value" with
-            | true, value -> Result.Ok value
-            | false, _ -> Result.Error $"'{text}' is not a TOML value"
-        with :? TomlException ->
-            Result.Error $"'{text}' is not a TOML value; a string needs quotes, as in a manifest: \"{text}\""
 
     /// What a `::linters` directive says: a linter to run, and the severity it sets for one of its rules, if any.
     let private linterSetting (directive: Directive) : Result<Linter * (string * Severity option) option, string> =
@@ -41,14 +31,14 @@ module Script =
         | [ _; name ], None -> linter name |> Result.map (fun linter -> linter, None)
         | [ _; name ], Some _ ->
             Result.Error $"::linters.{name} is a table, so it takes no value; set one of its rules with ::linters.{name}.<rule> = \"error\""
-        | [ _; name; ruleId ], Some text ->
+        | [ _; name; ruleId ], Some value ->
             linter name
             |> Result.bind (fun linter ->
                 let known = linter.Rules @ [ Linters.failedRule ] |> List.map _.Id
                 if not (List.contains ruleId known) then
                     Result.Error $"unknown rule '{ruleId}' of the linter '{linter.Name}'; the rules are {quoted known}"
                 else
-                    value text
+                    value
                     |> Result.bind (fun severity ->
                         match severity with
                         | :? string as name when Manifest.severities |> List.exists (fst >> (=) name) ->
