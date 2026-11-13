@@ -111,13 +111,6 @@ module internal ModuleLinking =
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name
             | _ -> true)
 
-    let internal exportedValueNames (module': Module) =
-        module'
-        |> List.choose (function
-            | Kind (Def (ValueDef(true, name, _, _))) -> Some name
-            | _ -> None)
-        |> Set.ofList
-
     let internal exportedTypeNames (module': Module) =
         module'
         |> List.choose (function
@@ -130,7 +123,7 @@ module internal ModuleLinking =
     let internal selectedExports (imported: CheckedModule) (selection: (Identifier * SourceSpan) list) : Set<string> =
         let names = selection |> List.map fst |> Set.ofList
         let types = exportedTypeNames imported.Own |> Set.intersect names
-        exportedValueNames imported.Own
+        SyntaxTree.exportedValueNames imported.Own
         |> Set.filter (fun name -> types |> Set.exists (fun typeName -> name.StartsWith(typeName + ".")))
         |> Set.union names
 
@@ -161,7 +154,7 @@ module internal ModuleLinking =
     /// The error for each name `item` selects that `imported` does not export, with the exports closest to it.
     let internal unexportedSelections (item: ImportItem) (imported: CheckedModule) : Diagnostic list =
         let reExported = imported.ReExports |> List.collect (fun reExport -> reExport.Item.Selection |> Option.defaultValue [] |> List.map fst)
-        let exports = Set.union (exportedValueNames imported.Own) (exportedTypeNames imported.Own) |> Set.union (Set.ofList reExported)
+        let exports = Set.union (SyntaxTree.exportedValueNames imported.Own) (exportedTypeNames imported.Own) |> Set.union (Set.ofList reExported)
         let shown =
             match item.Source with
             | ModuleImport name -> name
