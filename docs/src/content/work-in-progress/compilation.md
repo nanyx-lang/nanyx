@@ -5,8 +5,7 @@ order: 21
 ---
 
 > **Status: outline.** This page frames the compilation workstream: what it covers, where the compiler is today and
-> what comes next. Sections marked _to do_ are placeholders to fill in as the work is designed. Work is tracked
-> under the `compilation` label.
+> what comes next. Work is tracked under the `compilation` label.
 
 # Summary
 
@@ -113,23 +112,18 @@ every block that doesn't have them. Anything else a block uses, such as `nanyx/m
 
 # Plan
 
-_To do._ Candidate items, not yet filed:
+Done: the tour's examples run as tests ([Tour examples](#tour-examples)), memory is freed by Perceus reference
+counting over a core IR ([Memory management](./memory-management)), a tail call uses no stack
+([Tail calls](./tail-calls)), a debug build runs in spite of name and type errors
+([Deferred errors](./deferred-errors)), and record types are closed unless they say `...`
+([Closed and open records](./closed-and-open-records)). Those pages say what is left of each.
 
-1. **Docs coverage.** Run every tour example through `nanyx run` in a test, and file what fails. **Done**: see
-   [Tour examples](#tour-examples). The blocks marked `skip=` wait on the issues they name. The other docs
-   sections, such as the standard library pages, are not covered yet.
+1. **Docs coverage beyond the tour.** Only the tour's examples are compiled. The other docs sections, such as the
+   standard library pages, are not. The tour's blocks marked `skip=` wait on the issues they name.
 2. **Parser error recovery.** Keep parsing after a syntax error so later errors (and later analysis) are not
    lost. Shared with the language server.
 3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts.
 4. **Standard library.** Implement the documented modules, writing intrinsics only where Nanyx cannot.
-5. **Memory management.** Free memory with Perceus reference counting, which brings a core IR between the typed
-   AST and WebAssembly. Designed in [Memory management](./memory-management). **Done**, with reuse in place.
-6. **Tail calls.** Keep the language's promise that a tail call uses no stack, with `return_call`. Designed in
-   [Tail calls](./tail-calls).
-7. **Deferred errors.** Keep a debug build running in the face of name and type errors, by compiling each error
-   to a trap where it was found. Designed in [Deferred errors](./deferred-errors).
-8. **Closed and open records.** A record type has exactly the fields it names, unless it says `...` for more.
-   Designed in [Closed and open records](./closed-and-open-records).
 
 # Open questions
 

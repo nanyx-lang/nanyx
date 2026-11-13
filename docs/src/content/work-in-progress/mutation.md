@@ -1,29 +1,13 @@
 ---
 title: "Mutation"
-description: "Local cells today, and the rest of the plan for mutation under $Memory"
+description: "How local cells are built, and the rest of the plan for mutation under $Memory"
 order: 2
 ---
 
-The design of mutation is on [Memory](../advanced/memory). Its first step, local cells, is done
-([#756](https://github.com/nanyx-lang/nanyx/issues/756)); this page is what is left.
-
-# What works
-
-- The prelude declares the nominal context `$Memory` and `memory`, which runs a block with it.
-- `mut x = e` declares a cell in a `memory` block, `:=` changes one, and a cell's name reads it. Cells are not values:
-  nothing can hold one. `mut` declares one name and is not an expression ([#1071](https://github.com/nanyx-lang/nanyx/issues/1071)):
-  the parser reads `mut x = e` as a def whose value is a call to `__mut` (`MutSyntax`), as `rec` does with `__rec`,
-  and `mut` anywhere else but a parameter or an argument (below), `def x = mut e` included, is a parse error that says
-  to write `mut x = e`.
-- A lambda in the block may use the block's cells, and its type then requires `$Memory`: `{ word -> count := count + 1 }`
-  is `[$Memory] string -> ()`. A block whose result is, or holds, a lambda that uses one is an error.
-- A cell can be passed to a function ([#1072](https://github.com/nanyx-lang/nanyx/issues/1072)): `{ mut cell -> ... }`
-  takes one, `f(mut x)` passes one, and `mut T` is a cell parameter's type. Nothing else can hold a cell yet.
-- A cell no lambda captures is a WebAssembly local; a captured one is a reference-counted box the lambdas share.
-- `while condition -> body` runs its body for as long as its condition, which may read cells, is true
-  ([#957](https://github.com/nanyx-lang/nanyx/issues/957)). The parser makes it a call to `__while` (`WhileSyntax`);
-  neither part is a lambda, so the checker (`Loops.inferWhile`) types them where the loop is written, and the core IR
-  has a `While` node that evaluates both again each time round, borrowing what they use from outside.
+Local cells, cell parameters and `while` are built ([#756](https://github.com/nanyx-lang/nanyx/issues/756),
+[#1072](https://github.com/nanyx-lang/nanyx/issues/1072), [#957](https://github.com/nanyx-lang/nanyx/issues/957)).
+[Memory](../advanced/memory) and [Loops](../tour/loops) describe them. This page keeps how they are built and what
+is planned.
 
 # How it works
 
@@ -48,6 +32,10 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
   scope, `MemoryCells.inferArgument` types `mut x` (NYX0234 when `x` is not a cell), and
   `MemoryCells.ensureCellTypesPlaced` reports a `mut T` anywhere but a function's parameter (NYX0235). In the backend a
   cell that is passed is a box, a cell parameter is the box it is given, and `mut x` passes the box.
+- **`while`** ([#957](https://github.com/nanyx-lang/nanyx/issues/957)). The parser makes `while condition -> body` a
+  call to `__while` (`WhileSyntax`). Neither part is a lambda, so the checker (`Loops.inferWhile`) types them where
+  the loop is written, and the core IR has a `While` node that evaluates both again each time round, borrowing what
+  they use from outside.
 - **A `mut` parameter implies `$Memory`** ([#1075](https://github.com/nanyx-lang/nanyx/issues/1075)). `$Memory` is
   nominal and has no members, so the member-based inference of a def's contexts never sees it: a top-level def that
   writes no type and whose own lambda takes a cell has it added by name to `InferredContexts`, as an ambient context
