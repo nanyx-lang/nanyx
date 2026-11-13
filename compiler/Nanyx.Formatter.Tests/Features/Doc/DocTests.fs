@@ -174,5 +174,5 @@ let ``A stack sets apart the items that take more than one line, measured where 
 
 [<Fact>]
 let ``A stack keeps the author's blank lines and puts the separating one before leading comments`` () =
-    let doc = Stack(true, [ StackItem(Doc.text "a", false); StackBlank; StackItem(Doc.text "b", false); StackComment("-- c", true); StackItem(Doc.concat [ Doc.text "x"; Doc.hardLine; Doc.text "y" ], false) ])
+    let doc = Stack(true, [ StackItem(Doc.text "a", false); StackBlank; StackItem(Doc.text "b", false); StackComment(WrittenComment "-- c", true); StackItem(Doc.concat [ Doc.text "x"; Doc.hardLine; Doc.text "y" ], false) ])
     Assert.Equal("a\n\nb\n\n-- c\nx\ny\n", Doc.render 80 doc)

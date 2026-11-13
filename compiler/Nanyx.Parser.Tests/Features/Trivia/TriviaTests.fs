@@ -19,6 +19,7 @@ let private describe (items: Trivia list) =
     items
     |> List.map (function
         | LineComment(text, trailing, span) -> (if trailing then "trailing" else "own-line"), text, span.StartLine, span.StartColumn
+        | DocLineComment(text, span) -> "doc", text, span.StartLine, span.StartColumn
         | BlankLines(count, span) -> "blank", string count, span.StartLine, span.StartColumn)
 
 [<Fact>]
@@ -28,6 +29,19 @@ let ``A comment after code on its line is trailing`` () =
 [<Fact>]
 let ``A comment on a line of its own before a definition is not trailing`` () =
     Assert.Equal<_ list>([ "own-line", "-- the answer", 0, 0 ], describe (trivia "-- the answer\ndef a = 42"))
+
+[<Fact>]
+let ``A doc comment is a doc comment, its continuation lines included`` () =
+    let source = """
+--| One
+  two
+def a = 42
+"""
+    Assert.Equal<_ list>([ "doc", "--| One\n  two", 0, 0 ], describe (trivia (source.ReplaceLineEndings("\n").TrimStart '\n')))
+
+[<Fact>]
+let ``A --| after code on its line is an ordinary trailing comment`` () =
+    Assert.Equal<_ list>([ "trailing", "--| not a doc comment", 0, 11 ], describe (trivia "def a = 42 --| not a doc comment"))
 
 [<Fact>]
 let ``A comment's span runs from -- to the end of its line`` () =
@@ -193,4 +207,7 @@ let ``Every comment in the test files is recorded once, where it is written`` ()
                     // Only a block comment, which starts with its line of dashes, spans lines.
                     if text.Contains "\n" then
                         Assert.Matches("^---+\n", text)
+                | DocLineComment(text, span) ->
+                    Assert.StartsWith("--|", text)
+                    Assert.Equal(text, parsed.Source.Substring(span.Start, span.End - span.Start))
                 | BlankLines _ -> ()

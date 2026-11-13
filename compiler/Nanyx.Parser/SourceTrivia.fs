@@ -14,6 +14,9 @@ type Trivia =
     /// before it on its line. A block comment (`---` on a line of its own) is one too, whose text runs from its opening
     /// line of dashes to the end of its closing one, line breaks included.
     | LineComment of text: string * trailing: bool * span: SourceSpan
+    /// A doc comment, its text running from its `--|` to the end of its last line, line breaks included. It is on a
+    /// line of its own.
+    | DocLineComment of text: string * span: SourceSpan
     /// A run of this many consecutive blank lines (nothing but spaces and tabs), outside string literals and block
     /// comments, spanning from the start of the first to the end of the last.
     | BlankLines of count: int * span: SourceSpan
@@ -21,6 +24,7 @@ type Trivia =
     member this.Span =
         match this with
         | LineComment(_, _, span)
+        | DocLineComment(_, span)
         | BlankLines(_, span) -> span
 
 /// A module as written, for tools that print it back, such as the formatter.
@@ -35,23 +39,28 @@ type SourceModule =
 
 /// The comments and runs of blank lines in `source`, in source order, given the comments the parser skipped and
 /// where the text of its string literals is (each as start and end offsets).
-let internal collectTrivia (filePath: string) (source: string) (comments: (int * int) list) (stringTexts: (int * int) list) : Trivia list =
+let internal collectTrivia (filePath: string) (source: string) (comments: NotedComment list) (stringTexts: (int * int) list) : Trivia list =
     let lines = LineTable source
     let isBlank line =
         source.AsSpan(lines.Start line, lines.End line - lines.Start line).Trim(" \t".AsSpan()).IsEmpty
     // A line whose preceding line break is inside a string literal or a block comment is part of it.
     let inStringOrComment line =
         line > 0
-        && stringTexts @ comments |> List.exists (fun (start, finish) -> start <= lines.Start line - 1 && lines.Start line - 1 < finish)
+        && stringTexts @ (comments |> List.map (fun comment -> comment.Start, comment.End)) |> List.exists (fun (start, finish) -> start <= lines.Start line - 1 && lines.Start line - 1 < finish)
 
     let commentTrivia =
         comments
         // FParsec restores the state when it backtracks, so a comment is noted once; this is only a safety net.
         |> List.distinct
-        |> List.map (fun (start, finish) ->
-            let lineStart = lines.Start(lines.LineOf start)
-            let before = source.AsSpan(lineStart, start - lineStart)
-            LineComment(source.Substring(start, finish - start), not (before.Trim(" \t".AsSpan()).IsEmpty), lines.Span filePath start finish))
+        |> List.map (fun comment ->
+            let text = source.Substring(comment.Start, comment.End - comment.Start)
+            let span = lines.Span filePath comment.Start comment.End
+            if comment.IsDoc then
+                DocLineComment(text, span)
+            else
+                let lineStart = lines.Start(lines.LineOf comment.Start)
+                let before = source.AsSpan(lineStart, comment.Start - lineStart)
+                LineComment(text, not (before.Trim(" \t".AsSpan()).IsEmpty), span))
 
     let blankTrivia =
         [ if source.Length > 0 then yield! [ 0 .. lines.Count - 1 ] ]
