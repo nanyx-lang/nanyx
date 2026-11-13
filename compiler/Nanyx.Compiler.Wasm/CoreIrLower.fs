@@ -61,7 +61,7 @@ type internal Scope =
       /// In a lifted lambda, the captured locals that hold context members (`__ctx_<key>`), each with the keys and other
       /// names the member is in scope by once the local is bound.
       CapturedMembers: Map<string, ContextMemberKey list>
-      /// How many `for` loops enclose the expression, which names a loop's locals.
+      /// How many loops enclose the expression, which names a `for` loop's locals and a `while` loop's labels.
       ForDepth: int
       /// The closures of each local function generic in type variables of its own, by the variable its name is bound
       /// to: its type, a closure for each type arguments it is used at (see `Block`), and how to make it at others where
@@ -364,6 +364,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let depth = scope.ForDepth
             let lowerBody vars = this.Tail { scope with Vars = vars; ForDepth = depth + 1 } body
             CoreIrLowerLoops.forEach newVar tyOf (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
+        | WhileSyntax.Call(condition, body) ->
+            let inner = { scope with ForDepth = scope.ForDepth + 1 }
+            k (CoreIrLowerLoops.whileLoop scope.ForDepth (this.Tail inner condition) (this.Tail inner body))
         // A cell (see `CellSyntax`) no lambda captures is the local its def binds, and one a lambda captures is a box of
         // one field. A read is a copy of what the cell holds then, so that a later `:=` leaves the copy as it is.
         | MutSyntax.Call value -> this.Complex scope value k

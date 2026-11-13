@@ -92,6 +92,7 @@ type private Rewriter() =
             | If(cond, ifTrue, ifFalse) -> If(cond, recur ifTrue, recur ifFalse)
             | Match(scrutinees, arms) -> Match(scrutinees, arms |> List.map (this.Arm scrutinees))
             | ForEach loop -> ForEach { loop with Body = recur loop.Body }
+            | While loop -> While { loop with Condition = recur loop.Condition; Body = recur loop.Body }
             | Dup(vars, body) -> Dup(vars, recur body)
             | Drop(vars, body) -> Drop(vars, recur body)
             | DropAfter(body, vars) -> DropAfter(recur body, vars)

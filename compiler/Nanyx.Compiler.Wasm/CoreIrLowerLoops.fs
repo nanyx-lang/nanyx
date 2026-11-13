@@ -52,3 +52,8 @@ let forEach
         let vars = streams |> List.fold (fun vars (parameter, stream) -> vars |> Map.add parameter stream.Element) vars
         let forLoop: ForLoop = { Streams = List.map snd streams; Depth = depth; Body = lowerBody vars }
         k (mk (ForEach forLoop) IrUnit))
+
+/// `while condition -> body`, from the lowered condition and body, which run again each time round. `depth` is how many
+/// loops enclose this one, which names its labels.
+let whileLoop (depth: int) (condition: Expr) (body: Expr) =
+    mk (While { Condition = condition; Depth = depth; Body = body }) IrUnit

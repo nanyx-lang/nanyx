@@ -301,6 +301,15 @@ let forExpr : Parser<Expression, ParseState> =
             |>> fun body -> FunctionCall(ForSyntax.builtIn, None, iterables @ [ body ]))
     <?> "for loop"
 
+// `while condition -> body` runs the body for as long as the condition is true, evaluating it again before each time
+// round. It is a call to the built-in "__while" with the condition and the body (see `WhileSyntax`).
+let whileExpr : Parser<Expression, ParseState> =
+    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
+    spanned (
+        pstring "while" >>. keywordEnd >>. ws >>. expression .>>. (ws >>. pstring "->" >>. matchArmBody)
+        |>> fun (condition, body) -> FunctionCall(WhileSyntax.builtIn, None, [ condition; body ]))
+    <?> "while loop"
+
 // Match expression parser. The scrutinees are any expressions written on the `match` line (`match a, b`), or
 // a block on the lines after it. The block must be indented more than both the line `match` is on and the
 // arms, so that it cannot be mistaken for either:
@@ -683,7 +692,7 @@ let contextMemberAccess =
 let private workflowKeywordApplication =
     let reservedWords =
         set [ "and"; "as"; "context"; "def"; "do"; "else";"except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
-              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "with" ]
+              "module"; "mut"; "not";"or"; "private"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "while"; "with" ]
     let operandStart c = isLetter c || isDigit c || c = '_' || c = '"' || c = '#' || c = '(' || c = '['
     let keyword =
         identifierNoWs >>= fun name ->
@@ -710,6 +719,7 @@ let primaryExprNoWs =
         attempt ifExpr  // if-then-else must be early to avoid partial matches
         doExpr
         attempt forExpr
+        attempt whileExpr
         attempt matchExpr
         attempt lambda
         attempt contextMemberAccess  // C(T).field - must come before functionCall

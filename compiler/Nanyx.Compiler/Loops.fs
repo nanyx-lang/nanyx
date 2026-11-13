@@ -1,5 +1,6 @@
 /// Loops (see the loops page of the docs). The parser makes `for xs, ys | arms` a call to the built-in "__for" (see
-/// `ForSyntax`); the loop is unit, and runs its body where it is written.
+/// `ForSyntax`), and `while condition -> body` one to "__while" (see `WhileSyntax`); a loop is unit, and runs its body
+/// where it is written.
 module internal NyxCompiler.Loops
 
 open Parser.Program
@@ -40,3 +41,14 @@ let inferFor
         // The loop runs its body where it is written: what the body uses is used here.
         | Ok (typedLambda, next) -> Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, LambdaContexts.recordRunHere typedLambda.Type next)
         | Error err -> Error err
+
+/// `while condition -> body`, at `expr`: the condition is a `bool`, and the body's value is thrown away each time
+/// round. Neither is a lambda, so what they use is used where the loop is written.
+let inferWhile
+    (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
+    (env: TypeEnv) (state: InferState) (expr: Expression) (condition: Expression) (body: Expression) =
+    inferExpr env state condition
+    |> Result.bind (fun (typedCondition, afterCondition) ->
+        let constrained = addConstraintAt condition.Span typedCondition.Type (TyPrimitive "bool") afterCondition
+        inferExpr env constrained body
+        |> Result.map (fun (_, next) -> mkTypedExpr expr (TyPrimitive "unit") None None None, next))

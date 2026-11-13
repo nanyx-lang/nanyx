@@ -373,6 +373,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | WorkflowReturnExpr _ -> true
         | FunctionCall("__with", _, [ _; _ ]) -> true
         | ForSyntax.Call _
+        | WhileSyntax.Call _
         | MutSyntax.Call _
         | AssignSyntax.Call _ -> true
         | _ -> false
@@ -414,6 +415,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ expr operandPosition record; text " with "; commaJoin (List.mapi update fields) ]
         | ForSyntax.Call(iterables, loop, parameters, _) when parameters = List.init iterables.Length (fun index -> (ForSyntax.element (index + 1), None)) ->
             forDoc iterables loop
+        | WhileSyntax.Call(condition, body) -> cat [ text "while "; expr { full with Tail = false } condition; armBody true body ]
         | MapSyntax.Call entries -> mapDoc e.Span entries
         | FunctionCall(n, _, [ Kind (RecordExpr fields) ]) when n = SpreadSyntax.builtIn -> recordFieldsDoc true e.Span.Start e.Span.End fields
         | MutSyntax.Call value -> cat [ text "mut "; expr { full with Tail = position.Tail } value ]

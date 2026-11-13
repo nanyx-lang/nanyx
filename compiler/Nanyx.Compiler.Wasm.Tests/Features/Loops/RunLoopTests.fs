@@ -83,6 +83,57 @@ let ``Run - rec local loops`` () =
     runSource source |> assertRan "55\n2\n1\n"
 
 [<Fact>]
+let ``Run - while loops run while their condition holds`` () =
+    // The program from the loops page (#957), and loops whose condition and body read a list held in a cell: each time
+    // round they borrow it, so the memory checks find nothing left over.
+    let source = """
+import nanyx/console
+
+def countdown = {
+  memory {
+    def remaining = mut 3
+
+    while remaining > 0 ->
+      println("{remaining}...")
+      remaining := remaining - 1
+  }
+}
+
+def pairs = { n ->
+  memory {
+    def i = mut 0
+    while i < n ->
+      def j = mut 0
+      while j < i ->
+        println("{i},{j}")
+        j := j + 1
+      i := i + 1
+  }
+}
+
+def drain = {
+  memory {
+    def items = mut ["a", "b", "c"]
+    while list.length(items) > 0 ->
+      match items
+        | [first, ...rest] ->
+          println(first)
+          items := rest
+        | [] -> ()
+    while false -> println("never")
+  }
+}
+
+@entry
+def main = {
+  countdown()
+  pairs(3)
+  drain()
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3...\n2...\n1...\n1,0\n2,0\n2,1\na\nb\nc\n"
+
+[<Fact>]
 let ``Run - loops, floats, pipes and guards through the core IR`` () =
     let source =
         "import nanyx/console\n" +

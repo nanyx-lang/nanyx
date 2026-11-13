@@ -94,6 +94,9 @@ let collect (functions: Function list) : ModuleFacts =
         | ForEach loop ->
             ForLoop.sourceAtoms loop |> List.iter atom
             expr loop.Body
+        | While loop ->
+            expr loop.Condition
+            expr loop.Body
         | Let(var, value, body) when var.Kind = Temp ->
             deferred.[var.Id] <- value
             expr body
