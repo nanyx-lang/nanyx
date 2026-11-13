@@ -4,8 +4,6 @@ open Xunit
 open Parser.Program
 open ParserTestHelpers
 
-let private normalized (source: string) = source.ReplaceLineEndings "\n"
-
 let private parse (source: string) = parseModuleFile "t.nyx" (normalized source)
 
 /// The statements of the value of the module's only def, which must be a block.

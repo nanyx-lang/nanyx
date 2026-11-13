@@ -132,4 +132,4 @@ let ``Error on missing identifier`` () =
 
 [<Fact>]
 let ``Error on unterminated string`` () =
-    Assert.Equal("\"unterminated", snd (parseErrorOf "def x = \"unterminated"))
+    Assert.Equal("\"unterminated", snd (parseErrorOf """def x = "unterminated"""))

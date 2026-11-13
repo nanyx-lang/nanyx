@@ -187,10 +187,10 @@ let ``an if spans from the if keyword to its last branch`` () =
 [<Fact>]
 let ``spans in a multi-line lambda have the lines and columns they were written at`` () =
     let source =
-        "def f = { x ->\n" +
-        "  def y = x + 1\n" +
-        "  y * 2\n" +
-        "}"
+        normalized """def f = { x ->
+  def y = x + 1
+  y * 2
+}"""
     let value = parse source |> valueOf "f"
     textOf source value.Span |> should equal source.[8..]
     value.Span.StartLine |> should equal 0
@@ -487,10 +487,16 @@ let ``expressions are equal wherever they and the names in them were written`` (
 [<Fact>]
 let ``nodes made up for for-arms, record updates, tag payloads and multi-branch ifs start on their own text`` () =
     let source =
-        "def a = for xs\n  | 1 -> f(1)\n  | _ -> g()\n" +
-        "def b = alice with age = 31\n" +
-        "def c = #pair( 1, 2)\n" +
-        "def d = if\n  | p -> 1\n  | q -> 2\n  | else -> 3\n"
+        normalized """def a = for xs
+  | 1 -> f(1)
+  | _ -> g()
+def b = alice with age = 31
+def c = #pair( 1, 2)
+def d = if
+  | p -> 1
+  | q -> 2
+  | else -> 3
+"""
     checkAllSpans "t.nyx" source |> should be (greaterThan 10)
     let module' = parse source
     match (valueOf "b" module').Kind with
@@ -541,16 +547,16 @@ let private armsOf name (module': Module) =
 [<Fact>]
 let ``each pattern spans its text, and nested patterns span theirs`` () =
     let source =
-        "def f = match v\n" +
-        "  | #some((a, _)) -> a\n" +
-        "  | [x, ...rest] -> x\n" +
-        "  | [first, ..., last] -> first\n" +
-        "  | 1..10 -> 0\n" +
-        "  | { < 0 } -> 0\n" +
-        "  | Point(px, py) -> px\n" +
-        "  | (name = n) -> n\n" +
-        "  | \"text\" -> 0\n" +
-        "  | other -> 0"
+        normalized """def f = match v
+  | #some((a, _)) -> a
+  | [x, ...rest] -> x
+  | [first, ..., last] -> first
+  | 1..10 -> 0
+  | { < 0 } -> 0
+  | Point(px, py) -> px
+  | (name = n) -> n
+  | "text" -> 0
+  | other -> 0"""
     let texts = armsOf "f" (parse source) |> List.map (List.map (fun pattern -> textOf source pattern.Span))
     texts
     |> should equal [ [ "#some((a, _))" ]; [ "[x, ...rest]" ]; [ "[first, ..., last]" ]; [ "1..10" ]; [ "{ < 0 }" ]
@@ -663,16 +669,16 @@ let private lambdaStatements name (module': Module) =
 [<Fact>]
 let ``each statement in a block spans its text, without a comment after it`` () =
     let source =
-        "def f = { x ->\n" +
-        "  def y = x + 1 -- one more\n" +
-        "  type Point = (x: int, y: int)\n" +
-        "  use ctx\n" +
-        "  print(y) -- noted\n" +
-        "  match y\n" +
-        "    | 0 -> 1\n" +
-        "    | _ -> 2\n" +
-        "  y * 2\n" +
-        "}"
+        normalized """def f = { x ->
+  def y = x + 1 -- one more
+  type Point = (x: int, y: int)
+  use ctx
+  print(y) -- noted
+  match y
+    | 0 -> 1
+    | _ -> 2
+  y * 2
+}"""
     let statements = parse source |> lambdaStatements "f"
     statements
     |> List.map (fun statement -> textOf source statement.Span)
@@ -712,10 +718,12 @@ let private annotationOf name (module': Module) =
 [<Fact>]
 let ``each type expression spans its text, and nested types span theirs`` () =
     let source =
-        "def f: (int, string) -> list(a) = f\n" +
-        "def g: int, int -> int = g\n" +
-        "def h: [Sum(int) & Console] int -> #some(n: int) | #none = h\n" +
-        "type Shape =\n  | #circle(r: float)\n  | #square(side: float)"
+        normalized """def f: (int, string) -> list(a) = f
+def g: int, int -> int = g
+def h: [Sum(int) & Console] int -> #some(n: int) | #none = h
+type Shape =
+  | #circle(r: float)
+  | #square(side: float)"""
     let module' = parse source
     let f = annotationOf "f" module'
     textOf source f.Span |> should equal "(int, string) -> list(a)"
@@ -760,8 +768,12 @@ let ``each type expression spans its text, and nested types span theirs`` () =
 [<Fact>]
 let ``the types of lambda parameters, context accesses and context instances span their text`` () =
     let source =
-        "def f = { x: int, y -> ToString(list(a)).toString(x) }\n" +
-        "def g = { z ->\n  def sumInt: Sum(int) = (sum = add)\n  use sumInt\n  0\n}"
+        normalized """def f = { x: int, y -> ToString(list(a)).toString(x) }
+def g = { z ->
+  def sumInt: Sum(int) = (sum = add)
+  use sumInt
+  0
+}"""
     let module' = parse source
     match (valueOf "f" module').Kind with
     | Lambda ([ ("x", Some int); ("y", None) ], Kind (ContextMemberCall (context, "toString", _)), _) ->
@@ -789,17 +801,20 @@ let private itemTexts (source: string) = parse source |> List.map (fun item -> t
 [<Fact>]
 let ``each top-level item spans its text, without a comment after it`` () =
     let source =
-        "module shapes\n" +
-        "import (nanyx/console as c \"./other.nyx\")\n" +
-        "@entry\n" +
-        "export def area: float -> float = { r -> r * r } -- squared\n" +
-        "type Point = (x: int, y: int) -- a point\n" +
-        "context Show(a) = (show: a -> string)\n" +
-        "print(area(2.0)) -- once\n" +
-        "def total =\n  def x = 1\n  x + 1\n"
+        normalized """module shapes
+import (nanyx/console as c "./other.nyx")
+@entry
+export def area: float -> float = { r -> r * r } -- squared
+type Point = (x: int, y: int) -- a point
+context Show(a) = (show: a -> string)
+print(area(2.0)) -- once
+def total =
+  def x = 1
+  x + 1
+"""
     itemTexts source
     |> should equal [ "module shapes"
-                      "import (nanyx/console as c \"./other.nyx\")"
+                      """import (nanyx/console as c "./other.nyx")"""
                       "@entry"
                       "export def area: float -> float = { r -> r * r }"
                       "type Point = (x: int, y: int)"

@@ -90,11 +90,11 @@ let ``A pipe chain may continue after a comment line`` () =
 [<Fact>]
 let ``A pipe chain in a match arm's block continues on more indented lines`` () =
     let body =
-        "  match n\n" +
-        "    | 0 ->\n" +
-        "      n\n" +
-        "        \\add(2)\n" +
-        "    | _ -> n"
+        normalized """  match n
+    | 0 ->
+      n
+        \add(2)
+    | _ -> n"""
     match lambdaStatementOf body with
     | Match (_, [ _, Kind (Block [ Kind (ExprStatement (Kind (Pipe (Kind (IdentifierExpr "n"), "add", _, _)))) ]); _ ]) -> ()
     | other -> failwith $"Expected the first arm's block to be n \\add(2), got: %A{other}"
@@ -113,7 +113,9 @@ let ``except may start a more indented line after a pipe chain in a lambda body`
 
 [<Fact>]
 let ``\match matches on the value piped into it`` () =
-    match parseModule "def r = s \\trim \\match\n  | \"\" -> 0\n  | _ -> 1" with
+    match parseModule (normalized """def r = s \trim \match
+  | "" -> 0
+  | _ -> 1""") with
     | Result.Ok [ Kind (Def (ValueDef (_, "r", _, Kind (Match ([ Kind (Pipe (Kind (IdentifierExpr "s"), "trim", _, [])) ], arms))))) ] ->
         arms |> should haveLength 2
     | other -> failwith $"Expected a match on s \\trim, got: %A{other}"
@@ -121,11 +123,11 @@ let ``\match matches on the value piped into it`` () =
 [<Fact>]
 let ``\match continues a pipe chain in a lambda body, and the chain continues after its arms`` () =
     let body =
-        "  n\n" +
-        "    \\match\n" +
-        "      | 0 -> \"zero\"\n" +
-        "      | _ -> \"other\"\n" +
-        "    \\println"
+        normalized """  n
+    \match
+      | 0 -> "zero"
+      | _ -> "other"
+    \println"""
     match lambdaStatementOf body with
     | Pipe (Kind (Match ([ Kind (IdentifierExpr "n") ], [ _; _ ])), "println", _, []) -> ()
     | other -> failwith $"Expected (n \\match ...) \\println, got: %A{other}"

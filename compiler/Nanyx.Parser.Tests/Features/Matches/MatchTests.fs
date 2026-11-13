@@ -63,11 +63,11 @@ open Parser.Program
 [<Fact>]
 let ``An or-pattern arm becomes one arm per alternative`` () =
     let source =
-        "def f = { day ->\n" +
-        "  match day\n" +
-        "    | \"Sat\" | \"Sun\" -> \"weekend\"\n" +
-        "    | _ -> \"weekday\"\n" +
-        "}"
+        normalized """def f = { day ->
+  match day
+    | "Sat" | "Sun" -> "weekend"
+    | _ -> "weekday"
+}"""
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ]), _))))) ] ->
         let patterns = arms |> List.map (fst >> List.map (fun pattern -> pattern.Kind))
@@ -80,12 +80,12 @@ let ``An or-pattern arm becomes one arm per alternative`` () =
 [<Fact>]
 let ``An or-pattern may put each alternative on its own line`` () =
     let source =
-        "def f = { day ->\n" +
-        "  match day\n" +
-        "    | #sat\n" +
-        "    | #sun -> 1\n" +
-        "    | _ -> 0\n" +
-        "}"
+        normalized """def f = { day ->
+  match day
+    | #sat
+    | #sun -> 1
+    | _ -> 0
+}"""
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (ExprStatement (Kind (Match (_, arms)))) ]), _))))) ] ->
         arms
@@ -135,13 +135,13 @@ let ``A block scrutinee of one expression is that expression`` () =
 [<Fact>]
 let ``A block scrutinee is measured against the match line, not the match keyword`` () =
     let source =
-        "def f = { xs ->\n" +
-        "  def n = match\n" +
-        "      xs \\length\n" +
-        "    | 0 -> 1\n" +
-        "    | _ -> 0\n" +
-        "  n\n" +
-        "}"
+        normalized """def f = { xs ->
+  def n = match
+      xs \length
+    | 0 -> 1
+    | _ -> 0
+  n
+}"""
     match parseModule source with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (_, Kind (Block [ Kind (DefStatement (_, _, _, Kind (Match ([ Kind (Pipe _) ], _)))); _ ]), _))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
@@ -161,7 +161,7 @@ let ``A block scrutinee indented no more than the match is an error`` () =
 
 [<Fact>]
 let ``Or-patterns work in pattern lambdas and with several scrutinees`` () =
-    match parseModule "def f = { | 0, _ | _, 0 -> \"axis\" | _, _ -> \"plane\" }" with
+    match parseModule """def f = { | 0, _ | _, 0 -> "axis" | _, _ -> "plane" }""" with
     | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda (args, Kind (Match (_, arms)), _))))) ] ->
         args |> List.length |> should equal 2
         arms |> List.length |> should equal 3

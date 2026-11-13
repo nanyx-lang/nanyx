@@ -6,7 +6,7 @@ open ParserTestHelpers
 
 [<Fact>]
 let ``a record with a spread is a call to __spread with its parts in the order written`` () =
-    match parseModule "def config = (...defaults, protocol = \"https\", ...env)" with
+    match parseModule """def config = (...defaults, protocol = "https", ...env)""" with
     | Result.Ok [ Kind (Def (ValueDef (_, "config", _, Kind (SpreadSyntax.Call [ SpreadRecord (Kind (IdentifierExpr "defaults")); SpreadField ("protocol", Kind (LiteralExpr (StringLit "https"))); SpreadRecord (Kind (IdentifierExpr "env")) ])))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

@@ -23,7 +23,10 @@ let ``A name in backticks can hold punctuation and a keyword`` () =
 
 [<Fact>]
 let ``A name in backticks is a value, can be called, and can name a field`` () =
-    match parsed "def f = `add points`\ndef g = `add points`(1, 2)\ndef h = (`first name` = \"Ada\")\ndef i = h.`first name`" with
+    match parsed (normalized """def f = `add points`
+def g = `add points`(1, 2)
+def h = (`first name` = "Ada")
+def i = h.`first name`""") with
     | [ Def (ValueDef (_, "f", _, Kind (IdentifierExpr "add points")))
         Def (ValueDef (_, "g", _, Kind (FunctionCall ("add points", _, _))))
         Def (ValueDef (_, "h", _, Kind (RecordExpr [ NamedField ("first name", _) ])))

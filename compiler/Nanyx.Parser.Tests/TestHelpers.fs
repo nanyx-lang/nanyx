@@ -10,6 +10,10 @@ let (|IntLit64|_|) (literal: Literal) =
     | IntLit value when value >= bigint System.Int64.MinValue && value <= bigint System.Int64.MaxValue -> Some (int64 value)
     | _ -> None
 
+/// `source` with its line breaks made `\n`, whatever the line endings of the test file's checkout, as the parser makes
+/// them before it reads the source, so that spans are offsets into it.
+let normalized (source: string) = source.ReplaceLineEndings "\n"
+
 /// The text `span` covers in `source`.
 let textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
