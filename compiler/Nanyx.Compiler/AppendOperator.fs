@@ -17,7 +17,7 @@ module internal AppendOperator =
     let isBuiltIn (ty: Ty) =
         match Unifier.unalias ty with
         | TyPrimitive "string"
-        | TyApply("list", _) -> true
+        | Lists.ListType _ -> true
         | _ -> false
 
     /// Whether `ty` is a type that is known to have no `++`. A type variable, an open record and a nominal type are

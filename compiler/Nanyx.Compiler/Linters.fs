@@ -723,10 +723,9 @@ module PlusBetweenContexts =
                 | _ -> None)
 
     let lint (model: SemanticModel) : Report list =
-        let rec walk (typeExpr: TypeExpr) = typeExpr :: (TypeExpr.children typeExpr |> List.collect walk)
         let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
         (model.Syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
-        |> List.collect walk
+        |> List.collect TypeExpr.within
         |> List.collect (fun typeExpr ->
             match typeExpr.Kind with
             | TypeContext contexts

@@ -15,8 +15,8 @@ module internal BuiltinTypeNames =
         Map.ofList
             [ "String", "string"
               "Unit", "unit"
-              "List", "list"
-              "Seq", "seq"
+              "List", Lists.typeName
+              "Seq", Seqs.typeName
               "Map", Maps.typeName
               "Set", Sets.typeName
               "I64", "int"
@@ -83,30 +83,13 @@ module internal BuiltinTypeNames =
 
         let rec typeExpr (t: TypeExpr) : TypeExpr =
             let renamed (written: string) = tryAlias (partOf t.Span 0 written.Length) written |> Option.defaultValue written
-            let kind =
+            // The name is renamed first, so that errors are reported in the order the names are written.
+            let t =
                 match t.Kind with
-                | TypeName name -> TypeName(renamed name)
-                | TypeVar _
-                | TypeHole
-                | TypeUnit
-                | TypeOf _ -> t.Kind
-                | TypeTuple items -> TypeTuple(items |> List.map typeExpr)
-                | TypeRecord fields ->
-                    TypeRecord(
-                        fields
-                        |> List.map (function
-                            | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, typeOpt |> Option.map typeExpr, defaultOpt)
-                            | TypeMember(name, typeOpt) -> TypeMember(name, typeOpt |> Option.map typeExpr)))
-                | TypeApply(name, args) -> TypeApply(renamed name, args |> List.map typeExpr)
-                | TypeFunc(input, output) -> TypeFunc(typeExpr input, typeExpr output)
-                | TypeTag(name, payload) -> TypeTag(name, payload |> Option.map typeExpr)
-                | TypeUnion items -> TypeUnion(items |> List.map typeExpr)
-                | TypeIntersection items -> TypeIntersection(items |> List.map typeExpr)
-                | TypeContext items -> TypeContext(items |> List.map typeExpr)
-                | TypeWithContext(items, inner) -> TypeWithContext(items |> List.map typeExpr, typeExpr inner)
-                | TypeConstraint(name, baseTy, predicate) -> TypeConstraint(name, typeExpr baseTy, predicate)
-                | TypeWhere(baseTy, predicate) -> TypeWhere(typeExpr baseTy, predicate)
-            { t with Kind = kind }
+                | TypeName name -> { t with Kind = TypeName(renamed name) }
+                | TypeApply(name, args) -> { t with Kind = TypeApply(renamed name, args) }
+                | _ -> t
+            TypeExpr.mapChildren typeExpr t
 
         let typeParameters = List.map (fun (name, constraintOpt) -> name, constraintOpt |> Option.map typeExpr)
 

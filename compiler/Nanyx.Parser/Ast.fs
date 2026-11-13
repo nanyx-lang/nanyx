@@ -633,6 +633,34 @@ module TypeExpr =
         | TypeConstraint(_, inner, _)
         | TypeWhere(inner, _) -> [ inner ]
 
+    /// `typeExpr` with `f` applied to each type expression directly inside it: those `children` gives. One with none,
+    /// a `typeof` among them, is returned as it is.
+    let mapChildren (f: TypeExpr -> TypeExpr) (typeExpr: TypeExpr) : TypeExpr =
+        let kind =
+            match typeExpr.Kind with
+            | TypeName _
+            | TypeVar _
+            | TypeHole
+            | TypeUnit
+            | TypeOf _ -> typeExpr.Kind
+            | TypeTuple items -> TypeTuple(List.map f items)
+            | TypeUnion items -> TypeUnion(List.map f items)
+            | TypeIntersection items -> TypeIntersection(List.map f items)
+            | TypeContext items -> TypeContext(List.map f items)
+            | TypeApply(name, items) -> TypeApply(name, List.map f items)
+            | TypeRecord fields ->
+                TypeRecord(
+                    fields
+                    |> List.map (function
+                        | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, Option.map f typeOpt, defaultOpt)
+                        | TypeMember(name, typeOpt) -> TypeMember(name, Option.map f typeOpt)))
+            | TypeFunc(arg, ret) -> TypeFunc(f arg, f ret)
+            | TypeTag(name, payload) -> TypeTag(name, Option.map f payload)
+            | TypeWithContext(contexts, inner) -> TypeWithContext(List.map f contexts, f inner)
+            | TypeConstraint(name, inner, predicate) -> TypeConstraint(name, f inner, predicate)
+            | TypeWhere(inner, predicate) -> TypeWhere(f inner, predicate)
+        { typeExpr with Kind = kind }
+
     /// `typeExpr` and every type expression inside it, in order.
     let rec within (typeExpr: TypeExpr) : TypeExpr list =
         typeExpr :: (children typeExpr |> List.collect within)

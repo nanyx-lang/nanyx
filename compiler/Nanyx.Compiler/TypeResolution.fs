@@ -39,8 +39,7 @@ let internal literalType literal =
     | FloatLit _ -> primitiveType "float"
     | BoolLit _ -> primitiveType "bool"
 
-let internal listType elementTy =
-    TyApply("list", [ elementTy ])
+let internal listType elementTy = Lists.ofType elementTy
 
 let internal numericType =
     TyPrimitive "int"
@@ -63,8 +62,8 @@ let private lookupPrimitive (name: string) =
 /// A type's capitalised name, `List`, is written as its alias, `list`, by `BuiltinTypeNames` before inference.
 let internal isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
-    || name = "list"
-    || name = "seq"
+    || Lists.isTypeName name
+    || Seqs.isTypeName name
     || name = CellPassingSyntax.typeName
     || Maps.isTypeName name
     || Sets.isTypeName name
@@ -95,8 +94,8 @@ let rec attachedTypeNames (ty: Ty) : string list =
     | TyAlias(name, _, underlying) -> name :: attachedTypeNames underlying
     | TyNominal(id, _, _) -> [ id.Name ]
     | TyPrimitive name -> [ name ]
-    | TyApply("list", _) -> [ "list" ]
-    | TyApply("seq", _) -> [ "seq" ]
+    | Lists.ListType _ -> [ Lists.typeName ]
+    | Seqs.SeqType _ -> [ Seqs.typeName ]
     | Maps.MapType _ -> [ Maps.typeName ]
     | Sets.SetType _ -> [ Sets.typeName ]
     | _ -> []
@@ -120,7 +119,7 @@ let builtInPropertyNames = [ "length" ]
 let builtInProperty (ty: Ty) (name: string) : (BuiltInProperty * Ty) option =
     match Unifier.unalias ty, name with
     | TyPrimitive "string", "length" -> Some (StringLength, TyPrimitive "int")
-    | TyApply("list", _), "length" -> Some (ListLength, TyPrimitive "int")
+    | Lists.ListType _, "length" -> Some (ListLength, TyPrimitive "int")
     | _ -> None
 
 /// The error for reading `memberName` with a dot from a value of type `ty` that has no such field or property.
@@ -271,13 +270,13 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
                 let ty, next = typeExprToTy current arg
                 current <- next
                 ty)
-        if name = "list" then
+        if Lists.isTypeName name then
             let elementTy =
                 match argTys with
                 | [] -> TyPrimitive "unit"
                 | [single] -> single
                 | multiple -> tupleRecordType multiple
-            TyApply("list", [elementTy]), current
+            Lists.ofType elementTy, current
         elif Maps.isTypeName name && argTys.Length = 2 then
             Maps.ofTypes argTys.[0] argTys.[1], current
         elif Sets.isTypeName name && argTys.Length = 1 then
