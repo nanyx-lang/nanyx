@@ -253,14 +253,6 @@
     i32.store offset=8
     local.get $cell
   )
-  (func $__nanyx_record_set (param $base i32) (param $value i32) (param $offset i32) (result i32)
-    local.get $base
-    local.get $offset
-    i32.add
-    local.get $value
-    i32.store
-    local.get $base
-  )
   (func $__nanyx_list_cons_at_i64 (param $block i32) (param $head i64) (param $tail i32) (result i32)
     (local $cell i32)
     local.get $block
@@ -286,8 +278,10 @@
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
-  (table $ctx_table 2 funcref)
-  (elem (i32.const 0) $__lambda_0 $__nanyx_drop_env)
+  (table $ctx_table 1 funcref)
+  (elem (i32.const 0) $__lambda_0)
+
+  (data (i32.const 256) "\00\00\00\00\00\00\00\00\00\00\00\00")
 
   (func $prelude_reverseOnto__int (param $arg1 i32) (param $arg2 i32) (result i32) (local $__match_tmp_0 i32) (local $__match_tmp_1 i32) (local $__payload_x_i64 i64) (local $__payload_rest i32) (local $__reuse_1 i32)
     local.get $arg1
@@ -480,12 +474,7 @@
 
   (func $main (result i32) (local $__dbg_value_i64 i64) (local $__match_tmp_0_i64 i64) (local $__for_cursor_0 i32) (local $__for_end_0_i64 i64) (local $__for___for_element_0_i64 i64) (local $__owned_0 i32) (local $__owned_1 i32)
     call $items
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 0
-    i32.const 0
-    call $__nanyx_record_set
+    i32.const 264
     call $list_filter__int
     local.tee $__owned_0
     local.set $__for_cursor_0
@@ -795,10 +784,6 @@
       call $__nanyx_retain
     end
     local.get $p
-  )
-
-  (func $__nanyx_drop_env (param $p i32) (result i32)
-    i32.const 0
   )
 
   (func $__nanyx_start

@@ -145,7 +145,10 @@ let inferOwnership (functions: Function list) : Ownership =
     let indirect =
         functions
         |> Seq.collect (fun f -> nodes f.Body)
-        |> Seq.choose (fun e -> match e.Kind with MakeClosure(name, _, _) -> Some name | _ -> None)
+        |> Seq.collect (fun e ->
+            let made = match e.Kind with MakeClosure(name, _, _) -> [ name ] | _ -> []
+            let static' = operands Map.empty e |> List.choose (function AStaticClosure(name, _, _), _ -> Some name | _ -> None)
+            made @ static')
         |> Set.ofSeq
     let owned = Dictionary<string, bool array>()
     for f in functions do
@@ -266,7 +269,8 @@ type private Counter(ownership: Ownership, func: Function) =
         | ABool _
         | AUnit
         | AString _
-        | ATag _ -> Set.empty
+        | ATag _
+        | AStaticClosure _ -> Set.empty
 
     /// `e` with its counting: `owned` are the variables holding a reference of their own here, and `after` those used
     /// once `e` is done. Each owned variable not used after is taken over or dropped by `e`; one `e` does not use is

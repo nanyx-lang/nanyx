@@ -160,6 +160,22 @@ let private buildStringLiteralMap (literals: string list) =
 let private stringDataEnd (entries: (string * int * byte array) list) =
     entries |> List.fold (fun dataEnd (_, offset, bytes) -> max dataEnd (offset + bytes.Length)) stringDataBaseOffset
 
+/// How many bytes a static closure (see `CoreIr.AStaticClosure`) takes in the data segment: its header, then its
+/// function's table slot.
+let private staticClosureBytes = 8 + CoreIrLayout.closureSize []
+
+/// Where each of `closures` (by its function's name) is in the data segment, laid out from `start`, which is 4-byte
+/// aligned.
+let private staticClosureOffsets (closures: (string * int) list) (start: int) =
+    closures |> List.mapi (fun index (name, _) -> name, start + index * staticClosureBytes + 8) |> Map.ofList
+
+/// The data segment of the static closure at `offset` over the function in the table slot `slot`. It is laid out as a
+/// closure on the heap is (see `CoreIrEmit`'s `MakeClosure`), with a count of 0 so that it is never freed, and an
+/// info word of 0, since nothing ever drops it.
+let private staticClosureData (offset: int) (slot: int) =
+    let bytes = Array.concat [ BitConverter.GetBytes 0; BitConverter.GetBytes 0; BitConverter.GetBytes slot ]
+    $"  (data (i32.const {offset - 8}) \"{escapeWasmData bytes}\")"
+
 /// The data segments that lay out `entries` (see `buildStringLiteralMap`).
 let private renderDataSegments (entries: (string * int * byte array) list) =
     entries
@@ -588,6 +604,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let probeContext: CoreIrEmit.EmitContext =
         { TagId = (fun _ -> 0)
           StringOffset = (fun _ -> 0)
+          StaticClosure = (fun _ _ -> 0)
           RecordLayoutId = (fun _ -> 0)
           FunctionSlot = (fun _ _ -> 0)
           IndirectCall = ignore
@@ -663,8 +680,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         if options.CheckMemory then facts.Strings @ (MemoryChecks.messages |> List.except facts.Strings)
         else facts.Strings
     let stringLiteralMap, stringLiteralData = buildStringLiteralMap literals
-    // The free-list heads and the heap go after the literals, however far they run.
-    let heapBase = heapBaseAfter (stringDataEnd stringLiteralData)
+    // The static closures go after the literals, and the free-list heads and the heap after them, however far they run.
+    let staticClosureMap = staticClosureOffsets facts.StaticClosures (stringDataEnd stringLiteralData)
+    let heapBase = heapBaseAfter (stringDataEnd stringLiteralData + facts.StaticClosures.Length * staticClosureBytes)
     let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
 
     // The parameters and result of each function, which a call converts a value of no known type to and from.
@@ -684,6 +702,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 match stringLiteralMap |> Map.tryFind value with
                 | Some offset -> offset
                 | None -> CoreIr.internalError $"missing string literal offset for {value}"
+          StaticClosure =
+            fun name arity ->
+                functionValueSlot functionTable name arity |> ignore
+                match staticClosureMap |> Map.tryFind name with
+                | Some offset -> offset
+                | None -> CoreIr.internalError $"missing static closure offset for {name}"
           RecordLayoutId = recordLayoutId recordTable
           FunctionSlot = functionValueSlot functionTable
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
@@ -833,7 +857,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.filter (fun line -> not (String.IsNullOrWhiteSpace line))
         |> String.concat "\n"
 
-    let dataSegments = renderDataSegments stringLiteralData
+    let dataSegments =
+        [ renderDataSegments stringLiteralData
+          yield!
+              facts.StaticClosures
+              |> List.map (fun (name, arity) -> staticClosureData staticClosureMap.[name] (functionValueSlot functionTable name arity)) ]
+        |> List.filter (fun segment -> segment <> "")
+        |> String.concat "\n"
 
     // Add memory if we have string literals or any emitted function touches memory, but no dbg helpers (dbgPrelude
     // already includes memory). Reading the rendered text keeps this true of whatever the helpers and functions do.
@@ -841,7 +871,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         [ renderedHelpers; renderedFunctions; renderedDrops; renderedEqualities; renderedOrderings; renderedHashes; renderedStartFunction ]
         |> List.exists Wat.usesMemory
     let needsMemory =
-        (not (List.isEmpty stringLiteralData) || functionsUseMemory) && not moduleUsesIoHelpers
+        (not (List.isEmpty stringLiteralData && List.isEmpty facts.StaticClosures) || functionsUseMemory) && not moduleUsesIoHelpers
     let memorySection =
         if needsMemory then
             memoryDirective + "\n  (export \"memory\" (memory 0))"

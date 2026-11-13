@@ -25,8 +25,9 @@ namespace Nanyx.LanguageServer;
 /// </param>
 /// <param name="CompileStarted">Called as each compile of a document starts. For tests, which count them.</param>
 /// <param name="Timings">
-/// Whether each compile's log line, which says how long it took, also lists how long each module's check took,
-/// slowest first (<c>nanyx lsp --timings</c>; the VS Code extension passes it in development mode).
+/// Whether each compile's log line, which says how long it took, also shows how long each module's check took, as a
+/// tree of the modules each one imported (<c>nanyx lsp --timings</c>; the VS Code extension passes it in development
+/// mode).
 /// </param>
 public sealed record ServerSettings(
     TypeNotation TypeNotation,

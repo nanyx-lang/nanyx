@@ -22,6 +22,7 @@
     <Compile Include="Constraints.fs" />
     <Compile Include="FunctionContexts.fs" />
     <Compile Include="Unifier.fs" />
+    <Compile Include="Lists.fs" />
     <Compile Include="Maps.fs" />
     <Compile Include="Sets.fs" />
     <Compile Include="InferState.fs" />

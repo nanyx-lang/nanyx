@@ -304,7 +304,8 @@ module Package =
     /// with each module checked once (#698). A module that checked, for one file or as an import of one, is not checked
     /// again for a later file that imports it, nor for its own file. One that failed to check is checked again where it
     /// is needed, since an import cycle is reported where the file being compiled enters it. `listener` is told each
-    /// file's path as its compile starts, and each module's check as it starts and ends.
+    /// file's path as its compile starts, each module's check as it starts and ends, and each module already checked
+    /// where it is needed again, its own file's included.
     let private compileAll (listener: CompileListener) (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
         let checkedOnce = Collections.Generic.Dictionary<string, CheckedModule>()
         Nanyx.LargeStack.run <| fun () ->
@@ -318,7 +319,9 @@ module Package =
                 checkedModules.[checkedKey] <- Result.Ok checkedModule
             let checkedModule =
                 match checkedOnce.TryGetValue key with
-                | true, checkedModule -> Result.Ok checkedModule
+                | true, checkedModule ->
+                    listener.ModuleReused key
+                    Result.Ok checkedModule
                 | false, _ -> Compiler.typecheckModule checkedModules origin source Set.empty
             for KeyValue(checkedKey, result) in Seq.append checkedModules [ Collections.Generic.KeyValuePair(key, checkedModule) ] do
                 match result with

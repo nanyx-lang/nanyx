@@ -246,7 +246,7 @@ module PatternSpace =
         | HCons ->
             let element =
                 match shape with
-                | Some (TyApply("list", [ element ])) -> Some element
+                | Some (Lists.ListType element) -> Some element
                 | _ -> None
             [ element; ty ]
         | HBool _

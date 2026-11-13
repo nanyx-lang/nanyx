@@ -56,7 +56,7 @@ module internal WellKnownContexts =
             | TyRecord fields
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.tryPick (fun (name, fieldTy) -> inPart $"its field '{name}'" false fieldTy)
             | TyTag(name, payload) -> payload |> Option.bind (inPart $"the payload of '#{name}'" false)
-            | TyApply("list", [ element ]) -> inPart "its elements" true element
+            | Lists.ListType element -> inPart "its elements" true element
             | TyApply(_, args) -> args |> List.tryPick (inPart "a value it holds" false)
             | TyUnion items -> items |> List.tryPick (offendingPart kindOf)
 
@@ -80,7 +80,7 @@ module internal WellKnownContexts =
     let isBuiltIn (ty: Ty) =
         match Unifier.unalias ty with
         | TyPrimitive _
-        | TyApply("list", _) -> true
+        | Lists.ListType _ -> true
         | _ -> false
 
     /// `Eq`: every type that holds no function has the compiler's own, which compares by structure. A map or a set,
@@ -270,7 +270,7 @@ module internal WellKnownContexts =
         (ty: Ty)
         : Result<InferState option, Diagnostic list> =
         match Unifier.unalias ty, wellKnown.ListHelpers |> Map.tryFind op with
-        | TyApply("list", [ element ]), Some helper when isDeclared wellKnown state ->
+        | Lists.ListType element, Some helper when isDeclared wellKnown state ->
             instanceOf env state (resolveSoFar state element)
             |> Result.map (function
                 | Some instance, next ->

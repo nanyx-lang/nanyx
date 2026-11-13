@@ -5,7 +5,7 @@ order: 25
 ---
 
 > **Status: in progress.** This page describes what a call to a function that requires contexts compiles to, and
-> three changes that make it cheaper. Specialising on known members is done; static closures and inlining are not. It
+> three changes that make it cheaper. Static closures and specialising on known members are done; inlining is not. It
 > is part of the [compilation](./compilation) workstream, and its issues carry the `compilation`, `wasm backend` and
 > `performance` labels.
 
@@ -14,7 +14,7 @@ order: 25
 A function that requires contexts takes each of their members as a closure, and calls them through the function
 table. Most calls pass members that are known when the call is compiled: the ambient `Console`, or an instance built
 from attached definitions, whose members are top-level functions. The compiler can use that. A closure over a
-top-level function can be static data, so passing one allocates nothing. A function can be specialised on the
+top-level function is static data, so passing one allocates nothing. A function can be specialised on the
 members known at its call, so it calls them directly and is not passed the ones it never reads. An inliner could then
 fold small functions such as `println` into their callers.
 
@@ -24,10 +24,11 @@ Since printing takes any value with a `ToString` ([Printing values](./printing-v
 ordinary function, `[Console & ToString(a)] a -> ()`. Before specialising on known members
 ([#744](https://github.com/nanyx-lang/nanyx/issues/744)), hello world compiled to this:
 
-- **The call site allocated a closure for every member.** `println("Hello, Nanyx!")` made six closures on the heap,
-  one for each of `Console`'s five members and one for `string.toString`, and dropped them after the call. Each was a
-  closure over the wrapper of a top-level function (`ContextArgument.ClosureOverWrapper` in `CoreIrLowerInput.fs`) and
-  captured nothing, so every one of them was the same block every time.
+- **The call site passed a closure for every member.** `println("Hello, Nanyx!")` passed six closures, one for each
+  of `Console`'s five members and one for `string.toString`. Each was a closure over the wrapper of a top-level
+  function (`ContextArgument.ClosureOverWrapper` in `CoreIrLowerInput.fs`) and captured nothing. Static closures
+  ([#743](https://github.com/nanyx-lang/nanyx/issues/743)) made them six constant addresses; before that, the call
+  made the six on the heap and dropped them after the call.
 - **The callee called its members indirectly.** `println__string` took the six closures as parameters, after its
   own. It read two of them, `write` and `toString`, and made three `call_indirect`s.
 - **The module carried what made this work.** It had a wrapper for each member (`__fn_write`), a table to call
@@ -70,13 +71,21 @@ them.
 
 ## Closures over top-level functions are static data
 
-A closure over a top-level function captures nothing, so it can be laid out once in the data segment, as a closure
-on the heap is laid out, with a reference count of 0. String literals already work this way: `retain` and `release`
-leave a count of 0 alone, so dup and drop need no change and the closure is never freed. A call site passes a
-constant address.
+Done ([#743](https://github.com/nanyx-lang/nanyx/issues/743)). A closure over a top-level function captures nothing,
+so it is laid out once in the data segment, as a closure on the heap is laid out, with a reference count of 0. String
+literals work this way too: `retain` and `release` leave a count of 0 alone, so the closure is never freed. A call
+site passes a constant address.
 
-This is not specific to contexts. A top-level function passed as a value, as in `list.map(xs, double)`, gets the same
-treatment. ([#743](https://github.com/nanyx-lang/nanyx/issues/743))
+This is not specific to contexts. Lowering makes every closure that captures nothing an atom, `AStaticClosure`
+(`closureOver` in `CoreIr.fs`), rather than a `MakeClosure`: a context member passed at a call, a top-level function
+passed as a value (`list.map(xs, double)`), and a lambda that captures nothing, which lambda lifting made a top-level
+function. An atom is never a variable, so reference counting gives it no dup or drop, as it gives a string literal
+none. The module lays out one block for each such function after its string literals (`staticClosureData` in
+`CodeGen.fs`): a count of 0, an info word of 0, since nothing ever drops it, and the function's table slot. The tests
+are in `Features/Memory/StaticClosureTests.fs`.
+
+In the `proc` measurement on [Context escape](./context-escape#measured), variant C goes from 9 allocations per block
+to 7, as predicted.
 
 ## Specialising on known members
 
@@ -147,9 +156,9 @@ These are about inlining, which waits on them; [#745](https://github.com/nanyx-l
 
 # Plan
 
-1. Closures over top-level functions are static data
-   ([#743](https://github.com/nanyx-lang/nanyx/issues/743)).
-2. ~~Specialise a function on the context members known where it is called
-   ([#744](https://github.com/nanyx-lang/nanyx/issues/744)).~~ Done: `CoreIrLowerKnown.fs`.
+1. ~~Closures over top-level functions are static data~~
+   ([#743](https://github.com/nanyx-lang/nanyx/issues/743), done).
+2. ~~Specialise a function on the context members known where it is called~~
+   ([#744](https://github.com/nanyx-lang/nanyx/issues/744), done: `CoreIrLowerKnown.fs`).
 3. Inline small functions in the core IR, once the open questions are settled
    ([#745](https://github.com/nanyx-lang/nanyx/issues/745)).

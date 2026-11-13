@@ -52,7 +52,7 @@ internal static class CliCommands
     /// Check a Nanyx source file, or every source file of a package, and write nothing.
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
-    /// <param name="timings">Write how long each module took to check to stderr, slowest first.</param>
+    /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported.</param>
     [Consolo("check")]
     public static int Check(
         [Consolo("timings")] bool timings = false,
@@ -136,7 +136,7 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file to run as a script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
-    /// <param name="timings">Write how long each module took to check to stderr, slowest first, and how long the program took to emit.</param>
+    /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
@@ -190,7 +190,7 @@ internal static class CliCommands
     /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wat beside the manifest.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
-    /// <param name="timings">Write how long each module took to check to stderr, slowest first, and how long the program took to emit.</param>
+    /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit.</param>
     [Consolo("build")]
     public static int Build(
         [Consolo("out", Alias = "o")] string? outputPath = null,
@@ -429,7 +429,7 @@ internal static class CliCommands
     /// <param name="noLocalTypeHints">Show no inlay hints for local defs' inferred types.</param>
     /// <param name="noParameterTypeHints">Show no inlay hints for lambda parameters' inferred types.</param>
     /// <param name="noPatternVariableTypeHints">Show no inlay hints for pattern variables' inferred types.</param>
-    /// <param name="timings">Log how long each module took to check with each compile, slowest first, not only how long the compile took.</param>
+    /// <param name="timings">Log how long each module took to check with each compile, as a tree of the modules each one imported, not only how long the compile took.</param>
     [Consolo("lsp")]
     public static int Lsp(
         [Consolo("stdio")] bool stdio = false,

@@ -35,11 +35,6 @@ module SpecKey =
     let plain (definition: string) (typeArguments: IrType list) =
         { Definition = definition; TypeArguments = typeArguments; Known = [] }
 
-/// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in
-/// the instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
-let unconstrainedAsUnit (ty: Ty) =
-    substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
-
 /// `ty` without the rests of its unions that nothing closes, which add no tags (see `toIrType`): `ToString(#red | r)`
 /// is passed at `#red`.
 let rec private withoutOpenRests (ty: Ty) =
@@ -55,9 +50,9 @@ let rec private withoutOpenRests (ty: Ty) =
     | TyPrimitive _
     | TyOpenRecord _ -> ty
 
-/// The member that is a closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for
-/// a generic function, at `memberTy`, the type of the context member it is passed as.
-let knownWrapper (input: LowerInput) (wrapper: string) (memberTy: Ty option) : KnownMember =
+/// The top-level function that `wrapper` wraps, and the type a closure over the wrapper is at as a context member of
+/// type `memberTy`: the function's own type, or, for a generic function, `memberTy`.
+let wrappedAt (input: LowerInput) (wrapper: string) (memberTy: Ty option) : string * Ty =
     let wrapped =
         match input.Lifted |> Map.tryFind wrapper with
         | Some (FunctionWrapper wrapped) -> wrapped
@@ -65,8 +60,8 @@ let knownWrapper (input: LowerInput) (wrapper: string) (memberTy: Ty option) : K
     // A member that requires contexts of its own would need them found where the instance is.
     if input.ContextParameters.ContainsKey wrapped then cannot $"a context member '{wrapped}', which requires contexts"
     match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map (withoutOpenRests >> unconstrainedAsUnit) with
-    | Some ty, _ when (freeVars ty).IsEmpty -> KnownFunction(wrapper, wrapped, ty)
-    | Some _, Some ty -> KnownFunction(wrapper, wrapped, ty)
+    | Some ty, _ when (freeVars ty).IsEmpty -> wrapped, ty
+    | Some _, Some ty -> wrapped, ty
     | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
 
 /// The type arguments of the wrapper a closure over the known function `wrapped` at `at` calls: none when `wrapped` is
@@ -88,7 +83,9 @@ let knownAmong (input: LowerInput) (parameters: ContextParameter list) (argument
     List.zip3 parameters arguments memberTys
     |> List.choose (fun (parameter, argument, memberTy) ->
         match argument with
-        | ClosureOverWrapper wrapper -> Some (parameter.Key, knownWrapper input wrapper memberTy)
+        | ClosureOverWrapper wrapper ->
+            let wrapped, at = wrappedAt input wrapper memberTy
+            Some (parameter.Key, KnownFunction(wrapper, wrapped, at))
         | DefinitionValue definition -> Some (parameter.Key, knownValue input definition)
         | MemberInScope key -> inScope key |> Option.map (fun known -> parameter.Key, known)
         | DerivedClosure _

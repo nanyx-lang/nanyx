@@ -850,7 +850,7 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             match inferExpr env current arg with
             | Ok (typedArg, next) -> current <- addConstraint typedArg.Type (TyPrimitive "int") next
             | Error err -> errors <- errors @ err
-        let sequence = if args.Length = 1 then "gen" else "seq"
+        let sequence = if args.Length = 1 then "gen" else Seqs.typeName
         if errors.IsEmpty then Ok (mkTypedExpr expr (TyApply(sequence, [ TyPrimitive "int" ])) None None None, current)
         else Error errors
     elif name = RecSyntax.builtIn then

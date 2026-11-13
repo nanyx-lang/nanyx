@@ -13,7 +13,7 @@ let private okOf result =
     | Result.Ok value -> value
     | Result.Error errors -> failwith (String.concat "\n" errors)
 
-/// A listener that writes down what it is told, as "file <path>", "start <name>" and "end <name>".
+/// A listener that writes down what it is told, as "file <path>", "start <name>", "end <name>" and "reused <name>".
 type private Recording() =
     let events = Collections.Generic.List<string>()
     member _.Events = List.ofSeq events
@@ -21,6 +21,7 @@ type private Recording() =
         member _.FileStarted file = events.Add $"file {file}"
         member _.ModuleStarted name = events.Add $"start {name}"
         member _.ModuleFinished(name, _) = events.Add $"end {name}"
+        member _.ModuleReused name = events.Add $"reused {name}"
 
 /// The standard library's modules are checked once per process, so which of them a compile reports depends on the
 /// tests that ran before it: only the package's own modules are compared.
@@ -39,9 +40,9 @@ let ``A build reports each module's check as it starts and ends, inside its impo
     let recording = Recording()
     let build = Package.buildReporting recording found
     Assert.Empty(build.Diagnostics)
-    // util is checked as main's import, so its own file has nothing left to check.
+    // util is checked as main's import, so its own file reuses that check.
     Assert.Equal<string list>(
-        [ $"file {main}"; $"start {main}"; $"start {util}"; $"end {util}"; $"end {main}"; $"file {util}" ],
+        [ $"file {main}"; $"start {main}"; $"start {util}"; $"end {util}"; $"end {main}"; $"file {util}"; $"reused {util}" ],
         ownEvents package.Root recording.Events)
 
 [<Fact>]
@@ -57,21 +58,105 @@ let ``A script's compile reports its own module, with any standard-library check
         Assert.Equal($"end {Path.GetFullPath file}", List.last events)
         Assert.Equal<string list>([], ownEvents dir events |> List.filter (fun event -> event.StartsWith "file ")))
 
+let private seconds (value: float) = TimeSpan.FromSeconds value
+
+let private timing name total self = { Name = name; Total = seconds total; Self = seconds self }
+
+/// The checks of `checks` of the modules whose names hold `root`, each with the same of its imports.
+let rec private ownChecks (root: string) (checks: ModuleCheck list) =
+    checks
+    |> List.choose (function
+        | Checked(timing, imports) when timing.Name.Contains root -> Some (Checked(timing, ownChecks root imports))
+        | Reused name when name.Contains root -> Some (Reused name)
+        | _ -> None)
+
 [<Fact>]
-let ``Timings take an import's time off its importer's own`` () =
+let ``A build's timings are a tree of its files' checks, with a module imported again cached`` () =
+    use package =
+        new TempPackage(
+            [ "demo.nyxp", manifest
+              "src/main.nyx", "module main\n\nimport a\nimport b\n\n@entry\ndef main = {\n  println(\"{one + two}\")\n}\n"
+              "src/a.nyx", "module a\n\nimport c\n\nexport def one = zero + 1\n"
+              "src/b.nyx", "module b\n\nimport c\n\nexport def two = zero + 2\n"
+              "src/c.nyx", "module c\n\nexport def zero = 0\n" ])
+    let found = okOf (Package.find package.Root)
+    let timings = CompileTimings()
+    let build = Package.buildReporting timings found
+    Assert.Empty(build.Diagnostics)
+    // The files are compiled in order of their paths, and each module is checked once.
+    let tree = ModuleCheck.tree Path.GetFileName (ownChecks package.Root timings.Checks)
+    let shape = Text.RegularExpressions.Regex.Replace(tree, @" \(\d+\.\d\ds of \d+\.\d\ds\)", "")
+    let expected =
+        """a.nyx
+└── c.nyx
+b.nyx
+└── c.nyx (cached)
+c.nyx (cached)
+main.nyx
+├── a.nyx (cached)
+└── b.nyx (cached)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", shape)
+
+[<Fact>]
+let ``Timings nest each check under its importer's, and take its time off the importer's own`` () =
     let timings = CompileTimings()
     let listener = timings :> CompileListener
     listener.ModuleStarted "main"
     listener.ModuleStarted "util"
     listener.ModuleStarted "deep"
-    listener.ModuleFinished("deep", TimeSpan.FromSeconds 1.0)
-    listener.ModuleFinished("util", TimeSpan.FromSeconds 3.0)
-    listener.ModuleFinished("main", TimeSpan.FromSeconds 10.0)
-    Assert.Equal<ModuleTiming list>(
-        [ { Name = "deep"; Total = TimeSpan.FromSeconds 1.0; Self = TimeSpan.FromSeconds 1.0 }
-          { Name = "util"; Total = TimeSpan.FromSeconds 3.0; Self = TimeSpan.FromSeconds 2.0 }
-          { Name = "main"; Total = TimeSpan.FromSeconds 10.0; Self = TimeSpan.FromSeconds 7.0 } ],
-        timings.Timings)
+    listener.ModuleFinished("deep", seconds 1.0)
+    listener.ModuleFinished("util", seconds 3.0)
+    listener.ModuleFinished("main", seconds 10.0)
+    Assert.Equal<ModuleCheck list>(
+        [ Checked(timing "main" 10.0 7.0, [ Checked(timing "util" 3.0 2.0, [ Checked(timing "deep" 1.0 1.0, []) ]) ]) ],
+        timings.Checks)
+
+[<Fact>]
+let ``Timings list a check's imports in the order they were checked, not by time`` () =
+    let timings = CompileTimings()
+    let listener = timings :> CompileListener
+    listener.ModuleStarted "main"
+    listener.ModuleStarted "fast"
+    listener.ModuleFinished("fast", seconds 1.0)
+    listener.ModuleStarted "slow"
+    listener.ModuleFinished("slow", seconds 5.0)
+    listener.ModuleFinished("main", seconds 7.0)
+    Assert.Equal<ModuleCheck list>(
+        [ Checked(timing "main" 7.0 1.0, [ Checked(timing "fast" 1.0 1.0, []); Checked(timing "slow" 5.0 5.0, []) ]) ],
+        timings.Checks)
+
+[<Fact>]
+let ``Timings record a module needed again as reused, with nothing under it`` () =
+    let timings = CompileTimings()
+    let listener = timings :> CompileListener
+    listener.ModuleStarted "main"
+    listener.ModuleStarted "a"
+    listener.ModuleStarted "c"
+    listener.ModuleFinished("c", seconds 1.0)
+    listener.ModuleFinished("a", seconds 2.0)
+    listener.ModuleStarted "b"
+    listener.ModuleReused "c"
+    listener.ModuleFinished("b", seconds 1.0)
+    listener.ModuleFinished("main", seconds 4.0)
+    Assert.Equal<ModuleCheck list>(
+        [ Checked(
+              timing "main" 4.0 1.0,
+              [ Checked(timing "a" 2.0 1.0, [ Checked(timing "c" 1.0 1.0, []) ]); Checked(timing "b" 1.0 1.0, [ Reused "c" ]) ]
+          ) ],
+        timings.Checks)
+
+[<Fact>]
+let ``Timings keep a root for each module needed outside any check`` () =
+    let timings = CompileTimings()
+    let listener = timings :> CompileListener
+    listener.ModuleStarted "main"
+    listener.ModuleFinished("main", seconds 2.0)
+    listener.ModuleReused "main"
+    listener.ModuleStarted "other"
+    listener.ModuleFinished("other", seconds 1.0)
+    Assert.Equal<ModuleCheck list>(
+        [ Checked(timing "main" 2.0 2.0, []); Reused "main"; Checked(timing "other" 1.0 1.0, []) ],
+        timings.Checks)
 
 [<Fact>]
 let ``Timings pass everything on to the listener they wrap`` () =
@@ -80,18 +165,25 @@ let ``Timings pass everything on to the listener they wrap`` () =
     listener.FileStarted "a.nyx"
     listener.ModuleStarted "a"
     listener.ModuleFinished("a", TimeSpan.Zero)
-    Assert.Equal<string list>([ "file a.nyx"; "start a"; "end a" ], recording.Events)
+    listener.ModuleReused "a"
+    Assert.Equal<string list>([ "file a.nyx"; "start a"; "end a"; "reused a" ], recording.Events)
 
 [<Fact>]
-let ``The timings table lists the slowest module first, with its total and own time`` () =
-    let table =
-        ModuleTiming.table
-            [ { Name = "src/util.nyx"; Total = TimeSpan.FromSeconds 0.0315; Self = TimeSpan.FromSeconds 0.0315 }
-              { Name = "nanyx/prelude"; Total = TimeSpan.FromSeconds 1.2; Self = TimeSpan.FromSeconds 1.0 }
-              { Name = "src/main.nyx"; Total = TimeSpan.FromSeconds 1.5; Self = TimeSpan.FromSeconds 0.3 } ]
+let ``The timings tree shows each module's own and total time, with what it needed under it`` () =
+    let tree =
+        ModuleCheck.tree
+            (fun name -> name.Replace("/work/", ""))
+            [ Checked(
+                  timing "/work/src/main.nyx" 0.28 0.03,
+                  [ Checked(timing "/work/src/dependencyA.nyx" 0.25 0.05, [ Checked(timing "/work/src/dependencyC.nyx" 0.2 0.2, []) ])
+                    Reused "/work/src/dependencyB.nyx" ]
+              )
+              Checked(timing "nanyx/prelude" 1.1 0.8, [ Checked(timing "nanyx/list" 0.3 0.3, []) ]) ]
     let expected =
-        """    total      self  module
-   1.500s    0.300s  src/main.nyx
-   1.200s    1.000s  nanyx/prelude
-   0.032s    0.032s  src/util.nyx"""
-    Assert.Equal(expected.ReplaceLineEndings "\n", table)
+        """src/main.nyx (0.03s of 0.28s)
+├── src/dependencyA.nyx (0.05s of 0.25s)
+│   └── src/dependencyC.nyx (0.20s of 0.20s)
+└── src/dependencyB.nyx (cached)
+nanyx/prelude (0.80s of 1.10s)
+└── nanyx/list (0.30s of 0.30s)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", tree)

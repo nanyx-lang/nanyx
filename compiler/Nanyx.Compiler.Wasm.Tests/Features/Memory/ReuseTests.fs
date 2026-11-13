@@ -40,8 +40,8 @@ let ``Reuse - List.map with a closure over a list held once rewrites its cells i
     use program = instantiateWasm source []
     let buildAllocations, total = allocationsOf program "built" 100
     let mapAllocations, mapped = allocationsOf program "run" 100
-    // One more block than building it: the closure.
-    Assert.Equal(buildAllocations + 1, mapAllocations)
+    // As many blocks as building it: the closure captures nothing, so it is static data.
+    Assert.Equal(buildAllocations, mapAllocations)
     Assert.Equal(total + 100, mapped)
 
 [<Fact>]

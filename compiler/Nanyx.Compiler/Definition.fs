@@ -106,9 +106,8 @@ let referencesTo (result: CompileResult) (symbol: Symbol) : SourceSpan list =
                 else
                     None)
         let typeSpans =
-            let rec walk (typeExpr: TypeExpr) = typeExpr :: (TypeExpr.children typeExpr |> List.collect walk)
             (syntax |> List.collect SyntaxTree.topLevelTypes) @ (Hover.allExpressions syntax |> List.collect SyntaxTree.expressionTypes)
-            |> List.collect walk
+            |> List.collect TypeExpr.within
             |> List.filter (fun typeExpr -> refersTo typed.References typeExpr.Id)
             |> List.choose typeNameSpan
         // A node desugaring made up can share the span of the syntax it came from.

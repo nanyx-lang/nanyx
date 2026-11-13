@@ -85,6 +85,9 @@ type Atom =
     | AString of string
     /// A tag without a payload, which is its code.
     | ATag of string
+    /// A closure over a lifted function (as `MakeClosure` names it) that captures nothing, of this function type. It is
+    /// the same block every time, so it lives in the data segment, as a string literal does.
+    | AStaticClosure of string * arity: int * IrType
 
 type PrimOp =
     /// An operator on ints or booleans: `+`, `==`, `and`, ...
@@ -139,7 +142,7 @@ and ExprKind =
     /// or tags needs. One that returns nothing (an intrinsic whose result is unit) leaves unit, as every value must.
     | CallRuntime of string * Atom list * returnsValue: bool
     /// Allocates the closure block of a lifted function (by its name in WebAssembly text, and how many parameters it
-    /// takes, the environment included) over the values it captures.
+    /// takes, the environment included) over the values it captures, one or more (see `closureOver`).
     | MakeClosure of string * arity: int * Atom list
     /// A call through a function value: the closure block is passed first, as the environment, and its first slot is
     /// the function's table slot. The closure is read twice, so it is a parameter or a local, never a temporary.
@@ -420,6 +423,14 @@ let atomType (atom: Atom) =
     | AUnit -> IrUnit
     | AString _ -> IrString
     | ATag name -> IrTags [ name, None ]
+    | AStaticClosure(_, _, ty) -> ty
+
+/// The closure of type `ty` over the lifted function `name`, which takes `arity` parameters, the environment included,
+/// and `captured`: a block allocated as it runs, or static data when it captures nothing.
+let closureOver (name: string) (arity: int) (captured: Atom list) (ty: IrType) : Expr =
+    match captured with
+    | [] -> { Kind = Atom(AStaticClosure(name, arity, ty)); Type = ty }
+    | _ -> { Kind = MakeClosure(name, arity, captured); Type = ty }
 
 module ForLoop =
     /// The atoms a loop's streams start from, in the order its code reads them.
@@ -504,6 +515,7 @@ module Print =
         | AUnit -> "()"
         | AString value -> $"\"{value}\""
         | ATag name -> $"#{name}"
+        | AStaticClosure(name, _, _) -> $"closure {name}()"
 
     let rec private pattern (indent: string) (p: Pattern) =
         match p with

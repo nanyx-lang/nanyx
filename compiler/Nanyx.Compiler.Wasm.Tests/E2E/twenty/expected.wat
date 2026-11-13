@@ -470,12 +470,14 @@
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
   (type $ctx_fn_2_i32_i64_to_i32 (func (param i32 i64) (result i32)))
-  (table $ctx_table 3 funcref)
-  (elem (i32.const 0) $__lambda_0 $__nanyx_drop_env $__lambda_2)
+  (table $ctx_table 2 funcref)
+  (elem (i32.const 0) $__lambda_0 $__lambda_2)
 
   (data (i32.const 256) "\00\00\00\00\09\00\00\00xString: \00\00\00")
   (data (i32.const 276) "\00\00\00\00\0b\00\00\00, yString: \00")
   (data (i32.const 296) "\00\00\00\00\04\00\00\00fake\00\00\00\00")
+  (data (i32.const 312) "\00\00\00\00\00\00\00\00\00\00\00\00")
+  (data (i32.const 324) "\00\00\00\00\00\00\00\00\01\00\00\00")
 
   (func $compareStrings__int__string (param $x_i64 i64) (param $y i32) (param $__ctx_ToString_a_toString i32) (param $__ctx_ToString_b_toString i32) (result i32) (local $xString i32) (local $yString i32) (local $__dbg_value i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32)
     local.get $__ctx_ToString_a_toString
@@ -527,12 +529,7 @@
     i32.const 4
     i32.const 1
     call $__nanyx_new_object
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 0
-    i32.const 0
-    call $__nanyx_record_set
+    i32.const 320
     i32.const 0
     call $__nanyx_record_set
     local.set $fakeInt
@@ -545,12 +542,7 @@
     i32.const 4
     i32.const 1
     call $__nanyx_new_object
-    i32.const 4
-    i32.const 1
-    call $__nanyx_new_object
-    i32.const 2
-    i32.const 0
-    call $__nanyx_record_set
+    i32.const 332
     i32.const 0
     call $__nanyx_record_set
     local.set $plainString
@@ -749,9 +741,5 @@
       call $__nanyx_retain
     end
     local.get $p
-  )
-
-  (func $__nanyx_drop_env (param $p i32) (result i32)
-    i32.const 0
   )
 )

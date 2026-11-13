@@ -21,6 +21,9 @@ type EmitContext =
       TagId: string -> int
       /// Where a string literal's bytes are in the data segment.
       StringOffset: string -> int
+      /// Where the static closure over the function of this name and arity is in the data segment, giving the function
+      /// a table slot if it has none.
+      StaticClosure: string -> int -> int
       /// The number of the record layout with these fields, in the order they are stored, numbering it if it is new.
       RecordLayoutId: string list -> int
       /// The function table slot of the function of this name and arity, giving it one if it has none.
@@ -600,6 +603,7 @@ type private FunctionEmitter(context: EmitContext) =
         | AUnit -> "i32.const 0"
         | AString value -> $"i32.const {context.StringOffset value}"
         | ATag name -> $"i32.const {tagCode (context.TagId name)}"
+        | AStaticClosure(name, arity, _) -> $"i32.const {context.StaticClosure name arity}"
 
     /// A `for` loop: each time round, every stream gives its next element (or ends the loop), the body's value is
     /// dropped, and every stream moves on. The loop is unit.

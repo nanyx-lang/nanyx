@@ -117,7 +117,7 @@ module internal StructuralInstances =
         | TyUnion items when not items.IsEmpty -> tagsOf items |> Option.map TagShape
         | TyRecord fields when isTuple fields -> Some (TupleShape (tupleItems fields))
         | TyRecord fields when not fields.IsEmpty -> Some (RecordShape (Map.toList fields))
-        | TyApply("list", [ element ]) -> Some (ListShape element)
+        | Lists.ListType element -> Some (ListShape element)
         | _ -> None
 
     /// What `ty` is built from, as far as comparing two values of it goes: a map and a set are structures too, which
@@ -359,9 +359,9 @@ module internal StructuralInstances =
                 let names, tys = fields |> Map.toList |> List.unzip
                 let tys, acc = tys |> List.mapFold part acc
                 TyRecord (List.zip names tys |> Map.ofList), acc
-            | TyApply("list", [ element ]) ->
+            | Lists.ListType element ->
                 let element, acc = part acc element
-                TyApply("list", [ element ]), acc
+                Lists.ofType element, acc
             | _ -> ty, acc
         let abstracted, (found, next) = inside (Map.empty, state) ty
         if found.IsEmpty then ty, Map.empty, state
