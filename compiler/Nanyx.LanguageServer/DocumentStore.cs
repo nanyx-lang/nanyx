@@ -29,7 +29,7 @@ public sealed record OpenDocument(
     private EditedRegion? _editsSinceLastGood;
     private Lazy<Outline.OutlineItem[]?>? _outline;
 
-    private Lazy<IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic>>? _published;
+    private Lazy<ConvertedDiagnostics>? _converted;
 
     /// <summary>Converts positions in <see cref="Text"/>, built once per change rather than on every request.</summary>
     public SourcePositions Positions { get; } = new(Text);
@@ -43,13 +43,17 @@ public sealed record OpenDocument(
 
 
     /// <summary>
-    /// The LSP diagnostics of this text's compile, as published on <paramref name="uri"/>, the document's own (see
-    /// <see cref="DiagnosticsPublisher.Convert"/>). Converted once, when first asked for, so that the info view and code
-    /// actions, asked on every move of the cursor, neither convert them again nor read other files from disk.
+    /// The LSP diagnostics of this text's compile, for the document at <paramref name="uri"/> and for the files it
+    /// imports (see <see cref="DiagnosticsPublisher.Convert"/>). Converted once, when first asked for, so that the info
+    /// view and code actions, asked on every move of the cursor, neither convert them again nor read other files from
+    /// disk.
     /// </summary>
+    public ConvertedDiagnostics ConvertedDiagnostics(DocumentUri uri) =>
+        (_converted ??= new Lazy<ConvertedDiagnostics>(() => DiagnosticsPublisher.Convert(uri, this))).Value;
+
+    /// <summary>The LSP diagnostics of this text's compile published on the document itself, at <paramref name="uri"/>.</summary>
     public IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic> PublishedDiagnostics(DocumentUri uri) =>
-        (_published ??= new Lazy<IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic>>(
-            () => DiagnosticsPublisher.Convert(uri, this))).Value;
+        ConvertedDiagnostics(uri).Own;
 
     /// <summary>
     /// Reads the doc comments of the names in <see cref="Compiled"/>, for a request at <paramref name="offset"/>,

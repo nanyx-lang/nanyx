@@ -38,7 +38,10 @@ type Diagnostic =
       /// Other places that explain it: "declared here".
       Related: (SourceSpan * string) list
       Suggestions: string list
-      Fixes: Fix list }
+      Fixes: Fix list
+      /// For a diagnostic in a module the compiled one imports, directly or through others: the import in the
+      /// compiled module that brings that module in. The editor shows it there as well as in the imported file.
+      Import: SourceSpan option }
 
 /// A kind of compiler diagnostic: its code, title and severity.
 type DiagnosticCode =
@@ -166,7 +169,8 @@ module Diagnostics =
           Span = span |> Option.filter (SourceSpan.isNone >> not)
           Related = []
           Suggestions = []
-          Fixes = [] }
+          Fixes = []
+          Import = None }
 
     /// A diagnostic about the node written at `span`. A node the compiler made up has no span (`SourceSpan.none`),
     /// and gives a diagnostic without one.
@@ -179,6 +183,9 @@ module Diagnostics =
     let withRelated (span: SourceSpan) (message: string) (diagnostic: Diagnostic) =
         if SourceSpan.isNone span then diagnostic
         else { diagnostic with Related = diagnostic.Related @ [ span, message ] }
+
+    /// `diagnostic` as the module it is in reports it, rather than through an import of that module.
+    let inItsModule (diagnostic: Diagnostic) = { diagnostic with Import = None }
 
     /// `items` as a message lists them: "a", "a and b", "a, b and c".
     let listed (items: string list) =

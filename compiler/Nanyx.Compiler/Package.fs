@@ -361,7 +361,8 @@ module Package =
             not (result.Diagnostics |> List.exists Diagnostics.isError) || (not result.TypeChecked && result.ErrorsDeferred)
         { Package = package
           Results = results
-          Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics) |> List.distinct
+          // A file's errors are reported once, though each file that imports it reports them too.
+          Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics |> List.map Diagnostics.inItsModule) |> List.distinct
           ErrorsDeferred = results |> List.forall (snd >> deferred) }
 
     /// `buildReporting`, telling nobody.
