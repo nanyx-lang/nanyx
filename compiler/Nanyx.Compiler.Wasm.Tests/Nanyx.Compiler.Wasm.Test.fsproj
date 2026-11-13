@@ -110,8 +110,7 @@
 
   <ItemGroup>
     <!--
-      The execution tests (Features/*/Run*Tests.fs) run programs in this process through the CLI's own `run` code; the
-      tests of the CLI itself run the built nanyx.dll as a child process.
+      The tests run programs, and the CLI's commands, in this process through the CLI's own code (CliCommands).
     -->
     <ProjectReference Include="..\Nanyx.Compiler.Cli\NanyxCompiler.Cli.csproj" />
     <ProjectReference Include="..\Nanyx.Compiler.Wasm\Nanyx.Compiler.Wasm.fsproj" />
