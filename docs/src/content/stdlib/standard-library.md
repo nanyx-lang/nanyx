@@ -100,7 +100,7 @@ bool.toString: bool -> string
 string.toString: string -> string
 ```
 
-Each writes the value as string interpolation, `"{n}"`, does, and `string.toString` gives back the string itself. Interpolation goes through the prelude's [`ToString(a)`](../advanced/contexts#tostringa) context, which a type of your own gets by attaching a `toString` of the same kind. Because they are functions, they can be passed where interpolation cannot:
+Each writes the value as string interpolation, `"{n}"`, does, and `string.toString` gives back the string itself. Interpolation goes through the prelude's [`ToString(a)`](../advanced/contexts#tostringa) context, which a type of your own gets by attaching a `toString` of the same kind. A tag with a payload, a tuple, a record, a list, a [map](map) and a [set](set) have one the compiler derives from their parts: a map is written as its literal is, `[tea => 3, cake => 1]`, and a set as a list of its elements, `[3, 1]`. Because they are functions, they can be passed where interpolation cannot:
 
 ```nanyx
 import nanyx/text

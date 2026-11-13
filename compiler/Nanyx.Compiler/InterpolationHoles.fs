@@ -13,7 +13,7 @@ open NyxCompiler.InferState
 /// the sized numbers, float, bool, string, and tags without a payload. The prelude's `int.toString` and the others
 /// are written with a hole, which is how they avoid calling themselves. A function that requires `ToString` of a tag
 /// is passed the prelude's `__toString` (`builtInFunction`), which writes it the same way. A tag with a payload, a
-/// tuple, a record and a list have one the compiler derives from their parts (see `StructuralInstances`).
+/// tuple, a record, a list, a map and a set have one the compiler derives from their parts (see `StructuralInstances`).
 module InterpolationHoles =
     /// The context a hole requires of its value's type.
     let context = "ToString"
@@ -26,6 +26,12 @@ module InterpolationHoles =
 
     /// The prelude function the derived `toString` of a list calls, with the list and what writes an element.
     let listFunction = "__listToString"
+
+    /// The prelude function the derived `toString` of a map calls, with the map and what writes a key and a value.
+    let mapFunction = "__mapToString"
+
+    /// The prelude function the derived `toString` of a set calls, with the set and what writes an element.
+    let setFunction = "__setToString"
 
     /// Whether a call to `calleeName` is a hole's.
     let isHole (calleeName: Identifier) = calleeName = holeFunction

@@ -15,6 +15,12 @@ set.count(seen)         -- 3
 
 A set's elements need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, as a [map](map)'s keys do, so every function that looks one up requires `[Eq(a) & Hash(a)]`. Two sets are `==` when they hold the same elements, whatever order they were added in. Sets cannot be ordered with `<`, or be keys or elements of a set, yet.
 
+A set can be printed and interpolated when its elements can: it is written as `set.toList` of it would be, its elements in square brackets in the order they were first added, each by its own [`ToString`](../advanced/contexts#tostringa).
+
+```nanyx
+"{set.fromList([3, 1, 3])}"   -- "[3, 1]"
+```
+
 These functions are [attached definitions](../advanced/attached-definitions) on `set`, so `s \insert(x)` resolves to `set.insert` when `s` is a set, and are in the [prelude](../tour/modules#modules-in-the-standard-library). Sets are immutable: every function gives back a new set. For now a set keeps its elements in the order they were first added, and `contains` takes time in proportion to its size (see [Maps and sets](../work-in-progress/maps-and-sets)).
 
 ## empty

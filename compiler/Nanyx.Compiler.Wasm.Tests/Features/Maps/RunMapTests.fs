@@ -270,3 +270,17 @@ let ``Run - unionWith combines the values of a key both maps have`` () =
           """show(map.unionWith(map.empty, counts, { a, b -> a + b }))""" ]
     |> runSource
     |> assertRan "tea2cake1pie4\ntea2cake6pie4\ntea-5cake1\ntea2cake1\ntea2cake1\n"
+[<Fact>]
+let ``Run - a map is written as its literal is, each key and value by its own toString`` () =
+    program
+        [ """def counts = ["tea" => 3, "cake" => 1]"""
+          """def none: map(int, int) = map.empty"""
+          """def described: [ToString(k) & ToString(v)] map(k, v) -> string = { m -> "has {m}" }""" ]
+        [ """println(counts)"""
+          """println("{counts}")"""
+          """println([counts, ["pie" => 4]])"""
+          """println((count = 2, prices = [1 => #some(2.5)]))"""
+          """println(none)"""
+          """println(described([#tea => [1, 2]]))""" ]
+    |> runSource
+    |> assertRan "[tea => 3, cake => 1]\n[tea => 3, cake => 1]\n[[tea => 3, cake => 1], [pie => 4]]\n(count = 2, prices = [1 => #some(2.5)])\n[=>]\nhas [#tea => [1, 2]]\n"
