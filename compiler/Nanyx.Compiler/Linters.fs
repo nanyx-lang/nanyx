@@ -317,14 +317,10 @@ module UnreachableArms =
         if bar < 0 || source.[bar] <> '|' || SourceSpan.isNone body.Span then
             None
         else
-            let lineStart = source.LastIndexOf('\n', bar) + 1
-            let lineEnd =
-                match source.IndexOf('\n', body.Span.End) with
-                | -1 -> source.Length
-                | newline -> newline + 1
-            let after = source.Substring(body.Span.End, lineEnd - body.Span.End).Trim()
-            if String.IsNullOrWhiteSpace(source.Substring(lineStart, bar - lineStart)) && (after = "" || after.StartsWith "--") then
-                Some { Span = TextEdit.spanBetween source first lineStart lineEnd; NewText = "" }
+            let arm = TextEdit.spanBetween source first bar body.Span.End
+            let edit = SourceEdits.removal source arm
+            if edit.Span <> arm then
+                Some edit
             else
                 // On a line with other arms: the arm and the space before its `|`.
                 let start = if bar > 0 && source.[bar - 1] = ' ' then bar - 1 else bar
