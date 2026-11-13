@@ -588,7 +588,7 @@ let internal recordFieldsOf (ty: Ty) : Map<string, Ty> option =
 let internal recordFieldsSoFar (state: InferState) (ty: Ty) : Map<string, Ty> option =
     let resolved =
         match ty with
-        | TyVar _ -> Unifier.apply (fst (Unifier.solve state.Constraints)) ty
+        | TyVar _ -> Unifier.applySolved (fst (Unifier.solve state.Constraints)) ty
         | _ -> ty
     recordFieldsOf resolved
 /// `ty` as far as the constraints gathered so far determine it; a type variable stays one when nothing does.
@@ -597,4 +597,4 @@ let internal resolveSoFar (state: InferState) (ty: Ty) : Ty =
     match ty with
     | TyPrimitive _ -> ty
     // A conflict elsewhere in the module does not stop the rest of the constraints saying what `ty` is.
-    | _ -> Unifier.apply (fst (Unifier.solve state.Constraints)) ty
+    | _ -> Unifier.applySolved (fst (Unifier.solve state.Constraints)) ty
