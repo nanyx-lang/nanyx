@@ -26,7 +26,7 @@ If all failing operations use result-like unions, you avoid having to map betwee
 
 # Optional record fields
 
-Optional fields can be represented explicitly with tag unions or by using optional field syntax. This keeps intent clear and avoids a generic wrapper type where it adds little value.
+A field that may be absent has its absence in its type, as a tag union: `petsName: #some(string) | #none`. Nanyx has no `?` that marks a field optional. This keeps intent clear and avoids a generic wrapper type where it adds little value. See [Records and tuples](../tour/records#fields-that-may-be-absent).
 
 # Use explicit unions for richer states
 

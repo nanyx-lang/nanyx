@@ -29,8 +29,8 @@ let ``A context's members are laid out the same way`` () =
         format "export context Console = (print: string -> (), println: string -> (), eprint: string -> (), flush: () -> ())")
 
 [<Fact>]
-let ``Mutable, optional, defaulted, member and positional fields keep what they say`` () =
-    unchanged (lines [ "type Settings = ("; "  int,"; "  mut count: int"; "  label?: string"; "  limit: int = 10"; "  type Item = string"; ")" ])
+let ``Mutable, defaulted, member and positional fields keep what they say`` () =
+    unchanged (lines [ "type Settings = ("; "  int,"; "  mut count: int"; "  label: string"; "  limit: int = 10"; "  type Item = string"; ")" ])
 
 [<Fact>]
 let ``A record type with a comment among its fields has one field per line`` () =

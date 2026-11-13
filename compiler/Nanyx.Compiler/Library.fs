@@ -149,7 +149,7 @@ module Compiler =
             inlined @ own
             |> List.collect (function
                 | Kind (Def (TypeDef(_, modifiers, _, Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
-                    fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
+                    fields |> List.map (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> fieldName)
                 | _ -> [])
             |> Set.ofList
         // The members of the contexts without parameters, which an import under an alias defines under it (`c.write`).
@@ -157,7 +157,7 @@ module Compiler =
             inlined @ own
             |> List.collect (function
                 | Kind (Def (TypeDef(_, modifiers, [], Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
-                    fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
+                    fields |> List.map (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> fieldName)
                 | _ -> [])
             |> Set.ofList
         let rootNames =

@@ -284,13 +284,12 @@ and private expressionsOfType (typeExpr: TypeExpr) =
     | TypeApply (_, types) -> types |> List.collect expressionsOfType
     | TypeRecord fields ->
         fields |> List.collect (function
-            | TypeField (_, _, _, fieldType, defaultValue) ->
+            | TypeField (_, _, fieldType, defaultValue) ->
                 (fieldType |> Option.toList |> List.collect expressionsOfType)
                 @ (defaultValue |> Option.toList |> List.collect expressions)
             | TypeMember (_, memberType) -> memberType |> Option.toList |> List.collect expressionsOfType)
     | TypeFunc (input, output) -> expressionsOfType input @ expressionsOfType output
     | TypeTag (_, payload) -> payload |> Option.toList |> List.collect expressionsOfType
-    | TypeOptional inner -> expressionsOfType inner
     | TypeWithContext (contexts, inner) -> (contexts |> List.collect expressionsOfType) @ expressionsOfType inner
     | TypeConstraint (_, constrained, value) -> expressionsOfType constrained @ expressions value
     | TypeWhere (constrained, value) -> expressionsOfType constrained @ expressions value
@@ -385,11 +384,10 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         | TypeApply (_, types) -> types |> List.collect typesWithin
         | TypeRecord fields ->
             fields |> List.collect (function
-                | TypeField (_, _, _, fieldType, _)
+                | TypeField (_, _, fieldType, _)
                 | TypeMember (_, fieldType) -> fieldType |> Option.toList |> List.collect typesWithin)
         | TypeFunc (input, output) -> typesWithin input @ typesWithin output
         | TypeTag (_, payload) -> payload |> Option.toList |> List.collect typesWithin
-        | TypeOptional inner
         | TypeConstraint (_, inner, _)
         | TypeWhere (inner, _) -> typesWithin inner
         | TypeWithContext (contexts, inner) -> (contexts |> List.collect typesWithin) @ typesWithin inner
@@ -712,13 +710,13 @@ let private annotationOf name (module': Module) =
 [<Fact>]
 let ``each type expression spans its text, and nested types span theirs`` () =
     let source =
-        "def f: (int, string) -> list(a)? = f\n" +
+        "def f: (int, string) -> list(a) = f\n" +
         "def g: int, int -> int = g\n" +
         "def h: [Sum(int) & Console] int -> #some(n: int) | #none = h\n" +
         "type Shape =\n  | #circle(r: float)\n  | #square(side: float)"
     let module' = parse source
     let f = annotationOf "f" module'
-    textOf source f.Span |> should equal "(int, string) -> list(a)?"
+    textOf source f.Span |> should equal "(int, string) -> list(a)"
     match f.Kind with
     | TypeFunc (input, output) ->
         // A bracketed tuple spans its brackets.
@@ -728,14 +726,10 @@ let ``each type expression spans its text, and nested types span theirs`` () =
             textOf source int.Span |> should equal "int"
             textOf source string.Span |> should equal "string"
         | other -> failwith $"Expected a tuple, got %A{other}"
-        textOf source output.Span |> should equal "list(a)?"
+        textOf source output.Span |> should equal "list(a)"
         match output.Kind with
-        | TypeOptional list ->
-            textOf source list.Span |> should equal "list(a)"
-            match list.Kind with
-            | TypeApply ("list", [ a ]) -> textOf source a.Span |> should equal "a"
-            | other -> failwith $"Expected list(a), got %A{other}"
-        | other -> failwith $"Expected an optional, got %A{other}"
+        | TypeApply ("list", [ a ]) -> textOf source a.Span |> should equal "a"
+        | other -> failwith $"Expected list(a), got %A{other}"
     | other -> failwith $"Expected a function, got %A{other}"
     // Bare parameters are a tuple from the first to the last.
     let g = annotationOf "g" module'
@@ -780,8 +774,8 @@ let ``the types of lambda parameters, context accesses and context instances spa
 
 [<Fact>]
 let ``type expressions are equal wherever they were written`` () =
-    let first = parse "def f: (int, string) -> list(a)? = f" |> annotationOf "f"
-    let second = parse "def f:   ( int,  string ) ->  list( a )? = f" |> annotationOf "f"
+    let first = parse "def f: (int, string) -> list(a) | #none = f" |> annotationOf "f"
+    let second = parse "def f:   ( int,  string ) ->  list( a )  |  #none = f" |> annotationOf "f"
     first.Span |> should not' (equal second.Span)
     first |> should equal second
     hash first |> should equal (hash second)

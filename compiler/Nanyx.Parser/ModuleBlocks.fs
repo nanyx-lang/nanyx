@@ -24,7 +24,7 @@ let private rewriteTypeExprInModule (typeMap: Map<string, string>) (rewriteValue
             TypeRecord (
                 fields
                 |> List.map (function
-                    | TypeField(name, isMutable, isOptional, typeOpt, defaultOpt) -> TypeField(name, isMutable, isOptional, typeOpt |> Option.map rewrite, defaultOpt)
+                    | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, typeOpt |> Option.map rewrite, defaultOpt)
                     | TypeMember(name, typeOpt) -> TypeMember(name, typeOpt |> Option.map rewrite)))
         | TypeApply(name, args) ->
             let mappedName = typeMap |> Map.tryFind name |> Option.defaultValue name
@@ -33,7 +33,6 @@ let private rewriteTypeExprInModule (typeMap: Map<string, string>) (rewriteValue
         | TypeTag(name, payload) -> TypeTag(name, payload |> Option.map rewrite)
         | TypeUnion items -> TypeUnion (items |> List.map rewrite)
         | TypeIntersection items -> TypeIntersection (items |> List.map rewrite)
-        | TypeOptional inner -> TypeOptional (rewrite inner)
         | TypeContext items -> TypeContext (items |> List.map rewrite)
         | TypeWithContext(items, inner) -> TypeWithContext(items |> List.map rewrite, rewrite inner)
         | TypeConstraint(name, baseTy, predicate) -> TypeConstraint(name, rewrite baseTy, predicate)

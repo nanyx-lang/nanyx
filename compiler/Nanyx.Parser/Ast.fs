@@ -132,7 +132,6 @@ and TypeExprKind =
     | TypeTag of Identifier * TypeExpr option
     | TypeUnion of TypeExpr list
     | TypeIntersection of TypeExpr list
-    | TypeOptional of TypeExpr
     | TypeContext of TypeExpr list
     | TypeWithContext of TypeExpr list * TypeExpr
     | TypeConstraint of Identifier * TypeExpr * Expression
@@ -141,7 +140,8 @@ and TypeExprKind =
     | TypeOf of Expression
 
 and TypeRecordField =
-    | TypeField of Identifier * bool * bool * TypeExpr option * Expression option
+    /// A named field: its name, whether it is `mut`, its type and its default value.
+    | TypeField of Identifier * bool * TypeExpr option * Expression option
     | TypeMember of Identifier * TypeExpr option
 
 /// A pattern and where it came from. Like `Expression`, equality and comparison look only at `Kind`, and it is
@@ -524,11 +524,10 @@ module TypeExpr =
         | TypeContext items
         | TypeApply(_, items) -> items
         | TypeRecord fields ->
-            fields |> List.choose (function TypeField(_, _, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt)
+            fields |> List.choose (function TypeField(_, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt)
         | TypeFunc(arg, ret) -> [ arg; ret ]
         | TypeTag(_, payload) -> Option.toList payload
         | TypeWithContext(contexts, inner) -> contexts @ [ inner ]
-        | TypeOptional inner
         | TypeConstraint(_, inner, _)
         | TypeWhere(inner, _) -> [ inner ]
 

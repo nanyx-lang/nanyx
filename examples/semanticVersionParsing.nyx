@@ -9,8 +9,8 @@ type SemanticVersion = (
   major: int
   minor: int
   patch: int
-  tag?: string
-  buildMetadata?: string
+  tag: #some(string) | #none
+  buildMetadata: #some(string) | #none
 )
 
 -- Split a string at the first occurrence of a separator, if there is one

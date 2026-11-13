@@ -101,7 +101,6 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | TypeTag(n, payload) -> TypeTag(n, Option.map typeExpr payload)
             | TypeUnion items -> TypeUnion(List.map typeExpr items)
             | TypeIntersection items -> TypeIntersection(List.map typeExpr items)
-            | TypeOptional inner -> TypeOptional(typeExpr inner)
             | TypeContext items -> TypeContext(List.map typeExpr items)
             | TypeWithContext(contexts, inner) -> TypeWithContext(List.map typeExpr contexts, typeExpr inner)
             | TypeConstraint(n, baseType, predicate) -> TypeConstraint(n, typeExpr baseType, expr predicate)
@@ -111,7 +110,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
 
     and typeField (f: TypeRecordField) =
         match f with
-        | TypeField(n, isMutable, isOptional, t, defaultValue) -> TypeField(n, isMutable, isOptional, Option.map typeExpr t, Option.map expr defaultValue)
+        | TypeField(n, isMutable, t, defaultValue) -> TypeField(n, isMutable, Option.map typeExpr t, Option.map expr defaultValue)
         | TypeMember(n, t) -> TypeMember(n, Option.map typeExpr t)
 
     and typeDef (n, modifiers, parameters, body) =

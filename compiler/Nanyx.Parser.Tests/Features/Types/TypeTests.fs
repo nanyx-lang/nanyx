@@ -64,13 +64,13 @@ let ``comma binds tighter than the arrow inside brackets too`` () =
     annotationOf "def m: map(string, a -> b) = m" |> should equal (ty (TypeApply ("map", [ func (tuple [ named "string"; var "a" ]) (var "b") ])))
     annotationOf "def t: #pair(int, a) = t" |> should equal (tag "pair" (Some pair))
     annotationOf "def t: #apply(int, a -> b) = t" |> should equal (tag "apply" (Some (func pair (var "b"))))
-    annotationOf "def t: #field(name: int) = t" |> should equal (tag "field" (Some (ty (TypeRecord [ TypeField ("name", false, false, Some (named "int"), None) ]))))
+    annotationOf "def t: #field(name: int) = t" |> should equal (tag "field" (Some (ty (TypeRecord [ TypeField ("name", false, Some (named "int"), None) ]))))
     // A union binds tighter than the arrow, so it needs no brackets on either side of one.
     let union = ty (TypeUnion [ tag "some" (Some (named "int")); tag "none" None ])
     annotationOf "def u: #some(int) | #none -> #some(int) | #none = u" |> should equal (func union union)
     // A record field's and a lambda parameter's commas are their own, so a function there brackets its parameters.
     annotationOf "def r: (combine: (a, a) -> a) = r"
-    |> should equal (ty (TypeRecord [ TypeField ("combine", false, false, Some (func (tuple [ var "a"; var "a" ]) (var "a")), None) ]))
+    |> should equal (ty (TypeRecord [ TypeField ("combine", false, Some (func (tuple [ var "a"; var "a" ]) (var "a")), None) ]))
 
 [<Fact>]
 let ``a lone record type argument may be written in the application's own brackets`` () =
@@ -78,7 +78,7 @@ let ``a lone record type argument may be written in the application's own bracke
         match parseModule source with
         | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
         | other -> failwith $"Unexpected parse: %A{other}"
-    let field name typeName = TypeField (name, false, false, Some (named typeName), None)
+    let field name typeName = TypeField (name, false, Some (named typeName), None)
     let people = ty (TypeApply ("list", [ ty (TypeRecord [ field "name" "string"; field "age" "int" ]) ]))
     annotationOf "def p: list(name: string, age: int) = p" |> should equal people
     annotationOf "def p: list((name: string, age: int)) = p" |> should equal people
@@ -91,7 +91,7 @@ let ``a record type may start with positional fields, named by position`` () =
         match parseModule source with
         | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
         | other -> failwith $"Unexpected parse: %A{other}"
-    let field name typeValue = TypeField (name, false, false, Some typeValue, None)
+    let field name typeValue = TypeField (name, false, Some typeValue, None)
     let record fields = ty (TypeRecord fields)
     annotationOf "def g: (int, step: int) -> int = g"
     |> should equal (func (record [ field "0" (named "int"); field "step" (named "int") ]) (named "int"))
@@ -152,7 +152,7 @@ let ``typeof names a value as a type`` () =
     annotationOf "def p: typeof config.server.port = p"
     |> should equal (ty (TypeOf (Expression.synthetic (MemberAccess (Expression.synthetic (MemberAccess (value "config", "server", None)), "port", None)))))
     // It is a type like any other, and binds as tightly as one.
-    annotationOf "def o: typeof x? = o" |> should equal (ty (TypeOptional (typeOf "x")))
+    annotationOf "def o: typeof x | #none = o" |> should equal (ty (TypeUnion [ typeOf "x"; tag "none" None ]))
     annotationOf "def f: typeof x -> typeof y = f" |> should equal (func (typeOf "x") (typeOf "y"))
     annotationOf "def l: list(typeof x) = l" |> should equal (ty (TypeApply ("list", [ typeOf "x" ])))
 
@@ -168,7 +168,7 @@ let ``a record field's name may start with a keyword`` () =
         match parseModule source with
         | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
         | other -> failwith $"Unexpected parse: %A{other}"
-    let field name isMutable = TypeField (name, isMutable, false, Some (named "string"), None)
+    let field name isMutable = TypeField (name, isMutable, Some (named "string"), None)
     annotationOf "def r: (typeName: string) = r" |> should equal (ty (TypeRecord [ field "typeName" false ]))
     annotationOf "def r: (mutable: string) = r" |> should equal (ty (TypeRecord [ field "mutable" false ]))
     annotationOf "def r: (mut typeName: string) = r" |> should equal (ty (TypeRecord [ field "typeName" true ]))
@@ -204,3 +204,21 @@ let ``an underscore in a type is a hole`` () =
     annotationOf "def x: _ = 1" |> should equal hole
     // Only `_` alone: a name that starts with one is a type's name.
     annotationOf "def x: _a = 1" |> should equal (named "_a")
+
+[<Theory>]
+[<InlineData("type Person = (name: string, petsName?: string)", "petsName", "?: string)")>]
+[<InlineData("type Version = (\n  major: int\n  tag?: string\n)", "tag", "?: string")>]
+[<InlineData("type Event = #changed(at?: int)", "at", "?: int)")>]
+let ``a field marked optional with ? is reported, with the union to write instead`` (source: string, field: string, at: string) =
+    let reported, text = parseErrorOf source
+    Assert.Contains($"A field can't be marked optional with `?`: write one that may be absent as `{field}: #some(T) | #none`", reported)
+    Assert.Equal(at, text)
+
+[<Theory>]
+[<InlineData("type Name = string?", "?")>]
+[<InlineData("def f: list(a)? -> int = f", "? -> int = f")>]
+[<InlineData("type Item = (displayOnly: bool?)", "?)")>]
+let ``a type marked optional with ? is reported, with the union to write instead`` (source: string, at: string) =
+    let reported, text = parseErrorOf source
+    Assert.Contains("A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`", reported)
+    Assert.Equal(at, text)

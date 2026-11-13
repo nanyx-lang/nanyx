@@ -171,15 +171,29 @@ def valid = (10, 20, x = 10, y = 20)
 -- def invalid = (x = 10, 20)
 ```
 
-# Optional fields
+# Fields that may be absent
 
-Records can contain optional members when a field may be absent:
+A field that may have no value says so in its type, with a union of tags. The usual one is `#some(T) | #none`, the same type the standard library gives back when it may find nothing:
 
 ```nanyx
-type Person = (name: string, petsName?: string)
+type Person = (name: string, petsName: #some(string) | #none)
+
+def alice = Person(name = "Alice", petsName = #some("Rex"))
+def bob = Person(name = "Bob", petsName = #none)
+
+def describe = { person: Person ->
+  match person.petsName
+  | #some(pet) -> "{person.name} has a pet called {pet}"
+  | #none -> "{person.name} has no pet"
+}
+
+println(describe(alice))
+println(describe(bob))
 ```
 
-Optional fields can also be modeled explicitly with tag unions if you need stricter control.
+The field is always there, so a record of this type is built with a value for it, `#none` when there is nothing to say. Tags of your own can say why a value is missing, as `#unknown | #declined | #some(string)` does.
+
+There is no `?` that marks a field or a type optional: `petsName?: string` is an error, which says to write the union instead.
 
 # Copy and update (non-destructive mutation)
 

@@ -70,7 +70,7 @@ module internal ContextInference =
                 let fieldNames, fieldTys = fields |> Map.toList |> List.unzip
                 all fieldTys
                 |> Option.map (fun written ->
-                    List.map2 (fun name fieldTy -> TypeField(name, false, false, Some fieldTy, None)) fieldNames written |> TypeRecord)
+                    List.map2 (fun name fieldTy -> TypeField(name, false, Some fieldTy, None)) fieldNames written |> TypeRecord)
             | TyOpenRecord _ -> None
             | TyTag(name, None) -> Some (TypeTag(name, None))
             | TyTag(name, Some payload) -> typeExprOf names payload |> Option.map (fun payload -> TypeTag(name, Some payload))

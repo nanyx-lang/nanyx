@@ -67,7 +67,7 @@ The two are the same type everywhere, so `List(int)` and `list(int)` are one typ
 
 # Record types
 
-Records are structural types with named fields. They have their own Language Tour page covering record types, structural typing, optional fields, and the unified record/tuple model.
+Records are structural types with named fields. They have their own Language Tour page covering record types, structural typing, fields that may be absent, and the unified record/tuple model.
 
 See [Records and tuples](./records) for the full guide.
 

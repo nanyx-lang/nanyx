@@ -14,7 +14,7 @@ let ambientMemberDefinitions (module': Module) : (string * string) list =
     module'
     |> List.collect (function
         | Kind (Def (TypeDef(_, modifiers, parameters, Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
-            let members = fields |> List.map (function TypeField(fieldName, _, _, _, _) | TypeMember(fieldName, _) -> fieldName)
+            let members = fields |> List.map (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> fieldName)
             let qualifiers =
                 match members with
                 | first :: _ when parameters.IsEmpty ->

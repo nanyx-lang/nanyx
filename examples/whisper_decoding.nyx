@@ -10,47 +10,54 @@ loop as a recursive function over immutable state.
 ---
 
 type Tokens = list(int)
-type Logits = list(float)                -- one score per vocabulary token
+type Logits = list(float) -- one score per vocabulary token
 type AudioFeatures = list(list(float))
 
 export type DecodingOptions = (
   task: #transcribe | #translate
-  language?: string                      -- detected when absent
+  language: #some(string) | #none -- detected when absent
   temperature: float
-  sampleLen?: int                        -- maximum number of tokens to sample
-  bestOf?: int                           -- independent sample trajectories, if temperature > 0
-  beamSize?: int                         -- beams in beam search, if temperature == 0
-  patience?: float                       -- patience in beam search
-  lengthPenalty?: float                  -- "alpha" in Google NMT; length normalisation when absent
+  sampleLen: #some(int) | #none -- maximum number of tokens to sample
+  bestOf: #some(int) | #none -- independent sample trajectories, if temperature > 0
+  beamSize: #some(int) | #none -- beams in beam search, if temperature == 0
+  patience: #some(float) | #none -- patience in beam search
+  lengthPenalty: #some(float) | #none -- "alpha" in Google NMT; length normalisation when absent
   suppressBlank: bool
   withoutTimestamps: bool
 )
 
 export def defaultOptions = DecodingOptions(
   task = #transcribe
+  language = #none
   temperature = 0.0
+  sampleLen = #none
+  bestOf = #none
+  beamSize = #none
+  patience = #none
+  lengthPenalty = #none
   suppressBlank = true
   withoutTimestamps = false
 )
 
-export type OptionsError =
-  | #beamSizeAndBestOf
-  | #bestOfWithGreedySampling
-  | #patienceWithoutBeamSize
-  | #lengthPenaltyOutOfRange
+export type OptionsError = #beamSizeAndBestOf | #bestOfWithGreedySampling | #patienceWithoutBeamSize | #lengthPenaltyOutOfRange
 
-export def verifyOptions: DecodingOptions -> #some(DecodingOptions) | #error(OptionsError) = { options ->
-  if | options.beamSize != #none and options.bestOf != #none -> #error(#beamSizeAndBestOf)
-     | options.temperature == 0.0 and options.bestOf != #none -> #error(#bestOfWithGreedySampling)
-     | options.patience != #none and options.beamSize == #none -> #error(#patienceWithoutBeamSize)
-     | not (options.lengthPenalty \mapSomeOr(true) { p -> p >= 0.0 and p <= 1.0 }) -> #error(#lengthPenaltyOutOfRange)
-     | else -> #some(options)
-}
+export def verifyOptions
+  : DecodingOptions -> #some(DecodingOptions) | #error(OptionsError)
+  = { options ->
+    if
+      | options.beamSize != #none and options.bestOf != #none -> #error(#beamSizeAndBestOf)
+      | options.temperature == 0.0 and options.bestOf != #none -> #error(#bestOfWithGreedySampling)
+      | options.patience != #none and options.beamSize == #none -> #error(#patienceWithoutBeamSize)
+      | not (options.lengthPenalty \mapSomeOr(true) { p -> p >= 0.0 and p <= 1.0 }) -> #error(
+        #lengthPenaltyOutOfRange
+      )
+      | else -> #some(options)
+  }
 
 -- The tokenizer and the model are dependencies, so they are contexts
 context Tokenizer = (
-  eot: int                               -- end-of-transcript token
-  sotSequence: Tokens                    -- start-of-transcript tokens
+  eot: int -- end-of-transcript token
+  sotSequence: Tokens -- start-of-transcript tokens
   encode: string -> Tokens
   decode: Tokens -> string
 )
@@ -74,10 +81,12 @@ def softmax: list(float) -> list(float) = { xs ->
 -- Pick an index with probability proportional to its weight
 def sample: [Random] list(float) -> int = { probabilities ->
   def r = Random.float()
+
   rec pick = {
     | [], i, _ -> i - 1
     | [p, ...rest], i, acc -> if acc + p >= r then i else pick(rest, i + 1, acc + p)
   }
+
   pick(probabilities, 0, 0.0)
 }
 
@@ -86,10 +95,13 @@ type Decoder = (next: (Tokens, Logits) -> int)
 
 -- Greedy decoding takes the most likely token, or samples when there is a temperature
 def greedyDecoder: [Random] float -> Decoder = { temperature ->
-  Decoder(next = { _, logits ->
-    if temperature == 0.0 then argmax(logits)
-    else sample(logits \map { l -> l / temperature } \softmax)
-  })
+  Decoder(
+    next = { _, logits ->
+      if temperature == 0.0
+        then argmax(logits)
+        else sample(logits \map { l -> l / temperature } \softmax)
+    }
+  )
 }
 
 -- A logit filter adjusts the scores before a token is chosen
@@ -98,9 +110,13 @@ type LogitFilter = (Tokens, Logits) -> Logits
 -- Forbid a blank output right at the start of the transcript
 def suppressBlank: [Tokenizer] int -> LogitFilter = { sampleBegin ->
   def blank = encode(" ")
+
   { tokens, logits ->
     if tokens.length == sampleBegin then
-      logits \mapIndexed { i, l -> if blank \contains(i) or i == eot then Math.negativeInfinity else l }
+      logits \mapIndexed { i, l -> if blank \contains(i) or i == eot
+          then Math.negativeInfinity
+          else l
+      }
     else logits
   }
 }
@@ -112,29 +128,37 @@ def mainLoop
     rec step = { sequences, i ->
       def completed = sequences \all { s -> s \last == #some(eot) }
 
-      if completed or i >= sampleLen then sequences
-      else
+      if completed or i >= sampleLen then sequences else
         def extended = sequences \zip(logits(sequences, audio)) \map { tokens, raw ->
           def filtered = filters \fold(raw) { l, filter -> filter(tokens, l) }
           [...tokens, decoder.next(tokens, filtered)]
         }
+
         step(extended, i + 1)
     }
+
     step(initial, 0)
   }
 
 export def transcribe
-  : [Model & Tokenizer & Random] (AudioFeatures, DecodingOptions) -> #some(string) | #error(OptionsError)
-  = { audio, options -> proc {
-    def options = try verifyOptions(options)
-    def #some(sampleLen) = options.sampleLen except #none -> #some(448)
-    def decoder = greedyDecoder(options.temperature)
-    def filters = if options.suppressBlank then [suppressBlank(sotSequence.length)] else []
+  : [Model & Tokenizer & Random] AudioFeatures, DecodingOptions -> #some(string) | #error(OptionsError)
+  = { audio, options ->
+    proc {
+      def options = try verifyOptions(options)
+      def #some(sampleLen) = options.sampleLen except #none -> #some(448)
+      def decoder = greedyDecoder(options.temperature)
+      def filters = if options.suppressBlank then [suppressBlank(sotSequence.length)] else []
 
-    def #some(tokens) = mainLoop([sotSequence], audio, decoder, filters, sampleLen = sampleLen) \head
-      except #emptyList -> #some([])
+      def #some(tokens) = mainLoop(
+        [sotSequence]
+        audio
+        decoder
+        filters
+        sampleLen = sampleLen
+      ) \head except #emptyList -> #some([])
 
-    -- Skip the start sequence and drop everything from the end-of-transcript token on
-    def text = decode(tokens \skip(sotSequence.length) \takeWhile { != eot })
-    return text \trim
-  }}
+      -- Skip the start sequence and drop everything from the end-of-transcript token on
+      def text = decode(tokens \skip(sotSequence.length) \takeWhile { != eot })
+      return text \trim
+    }
+  }

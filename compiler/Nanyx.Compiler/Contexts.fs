@@ -56,7 +56,7 @@ let rec private collectContextMembers (state: InferState) (ctxExpr: TypeExpr) : 
         let members =
             fields
             |> List.choose (function
-                | TypeField(name, _, _, typeOpt, _) -> Some (name, typeOpt)
+                | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt)
                 | TypeMember(name, typeOpt) -> Some (name, typeOpt))
             |> List.map (fun (name, typeOpt) ->
                 let ty, next =
