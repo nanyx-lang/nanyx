@@ -87,7 +87,7 @@ let ``Build --timings - writes each module's check and the program's emit to std
         let checkedLines = lines |> List.filter (fun line -> line.Contains(Path.Combine("src", source) + " ("))
         Assert.Single(checkedLines |> List.filter (fun line -> not (line.EndsWith "(cached)"))) |> ignore
         for line in checkedLines do
-            Assert.Matches(@"src.\w+\.nyx \((\d+\.\d\ds of \d+\.\d\ds|cached)\)$", line)
+            Assert.Matches(@"src.\w+\.nyx \(((\d+\.\d\ds of )?\d+\.\d\ds|cached)\)$", line)
     Assert.True(lines |> List.exists (fun line -> line.StartsWith "Emitted the program in "), timed.StandardError)
 
 [<Fact>]
@@ -107,7 +107,7 @@ let ``Check --timings - writes the modules' checks as a tree, with a module chec
         |> Array.filter (fun line -> line.Contains ".nyx")
         |> Array.map (fun line ->
             let line = Regex.Replace(line, @"\S*src[\\/](\w+\.nyx)", "src/$1")
-            Regex.Replace(line, @" \(\d+\.\d\ds of \d+\.\d\ds\)", ""))
+            Regex.Replace(line, @" \((\d+\.\d\ds of )?\d+\.\d\ds\)", ""))
         |> String.concat "\n"
     let expected =
         """src/a.nyx
@@ -132,7 +132,7 @@ let ``Check --timings - to a pipe, writes only the finished tree, with no live v
     Assert.False(outcome.StandardError.Contains '\u001b', outcome.StandardError)
     // Every line is one of the tree's, as it is written at the end: no stopwatch, and no check's time so far.
     for line in (normalizeOutput outcome.StandardError).TrimEnd('\n').Split('\n') do
-        Assert.Matches(@"^[│├└─ ]*\S+ \((\d+\.\d\ds of \d+\.\d\ds|cached)\)$", line)
+        Assert.Matches(@"^[│├└─ ]*\S+ \(((\d+\.\d\ds of )?\d+\.\d\ds|cached)\)$", line)
 
 [<Fact>]
 let ``Check - a package with an error fails, even one that a debug build would defer`` () =

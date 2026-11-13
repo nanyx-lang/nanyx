@@ -64,15 +64,19 @@ type CompileSoFar =
 module ModuleCheck =
     let private seconds (time: TimeSpan) = sprintf "%.2fs" time.TotalSeconds
 
-    /// `check`'s own line, without the modules it needed: `name (self of total)` or `name (cached)`.
+    /// `check`'s own line, without the modules it needed: `name (self of total)`, `name (total)` when the two are the
+    /// same as written, or `name (cached)`.
     let private line (display: string -> string) (check: ModuleCheck) =
         match check with
         | Reused name -> $"{display name} (cached)"
-        | Checked(timing, _) -> $"{display timing.Name} ({seconds timing.Self} of {seconds timing.Total})"
+        | Checked(timing, _) ->
+            let self, total = seconds timing.Self, seconds timing.Total
+            if self = total then $"{display timing.Name} ({total})"
+            else $"{display timing.Name} ({self} of {total})"
 
     /// `checks` as a tree for a terminal or a log, each module's name written by `display`: a line per module, as
-    /// `name (self of total)` in seconds or `name (cached)`, with the modules it needed under it, drawn with
-    /// box-drawing characters.
+    /// `name (self of total)` in seconds, `name (total)` when the two are the same as written, or `name (cached)`, with
+    /// the modules it needed under it, drawn with box-drawing characters.
     let tree (display: string -> string) (checks: ModuleCheck list) : string =
         let rec lines (prefix: string) (childPrefix: string) (check: ModuleCheck) =
             match check with
