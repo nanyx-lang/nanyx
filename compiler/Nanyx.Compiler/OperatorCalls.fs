@@ -82,10 +82,18 @@ module internal OperatorCalls =
 
     /// `expr`, an operator that calls `scheme` by the name `callee`, of `instance` if it is an instance's member,
     /// typed as that call: the definition takes its operands (`input`) and the operator's value is what it returns.
+    /// Each of two operands is checked against its parameter as a call's argument is, so that a tag widens into the
+    /// union its parameter is: `#none >>= f` where `` `>>=` `` takes a `#some(a) | z`.
     let infer (state: InferState) (expr: Expression) (callee: Identifier) (scheme: TypeScheme) (instance: TypeExpr option) (input: Ty) : Ty * InferState =
         let funcTy, next = instantiate (recordReference expr scheme state) scheme
         let resultTy, next = freshVar next
-        let next = addConstraint funcTy (TyFunc(input, resultTy, [])) next
+        let next =
+            match Unifier.unalias funcTy, input with
+            | TyFunc(TyRecord parameters, _, _), TyRecord operands when Set.ofSeq parameters.Keys = Set.ofSeq operands.Keys ->
+                operands
+                |> Map.fold (fun current field operandTy -> addAssignableConstraint operandTy parameters.[field] current)
+                    (addConstraint funcTy (TyFunc(TyRecord parameters, resultTy, [])) next)
+            | _ -> addConstraint funcTy (TyFunc(input, resultTy, [])) next
         resultTy,
         { next with
             CalleeTypes = next.CalleeTypes |> Map.add expr.Id funcTy
