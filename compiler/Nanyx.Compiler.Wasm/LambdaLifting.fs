@@ -215,7 +215,7 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, string list>) (
                 let members =
                     fields
                     |> List.choose (function
-                        | TypeField(fieldName, _, _, typeOpt, _)
+                        | TypeField(fieldName, _, typeOpt, _)
                         | TypeMember(fieldName, typeOpt) -> typeOpt |> Option.map (fun ty -> fieldName, ty))
                     |> Map.ofList
                 Some (name, (parameters |> List.map fst, members))

@@ -14,7 +14,7 @@ module internal InlineContexts =
     /// The member an item in a def's contexts requires, with the type written for it, if it is written as a member.
     let private memberOf (ctx: TypeExpr) : (Identifier * TypeExpr) option =
         match ctx.Kind with
-        | TypeRecord [ TypeField(name, false, false, Some memberType, None) ] -> Some (name, memberType)
+        | TypeRecord [ TypeField(name, false, Some memberType, None) ] -> Some (name, memberType)
         | _ -> None
 
     /// The type the context parameter `parameter` stands for in `specific`, a type of the shape of `general`, which

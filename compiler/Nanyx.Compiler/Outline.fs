@@ -48,7 +48,7 @@ let private fieldsOf (declared: DeclaredNames) (record: TypeExpr) =
     | TypeRecord fields ->
         fields
         |> List.choose (function
-            | TypeField(name, _, _, typeOpt, _) ->
+            | TypeField(name, _, typeOpt, _) ->
                 names |> List.tryFind (fun (declaredName, _) -> declaredName = name) |> Option.map (fun (_, span) -> name, typeOpt, span)
             | TypeMember _ -> None)
     | _ -> []

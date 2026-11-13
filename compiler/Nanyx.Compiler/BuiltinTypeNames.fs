@@ -95,14 +95,13 @@ module internal BuiltinTypeNames =
                     TypeRecord(
                         fields
                         |> List.map (function
-                            | TypeField(name, isMutable, isOptional, typeOpt, defaultOpt) -> TypeField(name, isMutable, isOptional, typeOpt |> Option.map typeExpr, defaultOpt)
+                            | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, typeOpt |> Option.map typeExpr, defaultOpt)
                             | TypeMember(name, typeOpt) -> TypeMember(name, typeOpt |> Option.map typeExpr)))
                 | TypeApply(name, args) -> TypeApply(renamed name, args |> List.map typeExpr)
                 | TypeFunc(input, output) -> TypeFunc(typeExpr input, typeExpr output)
                 | TypeTag(name, payload) -> TypeTag(name, payload |> Option.map typeExpr)
                 | TypeUnion items -> TypeUnion(items |> List.map typeExpr)
                 | TypeIntersection items -> TypeIntersection(items |> List.map typeExpr)
-                | TypeOptional inner -> TypeOptional(typeExpr inner)
                 | TypeContext items -> TypeContext(items |> List.map typeExpr)
                 | TypeWithContext(items, inner) -> TypeWithContext(items |> List.map typeExpr, typeExpr inner)
                 | TypeConstraint(name, baseTy, predicate) -> TypeConstraint(name, typeExpr baseTy, predicate)

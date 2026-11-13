@@ -30,18 +30,22 @@ let internal fillTypeRefs () =
             (opt (attempt (pstring "=" >>. wsNoNl() >>. typeExpr)))
             (fun name typeOpt -> TypeMember(name, typeOpt))
 
+    // `name?: T` and `T?` are not Nanyx: a value that may be absent has its absence in its type, as everywhere else
+    // (`#some(T) | #none`). They are reported, so that whoever writes them is told what to write instead.
+    let noOptionalMarker (message: string) : Parser<unit, ParseState> =
+        optional (getPosition .>> attempt (pchar '?' >>. notFollowedBy (pchar '?')) >>= fun position -> reportFocused position message)
+
+    let noOptionalField (name: Identifier) =
+        noOptionalMarker $"A field can't be marked optional with `?`: write one that may be absent as `{Names.written name}: #some(T) | #none`"
+
     // A named field's name is noted, for the record type it is in to declare.
     let typeField =
-        pipe5
+        pipe4
             (opt (attempt (pstring "mut" >>. keywordEnd >>. ws)))
-            (getPosition .>>. nameNoWs >>= fun (start, name) -> noteName start name >>% name)
-            (opt (pstring "?" >>% true))
+            (getPosition .>>. nameNoWs >>= fun (start, name) -> noteName start name >>. noOptionalField name >>% name)
             (wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
-            (fun mutOpt name optFlag typeValue defaultOpt ->
-                let isMutable = mutOpt.IsSome
-                let isOptional = optFlag.IsSome
-                TypeField(name, isMutable, isOptional, Some typeValue, defaultOpt))
+            (fun mutOpt name typeValue defaultOpt -> TypeField(name, mutOpt.IsSome, Some typeValue, defaultOpt))
 
     let recordFieldSeparator =
         attempt (pstring "," >>. ws >>% ()) <|> (skipMany1 (skipAnyOf " \t\r\n") >>. ws)
@@ -50,7 +54,7 @@ let internal fillTypeRefs () =
     // position, `0`, `1`, ..., as a tuple's are. Brackets with no named field are a tuple or a grouping instead.
     let positionalTypeFields =
         many (attempt (typeExpr .>> ws .>> pstring "," .>> ws))
-        |>> List.mapi (fun index typeValue -> TypeField(string index, false, false, Some typeValue, None))
+        |>> List.mapi (fun index typeValue -> TypeField(string index, false, Some typeValue, None))
 
     let namedTypeFields =
         pipe2
@@ -89,13 +93,10 @@ let internal fillTypeRefs () =
 
     let typeTag =
         let namedField =
-            pipe3
-                identifierNoWs
-                (opt (pstring "?" >>% true))
+            pipe2
+                (identifierNoWs >>= fun name -> noOptionalField name >>% name)
                 ((wsNoNl() >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr))
-                (fun name optFlag typeValue ->
-                    let isOptional = optFlag.IsSome
-                    TypeField(name, false, isOptional, Some typeValue, None))
+                (fun name typeValue -> TypeField(name, false, Some typeValue, None))
         // A payload is a record of named fields, or the types in the brackets: `#pair(int, string)` carries a
         // tuple and `#apply(a, b -> c)` a function. Empty brackets, `#some()`, carry the unit type.
         let unitPayload = attempt (spannedType (pstring "(" >>. ws >>. pstring ")" >>% TypeUnit))
@@ -135,7 +136,7 @@ let internal fillTypeRefs () =
             pipe2
                 (nameNoWs .>> wsNoNl() .>> pstring ":" .>> ws)
                 typeSignature
-                (fun name memberType -> TypeRecord [ TypeField(name, false, false, Some memberType, None) ]))
+                (fun name memberType -> TypeRecord [ TypeField(name, false, Some memberType, None) ]))
 
     let bracketedContextMember =
         withSpan (between (pstring "(" >>. ws) (ws >>. pstring ")") contextMember)
@@ -193,10 +194,7 @@ let internal fillTypeRefs () =
         ]
 
     let typePostfix =
-        withSpan (typeAtom .>>. opt (pchar '?')) |>> fun ((baseType, optFlag), span) ->
-            match optFlag with
-            | Some _ -> TypeExpr.at span (TypeOptional baseType)
-            | None -> baseType
+        typeAtom .>> noOptionalMarker "A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`"
 
     let typeIntersection =
         singleOrCombined TypeIntersection (sepBy1 typePostfix (attempt (ws >>. pstring "&" >>. ws)))

@@ -75,7 +75,7 @@ let ``An operator is required by the member it reads, among a def's contexts`` (
         | other -> failwith $"Unexpected parse: %A{other}"
     let a = TypeExpr.synthetic (TypeVar "a")
     let binary result = TypeExpr.synthetic (TypeFunc (TypeExpr.synthetic (TypeTuple [ a; a ]), result))
-    let required name memberType = TypeRecord [ TypeField (name, false, false, Some memberType, None) ]
+    let required name memberType = TypeRecord [ TypeField (name, false, Some memberType, None) ]
     Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: a, a -> a] = { + }")
     Assert.Equal<TypeExprKind list>([ required "+" (binary a) ], contextsOf "def add: [`+`: (a, a) -> a] a, a -> a = { + }")
     Assert.Equal<TypeExprKind list>(

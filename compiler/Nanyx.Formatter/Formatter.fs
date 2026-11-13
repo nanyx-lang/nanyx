@@ -1159,22 +1159,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                 | TypeUnion _
                 | TypeFunc _
                 | TypeWithContext _ -> parenType item
-                | _ -> postfixType item)
+                | _ -> atomType item)
             |> Doc.join (text " & ")
-        | _ -> postfixType t
-
-    and postfixType (t: TypeExpr) : Doc =
-        match t.Kind with
-        | TypeOptional inner ->
-            let innerDoc =
-                match inner.Kind with
-                | TypeOptional _
-                | TypeUnion _
-                | TypeIntersection _
-                | TypeFunc _
-                | TypeWithContext _ -> parenType inner
-                | _ -> atomType inner
-            cat [ innerDoc; text "?" ]
         | _ -> atomType t
 
     and parenType (t: TypeExpr) : Doc =
@@ -1202,7 +1188,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeFunc _
         | TypeUnion _
         | TypeIntersection _
-        | TypeOptional _
         | TypeWithContext _ -> parenType t
 
     /// Type arguments are a list of types, so one function argument needs no brackets: `map(a -> b)`.
@@ -1218,10 +1203,10 @@ let format (options: Options) (parsed: SourceModule) : string =
     and tagPayload (payload: TypeExpr) : Doc =
         let isPosition (n: string) = n.Length > 0 && Seq.forall Char.IsDigit n
         match payload.Kind with
-        | TypeRecord fields when fields |> List.forall (function TypeField(n, false, _, Some _, None) -> not (isPosition n) | _ -> false) ->
+        | TypeRecord fields when fields |> List.forall (function TypeField(n, false, Some _, None) -> not (isPosition n) | _ -> false) ->
             fields
             |> List.map (function
-                | TypeField(n, _, isOptional, Some t, _) -> cat [ text (Names.written n); (if isOptional then text "?" else Doc.empty); text ": "; typeExpr t ]
+                | TypeField(n, _, Some t, _) -> cat [ text (Names.written n); text ": "; typeExpr t ]
                 | _ -> Doc.empty)
             |> commaJoin
         | TypeWithContext _ -> parenType payload
@@ -1229,12 +1214,11 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and recordTypeField (field: TypeRecordField) : Doc =
         match field with
-        | TypeField(n, false, false, Some t, None) when n.Length > 0 && Seq.forall Char.IsDigit n -> typeExpr t
-        | TypeField(n, isMutable, isOptional, typeOpt, defaultValue) ->
+        | TypeField(n, false, Some t, None) when n.Length > 0 && Seq.forall Char.IsDigit n -> typeExpr t
+        | TypeField(n, isMutable, typeOpt, defaultValue) ->
             cat [
                 (if isMutable then text "mut " else Doc.empty)
                 text (Names.written n)
-                (if isOptional then text "?" else Doc.empty)
                 (match typeOpt with
                  | Some t -> cat [ text ": "; typeExpr t ]
                  | None -> Doc.empty)
@@ -1251,7 +1235,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
             // An operator required by the member it reads: `` `+`: a, a -> a ``. Its type runs to the end of the set,
             // so among other contexts it is bracketed: `` [(`+`: a, a -> a) & Eq(a)] ``.
-            | TypeRecord [ TypeField(n, false, false, Some memberType, None) ] ->
+            | TypeRecord [ TypeField(n, false, Some memberType, None) ] ->
                 let requirement = cat [ text (Names.written n); text ": "; typeList memberType ]
                 if items.Length > 1 then cat [ text "("; requirement; text ")" ] else requirement
             | _ -> typeExpr t
@@ -1296,12 +1280,12 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeRecord fields when fields.Length > 3 || (valid body.Span && hasCommentsIn body.Span.Start body.Span.End) ->
             let isPositional field =
                 match field with
-                | TypeField(n, false, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
+                | TypeField(n, false, Some _, None) -> n.Length > 0 && Seq.forall Char.IsDigit n
                 | _ -> false
             // A field's own text is not kept; its type's span stands in for where it is.
             let spanOf field =
                 match field with
-                | TypeField(_, _, _, Some t, defaultValue) ->
+                | TypeField(_, _, Some t, defaultValue) ->
                     let finish = match defaultValue with Some value when valid value.Span -> value.Span.End | _ -> t.Span.End
                     t.Span.Start, finish
                 | TypeMember(_, Some t) -> t.Span.Start, t.Span.End

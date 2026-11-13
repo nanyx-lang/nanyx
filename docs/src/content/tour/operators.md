@@ -151,5 +151,4 @@ Some sequences built from operator characters are syntax, not operators, and can
 | `@` | Attribute prefix |
 | `$` | Nominal prefix |
 | `:` | Type annotation |
-| `?` | Optional marker |
 | `???` | Unimplemented placeholder |

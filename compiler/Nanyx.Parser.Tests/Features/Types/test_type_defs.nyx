@@ -19,10 +19,10 @@ type Arguments = list(String)
 
 type CliConfigM = StateT(Config, ReaderT(Arguments, Err(String)))
 
-type OptionalString = string?
+type OptionalString = #some(string) | #none
 
 type QuickPickItem = QuickPickItem & (
-	displayOnly: true?
+	displayOnly: #some(true) | #none
 )
 
 type Email = private string

@@ -303,7 +303,7 @@ let private extractTypeLayouts (module': Module) : Map<string, string list> * Ma
                 let fieldInfo =
                     fields
                     |> List.choose (function
-                        | TypeField(fieldName, _, _, typeOpt, _) ->
+                        | TypeField(fieldName, _, typeOpt, _) ->
                             let typeName =
                                 match typeOpt with
                                 | Some t -> typeExprToTypeString t
@@ -479,7 +479,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | TypeRecord written, TyRecord fields ->
                     written
                     |> List.collect (function
-                        | TypeField(fieldName, _, _, Some fieldType, _) ->
+                        | TypeField(fieldName, _, Some fieldType, _) ->
                             fields |> Map.tryFind fieldName |> Option.map (matchAnnotation fieldType) |> Option.defaultValue []
                         | _ -> [])
                 // A tag's payload, and each tag of a union by its name, as the union's tags need not be in the same order.

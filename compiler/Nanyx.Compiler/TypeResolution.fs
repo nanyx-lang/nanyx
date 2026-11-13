@@ -211,7 +211,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         let fieldMap =
             fields
             |> List.choose (function
-                | TypeField(name, _, _, typeOpt, _) -> Some (name, typeOpt)
+                | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt)
                 | TypeMember(name, typeOpt) -> Some (name, typeOpt))
             |> List.map (fun (name, typeOpt) ->
                 let ty, next =
@@ -287,9 +287,6 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
                 current <- next
                 ty)
         TyUnion tys, current
-    | TypeOptional inner ->
-        let innerTy, next = typeExprToTy state inner
-        TyUnion [ innerTy; TyTag("none", None) ], next
     | TypeContext _ ->
         let ty, next = freshVar state
         ty, next
@@ -318,13 +315,13 @@ let rec internal typeOfValues (typeExpr: TypeExpr) : Expression list =
     | TypeRecord fields ->
         fields
         |> List.collect (function
-            | TypeField(_, _, _, Some t, _) | TypeMember(_, Some t) -> typeOfValues t
+            | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> typeOfValues t
             | _ -> [])
     | TypeApply(_, args) -> ofList args
     | TypeFunc(arg, ret) -> typeOfValues arg @ typeOfValues ret
     | TypeTag(_, payload) -> payload |> Option.map typeOfValues |> Option.defaultValue []
     | TypeWithContext(contexts, inner) -> ofList contexts @ typeOfValues inner
-    | TypeOptional inner | TypeConstraint(_, inner, _) | TypeWhere(inner, _) -> typeOfValues inner
+    | TypeConstraint(_, inner, _) | TypeWhere(inner, _) -> typeOfValues inner
 
 /// The error for each `typeof` in the type definition `name`: a type definition is not in the scope of any value.
 let internal typeOfInTypeDef (name: Identifier) (body: TypeExpr) (parameters: (Identifier * TypeExpr option) list) : Diagnostic list =
@@ -347,12 +344,11 @@ let rec private typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) lis
     | TypeRecord fields ->
         fields
         |> List.collect (function
-            | TypeField(_, _, _, Some t, _)
+            | TypeField(_, _, Some t, _)
             | TypeMember(_, Some t) -> ofType t
             | _ -> [])
     | TypeFunc(arg, ret) -> ofType arg @ ofType ret
     | TypeTag(_, Some payload)
-    | TypeOptional payload
     | TypeWithContext(_, payload)
     | TypeConstraint(_, payload, _)
     | TypeWhere(payload, _) -> ofType payload
@@ -457,7 +453,7 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
         | TypeRecord fields when isContextDef modifiers ->
             fields
             |> List.choose (function
-                | TypeField(memberName, _, _, _, _) ->
+                | TypeField(memberName, _, _, _) ->
                     let memberSymbol, declared = declareUnscoped RecordTypeFields body.Id memberName ContextMember next
                     next <- declared
                     memberSymbol |> Option.map (fun id -> memberName, id)

@@ -24,12 +24,12 @@ let rec internal annotationVarNames (typeExpr: TypeExpr) : string list =
         | TypeRecord fields ->
             fields
             |> List.collect (function
-                | TypeField(_, _, _, Some t, _) | TypeMember(_, Some t) -> annotationVarNames t
+                | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> annotationVarNames t
                 | _ -> [])
         | TypeApply(_, args) -> ofList args
         | TypeFunc(arg, ret) -> annotationVarNames arg @ annotationVarNames ret
         | TypeTag(_, payload) -> payload |> Option.map annotationVarNames |> Option.defaultValue []
-        | TypeOptional inner | TypeWithContext(_, inner) | TypeConstraint(_, inner, _) | TypeWhere(inner, _) ->
+        | TypeWithContext(_, inner) | TypeConstraint(_, inner, _) | TypeWhere(inner, _) ->
             annotationVarNames inner
         // The type of a value is not a variable the annotation introduces.
         | TypeOf _ -> []

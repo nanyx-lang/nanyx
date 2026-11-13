@@ -36,10 +36,10 @@ def required: (#some(a) | #notFound) -> #some(a) | #error(#extractionFailed) = {
 type CompanionRegistration = (
   pubKey: string
   ref: Binary
-  deviceIdentity?: string
-  keyIndexList?: Binary
-  keyIndexListTs?: int
-  refCert?: Binary
+  deviceIdentity: #some(string) | #none
+  keyIndexList: #some(Binary) | #none
+  keyIndexListTs: #some(int) | #none
+  refCert: #some(Binary) | #none
 )
 
 type TrustCircleOnboarding = (
