@@ -422,7 +422,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
             |> Result.bind (fun (found, current: InferState) ->
                 match ctx.Kind with
                 | TypeApply(ctxName, args) when isParameterizedContext current ctx ->
-                    let signature = current.ContextSignatures |> Map.tryFind (canonicalName env current name)
+                    let signature = contextSignatureOf env current name
                     let argTys, argTysAsRead, current = contextArgTysAtCall current signature scheme.Type calleeTy args
                     // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`).
                     let argTys, argTysAsRead, current =

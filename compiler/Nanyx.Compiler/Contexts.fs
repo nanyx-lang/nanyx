@@ -316,14 +316,26 @@ let internal canonicalName (env: TypeEnv) (state: InferState) (name: Identifier)
     | Some qualified when (TypeEnv.tryFind name env |> Option.bind _.Symbol) = (TypeEnv.tryFind qualified env |> Option.bind _.Symbol) -> qualified
     | _ -> name
 
+/// The symbol `name` names where `env` is the environment, if it is one this module knows.
+let private symbolNamed (env: TypeEnv) (state: InferState) (name: Identifier) =
+    TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id)
+
 /// The contexts the function `name` names where `env` is the environment requires, as written or inferred. A local
 /// def's are its own, by its symbol, and a parameter or a pattern's variable has none: neither takes those of a
 /// top-level def it shadows, which `ContextRequirements` holds under the same name.
 let internal contextRequirementsOf (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr list option =
-    match TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
+    match symbolNamed env state name with
     | Some symbol when symbol.Kind = LocalValue -> state.LocalContextRequirements |> Map.tryFind symbol.Id
     | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
     | _ -> state.ContextRequirements |> Map.tryFind (canonicalName env state name)
+
+/// The type the function `name` names where `env` is the environment declares without its contexts, where it writes
+/// one, read as `contextRequirementsOf` reads its contexts.
+let internal contextSignatureOf (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr option =
+    match symbolNamed env state name with
+    | Some symbol when symbol.Kind = LocalValue -> state.LocalContextSignatures |> Map.tryFind symbol.Id
+    | Some symbol when symbol.Kind = Parameter || symbol.Kind = PatternVariable -> None
+    | _ -> state.ContextSignatures |> Map.tryFind (canonicalName env state name)
 
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
 /// of an unannotated top-level def is kept to check once its contexts are known. Where the use is the call `call`, what
