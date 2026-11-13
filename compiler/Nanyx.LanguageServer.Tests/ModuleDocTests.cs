@@ -158,7 +158,7 @@ public sealed class ModuleDocTests : LanguageServerTestBase
                 """.ReplaceLineEndings("\n"));
             Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-            var topLevel = Section(await InfoViewAt(uri, 2, 11), "topLevel").Items;
+            var topLevel = Section(await InfoViewAt(uri, 2, 11), "module", "names");
             var import = Assert.Single(topLevel, item => item.Detail == "import");
             Assert.Equal(("m", "Wraps values."), (import.Text, import.Documentation));
             Assert.Null(Assert.Single(topLevel, item => item.Text.StartsWith("w:")).Documentation);

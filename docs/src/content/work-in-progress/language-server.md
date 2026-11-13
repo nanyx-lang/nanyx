@@ -149,7 +149,7 @@ what the compiler keeps: exact spans, resolved names and types.
   `module` line, is shown on hover over the module's name: in its own `module` line, in an import (its path or its
   alias) and in an alias that qualifies a name (`m` in `m.foo`). `Hover.moduleAt` finds the module there, and the
   compiler records which file each import brings in (`TypedModule.ImportedFiles`), so `Documentation.Reader.ForModule`
-  can read that file's doc comments. Completion of an alias, and the info view's top-level list, show an import with
+  can read that file's doc comments. Completion of an alias, and the info view's module scope, show an import with
   its module's doc comment too.
 - **Find-references in the open document** ([#276](https://github.com/nanyx-lang/nanyx/issues/276)). From the
   name under the cursor it finds the symbol as go-to-definition does, then every name in the document's compile
@@ -179,21 +179,23 @@ what the compiler keeps: exact spans, resolved names and types.
   library's exports built once; the prelude is left out, since its names are always in scope. A fix that edits
   another file is not offered.
 - **The info view** ([#715](https://github.com/nanyx-lang/nanyx/issues/715)), a request of the server's own,
-  `nanyx/infoView` (`InfoViewHandler`), with a document and a position. It returns sections of items, each item with
-  its text, a detail and a location to link to: the expression at the position with its type, as hover gives it, and on
-  a use of a generic def its declared signature (`declared`), its type there (`at this use`) and the bindings of its
-  type variables (`type variables`), each linking to the def; the
-  locals, parameters and pattern variables in scope, nearest first; the top-level defs and imports in scope (less the
-  standard library's reserved `__` names); the contexts in scope with where each comes from; the contexts the call
-  around the position requires, with where it finds each; the flow of contexts through the def around it, each
-  provider with the calls it serves (`NyxCompiler.ContextFlow`); and the diagnostics on the position's line. It also
+  `nanyx/infoView` (`InfoViewHandler`), with a document and a position. It returns scopes, innermost first
+  ([#1066](https://github.com/nanyx-lang/nanyx/issues/1066)), each a heading and sections of items, each item with
+  its text, a detail and a location to link to. The cursor: the expression at the position with its type, as hover
+  gives it, and on a use of a generic def its declared signature (`declared`), its type there (`at this use`) and the
+  bindings of its type variables (`type variables`), each linking to the def; the diagnostics on the position's line;
+  and the contexts the call around the position requires, with where it finds each. Each lambda around it: its type
+  and the names and `use`s in it. Each def around it: its signature, its names, its contexts with where each comes
+  from, and in the innermost one the flow of contexts through it, each provider with the calls it serves
+  (`NyxCompiler.ContextFlow`). The module: its top-level defs and imports in scope (less the standard library's
+  reserved `__` names) and the runtime's contexts. It also
   gives the ranges for the editor to highlight between a provider and its calls.
   Each item whose name or context has a doc comment carries it as Markdown, read with the `Documentation.Reader` hover
   uses ([#917](https://github.com/nanyx-lang/nanyx/issues/917)).
   `NyxCompiler.InfoView.at` gathers all but the diagnostics from the last typed compile, as hover reads it; the
-  locals' types and the contexts are named together, so an `α` means the same in both. A context comes from a `use`
-  before the position in a block around it, a def around it (its annotation, or what it was inferred to need), or, at
-  the top level, the runtime (`TypedModule.AmbientContexts`). What the call uses is read from what the compiler
+  locals' types, the lambdas' and the contexts are named together, so an `α` means the same in all of them. A context
+  comes from a `use` before the position in a block around it, a def around it (its annotation, or what it was
+  inferred to need), or the module's runtime (`TypedModule.AmbientContexts`). What the call uses is read from what the compiler
   recorded for it (`TypedModule.ContextInstances` and `ContextProviders`,
   [#989](https://github.com/nanyx-lang/nanyx/issues/989)). The extension shows it in a webview view in the secondary side bar (see
   [Info view and library browser](./info-view-and-library-browser)).
