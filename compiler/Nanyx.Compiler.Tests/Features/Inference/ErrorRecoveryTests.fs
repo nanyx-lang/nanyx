@@ -187,3 +187,23 @@ def head2: list(int) -> int = { xs ->
         "Tag union mismatch: only the first has #bad; only the second has #underflow. Type mismatch: #some(int) | #bad(string) vs #some(int) | #underflow.",
         diagnostic.Message)
     Assert.Equal(offsetOf source "if x == 1 then applyOp" 0 0, diagnostic.Span.Value.Start)
+
+[<Fact>]
+let ``An error in an earlier def does not change what a later lambda takes`` () =
+    // A `memory` block's lambda took unit rather than the block's `$Memory`, and was reported as
+    // "Type mismatch: @scope(@call) vs ()" (#1105).
+    let source = """
+def bad: int = "x"
+
+def count: () -> int = {
+  memory {
+    mut n = 0
+    n := n + 1
+    n
+  }
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal("Type mismatch: string vs int.", diagnostic.Message)
+    Assert.Equal("\"x\"", textAt source diagnostic.Span.Value)
