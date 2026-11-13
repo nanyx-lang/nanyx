@@ -48,7 +48,7 @@ module FileImports =
         match item.Source, item.Alias with
         | PathImport path, None ->
             let stem = Path.GetFileNameWithoutExtension path
-            let example = if identifier.IsMatch stem then $": write import \"{path}\" as {stem}" else ""
+            let example = if identifier.IsMatch stem then $""": write import "{path}" as {stem}""" else ""
             Some (Diagnostics.at DiagnosticCodes.PathImportWithoutAlias item.Span $"An import of a file path must have an alias{example}")
         | _ -> None
 

@@ -241,8 +241,8 @@ export def string.hash: string -> int = { s ->
   through it, so a type can be interpolated when it has one: a type gets one by attaching a
   `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
   `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
-  and derives one for a tag with a payload, a tuple, a record and a list from the `ToString` of
-  each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`.
+  and derives one for a tag with a payload, a tuple, a record, a list, a map and a set from the
+  `ToString` of each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`, `[a => 1]`.
 export context ToString(a) = (toString: a -> string)
 
 --| What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole

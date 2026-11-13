@@ -7,10 +7,25 @@ module NewPackage =
     /// The manifest of a new package called `name`: its sources are under `src`, and the official linter is on with
     /// every rule at its default.
     let manifest (name: string) =
-        $"[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nsources = [\"src/**/*.nyx\"]\n\n[linters.default]\n"
+        $"""[package]
+name = "{name}"
+version = "0.1.0"
+sources = ["src/**/*.nyx"]
+
+[linters.default]
+"""
+            .ReplaceLineEndings "\n"
 
     /// The new package's one source file, `src/main.nyx`.
-    let entry = "module main\n\n@entry\ndef main = {\n  println(\"Hello, World!\")\n}\n"
+    let entry =
+        """module main
+
+@entry
+def main = {
+  println("Hello, World!")
+}
+"""
+            .ReplaceLineEndings "\n"
 
     /// The directory a package called `name` is made in when none is given: the name's last segment.
     let defaultDirectory (name: string) = name.Substring(name.LastIndexOf '.' + 1)
@@ -20,7 +35,7 @@ module NewPackage =
     let create (name: string) (directory: string) : Result<string, string> =
         let full = Path.GetFullPath directory
         if not (Manifest.namePattern.IsMatch name) then
-            Result.Error $"The package name \"{name}\" must be {Manifest.nameRule}"
+            Result.Error $"""The package name "{name}" must be {Manifest.nameRule}"""
         elif File.Exists full then
             Result.Error $"{full} is a file, not a directory"
         elif Directory.Exists full && not (Seq.isEmpty (Directory.EnumerateFileSystemEntries full)) then

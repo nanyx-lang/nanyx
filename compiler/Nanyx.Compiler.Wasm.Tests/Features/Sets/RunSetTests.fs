@@ -128,3 +128,14 @@ let ``Run - isSubset says whether another set holds every element`` () =
           """println(show(set.fromList([2, 1]) \set.isSubset(set.fromList([1, 2]))))""" ]
     |> runSource
     |> assertRan "T\nF\nT\nT\n"
+
+[<Fact>]
+let ``Run - a set is written as a list of its elements is`` () =
+    program
+        [ """def noElements: set(int) = set.empty""" ]
+        [ """println(set.fromList([3, 1, 3]))"""
+          """println("{set.fromList(["tea", "cake"])}")"""
+          """println((name = "s", s = set.fromList([#a, #b])))"""
+          """println([set.fromList([1]), noElements])""" ]
+    |> runSource
+    |> assertRan "[3, 1]\n[tea, cake]\n(name = s, s = [#a, #b])\n[[1], []]\n"
