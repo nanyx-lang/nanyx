@@ -151,6 +151,6 @@ let ``A doc comment is kept as one comment for the formatter`` () =
     match parseModuleWithTrivia "" (normalized "--| One\n  two\n\ndef a = 1\n") with
     | Result.Ok parsed ->
         match parsed.Trivia with
-        | [ LineComment(text, false, _); BlankLines(1, _) ] -> Assert.Equal("--| One\n  two", text)
+        | [ DocLineComment(text, _); BlankLines(1, _) ] -> Assert.Equal("--| One\n  two", text)
         | other -> failwith $"Unexpected trivia: %A{other}"
     | Result.Error error -> failwith error.Message

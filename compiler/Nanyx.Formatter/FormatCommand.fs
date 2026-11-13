@@ -50,7 +50,7 @@ let commentsOf (parsed: SourceModule) =
     let moved, kept =
         parsed.Trivia
         |> List.choose (function
-            | LineComment(comment, _, span) when comment.StartsWith "--|" -> Some(DocComments.relaidOut 0 comment, span)
+            | DocLineComment(comment, span) -> Some(DocComments.relaidOut 0 comment, span)
             | LineComment(comment, _, span) -> Some(comment.TrimEnd(), span)
             | BlankLines _ -> None)
         |> List.partition (snd >> onImportLine)

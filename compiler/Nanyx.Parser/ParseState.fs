@@ -6,6 +6,14 @@ open FParsec
 // After the libraries, so that the parser's names shadow theirs (identifier, Attribute) as they did in one file.
 open Parser.Program
 
+/// A comment the parser skipped: where it starts and ends (from `--` to the end of the line, without the line break, or
+/// to the end of a block comment's closing line or a doc comment's last line), and whether it is a doc comment.
+type NotedComment =
+    { Start: int
+      End: int
+      /// A doc comment: `--|` on a line of its own, and the lines after it that are indented further.
+      IsDoc: bool }
+
 /// What the parser keeps beside the input. FParsec restores it when it backtracks, so a declaration parsed on
 /// a path that failed is forgotten with it.
 type ParseState =
@@ -32,10 +40,9 @@ type ParseState =
       /// parsed as if it were spaced, and the parse fails with this afterwards, so that no other reading of the text,
       /// tried when this one is backtracked over, hides it.
       MisspacedOperator: (Position * string) option ref
-      /// The `-- comments` skipped so far, as start and end offsets (from `--` to the end of the line, without the
-      /// line break, or to the end of a block comment's closing line or a doc comment's last line), most recent first.
-      /// For the formatter, which puts them back (see `parseModuleWithTrivia`), and for doc comments (see `DocComments`).
-      Comments: (int * int) list
+      /// The comments skipped so far, most recent first. For the formatter, which puts them back (see
+      /// `parseModuleWithTrivia`), and for doc comments (see `DocComments`).
+      Comments: NotedComment list
       /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
       /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
       StringTexts: (int * int) list }
@@ -53,10 +60,10 @@ module ParseState =
           Comments = []
           StringTexts = [] }
 
-/// Runs `p`, noting the offsets of the text it consumed with `note`.
-let private noting (note: int * int -> ParseState -> ParseState) (p: Parser<'a, ParseState>) : Parser<'a, ParseState> =
+/// Runs `p`, noting what it gave and the offsets of the text it consumed with `note`.
+let private noting (note: 'a -> int * int -> ParseState -> ParseState) (p: Parser<'a, ParseState>) : Parser<'a, ParseState> =
     pipe3 getPosition p getPosition (fun start value finish -> value, (int start.Index, int finish.Index))
-    >>= fun (value, range) -> updateUserState (note range) >>% value
+    >>= fun (value, range) -> updateUserState (note value range) >>% value
 
 // Fails fatally at `position` with `message`, and notes the failure in the state, which `parseModuleFileWithNames`
 // reports in place of FParsec's error when the parse fails: the failure is backtracked over, and FParsec would report
@@ -134,10 +141,11 @@ let private lineComment () =
     let comment =
         pipe3 getPosition (opt atLineStart) (pstring "--" >>. restOfLine false) (fun start ownLine rest -> start, ownLine.IsSome, "--" + rest.TrimEnd())
         >>= fun (start, ownLine, line) ->
-            if ownLine && isFence line then blockRest start line
-            elif ownLine && line.StartsWith "--|" then docCommentRest (int start.Column - 1)
-            else preturn ()
-    noting (fun range state -> { state with Comments = range :: state.Comments }) comment
+            if ownLine && isFence line then blockRest start line >>% false
+            elif ownLine && line.StartsWith "--|" then docCommentRest (int start.Column - 1) >>% true
+            else preturn false
+    noting (fun isDoc (start, finish) state -> { state with Comments = { NotedComment.Start = start; End = finish; IsDoc = isDoc } :: state.Comments }) comment
+    >>% ()
 
 let comment () = lineComment () >>. optional skipNewline
 let inlineCommentNoNl () = lineComment ()
@@ -321,4 +329,4 @@ let internal blockSpanned (statements: Parser<Statement list, ParseState>) : Par
 
 /// Runs `p`, which parses text inside a string literal, and notes where that text is.
 let internal stringText (p: Parser<string, ParseState>) =
-    noting (fun range state -> { state with StringTexts = range :: state.StringTexts }) p
+    noting (fun _ range state -> { state with StringTexts = range :: state.StringTexts }) p

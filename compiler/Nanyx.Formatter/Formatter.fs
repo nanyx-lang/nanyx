@@ -680,9 +680,9 @@ let format (options: Options) (parsed: SourceModule) : string =
                 Doc.empty
             else
                 cat [ for i in unplacedIn value.Span.End at ->
-                          let commentText, span = placement.Place i
-                          if sourceText.LineOf span.Start = sourceText.LineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
-                          else cat [ hard; Doc.comment commentText ] ]
+                          let comment, span = placement.Place i
+                          if sourceText.LineOf span.Start = sourceText.LineOf (max 0 (value.Span.End - 1)) then Doc.trailingComment comment
+                          else cat [ hard; Doc.comment comment ] ]
         if position.Tail && writtenOnLines then
             cat [ rootDoc; nest (cat [ for value, at, _, doc in steps -> cat [ commentsBefore value at; hard; doc ] ]) ]
         elif position.Tail && steps.Length > 1 && not (List.contains true isMatch)
@@ -1044,7 +1044,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                     placeBetween items[k].Span.Start items[k].Span.End
                     match unplacedIn items[k].Span.End (lineFinish k) with
                     | i :: _ ->
-                        entries.Add(StackItem(cat [ item items[k]; Doc.lineSuffix (fst (placement.Place i)) ], false))
+                        entries.Add(StackItem(cat [ item items[k]; Doc.trailingComment (fst (placement.Place i)) ], false))
                     | [] -> entries.Add(StackItem(item items[k], false))
                 previous <- lineFinish (List.last run)
             placeBetween previous finish
