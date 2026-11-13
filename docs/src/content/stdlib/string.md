@@ -166,6 +166,26 @@ string.substring("nanyx", start = 1, length = 3)
 
 ---
 
+# take and skip
+
+```nanyx
+string.take: string, int -> string
+string.skip: string, int -> string
+```
+
+`take` is the first `n` bytes, or the whole string when it is shorter. `skip` is all but the first `n` bytes, or `""`
+when it is shorter. A negative count takes or skips none. They count bytes as `substring` and `indexOf` do, so they
+cut at an index `indexOf` returned.
+
+```nanyx
+"hello" \take(2)   -- "he"
+"hello" \skip(2)   -- "llo"
+"hello" \take(10)  -- "hello"
+"hello" \skip(10)  -- ""
+```
+
+---
+
 # trim
 
 ```nanyx

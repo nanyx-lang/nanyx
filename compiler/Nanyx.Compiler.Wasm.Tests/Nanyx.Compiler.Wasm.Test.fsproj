@@ -41,6 +41,7 @@
     <Compile Include="Features\Contexts\RunUseDischargeTests.fs" />
     <Compile Include="Features\Contexts\RunLambdaMemberCaptureTests.fs" />
     <Compile Include="Features\Contexts\RunKnownMemberTests.fs" />
+    <Compile Include="Features\Contexts\RunLambdaSuppliedContextTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunTourExampleTests.fs" />
@@ -97,6 +98,7 @@
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
+    <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />

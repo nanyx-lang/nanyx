@@ -56,6 +56,24 @@ public sealed class CompletionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Completion_offers_the_reserved_words_as_keywords_and_not_a_workflows_keywords()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("completion-keywords.nyx"));
+
+        Open(uri, "def answer = 42\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // `yield`, `await` and `defer` are members of a workflow's builder, not words the language reserves.
+        Assert.Equal(
+            [
+                "and", "as", "context", "def", "do", "else", "except", "export", "for", "if", "import", "in", "is", "match",
+                "module", "mut", "not", "or", "private", "protected", "rec", "return", "then", "try", "type", "typeof", "use", "where",
+                "while", "with"
+            ],
+            (await CompletionsAt(uri, 1, 0)).Where(item => item.Kind == CompletionItemKind.Keyword).Select(item => item.Label).Order());
+    }
+
+    [Fact]
     public async Task Completion_reads_the_text_with_type_errors_and_the_last_typed_one_while_it_does_not_parse()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("completion-last-good.nyx"));

@@ -12,7 +12,7 @@ module StringEscapes =
     let simple = [ 'n', '\n'; 't', '\t'; 'r', '\r'; '\\', '\\'; '"', '"'; '{', '{'; '}', '}' ]
 
     /// The escapes, as a diagnostic lists them.
-    let written = "`\\n`, `\\t`, `\\r`, `\\\\`, `\\\"`, `\\{`, `\\}` and `\\u{...}`"
+    let written = """`\n`, `\t`, `\r`, `\\`, `\"`, `\{`, `\}` and `\u{...}`"""
 
     /// The text the escape `\u{digits}` stands for: None unless `digits` is one to six hex digits naming a code point
     /// that is not a surrogate.

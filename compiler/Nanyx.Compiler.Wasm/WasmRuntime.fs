@@ -53,6 +53,26 @@ type Storage =
 /// Where a tag cell's payload is: after its code (see the memory model at `runtimeHelpers`).
 let tagPayloadOffset = 4
 
+/// The header in front of an object on the heap, before its pointer (see the memory model at `runtimeHelpers`).
+module Header =
+    /// A list cell's, a tag cell's or a float box's: its count. `newCell` makes it.
+    let countOnly = 4
+
+    /// A string's, a record's or a closure's: its count, then its info word. `newObject` makes it.
+    let withInfo = 8
+
+    /// Where the info word is in a header `withInfo`: after the count.
+    let infoOffset = countOnly
+
+    /// How far before an object's pointer its info word is: it is the last word of the header.
+    let infoBefore = withInfo - infoOffset
+
+/// How a helper, or any instruction, uses an operand: it takes the reference over (a call that owns the parameter, a
+/// field of a new object, a value returned), or only borrows it while it runs.
+type Use =
+    | Owned
+    | Borrowed
+
 /// The names of the WebAssembly helper functions the backend emits on demand (see `runtimeHelpers`).
 module Helpers =
     let alloc = "__nanyx_alloc"
@@ -120,6 +140,16 @@ module Helpers =
     /// The helpers that hold a value of the program's in memory, which have a variant for each way a value is stored
     /// (see `Storage`).
     let storingValues = [ listCons; listConsAt; tagBox; tagBoxAt; recordSet; listConcat ]
+
+    /// How the helper `name` uses its operand at `index`. A helper borrows its operands and gives back a value of its
+    /// own, except `listCons`, which takes both over, and `listConcat`, which copies the first list's cells and makes
+    /// the second their tail.
+    let operandUse (name: string) (index: int) =
+        if name = listCons || (name = listConcat && index = 1) then Owned else Borrowed
+
+    /// The helper that does what the allocating helper `name` does in the block of a reuse token (see
+    /// `CoreIrReuse`), if it has one.
+    let reusingVariant (name: string) = if name = listCons then Some listConsAt else None
 
     /// The helper `name`, one of `storingValues`, for a value stored as `storage`: the helper itself for a `Word`.
     let forStorage (name: string) (storage: Storage) =
@@ -524,7 +554,7 @@ let private storingHelpers (storage: Storage) =
             "    return"
             "  end"
             "  local.get $block"
-            "  i32.const 4"
+            $"  i32.const {Header.countOnly}"
             "  i32.add"
             "  local.tee $cell"
             "  local.get $head"
@@ -539,14 +569,14 @@ let private storingHelpers (storage: Storage) =
       lines
           [ $"(func ${name Helpers.tagBox} (param $code i32) (param $payload {valueType}) (result i32)"
             "  (local $cell i32)"
-            $"  i32.const {bytes + 4}"
+            $"  i32.const {tagPayloadOffset + bytes}"
             $"  call ${Helpers.newCell}"
             "  local.tee $cell"
             "  local.get $code"
             "  i32.store"
             "  local.get $cell"
             "  local.get $payload"
-            $"  {storage.Store} offset=4"
+            $"  {storage.Store} offset={tagPayloadOffset}"
             "  local.get $cell"
             ")" ]
       // `tagBox` into the block of a reuse token, when it is not 0: `block code payload -> cell`.
@@ -563,14 +593,14 @@ let private storingHelpers (storage: Storage) =
             "    return"
             "  end"
             "  local.get $block"
-            "  i32.const 4"
+            $"  i32.const {Header.countOnly}"
             "  i32.add"
             "  local.tee $cell"
             "  local.get $code"
             "  i32.store"
             "  local.get $cell"
             "  local.get $payload"
-            $"  {storage.Store} offset=4"
+            $"  {storage.Store} offset={tagPayloadOffset}"
             "  local.get $cell"
             ")" ]
       // Stores one field of a freshly allocated record and hands the record pointer back, so a record
@@ -624,8 +654,8 @@ let private checkedIntHelper (name: string) (instruction: string) (overflowed: s
 /// a record's layout, a closure's drop function). So the count is at `p - 8` for strings, records and closures, made
 /// by `newObject`, and at `p - 4` for list cells, tag cells and float boxes, made by `newCell`. A count of 0 marks
 /// an object that is never freed: a string literal in the data segment. `retain` takes a reference and `release`
-/// gives one up. A helper borrows its operands and gives back a value of its own, which reference counting relies on
-/// (see `CoreIrCounting.operands`): only `listCons` takes its operands over, and `listConcat` its second.
+/// gives one up. The header's sizes are in `Header`. A helper borrows its operands and gives back a value of its own,
+/// which reference counting relies on (see `CoreIrCounting.operands`), except those `Helpers.operandUse` names.
 ///
 /// The allocator hands out 4-byte-aligned blocks, so a pointer is never odd. Every block has its size (the
 /// requested size rounded up to 4 bytes, and at least 4) in the word before it, and `free` puts a block back on the
@@ -645,14 +675,14 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
           [ $"(func ${Helpers.newCell} (param $size i32) (result i32)"
             "  (local $block i32)"
             "  local.get $size"
-            "  i32.const 4"
+            $"  i32.const {Header.countOnly}"
             "  i32.add"
             $"  call ${Helpers.alloc}"
             "  local.tee $block"
             "  i32.const 1"
             "  i32.store"
             "  local.get $block"
-            "  i32.const 4"
+            $"  i32.const {Header.countOnly}"
             "  i32.add"
             ")" ]
       // An object of `$size` bytes with a count of one and the info word `$info`: `size info -> p`.
@@ -661,7 +691,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
           [ $"(func ${Helpers.newObject} (param $size i32) (param $info i32) (result i32)"
             "  (local $block i32)"
             "  local.get $size"
-            "  i32.const 8"
+            $"  i32.const {Header.withInfo}"
             "  i32.add"
             $"  call ${Helpers.alloc}"
             "  local.tee $block"
@@ -669,9 +699,9 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.store"
             "  local.get $block"
             "  local.get $info"
-            "  i32.store offset=4"
+            $"  i32.store offset={Header.infoOffset}"
             "  local.get $block"
-            "  i32.const 8"
+            $"  i32.const {Header.withInfo}"
             "  i32.add"
             ")" ]
       Helpers.release, releaseHelper checks
@@ -690,9 +720,9 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  end"
             "  local.get $block"
             "  local.get $info"
-            "  i32.store offset=4"
+            $"  i32.store offset={Header.infoOffset}"
             "  local.get $block"
-            "  i32.const 8"
+            $"  i32.const {Header.withInfo}"
             "  i32.add"
             ")" ]
       for storage in Storage.All do
@@ -729,7 +759,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
       lines
           [ $"(func ${Helpers.stringLength} (param $s i32) (result i32)"
             "  local.get $s"
-            "  i32.const 4"
+            $"  i32.const {Header.infoBefore}"
             "  i32.sub"
             "  i32.load"
             ")" ]
@@ -978,7 +1008,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  (local $dst i32)"
             "  local.get $size"
             "  local.get $src"
-            "  i32.const 4"
+            $"  i32.const {Header.infoBefore}"
             "  i32.sub"
             "  i32.load"
             $"  call ${Helpers.newObject}"
@@ -1368,7 +1398,7 @@ let dbgFunctions =
         [ "  (func $dbg_str (param $ptr i32)"
           "    (local $len i32)"
           "    local.get $ptr"
-          "    i32.const 4"
+          $"    i32.const {Header.infoBefore}"
           "    i32.sub"
           "    i32.load"
           "    local.set $len"

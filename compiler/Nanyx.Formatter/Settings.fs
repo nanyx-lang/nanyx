@@ -77,17 +77,11 @@ let withDirectives (path: string) (text: string) (options: Formatter.Options) : 
         options
         |> Result.bind (fun options ->
             let error message = Result.Error $"{path}:{directive.Span.StartLine + 1}:1: {message}"
-            let positive (key: string) (text: string) =
-                let value =
-                    try
-                        match TomlSerializer.Deserialize<TomlTable>("value = " + text, TomlSerializerOptions()).TryGetValue "value" with
-                        | true, value -> Some value
-                        | false, _ -> None
-                    with :? TomlException -> None
+            let positive (key: string) (value: Result<obj, string>) =
                 match value with
-                | Some (:? int64 as n) when n > 0L && n <= int64 Int32.MaxValue -> Result.Ok(int n)
-                | Some value -> error $"::formatter.{key} must be a positive integer, not {describe value}"
-                | None -> error $"::formatter.{key} must be a positive integer, not '{text}'"
+                | Result.Ok (:? int64 as n) when n > 0L && n <= int64 Int32.MaxValue -> Result.Ok(int n)
+                | Result.Ok value -> error $"::formatter.{key} must be a positive integer, not {describe value}"
+                | Result.Error message -> error message
             match manifest, directive.Key, directive.Value with
             | Result.Ok (Some manifest), _, _ -> error $"::formatter is for a script; in a package, set it in the [formatter] table of {manifest}"
             | _, [ _; "lineWidth" as key ], Some value -> positive key value |> Result.map (fun n -> { options with LineWidth = n })

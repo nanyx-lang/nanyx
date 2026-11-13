@@ -682,16 +682,13 @@ let contextMemberAccess =
 // blocks are lambdas, so only a name inside a lambda is taken for a keyword: outside one, a line such as
 // `pattern string -> ...` is some other mistake.
 let private workflowKeywordApplication =
-    let reservedWords =
-        set [ "and"; "as"; "context"; "def"; "do"; "else";"except"; "export"; "for"; "if"; "import"; "in"; "is"; "match"
-              "module"; "mut"; "not";"or"; "private"; "protected"; "rec"; "return"; "then"; "try"; "type"; "use"; "where"; "while"; "with" ]
     let operandStart c = isLetter c || isDigit c || c = '_' || c = '"' || c = '#' || c = '(' || c = '['
     let keyword =
         identifierNoWs >>= fun name ->
-            if Char.IsLower name.[0] && not (reservedWords.Contains name) then preturn name else pzero
+            if Char.IsLower name.[0] && not (Keywords.reserved.Contains name) then preturn name else pzero
     // What follows `x` in `x then` or `x and y` is the rest of an enclosing construct, not a value.
     let operand = followedBy (satisfy operandStart) >>. notFollowedBy (identifierNoWs >>= fun word ->
-        if reservedWords.Contains word then preturn () else pzero)
+        if Keywords.reserved.Contains word then preturn () else pzero)
     userStateSatisfies (fun state -> state.LambdaDepth > 0)
     >>. getPosition .>>. lookAhead (keyword .>> skipMany1 (anyOf " \t") .>> operand)
     >>= fun (position, name) ->

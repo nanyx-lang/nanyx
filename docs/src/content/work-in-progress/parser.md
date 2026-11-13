@@ -20,8 +20,9 @@ the grammar:
 
 - **Keywords leak into names.** With no lexer, a keyword parser can match the start of a longer name: `typeName`
   ([#493](https://github.com/nanyx-lang/nanyx/issues/493)), `trueValue` and `nan`
-  ([#521](https://github.com/nanyx-lang/nanyx/issues/521)), `useful`. The reserved words are listed twice, once for
-  the parser and once for completion ([#541](https://github.com/nanyx-lang/nanyx/issues/541)).
+  ([#521](https://github.com/nanyx-lang/nanyx/issues/521)), `useful`. The reserved words are one list,
+  `Keywords.reserved`, which completion reads too ([#541](https://github.com/nanyx-lang/nanyx/issues/541)), but the
+  parsers that match a keyword each write it out again.
 - **Backtracking hides errors.** An `attempt` that rewinds past the real problem reports it somewhere else, as a
   list error reported at its block's `{` was ([#758](https://github.com/nanyx-lang/nanyx/issues/758)), and FParsec's
   "Expecting: any char in ' ', for loop, function call, ..." messages are the same effect. Because choice order and
@@ -72,7 +73,7 @@ formatter and the language server need no change until the parser underneath the
   ignoring node ids. Every later stage is checked by it.
 - **The refactors already filed**, which shrink what has to be ported: name the desugared calls in one place
   (done: the `...Syntax` modules in `Ast.fs`, [#367](https://github.com/nanyx-lang/nanyx/issues/367)), keep one list of reserved words
-  ([#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
+  (done: `Keywords.reserved` in `Keywords.fs`, [#541](https://github.com/nanyx-lang/nanyx/issues/541)), build the parser's and formatter's operator tables from one
   list (done: `binaryOperators` in `Operators.fs`, [#370](https://github.com/nanyx-lang/nanyx/issues/370)), and split
   the parser out of `Program.fs` (done: `Expressions.fs`, `TopLevel.fs`, `Api.fs` and the files before them,
   [#366](https://github.com/nanyx-lang/nanyx/issues/366)).

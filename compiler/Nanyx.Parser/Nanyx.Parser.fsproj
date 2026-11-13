@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="LargeStack.fs" />
     <Compile Include="Ast.fs" />
+    <Compile Include="Keywords.fs" />
     <Compile Include="LineTable.fs" />
     <Compile Include="Operators.fs" />
     <Compile Include="StringEscapes.fs" />
@@ -31,6 +32,7 @@
 
   <ItemGroup>
     <PackageReference Include="FParsec" Version="1.1.1" />
+    <PackageReference Include="Tomlyn" Version="2.10.1" />
   </ItemGroup>
 
 </Project>
