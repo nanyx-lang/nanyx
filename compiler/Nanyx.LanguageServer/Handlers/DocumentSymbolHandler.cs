@@ -68,6 +68,7 @@ public sealed class DocumentSymbolHandler : DocumentSymbolHandlerBase
         {
             Name = item.Name,
             Kind = KindOf(item.Kind),
+            Detail = item.Kind.IsScopedContextType ? "scoped" : null,
             Range = document.Positions.ToRange(span.Start, span.End),
             SelectionRange = document.Positions.ToRange(name.Start, name.End),
             Children = new Container<DocumentSymbol>(item.Children.Select(child => ToSymbol(child, map, document)).OfType<DocumentSymbol>())
@@ -81,7 +82,7 @@ public sealed class DocumentSymbolHandler : DocumentSymbolHandlerBase
             Outline.OutlineKind.Tags.Value => SymbolKind.Variable,
             Outline.OutlineKind.Tags.RecordType => SymbolKind.Struct,
             Outline.OutlineKind.Tags.UnionType => SymbolKind.Enum,
-            Outline.OutlineKind.Tags.ContextType => SymbolKind.Interface,
+            Outline.OutlineKind.Tags.ContextType or Outline.OutlineKind.Tags.ScopedContextType => SymbolKind.Interface,
             Outline.OutlineKind.Tags.RecordField => SymbolKind.Field,
             Outline.OutlineKind.Tags.ContextFunction => SymbolKind.Method,
             Outline.OutlineKind.Tags.ContextValue => SymbolKind.Property,

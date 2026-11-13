@@ -189,7 +189,10 @@ checks, since a lambda with no parameters ignores one.
    Done: a read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so
    `{ word -> count := count + 1 }` is `[$Memory] string -> ()`, and a lambda that calls it requires `$Memory` too.
    NYX0224 still keeps such a lambda in its block.
-3. Parse and format `scoped context`, which must be nominal ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+   Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
+   `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `$Memory` is declared
+   `scoped`. Nothing checks escape by it yet.
 4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3).
 5. Give a `memory` block its instance, `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058),

@@ -140,6 +140,8 @@ type TypeDefInfo =
       Underlying: Ty
       IsPrivate: bool
       IsContext: bool
+      /// Declared `scoped context`.
+      IsScoped: bool
       Symbol: SymbolId option
       Members: Map<string, SymbolId> }
 
