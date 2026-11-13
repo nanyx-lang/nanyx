@@ -75,6 +75,7 @@
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />
+    <Compile Include="Attributes.fs" />
     <Compile Include="TailPosition.fs" />
     <Compile Include="Signatures.fs" />
     <Compile Include="Linters.fs" />
