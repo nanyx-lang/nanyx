@@ -9,26 +9,54 @@ ordinary pure functions and pipes.
 
 def letters = 'a'..'z'
 
-def rotateChar: (string, int) -> string = { c, shift ->
+def rotateChar: string, int -> string = { c, shift ->
   if letters \contains(c) then
     def base = c.codePoint - 'a'.codePoint
     string.fromCodePoint('a'.codePoint + (base + shift) % 26)
   else c
 }
 
-def rotate: (string, int) -> string = { s, shift ->
+def rotate: string, int -> string = { s, shift ->
   s \chars \map { c -> rotateChar(c, shift) } \string.join("")
 }
 
 -- The letter frequency table for English
 def english = [
-  8.2, 1.5, 2.8, 4.3, 12.7, 2.2, 2.0, 6.1, 7.0, 0.2, 0.8, 4.0, 2.4,
-  6.7, 7.5, 1.9, 0.1, 6.0, 6.3, 9.1, 2.8, 1.0, 2.4, 0.2, 2.0, 0.1
+  8.2
+  1.5
+  2.8
+  4.3
+  12.7
+  2.2
+  2.0
+  6.1
+  7.0
+  0.2
+  0.8
+  4.0
+  2.4
+  6.7
+  7.5
+  1.9
+  0.1
+  6.0
+  6.3
+  9.1
+  2.8
+  1.0
+  2.4
+  0.2
+  2.0
+  0.1
 ]
 
-def percent: (int, int) -> float = { n, m -> 100.0 * int.toFloat(n) / int.toFloat(m) }
+def percent: int, int -> float = { n, m ->
+  100.0 * int.toFloat(n) / int.toFloat(m)
+}
 
-def rotateList: (list(a), int) -> list(a) = { xs, n -> xs \skip(n) ++ xs \take(n) }
+def rotateList: list(a), int -> list(a) = { xs, n ->
+  xs \skip(n) ++ xs \take(n)
+}
 
 -- A frequency table for a string
 def freqs: string -> list(float) = { s ->
@@ -38,7 +66,7 @@ def freqs: string -> list(float) = { s ->
 }
 
 -- How well two frequency tables match, according to the chi-square statistic
-def chisqr: (list(float), list(float)) -> float = { xs, ys ->
+def chisqr: list(float), list(float) -> float = { xs, ys ->
   xs \zip(ys) \map { x, y -> (x - y) ** 2.0 / y } \sum
 }
 
@@ -58,10 +86,12 @@ and the caller decides what `ask` does with `use`.
 
 context Ask(a) = (ask: () -> a)
 
-def addTwice: [Ask(int)] () -> int = { ask() + ask() }
+def addTwice: [Ask(int)] () -> int = {
+  ask() + ask()
+}
 
 def askConst: () -> int = {
-  use Ask(int)(ask = { 21 }) in addTwice()   -- 42
+  use Ask(int)(ask = { 21 }) in addTwice() -- 42
 }
 
 def askRandom: [Random] () -> int = {
@@ -70,26 +100,20 @@ def askRandom: [Random] () -> int = {
 
 -- State is just another context; the mutation lives in a `memory` scope that
 -- never escapes `runState`.
-context State(a) = (
-  get: () -> a
-  put: a -> ()
-)
+context State(a) = (get: () -> a, put: a -> ())
 
 def sumdown: [State(int)] int -> int = { sum ->
   def i = get()
-  if i <= 0 then sum
-  else
+
+  if i <= 0 then sum else
     put(i - 1)
     sumdown(sum + i)
 }
 
-def runState: [c] (a, [State(a) & c] () -> b) -> b = { init, action ->
+def runState: [c] a, ([State(a) & c] () -> b) -> b = { init, action ->
   memory {
     mut cell = init
-    use State(a)(
-      get = { cell }
-      put = { v -> cell := v }
-    ) in action()
+    use State(a)(get = { cell }, put = { v -> cell := v }) in action()
   }
 }
 
@@ -97,5 +121,5 @@ def runState: [c] (a, [State(a) & c] () -> b) -> b = { init, action ->
 def main = {
   println(crack(rotate("nanyx is a fun language", 3)))
   println("{askConst()}")
-  println("{runState(10, { sumdown(0) })}")   -- 55
+  println("{runState(10, { sumdown(0) })}") -- 55
 }
