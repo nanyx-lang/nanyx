@@ -150,7 +150,7 @@ newer than 0.23.0.
 
 The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current file** from the command palette, saves the file and runs it with `nanyx run`. The program runs in a terminal of its own in the panel, so it can read what you type, and Ctrl+C stops it. Running the file again uses the same terminal.
 
-The program's working directory is the workspace folder the file is in, or the file's own folder when it is in none. The file runs as a script, even when it is part of a package.
+The program's working directory is the workspace folder the file is in, or the file's own folder when it is in none. The file runs as a script, even when it is part of a package. In [development mode](#working-on-the-compiler), it runs with `--timings`, so the terminal also shows how long each module took to check.
 
 The command has no keyboard shortcut. To give it one, look for it in **Keyboard Shortcuts**.
 
@@ -169,7 +169,7 @@ To try a change to the compiler in the editor, set `nanyx.path` to your build, s
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
-| `nanyx.developmentMode` | off | Runs the server from a copy of the build `nanyx.path` points at, so `dotnet build` can overwrite the build while the server runs, and restarts the server with a fresh copy whenever the build changes. Also starts the server with `--timings`, so the output channel shows how long each module took to check in each compile, not only how long the compile took. Needs `nanyx.path`. |
+| `nanyx.developmentMode` | off | Runs the server from a copy of the build `nanyx.path` points at, so `dotnet build` can overwrite the build while the server runs, and restarts the server with a fresh copy whenever the build changes. Also starts the server with `--timings`, so the output channel shows how long each module took to check in each compile, not only how long the compile took, and runs a file with `nanyx run --timings`, so the run terminal shows the same tree. Needs `nanyx.path`. |
 
 # Troubleshooting
 

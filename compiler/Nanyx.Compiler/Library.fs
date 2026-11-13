@@ -493,9 +493,13 @@ module Compiler =
                         if importKey = key || visited.Contains importKey then
                             Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"Import cycle detected for {importKey}" ])
                         else
+                            // The imported module's errors name this import as the one that brings them in, in place
+                            // of the one in that module that brought them into it.
+                            let throughThis = List.map (fun (diagnostic: Diagnostic) -> { diagnostic with Import = Some item.Span })
                             match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
                             // A module with errors fails each importer with them.
-                            | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, imported.Errors)
+                            | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, throughThis imported.Errors)
+                            | Error (phase, diagnostics) -> Error (phase, throughThis diagnostics)
                             | checkedImport -> checkedImport
                     match StandardLibrary.tryModuleName item with
                     | Some moduleName ->
@@ -547,8 +551,9 @@ module Compiler =
                     PreludeContexts = OperatorContexts.inModule (key = preludeKey) desugared merged.State.PreludeContexts
                     NamedAsValues = SyntaxTree.namedAsValues desugared }
             if not merged.Errors.IsEmpty then
-                // A module imported along several paths fails each importer with the same diagnostics.
-                Error (Typed, List.distinct merged.Errors)
+                // A module imported along several paths fails each importer with the same diagnostics, each through
+                // the first import that brings it in.
+                Error (Typed, List.distinctBy Diagnostics.inItsModule merged.Errors)
             else
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Unifier.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches

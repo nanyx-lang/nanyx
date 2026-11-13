@@ -27,11 +27,15 @@ what the compiler keeps: exact spans, resolved names and types.
 - **Diagnostics** ([#97](https://github.com/nanyx-lang/nanyx/issues/97)). The server does full text sync and
   publishes diagnostics on open and change. Each compiler diagnostic has a code (`NYX0201`), published as `code`,
   and the span of the node it is about, published as the full range (UTF-16 columns, through `SourcePositions`).
-  Related locations ("declared here") are published as `relatedInformation`. A diagnostic in an imported module
-  carries that module's file: it is published on the document being edited, at its start, naming the file and
-  linking to the place there; publishing it on the imported file itself is Plan item 7
-  ([#794](https://github.com/nanyx-lang/nanyx/issues/794)). A diagnostic about the whole compilation is shown at the
-  start of the file. See [How the server is built](#how-the-server-is-built).
+  Related locations ("declared here") are published as `relatedInformation`. A diagnostic in an imported file is
+  published on that file, at its place there, and the import in the document that brings the file in, directly or
+  through other imports, gets one diagnostic (`'mod.nyx' has errors`) linking to each error
+  ([#794](https://github.com/nanyx-lang/nanyx/issues/794)). The compiler records that import on each diagnostic it
+  passes up from an imported module (`Diagnostic.Import`). An imported file the editor has open shows only its own
+  compile's diagnostics; one that is not open shows what the latest compile of a document importing it found, and is
+  cleared when that compile finds nothing there, or when the importer is closed (`DiagnosticsPublisher`). An error in
+  a standard library module, which is not a file on disk, is described in the diagnostic at the import. A diagnostic
+  about the whole compilation is shown at the start of the file. See [How the server is built](#how-the-server-is-built).
 - **Hover shows inferred types** ([#120](https://github.com/nanyx-lang/nanyx/issues/120)). Inference records the
   resolved type of every expression by `NodeId` (`TypedModule.ExprTypes`, the `Types` table of the planned
   [semantic model](./linters#3-the-semantic-model)), and the callee's type at each call (`CalleeTypes`), for
@@ -292,8 +296,8 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 6. **Code actions.** Done for diagnostic fixes ([#284](https://github.com/nanyx-lang/nanyx/issues/284)). The first
    compiler error with fixes is an unknown name the standard library exports, which offers its import
    ([#497](https://github.com/nanyx-lang/nanyx/issues/497)); other compiler errors have none yet.
-7. **Diagnostics in imported files** ([#794](https://github.com/nanyx-lang/nanyx/issues/794)). Publish diagnostics
-   for the file they belong to, not the file being edited.
+7. **Diagnostics in imported files.** Done ([#794](https://github.com/nanyx-lang/nanyx/issues/794)): each is
+   published on the file it belongs to, with one at the import that brings that file in.
 8. **A library browser, search by type and an info view.** Planned on
    [Info view and library browser](./info-view-and-library-browser). Doc comments, the first item there, are done
    ([#719](https://github.com/nanyx-lang/nanyx/issues/719)), and so is a first cut of the info view

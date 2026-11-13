@@ -128,21 +128,107 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     }
 
     [Fact]
-    public async Task Diagnostic_in_an_imported_file_links_to_its_place_there()
+    public async Task Diagnostic_in_an_imported_file_is_published_on_that_file()
     {
-        var imported = TempPath("mod.nyx");
-        File.WriteAllText(imported, "module mod\nexport def value = missing\n");
+        var path = TempPath("mod.nyx");
+        File.WriteAllText(path, "module mod\nexport def value = missing\n");
+        var imported = DocumentUri.FromFileSystemPath(path);
         var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
 
         Open(uri, "module main\nimport mod\ndef copy = value\n");
 
-        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
-        Assert.Equal("NYX0101", diagnostic.Code?.String);
-        Assert.Contains("mod.nyx", diagnostic.Message.String);
-        Assert.Equal(new Range(0, 0, 0, 0), diagnostic.Range);
-        var related = Assert.Single(diagnostic.RelatedInformation!);
-        Assert.Equal(DocumentUri.FromFileSystemPath(imported), related.Location.Uri);
+        var inImported = Assert.Single((await NextPublished(imported)).Diagnostics!);
+        Assert.Equal("NYX0101", inImported.Code?.String);
+        Assert.Equal(new Range(1, 19, 1, 26), inImported.Range);
+
+        // The import that brings the file in says so, and links to the error.
+        var atImport = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("'mod.nyx' has errors", atImport.Message.String);
+        Assert.Equal(DiagnosticSeverity.Error, atImport.Severity);
+        Assert.Equal(new Range(1, 7, 1, 10), atImport.Range);
+        var related = Assert.Single(atImport.RelatedInformation!);
+        Assert.Equal(imported, related.Location.Uri);
         Assert.Equal(new Range(1, 19, 1, 26), related.Location.Range);
+    }
+
+    [Fact]
+    public async Task Diagnostic_in_a_file_imported_through_another_is_shown_at_the_import_that_brings_it_in()
+    {
+        File.WriteAllText(TempPath("mod.nyx"), "module mod\nimport sub\nexport def value = 1\n");
+        var path = TempPath("sub.nyx");
+        File.WriteAllText(path, "module sub\nexport def other = missing\n");
+        var deeper = DocumentUri.FromFileSystemPath(path);
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
+
+        Open(uri, "module main\nimport mod\ndef copy = value\n");
+
+        Assert.Equal(new Range(1, 19, 1, 26), Assert.Single((await NextPublished(deeper)).Diagnostics!).Range);
+        var atImport = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("'sub.nyx' has errors", atImport.Message.String);
+        Assert.Equal(new Range(1, 7, 1, 10), atImport.Range);
+    }
+
+    [Fact]
+    public async Task Fixing_an_imported_file_clears_its_diagnostics_when_the_importer_is_compiled_again()
+    {
+        var path = TempPath("mod.nyx");
+        File.WriteAllText(path, "module mod\nexport def value = missing\n");
+        var imported = DocumentUri.FromFileSystemPath(path);
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
+        const string text = "module main\nimport mod\ndef copy = value\n";
+
+        Open(uri, text);
+        Assert.NotEmpty((await NextPublished(imported)).Diagnostics!);
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        File.WriteAllText(path, "module mod\nexport def value = 1\n");
+        Change(uri, version: 2, text + "def more = copy\n");
+
+        Assert.Empty((await NextPublished(imported)).Diagnostics!);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+    }
+
+    [Fact]
+    public async Task An_open_imported_file_shows_only_its_own_compile_s_diagnostics()
+    {
+        var path = TempPath("mod.nyx");
+        File.WriteAllText(path, "module mod\nexport def value = missing\n");
+        var imported = DocumentUri.FromFileSystemPath(path);
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
+        var marker = DocumentUri.FromFileSystemPath(TempPath("marker.nyx"));
+
+        Open(imported, "module mod\nexport def value = missing\n");
+        Assert.Equal("NYX0101", Assert.Single((await NextPublished(imported)).Diagnostics!).Code?.String);
+        Open(uri, "module main\nimport mod\ndef copy = value\n");
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+        _client.DidCloseTextDocument(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier(uri) });
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // Diagnostics arrive in the order they are sent, so once the marker's have, any for the open file would have.
+        Open(marker, "def one = 1\n");
+        await NextPublished(marker);
+        lock (_published)
+        {
+            Assert.DoesNotContain(_published, published => published.Uri == imported);
+        }
+    }
+
+    [Fact]
+    public async Task Closing_an_imported_file_shows_what_its_importer_found_in_it()
+    {
+        var path = TempPath("mod.nyx");
+        File.WriteAllText(path, "module mod\nexport def value = missing\n");
+        var imported = DocumentUri.FromFileSystemPath(path);
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
+
+        Open(uri, "module main\nimport mod\ndef copy = value\n");
+        Assert.NotEmpty((await NextPublished(imported)).Diagnostics!);
+        Open(imported, "module mod\nexport def value = 1\n");
+        Assert.Empty((await NextPublished(imported)).Diagnostics!);
+
+        _client.DidCloseTextDocument(new DidCloseTextDocumentParams { TextDocument = new TextDocumentIdentifier(imported) });
+
+        Assert.Equal(new Range(1, 19, 1, 26), Assert.Single((await NextPublished(imported)).Diagnostics!).Range);
     }
 
     [Fact]
