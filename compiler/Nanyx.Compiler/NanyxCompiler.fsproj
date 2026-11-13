@@ -64,6 +64,7 @@
     <Compile Include="InitialisationCycles.fs" />
     <Compile Include="EscapingLambdas.fs" />
     <Compile Include="MemoryCells.fs" />
+    <Compile Include="Loops.fs" />
     <Compile Include="RecordSpread.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
