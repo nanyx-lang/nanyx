@@ -403,6 +403,19 @@ module RecSyntax =
         | FunctionCall(name, _, [ value ]) when name = builtIn -> Some value
         | _ -> None
 
+/// `use C(T)(members)` (see the contexts page): the value `use` loads is a block that defines the instance under the
+/// made-up name "__instance", typed `C(T)`, and gives it back, as `def name: C(T) = (members)` then `use name` would.
+module UseInstanceSyntax =
+    let name = "__instance"
+
+    /// The context at its types, `C(T)`, and the members, of a `use C(T)(members)`.
+    let (|Instance|_|) (kind: ExpressionKind) =
+        match kind with
+        | Block [ { Statement.Kind = DefStatement(false, defined, Some context, members) }
+                  { Statement.Kind = ExprStatement { Expression.Kind = IdentifierExpr result } } ] when defined = name && result = name ->
+            Some (context, members)
+        | _ -> None
+
 /// `record with f = v, ...` (see the records page): a call to the built-in "__with" with the record and a record of the
 /// updated fields.
 module WithSyntax =

@@ -611,8 +611,9 @@ let workflowKeywordExpr =
         |>> fun value -> WorkflowBindExpr(WorkflowSyntax.tryKeyword, value))
     <?> "workflow keyword"
 
-// The value a `use` loads: `use addInt`. `use C(T) = expr`, an older way to load an instance, fails at the context's
-// name, saying what to write instead.
+// The value a `use` loads: `use addInt`, or an instance written out, `use Add(Point)(zero = ..., ...)` (see
+// `UseInstanceSyntax`). `use C(T) = expr`, an older way to load an instance, fails at the context's name, saying what to
+// write instead.
 let useValue =
     let typeArgs = between (pstring "(") (pstring ")") (sepBy1 (ws >>. typeExpr) (pstring "," .>> ws))
     let instanceHead = withSkippedString (fun head _ -> head) (identifierNoWs .>> opt typeArgs)
@@ -620,9 +621,19 @@ let useValue =
         getPosition .>>. lookAhead (instanceHead .>> ws .>> pstring "=" .>> notFollowedBy (anyOf "=>"))
         >>= fun (position, head) ->
             reportFocused position
-                ($"`use {head} = ...` is not a way to load an instance: write `use <expr>`. Define the instance "
-                 + $"with `def name: {head} = (...)`, then load it with `use name`.")
-    oldInstance <|> expression
+                ($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`, or define the instance "
+                 + $"with `def name: {head} = (...)` and load it with `use name`.")
+    let context =
+        let contextName = identifierNoWs >>= fun name -> if Char.IsUpper name.[0] then preturn name else fail "context name (capitalised)"
+        spannedType (pipe2 contextName typeArgs (fun name args -> TypeApply(name, args)))
+    let instance =
+        attempt (withSpan (context .>>. parenFields))
+        |>> fun ((context, (fields, membersSpan)), span) ->
+            let members = Expression.at membersSpan (RecordExpr fields)
+            let definition = Statement.at span (DefStatement(false, UseInstanceSyntax.name, Some context, members))
+            let result = Statement.at span (ExprStatement (Expression.at span (IdentifierExpr UseInstanceSyntax.name)))
+            Expression.at span (Block [ definition; result ])
+    instance <|> oldInstance <|> expression
 
 // `do` followed by an indented block of statements is that block, as in F#: a way to start a block wherever an
 // expression goes, for instance to keep the defs in it from the statements after it. It is not a loop. A `do`

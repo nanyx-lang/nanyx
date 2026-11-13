@@ -450,7 +450,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let argument index arg = expr { full with Tail = (index = count - 1) } arg
             cat [ contextHead context; text "."; text (Names.written field); text "("; commaJoin (List.mapi argument args); text ")" ]
         | UseIn(value, body) ->
-            let head = cat [ text "use "; expr { full with Tail = false } value; text " in" ]
+            let head = cat [ text "use "; useValue { full with Tail = false } value; text " in" ]
             match body.Kind with
             | Block _ -> cat [ head; nest (cat [ hard; block body ]) ]
             | _ -> cat [ head; text " "; expr full body ]
@@ -1000,8 +1000,15 @@ let format (options: Options) (parsed: SourceModule) : string =
         | DefStatement(isExport, n, t, value) -> defDoc isExport "def" n t value
         | TypeDefStatement(n, modifiers, parameters, body) -> typeDefDoc n modifiers parameters body
         | ImportStatement items -> importDoc s.Span.Start s.Span.End items
-        | UseStatement value -> cat [ text "use "; expr full value ]
+        | UseStatement value -> cat [ text "use "; useValue full value ]
         | ExprStatement value -> expr statementPosition value
+
+    /// What a `use` loads. An instance written out is printed as written, `Add(Point)(zero = ...)` (see
+    /// `UseInstanceSyntax`).
+    and useValue (position: Position) (value: Expression) : Doc =
+        match value.Kind with
+        | UseInstanceSyntax.Instance(context, members) -> cat [ typeExpr context; expr position members ]
+        | _ -> expr position value
 
     and defDoc (isExport: bool) (keyword: string) (name: string) (typeOpt: TypeExpr option) (value: Expression) : Doc =
         defDocNamed isExport keyword (text (Names.written name)) typeOpt value

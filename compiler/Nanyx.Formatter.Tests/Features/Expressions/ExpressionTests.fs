@@ -76,3 +76,9 @@ let ``Names that are sentences keep their backticks, and an identifier loses the
     unchanged "def n = r.`first name`\n"
     Assert.Equal("def plain = 1\n", format "def `plain` = 1")
     unchanged "def x = t.0\n"
+
+[<Fact>]
+let ``An instance written out in a use is printed as written`` () =
+    unchanged (lines [ "def main = {"; "  use Eq(int)(`==` = { a, b -> true })"; "  1"; "}" ])
+    unchanged (lines [ "def main = {"; "  use Add(Point)(zero = origin, `+` = plus, `-` = minus, negate = flip)"; "  1"; "}" ])
+    unchanged (lines [ "def shown = use ToString(int)(toString = { n -> \"#\" }) in \"{1}\"" ])
