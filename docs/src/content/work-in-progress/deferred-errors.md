@@ -121,12 +121,20 @@ How it is built:
 
 ## Broken definitions
 
-The unit of deferral above is an expression. A definition whose own type cannot be settled (its signature
-mismatches its body, or its inferred type contains `TyError`) is deferred whole: its body is not compiled, and
-every reference to it becomes a `Panic` with a diagnostic naming the definition and the original error. A
-definition whose signature is sound (written down, or inferred without error) compiles normally, with traps only
-where its body has errors. This keeps a broken helper from poisoning the types of the functions that call it, and
-a call to it fails at the call, with a message that says why.
+The unit of deferral above is an expression. A definition that fails to check as a whole, for example because its
+annotation doesn't fit its body, is deferred whole (`abandon` in `InferModule.fs`):
+
+- **It is reported once, and bound at the error type from then on.** Uses of it are not errors of their own, so a
+  broken helper doesn't poison the types of the functions that call it. It loses its annotation, since that may be
+  what failed.
+- **It stays in the module, failed as a whole.** Its body is recorded in `FailedExprs`, so a debug build replaces it
+  with a trap (`deferErrors` in `DeferredErrors.fs`). A function's calls still compile and trap inside the function,
+  writing the original error. A value traps where it is computed.
+- **A use that needs its type traps too.** Piping it or reading a member of it can't be compiled without a type, so
+  that expression traps with "the value used here has no known type, because of an error deferred from compile
+  time", which has no code of its own.
+
+A definition that checks compiles normally, with traps only where its body has errors.
 
 ## What is deferred
 
