@@ -141,15 +141,9 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
 let private aliasType (name: string) (info: TypeDefInfo) : Ty =
     TyAlias(name, info.Parameters |> List.map TyVar, info.Underlying)
 
-/// Whether `info` defines a nominal type.
-/// Whether a type named `name` is nominal: its own name starts with `$`, whether or not it is qualified with a module
-/// block's name (`money.$Money`).
-let private isNominalName (name: string) =
-    let own = match name.LastIndexOf '.' with -1 -> name | dot -> name.Substring(dot + 1)
-    own.StartsWith("$")
-
+/// Whether `info` defines a nominal type: one declared `protected` or `private`.
 let internal isNominal (info: TypeDefInfo) =
-    isNominalName info.Name
+    info.IsNominal
 
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
 let internal namedType (name: string) (info: TypeDefInfo) : Ty =
@@ -272,7 +266,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Maps.ofTypes argTys.[0] argTys.[1], current
         elif Sets.isTypeName name && argTys.Length = 1 then
             Sets.ofType argTys.[0], current
-        // `mut T`: a cell of the `memory` block whose `$Memory` the signature writes, as `[$Memory] mut int -> ()` says
+        // `mut T`: a cell of the `memory` block whose `Memory` the signature writes, as `[Memory] mut int -> ()` says
         // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
         // its own: the cell given for it says which. A signature inference writes out has no source either, but what
         // its cells hold is written by inference too, and its cells share the signature's scope.
@@ -377,7 +371,7 @@ let internal typeOfInTypeDef (name: Identifier) (body: TypeExpr) (parameters: (I
     |> List.map (fun value ->
         Diagnostics.at DiagnosticCodes.MisplacedTypeof value.Span $"'typeof' cannot be used in the definition of the type '{name}', only in the type of a value")
 
-/// The type names written in `typeExpr` that name no type here: `Strnig`, or `$Email` where only `m.$Email` is in
+/// The type names written in `typeExpr` that name no type here: `Strnig`, or `Email` where only `m.Email` is in
 /// scope. `parameters` are the names of the parameters of the type definition `typeExpr` is the body of, if it is
 /// one. Contexts are checked apart.
 let rec private typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) list =
@@ -438,7 +432,7 @@ let internal unknownTypesInTypeDef (state: InferState) (body: TypeExpr) (paramet
 /// Whether the definition of the type `name` can name the type itself: an alias can, unless it is a context, or a
 /// type of that name is already in scope, which the name then means.
 let private canReferToItself (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) =
-    not (isNominalName name) && not (isContextDef modifiers) && (tryFindTypeDef name state).IsNone
+    not (TypeDefModifier.isNominal modifiers) && not (isContextDef modifiers) && (tryFindTypeDef name state).IsNone
 
 /// The type the definition of `name`, with the parameters `paramVars`, stands for. An alias that names itself inside
 /// the payload of one of its tags is recursive (see `RecursiveAliases`); one that names itself anywhere else reads the
@@ -453,6 +447,7 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               Home = state.Home
               Parameters = paramVars
               Underlying = RecursiveAliases.selfMarker paramVars
+              IsNominal = false
               IsPrivate = false
               IsContext = false
               IsScoped = false
@@ -467,15 +462,15 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
 /// The error for each place the alias `name` names itself other than inside the payload of one of its tags (see
 /// `RecursiveAliases.unguardedReferences`).
 let internal unguardedSelfReferences (name: Identifier) (modifiers: TypeDefModifier list) (body: TypeExpr) : Diagnostic list =
-    if isNominalName name || isContextDef modifiers then [] else RecursiveAliases.unguardedReferences name body
+    if TypeDefModifier.isNominal modifiers || isContextDef modifiers then [] else RecursiveAliases.unguardedReferences name body
 
-/// The error for a scoped context whose name isn't nominal: only the context's own module may make its instances,
-/// so that each one comes from the function that supplies it.
+/// The error for a scoped context that isn't nominal: only the context's own module may make its instances, so that
+/// each one comes from the function that supplies it.
 let internal unnominalScopedContext (name: Identifier) (modifiers: TypeDefModifier list) : Diagnostic list =
     match TypeDefModifier.scopedSpan modifiers with
-    | Some span when not (isNominalName name) ->
+    | Some span when not (TypeDefModifier.isNominal modifiers) ->
         [ Diagnostics.at DiagnosticCodes.ScopedContextNotNominal span
-            $"The scoped context '{name}' must be nominal, written '${name}', so that only its own module can make its instances" ]
+            $"The scoped context '{name}' must be nominal, declared `scoped context {Names.written name} = protected (...)`, so that only its own module can make its instances" ]
     | _ -> []
 
 let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
@@ -498,10 +493,11 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
     let paramVars = paramEntries |> List.map snd
     let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars body
     let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
+    let isNominal = TypeDefModifier.isNominal modifiers
     let nextNominals =
-        if isNominalName name then next.LocalNominals |> Set.add name else next.LocalNominals
+        if isNominal then next.LocalNominals |> Set.add name else next.LocalNominals
     let nextPrivate =
-        if isNominalName name && isPrivate then next.LocalPrivateNominals |> Set.add name else next.LocalPrivateNominals
+        if isPrivate then next.LocalPrivateNominals |> Set.add name else next.LocalPrivateNominals
     let nextContexts =
         if isContextDef modifiers then next.ContextDefs |> Map.add name body else next.ContextDefs
     let isExport = modifiers |> List.contains Export
@@ -529,6 +525,7 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           Home = next.Home
           Parameters = paramVars
           Underlying = underlyingTy
+          IsNominal = isNominal
           IsPrivate = isPrivate
           IsContext = isContextDef modifiers
           IsScoped = List.exists TypeDefModifier.isScoped modifiers

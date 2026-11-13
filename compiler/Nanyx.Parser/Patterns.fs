@@ -43,7 +43,7 @@ let tuplePattern =
         | multiple -> Pattern.at span (TuplePattern multiple)
 
 // Record pattern by position: TypeName(pat1, pat2, ...). A nominal type's name takes its value apart:
-// `$Email(raw)` binds the string an `$Email` wraps.
+// `Email(raw)` binds the string an `Email` wraps.
 let recordPatternByPosition =
     spannedPattern <| pipe2
         typeNameIdentifier

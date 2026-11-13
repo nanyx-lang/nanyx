@@ -3,8 +3,8 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Operators that call a definition. A type gets an operator by attaching it, `` def $Vector.`+` = ... ``, and then
-/// `v + w` on a `$Vector` calls it. Where an operator's name is bound, as `` `+` `` is in a function that requires
+/// Operators that call a definition. A type gets an operator by attaching it, `` def Vector.`+` = ... ``, and then
+/// `v + w` on a `Vector` calls it. Where an operator's name is bound, as `` `+` `` is in a function that requires
 /// `[Sum(a)]`, `x + y` calls that definition with its two operands, so generic code can add any type that has a
 /// `+`. On a built-in type the operator is still the built-in one, whatever is in scope, so `count + 1` in that
 /// same function adds ints.
@@ -35,7 +35,7 @@ module internal OperatorCalls =
     /// The definition the operator `expr` calls with its operands (`input`, as a call's arguments are typed), if it
     /// calls one, and the name it calls it by. On a built-in type, that of its left operand (`leftTy`) as far as it is
     /// known, the operator is the built-in one, unless it is a spare one (`^`, `<>`, ...), which has none, and so is `++` on a list. Otherwise it is the definition attached under the operator's name to
-    /// that type, when `attached` finds one: `` $Vector.`+` `` for `v + w`. Otherwise it is the binding of the
+    /// that type, when `attached` finds one: `` Vector.`+` `` for `v + w`. Otherwise it is the binding of the
     /// operator's name in `env`. `!=` calls what `==` does, and `-x` what `negate` is. `and` and `or` are keywords, so
     /// their names are never bound. The ordering operators are always read through `Ord` (see `OrderingOperators`).
     ///

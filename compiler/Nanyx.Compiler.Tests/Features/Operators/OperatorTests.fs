@@ -39,7 +39,7 @@ let ``Defining an operator Nanyx does not have is an error at the operator`` () 
 let ``A spare operator with no meaning for its operands is an error at the operator`` () =
     let code, reported, text = onlyDiagnostic "def x = 1 + 2 ^ 3\n"
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
-    Assert.Equal("`^` has no built-in meaning, and `int` has no `^` attached. A type gets one by attaching it: def $Money.`^` = ...", reported)
+    Assert.Equal("`^` has no built-in meaning, and `int` has no `^` attached. A type gets one by attaching it: def Money.`^` = ...", reported)
     Assert.Equal("^ 3", text)
 
 [<Fact>]

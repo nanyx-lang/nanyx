@@ -62,8 +62,8 @@ let ``Names in a guard pattern's predicate refer to its parameter and to what is
 [<Fact>]
 let ``Names refer to the variables a pattern parameter binds`` () =
     let source =
-        "type $Email = string\n" +
-        "def value = { $Email(s) -> s }\n" +
+        "type Email = protected string\n" +
+        "def value = { Email(s) -> s }\n" +
         "def add = { (a, b), c -> a + b + c }\n"
     Assert.Equal(Some (PatternVariable, offsetOf source "s)" 0 0), resolvesTo source (offsetOf source "-> s" 0 3))
     Assert.Equal(Some (PatternVariable, offsetOf source "b)" 0 0), resolvesTo source (offsetOf source "b +" 0 0))

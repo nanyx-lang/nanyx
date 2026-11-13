@@ -76,9 +76,9 @@ let ``Records, tags and functions have no order`` () =
           "def e = [(x = 1)] <= [(x = 2)]\n",
           "'list(x: int)' cannot be ordered with <=: its elements are records, and records have no order",
           "[(x = 1)] <= [(x = 2)]"
-          "type $Version = (major: int, minor: int)\ndef v = $Version(major = 1, minor = 2) < $Version(major = 1, minor = 3)\n",
-          "'$Version' cannot be ordered with <: records have no order. Attach '$Version.compare', or order by a key with list.sortBy",
-          "$Version(major = 1, minor = 2) < $Version(major = 1, minor = 3)" ]
+          "type Version = protected (major: int, minor: int)\ndef v = Version(major = 1, minor = 2) < Version(major = 1, minor = 3)\n",
+          "'Version' cannot be ordered with <: records have no order. Attach 'Version.compare', or order by a key with list.sortBy",
+          "Version(major = 1, minor = 2) < Version(major = 1, minor = 3)" ]
 
 [<Fact>]
 let ``A call that requires Ord of a type with no order is an error at the call`` () =
@@ -91,12 +91,12 @@ let ``A call that requires Ord of a type with no order is an error at the call``
 let ``A nominal type orders with the compare attached to it`` () =
     let typed =
         compileClean (
-            "type $Version = (major: int, minor: int)\n" +
-            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
-            "def v = { major -> $Version(major = major, minor = 0) }\n" +
+            "type Version = protected (major: int, minor: int)\n" +
+            "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
+            "def v = { major -> Version(major = major, minor = 0) }\n" +
             "def a = v(1) < v(2)\n" +
             "def b = list.sort([v(2), v(1)])\n")
-    Assert.Contains(InstanceSynthesized [ "compare", "$Version.compare" ], instancesOf typed)
+    Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
 
 [<Fact>]
 let ``An Ord loaded with use orders a built-in type in its block`` () =
@@ -121,7 +121,7 @@ let ``Only a nominal type may attach compare, and a built-in type's attached com
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.UnattachableDefinition.Code, diagnostic.Code)
     Assert.Equal(
-        "'Point.compare' cannot be defined: 'Point' is a structural type, so it is only ordered by its structure, and records and tags have none. Make it nominal ('$Point') to define its own order",
+        "'Point.compare' cannot be defined: 'Point' is a structural type, so it is only ordered by its structure, and records and tags have none. Declare it `protected` to define its own order",
         diagnostic.Message)
     // The prelude attaches `Int.compare`, but `List.sort` of ints uses the compiler's own.
     let typed = compileClean "def sorted = list.sort([2, 1])\n"
@@ -152,11 +152,11 @@ let ``A def that calls a local function ordering its own type variable requires 
 let ``A list of a type with its own compare is ordered through it, element by element`` () =
     let typed =
         compileClean (
-            "type $Version = (major: int, minor: int)\n" +
-            "def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
-            "def v = { major -> $Version(major = major, minor = 0) }\n" +
+            "type Version = protected (major: int, minor: int)\n" +
+            "def Version.compare: Version, Version -> #less | #equal | #greater = { a, b -> int.compare(a.major, b.major) }\n" +
+            "def v = { major -> Version(major = major, minor = 0) }\n" +
             "def a = [v(1), v(2)] < [v(3)]\n" +
             "def before: [Ord(a)] list(a), list(a) -> bool = { xs, ys -> xs >= ys }\n")
-    Assert.Contains(InstanceSynthesized [ "compare", "$Version.compare" ], instancesOf typed)
+    Assert.Contains(InstanceSynthesized [ "compare", "Version.compare" ], instancesOf typed)
     let instances = typed.ContextInstances |> Map.values |> Seq.concat |> Seq.choose id |> List.ofSeq
     Assert.Contains(instances, function InstanceInScope(Kind (TypeApply("Ord", [ Kind (TypeVar "a") ])), _) -> true | _ -> false)

@@ -18,7 +18,7 @@ export def __equals: a, a -> bool = { x, y ->
 }
 
 --| What `xs == ys` calls on two lists whose elements have an `Eq` other than the compiler's own:
-  `==` on a `list($Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
+  `==` on a `list(Email)`, or on a `list(a)` in a function that requires `Eq(a)`. The lists are
   compared element by element through that `Eq`. `!=` is `not` of it.
 export def __listEquals: [Eq(a)] list(a), list(a) -> bool = {
   | [], [] -> true
@@ -43,7 +43,7 @@ export def __listEqualsBy: [c] list(a), list(a), ([c] a, a -> bool) -> bool = { 
 
 --| The values of type `a` that join, end to end. `x ++ y` is read through it:
   `def surround: [Append(a)] a, a -> a = { edge, x -> edge ++ x ++ edge }` works at `string` and
-  at any `list`. A type gets one by attaching `` def $Path.`++` = ... ``.
+  at any `list`. A type gets one by attaching `` def Path.`++` = ... ``.
 export context Append(a) = (`++`: (a, a) -> a)
 
 -- The compiler's own `Append` of `string` and `list(a)`: the members attached to them, which are
@@ -109,7 +109,7 @@ export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
 }
 
 --| What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
-  `<` on a `list($Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
+  `<` on a `list(Version)`, or on a `list(a)` in a function that requires `Ord(a)`. The lists are
   ordered element by element through that `Ord`, and a list that is a prefix of the other comes
   first. `<=`, `>` and `>=` call the three after it.
 export def __listCompare: [Ord(a)] list(a), list(a) -> #less | #equal | #greater = {
@@ -178,7 +178,7 @@ export def string.compare: string, string -> #less | #equal | #greater = { x, y 
 --| How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
   so that a map can find a key by its hash. The compiler has its own for every type it has its own
   `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
-  `hash` that agrees with it, or it has none: `def $Email.hash = { e -> string.hash(lower(e)) }`
+  `hash` that agrees with it, or it has none: `def Email.hash = { e -> string.hash(lower(e)) }`
   for an `==` that ignores case. A function that hashes values of one of its type variables
   requires it: `def bucket: [Hash(a)] a, int -> int`.
 export context Hash(a) = (hash: a -> int)

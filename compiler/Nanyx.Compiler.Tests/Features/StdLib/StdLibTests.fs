@@ -53,14 +53,14 @@ println(inc)
 let ``println of a protected type without a toString names what to define`` () =
     let source = """import nanyx/console
 
-type $Id = private int
+type Id = private int
 
-println($Id(3))
+println(Id(3))
 """
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-    Assert.Contains("'println' requires the context 'ToString($Id)'", diagnostic.Message)
-    Assert.Contains("'$Id.toString' is not defined", diagnostic.Message)
+    Assert.Contains("'println' requires the context 'ToString(Id)'", diagnostic.Message)
+    Assert.Contains("'Id.toString' is not defined", diagnostic.Message)
 
 [<Fact>]
 let ``println is not in scope without importing nanyx/console`` () =

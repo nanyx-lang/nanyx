@@ -7,13 +7,13 @@ open NyxCompiler
 open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
-/// A `module money =` block with a nominal `$Money`, its constructor and printer, an exported value and a private one.
+/// A `module money =` block with a nominal `Money`, its constructor and printer, an exported value and a private one.
 let private moneyBlock =
     "module money =\n" +
-    "  export type $Money = (pence: int)\n" +
-    "  export def $Money.new: int -> $Money = { pence -> $Money(pence = pence) }\n" +
-    "  export def $Money.toString: $Money -> string = { m -> \"{m.pence}p\" }\n" +
-    "  export def zero: $Money = $Money.new(0)\n" +
+    "  export type Money = protected (pence: int)\n" +
+    "  export def Money.new: int -> Money = { pence -> Money(pence = pence) }\n" +
+    "  export def Money.toString: Money -> string = { m -> \"{m.pence}p\" }\n" +
+    "  export def zero: Money = Money.new(0)\n" +
     "  def secret = 42\n\n"
 
 /// The diagnostics compiling `source` gives: each one's code and the text it is reported at.
@@ -22,11 +22,11 @@ let private codesAt (source: string) =
 
 [<Fact>]
 let ``A module block can be imported by its file, unqualified or under an alias, before or after it`` () =
-    let unqualified = moneyBlock + "import money\n\ndef price: $Money = $Money.new(250)\ndef text: string = $Money.toString(price)\ndef nothing: string = zero \\toString\n"
+    let unqualified = moneyBlock + "import money\n\ndef price: Money = Money.new(250)\ndef text: string = Money.toString(price)\ndef nothing: string = zero \\toString\n"
     Assert.Empty(codesAt unqualified)
-    let aliased = moneyBlock + "import money as m\n\ndef price: m.$Money = m.$Money.new(250)\ndef text: string = m.$Money.toString(m.zero)\n"
+    let aliased = moneyBlock + "import money as m\n\ndef price: m.Money = m.Money.new(250)\ndef text: string = m.Money.toString(m.zero)\n"
     Assert.Empty(codesAt aliased)
-    let first = "import money\n\n" + moneyBlock + "def text: string = $Money.toString(zero)\n"
+    let first = "import money\n\n" + moneyBlock + "def text: string = Money.toString(zero)\n"
     Assert.Empty(codesAt first)
 
 [<Fact>]
@@ -36,29 +36,29 @@ let ``A module block's import brings in only its exports, and a local still shad
 
 [<Fact>]
 let ``A nominal type in a module block can only be constructed in the block`` () =
-    let viaImport = moneyBlock + "import money\n\ndef p = $Money(pence = 1)\n"
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$Money" ], codesAt viaImport)
-    let qualified = moneyBlock + "def p = money.$Money(pence = 1)\n"
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "money.$Money" ], codesAt qualified)
-    match codesAt (moneyBlock + "import money\n\ndef p: $Money = (pence = 1)\n") with
+    let viaImport = moneyBlock + "import money\n\ndef p = Money(pence = 1)\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "Money" ], codesAt viaImport)
+    let qualified = moneyBlock + "def p = money.Money(pence = 1)\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "money.Money" ], codesAt qualified)
+    match codesAt (moneyBlock + "import money\n\ndef p: Money = (pence = 1)\n") with
     | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     | other -> failwith $"Expected one type mismatch, got %A{other}"
 
-/// A `module ids =` block with a protected `$UserId`, whose shape only the block can see.
+/// A `module ids =` block with a protected `UserId`, whose shape only the block can see.
 let private idsBlock =
     "module ids =\n" +
-    "  export type $UserId = private int\n" +
-    "  export def $UserId.of: int -> $UserId = { n -> $UserId(n) }\n" +
-    "  export def $UserId.value: $UserId -> int = { id -> match id | $UserId(n) -> n }\n" +
-    "  export def first: $UserId = $UserId.of(1)\n\n"
+    "  export type UserId = private int\n" +
+    "  export def UserId.of: int -> UserId = { n -> UserId(n) }\n" +
+    "  export def UserId.value: UserId -> int = { id -> match id | UserId(n) -> n }\n" +
+    "  export def first: UserId = UserId.of(1)\n\n"
 
 [<Fact>]
 let ``A protected type can only be taken apart in the module that defines it`` () =
-    Assert.Empty(codesAt (idsBlock + "import ids\n\ndef n: int = $UserId.value(first)\n"))
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$UserId(n)" ], codesAt (idsBlock + "import ids\n\ndef $UserId(n) = first\n"))
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "$UserId(n)" ], codesAt (idsBlock + "import ids\n\ndef n = match first | $UserId(n) -> n\n"))
+    Assert.Empty(codesAt (idsBlock + "import ids\n\ndef n: int = UserId.value(first)\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "UserId(n)" ], codesAt (idsBlock + "import ids\n\ndef UserId(n) = first\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "UserId(n)" ], codesAt (idsBlock + "import ids\n\ndef n = match first | UserId(n) -> n\n"))
     // A nominal type that is not protected has no hidden shape, so its pattern is usable anywhere.
-    Assert.Empty(codesAt (moneyBlock + "import money\n\ndef $Money(m) = zero\ndef p: int = m.pence\n"))
+    Assert.Empty(codesAt (moneyBlock + "import money\n\ndef Money(m) = zero\ndef p: int = m.pence\n"))
 
 [<Fact>]
 let ``A module block cannot use its file's definitions`` () =
@@ -75,7 +75,7 @@ let ``A module block's imports are its own`` () =
 
 [<Fact>]
 let ``A module block can import the block beside it, but not reach it without an import`` () =
-    let other = "module prices =\n  import money\n  export def price: $Money = $Money.new(5)\n"
+    let other = "module prices =\n  import money\n  export def price: Money = Money.new(5)\n"
     Assert.Empty(codesAt (moneyBlock + other))
     let unimported = "module prices =\n  export def nothing = money.zero\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "money.zero" ], codesAt (moneyBlock + unimported))
@@ -111,12 +111,12 @@ let ``A module block names the types of the blocks it imports, and its own`` () 
 [<Fact>]
 let ``A module block names only the imported types it imports itself`` () =
     withTempDir (fun dir ->
-        File.WriteAllText(Path.Combine(dir, "people.nyx"), "module people\nexport type $Person = (name: string)\n")
+        File.WriteAllText(Path.Combine(dir, "people.nyx"), "module people\nexport type Person = protected (name: string)\n")
         let compile (main: string) =
             let mainPath = Path.Combine(dir, "main.nyx")
             File.WriteAllText(mainPath, main)
             (Compiler.compileFile mainPath).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt main (spanOf diagnostic))
         Assert.Equal<(string * string) list>(
-            [ DiagnosticCodes.OutsideModuleBlock.Code, "$Person" ],
-            compile "import people\n\nmodule greet =\n  export def name: $Person -> string = { p -> p.name }\n")
-        Assert.Empty(compile "module greet =\n  import people\n  export def name: $Person -> string = { p -> p.name }\n"))
+            [ DiagnosticCodes.OutsideModuleBlock.Code, "Person" ],
+            compile "import people\n\nmodule greet =\n  export def name: Person -> string = { p -> p.name }\n")
+        Assert.Empty(compile "module greet =\n  import people\n  export def name: Person -> string = { p -> p.name }\n"))

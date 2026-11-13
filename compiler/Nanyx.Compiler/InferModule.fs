@@ -145,7 +145,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     for item in module' do
         prebind item
 
-    // The exported types of an imported block can be written under the import's names too (`$Money`, `m.$Money`).
+    // The exported types of an imported block can be written under the import's names too (`Money`, `m.Money`).
     state <-
         { state with
             TypeDefs =

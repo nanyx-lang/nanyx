@@ -78,8 +78,8 @@ let ``A hole of a structure with a part that has no ToString is an error at the 
           "def f: int -> int = { n -> n }\ndef s = \"{(1, [f])}\"\n",
           "'int -> int' cannot be interpolated: it is a function, and functions have no toString",
           "(1, [f])"
-          "type $Money = private int\ndef m = $Money(5)\ndef s = \"{[m]}\"\n",
-          "'$Money' cannot be interpolated because it has no toString: attach '$Money.toString', or load an instance of `ToString($Money)` with `use`",
+          "type Money = private int\ndef m = Money(5)\ndef s = \"{[m]}\"\n",
+          "'Money' cannot be interpolated because it has no toString: attach 'Money.toString', or load an instance of `ToString(Money)` with `use`",
           "[m]" ]
     for source, expectedMessage, expectedAt in cases do
         let message, at = missingContext source
@@ -218,29 +218,29 @@ let ``A structure with no part that has an == of its own is compared by the comp
 let ``A structure with a part that has an == attached is compared by a derived ==`` () =
     let typed =
         compileClean (
-            "type $Email = string\n" +
-            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
-            "def b = #some($Email(\"a\")) == #some($Email(\"b\"))\n" +
-            "def c = #some($Email(\"a\")) != #some($Email(\"c\"))\n")
+            "type Email = protected string\n" +
+            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
+            "def b = #some(Email(\"a\")) == #some(Email(\"b\"))\n" +
+            "def c = #some(Email(\"a\")) != #some(Email(\"c\"))\n")
     Assert.Equal(1, (derivedDefs "__equals_" typed).Length)
 
 [<Fact>]
 let ``A list whose elements have an == attached is compared through it without a derived ==`` () =
     let typed =
         compileClean (
-            "type $Email = string\n" +
-            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
-            "def b = [$Email(\"a\")] == [$Email(\"b\")]\n")
+            "type Email = protected string\n" +
+            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
+            "def b = [Email(\"a\")] == [Email(\"b\")]\n")
     Assert.Empty(derivedDefs "__equals_" typed)
 
 [<Fact>]
 let ``A function that requires Eq is passed the one derived for a structure whose part has an == attached`` () =
     let typed =
         compileClean (
-            "type $Email = string\n" +
-            "def $Email.`==`: $Email, $Email -> bool = { a, b -> true }\n" +
+            "type Email = protected string\n" +
+            "def Email.`==`: Email, Email -> bool = { a, b -> true }\n" +
             "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }\n" +
-            "def b = same(#some($Email(\"a\")), #some($Email(\"b\")))\n" +
+            "def b = same(#some(Email(\"a\")), #some(Email(\"b\")))\n" +
             "def c = same(#some(1), #some(2))\n")
     match membersNamed "==" typed with
     | [ derived; builtIn ] ->

@@ -34,18 +34,12 @@ module Names =
     /// reserved for associated types (see the types page).
     let isTypeVariable (name: string) = name.Length = 1 && System.Char.IsLower name[0]
 
-    /// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`): its
-    /// own part, after the last dot, starts with `$`.
-    let isNominalTypeName (name: string) = name.Substring(name.LastIndexOf '.' + 1).StartsWith "$"
-
-    /// `name` as it is written where a name goes: an identifier or a nominal type's name (`$Email`) as it is, and
-    /// anything else, such as an operator or a sentence, in backticks. A keyword is an identifier here: it is a name
-    /// where a name is expected, as a workflow builder's `try` and `return` fields are. Each part of a qualified name
-    /// is written on its own: `` Point.`+` ``.
+    /// `name` as it is written where a name goes: an identifier as it is, and anything else, such as an operator or a
+    /// sentence, in backticks. A keyword is an identifier here: it is a name where a name is expected, as a workflow
+    /// builder's `try` and `return` fields are. Each part of a qualified name is written on its own: `` Point.`+` ``.
     let written (name: string) =
-        let isBare (part: string) = isIdentifier part || (part.StartsWith "$" && isIdentifier part[1..])
         name.Split '.'
-        |> Array.map (fun part -> if isBare part then part else $"`{part}`")
+        |> Array.map (fun part -> if isIdentifier part then part else $"`{part}`")
         |> String.concat "."
 
 /// Where a syntax node came from: character offsets into its file's source (`End` is one past the last
@@ -90,7 +84,11 @@ type Literal =
 type TypeDefModifier =
     | Export
     | Context
+    /// `type UserId = private int`: a nominal type whose shape is hidden outside its home module.
     | Private
+    /// `type Email = protected string`: a nominal type whose shape is visible everywhere, though only its home module
+    /// constructs one. A `$` before the declared name (`type $Email = string`) says the same.
+    | Protected
     /// `scoped context`: nothing that requires the context can leave the scope that supplies it. The span is the
     /// `scoped` keyword's.
     | Scoped of SourceSpan
@@ -101,7 +99,12 @@ module TypeDefModifier =
         | Scoped _ -> true
         | Export
         | Context
-        | Private -> false
+        | Private
+        | Protected -> false
+
+    /// Whether a type declared with `modifiers` is nominal: protected or private, as opposed to an alias of its shape.
+    let isNominal (modifiers: TypeDefModifier list) =
+        modifiers |> List.exists (fun modifier -> modifier = Private || modifier = Protected)
 
     /// Where `scoped` is written among `modifiers`, if it is.
     let scopedSpan (modifiers: TypeDefModifier list) =
@@ -538,7 +541,7 @@ module NegateSyntax =
 module DbgSyntax =
     let builtIn = "dbg"
 
-/// `def (x, y) = value` or `def $Money(pence) = m` (see the parser's `Destructuring`): the whole value is bound to a
+/// `def (x, y) = value` or `def Money(pence) = m` (see the parser's `Destructuring`): the whole value is bound to a
 /// temporary named from where the def is written, as `__tuple_3_1`, and each name the pattern binds to its part of it.
 module DestructuringSyntax =
     let private tempName = System.Text.RegularExpressions.Regex(@"^__tuple_\d+_\d+$")

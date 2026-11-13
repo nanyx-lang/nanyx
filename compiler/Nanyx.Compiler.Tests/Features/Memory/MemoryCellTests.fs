@@ -78,7 +78,7 @@ let private hoverOn (source: string) (text: string) (occurrence: int) =
     Hover.typeAt Unicode result (offsetOf source text occurrence 0) |> Option.map _.Type
 
 [<Fact>]
-let ``A lambda that reads or changes a cell requires $Memory`` () =
+let ``A lambda that reads or changes a cell requires Memory`` () =
     let source = """
 def tally = { words: list(string) ->
   memory {
@@ -90,12 +90,12 @@ def tally = { words: list(string) ->
   }
 }
 """
-    Assert.Equal(Some "note: [$Memory] string -> ()", hoverOn source "note" 0)
-    Assert.Equal(Some "current: [$Memory] () -> int", hoverOn source "current" 0)
+    Assert.Equal(Some "note: [Memory] string -> ()", hoverOn source "note" 0)
+    Assert.Equal(Some "current: [Memory] () -> int", hoverOn source "current" 0)
     Assert.Equal(Some "def tally: list(string) -> int", hoverOn source "tally" 0)
 
 [<Fact>]
-let ``A lambda that calls a local function over a cell requires $Memory too`` () =
+let ``A lambda that calls a local function over a cell requires Memory too`` () =
     let source = """
 def f = memory {
   mut n = 0
@@ -108,7 +108,7 @@ def f = memory {
   n
 }
 """
-    Assert.Equal(Some "twice: [$Memory] () -> ()", hoverOn source "twice" 0)
+    Assert.Equal(Some "twice: [Memory] () -> ()", hoverOn source "twice" 0)
 
 [<Fact>]
 let ``A lambda that only uses what a cell holds requires nothing`` () =
@@ -134,11 +134,11 @@ def f = {
     Assert.Equal(DiagnosticCodes.MutOutsideMemory.Code, code)
     Assert.Equal("mut x = 0", text)
     let result = Compiler.compile source
-    Assert.Contains("$Memory", result.Diagnostics.Head.Message)
+    Assert.Contains("Memory", result.Diagnostics.Head.Message)
 
 [<Fact>]
-let ``$Memory is nominal, so code outside the prelude cannot make one`` () =
-    let result = Compiler.compile "def m = $Memory(())\n"
+let ``Memory is nominal, so code outside the prelude cannot make one`` () =
+    let result = Compiler.compile "def m = Memory(())\n"
     Assert.Equal<string list>([ DiagnosticCodes.NominalConstructedOutsideItsModule.Code ], result.Diagnostics |> List.map _.Code)
 
 [<Fact>]

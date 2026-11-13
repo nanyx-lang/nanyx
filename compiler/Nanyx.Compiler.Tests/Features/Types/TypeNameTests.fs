@@ -34,7 +34,7 @@ def f = {
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.InvalidTypeName.Code, "$money"; DiagnosticCodes.InvalidTypeName.Code, "log"; DiagnosticCodes.InvalidTypeName.Code, "pair" ],
         compiled source |> List.map (fun (code, _, text) -> code, text))
-    Assert.Contains("write '$Money'", (compiled source).Head |> fun (_, message, _) -> message)
+    Assert.Contains("write 'Money'", (compiled source).Head |> fun (_, message, _) -> message)
 
 [<Fact>]
 let ``A type cannot be defined with a built-in type's name`` () =
@@ -53,5 +53,5 @@ let ``A lowercase name longer than one letter in a type is reserved, not an unkn
 
 [<Fact>]
 let ``Capitalised names, type variables and lowercase built-in types are valid`` () =
-    Assert.Empty(compiled "type Point = (x: int)\ntype $Money = int\ntype _Later = int\ndef f: (a, list(string), Point) -> a = { x, _, _ -> x }\n")
+    Assert.Empty(compiled "type Point = (x: int)\ntype Money = int\ntype _Later = int\ndef f: (a, list(string), Point) -> a = { x, _, _ -> x }\n")
     Assert.Contains("write '_Later'", compiled "type _later = int\n" |> List.exactlyOne |> fun (_, message, _) -> message)

@@ -17,6 +17,7 @@ let ``A definition can be named by an operator in backticks`` () =
 
 [<Theory>]
 [<InlineData("def `+++` = { a, b -> a }", "`+++` = { a, b -> a }", "+++")>]
+[<InlineData("def Money.`<=>` = { a, b -> a }", "`<=>` = { a, b -> a }", "<=>")>]
 [<InlineData("def $Money.`<=>` = { a, b -> a }", "`<=>` = { a, b -> a }", "<=>")>]
 [<InlineData("def f = {\n  def `!` = { a -> a }\n  1\n}", "`!` = { a -> a }", "!")>]
 [<InlineData("def f = {\n  rec `**!` = { a -> a }\n  1\n}", "`**!` = { a -> a }", "**!")>]
@@ -30,8 +31,8 @@ let ``An operator can be attached to a type`` () =
     match parsed "def Point.`==`: Point, Point -> bool = { p, q -> true }" with
     | [ Def (ValueDef (_, "Point.==", Some _, _)) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
-    match parsed "def $Email.`+` = { a, b -> a }" with
-    | [ Def (ValueDef (_, "$Email.+", None, _)) ] -> ()
+    match parsed "def Email.`+` = { a, b -> a }" with
+    | [ Def (ValueDef (_, "Email.+", None, _)) ] -> ()
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]

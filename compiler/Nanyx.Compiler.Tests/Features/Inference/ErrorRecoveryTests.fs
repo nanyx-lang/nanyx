@@ -206,7 +206,7 @@ def head2: list(int) -> int = { xs ->
 
 [<Fact>]
 let ``An error in an earlier def does not change what a later lambda takes`` () =
-    // A `memory` block's lambda took unit rather than the block's `$Memory`, and was reported as
+    // A `memory` block's lambda took unit rather than the block's `Memory`, and was reported as
     // "Type mismatch: @scope(@call) vs ()" (#1105).
     let source = """
 def bad: int = "x"

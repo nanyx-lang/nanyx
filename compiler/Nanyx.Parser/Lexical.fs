@@ -113,7 +113,7 @@ let importSource: Parser<ImportSource, ParseState> =
     ) <|> (modulePath |>> ModuleImport)
 
 /// The names an import selects, in brackets, separated by commas or line breaks: `(sqrt, pi)`. A name may be a type's
-/// (`$Email`) or an attached definition's (`string.shout`).
+/// (`Email`) or an attached definition's (`string.shout`).
 let private importSelection: Parser<(Identifier * SourceSpan) list, ParseState> =
     let name = withSpan qualifiedIdentifier
     between

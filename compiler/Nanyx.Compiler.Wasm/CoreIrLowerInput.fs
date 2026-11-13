@@ -72,9 +72,12 @@ type LowerInput =
       BuiltInHoles: Set<NodeId>
       /// The record types the module defines, whose names construct a record: `Person(name = "Ada", age = 36)`.
       RecordConstructors: Set<string>
-      /// The nominal types whose shape is not a record (`type $Money = private int`). A value of one is its shape's
+      /// The nominal types whose shape is not a record (`type Money = private int`). A value of one is its shape's
       /// value, so its constructor and the pattern that takes it apart are no-ops.
       NominalWrappers: Set<string>
+      /// The names of the nominal types in scope, the module's and those it imports: `Money(p)` with one of them takes a
+      /// nominal value apart.
+      NominalTypes: Set<string>
       /// The functions lambda lifting made, by name.
       Lifted: Map<string, LiftedFunction>
       /// The module's top-level expressions, which its start function evaluates in order when the module is loaded.

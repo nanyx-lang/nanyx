@@ -97,7 +97,7 @@ type InferState =
             TypeVars: Map<string, TyVar>;
             TypeDefs: Map<string, TypeDefInfo>;
             /// The names in `TypeDefs` that cannot be written: the types only an aliased import brings in, which are
-            /// written with the alias (`m.$Email`). They stay in `TypeDefs` for what the imported definitions' own
+            /// written with the alias (`m.Email`). They stay in `TypeDefs` for what the imported definitions' own
             /// signatures name.
             HiddenTypeNames: Set<string>;
             ContextDefs: Map<string, TypeExpr>;
@@ -209,8 +209,8 @@ type InferState =
             /// they export it under: where a pipe's error says to find a definition it could not reach.
             StandardLibraryExports: Lazy<Map<string, string list>>;
             /// The operators that call a definition, by the operator's node, with the name they call it by: `x + y`
-            /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `$Vector` it calls
-            /// `` $Vector.`+` `` when that is attached.
+            /// in a function that requires `[Sum(a)]` calls the context's `` `+` ``, and on a `Vector` it calls
+            /// `` Vector.`+` `` when that is attached.
             OperatorCalls: Map<NodeId, Identifier>;
             /// The instance in scope whose member each of those operators calls, by the operator's node, as written
             /// where it is put in scope, where the operator calls one: in a function that requires

@@ -5,7 +5,7 @@ module internal NyxCompiler.WrittenContexts
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Whether `name` is a scoped context (`scoped context $Memory = ()`).
+/// Whether `name` is a scoped context (`scoped context Memory = ()`).
 let isScoped (state: InferState) (name: Identifier) =
     state.TypeDefs |> Map.tryFind name |> Option.exists _.IsScoped
 
@@ -27,7 +27,7 @@ let private read (typeExprToTy: InferState -> TypeExpr -> Ty * InferState) (stat
         Some (TyApply(name, argTys)), next
     | _ -> None, state
 
-/// The scope of the scoped context `name` somewhere in `ty`, if `ty` has one: a cell's type has `$Memory`'s.
+/// The scope of the scoped context `name` somewhere in `ty`, if `ty` has one: a cell's type has `Memory`'s.
 let rec private scopeIn (name: Identifier) (ty: Ty) : Ty option =
     let within = List.tryPick (scopeIn name)
     match ty with

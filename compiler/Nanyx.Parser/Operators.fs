@@ -14,7 +14,7 @@ type OperatorAssociativity =
     /// not group, or that group different ways, cannot be written side by side either.
     | NonAssociative
 
-/// A binary operator. `Text` is how it is written and the name it is defined by (`` def $Money.`+` = ... ``). The
+/// A binary operator. `Text` is how it is written and the name it is defined by (`` def Money.`+` = ... ``). The
 /// higher its `Precedence`, the tighter it binds. A spare operator has no built-in meaning: it means only what a type
 /// attaches to it. An operator that short-circuits runs its right operand only when its left one does not settle the
 /// result; it is syntax rather than a function, so no definition can be given it.

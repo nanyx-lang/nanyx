@@ -67,8 +67,8 @@ public sealed class CompletionTests : LanguageServerTestBase
         Assert.Equal(
             [
                 "and", "as", "context", "def", "do", "else", "except", "export", "for", "if", "import", "in", "is", "match",
-                "module", "mut", "not", "or", "private", "rec", "return", "then", "try", "type", "typeof", "use", "where",
-                "while", "with"
+                "module", "mut", "not", "or", "private", "protected", "rec", "return", "then", "try", "type", "typeof",
+                "use", "where", "while", "with"
             ],
             (await CompletionsAt(uri, 1, 0)).Where(item => item.Kind == CompletionItemKind.Keyword).Select(item => item.Label).Order());
     }

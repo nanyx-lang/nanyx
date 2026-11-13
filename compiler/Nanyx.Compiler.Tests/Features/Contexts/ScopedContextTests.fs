@@ -26,27 +26,27 @@ let ``A local scoped context that isn't nominal is an error at scoped`` () =
 
 [<Fact>]
 let ``Any module may declare a scoped context, if it is nominal`` () =
-    let typed = compileClean "scoped export context $Transaction = (commit: () -> ())\n"
-    let info = typed.TypeDefs |> Map.find "$Transaction"
+    let typed = compileClean "scoped export context Transaction = protected (commit: () -> ())\n"
+    let info = typed.TypeDefs |> Map.find "Transaction"
     Assert.True(info.IsContext)
     Assert.True(info.IsScoped)
 
 [<Fact>]
-let ``The prelude's $Memory is scoped`` () =
+let ``The prelude's Memory is scoped`` () =
     let typed = compileClean "def main = 1\n"
-    Assert.True((typed.TypeDefs |> Map.find "$Memory").IsScoped)
+    Assert.True((typed.TypeDefs |> Map.find "Memory").IsScoped)
 
 [<Fact>]
 let ``Hovering a scoped context's name shows that it is scoped`` () =
-    let source = "scoped context $Tx = ()\ndef run: [$Tx] () -> () = { () }\n"
+    let source = "scoped context Tx = protected ()\ndef run: [Tx] () -> () = { () }\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let hover = Definition.typeDefinitionAt Unicode "" result (offsetOf source "$Tx]" 0 1)
-    Assert.Equal(Some "scoped context $Tx = ()", hover |> Option.map _.Type)
+    let hover = Definition.typeDefinitionAt Unicode "" result (offsetOf source "Tx]" 0 1)
+    Assert.Equal(Some "scoped context Tx = protected ()", hover |> Option.map _.Type)
 
 [<Fact>]
 let ``The outline tells a scoped context from another`` () =
-    let outline = (Outline.ofSource "" "scoped context $Tx = ()\ncontext Log = ()\n").Value
+    let outline = (Outline.ofSource "" "scoped context Tx = protected ()\ncontext Log = ()\n").Value
     Assert.Equal<Outline.OutlineKind list>(
         [ Outline.OutlineKind.ScopedContextType; Outline.OutlineKind.ContextType ],
         outline |> List.map _.Kind)
