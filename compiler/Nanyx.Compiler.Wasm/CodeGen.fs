@@ -395,7 +395,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         match checkedTypes |> Map.tryFind lambda.Id with
         | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
-    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts module'
+    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
     let defs =
         module'
         |> List.choose (function
@@ -429,15 +429,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let functionContextRequirements = contextMemberKeys defs typeLayouts
 
-    // The ambient context instance: a module-level function named like a member of a declared context stands
-    // in for that member whenever a callee requires the context and the caller has nothing else to supply.
+    // The ambient context instance: the definition the type checker found for each member of an ambient context
+    // (`TypedModule.AmbientMembers`) stands in for that member whenever a callee requires the context and the caller
+    // has nothing else to supply.
     // This is how the runtime-provided `Console` (the functions `nanyx/console` exports) reaches `@entry`.
     // Closure conversion made a wrapper for each such function, so the member is a closure over it.
     // Lambda lifting made those wrappers only where something may need them.
     let ambientContextMembers =
-        AmbientMembers.ambientMemberDefinitions module'
-        |> List.filter (fun (_, definition) -> not (functionContextRequirements.ContainsKey definition))
-        |> List.choose (fun (memberName, definition) -> functionWrappers |> Map.tryFind definition |> Option.map (fun wrapper -> NamedMember memberName, wrapper))
+        typed.AmbientMembers
+        |> List.distinctBy _.Member
+        |> List.filter (fun ambient -> not (functionContextRequirements.ContainsKey ambient.Definition))
+        |> List.choose (fun ambient -> functionWrappers |> Map.tryFind ambient.Definition |> Option.map (fun wrapper -> NamedMember ambient.Member, wrapper))
         |> Map.ofList
 
     let functionTable: FunctionTable =

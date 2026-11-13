@@ -81,14 +81,11 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 state.TypeDefs
                 |> Map.toList
                 |> List.collect (fun (ctxName, info) ->
-                    // An aliased import's context (`c.Console`) has its members under the alias too (`c.println`).
-                    let qualify memberName =
-                        if ctxName.Contains '.' then $"{ctxName.Substring(0, ctxName.LastIndexOf '.')}.{memberName}" else memberName
                     let bindings =
                         info.Members
                         |> Map.toList
                         |> List.map (fun (memberName, memberSymbol) ->
-                            let memberName = qualify memberName
+                            let memberName = AmbientMember.definitionName ctxName memberName
                             memberName,
                             TypeEnv.tryFind memberName env
                             |> Option.bind (fun scheme -> scheme.Symbol)

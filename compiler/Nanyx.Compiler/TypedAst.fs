@@ -149,6 +149,21 @@ module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
     let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
 
+/// A member of an ambient context (one the runtime supplies, as `nanyx/console`'s definitions are its `Console`) and the
+/// top-level definition that stands in for it (see `TypedModule.AmbientMembers`).
+type AmbientMember =
+    { Context: string
+      Member: string
+      Definition: string }
+
+module AmbientMember =
+    /// The name an import gives the definition that stands in for `memberName` of the ambient context it imports as
+    /// `context`: the member's own name, or under the alias of an aliased import (`c.println` for `c.Console`).
+    let definitionName (context: string) (memberName: string) =
+        match context.LastIndexOf '.' with
+        | dot when dot > 0 -> $"{context.Substring(0, dot)}.{memberName}"
+        | _ -> memberName
+
 /// What provides a context where a call requires it, such as `Console`, or `Sum(Point)` from an instance in scope (see
 /// `TypedModule.ContextProviders`).
 type ContextProvider =
@@ -242,6 +257,11 @@ type ImportedFile = { File: string; Name: string option }
 /// `AmbientContexts` are the names of the imported contexts the runtime supplies, as `nanyx/console`'s definitions are
 /// its `Console`, in order: the top level of the module runs in them.
 ///
+/// `AmbientMembers` holds the definition in `Module` that stands in for each member of an ambient context: of those in
+/// `AmbientContexts`, and of those carried in with the imported functions that require them, which the module cannot
+/// name (a module that imports a function requiring `Console` without importing `nanyx/console`). The backend passes
+/// these where nothing else supplies the context.
+///
 /// `ImportedFiles` holds the module each of the module's imports brings in, by the import's symbol (see `ImportedFile`).
 type TypedModule =
     { Module: Module
@@ -265,6 +285,7 @@ type TypedModule =
       ContextTypes: Map<SymbolId, Ty list>
       ImportedContextTypes: Map<SymbolId, Ty * Ty list>
       AmbientContexts: string list
+      AmbientMembers: AmbientMember list
       ImportedFiles: Map<SymbolId, ImportedFile>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty> }

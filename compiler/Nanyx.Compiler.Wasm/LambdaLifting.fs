@@ -120,7 +120,7 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
 /// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one. A `use` left behind
 /// binds such a member by its key's text, and the key of each such name is returned too.
-let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> =
+let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
@@ -469,8 +469,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
 
     let items = module' |> List.map liftItem
 
-    // The ambient instance: a top-level function named like a member of a declared context, which takes
-    // no contexts itself, stands in for that member wherever nothing else supplies it. Only worth a
+    // The ambient instance: each of `ambientDefinitions` (the type checker's `TypedModule.AmbientMembers`) that takes
+    // no contexts itself stands in for a context member wherever nothing else supplies it. Only worth a
     // wrapper when some function takes contexts, or some lambda is passed members where it is called.
     let takesContexts (typeOpt: TypeExpr option) =
         match typeOpt with
@@ -480,8 +480,8 @@ let lift (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKe
     let defTypes =
         module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, _))) -> Some (name, typeOpt) | _ -> None) |> Map.ofList
     if passesMembers || defTypes |> Map.exists (fun _ typeOpt -> takesContexts typeOpt) then
-        AmbientMembers.ambientMemberDefinitions module'
-        |> List.map snd
+        ambientDefinitions
+        |> List.distinct
         |> List.filter (fun name -> topLevelFunctions.ContainsKey name && not (takesContexts defTypes.[name]))
         |> List.iter (wrapperOf >> ignore)
     synthesized |> Set.filter topLevelArities.ContainsKey |> Set.iter (wrapperOf >> ignore)

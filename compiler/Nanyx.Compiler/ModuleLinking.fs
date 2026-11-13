@@ -172,6 +172,14 @@ module internal ModuleLinking =
         |> List.map (fun (name, span) ->
             NameSuggestions.unknown DiagnosticCodes.NotExported span $"'{shown}' does not export '{name}'" exports name)
 
+    /// The members of the ambient contexts `carried` names that `checkedModule` records (see
+    /// `TypedModule.AmbientMembers`), each under the name `inlinedItemsForImport` inlines its definition under.
+    let internal ambientMembersForImport (item: ImportItem) (checkedModule: CheckedModule) (carried: Set<string>) : AmbientMember list =
+        let renames = inlinedRenames item checkedModule
+        checkedModule.Typed.AmbientMembers
+        |> List.filter (fun ambient -> carried.Contains ambient.Context)
+        |> List.map (fun ambient -> { ambient with Definition = renames |> Map.tryFind ambient.Definition |> Option.defaultValue ambient.Definition })
+
     let internal inlinedItemsForImport (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
         let renames = inlinedRenames item checkedModule
         let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name

@@ -27,6 +27,7 @@
     <Compile Include="Features\Commands\ExitCodeTests.fs" />
     <Compile Include="Features\Console\RunConsoleTests.fs" />
     <Compile Include="Features\Contexts\RunContextTests.fs" />
+    <Compile Include="Features\Contexts\RunAmbientContextTests.fs" />
     <Compile Include="Features\Contexts\RunContextFunctionValueTests.fs" />
     <Compile Include="Features\Contexts\RunCallSiteContextTests.fs" />
     <Compile Include="Features\Contexts\RunContextArgumentTypeTests.fs" />
