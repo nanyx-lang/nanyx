@@ -11,7 +11,8 @@ namespace Nanyx.LanguageServer.Handlers;
 /// typed: this one even with type or name errors, where what failed has the type <c>???</c>. On a call's function name it shows the function's type instantiated at that call, and on a
 /// declaration's own name (a def, a parameter, a pattern variable) the type of what it declares. On a name, the type
 /// comes after it, with a top-level def's contexts: <c>def name: [Console] string -> ()</c>. On a type's name it
-/// shows the type's definition instead, even inside an expression. Nothing is shown in a top-level item edited since
+/// shows the type's definition instead, even inside an expression, and for a nominal type a sentence that says whether
+/// it is protected or private and which module declares it. Nothing is shown in a top-level item edited since
 /// that compile, nor in a document that has never been typed (see <see cref="OpenDocument.LastGood"/>). Below the
 /// type comes the doc comment of the name there, if it has one, as Markdown (see <see cref="NyxCompiler.Documentation.Reader"/>).
 /// On a module's name, in the document's <c>module</c> line, an import or an alias that qualifies a name, it shows
@@ -64,7 +65,9 @@ public sealed class HoverHandler : HoverHandlerBase
             Contents = new MarkedStringsOrMarkupContent(new MarkupContent
             {
                 Kind = MarkupKind.Markdown,
-                Value = $"```nanyx\n{info.Value.Type}\n```" + (docs is null ? "" : $"\n\n---\n\n{docs}")
+                Value = $"```nanyx\n{info.Value.Type}\n```"
+                    + (info.Value.Note?.Value is { } note ? $"\n\n{note}" : "")
+                    + (docs is null ? "" : $"\n\n---\n\n{docs}")
             }),
             Range = document.Positions.ToRange(span.Start, span.End)
         };

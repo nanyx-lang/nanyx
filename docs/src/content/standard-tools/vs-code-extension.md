@@ -8,7 +8,8 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files (the type in 
 
 - errors and warnings as you type, each compiler error's code (such as `NYX0201`) a link to its section of
   [Compiler errors](./errors)
-- the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line
+- the names of [nominal types](#nominal-types) in italics
+- the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a type's name it shows the type's definition, and for a nominal type whether it is protected or private and which module declares it. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references and the outline view
 - completion of names, record fields, module members and import paths, each name with its doc comment and each module with the module's. The names the standard library keeps for itself, those that start with `__`, are never offered outside it. VS Code's own suggestions of words already in a file come only from the file being edited (`editor.wordBasedSuggestions` is `currentDocument` for Nanyx), so a standard-library file you opened from go to definition does not fill completion with its words
@@ -52,6 +53,27 @@ The other fields get a name, as `…ω` does in `keep`, only where the type uses
 | `nanyx.asciiTypes` | off | Write types in ASCII only: type variables are `a`, `b`, `c` and the other fields of a record are `...`, as you would write them in source. Needs compiler 0.20.0 or later. |
 
 `nanyx.greekTypeVariables` is the older name for this setting. It still works, but use `nanyx.asciiTypes` instead.
+
+# Nominal types
+
+A [nominal type](../advanced/nominal-and-protected-types), one declared `protected` or `private`
+(`type Email = protected string`), has a name written like any other type's. So that you can still tell it from an
+alias of its shape, the language server marks each of its names, at its declaration, where a type names it, its
+constructor, a pattern that takes it apart and the type's part of an attached definition's name (`Email` in
+`def Email.parse`), as a semantic token with the `nominal` modifier. A private type's names also have the `private`
+modifier. The extension shows them in italics, in any colour theme: it turns on semantic highlighting for Nanyx files
+(`editor.semanticHighlighting.enabled`) and sets this default for `editor.semanticTokenColorCustomizations`:
+
+```json
+"editor.semanticTokenColorCustomizations": {
+  "rules": {
+    "*.nominal:nanyx": { "italic": true }
+  }
+}
+```
+
+To style them otherwise, such as giving private types a colour of their own, write your own rules in `settings.json`;
+yours replace the default. `type.private:nanyx` selects the private ones. Needs compiler 0.28.0 or later.
 
 # Type hints
 

@@ -728,6 +728,26 @@ module Pattern =
         | UnitPattern
         | ElsePattern -> []
 
+    /// `pattern` and every pattern inside it, in order.
+    let rec within (pattern: Pattern) : Pattern list =
+        let inner =
+            match pattern.Kind with
+            | TuplePattern patterns
+            | AndPattern patterns
+            | RecordPattern(_, patterns) -> patterns
+            | RecordMemberPattern(members, _) -> members |> List.map snd
+            | ListPattern(patterns, rest) -> patterns @ Option.toList rest
+            | ListSplatMiddle(before, after) -> before @ after
+            | TagPattern(_, payload) -> Option.toList payload
+            | GuardPattern _
+            | RangePattern _
+            | LiteralPattern _
+            | IdentifierPattern _
+            | WildcardPattern
+            | UnitPattern
+            | ElsePattern -> []
+        pattern :: (inner |> List.collect within)
+
     /// The names `pattern` binds, in the order they are written: its identifier patterns and its named list rests.
     let rec boundNames (pattern: Pattern) : Identifier list =
         match pattern.Kind with
