@@ -491,18 +491,19 @@ let internal recordAnnotated (symbol: SymbolId option) (isAnnotated: bool) (stat
     | Some symbol when isAnnotated -> { state with AnnotatedSymbols = state.AnnotatedSymbols |> Set.add symbol }
     | _ -> state
 
+/// The `module name =` block innermost around `span`, with its name, if `span` is in one.
+let blockAround (moduleBlocks: (ModuleName * SourceSpan) list) (span: SourceSpan) : (ModuleName * SourceSpan) option =
+    moduleBlocks
+    |> List.filter (fun (_, block) -> SourceSpan.contains block span)
+    |> List.sortBy (fun (_, block) -> block.End - block.Start)
+    |> List.tryHead
+
 /// `state.ImportReferences`, with the node `node`, written at `span`, recorded as naming `symbol` through its import
 /// if it was imported. Of the imports that bring `symbol` in, it is the one written in the innermost `module name =`
 /// block around `span`, a block's imports being its own; among imports in the same place, the last.
 let private importReferenceOf (node: NodeId) (span: SourceSpan) (symbol: SymbolId) (state: InferState) =
-    let blockAround (inner: SourceSpan) =
-        state.ModuleBlocks
-        |> List.map snd
-        |> List.filter (fun block -> SourceSpan.contains block inner)
-        |> List.sortBy (fun block -> block.End - block.Start)
-        |> List.tryHead
     let reaches (import: SymbolId) =
-        match state.Symbols |> Map.tryFind import |> Option.map (fun symbol -> blockAround symbol.Declaration) with
+        match state.Symbols |> Map.tryFind import |> Option.map (fun symbol -> blockAround state.ModuleBlocks symbol.Declaration |> Option.map snd) with
         | Some (Some block) -> if SourceSpan.contains block span then Some (block.End - block.Start) else None
         | Some None
         | None -> Some System.Int32.MaxValue
