@@ -1117,20 +1117,34 @@ do
     // Note: f(a, b) creates single tuple argument: FunctionCall("f", None, [TupleExpr[a; b]]), and f(a, b) { ... }
     // passes the lambda after them: FunctionCall("f", None, [a; b; lambda]) (see `withTrailingLambda`)
 
+    // `(args)`, and then a trailing lambda if there is one: the arguments of a call.
+    let parenArgumentsAndTrailing =
+        pipe2
+            (noteFailureInside (
+                between (pstring "(") (pstring ")")
+                    (opt (ws >>. withSpan recordFields .>> ws))))
+            (opt (attempt (skipMany (skipAnyOf " \t") >>. lambda)))
+            (fun fieldsOpt trailingLambdaOpt ->
+                match fieldsOpt, trailingLambdaOpt with
+                | Some fields, Some lambdaExpr -> withTrailingLambda fields lambdaExpr
+                | Some fields, None -> [ fieldsToExpr fields ]
+                | None, Some lambdaExpr -> [ lambdaExpr ]
+                | None, None -> [])
+
+    // A call on a call's result, `f()(args)`, is a block that calls the result by a made-up name (see
+    // `CallResultSyntax`). Each call spans from the start of the first.
+    let callResult (callee: Expression) (args: Expression list, span: SourceSpan) =
+        let span = SourceSpan.between callee.Span span
+        let definition = Statement.at callee.Span (DefStatement(false, CallResultSyntax.name, None, callee))
+        let call = Statement.at span (ExprStatement (Expression.at span (FunctionCall(CallResultSyntax.name, None, args))))
+        Expression.at span (Block [ definition; call ])
+
     let callWithParensAndTrailing =
-        spanned (
-            pipe3
-                qualifiedIdentifierWithSpan
-                (noteFailureInside (
-                    between (pstring "(") (pstring ")")
-                        (opt (ws >>. withSpan recordFields .>> ws))))
-                (opt (attempt (skipMany (skipAnyOf " \t") >>. lambda)))
-                (fun (name, nameSpan) fieldsOpt trailingLambdaOpt ->
-                    match fieldsOpt, trailingLambdaOpt with
-                    | Some fields, Some lambdaExpr -> FunctionCall(name, nameSpan, withTrailingLambda fields lambdaExpr)
-                    | Some fields, None -> FunctionCall(name, nameSpan, [ fieldsToExpr fields ])
-                    | None, Some lambdaExpr -> FunctionCall(name, nameSpan, [ lambdaExpr ])
-                    | None, None -> FunctionCall(name, nameSpan, [])))
+        pipe2
+            (spanned (
+                pipe2 qualifiedIdentifierWithSpan parenArgumentsAndTrailing (fun (name, nameSpan) args -> FunctionCall(name, nameSpan, args))))
+            (many (withSpan parenArgumentsAndTrailing))
+            (List.fold callResult)
 
     let callWithOnlyTrailing =
         attempt (
