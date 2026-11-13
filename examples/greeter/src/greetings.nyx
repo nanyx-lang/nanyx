@@ -1,15 +1,15 @@
 module greetings
 
-export type $Person = (name: string)
+export type Person = protected (name: string)
 
-export def $Person.new: string -> $Person = { name ->
-  $Person(name = name)
+export def Person.new: string -> Person = { name ->
+  Person(name = name)
 }
 
-export def greet: $Person -> string = { p ->
+export def greet: Person -> string = { p ->
   "Hello, " ++ p.name ++ "!"
 }
 
-export def farewell: $Person -> string = { p ->
+export def farewell: Person -> string = { p ->
   "Goodbye, " ++ p.name ++ "."
 }
