@@ -150,10 +150,5 @@ module DocComments =
             | _ -> []
         { Comments = docs; TopLevel = items |> List.collect topLevel }
 
-    /// The doc comments of the source of the file at `filePath`, attached to what they document. A file that does not
-    /// parse has none.
-    let parse (filePath: string) (input: string) : FileDocComments =
-        let normalized = normalizeSource input
-        match runModuleParser filePath normalized with
-        | Result.Ok (items, state) -> attach filePath normalized items state.Declared state.Comments
-        | Result.Error _ -> { Comments = []; TopLevel = [] }
+    /// The doc comments of a file that does not parse: none.
+    let none: FileDocComments = { Comments = []; TopLevel = [] }

@@ -41,14 +41,13 @@ type SemanticModel =
       /// Where each call to a function that requires a parameterised context finds each instance, by the call's node
       /// (as `TypedModule.ContextInstances` has it): an instance built from attached definitions names them.
       ContextInstances: Map<NodeId, ContextInstance option list>
-      /// The module's doc comments, each with what it documents. Few modules have any, so the source is parsed
-      /// again for them only when a rule asks, and only when it has a `--|`.
+      /// The module's doc comments, each with what it documents, found from the parse only when a rule asks.
       DocComments: Lazy<DocComment list> }
 
 module SemanticModel =
     /// The model of a type-checked module, from the file it was compiled as (empty for source compiled directly), its
-    /// text, the module as parsed, the expressions made up for its nodes, and what checking it found.
-    let ofTyped (file: string) (source: string) (syntax: Module) (lowered: Map<NodeId, NodeId list>) (typed: TypedModule) =
+    /// text, the module as parsed, the expressions made up for its nodes, its doc comments, and what checking it found.
+    let ofTyped (file: string) (source: string) (syntax: Module) (lowered: Map<NodeId, NodeId list>) (docComments: Lazy<FileDocComments>) (typed: TypedModule) =
         let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
         { File = file
           Syntax = syntax
@@ -61,7 +60,7 @@ module SemanticModel =
           References = typed.References
           ImportReferences = typed.ImportReferences
           ContextInstances = typed.ContextInstances
-          DocComments = lazy (if source.Contains "--|" then (DocComments.parse file source).Comments else []) }
+          DocComments = lazy docComments.Value.Comments }
 
 /// Something one of a linter's rules found. The host turns it into a diagnostic with the rule's code and
 /// configured severity.
