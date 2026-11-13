@@ -12,7 +12,9 @@ compiler/
 ├── Nanyx.Parser/              # Parser library (F#, FParsec)
 │   ├── Ast.fs                 # The syntax tree
 │   ├── ParseState.fs, …       # Parse state, lexical rules, patterns, types (see the .fsproj)
-│   └── Program.fs             # Expressions, statements and the public parse functions
+│   ├── Expressions.fs         # Expressions: blocks, match, operators, pipes, lambdas, calls
+│   ├── TopLevel.fs            # Statements and a module's top-level items
+│   └── Api.fs                 # The public parse functions
 ├── Nanyx.Parser.Tests/        # Parser unit and fixture tests
 ├── Nanyx.Compiler/            # Type checker (F#)
 ├── Nanyx.Compiler.Tests/      # Compiler-level unit/integration tests

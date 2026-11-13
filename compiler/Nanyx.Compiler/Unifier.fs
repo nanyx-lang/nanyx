@@ -59,6 +59,9 @@ module Unifier =
     /// `unify` of more constraints may give the same rest another, and a constraint naming it may name nothing then.
     let isMadeUpRest (var: TyVar) = var.Id >= firstMadeUpRest
 
+    /// Whether `var` is a variable inference made up: not one a type names, nor a rest `unify` made up.
+    let private isPlainVar (var: TyVar) = var.Name.IsNone && not (isMadeUpRest var)
+
     /// The contexts of a function type that are written: not a made-up variable, which only keeps room for more
     /// contexts (see `FunctionContexts.fit`).
     let writtenContexts (contexts: Ty list) =
@@ -721,6 +724,12 @@ module Unifier =
                 // `FunctionContexts.isCallScope`).
                 | TyVar _, TyVar v when FunctionContexts.isCallScope l && not (FunctionContexts.isCallScope r) ->
                     loop (subst |> Map.add v.Id l) rest
+                // Of two variables inference made up, the newer stands for the older, so a variable that many others
+                // stand for stays where they point: in `1 + 1 + ... + 1`, each operand's would otherwise stand for the
+                // next one's, and resolving the first would walk the whole chain (#839).
+                | TyVar older, TyVar v
+                | TyVar v, TyVar older when isPlainVar older && isPlainVar v && v.Id > older.Id ->
+                    loop (subst |> Map.add v.Id (TyVar older)) rest
                 | TyVar v, ty
                 | ty, TyVar v ->
                     if occurs v.Id ty then

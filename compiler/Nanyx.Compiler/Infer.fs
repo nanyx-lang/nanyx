@@ -221,7 +221,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, state)
     // The placeholder for code not written yet is an error like any other, so a release build refuses it and a debug
     // build defers it: it has the error type, and stops the program if reached.
-    | IdentifierExpr name when name = Parser.Program.Api.notImplemented ->
+    | IdentifierExpr name when name = Parser.Program.Expressions.notImplemented ->
         Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "Not implemented: `???` stands for code not written yet" ]
     | IdentifierExpr name ->
         match TypeEnv.tryFind name env with
