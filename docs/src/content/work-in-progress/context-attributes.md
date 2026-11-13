@@ -98,7 +98,7 @@ position.
   parenthesised `contextMember`, that ends at the first thing that is not an `@`. `typeWithContext` and
   `typeSignature` are unchanged apart from calling it. The AST keeps `TypeWithContext(contexts, inner)`: the list of
   contexts is the same list, written differently.
-- **Formatter.** `contextSet` in `Nanyx.Formatter/Formatter.fs` writes `@` before each item and drops the extra
+- **Formatter.** `contextSet` in `Nanyx.Formatter/TypePrinter.fs` writes `@` before each item and drops the extra
   brackets around a member requirement.
 - **Type printer.** `Signatures.fs` and `Hover.fs` write the contexts of a type for hovers, diagnostics and the
   documentation; they switch to the same form.
