@@ -97,7 +97,9 @@ type LowerFailure =
 type Lowered<'T> =
     { /// The definitions lowered as they are, by name.
       Roots: Map<string, Function * 'T>
-      /// The specialisations of each generic definition, by the definition's name, in the order they were asked for.
+      /// The specialisations of each definition, by the definition's name, in the order they were asked for: of a
+      /// generic definition at type arguments, and of a definition that requires contexts on known members (see
+      /// `CoreIrLowerKnown`).
       Specialisations: Map<string, (Function * 'T) list>
       /// What could not be lowered, in the order it was met: the function (by its definition's name), why, and where.
       Failures: (string * LowerFailure * SourceSpan option) list }

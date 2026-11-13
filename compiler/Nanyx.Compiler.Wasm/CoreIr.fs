@@ -434,6 +434,22 @@ module ForLoop =
     let locals (loop: ForLoop) =
         loop.Streams |> List.collect (fun stream -> [ stream.Cursor; stream.End; stream.Element ])
 
+module Pattern =
+    /// The guards in `pattern`, each with the variable that holds the value it tests.
+    let rec guards (pattern: Pattern) : (Var * Expr) list =
+        match pattern with
+        | PGuard(var, guard) -> [ var, guard ]
+        | PTag(_, Some inner) -> guards inner
+        | PFields fields -> fields |> List.collect (snd >> guards)
+        | PAll parts -> parts |> List.collect guards
+        | PList(elements, rest) -> (elements |> List.collect guards) @ (rest |> Option.map guards |> Option.defaultValue [])
+        | PTag(_, None)
+        | PBind _
+        | PWildcard
+        | PInt _
+        | PBool _
+        | PString _ -> []
+
 /// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s and `Release`s, each followed by the next. A
 /// function's body is a chain as long as the function, so a pass walks one in a loop, and recurses only as deep as an
 /// expression nests.

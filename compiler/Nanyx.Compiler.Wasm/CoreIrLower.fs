@@ -1,7 +1,8 @@
 /// Lowers the typed AST to the core IR (`CoreIr.fs`), specialising generic functions as it goes.
 ///
 /// Each definition whose type is concrete is lowered as a root. A call to a generic definition asks for its
-/// specialisation at the call's type arguments, which is lowered in turn (and may ask for more). Every function is
+/// specialisation at the call's type arguments, and on the context members it knows (see `CoreIrLowerKnown`), which
+/// is lowered in turn (and may ask for more). Every function is
 /// compiled from the IR. What it cannot lower yet (`cannot`) is reported by `CodeGen.fs` as `UnsupportedByBackend`
 /// where it is written, and a broken invariant of the backend (`internalError`) as `BackendInternalError`: see "What
 /// cannot be compiled" in `docs/src/content/work-in-progress/memory-management.md`.
@@ -16,12 +17,10 @@ open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 open Transpiler.Wasm.CoreIrLowerSyntax
 open Transpiler.Wasm.CoreIrLowerInput
+open Transpiler.Wasm.CoreIrLowerKnown
 
 /// A pattern the value it is matched against can never match.
 exception private NeverMatches
-
-/// A generic definition at some type arguments: what a specialisation is.
-type internal SpecKey = string * IrType list
 
 /// How a function is lowered.
 type internal Lowering =
@@ -80,6 +79,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let mutable subst = subst
     let mutable nextId = 0
     let usedNames = System.Collections.Generic.HashSet<string>()
+    // The locals that stand for the members the function is specialised on, by id (see `CoreIrLowerKnown`).
+    let known = System.Collections.Generic.Dictionary<int, Var * KnownMember>()
 
     let newVar (name: string) (kind: VarKind) (ty: IrType) =
         nextId <- nextId + 1
@@ -101,13 +102,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let printerTools: CoreIrLowerDbg.PrinterTools =
         { NewVar = fun name kind ty -> newVar (uniqueName name) kind ty
           NewTemp = newTemp
-          PrinterOf = fun printer -> request (CoreIrLowerDbg.key printer, []) Map.empty (Printing printer)
+          PrinterOf = fun printer -> request (SpecKey.plain (CoreIrLowerDbg.key printer) []) Map.empty (Printing printer)
           ToIrType = toIrType }
-
-    /// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in
-    /// the instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
-    let unconstrainedAsUnit (ty: Ty) =
-        substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
 
     /// The members of the contexts without parameters in `contexts`, in the order a function value takes them.
     let membersOf (contexts: Ty list) =
@@ -176,16 +172,17 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Some scheme -> bindScheme Map.empty scheme (substitute subst instanceTy)
         | None -> Map.empty
 
-    /// The name to call `name` by at the instance type `instanceTy`: its own, or a specialisation's. A definition with
-    /// context variables is specialised on the members of the contexts they stand for, unless they stand for none.
-    let callee (name: string) (instanceTy: Ty) =
+    /// The name to call `name` by at the instance type `instanceTy`, given the members known where it is called: its
+    /// own, or a specialisation's. A definition with context variables is specialised on the members of the contexts
+    /// they stand for, unless they stand for none.
+    let calleeKnowing (name: string) (instanceTy: Ty) (knownMembers: (ContextMemberKey * KnownMember) list) =
         let scheme =
             match input.DefinitionTypes |> Map.tryFind name with
             | Some scheme -> scheme
             | None -> cannot $"a call to '{name}', whose type is not known"
         let typeVars = freeVars scheme |> List.distinct |> List.sort
         let contextVars = contextVariables name
-        if typeVars.IsEmpty && contextVars.IsEmpty then sanitizeIdentifier name
+        if typeVars.IsEmpty && contextVars.IsEmpty && knownMembers.IsEmpty then sanitizeIdentifier name
         else
             let bindings = bindingsAt name instanceTy
             let typeArguments =
@@ -201,8 +198,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let typeArguments =
                 if contextArguments |> List.forall List.isEmpty then typeArguments
                 else typeArguments @ (contextArguments |> List.map (fun members -> IrFunction(IrUnit, IrUnit, members)))
-            if typeArguments.IsEmpty then sanitizeIdentifier name
-            else request (name, typeArguments) bindings AsDefined
+            if typeArguments.IsEmpty && knownMembers.IsEmpty then sanitizeIdentifier name
+            else request { Definition = name; TypeArguments = typeArguments; Known = knownMembers } bindings AsDefined
+
+    let callee (name: string) (instanceTy: Ty) = calleeKnowing name instanceTy []
 
     let mk kind ty : Expr = { Kind = kind; Type = ty }
 
@@ -452,8 +451,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let specialised =
                     input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty >> not)
                     || not (contextVariables wrapped).IsEmpty
-                let key = target, (if specialised then [ toIrType instanceTy ] else [])
-                this.ContextMembers scope wrapped expr.Id instanceTy passed (fun captured ->
+                let key = SpecKey.plain target (if specialised then [ toIrType instanceTy ] else [])
+                this.ContextMembers scope wrapped expr.Id instanceTy passed [] (fun captured ->
                     let name = request key subst (WrapperCalling(wrapped, instanceTy, captured |> List.map (fun (memberKey, atom) -> memberKey, atomType atom)))
                     k (mk (MakeClosure(name, arity, List.map snd captured)) ty))
             | None -> cannot $"a closure over '{target}', which lambda lifting did not make"
@@ -477,7 +476,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             mk (Let(closure, value, body)) body.Type
         | FunctionCall(name, _, args) when input.Lifted.ContainsKey name ->
             // A `rec` local function calling itself, directly, with its environment passed on.
-            if name <> fst self then cannot $"a call to the lifted function '{name}' from another function"
+            if name <> self.Definition then cannot $"a call to the lifted function '{name}' from another function"
             let ty = tyOf expr
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 this.MemberAtoms scope selfMembers (fun members -> k (mk (Call(selfName, atoms @ members)) ty)))
@@ -503,7 +502,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match input.ExprTypes |> Map.tryFind expr.Id with
                     | Some output -> TyFunc(input', output, [])
                     | None -> cannot $"a call to '{name}' whose type is not known"
-            let target = callee name instanceTy
+            let knownMembers = this.KnownMembers scope name expr.Id instanceTy
+            let target = calleeKnowing name instanceTy knownMembers
             let ty = tyOf expr
             let parameters = parameterNames name
             // A function value given for a parameter whose type requires other contexts is adapted to it (see `Coerce`).
@@ -513,7 +513,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // The context members the callee requires follow its arguments.
             let call atoms =
                 this.CoerceAll scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
-                    this.ContextMembers scope name expr.Id instanceTy Set.empty (fun members ->
+                    this.ContextMembers scope name expr.Id instanceTy Set.empty knownMembers (fun members ->
                         k (mk (Call(target, atoms @ List.map snd members)) ty)))
             // The arguments as the callee takes them.
             match SyntaxTree.flattenCallArgs args with
@@ -666,14 +666,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// type `instanceTy`, each with its key: those of the contexts it declares, each found where the type checker found
     /// it (see `LowerInput.ContextArguments`), then those of the contexts its context variables stand for, found in
     /// scope. They are passed on to `k` in the order the function takes them, but for those of the keys in `passed`,
-    /// which the callers of the function's value pass instead.
-    member private this.ContextMembers (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) (passed: Set<ContextMemberKey>) (k: (ContextMemberKey * Atom) list -> Expr) : Expr =
-        let contextParameters = input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
-        let bindings = bindingsAt name instanceTy
-        // The type of each member here, where the function's type gives it.
-        let memberTys =
-            contextParameters |> List.map (fun parameter -> parameter.Type |> Option.map (substitute bindings >> substitute subst))
-        let variables = variableMembers name bindings |> List.filter (fst >> passed.Contains >> not)
+    /// which the callers of the function's value pass instead, and those in `knownMembers`, which the callee is
+    /// specialised on.
+    member private this.ContextMembers (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) (passed: Set<ContextMemberKey>) (knownMembers: (ContextMemberKey * KnownMember) list) (k: (ContextMemberKey * Atom) list -> Expr) : Expr =
+        let contextParameters, memberTys = this.MemberTypes name instanceTy
+        let variables = variableMembers name (bindingsAt name instanceTy) |> List.filter (fst >> passed.Contains >> not)
         match input.ContextArguments name node (scope.Members |> Map.keys |> Set.ofSeq) passed with
         | Error reason -> cannot reason
         | Ok arguments ->
@@ -685,23 +682,36 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match remaining with
                 | [] -> this.MemberAtoms scope variables (fun atoms -> k (List.rev acc @ List.zip (List.map fst variables) atoms))
                 | (_, PassedByCaller, _) :: rest -> pass rest acc
+                | (key, _, _) :: rest when knownMembers |> List.exists (fst >> (=) key) -> pass rest acc
                 | (key, MemberInScope inScope, memberTy) :: rest -> next key (AVar scope.Members.[inScope]) memberTy rest
                 | (key, ClosureOverWrapper wrapper, memberTy) :: rest ->
                     let closure = this.WrapperClosure wrapper memberTy
                     bindTemp closure (fun atom -> next key atom memberTy rest)
                 | (key, DerivedClosure(wrapper, at), memberTy) :: rest ->
                     this.DerivedClosure scope wrapper at memberTy (fun atom -> next key atom memberTy rest)
+                // A member that is a value (`Point.`0``): the top-level value, evaluated.
                 | (key, DefinitionValue definition, _) :: rest ->
-                    // A member that is a value (`Point.`0``): the top-level value, evaluated.
-                    let definitionTy =
-                        match input.DefinitionTypes |> Map.tryFind definition with
-                        | Some ty when (freeVars ty).IsEmpty -> ty
-                        | _ -> cannot $"passing the generic value '{definition}' as a context member"
-                    let value = mk (Call(callee definition definitionTy, [])) (toIrType definitionTy)
-                    bindTemp value (fun atom -> pass rest ((key, atom) :: acc))
+                    bindTemp (this.ValueOfKnown (knownValue input definition)) (fun atom -> pass rest ((key, atom) :: acc))
             if arguments.Length <> memberTys.Length then
                 internalError $"{arguments.Length} context members found for the {memberTys.Length} '{name}' requires"
             pass (List.zip3 (contextParameters |> List.map _.Key) arguments memberTys) []
+
+    /// The members of the contexts `name` declares, and the type of each where it is called at `instanceTy`, where the
+    /// function's type gives it.
+    member private this.MemberTypes (name: string) (instanceTy: Ty) : ContextParameter list * Ty option list =
+        let contextParameters = input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
+        let bindings = bindingsAt name instanceTy
+        contextParameters, contextParameters |> List.map (fun parameter -> parameter.Type |> Option.map (substitute bindings >> substitute subst))
+
+    /// The members of the contexts `name` declares that a call to it at the node `node` knows (see `CoreIrLowerKnown`).
+    /// What cannot be found is left to `ContextMembers` to report.
+    member private this.KnownMembers (scope: Scope) (name: string) (node: NodeId) (instanceTy: Ty) =
+        let contextParameters, memberTys = this.MemberTypes name instanceTy
+        match input.ContextArguments name node (scope.Members |> Map.keys |> Set.ofSeq) Set.empty with
+        | Ok arguments when arguments.Length = contextParameters.Length ->
+            let inScope key = scope.Members |> Map.tryFind key |> Option.bind (fun var -> match known.TryGetValue var.Id with | true, (_, knownMember) -> Some knownMember | _ -> None)
+            knownAmong input contextParameters arguments memberTys inScope
+        | _ -> []
 
     /// The member of each of `members` (a key and the type the member is wanted at), as the scope has it, or else the
     /// ambient instance's, each adapted to its type (see `Coerce`).
@@ -733,40 +743,30 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | IrFunction(_, _, given) as givenTy, IrFunction(_, _, wanted) when given <> wanted ->
             let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
             this.MemberAtoms scope missing (fun captured ->
-                let name = request ($"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}", []) subst (Adapting(givenTy, expected))
+                let name = request (SpecKey.plain $"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}" []) subst (Adapting(givenTy, expected))
                 let arity = 1 + (adaptedValueTypes givenTy expected).Length + wanted.Length
                 bindTemp (mk (MakeClosure(name, arity, atom :: captured)) expected) k)
         | _ -> k atom
 
-    /// A closure over the wrapper `wrapper` of a top-level function: at the function's own type, or, for a generic
-    /// function, at `memberTy`, the type of the context member it is passed as. A union's rest that nothing closes adds
-    /// no tags (see `toIrType`): `ToString(#red | r)` is passed at `#red`.
-    member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Expr =
-        let wrapped =
-            match input.Lifted |> Map.tryFind wrapper with
-            | Some (FunctionWrapper wrapped) -> wrapped
-            | _ -> internalError $"'{wrapper}' is not a function's wrapper"
-        // A member that requires contexts of its own would need them found where the instance is.
-        if input.ContextParameters.ContainsKey wrapped then cannot $"a context member '{wrapped}', which requires contexts"
-        let rec withoutOpenRests (ty: Ty) =
-            match ty with
-            | TyUnion items -> TyUnion(items |> List.filter (function TyVar _ -> false | _ -> true) |> List.map withoutOpenRests)
-            | TyFunc(input, output, _) -> TyFunc(withoutOpenRests input, withoutOpenRests output, [])
-            | TyRecord fields -> TyRecord(fields |> Map.map (fun _ -> withoutOpenRests))
-            | TyTag(name, payload) -> TyTag(name, payload |> Option.map withoutOpenRests)
-            | TyApply(name, args) -> TyApply(name, args |> List.map withoutOpenRests)
-            | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, withoutOpenRests underlying, isPrivate)
-            | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map withoutOpenRests, withoutOpenRests underlying)
-            | TyVar _
-            | TyPrimitive _
-            | TyOpenRecord _ -> ty
-        let key, wrappedTy =
-            match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map (withoutOpenRests >> unconstrainedAsUnit) with
-            | Some ty, _ when (freeVars ty).IsEmpty -> (wrapper, []), ty
-            | Some _, Some ty -> (wrapper, [ toIrType ty ]), ty
-            | _ -> cannot $"passing the generic function '{wrapped}' as a context member"
-        let name = request key subst (WrapperCalling(wrapped, wrappedTy, []))
-        mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) (toIrType wrappedTy), [])) (toIrType wrappedTy)
+    /// A closure over the wrapper `wrapper` of a top-level function, as a context member of type `memberTy` (see
+    /// `knownWrapper`).
+    member this.WrapperClosure (wrapper: string) (memberTy: Ty option) : Expr = this.ValueOfKnown (knownWrapper input wrapper memberTy)
+
+    /// The value of a known member: a closure over a function's wrapper, or a top-level value, evaluated.
+    member this.ValueOfKnown (knownMember: KnownMember) : Expr =
+        match knownMember with
+        | KnownFunction(wrapper, wrapped, at) ->
+            let name = request (SpecKey.plain wrapper (wrapperTypeArguments input toIrType wrapped at)) subst (WrapperCalling(wrapped, at, []))
+            mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) (toIrType at), [])) (toIrType at)
+        | KnownValue(definition, ty) -> mk (Call(callee definition ty, [])) (toIrType ty)
+
+    /// `body` with each local that stands for a known member and that it uses given the member's value first.
+    member private this.WithKnownValues (body: Expr) : Expr =
+        usedOf (known.Keys |> Set.ofSeq) body
+        |> Seq.fold (fun (body: Expr) id ->
+            let var, knownMember = known.[id]
+            bindTemp (this.ValueOfKnown knownMember) (fun value ->
+                this.Coerce emptyScope value var.Type (fun value -> mk (Let(var, mk (Atom value) var.Type, body)) body.Type))) body
 
     /// A closure over the wrapper `wrapper` of a definition derived from the parts of a type (see `DerivedClosure`), at
     /// `memberTy`, the type of the context member it is passed as: it captures the members of the contexts the
@@ -783,8 +783,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | None, Some (TyFunc(input, output, _)) -> unconstrainedAsUnit (TyFunc(input, output, []))
             | None, _ -> internalError $"the derived definition '{wrapped}' has no function type"
         let ty = toIrType memberTy
-        this.ContextMembers scope wrapped at memberTy Set.empty (fun captured ->
-            let name = request (wrapper, [ ty ]) subst (WrapperCalling(wrapped, memberTy, captured |> List.map (fun (key, atom) -> key, atomType atom)))
+        this.ContextMembers scope wrapped at memberTy Set.empty [] (fun captured ->
+            let name = request (SpecKey.plain wrapper [ ty ]) subst (WrapperCalling(wrapped, memberTy, captured |> List.map (fun (key, atom) -> key, atomType atom)))
             bindTemp (mk (MakeClosure(name, IrType.closureArity (parameterNames wrapper) ty, List.map snd captured)) ty) k)
 
     /// The type of `expr` where it is: a name in scope has its variable's type, and a field of one the field's, which
@@ -819,7 +819,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         this.Atoms scope captured (fun atoms ->
             this.CapturedInstances scope target bindings captured atoms (fun atoms capturedLocals ->
                 let capturedTys = atoms |> List.map atomType
-                let name = request (target, snd self @ typeArguments) subst (LiftedCapturing(capturedTys, capturedLocals))
+                let name = request (SpecKey.plain target (self.TypeArguments @ typeArguments)) subst (LiftedCapturing(capturedTys, capturedLocals))
                 k (mk (MakeClosure(name, arity, atoms)) ty)))
 
     /// `atoms`, what a closure over the lifted lambda `target` captures (`captured`, lowered), with each local function
@@ -981,7 +981,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple
     /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it. A function
     /// whose input is unit takes nothing, so `f()` and `f(())` are the same call (see `ValueParameters`). The members
-    /// of the contexts the value requires follow, as they are in scope here.
+    /// of the contexts the value requires follow, as they are in scope here. A known function a specialisation stands
+    /// in for with `closure` is called directly (see `CoreIrLowerKnown`).
     member this.CallValue (scope: Scope) (closure: Var) (args: Expression list) (ty: IrType) (k: Expr -> Expr) : Expr =
         let members, parameterTys =
             match closure.Type with
@@ -990,7 +991,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> [], []
         let call atoms =
             this.CoerceAll scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
-                this.MemberAtoms scope members (fun memberAtoms -> k (mk (CallClosure(closure, atoms @ memberAtoms)) ty)))
+                match known.TryGetValue closure.Id, closure.Type with
+                | (true, (_, KnownFunction(wrapper, wrapped, at))), IrFunction(input, _, _) ->
+                    directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (mk (Call(callee wrapped at, atoms)) ty))
+                | _ -> this.MemberAtoms scope members (fun memberAtoms -> k (mk (CallClosure(closure, atoms @ memberAtoms)) ty)))
         let elements =
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input
@@ -1287,7 +1291,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let contextParameters = input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
         let parameters =
             (parameterNames |> List.map (fun parameterName -> newVar (uniqueName parameterName) Param IrError))
-            @ (contextParameters |> List.map (fun parameter -> newVar parameter.Name Param IrError))
+            @ (contextParameters
+               |> List.filter (fun parameter -> not (self.Known |> List.exists (fst >> (=) parameter.Key)))
+               |> List.map (fun parameter -> newVar parameter.Name Param IrError))
             @ (variableMembers name subst |> List.map (fun (key, _) -> newVar (contextMemberParameter key) Param IrError))
         { Name = functionName
           Source = name
@@ -1361,13 +1367,18 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | None -> cannot "a definition without a type"
             let parameterTys, resultTy = this.ParameterTypes parameterNames defTy isLambda
             let parameters = List.map2 (fun parameterName ty -> parameterOf parameterName (toIrType ty)) parameterNames parameterTys
-            // The members of the contexts it requires follow, each a closure in a parameter of its own.
+            // The members of the contexts it requires follow, each a closure in a parameter of its own, but those it is
+            // specialised on, each in a local that has the member's value only if the body uses it as one.
             let contextParameters, aliases = input.ContextParameters |> Map.tryFind name |> Option.defaultValue ([], Map.empty)
             let members =
                 contextParameters
                 |> List.map (fun parameter ->
+                    let knownMember = self.Known |> List.tryFind (fst >> (=) parameter.Key) |> Option.map snd
                     match parameter.Type with
-                    | Some ty -> parameter.Key, newVar parameter.Name Param (toIrType (substitute subst ty))
+                    | Some ty ->
+                        let var = newVar parameter.Name (if knownMember.IsSome then Local else Param) (toIrType (substitute subst ty))
+                        knownMember |> Option.iter (fun knownMember -> known.[var.Id] <- (var, knownMember))
+                        parameter.Key, var
                     | None -> cannot $"the context member {ContextMemberKey.text parameter.Key}, whose type is not known")
             // Then those of the contexts its context variables stand for here.
             let members =
@@ -1385,7 +1396,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match value.Type with
                 | IrFunction _ when value.Type <> result -> bindTemp value (fun atom -> this.Coerce scope atom result (fun atom -> mk (Atom atom) result))
                 | _ -> value
-            make (parameters @ List.map snd members) result (this.Complex scope body adapted)
+            let parameters = parameters @ (members |> List.map snd |> List.filter (fun var -> var.Kind = Param))
+            make parameters result (this.WithKnownValues (this.Complex scope body adapted))
         | LiftedCapturing(capturedTys, capturedLocals) ->
             // The environment first: the function's table slot, then what it captures. The rest are the lambda's
             // parameters, typed as the lambda was where it was written.

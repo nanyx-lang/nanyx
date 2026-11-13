@@ -95,20 +95,6 @@ let rec private mapGuards (f: Expr -> Expr) (pattern: Pattern) : Pattern =
     | PBool _
     | PString _ -> pattern
 
-let rec private guards (pattern: Pattern) : (Var * Expr) list =
-    match pattern with
-    | PGuard(var, guard) -> [ var, guard ]
-    | PTag(_, Some inner) -> guards inner
-    | PFields fields -> fields |> List.collect (snd >> guards)
-    | PAll parts -> parts |> List.collect guards
-    | PList(elements, rest) -> (elements |> List.collect guards) @ (rest |> Option.map guards |> Option.defaultValue [])
-    | PTag(_, None)
-    | PBind _
-    | PWildcard
-    | PInt _
-    | PBool _
-    | PString _ -> []
-
 /// Every expression in `e` that is a node of its own: `e`, the values and bodies of its lets, branches, arms, guards
 /// and loop bodies, and so on down.
 let rec private nodes (e: Expr) : Expr seq =
@@ -124,7 +110,7 @@ let rec private nodes (e: Expr) : Expr seq =
             yield! nodes ifFalse
         | Match(_, arms) ->
             for arm in arms do
-                for _, guard in arm.Patterns |> List.collect guards do
+                for _, guard in arm.Patterns |> List.collect Pattern.guards do
                     yield! nodes guard
                 yield! nodes arm.Body
         | ForEach loop -> yield! nodes loop.Body
@@ -257,7 +243,7 @@ type private Counter(ownership: Ownership, func: Function) =
                     let ofArm (arm: Arm) =
                         let bound = arm.Patterns |> List.collect patternBinds |> List.map _.Id |> Set.ofList
                         let ofGuards =
-                            arm.Patterns |> List.collect guards |> List.map (fun (var, guard) -> this.Free guard |> Set.remove var.Id)
+                            arm.Patterns |> List.collect Pattern.guards |> List.map (fun (var, guard) -> this.Free guard |> Set.remove var.Id)
                         Set.unionMany ((Set.difference (this.Free arm.Body) bound) :: ofGuards)
                     Set.unionMany ((scrutinees |> List.map _.Id |> Set.ofList) :: List.map ofArm arms)
                 | ForEach loop ->

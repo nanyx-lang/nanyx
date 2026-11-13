@@ -268,7 +268,13 @@ passes a tuple whole (`f(t)`) reads the elements from it ([#441](https://github.
 A function that requires contexts takes each of their members as a closure, in a parameter of its own after its
 others, typed from the context's definition. A call finds each member the callee requires where the type checker
 found its context (a `use`, the caller's own members, an instance built from attached definitions, or the ambient
-`Console`). [Context calls](./context-calls) describes what this costs and how to make it cheaper. A lambda of no parameters is lifted like any other, so `def block = { ... }` is a function to call. A workflow block that uses a keyword is not a lambda by then: desugaring leaves its body where it
+`Console`). A member that is a top-level function (one of the ambient `Console`'s, or of an instance built from
+attached definitions) or a top-level value is known where the call is compiled, and is not passed: the call goes to a
+specialisation of the callee on it (`println__string__known`), which calls a known function directly and passes it on
+to the functions it calls as known. Only a member that is not known is passed as a closure: a `use` of a lambda, or a
+member a function that is not specialised on it passes on. A specialisation makes a closure over a known member only
+where it uses the member as a value, as when it passes it to `list.map` (`CoreIrLowerKnown.fs`). [Context
+calls](./context-calls) describes this, and what is still to do. A lambda of no parameters is lifted like any other, so `def block = { ... }` is a function to call. A workflow block that uses a keyword is not a lambda by then: desugaring leaves its body where it
 is written.
 
 The module's top-level expressions are lowered as one more function, the start function, which evaluates each in
@@ -392,7 +398,7 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
   one cycle the language can make. Lambda lifting avoids it: the lifted function refers to itself through the
   closure it is called with, which it does not capture.
 - **Closures and contexts.** Capturing a value duplicates it, and freeing a closure drops what it captured. Context
-  members are passed as closures and follow the same rules.
+  members that are not known where a function is called are passed as closures and follow the same rules.
 - **Host calls.** Strings handed to the runtime (stdout, `dbg`) are borrowed for the call.
 - **Tail calls.** The language guarantees that a tail call uses no stack ([Tail calls](./tail-calls)), so a
   variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:

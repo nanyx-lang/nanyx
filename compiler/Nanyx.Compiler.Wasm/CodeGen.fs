@@ -576,9 +576,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                   CoreIrLowerInput.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
         parameters, contextMemberAliases name |> Map.ofList
 
-    // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported.
-    let emitFromCoreIr (context: CoreIrEmit.EmitContext) (func: CoreIr.Function) =
-        let exportName = if func.TypeArguments.IsEmpty then Some func.Source else None
+    // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported,
+    // unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`).
+    let emitFromCoreIr (context: CoreIrEmit.EmitContext) (specialisations: Set<string>) (func: CoreIr.Function) =
+        let exportName = if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) then Some func.Source else None
         CoreIrEmit.emitFunction context func exportName
 
     // Every definition that is not generic, the start function, and the specialisations and lifted functions they
@@ -623,7 +624,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Underlying, info.IsPrivate)) }
-        CoreIrLowerModule.lowerModule input (emitFromCoreIr probeContext >> ignore)
+        CoreIrLowerModule.lowerModule input (emitFromCoreIr probeContext Set.empty >> ignore)
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
@@ -689,8 +690,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           Signature = fun name -> signatures |> Map.tryFind name }
 
     /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
+    let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
     let fromCoreIr (func: CoreIr.Function) =
-        let emitted = emitFromCoreIr context func
+        let emitted = emitFromCoreIr context specialisations func
         for helper in emitted.Helpers do
             usedHelpers.Add helper |> ignore
         emitted.Text
