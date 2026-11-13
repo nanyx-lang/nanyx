@@ -45,6 +45,7 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Equal("nanyx", diagnostic.Source);
         Assert.Equal("NYX0101", diagnostic.Code?.String);
+        Assert.Equal(new Uri("https://nanyx.dev/docs/standard-tools/errors#nyx0101"), diagnostic.CodeDescription?.Href);
         Assert.Contains("missing", diagnostic.Message.String);
         Assert.Equal(new Range(2, 8, 2, 15), diagnostic.Range);
     }
@@ -236,6 +237,9 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
 
         var diagnostics = (await NextPublished(uri)).Diagnostics!.ToList();
         Assert.Equal(["NYX0009", "default/unusedBindings"], diagnostics.Select(d => d.Code?.String));
+        // Only the compiler's own codes link to the error reference.
+        Assert.NotNull(diagnostics[0].CodeDescription);
+        Assert.Null(diagnostics[1].CodeDescription);
         Assert.Equal(new Range(1, 0, 1, 14), diagnostics[0].Range);
         Assert.Equal(DiagnosticSeverity.Error, diagnostics[1].Severity);
     }

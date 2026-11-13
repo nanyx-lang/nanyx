@@ -148,6 +148,14 @@ module DiagnosticCodes =
           NotACellArgument; MisplacedCellType; UndeterminedContextType
           UnsupportedByBackend; BackendInternalError ]
 
+    /// The section of the docs' error reference about the compiler code `code`, such as
+    /// https://nanyx.dev/docs/standard-tools/errors#nyx0201; none for a linter's code.
+    let referenceUrl (code: string) : string option =
+        if all |> List.exists (fun known -> known.Code = code) then
+            Some $"https://nanyx.dev/docs/standard-tools/errors#{code.ToLowerInvariant()}"
+        else
+            None
+
 module Diagnostics =
     let private create (code: DiagnosticCode) (span: SourceSpan option) (message: string) =
         { Code = code.Code

@@ -92,8 +92,8 @@ little beyond the title.
 - Every section has an example, except those of the codes no program can report: `NYX0002` (the file given to
   `nanyx` is missing), `NYX0006` (a broken standard library module) and `NYX0302` (a bug in the backend).
 
-The language server will set each diagnostic's `codeDescription.href` to the code's section on nanyx.dev, so that an
-editor shows the code as a link.
+The language server sets each compiler diagnostic's `codeDescription.href` to the code's section on nanyx.dev, from
+`DiagnosticCodes.referenceUrl`, so that an editor shows the code as a link. A linter's code has none.
 
 # Goals
 
@@ -114,10 +114,9 @@ _To do._ Candidate items, not yet filed:
    ([#880](https://github.com/nanyx-lang/nanyx/issues/880)); see Where the compiler is today.
 4. ~~**Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.~~
    Done ([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see Where the compiler is today.
-5. **Error reference.** One page with a section per code, checked against the compiler's table, its examples compiled as
+5. ~~**Error reference.** One page with a section per code, checked against the compiler's table, its examples compiled as
    tests, and linked from the language server ([#882](https://github.com/nanyx-lang/nanyx/issues/882)); see
-   [The error reference](#the-error-reference). The page, its test and every section are in; the language server's link is
-   still to do.
+   [The error reference](#the-error-reference).~~ Done.
 
 # Open questions
 
