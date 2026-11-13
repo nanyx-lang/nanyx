@@ -33,7 +33,16 @@ npm run check    # type-check .astro and .ts files
 
 ## Deploying
 
-Deploy by hand with the Vercel CLI, from the repository root (the Vercel
+The [Docs workflow](../.github/workflows/docs.yml) deploys `main` to
+production once an hour, on the hour, from 08:00 to 22:00 London time. It
+needs the repository secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
+`VERCEL_PROJECT_ID`. To deploy straight away, run it by hand:
+
+```sh
+gh workflow run Docs
+```
+
+Or deploy with the Vercel CLI, from the repository root (the Vercel
 project's root directory is `docs/`):
 
 ```sh
