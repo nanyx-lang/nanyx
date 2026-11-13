@@ -260,21 +260,11 @@ module Compiler =
         let contextRequirements =
             imported.ContextRequirements
             |> Map.filter (fun name _ -> isSelected name)
-            |> Map.fold (fun acc name contexts ->
-                let importedName =
-                    match qualifier with
-                    | Some qualifier -> $"{qualifier}.{name}"
-                    | None -> name
-                acc |> Map.add importedName contexts) state.ContextRequirements
+            |> Map.fold (fun acc name contexts -> acc |> Map.add (ModuleLinking.importedName qualifier name) contexts) state.ContextRequirements
         let contextSignatures =
             imported.ContextSignatures
             |> Map.filter (fun name _ -> isSelected name)
-            |> Map.fold (fun acc name signature ->
-                let importedName =
-                    match qualifier with
-                    | Some qualifier -> $"{qualifier}.{name}"
-                    | None -> name
-                acc |> Map.add importedName signature) state.ContextSignatures
+            |> Map.fold (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature) state.ContextSignatures
         let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
         // The contexts the imported functions require that this module cannot name are carried in with their
         // definitions, hidden, so a call to one is checked as a call needing the context is here: an ambient
@@ -537,7 +527,8 @@ module Compiler =
                 let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> ModuleLinking.writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (DeferredErrors.deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
-                let ownNames = ModuleLinking.exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
+                let exported = ModuleLinking.exportedValueNames own
+                let ownNames = exported |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                 let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     merged.Inlined @ merged.PreludeInlined
@@ -582,7 +573,7 @@ module Compiler =
                           Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
                           TypeDefs = resolvedTypeDefs
                           Items = resolvedItems
-                          // Filled in for the root module only, by `compileWith`.
+                          // Filled in for the root module only, by `compileChecked`.
                           ExprTypes = Map.empty
                           CalleeTypes = Map.empty
                           SymbolTypes = Map.empty
@@ -596,13 +587,13 @@ module Compiler =
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
                           ContextProviders = state.ContextProviders
                           UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
-                          // Resolved for the root module only, by `compileWith`.
+                          // Resolved for the root module only, by `compileChecked`.
                           InferredContextTypes = state.InferredContextTypes
                           ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
                           ImportedContextTypes = merged.ImportedContextTypes
                           AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
                           ImportedFiles = merged.ImportedFiles
-                          // Filled in for the root module only, by `compileWith`.
+                          // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }
                      Errors = moduleErrors
@@ -624,12 +615,8 @@ module Compiler =
                         |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue && symbol.IsExported)
                         |> Seq.map (fun symbol -> symbol.Name, symbol)
                         |> Map.ofSeq
-                     ContextRequirements =
-                        let exported = ModuleLinking.exportedValueNames own
-                        state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name)
-                     ContextSignatures =
-                        let exported = ModuleLinking.exportedValueNames own
-                        state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
+                     ContextRequirements = state.ContextRequirements |> Map.filter (fun name _ -> exported.Contains name)
+                     ContextSignatures = state.ContextSignatures |> Map.filter (fun name _ -> exported.Contains name)
                      CheckedRests = state.CheckedRests
                      AmbientContexts =
                         state.AmbientMembers

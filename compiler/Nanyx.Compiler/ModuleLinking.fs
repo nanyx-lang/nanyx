@@ -9,6 +9,12 @@ module internal ModuleLinking =
     let internal importQualifier (item: ImportItem) =
         item.Alias |> Option.map IdentifierNames.sanitizeIdentifier
 
+    /// The name an imported definition `name` is known by: `m.name` under the import's qualifier `m`, else `name`.
+    let internal importedName (qualifierOpt: string option) (name: string) =
+        match qualifierOpt with
+        | Some qualifier -> $"{qualifier}.{name}"
+        | None -> name
+
     let internal reExportsOf (module': Module) =
         module'
         |> List.choose (function
@@ -220,8 +226,4 @@ module internal ModuleLinking =
             TypeEnv.generalize TypeEnv.empty (Unifier.apply renumbered ty)
         types
         |> Map.fold (fun acc name ty ->
-            let importedName =
-                match qualifierOpt with
-                | Some qualifier -> $"{qualifier}.{name}"
-                | None -> name
-            acc |> TypeEnv.declare importedName (symbols |> Map.tryFind name) (quantify ty)) env
+            acc |> TypeEnv.declare (importedName qualifierOpt name) (symbols |> Map.tryFind name) (quantify ty)) env
