@@ -365,11 +365,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | Some (InstanceDerived(_, definition, _)) -> Some [ definition ]
             | _ -> None) >> List.concat)
         |> Set.ofSeq
-    // A lambda lifted out of a function that requires contexts captures the function's members, by the names of the
-    // parameters they come in, so that it can call them and pass them on.
+    // A lambda lifted out of a function that requires contexts captures the function's members it may call, by the names
+    // of the parameters they come in, so that it can call them and pass them on.
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
-        contextMemberKeys defs (fst (extractTypeLayouts module')) |> Map.map (fun _ keys -> keys |> List.map contextMemberParameter)
+        contextMemberKeys defs (fst (extractTypeLayouts module'))
+    // A function that is passed context members where it is called: one whose type requires contexts, or context variables.
+    let requiresContexts (name: string) =
+        memberCaptures.ContainsKey name
+        || match typed.Types |> Map.tryFind name |> Option.map Unifier.unalias with
+           | Some (TyFunc(_, _, contexts)) -> not (Unifier.writtenContexts contexts).IsEmpty
+           | _ -> false
     // The members of each context without parameters, as a function value that requires the context takes them.
     let contextLayouts: CoreIrLowerTypes.ContextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
     // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
@@ -380,7 +386,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | CoreIr.IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
             | _ -> Set.empty
         | _ -> Set.empty
-    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures passedMembers typed.UseContexts module'
+    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts module'
     let defs =
         module'
         |> List.choose (function
