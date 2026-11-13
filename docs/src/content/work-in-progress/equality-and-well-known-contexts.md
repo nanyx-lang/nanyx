@@ -44,8 +44,9 @@ operators call, and `Hash(a)` and `__hash`.
   closure at each of its types is made where the lambda's is. A use the backend cannot type reads the closure compiled
   with its type variables as unit, which compares them as words. A call to a local `def same = { x, y -> x == y }` still needs an `Eq` of the type
   it compares at the call, so `same(f, f)` with functions is `NYX0205` at the call, and a def that calls it with one
-  of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). Only a call by name is
-  checked, not a local function passed as a value.
+  of its own type variables requires `Eq` of it (`WellKnownContexts.checkLocalCall`, which `Ord` shares). The local
+  function named as a value is checked the same way, at the type it is passed as, so `check(same)` where `check` calls
+  it with functions is `NYX0205` at `same` (`ContextInstances.checkComparisonsAt`).
 - **The operands are joined when one is a tag.** `{ o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))`
   checks, as the join for `if` and `match` branches does (`BranchJoin.joinBranchTypes`, chosen by
   `EqualityOperators.joinsOperands`). Other operands are still made equal, so a comparison of two `Point`s still
@@ -58,8 +59,8 @@ operators call, and `Hash(a)` and `__hash`.
   rests of its type that its comparisons, or its calls to such functions, compare
   (`ContextInference.checkRestsAtCalls`, kept in `InferState.CheckedRests` and carried by imports), and a call checks
   `Eq` of what each is there as a call to a local function does (`WellKnownContexts.checkLocalCall`). A function that
-  writes its type with an open union, `#none | r -> bool`, needs no `[Eq(r)]`. As for local functions, only a call
-  by name is checked, not a function passed as a value.
+  writes its type with an open union, `#none | r -> bool`, needs no `[Eq(r)]`. As for local functions, the function
+  named as a value is checked too, at the type it is passed as.
 - **A concrete `a == b` is a lookup too** (decision 2). Where `==` is bound to a definition that takes the operands,
   as it is after `use ignoringCase` (an `Eq(string)`), `a == b` calls it, on a built-in type as on any other; else, on
   a type with a `==` attached, it calls that, as any operator on a type that attaches it does (`OperatorCalls.fs`,
