@@ -77,22 +77,27 @@ let private typeItem (declared: DeclaredNames) (span: SourceSpan) (modifiers: Ty
                 | _ -> OutlineKind.OtherType, []
         { Name = name; Kind = kind; Span = span; NameSpan = nameSpan; Children = children })
 
-/// The defs and types declared in `value`'s block, or in the block that is its lambda's body.
+/// The defs and types declared in the blocks anywhere in `value`, in the order they are written: its own block, an
+/// `if` branch's, a match arm's, or the body of a lambda it passes, such as a `memory { ... }` block. A lambda has no
+/// name to list its defs under, so they are the enclosing def's. The defs in a local def's value are that def's.
 let rec private localItems (declared: DeclaredNames) (value: Expression) : OutlineItem list =
-    let statements =
-        match value.Kind with
-        | Block statements
-        | Lambda(_, Kind (LambdaResultSyntax.Annotated(_, Kind (Block statements))), _)
-        | Lambda(_, Kind (Block statements), _) -> statements
-        | _ -> []
-    statements
-    |> List.choose (fun statement ->
+    let rec within (expr: Expression) =
+        let children, statements = SyntaxTree.childrenOf expr
+        (children |> List.collect within) @ (statements |> List.collect inStatement)
+    and inStatement (statement: Statement) =
         match statement.Kind with
-        | DefStatement(_, _, _, defValue) -> defItem declared statement.Span defValue
-        | TypeDefStatement(_, modifiers, _, body) -> typeItem declared statement.Span modifiers body
+        | DefStatement(_, _, _, defValue) ->
+            match defItem declared statement.Span defValue with
+            | Some item -> [ item ]
+            // A def the compiler made up, such as a destructuring def's value, declares no name: its value's defs
+            // are listed in its place.
+            | None -> within defValue
+        | TypeDefStatement(_, modifiers, _, body) -> typeItem declared statement.Span modifiers body |> Option.toList
         | ImportStatement _
         | UseStatement _
-        | ExprStatement _ -> None)
+        | ExprStatement _ -> SyntaxTree.ofStatement statement |> List.collect within
+    // An or-pattern's arms share their body, which is walked once for each.
+    within value |> List.distinctBy (fun item -> item.NameSpan.Start, item.Name) |> List.sortBy (fun item -> item.Span.Start)
 
 /// The def whose value is `value`. A def the compiler made up declares no name, and is left out.
 and private defItem (declared: DeclaredNames) (span: SourceSpan) (value: Expression) =
