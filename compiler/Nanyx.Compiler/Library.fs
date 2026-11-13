@@ -184,23 +184,65 @@ module Compiler =
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name
             | _ -> true)
 
+    let private exportedValueNames (module': Module) =
+        module'
+        |> List.choose (function
+            | Kind (Def (ValueDef(true, name, _, _))) -> Some name
+            | _ -> None)
+        |> Set.ofList
+
+    let private exportedTypeNames (module': Module) =
+        module'
+        |> List.choose (function
+            | Kind (Def (TypeDef(name, modifiers, _, _))) when modifiers |> List.contains Export -> Some name
+            | _ -> None)
+        |> Set.ofList
+
+    /// The exports of `imported` that `selection` brings in unqualified: each name it selects, and the definitions
+    /// attached to each type it selects, as `$Email.parse` with `$Email`.
+    let private selectedExports (imported: CheckedModule) (selection: (Identifier * SourceSpan) list) : Set<string> =
+        let names = selection |> List.map fst |> Set.ofList
+        let types = exportedTypeNames imported.Own |> Set.intersect names
+        exportedValueNames imported.Own
+        |> Set.filter (fun name -> types |> Set.exists (fun typeName -> name.StartsWith(typeName + ".")))
+        |> Set.union names
+
     /// The items an importer inlines for the backend from a module it imports: the module's own value
     /// definitions and type definitions (plus whatever that module inlined itself). Exported definitions keep
     /// their names, or take the import's alias as a qualifier; private ones are qualified with the module's own
     /// name so they cannot collide with anything in the importer.
+    /// An import that selects names without an alias, `as (a, b)`, brings in only the exports it selects (see
+    /// `selectedExports`) unqualified; the others are inlined as private definitions are.
     let private inlinedRenames (item: ImportItem) (checkedModule: CheckedModule) : Map<string, string> =
         let qualifier = importQualifier item
         let moduleName =
             checkedModule.Name
             |> Option.map IdentifierNames.sanitizeIdentifier
             |> Option.defaultValue "import"
+        let selected = item.Selection |> Option.map (selectedExports checkedModule)
         checkedModule.Own
         |> List.choose (function
             | Kind (Def (ValueDef(true, name, _, _))) ->
-                qualifier |> Option.map (fun q -> name, $"{q}.{name}")
+                match qualifier, selected with
+                | Some q, _ -> Some (name, $"{q}.{name}")
+                | None, Some selected when not (selected.Contains name) -> Some (name, $"{moduleName}.{name}")
+                | None, _ -> None
             | Kind (Def (ValueDef(false, name, _, _))) -> Some (name, $"{moduleName}.{name}")
             | _ -> None)
         |> Map.ofList
+
+    /// The error for each name `item` selects that `imported` does not export, with the exports closest to it.
+    let private unexportedSelections (item: ImportItem) (imported: CheckedModule) : Diagnostic list =
+        let exports = Set.union (exportedValueNames imported.Own) (exportedTypeNames imported.Own)
+        let shown =
+            match item.Source with
+            | ModuleImport name -> name
+            | PathImport path -> path
+        item.Selection
+        |> Option.defaultValue []
+        |> List.filter (fun (name, _) -> not (exports.Contains name))
+        |> List.map (fun (name, span) ->
+            NameSuggestions.unknown DiagnosticCodes.NotExported span $"'{shown}' does not export '{name}'" exports name)
 
     let private inlinedItemsForImport (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
         let renames = inlinedRenames item checkedModule
@@ -230,20 +272,6 @@ module Compiler =
             | Kind (Def (ValueDef(_, name, _, _))) -> seen.Add("value:" + name)
             | Kind (Def (TypeDef(name, _, _, _))) -> seen.Add("type:" + name)
             | _ -> true)
-
-    let private exportedValueNames (module': Module) =
-        module'
-        |> List.choose (function
-            | Kind (Def (ValueDef(true, name, _, _))) -> Some name
-            | _ -> None)
-        |> Set.ofList
-
-    let private exportedTypeNames (module': Module) =
-        module'
-        |> List.choose (function
-            | Kind (Def (TypeDef(name, modifiers, _, _))) when modifiers |> List.contains Export -> Some name
-            | _ -> None)
-        |> Set.ofList
 
     let private mergeTypeDefs (target: Map<string, TypeDefInfo>) (incoming: Map<string, TypeDefInfo>) =
         incoming
@@ -326,7 +354,7 @@ module Compiler =
         | items, entryCalls, [] ->
             let entryImport =
                 if not entryCalls.IsEmpty && not (importsModule entryContextModule items) then
-                    [ TopLevelItem.synthetic (Import [ { Source = ModuleImport entryContextModule; Alias = None; Span = SourceSpan.none } ]) ]
+                    [ TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport entryContextModule) None ]) ]
                 else
                     []
             let lowered = entryCalls |> List.map (fun (attribute, call) -> attribute, SyntaxTree.ofItem call |> List.map _.Id) |> Map.ofList
@@ -522,7 +550,7 @@ module Compiler =
                 if key = preludeKey then
                     fileImports
                 else
-                    { Source = ModuleImport (StandardLibrary.importPrefix + StandardLibrary.preludeModuleName); Alias = None; Span = SourceSpan.none }
+                    ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + StandardLibrary.preludeModuleName)) None
                     :: fileImports
             let mutable env =
                 match origin with
@@ -556,13 +584,16 @@ module Compiler =
                 let importedKey = originKey importedOrigin
                 let qualifier = importQualifier item
                 let exportedValues = exportedValueNames imported.Own
+                // An import without an alias brings in every export unqualified, or only those it selects.
+                let selected = if qualifier.IsNone then item.Selection |> Option.map (selectedExports imported) else None
+                let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
                 if qualifier.IsNone && importedKey <> preludeKey then
                     let moduleName =
                         match imported.Name, item.Source with
                         | Some name, _ -> name
                         | None, ModuleImport name -> name
                         | None, PathImport path -> path
-                    for name in exportedValues do
+                    for name in exportedValues |> Set.filter isSelected do
                         let sources = unqualifiedSources |> Map.tryFind name |> Option.defaultValue []
                         if not (sources |> List.exists (fun (key, _) -> key = importedKey)) then
                             unqualifiedSources <- unqualifiedSources |> Map.add name (sources @ [ importedKey, moduleName ])
@@ -586,7 +617,7 @@ module Compiler =
                     |> Seq.choose (fun id -> imported.Typed.Symbols |> Map.tryFind id)
                     |> Seq.map (fun symbol -> symbol.Id, symbol)
                     |> Map.ofSeq
-                env <- extendEnvWithImport env qualifier exportedValueTypes (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
+                env <- extendEnvWithImport env qualifier (exportedValueTypes |> Map.filter (fun name _ -> isSelected name)) (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
                 // The import is a symbol of its own, unless the compiler made it up (for `@entry`).
                 let importSymbols, importedThrough =
                     if SourceSpan.isNone item.Span then
@@ -615,7 +646,8 @@ module Compiler =
                         state.TypeDefs |> Map.filter (fun name _ -> not (preludeTypeNames.Contains name && exportedTypeDefs.ContainsKey name))
                 // An aliased import's types are written with the alias (`m.$Email`). Their own names stay known for
                 // the signatures that name them, but cannot be written unless something else brings them in. An
-                // unaliased import's types can, and replace a type only an aliased import brought in.
+                // unaliased import's types can, and replace a type only an aliased import brought in. One that selects
+                // names brings in only the types it selects; the rest are as an aliased import's.
                 let typeDefs, hiddenTypeNames =
                     match qualifier with
                     | Some qualifier ->
@@ -623,11 +655,14 @@ module Compiler =
                         let hidden = exportedTypeDefs.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
                         qualified, Set.union state.HiddenTypeNames hidden
                     | None ->
-                        typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && exportedTypeDefs.ContainsKey name)),
-                        state.HiddenTypeNames - Set.ofSeq exportedTypeDefs.Keys
+                        let visible, unselected = exportedTypeDefs |> Map.partition (fun name _ -> isSelected name)
+                        let hidden = unselected.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
+                        typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && visible.ContainsKey name)),
+                        Set.union (state.HiddenTypeNames - Set.ofSeq visible.Keys) hidden
                 // A function that requires a context requires it wherever it is called, under the name it is imported as.
                 let contextRequirements =
                     imported.ContextRequirements
+                    |> Map.filter (fun name _ -> isSelected name)
                     |> Map.fold (fun acc name contexts ->
                         let importedName =
                             match qualifier with
@@ -636,6 +671,7 @@ module Compiler =
                         acc |> Map.add importedName contexts) state.ContextRequirements
                 let contextSignatures =
                     imported.ContextSignatures
+                    |> Map.filter (fun name _ -> isSelected name)
                     |> Map.fold (fun acc name signature ->
                         let importedName =
                             match qualifier with
@@ -680,7 +716,7 @@ module Compiler =
                         PreludeContexts =
                             if importedKey = preludeKey then
                                 exportedTypeDefs |> Map.filter (fun _ info -> info.IsContext) |> Map.keys |> Set.ofSeq
-                            elif qualifier.IsNone then state.PreludeContexts - Set.ofSeq exportedTypeDefs.Keys
+                            elif qualifier.IsNone then state.PreludeContexts - (exportedTypeDefs.Keys |> Seq.filter isSelected |> Set.ofSeq)
                             else state.PreludeContexts
                         // Where each definition is imported, since a `module name =` block's imports are its own.
                         ImportSites =
@@ -705,6 +741,15 @@ module Compiler =
                 importedContextTypes <-
                     RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
                     |> Map.fold (fun acc id found -> acc |> Map.add id found) importedContextTypes
+            // `as m & (a, b)` is an import under `m` and an import of `a` and `b` alone. The second is made up, so it
+            // is not an import symbol of its own. A name the module does not export is an error.
+            let mergeWritten (importedOrigin: ModuleOrigin) (item: ImportItem) (imported: CheckedModule) =
+                match unexportedSelections item imported, item.Alias, item.Selection with
+                | _ :: _ as unexported, _, _ -> errors <- errors @ unexported
+                | [], Some _, Some _ ->
+                    mergeImport importedOrigin { item with Selection = None } imported
+                    mergeImport importedOrigin { item with Alias = None; Span = SourceSpan.none } imported
+                | [], _, _ -> mergeImport importedOrigin item imported
             for item in imports do
                 // An import of a module that is still being checked, because it imports this one, is a cycle.
                 let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
@@ -728,7 +773,7 @@ module Compiler =
                         | Ok imported when imported.Name <> Some moduleName ->
                             let declared = imported.Name |> Option.defaultValue "(none)"
                             errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
-                        | Ok imported -> mergeImport (StandardLibraryModule moduleName) item imported
+                        | Ok imported -> mergeWritten (StandardLibraryModule moduleName) item imported
                 | None ->
                     match origin with
                     | SourceFile fullPath ->
@@ -740,7 +785,7 @@ module Compiler =
                             | Error (_, diags) -> errors <- errors @ diags
                             | Ok imported ->
                                 match FileImports.importedFile item imported.Name imported.Syntax with
-                                | [] -> mergeImport (SourceFile importPath) item imported
+                                | [] -> mergeWritten (SourceFile importPath) item imported
                                 | diags -> errors <- errors @ diags
                     | StandardLibraryModule name ->
                         errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{name}' may only import other standard library modules" ]

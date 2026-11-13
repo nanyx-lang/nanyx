@@ -95,8 +95,15 @@ type ImportSource =
 type ImportItem =
     { Source: ImportSource
       Alias: Identifier option
-      /// The import as written: its source and alias.
+      /// The names `as (a, b)` or `as m & (a, b)` selects, each where it is written. Only these come in unqualified.
+      Selection: (Identifier * SourceSpan) list option
+      /// The import as written: its source, alias and selection.
       Span: SourceSpan }
+
+module ImportItem =
+    /// An import of `source` under `alias`, with no selection and nowhere in the source.
+    let synthetic (source: ImportSource) (alias: Identifier option) : ImportItem =
+        { Source = source; Alias = alias; Selection = None; Span = SourceSpan.none }
 
 /// A type expression and where it came from. Like `Expression`, equality and comparison look only at `Kind`, and
 /// it is printed (`%A`) as its kind alone. Like `Pattern`, it is declared before `Expression`.

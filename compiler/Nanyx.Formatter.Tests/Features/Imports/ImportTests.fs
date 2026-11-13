@@ -39,3 +39,12 @@ let ``Imports in a row in a module block go in one bracketed import too`` () =
     Assert.Equal(
         lines [ "module m ="; "  import ("; "    nanyx/math"; "    nanyx/text"; "  )"; ""; "  def a = 1" ],
         format (lines [ "module m ="; "  import nanyx/math"; "  import nanyx/text"; "  def a = 1" ]))
+
+[<Fact>]
+let ``A selection is printed after as, and after & with an alias`` () =
+    unchanged (lines [ "import util as (double, triple)"; ""; "def a = double(1)" ])
+    unchanged (lines [ "import util as u & (double)"; ""; "def a = double(1)" ])
+
+[<Fact>]
+let ``A selection written one name per line is printed on one`` () =
+    Assert.Equal(lines [ "import util as (double, triple)" ], format (lines [ "import util as ("; "  double"; "  triple"; ")" ]))

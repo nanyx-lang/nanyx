@@ -27,7 +27,10 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
         else
             n
 
-    let importItem (item: ImportItem) = { item with Span = SourceSpan.none }
+    let importItem (item: ImportItem) =
+        { item with
+            Selection = item.Selection |> Option.map (List.map (fun (name, _) -> name, SourceSpan.none))
+            Span = SourceSpan.none }
 
     let rec expr (e: Expression) : Expression =
         let kind =
