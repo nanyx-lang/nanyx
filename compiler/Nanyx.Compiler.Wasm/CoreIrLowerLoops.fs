@@ -6,8 +6,6 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 
-let private mk kind ty : Expr = { Kind = kind; Type = ty }
-
 /// `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body names by its
 /// parameter. A range counts from its start (to its end, if it has one); a list walks its cells. `depth` is how many
 /// loops enclose this one, which names its locals; `atoms` lowers the iterables' operands, and `lowerBody` the body,
@@ -51,9 +49,9 @@ let forEach
             |> fst
         let vars = streams |> List.fold (fun vars (parameter, stream) -> vars |> Map.add parameter stream.Element) vars
         let forLoop: ForLoop = { Streams = List.map snd streams; Depth = depth; Body = lowerBody vars }
-        k (mk (ForEach forLoop) IrUnit))
+        k (Expr.make (ForEach forLoop) IrUnit))
 
 /// `while condition -> body`, from the lowered condition and body, which run again each time round. `depth` is how many
 /// loops enclose this one, which names its labels.
 let whileLoop (depth: int) (condition: Expr) (body: Expr) =
-    mk (While { Condition = condition; Depth = depth; Body = body }) IrUnit
+    Expr.make (While { Condition = condition; Depth = depth; Body = body }) IrUnit
