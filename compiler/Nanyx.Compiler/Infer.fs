@@ -182,8 +182,12 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
         |> Result.bind (fun (typedExpr, next) ->
             match expr.Kind with
             // A call to a function that requires a parameterised context finds its instance once its arguments are typed.
+            // Arguments that do not fit the callee leave its type variables open, so no instance is found: the mismatch
+            // is the error, which its constraints report, not the context (#1045).
             | FunctionCall(name, spanOpt, _) ->
-                resolveCallInstances env next expr name (nameSpan spanOpt expr)
+                match resolveCallInstances env next expr name (nameSpan spanOpt expr) with
+                | Error _ when snd (Unifier.solve next.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok next
+                | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
                 |> Result.bind (fun next -> checkCalledComparisons env next expr name (nameSpan spanOpt expr))
                 |> Result.bind (MemoryCells.checkCall env expr name)
