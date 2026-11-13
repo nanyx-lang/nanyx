@@ -297,3 +297,24 @@ for [Product(name = "a", price = 2), Product(name = "b", price = 5)] | p ->
   println("{p.name}: {p.price}")
 """
     runSource source |> assertRan "a: 2\nb: 5\n"
+
+[<Fact>]
+let ``Run - an open record parameter takes a record with more fields, and a named row keeps them`` () =
+    let source = """
+import nanyx/console
+
+def g: (x: int, y: int, ...) -> int = { x, y -> x + y }
+
+def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
+
+def main = {
+  def data = (x = 1, y = 2, z = 3)
+  println(g(data))
+  println(g((x = 10, y = 20, label = "a")))
+  def moved = moveRight((x = 1, y = 2, label = "a"))
+  println("{moved.label} {moved.x} {moved.y}")
+}
+
+main()
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n30\na 2 2\n"

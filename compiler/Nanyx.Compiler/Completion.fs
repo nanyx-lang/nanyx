@@ -66,10 +66,11 @@ type MemberKind =
 /// What can follow a dot, with its type as hover writes it, if it has one, and the symbol of a definition.
 type Member = { Name: string; Kind: MemberKind; Type: string option; IsFunction: bool; Symbol: Symbol option }
 
-/// The fields of a record type, or of the record a named type stands for.
+/// The fields of a record type, or of the record a named type stands for. An open record's are the ones it lists.
 let rec private recordFields (ty: Ty) : Map<string, Ty> option =
     match Unifier.unalias ty with
-    | TyRecord fields -> Some fields
+    | TyRecord fields
+    | TyOpenRecord(fields, _) -> Some fields
     | TyNominal(_, underlying, _) -> recordFields underlying
     | _ -> None
 

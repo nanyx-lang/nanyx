@@ -93,6 +93,9 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         | TypeUnit -> text "()"
         | TypeTuple _ -> parenType t
         | TypeRecord fields -> cat [ text "("; commaJoin (List.map recordTypeField fields); text ")" ]
+        | TypeOpenRecord(fields, row) ->
+            let others = text ("..." + Option.defaultValue "" row)
+            cat [ text "("; commaJoin (List.map recordTypeField fields @ [ others ]); text ")" ]
         // `mut int`, the type of a cell (see `CellPassingSyntax`): what it holds is an atom, so a bigger type is bracketed.
         | TypeApply(n, [ held ]) when n = CellPassingSyntax.typeName ->
             match held.Kind with

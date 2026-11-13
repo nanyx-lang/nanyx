@@ -823,7 +823,12 @@ and private inferCall (env: TypeEnv) (state: InferState) (expr: Expression) (nam
             match inferExpr env state baseExpr with
             | Error err -> Error err
             | Ok (typedBase, afterBase) ->
-                match recordFieldsOf typedBase.Type with
+                // An open record's fields are the ones it lists: its other fields are kept, and can't be updated.
+                let updatable =
+                    match Unifier.unalias typedBase.Type with
+                    | TyOpenRecord(fields, _) -> Some fields
+                    | ty -> recordFieldsOf ty
+                match updatable with
                 | None -> Error [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate baseExpr.Span "`with` needs a record whose fields are known here" ]
                 | Some fields ->
                     let mutable current = afterBase

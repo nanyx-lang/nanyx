@@ -222,3 +222,13 @@ let ``a type marked optional with ? is reported, with the union to write instead
     let reported, text = parseErrorOf source
     Assert.Contains("A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`", reported)
     Assert.Equal(at, text)
+[<Fact>]
+let ``an open record type ends its named fields with ... or ...r`` () =
+    let annotationOf source =
+        match parseModule source with
+        | Result.Ok [ Kind (Def (ValueDef (_, _, Some annotation, _))) ] -> annotation
+        | other -> failwith $"Unexpected parse: %A{other}"
+    let field name typeName = TypeField (name, false, Some (named typeName), None)
+    annotationOf "def p: (x: int, ...) = p" |> should equal (ty (TypeOpenRecord ([ field "x" "int" ], None)))
+    annotationOf "def p: (x: int, y: int, ...r) = p" |> should equal (ty (TypeOpenRecord ([ field "x" "int"; field "y" "int" ], Some "r")))
+    annotationOf "def p: (int, x: int, ...) = p" |> should equal (ty (TypeOpenRecord ([ field "0" "int"; field "x" "int" ], None)))

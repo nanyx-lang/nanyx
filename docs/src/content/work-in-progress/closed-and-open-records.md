@@ -4,10 +4,10 @@ description: "Whether a record type allows fields it does not name"
 order: 23
 ---
 
-> **Status: in progress.** This page decides whether a record type allows fields it does not name. Built: closed
-> records and record patterns have exactly their fields, and a pattern may end in `...` (stage 1 of the
-> [plan](#plan)). Not built: writing `...` in a type. It is part
-> of the [compilation](./compilation) workstream, and its issues carry the `compilation` and `type checker` labels.
+> **Status: built, with an open question.** This page decides whether a record type allows fields it does not name.
+> Built: closed records and record patterns have exactly their fields, a pattern may end in `...`, and a record
+> type may end in `...` or `...r` (the [plan](#plan)). Still open: the [open question](#open-questions). It is part of the [compilation](./compilation) workstream, and its issues carry
+> the `compilation` and `type checker` labels.
 
 # Summary
 
@@ -141,23 +141,28 @@ offsets, so open records cost code size, not speed.
   those fields (`openRecordWith` in
   [InferState.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/InferState.fs)). A tuple
   pattern's names, `(name, age)`, are closed too, and have no `...` form.
-- **Open records exist in inference only.** `TyOpenRecord` ([TypedAst.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/TypedAst.fs)) is what
+- **Open records can be written.** `TyOpenRecord` ([TypedAst.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/TypedAst.fs)) is what
   reading a field of an unknown value gives, and is printed `(x: int, ...a)`. Unification solves its row as the
-  table above says. There is no syntax for it: the parser's `typeRecord` ([Types.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Parser/Types.fs))
-  does not accept `...`.
+  table above says. The parser's `typeRecord` ([Types.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Parser/Types.fs))
+  reads `...` or `...r` after a record type's named fields as a `TypeOpenRecord`, and `typeExprToTy`
+  ([TypeResolution.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/TypeResolution.fs)) makes it a
+  `TyOpenRecord`: `...r` is the annotation's type variable `r`, and `...` a variable of its own. The formatter keeps
+  both, a hover writes them `…` and `…r`, and completion offers the fields an open record lists.
+- **`with` on an open record** updates the fields its type lists; the others are kept, and can't be updated.
 - **The backend specialises open records.** `bindScheme` in [CoreIrLowerTypes.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler.Wasm/CoreIrLowerTypes.fs)
-  binds an open record's row to the fields of the record it is used at. An open record still open at code generation
-  is reported as not supported.
+  binds an open record's row to the fields of the record it is used at. A function of several parameters given a
+  record with more fields takes the field of each parameter's name (`parameterTypes`, and `fieldsAsArguments` in
+  `CoreIrLowerArguments.fs`). An open record still open at code generation is reported as not supported.
 
 # Plan
 
 1. **Closed means closed.** _Done._ Two closed records agree only when they have the same fields, with an error
    that names the extra or missing ones ([#470](https://github.com/nanyx-lang/nanyx/issues/470)). A record pattern
    names every field or ends in `...` ([#459](https://github.com/nanyx-lang/nanyx/issues/459)).
-2. **`...` and `...r` in record types.** Parse them, lower them to `TyOpenRecord`, and have the formatter, hover
-   and completion show them. ([#471](https://github.com/nanyx-lang/nanyx/issues/471))
-3. **Docs.** The [records tour](../tour/records#closed-and-open-records) describes the
-   design; once stages 1 and 2 land, its examples get tests.
+2. **`...` and `...r` in record types.** _Done._ They parse, lower to `TyOpenRecord`, and the formatter, hover and
+   completion show them ([#471](https://github.com/nanyx-lang/nanyx/issues/471)).
+3. **Docs.** _Done._ The [records tour](../tour/records#closed-and-open-records) describes the design, and its
+   examples are tests.
 
 # Open questions
 

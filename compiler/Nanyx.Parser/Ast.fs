@@ -153,6 +153,9 @@ and TypeExprKind =
     | TypeUnit
     | TypeTuple of TypeExpr list
     | TypeRecord of TypeRecordField list
+    /// `(x: int, ...)` or `(x: int, ...r)`: a record with the fields it lists and any other named fields, and the name
+    /// `...r` gives those others, if it gives one. Its positional fields are exactly the ones it lists.
+    | TypeOpenRecord of TypeRecordField list * Identifier option
     | TypeApply of Identifier * TypeExpr list
     | TypeFunc of TypeExpr * TypeExpr
     | TypeTag of Identifier * TypeExpr option
@@ -625,7 +628,8 @@ module TypeExpr =
         | TypeIntersection items
         | TypeContext items
         | TypeApply(_, items) -> items
-        | TypeRecord fields ->
+        | TypeRecord fields
+        | TypeOpenRecord(fields, _) ->
             fields |> List.choose (function TypeField(_, _, typeOpt, _) | TypeMember(_, typeOpt) -> typeOpt)
         | TypeFunc(arg, ret) -> [ arg; ret ]
         | TypeTag(_, payload) -> Option.toList payload
@@ -633,6 +637,10 @@ module TypeExpr =
         | TypeConstraint(_, inner, _)
         | TypeWhere(inner, _) -> [ inner ]
 
+    let private mapField (f: TypeExpr -> TypeExpr) (field: TypeRecordField) =
+        match field with
+        | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, Option.map f typeOpt, defaultOpt)
+        | TypeMember(name, typeOpt) -> TypeMember(name, Option.map f typeOpt)
     /// `typeExpr` with `f` applied to each type expression directly inside it: those `children` gives. One with none,
     /// a `typeof` among them, is returned as it is.
     let mapChildren (f: TypeExpr -> TypeExpr) (typeExpr: TypeExpr) : TypeExpr =
@@ -648,12 +656,8 @@ module TypeExpr =
             | TypeIntersection items -> TypeIntersection(List.map f items)
             | TypeContext items -> TypeContext(List.map f items)
             | TypeApply(name, items) -> TypeApply(name, List.map f items)
-            | TypeRecord fields ->
-                TypeRecord(
-                    fields
-                    |> List.map (function
-                        | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, Option.map f typeOpt, defaultOpt)
-                        | TypeMember(name, typeOpt) -> TypeMember(name, Option.map f typeOpt)))
+            | TypeRecord fields -> TypeRecord(List.map (mapField f) fields)
+            | TypeOpenRecord(fields, row) -> TypeOpenRecord(List.map (mapField f) fields, row)
             | TypeFunc(arg, ret) -> TypeFunc(f arg, f ret)
             | TypeTag(name, payload) -> TypeTag(name, Option.map f payload)
             | TypeWithContext(contexts, inner) -> TypeWithContext(List.map f contexts, f inner)

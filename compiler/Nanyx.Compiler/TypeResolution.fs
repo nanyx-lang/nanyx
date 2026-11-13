@@ -20,6 +20,8 @@ let rec internal annotationVarNames (typeExpr: TypeExpr) : string list =
             |> List.collect (function
                 | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> annotationVarNames t
                 | _ -> [])
+        // The name of an open record's other fields is a type variable like any other.
+        | TypeOpenRecord(fields, row) -> annotationVarNames { typeExpr with Kind = TypeRecord fields } @ Option.toList row
         | TypeApply(_, args) -> ofList args
         | TypeFunc(arg, ret) -> annotationVarNames arg @ annotationVarNames ret
         | TypeTag(_, payload) -> payload |> Option.map annotationVarNames |> Option.defaultValue []
@@ -209,6 +211,14 @@ let internal inputTypeFromArgs argTys =
 let private isPrivateType modifiers =
     modifiers |> List.exists (fun modifier -> modifier = TypeDefModifier.Private)
 
+/// The type variable an annotation names `name`: the one it already stands for in this annotation, or a new one. The
+/// variable keeps the annotation's name, so types are shown with the names the user wrote.
+let private namedTypeVar (state: InferState) (name: Identifier) : TyVar * InferState =
+    match state.TypeVars |> Map.tryFind name with
+    | Some existing -> existing, state
+    | None ->
+        let var = { Id = state.NextId; Name = Some name }
+        var, { state with NextId = state.NextId + 1; TypeVars = state.TypeVars |> Map.add name var }
 
 let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * InferState =
     match typeExpr.Kind with
@@ -225,12 +235,8 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             | Some info -> namedType name info, recordTypeReference typeExpr info state
             | None -> TyPrimitive name, state
     | TypeVar name ->
-        match state.TypeVars |> Map.tryFind name with
-        | Some existing -> TyVar existing, state
-        | None ->
-            // The variable keeps the annotation's name, so types are shown with the names the user wrote.
-            let var = { Id = state.NextId; Name = Some name }
-            TyVar var, { state with NextId = state.NextId + 1; TypeVars = state.TypeVars |> Map.add name var }
+        let var, next = namedTypeVar state name
+        TyVar var, next
     // Each `_` is a variable of its own, with no name to share (see `TypeHoles`). It is recorded by node, as an
     // expression's type is, so an editor can show what it was inferred to be.
     | TypeHole ->
@@ -247,21 +253,16 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
                 ty)
         tupleRecordType tys, current
     | TypeRecord fields ->
-        let mutable current = state
-        let fieldMap =
-            fields
-            |> List.choose (function
-                | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt)
-                | TypeMember(name, typeOpt) -> Some (name, typeOpt))
-            |> List.map (fun (name, typeOpt) ->
-                let ty, next =
-                    match typeOpt with
-                    | Some t -> typeExprToTy current t
-                    | None -> freshVar current
-                current <- next
-                name, ty)
-            |> Map.ofList
-        TyRecord fieldMap, current
+        let fieldMap, next = recordFieldTypes state fields
+        TyRecord fieldMap, next
+    // `...r` is the type variable `r`, shared with the rest of the annotation; `...` is a variable of its own.
+    | TypeOpenRecord(fields, row) ->
+        let fieldMap, next = recordFieldTypes state fields
+        let rowVar, next =
+            match row with
+            | Some name -> namedTypeVar next name
+            | None -> { Id = next.NextId; Name = None }, { next with NextId = next.NextId + 1 }
+        TyOpenRecord(fieldMap, rowVar), next
     | TypeApply(name, args) ->
         let mutable current = state
         let argTys =
@@ -355,6 +356,24 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | Some ty -> ty, state
         | None -> freshVar state
 
+/// The types of the fields of a record type, by name. A field written without a type is a fresh variable.
+and private recordFieldTypes (state: InferState) (fields: TypeRecordField list) : Map<string, Ty> * InferState =
+    let mutable current = state
+    let fieldMap =
+        fields
+        |> List.choose (function
+            | TypeField(name, _, typeOpt, _) -> Some (name, typeOpt)
+            | TypeMember(name, typeOpt) -> Some (name, typeOpt))
+        |> List.map (fun (name, typeOpt) ->
+            let ty, next =
+                match typeOpt with
+                | Some t -> typeExprToTy current t
+                | None -> freshVar current
+            current <- next
+            name, ty)
+        |> Map.ofList
+    fieldMap, current
+
 /// The values named by each `typeof` in `typeExpr`, in the order they are written.
 let rec internal typeOfValues (typeExpr: TypeExpr) : Expression list =
     let ofList items = items |> List.collect typeOfValues
@@ -362,7 +381,8 @@ let rec internal typeOfValues (typeExpr: TypeExpr) : Expression list =
     | TypeOf value -> [ value ]
     | TypeName _ | TypeVar _ | TypeHole | TypeUnit -> []
     | TypeTuple items | TypeUnion items | TypeIntersection items | TypeContext items -> ofList items
-    | TypeRecord fields ->
+    | TypeRecord fields
+    | TypeOpenRecord(fields, _) ->
         fields
         |> List.collect (function
             | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> typeOfValues t
@@ -391,7 +411,8 @@ let rec private typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) lis
     | TypeTuple items
     | TypeUnion items
     | TypeIntersection items -> items |> List.collect ofType
-    | TypeRecord fields ->
+    | TypeRecord fields
+    | TypeOpenRecord(fields, _) ->
         fields
         |> List.collect (function
             | TypeField(_, _, Some t, _)
