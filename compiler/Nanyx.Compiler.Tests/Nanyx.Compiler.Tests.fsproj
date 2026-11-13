@@ -30,6 +30,7 @@
     <Compile Include="Features\Contexts\AddContextFixTests.fs" />
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\ContextEscapeTests.fs" />
+    <Compile Include="Features\Contexts\ScopedContextTests.fs" />
     <Compile Include="Features\Contexts\AliasedContextTests.fs" />
     <Compile Include="Features\Contexts\OperatorContextTests.fs" />
     <Compile Include="Features\Contexts\StructuralInstanceTests.fs" />
@@ -44,6 +45,7 @@
     <Compile Include="Features\Contexts\ContextProviderTests.fs" />
     <Compile Include="Features\Contexts\ContextMemberValueTests.fs" />
     <Compile Include="Features\Contexts\ParameterisedContextCallTests.fs" />
+    <Compile Include="Features\Contexts\UseDischargeTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Definitions\InitialisationCycleTests.fs" />

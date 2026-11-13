@@ -74,6 +74,11 @@ def main = {
 - **The backend needs nothing new.** `FunctionLowering.Coerce` already adapts a function value given where one that
   passes fewer members is expected, capturing the members it needs where it is given. A `use` binding goes through it.
 
+`UseDischarge.fs` does this in the type checker ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). A `use`
+marks the instance it loads; the constructor call checks each lambda it is given against its member's type without
+the contexts the lambda needs besides, and records those as used where the `use` is written, so a lambda around the
+`use` requires them too. The lambda's parameters take their types from the member wherever the constructor is called.
+
 A `use` of a record written out, `use (log = { m: string -> println(m) })`, already checks and runs, because its
 members have no declared types to fit: `log` is `[Console] string -> ()`, and a lambda that calls it requires
 `Console`.
@@ -183,13 +188,16 @@ checks, since a lambda with no parameters ignores one.
 
 # Plan
 
-1. Let a `use` give a member a lambda that needs more contexts, required where the `use` is written
-   ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)).
+1. ~~Let a `use` give a member a lambda that needs more contexts, required where the `use` is written~~
+   ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). Done: see `UseDischarge.fs` above.
 2. ~~Make a lambda that uses a cell require `$Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
    Done: a read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so
    `{ word -> count := count + 1 }` is `[$Memory] string -> ()`, and a lambda that calls it requires `$Memory` too.
    NYX0224 still keeps such a lambda in its block.
-3. Parse and format `scoped context`, which must be nominal ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
+   Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
+   `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `$Memory` is declared
+   `scoped`. Nothing checks escape by it yet.
 4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3).
 5. Give a `memory` block its instance, `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058),

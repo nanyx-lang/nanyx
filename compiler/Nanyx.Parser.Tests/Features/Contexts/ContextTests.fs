@@ -16,6 +16,21 @@ let ``Parse context feature files`` () =
     )
 
 [<Fact>]
+let ``scoped comes before export and context, and is recorded with where it is written`` () =
+    for source in [ "scoped context $Tx = ()"; "scoped export context $Memory = ()"; "scoped context Tx = ()" ] do
+        match parseModule source with
+        | Result.Ok [ Kind (Def (TypeDef (_, modifiers, [], _))) ] ->
+            Assert.Contains(Context, modifiers)
+            Assert.Equal(source.Contains "export", List.contains Export modifiers)
+            match TypeDefModifier.scopedSpan modifiers with
+            | Some span -> Assert.Equal((0, 6), (span.Start, span.End))
+            | None -> failwith $"Expected '{source}' to be scoped"
+        | other -> failwith $"Unexpected parse of '{source}': %A{other}"
+    match parseModule "export context $Memory = ()" with
+    | Result.Ok [ Kind (Def (TypeDef (_, modifiers, [], _))) ] -> Assert.Equal(None, TypeDefModifier.scopedSpan modifiers)
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
 let ``a name that starts with use or in is not the use keyword`` () =
     let statementsOf source =
         match parseModule source with

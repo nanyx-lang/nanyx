@@ -517,7 +517,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let argResults =
                         args
                         |> List.map (fun arg ->
-                            match inferExpr env current arg with
+                            let inferred =
+                                match LambdaArguments.namedFields arg info.Underlying with
+                                | Some (names, values, memberTys) ->
+                                    let inferLambda state lambda lambdaArgs lambdaBody expectedInput =
+                                        inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                                    LambdaArguments.inferTupleItems (inferExpr env) inferLambda current values memberTys
+                                    |> Result.map (fun (typedValues, next) ->
+                                        let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList
+                                        mkTypedExpr arg (TyRecord fieldTys) None None None, next)
+                                    |> recordExprType
+                                | None -> inferExpr env current arg
+                            match inferred with
                             | Ok (ty, next) ->
                                 current <- next
                                 Ok ty
@@ -529,8 +540,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Some diagnostic -> Error [ diagnostic ]
                         | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
-                        let inputTy = inputTypeFromArgs argTys
-                        let constrained = addAssignableConstraint inputTy info.Underlying current
+                        let inputTy, fitted = UseDischarge.fit current expr info.Underlying args (inputTypeFromArgs argTys)
+                        let constrained = addAssignableConstraint inputTy info.Underlying fitted
                         Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
                     else
                         Error errors
@@ -668,7 +679,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 Ok ({ typedCall with Expr = { expr with Kind = Pipe(value, resolvedName, spanOpt, args) } }, finalState)
             | Error err -> Error err
     | UseIn(value, body) ->
-        match inferExpr env state value with
+        match inferExpr env (UseDischarge.mark value state) value with
         | Error err -> Error err
         | Ok (typedValue, nextState) ->
             let envWithUse, nextState = useInstance (extendEnvWithRecordFields (FromUse value.Id) nextState env typedValue.Type) nextState value typedValue.Type
@@ -1459,11 +1470,12 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters
                 current <- registerTypeDef current name modifiers parameters body
                 // Checked once the type is registered, so it can name itself.
-                if errors.IsEmpty then errors <- unknownTypesInTypeDef current body parameters @ unguardedSelfReferences name modifiers body
+                if errors.IsEmpty then
+                    errors <- unnominalScopedContext name modifiers @ unknownTypesInTypeDef current body parameters @ unguardedSelfReferences name modifiers body
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement value ->
                 if errors.IsEmpty then
-                    match inferExpr env' current value with
+                    match inferExpr env' (UseDischarge.mark value current) value with
                     | Ok (typedExpr, next) ->
                         let withUse, next = useInstance (extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type) next value typedExpr.Type
                         current <- next

@@ -10,12 +10,6 @@ open Nanyx.Compiler.Tests.TestSupport
 let private typeOf (source: string) (name: string) =
     Unifier.tyToString (compileClean source).Types.[name]
 
-let private hoverType (source: string) (text: string) =
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let offset = source.ReplaceLineEndings("\n").IndexOf text
-    Hover.typeAt Unicode result offset |> Option.map _.Type
-
 [<Fact>]
 let ``A parameter's function type keeps the contexts written on it`` () =
     let source =

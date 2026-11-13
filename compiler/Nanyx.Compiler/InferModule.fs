@@ -351,7 +351,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
             match typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters with
-            | [] -> errors <- errors @ unknownTypesInTypeDef state body parameters @ unguardedSelfReferences name modifiers body
+            | [] ->
+                errors <-
+                    errors
+                    @ unnominalScopedContext name modifiers
+                    @ unknownTypesInTypeDef state body parameters
+                    @ unguardedSelfReferences name modifiers body
             | typeOfErrors -> errors <- errors @ typeOfErrors
             emit (TypedDef (TypedTypeDef(name, modifiers, parameters, body)))
 

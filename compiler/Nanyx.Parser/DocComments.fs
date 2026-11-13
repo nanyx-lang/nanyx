@@ -64,7 +64,7 @@ module DocComments =
         String.concat "\n" (firstLine :: (rest |> List.map (fun line -> if line.Length = 0 then line else String(' ', indent) + line)))
 
     /// The words that may come before what a doc comment documents on its line: `export def name`, `| #tag`.
-    let private leadingWords = set [ "export"; "private"; "def"; "rec"; "mut"; "type"; "context"; "|"; "(" ]
+    let private leadingWords = set [ "scoped"; "export"; "private"; "def"; "rec"; "mut"; "type"; "context"; "|"; "(" ]
 
     /// The doc comments among `comments` (start and end offsets in `source`, as the parser notes them), each attached
     /// to what it documents in `items`, the module as parsed, whose declarations are `declared`.

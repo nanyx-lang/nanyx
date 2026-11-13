@@ -160,7 +160,8 @@ what the compiler keeps: exact spans, resolved names and types.
   workspace.
 - **Document symbols** ([#278](https://github.com/nanyx-lang/nanyx/issues/278)), for the outline view, breadcrumbs
   and Go to Symbol in Editor. `NyxCompiler.Outline.ofSource` parses the text and lists its top-level defs (a
-  function when the value is a lambda), types (a record, a union or another alias), contexts and `module name =`
+  function when the value is a lambda), types (a record, a union or another alias), contexts (a scoped one shows
+  `scoped` as its detail) and `module name =`
   blocks, each with what is declared inside it: a def's local defs, a record's fields, a context's members, a
   block's definitions. The parser lifts a block's defs to the top level, so they are put back by where the block
   is written. Names and their spans come from the declared names the parser records (`DefValue`, `TypeDefBody`,
