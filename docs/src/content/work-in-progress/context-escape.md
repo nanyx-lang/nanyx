@@ -199,6 +199,15 @@ checks, since a lambda with no parameters ignores one.
    `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `$Memory` is declared
    `scoped`. Nothing checks escape by it yet.
 4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
-   ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3).
+   ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3). In two steps:
+   - ~~Carry the scope in types.~~ Done: a scoped context in a type is `TyApply("$Memory", [scope])`, the scope wrapped
+     so that `FunctionContexts.ScopedContext` knows it (`FunctionContexts.scoped`). Every scoped context of a name that
+     one signature writes shares a scope (`WrittenContexts.read`), each `memory` call's block has a scope of its own,
+     which its cells take (`MemoryCells.aroundCall`), and a def's own `$Memory` named as a value takes the scope its
+     type has, or a fresh one (`WrittenContexts.plain`). Contexts pair and unify their scopes as they do any
+     arguments, so nothing is checked yet. The printer leaves the scope out (`FunctionContexts.withoutScope`), and so
+     does the backend (`CoreIrLowerTypes.concreteContexts`).
+   - Make each supplying call's scope rigid while the call is checked, check that its result does not mention it, and
+     find suppliers from their types; delete NYX0224 and `MemoryCells.checkEscape`.
 5. Give a `memory` block its instance, `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058),
    after 4).

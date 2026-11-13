@@ -13,8 +13,9 @@ let context = "$Memory"
 /// The function that provides `$Memory` for the block it is given, as the prelude declares it.
 let memoryFunction = "memory"
 
-/// The name the environment binds while a `memory` block is checked: what tells a `mut` declaration that `$Memory` is there. No code
-/// can write it.
+/// The name the environment binds while a `memory` block is checked, to the block's scope (see
+/// `FunctionContexts.scoped`): what tells a `mut` declaration that `$Memory` is there, and which scope its cell belongs
+/// to. No code can write it.
 let private scopeKey = "@memory"
 
 /// Whether a call to `name` is a call to the prelude's `memory`, rather than to a definition of the same name: one
@@ -26,26 +27,37 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
        | Some file, Some contextFile -> file = contextFile
        | _ -> false
 
-/// The environment the arguments of a call to `name` are checked in: one where `$Memory` is, for the prelude's `memory`.
-let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) : TypeEnv =
-    if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono (TyPrimitive "unit")) env else env
+/// The environment the arguments of a call to `name` are checked in: one where `$Memory` is, of a scope of its own, for
+/// the prelude's `memory`.
+let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) : TypeEnv * InferState =
+    if isMemoryCall env state name then
+        let scope, next = freshVar state
+        TypeEnv.extend scopeKey (TypeEnv.mono scope) env, next
+    else env, state
+
+/// The scope of the cell `name`, as `env` binds it, if it is one.
+let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty option =
+    TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind state.Cells.TryFind
 
 /// Whether `name`, as `env` binds it, is a cell.
-let isCell (env: TypeEnv) (state: InferState) (name: Identifier) =
-    match TypeEnv.tryFind name env |> Option.bind _.Symbol with
-    | Some symbol -> state.Cells.Contains symbol
-    | None -> false
+let isCell (env: TypeEnv) (state: InferState) (name: Identifier) = (scopeOf env state name).IsSome
 
-/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `$Memory`, which the lambda around it
-/// requires (see `LambdaContexts`).
+/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `$Memory` of the cell's block, which
+/// the lambda around it requires (see `LambdaContexts`).
 let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState =
-    if isCell env state name then LambdaContexts.record [ TyApply(context, []) ] state else state
-
-/// Records that the local def `symbol` is a cell.
-let declareCell (symbol: SymbolId option) (state: InferState) =
-    match symbol with
-    | Some symbol -> { state with Cells = state.Cells.Add symbol }
+    match scopeOf env state name with
+    | Some scope -> LambdaContexts.record [ FunctionContexts.scoped context scope ] state
     | None -> state
+
+/// Records that the local def `symbol` is a cell, of the scope of the `memory` block `env` is in. One made outside a
+/// block, which is an error, has a scope of its own.
+let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
+    match symbol, TypeEnv.tryFind scopeKey env with
+    | Some symbol, Some scope -> { state with Cells = state.Cells |> Map.add symbol scope.Type }
+    | Some symbol, None ->
+        let scope, next = freshVar state
+        { next with Cells = next.Cells |> Map.add symbol scope }
+    | None, _ -> state
 
 /// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `$Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
@@ -85,7 +97,7 @@ let checkEscape (state: InferState) (call: Expression) (block: Expression) : Dia
             state.Symbols |> Map.tryFind symbol |> Option.exists (fun declared -> SourceSpan.contains span declared.Declaration)
         let usesCell (lambda: Expression) (node: Expression) =
             match state.References |> Map.tryFind node.Id with
-            | Some symbol -> state.Cells.Contains symbol && not (declaredWithin lambda.Span symbol)
+            | Some symbol -> state.Cells.ContainsKey symbol && not (declaredWithin lambda.Span symbol)
             | None -> false
         match EscapingLambdas.tryFind state usesCell (SyntaxTree.blocksWithin body) result with
         | Some _ ->

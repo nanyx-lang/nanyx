@@ -25,11 +25,12 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
 # How it works
 
 - **Type checking** (`compiler/Nanyx.Compiler/MemoryCells.fs`). The block of a call to the prelude's `memory` is
-  checked with a name in the environment no code can write, which is what a `mut` declaration looks for. A def whose
-  value is a call to `__mut` is a cell: its symbol is in `InferState.Cells`, and it is not generalised. `:=` checks that its target
-  resolves to a cell, and adds an assignability constraint reported at the `:=`, whose mismatches get their own code.
-  Each read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so a lambda over
-  a cell says so in its type. Requiring `$Memory` doesn't keep it in the block, since every block supplies one, so
+  checked with a name in the environment no code can write, bound to the block's scope, which is what a `mut`
+  declaration looks for. A def whose value is a call to `__mut` is a cell: its symbol is in `InferState.Cells`, with the
+  scope of its block, and it is not generalised. `:=` checks that its target resolves to a cell, and adds an
+  assignability constraint reported at the `:=`, whose mismatches get their own code. Each read or change of a cell
+  makes the lambda around it require `$Memory` of the cell's scope (`MemoryCells.recordUse`), so a lambda over a cell
+  says so in its type. Requiring `$Memory` doesn't keep it in the block, since every block supplies one, so
   escape is still checked syntactically: the block's result, if its type holds a function, must not hold a lambda that
   names a cell from outside itself, or a local function that does. Scoped contexts replace that check
   ([Context escape](./context-escape#scoped-contexts)).
