@@ -93,7 +93,7 @@ let private command (arguments: string list) : Shell -> int =
     match arguments with
     | "new" :: name :: directory -> fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "check" :: path -> fun shell -> CliCommands.CheckIn(shell, Array.ofList path)
-    | "run" :: path -> fun shell -> CliCommands.RunIn(shell, null, false, Array.ofList path)
+    | "run" :: path -> fun shell -> CliCommands.RunIn(shell, false, Array.ofList path)
     | "build" :: rest ->
         let outputPath, release, path = options (null, false, []) rest
         fun shell -> CliCommands.BuildIn(shell, outputPath, release, path)

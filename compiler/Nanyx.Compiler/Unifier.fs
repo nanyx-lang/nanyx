@@ -660,15 +660,25 @@ module Unifier =
             | TyUnion args -> List.fold (fun acc arg -> max acc (maxId arg)) 0 args
         constraints |> List.fold (fun acc (left, right, _, _) -> max acc (max (maxId left) (maxId right))) 0
 
+    /// Whether the order a list of constraints was solved in could show (see `unifyFrom`).
+    type private SolveOrder =
+        /// It could not.
+        | Hidden
+        /// These constraints were put off to the end (see `AssignableLater`).
+        | PutOff of ConstraintSet
+        /// A rest variable made up before them took more.
+        | Shown
+
     /// Solves `constraints` on top of `start`, a substitution that solved constraints given earlier, or gives the
     /// first that cannot be satisfied (see `Mismatch`). Rest variables are made up from `restFrom` on, or past the
     /// constraints' own variables. Also gives where the next made-up rest variable would be numbered, and whether the
-    /// order the constraints were solved in could show (see `orderShowed`).
-    let private unifyFrom (start: Subst) (restFrom: int) (constraints: ConstraintSet) : Result<Subst * int * bool, Mismatch> =
+    /// order the constraints were solved in could show (see `SolveOrder`).
+    let private unifyFrom (start: Subst) (restFrom: int) (constraints: ConstraintSet) : Result<Subst * int * SolveOrder, Mismatch> =
         // A union, a record or a set of contexts grows through the rest variable made up for it, taking tags, fields
         // or contexts in the order constraints come. So the order shows when one made up before these constraints,
         // for `start`, takes more, or when a constraint is put off to the end (see `AssignableLater`).
-        let mutable orderShowed = false
+        let mutable restTaken = false
+        let mutable putOff = []
         let madeUpBefore (var: TyVar) = isMadeUpRest var && var.Id < restFrom
         // Widening a union (below) makes up rest variables. They are numbered past every variable in the
         // constraints, and far past where inference numbers its own, so that they are new to both.
@@ -735,7 +745,7 @@ module Unifier =
                     if occurs v.Id ty then
                         Error ($"Occurs check failed: {tyToString ty} contains {tyToString (TyVar v)}.", origin, TypesDiffer)
                     else
-                        if madeUpBefore v then orderShowed <- true
+                        if madeUpBefore v then restTaken <- true
                         let newSubst = subst |> Map.add v.Id ty
                         loop newSubst rest
                 // Two references to one recursive alias are the same type when their arguments are: unfolded, each
@@ -921,7 +931,7 @@ module Unifier =
                         // widens it with another failure (#354). Constraints are otherwise solved newest first, so
                         // this changes their order.
                         | _ when kind = Assignable && isPendingUnion l r ->
-                            orderShowed <- true
+                            putOff <- (left, right, kind, origin) :: putOff
                             loop subst (rest @ [ (left, right, AssignableLater, origin) ])
                         | TyVar _, _
                         | _, TyVar _ ->
@@ -1009,12 +1019,71 @@ module Unifier =
                             unifyEqual false origin l r rest
                     | Equal ->
                         unifyEqual true origin l r rest
-        loop start constraints |> Result.map (fun subst -> subst, nextRestId, orderShowed)
+        loop start constraints
+        |> Result.map (fun subst ->
+            let order =
+                match restTaken, putOff with
+                | true, _ -> Shown
+                | false, [] -> Hidden
+                | false, putOff -> PutOff putOff
+            subst, nextRestId, order)
+
+    /// Whether `found` holds for a variable that one of `tys` holds, or that is held by what `subst` binds such a
+    /// variable to, and so on. Each variable is looked at once.
+    let private reachesVar (subst: Subst) (found: int -> bool) (tys: Ty list) : bool =
+        let seen = HashSet<int>()
+        let rec visit ty =
+            match ty with
+            | TyVar v ->
+                seen.Add v.Id
+                && (found v.Id
+                    || match subst.TryFind v.Id with
+                       | Some bound -> visit bound
+                       | None -> false)
+            | TyPrimitive _ -> false
+            | TyNominal(_, underlying, _) -> visit underlying
+            | TyAlias(_, args, underlying) -> List.exists visit args || visit underlying
+            | TyFunc(arg, ret, contexts) -> visit arg || visit ret || List.exists visit contexts
+            | TyRecord fields -> fields |> Map.exists (fun _ fieldTy -> visit fieldTy)
+            | TyOpenRecord(fields, row) -> visit (TyVar row) || fields |> Map.exists (fun _ fieldTy -> visit fieldTy)
+            | TyTag(_, payload) -> payload |> Option.exists visit
+            | TyApply(_, args)
+            | TyUnion args -> List.exists visit args
+        List.exists visit tys
+
+    let private sides (constraints: ConstraintSet) =
+        constraints |> List.collect (fun (left, right, _, _) -> [ left; right ])
+
+    /// Which constraints given after a solved list can be solved on top of what it solved to.
+    type private Extension =
+        | AnyAfter
+        /// Those that reach none of these variables (see `reachesVar`), which the constraints it put off to the end reach.
+        /// Solving them all afresh would solve the later constraints before those put off, but as they share no
+        /// variable, which comes first does not show.
+        | ApartFrom of HashSet<int>
+        /// None: the order its own constraints were solved in showed otherwise.
+        | NoneAfter
+
+    /// What constraints given after a list solved to `subst`, in the order `order`, can be solved on top of it.
+    let private extensionOf (subst: Subst) (order: SolveOrder) =
+        match order with
+        | Hidden -> AnyAfter
+        | PutOff putOff ->
+            let reached = HashSet<int>()
+            reachesVar subst (fun id -> reached.Add id |> ignore; false) (sides putOff) |> ignore
+            ApartFrom reached
+        | Shown -> NoneAfter
+
+    /// Whether `newer` can be solved on top of `subst`, which solved the constraints after them.
+    let private extends (extension: Extension) (subst: Subst) (newer: ConstraintSet) =
+        match extension with
+        | AnyAfter -> true
+        | ApartFrom reached -> not (reachesVar subst reached.Contains (sides newer))
+        | NoneAfter -> false
 
     /// A list of constraints this thread solved, what solving them gave, where its made-up rest variables ended, and
-    /// whether constraints given after it can be solved on top of it: not when the order its own were solved in
-    /// showed, as solving them all afresh would solve the later ones first.
-    type private Solved = { Result: Result<Subst, Mismatch>; NextRestId: int; Extendable: bool }
+    /// which constraints given after it can be solved on top of it.
+    type private Solved = { Result: Result<Subst, Mismatch>; NextRestId: int; Extension: Extension }
 
     /// How many solved lists `solvedLists` keeps before it starts again.
     let private solvedListsKept = 64
@@ -1025,11 +1094,12 @@ module Unifier =
             Dictionary<ConstraintSet, Solved>(HashIdentity.Reference))
 
     /// The constraints at the front of `constraints` that come before a list solved lately, and what that list solved
-    /// to, if it agreed and can be solved on top of.
+    /// to, if it agreed and they can be solved on top of it.
     let private solvedTail (solved: Dictionary<ConstraintSet, Solved>) (constraints: ConstraintSet) =
         let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
             match solved.TryGetValue remaining with
-            | true, { Result = Ok subst; NextRestId = restFrom; Extendable = true } -> Some (List.rev newer, subst, restFrom)
+            | true, { Result = Ok subst; NextRestId = restFrom; Extension = extension } when extends extension subst newer ->
+                Some (List.rev newer, subst, restFrom, extension)
             | true, _ -> None
             | false, _ ->
                 match remaining with
@@ -1042,28 +1112,31 @@ module Unifier =
     /// So when the list ends in one solved lately that agreed, only the constraints in front of it are solved, on top
     /// of what it solved to. When they don't agree with it, or the order they are solved in shows, the whole list is
     /// solved again, newest first, so that the failure reported, and the order in which a union's tags are added, are
-    /// those solving it afresh gives.
+    /// those solving it afresh gives. So is a list that ends in one whose order showed only in the constraints it put
+    /// off to the end, when the constraints in front reach what those do (see `Extension`).
     let unifyDetailed (constraints: ConstraintSet) : Result<Subst, Mismatch> =
         let solved = solvedLists.Value
         match solved.TryGetValue constraints with
         | true, known -> known.Result
         | false, _ ->
-            let fromStart () = unifyFrom empty 0 constraints
+            let fromStart () =
+                unifyFrom empty 0 constraints |> Result.map (fun (subst, nextRestId, order) -> subst, nextRestId, extensionOf subst order)
             // A made-up rest variable a constraint names, taken from what an earlier solve gave, names nothing when
             // the whole list is solved (see `isMadeUpRest`), but would name what it was solved to on top of that solve.
             let namesMadeUpRest newer = highestVarId newer >= firstMadeUpRest
             let result =
                 match solvedTail solved constraints with
-                | Some (newer, subst, restFrom) when not (namesMadeUpRest newer) ->
+                | Some (newer, subst, restFrom, extension) when not (namesMadeUpRest newer) ->
+                    // The constraints it put off reach nothing the newer ones bind, so they reach the same still.
                     match unifyFrom subst restFrom newer with
-                    | Ok (_, _, false) as result -> result
+                    | Ok (subst, nextRestId, Hidden) -> Ok (subst, nextRestId, extension)
                     | _ -> fromStart ()
                 | _ -> fromStart ()
             if solved.Count >= solvedListsKept then solved.Clear()
             let known =
                 match result with
-                | Ok (subst, nextRestId, orderShowed) -> { Result = Ok subst; NextRestId = nextRestId; Extendable = not orderShowed }
-                | Error mismatch -> { Result = Error mismatch; NextRestId = 0; Extendable = false }
+                | Ok (subst, nextRestId, extension) -> { Result = Ok subst; NextRestId = nextRestId; Extension = extension }
+                | Error mismatch -> { Result = Error mismatch; NextRestId = 0; Extension = NoneAfter }
             solved[constraints] <- known
             known.Result
 

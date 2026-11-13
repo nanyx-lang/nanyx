@@ -79,8 +79,8 @@ let ``A def without an annotation keeps a short lambda on one line`` () =
     unchanged "def add = { a, b -> a + b }\n"
 
 [<Fact>]
-let ``A body moved to its own line keeps the operators a statement can take bracketed`` () =
-    Assert.Equal(lines [ "def odd: int -> bool = { n ->"; "  (n % 2) == 1"; "}" ], format "def odd: int -> bool = { n -> n % 2 == 1 }")
+let ``A body moved to its own line needs no parentheses for its operators`` () =
+    Assert.Equal(lines [ "def odd: int -> bool = { n ->"; "  n % 2 == 1"; "}" ], format "def odd: int -> bool = { n -> n % 2 == 1 }")
 
 [<Fact>]
 let ``A lambda body that spans lines is indented, with the closing braces on different lines`` () =
