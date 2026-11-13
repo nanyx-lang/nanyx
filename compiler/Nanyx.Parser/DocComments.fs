@@ -69,18 +69,10 @@ module DocComments =
     /// The doc comments among `comments` (start and end offsets in `source`, as the parser notes them), each attached
     /// to what it documents in `items`, the module as parsed, whose declarations are `declared`.
     let attach (filePath: string) (source: string) (items: TopLevelItem list) (declared: DeclaredNames) (comments: (int * int) list) : FileDocComments =
-        let lineStarts =
-            [| yield 0
-               for i in 0 .. source.Length - 1 do
-                   if source[i] = '\n' then yield i + 1 |]
-        let lineOf offset =
-            match Array.BinarySearch(lineStarts, offset) with
-            | found when found >= 0 -> found
-            | notFound -> ~~~notFound - 1
-        let spanAt start finish =
-            let line = lineOf start
-            { File = filePath; Start = start; End = finish; StartLine = line; StartColumn = start - lineStarts[line] }
-        let onOwnLine start = String.IsNullOrWhiteSpace(source.Substring(lineStarts[lineOf start], start - lineStarts[lineOf start]))
+        let lines = LineTable source
+        let onOwnLine start =
+            let lineStart = lines.Start(lines.LineOf start)
+            String.IsNullOrWhiteSpace(source.Substring(lineStart, start - lineStart))
 
         let declarations =
             declared
@@ -127,11 +119,11 @@ module DocComments =
             | Some code, Some first when code = first.Span.Start && (match first.Kind with ModuleDecl _ | Import _ -> true | _ -> false) ->
                 DocumentsModule
             | Some code, _ ->
-                let line = lineOf code
-                let lineStart = lineStarts[line]
+                let line = lines.LineOf code
+                let lineStart = lines.Start line
                 // The first target on the line, if only the words that introduce it come before it.
                 targets
-                |> List.filter (fun (_, start) -> start >= code && lineOf start = line)
+                |> List.filter (fun (_, start) -> start >= code && lines.LineOf start = line)
                 |> List.sortBy snd
                 |> List.tryHead
                 |> Option.filter (fun (_, start) ->
@@ -147,7 +139,7 @@ module DocComments =
             |> List.sortBy fst
             |> List.map (fun (start, finish) ->
                 { Text = markdown (source.Substring(start, finish - start))
-                  Span = spanAt start finish
+                  Span = lines.Span filePath start finish
                   Target = targetAfter finish })
         let rec topLevel (item: TopLevelItem) =
             match item.Kind with
