@@ -241,6 +241,29 @@ let ``Run - Int.fromString reads decimal integers and rejects anything else`` ()
     runSource source |> assertRan "#some(42)\n#some(5)\n#some(7)\n#some(0)\n#some(-17)\n#some(70000)\n#invalidInt\n#invalidInt\n#invalidInt\n#invalidInt\n#some(12)\n"
 
 [<Fact>]
+let ``Run - Int.fromString reads the whole range of int and rejects a number past it`` () =
+    // A number past the range stopped the program with an overflow, as did the smallest int (#1015).
+    let source = """
+import nanyx/console
+
+def show: [Console] string -> () = { s ->
+  match int.fromString(s)
+    | #some(n) -> println("#some({n})")
+    | #invalidInt -> println("#invalidInt")
+}
+
+show("9223372036854775807")
+show("-9223372036854775808")
+show("9223372036854775808")
+show("-9223372036854775809")
+show("99999999999999999999")
+show("-0")
+println("still running")
+"""
+    runSource (source.ReplaceLineEndings "\n")
+    |> assertRan "#some(9223372036854775807)\n#some(-9223372036854775808)\n#invalidInt\n#invalidInt\n#invalidInt\n#some(0)\nstill running\n"
+
+[<Fact>]
 let ``Run - Bool.fromString reads true and false and rejects anything else`` () =
     let source =
         "import nanyx/console\n" +
