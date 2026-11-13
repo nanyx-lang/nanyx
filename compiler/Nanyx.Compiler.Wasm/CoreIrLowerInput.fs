@@ -83,6 +83,12 @@ type LowerInput =
       /// names one means.
       NamedTypes: Map<string, Ty> }
 
+/// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
+let wrappedOf (input: LowerInput) (wrapper: string) =
+    match input.Lifted |> Map.tryFind wrapper with
+    | Some (FunctionWrapper wrapped) -> wrapped
+    | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+
 /// The name of the start function, which evaluates the module's top-level expressions.
 let startFunctionName = "__nanyx_start"
 

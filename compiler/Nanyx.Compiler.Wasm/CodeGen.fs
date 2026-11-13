@@ -393,10 +393,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
     let passedMembers (lambda: Expression) =
         match checkedTypes |> Map.tryFind lambda.Id with
-        | Some (TyFunc(_, _, contexts)) ->
-            match CoreIrLowerTypes.toIrTypeIn contextLayouts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
-            | CoreIr.IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
-            | _ -> Set.empty
+        | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
     let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts module'
     let defs =

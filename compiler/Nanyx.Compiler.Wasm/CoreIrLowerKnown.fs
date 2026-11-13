@@ -53,10 +53,8 @@ let rec private withoutOpenRests (ty: Ty) =
 /// The top-level function that `wrapper` wraps, and the type a closure over the wrapper is at as a context member of
 /// type `memberTy`: the function's own type, or, for a generic function, `memberTy`.
 let wrappedAt (input: LowerInput) (wrapper: string) (memberTy: Ty option) : string * Ty =
-    let wrapped =
-        match input.Lifted |> Map.tryFind wrapper with
-        | Some (FunctionWrapper wrapped) -> wrapped
-        | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+    let wrapped = wrappedOf input wrapper
+
     // A member that requires contexts of its own would need them found where the instance is.
     if input.ContextParameters.ContainsKey wrapped then cannot $"a context member '{wrapped}', which requires contexts"
     match input.DefinitionTypes |> Map.tryFind wrapped, memberTy |> Option.map (withoutOpenRests >> unconstrainedAsUnit) with
