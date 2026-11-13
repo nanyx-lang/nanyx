@@ -27,11 +27,12 @@ let private read (typeExprToTy: InferState -> TypeExpr -> Ty * InferState) (stat
         Some (TyApply(name, argTys)), next
     | _ -> None, state
 
-/// The scope of the scoped context `name` somewhere in `ty`, if `ty` has one.
+/// The scope of the scoped context `name` somewhere in `ty`, if `ty` has one: a cell's type has `$Memory`'s.
 let rec private scopeIn (name: Identifier) (ty: Ty) : Ty option =
     let within = List.tryPick (scopeIn name)
     match ty with
     | FunctionContexts.ScopedContext(found, scope) when found = name -> Some scope
+    | FunctionContexts.CellType(_, scope) when name = FunctionContexts.cellContext -> Some scope
     | TyFunc(input, output, contexts) -> within (contexts @ [ input; output ])
     | TyNominal(_, underlying, _) -> scopeIn name underlying
     | TyAlias(_, args, underlying) -> within (args @ [ underlying ])

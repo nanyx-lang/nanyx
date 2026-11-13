@@ -86,6 +86,8 @@ def count = memory {
 
 In the body, a cell parameter behaves as a cell declared there: its name reads it and `:=` changes it. Its type is `mut T`, which an annotation can write: `def inc: [$Memory] mut int -> () = { mut cell -> ... }`. A function can pass a cell it is given on, `other(mut cell)`, and one cell can be passed for two parameters, `swap(mut a, mut a)`, which are then the same cell.
 
+A function that takes a cell can only be called where the cell's block is, so a `mut` parameter implies `$Memory`, whether or not the body uses the cell. `inc` above is inferred as `[$Memory] mut int -> ()`, and so is a function that only passes its cell on. A function type that takes a cell and writes no contexts, such as a parameter's `change: mut int -> ()`, requires `$Memory` too. A def that writes contexts must write `$Memory` among them: `def inc: [Console] mut int -> ()` is an error (NYX0211) that says to write `[Console & $Memory]`.
+
 `mut x` passes only a cell, a name declared with `mut` or a `mut` parameter: anything else is an error (NYX0234). A plain value where `mut T` is expected, or `mut x` where a plain `T` is, is a type error. A `mut` parameter takes one name, never a pattern.
 
 A cell can be passed to a function, but nothing else can hold one yet: `mut T` anywhere but a function's parameter, as in `list(mut int)`, is an error (NYX0235). A lambda over a cell parameter needs the `$Memory` of the block the cell is in, so it cannot leave that block, as a lambda over the cell itself cannot.

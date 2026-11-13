@@ -1326,7 +1326,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
         env' <- TypeEnv.declare name symbol (TypeEnv.mono bound) env'
     match inferExpr env' (LambdaContexts.enter lambda current) body with
     | Ok (bodyExpr, next) ->
-        let used, next = LambdaContexts.leave lambda next
+        let used, next = LambdaContexts.leave lambda next ||> fun used next -> MemoryCells.parameterContexts next lambda args |> fun (cells, next) -> used @ cells |> List.distinct, next
         let withReturnConstraint =
             match expectedReturnOpt with
             | Some expectedReturn -> addDeclaredConstraintAt body.Span bodyExpr.Type expectedReturn next
@@ -1359,7 +1359,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         | Some contexts -> ensureContextsExist current name (declarationSpan current DefValue expr) contexts
                         | None -> Ok ()
                     let contextsExist =
-                        contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.ensureCellTypesPlaced typeOpt)
+                        contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.checkCellTypes current name typeOpt)
                     let notSelfReferenced =
                         match LocalRecursion.selfReferences env' name expr with
                         | [] -> Ok ()

@@ -768,7 +768,7 @@ module Unifier =
                 | _, TyNominal _ ->
                     Error (mismatchMessage l r, origin, TypesDiffer)
                 | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
-                    match FunctionContexts.agree freshRest origin lContexts rContexts with
+                    match FunctionContexts.agree freshRest origin (FunctionContexts.withCellMemory lArg lContexts) (FunctionContexts.withCellMemory rArg rContexts) with
                     | Ok contexts -> loop subst ((lArg, rArg, Equal, origin) :: (lRet, rRet, Equal, origin) :: contexts @ rest)
                     | Error (onlyLeft, onlyRight) -> Error (contextsMessage onlyLeft onlyRight l r, origin, TypesDiffer)
                 | TyRecord lFields, TyRecord rFields ->
@@ -989,7 +989,7 @@ module Unifier =
                             loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Assignable, origin)) lArgs rArgs) @ rest)
                         // A function that requires fewer contexts fits where one that requires more is expected.
                         | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
-                            match FunctionContexts.fit freshRest origin lContexts rContexts with
+                            match FunctionContexts.fit freshRest origin (FunctionContexts.withCellMemory lArg lContexts) (FunctionContexts.withCellMemory rArg rContexts) with
                             | Ok contexts -> loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: contexts @ rest)
                             | Error extra -> Error (contextsNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                         | _ ->
