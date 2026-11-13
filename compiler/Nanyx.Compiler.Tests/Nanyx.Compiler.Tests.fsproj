@@ -47,6 +47,7 @@
     <Compile Include="Features\Contexts\ContextMemberValueTests.fs" />
     <Compile Include="Features\Contexts\ParameterisedContextCallTests.fs" />
     <Compile Include="Features\Contexts\UseDischargeTests.fs" />
+    <Compile Include="Features\Contexts\UndeterminedContextTypeTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
     <Compile Include="Features\Definitions\InitialisationCycleTests.fs" />

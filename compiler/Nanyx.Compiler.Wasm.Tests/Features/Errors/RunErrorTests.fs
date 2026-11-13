@@ -51,6 +51,29 @@ println(describe(Point(x = 1, y = 2)))
     Assert.DoesNotContain("NYX0301", outcome.StandardError)
 
 [<Fact>]
+let ``Run - a context on a type variable the type does not use is reported at the annotation, not by the backend`` () =
+    let source =
+        """
+import nanyx/console
+
+context Log = (log: string -> ())
+
+def greet: [Log & ToString(a)] string -> () = { name -> log("hello {name}") }
+
+def main = {
+  use Log(log = { m -> println(m) })
+  greet("Ada")
+}
+
+main()
+"""
+    let outcome = runSource (source.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains(":6:19: error NYX0236: ", outcome.StandardError)
+    Assert.DoesNotContain("NYX0301", outcome.StandardError)
+    Assert.DoesNotContain("NYX0205", outcome.StandardError)
+
+[<Fact>]
 let ``Run - importing an unknown standard library module is a diagnostic`` () =
     let outcome = runSource "import nanyx/sockets\n\ndbg(1)\n"
     Assert.Equal(1, outcome.ExitCode)

@@ -98,15 +98,22 @@ module InterpolationHoles =
             $"'{calleeName}' requires the context 'ToString({display ty})', and '{heldText}'{part} is a function: functions have no toString"
         | _ -> noInstance held
 
+    /// What to do about the missing `ToString` of `part`, a type variable of the function `defName` (if it is in one):
+    /// add it to the function's type, or, where the type writes only contexts and has `ToString` of a variable written
+    /// the same already, write the parameters' types, which that variable is not.
+    let private toStringAdvice (state: InferState) (part: Ty) (defName: Identifier option) =
+        let partText = display part
+        match defName with
+        | Some name when ContextFixes.writesOnContextsAlone state name context partText ->
+            $": the '{partText}' in 'ToString({partText})' in the type of '{name}' is not the type of this value, because that type writes no parameters: write the type of the parameter, as in '[ToString({partText})] {partText} -> ...'"
+        | Some name -> $": add [ToString({partText})] to the type of '{name}'"
+        | None -> ""
+
     /// The error for a hole of the type `ty`, one of the type variables of the function `defName` (if it is in one),
     /// whose type does not require `ToString` of it.
-    let undeclared (ty: Ty) (defName: Identifier option) =
+    let undeclared (state: InferState) (ty: Ty) (defName: Identifier option) =
         let tyText = display ty
-        let advice =
-            match defName with
-            | Some name -> $": add [ToString({tyText})] to the type of '{name}'"
-            | None -> ""
-        $"Interpolating a value of type '{tyText}' requires the context 'ToString({tyText})', which is not available here{advice}"
+        $"Interpolating a value of type '{tyText}' requires the context 'ToString({tyText})', which is not available here{toStringAdvice state ty defName}"
 
     /// The error for a call to `calleeName` that requires `ToString` of `ty`, which holds a union open to tags the
     /// caller of `defName` (the function around the call, if it is in one) chooses.
@@ -123,19 +130,16 @@ module InterpolationHoles =
 
     /// The error for a call to `calleeName` that requires `ToString` of the structure `ty`, whose variable `part` has
     /// no `ToString` where the call is, in the function `defName` (if it is in one).
-    let undeclaredPart (calleeName: Identifier) (ty: Ty) (part: Ty) (defName: Identifier option) =
-        let partText = display part
-        let advice =
-            match defName with
-            | Some name -> $": add [ToString({partText})] to the type of '{name}'"
-            | None -> ""
-        $"'{calleeName}' requires the context 'ToString({display ty})', which is written through 'ToString({partText})', and that is not available here{advice}"
+    let undeclaredPart (state: InferState) (calleeName: Identifier) (ty: Ty) (part: Ty) (defName: Identifier option) =
+        $"'{calleeName}' requires the context 'ToString({display ty})', which is written through 'ToString({display part})', and that is not available here{toStringAdvice state part defName}"
 
-    /// `diagnostic` with the fix that adds `ToString` of `part` to the type of `defName`, if it is in a def.
+    /// `diagnostic` with the fix that adds `ToString` of `part` to the type of `defName`, if it is in a def that does
+    /// not have it written already (see `toStringAdvice`).
     let addToStringFix (state: InferState) (part: Ty) (defName: Identifier option) (diagnostic: Diagnostic) =
         match defName with
-        | Some name -> ContextFixes.withAddToType state name $"ToString({display part})" diagnostic
-        | None -> diagnostic
+        | Some name when not (ContextFixes.writesOnContextsAlone state name context (display part)) ->
+            ContextFixes.withAddToType state name $"ToString({display part})" diagnostic
+        | _ -> diagnostic
 
     /// The def the holes found once the whole module is inferred are pending in (see `resolveLater`). No def has it.
     let moduleEnd: Identifier = ""
@@ -169,7 +173,7 @@ module InterpolationHoles =
                 | ValueScope _ -> moduleEnd, None
             let pending =
                 { Def = def; Call = call.Id; Callee = holeFunction; Index = found.Length; Count = count
-                  Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared ty annotatedDef) |> List.map (addToStringFix state ty annotatedDef); ChecksOnly = false }
+                  Context = ctxName; ArgTys = argTys; Span = span; Errors = error (undeclared state ty annotatedDef) |> List.map (addToStringFix state ty annotatedDef); ChecksOnly = false }
             Ok (found @ [ None ],
                 { state with
                     PendingContextInstances = pending :: state.PendingContextInstances
