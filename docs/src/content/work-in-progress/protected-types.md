@@ -8,6 +8,11 @@ This page proposes declaring a nominal type with a keyword on its declaration, `
 instead of a `$` on its name, `type $Point = (x: int, y: int)`. The name is then an ordinary type name everywhere it is
 used, and the tools show which types are nominal. It is a proposal; the compiler reads the `$` form today.
 
+The words, as this page uses them: a *nominal* type is one whose name matters, as opposed to an alias for a structural
+record or union. There are two kinds. A *protected* type is nominal and its shape is visible everywhere, so `Email` is
+still a `string`. A *private* type is nominal and its shape is hidden outside its home module. Today the `$` says
+"nominal" and `private` picks the second kind; the proposal has a keyword for each kind and nothing for the umbrella.
+
 # Motivation
 
 A [nominal type](../advanced/nominal-and-protected-types) is declared with a `$` in front of its name, and the `$` is
@@ -39,7 +44,7 @@ Two other things make the sigil a poor fit now.
 
 # Syntax
 
-A nominal type is declared with `protected` after the `=`, where `private` is written today:
+A protected type is declared with `protected` after the `=`, where `private` is written today:
 
 ```nanyx fragment
 module email
@@ -74,27 +79,27 @@ A nominal context is declared the same way, and `scoped` still requires it:
 scoped context Memory = protected (...)
 ```
 
-## Opaque types
+## Private types
 
-Today a protected type in the docs' sense, one whose shape is hidden outside its home module, is written
-`type $UserId = private int`: nominal by the sigil, opaque by the keyword. With the sigil gone, `private` says both:
+Today a private type is written `type $UserId = private int`: nominal by the sigil, hidden by the keyword. With the
+sigil gone, `private` says both:
 
 ```nanyx fragment
 export type UserId = private int
 ```
 
-An opaque type is nominal, since a type whose shape nobody else can see has nothing else to be, so `private` includes
-`protected`, and writing both is an error that says to keep `private`.
+A private type is nominal, since a type whose shape nobody else can see has nothing else to be, so `private` is the
+other kind and never needs `protected` beside it; writing both is an error that says to keep `private`.
 
-This renames the two kinds in the documentation. What the docs call a nominal type becomes a protected type, and what
-they call a protected type becomes a private type. The page [Nominal and protected types](../advanced/nominal-and-protected-types)
-becomes "Protected and private types": a protected type has a name that matters and a shape anyone can use; a private
-type has a name and nothing else outside its module.
+The documentation keeps "nominal" for the umbrella and names the kinds by their keywords. The page
+[Nominal and protected types](../advanced/nominal-and-protected-types) becomes "Nominal types", with a section for
+each kind: a protected type has a name that matters and a shape anyone can use; a private type has a name and nothing
+else outside its module.
 
 | | Today | Proposed |
 |---|---|---|
-| Name matters, shape visible | `type $Email = string` | `type Email = protected string` |
-| Name matters, shape hidden | `type $UserId = private int` | `type UserId = private int` |
+| Nominal, shape visible (protected) | `type $Email = string` | `type Email = protected string` |
+| Nominal, shape hidden (private) | `type $UserId = private int` | `type UserId = private int` |
 | Nominal context | `context $Memory = (...)` | `context Memory = protected (...)` |
 | Use the type | `$Email` | `Email` |
 | Construct, in the home module | `$Email(v)` | `Email(v)` |
@@ -108,8 +113,8 @@ Without the sigil, a reader of plain text cannot tell `Email` from a structural 
 relies on them:
 
 - **The extension** gives nominal types a semantic token modifier, so they are coloured apart from structural types and
-  aliases in every position: declaration, use, constructor, pattern and attached definition. The modifier applies to
-  private types too, with its own colour where the theme has one.
+  aliases in every position: declaration, use, constructor, pattern and attached definition. A second modifier marks
+  the private ones, with its own colour where the theme has one.
 - **Hover** on the name says which kind it is and where it lives: "protected type `Email = string`, declared in
   `email`", or "private type `UserId`, declared in `ids`". For a private type outside its module the shape is not shown,
   as it is not available.
@@ -138,7 +143,7 @@ they need.
   for a nominal context.
 - **Language server and extension.** The semantic token modifier, hover text and info view entries above. The TextMate
   grammar's rule for `$Name` goes, and `protected` joins its keyword list.
-- **Documentation.** The nominal-and-protected-types page is rewritten and retitled as above, with every `$` removed.
+- **Documentation.** The nominal-and-protected-types page is rewritten as above, with every `$` removed.
   [Memory](../advanced/memory), [Contexts](../advanced/contexts), [Naming conventions](../tour/naming-conventions),
   [Context escape](./context-escape), [Hosts](./hosts), [Equality and well-known contexts](./equality-and-well-known-contexts)
   and the other pages that write `$Memory`, `$Email` or `$UserId`, about 170 occurrences, follow. The naming conventions
@@ -156,8 +161,9 @@ message shows the declaration without it.
 # Open questions
 
 - **The word.** `protected` is the proposal, since it says what the type is, a type whose construction is protected, and
-  pairs with `private`. `nominal` says what the type system calls it, and `opaque` would then be the other. The pair
-  `protected`/`private` is chosen because both are about what the home module keeps to itself.
+  pairs with `private`: both are about what the home module keeps to itself, the constructor alone or the shape too.
+  `nominal` is kept for the umbrella and is not a keyword, since no declaration is nominal without being one kind or
+  the other.
 - **Before the name or after the `=`.** `type Point = protected (...)` matches `private` and reads as a property of the
   shape. `protected type Point = (...)` matches `scoped context` and reads as a property of the declaration, which is
   what it is. The proposal takes the first for consistency with `private`; if `private` moves, both move together.
