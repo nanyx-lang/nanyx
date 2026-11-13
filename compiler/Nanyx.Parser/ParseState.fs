@@ -142,17 +142,15 @@ let private lineComment () =
 let comment () = lineComment () >>. optional skipNewline
 let inlineCommentNoNl () = lineComment ()
 let ws: Parser<unit, ParseState> = skipMany (skipMany1 spaces1 <|> comment ())
-let wsAll: Parser<unit, ParseState> = ws
+/// Spaces and tabs, but no newline.
 let wsInline = skipMany (skipAnyOf " \t")
-let wsNoNl() = skipMany (skipAnyOf " \t") // whitespace without newlines
-let wsWithComments () = ws
 
 /// After a keyword: the word ends there, so `typeName` is a name and not `type` then `Name`.
 let keywordEnd: Parser<unit, ParseState> = notFollowedBy (satisfy (fun c -> System.Char.IsLetterOrDigit c || c = '_'))
 
 /// The end of a line in an indentation-based block: an optional `-- comment`, then the newline.
 let blockLineEnd () : Parser<unit, ParseState> =
-    wsNoNl() >>. optional (inlineCommentNoNl ()) >>. skipNewline
+    wsInline >>. optional (inlineCommentNoNl ()) >>. skipNewline
 
 /// The end of a line in an indentation-based block, then any lines that are empty, whitespace only or a comment, so
 /// the next parser starts at the beginning of the next line with code. Used between a block's statements, inside an
@@ -160,30 +158,6 @@ let blockLineEnd () : Parser<unit, ParseState> =
 /// skipped here are forgotten, to be noted again by whatever parses them next.
 let blockLinesEnd () : Parser<unit, ParseState> =
     blockLineEnd () >>. skipMany (attempt (blockLineEnd ()))
-
-// Indentation helpers
-let getIndentation () = 
-    getPosition |>> (fun pos -> int pos.Column - 1)
-
-let skipToColumn (col: int64) =
-    getPosition >>= fun pos ->
-        let currentCol = pos.Column
-        if currentCol < col then
-            skipManyTill (pchar ' ') (getPosition >>= fun p -> if p.Column >= col then preturn () else pzero)
-        else if currentCol = col then
-            preturn ()
-        else
-            pzero
-
-let atIndentation (refCol: int64) =
-    getPosition >>= fun pos ->
-        if pos.Column = refCol then preturn ()
-        else pzero
-
-let greaterIndentation (refCol: int64) =
-    getPosition >>= fun pos ->
-        if pos.Column > refCol then preturn ()
-        else pzero
 
 let newlineIndentedContinuation (refCol: int64) : Parser<unit, ParseState> =
     attempt (
@@ -194,7 +168,7 @@ let newlineIndentedContinuation (refCol: int64) : Parser<unit, ParseState> =
     )
 
 let defEqualsContinuation (refCol: int64) : Parser<unit, ParseState> =
-    attempt (wsNoNl() >>. followedBy (pstring "=")) <|> newlineIndentedContinuation refCol
+    attempt (wsInline >>. followedBy (pstring "=")) <|> newlineIndentedContinuation refCol
 
 /// A character that can continue an identifier. A word such as `true` is only that word when none follows it.
 let isIdentifierChar c = isLetter c || isDigit c || c = '_'

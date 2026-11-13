@@ -127,13 +127,9 @@ let private hints (names: TypeNotation) (file: string) (result: CompileResult) :
 let typeLenses (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     fst (hints names file result)
 
-/// An inlay hint for each local def, lambda parameter and pattern variable in the compiled root module that does
-/// not write its type, in source order, as for `typeLenses`.
-let inlayHints (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
-    snd (hints names file result)
-
-/// The hints of `typeLenses` and `inlayHints` together in source order, for an editor that shows a top-level def's
-/// type after its name, as an inlay hint, rather than in a lens above it.
+/// The hints of `typeLenses`, and one for each local def, lambda parameter and pattern variable that does not write
+/// its type, together in source order, for an editor that shows a top-level def's type after its name, as an inlay
+/// hint, rather than in a lens above it.
 let inlayHintsWithTopLevel (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     let lenses, others = hints names file result
     lenses @ others |> List.sortBy (fun hint -> hint.Span.Start)

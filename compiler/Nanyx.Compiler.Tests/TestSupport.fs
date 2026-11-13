@@ -106,6 +106,11 @@ let hoverType (source: string) (text: string) =
     let offset = source.ReplaceLineEndings("\n").IndexOf text
     Hover.typeAt Unicode result offset |> Option.map _.Type
 
+/// The inlay hints the editor shows inside the top-level defs of `result`: those of `TypeHints.inlayHintsWithTopLevel`
+/// without the top-level defs' own.
+let localInlayHints (names: TypeNotation) (file: string) (result: CompileResult) =
+    TypeHints.inlayHintsWithTopLevel names file result |> List.filter (fun hint -> hint.Kind <> TopLevelValue)
+
 /// The code of the one diagnostic `source` compiles to, and the text it is reported at.
 let singleError (source: string) =
     let result = Compiler.compile source

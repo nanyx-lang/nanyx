@@ -7,7 +7,7 @@ open FParsec
 open Parser.Program
 
 // `_` alone: `_rest` is a name, which says it is unused on purpose.
-let wildcardPattern = spannedPattern (pstring "_" .>> notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_')) >>% WildcardPattern)
+let wildcardPattern = spannedPattern (pstring "_" .>> keywordEnd >>% WildcardPattern)
 let elsePattern = spannedPattern (pstring "else" >>% ElsePattern)
 let identifierPattern =
     spannedPattern (getPosition .>>. identifierNoWs >>= fun (start, name) -> noteName start name >>% IdentifierPattern name)

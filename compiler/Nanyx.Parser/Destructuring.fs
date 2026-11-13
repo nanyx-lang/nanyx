@@ -58,8 +58,8 @@ let destructuringDefWith (lineStartCol: int64) (exprParser: Parser<Expression, P
             | several -> Pattern.at span (TuplePattern several)
     pipe3
         (opt (attempt (pstring "export" >>. ws)))
-        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames patterns .>> wsNoNl()))
-        (defEqualsContinuation lineStartCol >>. pstring "=" >>. wsNoNl() >>. exprParser)
+        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames patterns .>> wsInline))
+        (defEqualsContinuation lineStartCol >>. pstring "=" >>. wsInline >>. exprParser)
         (fun exportOpt (position, pattern) value -> exportOpt.IsSome, position, pattern, value)
     >>= fun (isExport, position, (pattern, names), value) ->
         // Each name is declared by the value of the def it becomes.

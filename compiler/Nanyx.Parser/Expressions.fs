@@ -51,7 +51,7 @@ let blockExpr() : Parser<Expression, ParseState> =
             pzero
 
 let matchArmBody: Parser<Expression, ParseState> =
-    attempt (blockExpr()) <|> (wsNoNl() >>. exprWithoutCrossingNewlines)
+    attempt (blockExpr()) <|> (wsInline >>. exprWithoutCrossingNewlines)
 
 let typeDefCore: Parser<Definition, ParseState> =
     let typeModifiers =
@@ -62,7 +62,7 @@ let typeDefCore: Parser<Definition, ParseState> =
             ]))
 
     let typeParams =
-        between (pstring "(") (pstring ")") (sepBy1 (wsNoNl() >>. typeParam) (pstring "," .>> wsNoNl()))
+        between (pstring "(") (pstring ")") (sepBy1 (wsInline >>. typeParam) (pstring "," .>> wsInline))
 
     let typeExprWithWhere =
         withSpan (typeExpr .>>. opt (attempt (ws >>. pstring "where" >>. ws >>. expression))) |>> fun ((baseType, whereOpt), span) ->
@@ -98,8 +98,8 @@ let typeDefCore: Parser<Definition, ParseState> =
         pipe5
             contextModifiers
             (pstring "context" >>. ws >>. (getPosition .>>. contextName))
-            (opt (attempt (wsNoNl() >>. typeParams)))
-            (wsNoNl() >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
+            (opt (attempt (wsInline >>. typeParams)))
+            (wsInline >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
             typeExprWithWhere
             (fun baseMods (start, name) paramsOpt privateOpt typeValue ->
                 let typeParams = defaultArg paramsOpt []
@@ -111,8 +111,8 @@ let typeDefCore: Parser<Definition, ParseState> =
         pipe5
             typeModifiers
             (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
-            (opt (attempt (wsNoNl() >>. typeParams)))
-            (wsNoNl() >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
+            (opt (attempt (wsInline >>. typeParams)))
+            (wsInline >>. pstring "=" >>. ws >>. opt (attempt (pstring "private" >>. ws)))
             typeExprWithWhere
             (fun modifiers (start, name) paramsOpt privateOpt typeValue ->
                 let typeParams = defaultArg paramsOpt []
@@ -199,7 +199,6 @@ let matchArms : Parser<(Pattern list * Expression) list, ParseState> =
 // than every operator and pipe, and may start a line of its own, as a pipe may: `xs \find(p)` and then
 // `except #notFound -> #none` on the next line. Its arms take one value each.
 let private exceptArms : Parser<(Pattern list * Expression) list, ParseState> =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     pstring "except" >>. keywordEnd >>. (attempt matchArms <|> (ws >>. armAlternativesAfter (preturn ())))
     <?> "except"
 
@@ -217,7 +216,6 @@ let private withExcept (leadingWs: Parser<unit, ParseState>) (valueParser: Parse
 // to the built-in "__for" with the iterables and a lambda of one element of each (see `ForSyntax`), which the type
 // checker and backend handle as a loop.
 let forExpr : Parser<Expression, ParseState> =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let elements count = List.init count (fun index -> (ForSyntax.element (index + 1), None))
     // The whitespace before the first arm is skipped outside the span, which starts at its `|`.
     let withArms count =
@@ -237,7 +235,6 @@ let forExpr : Parser<Expression, ParseState> =
 // `while condition -> body` runs the body for as long as the condition is true, evaluating it again before each time
 // round. It is a call to the built-in "__while" with the condition and the body (see `WhileSyntax`).
 let whileExpr : Parser<Expression, ParseState> =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     spanned (
         pstring "while" >>. keywordEnd >>. ws >>. expression .>>. (ws >>. pstring "->" >>. matchArmBody)
         |>> fun (condition, body) -> FunctionCall(WhileSyntax.builtIn, None, [ condition; body ]))
@@ -253,10 +250,9 @@ let whileExpr : Parser<Expression, ParseState> =
 //     | [a, b] -> ...
 do
     matchExprRef :=
-        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
-        let sameLine = wsNoNl() >>. sepBy1 expression (pstring "," .>> ws) |>> fun scrutinees -> scrutinees, None
+        let sameLine = wsInline >>. sepBy1 expression (pstring "," .>> ws) |>> fun scrutinees -> scrutinees, None
         let indentedBlock matchIndent =
-            lookAhead (wsNoNl() >>. newline >>. wsNoNl() >>. getPosition) >>= fun blockStart ->
+            lookAhead (wsInline >>. newline >>. wsInline >>. getPosition) >>= fun blockStart ->
                 if blockStart.Column <= matchIndent then
                     fail "the scrutinee of a match must be on the same line or indented more than the match"
                 else
@@ -466,7 +462,6 @@ let tagExpr =
 // of an enclosing match, and one without an `else` ends at an arm indented less than its first (see
 // `armIndentedFrom`).
 let ifExpr =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let branch = attempt (blockExpr()) <|> (ws >>. expression)
     let patternBinding =
         attempt (expression .>> ws .>> pstring "is" .>> keywordEnd .>> ws) .>>. pattern
@@ -538,7 +533,6 @@ let workflowReturnExpr =
 // workflow (see the workflows page of the docs). `try` is the only keyword written this way so far. Its value is
 // on the same line, and `try` is reserved: `try` alone is not a name.
 let workflowKeywordExpr =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     spanned (
         attempt (pstring WorkflowSyntax.tryKeyword .>> keywordEnd) >>. wsInline >>. expression
         |>> fun value -> WorkflowBindExpr(WorkflowSyntax.tryKeyword, value))
@@ -572,7 +566,6 @@ let useValue =
 // expression goes, for instance to keep the defs in it from the statements after it. It is not a loop. A `do`
 // without a block fails at the `do` (see `reportFocused`).
 let doExpr =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     attempt (getPosition .>> pstring "do" .>> keywordEnd)
     >>= fun position ->
         attempt (blockExpr ())
@@ -583,7 +576,7 @@ let doExpr =
 // lines after `in`, indented more than the line `use` is on. A block of one expression is just that expression.
 let useInExpr =
     let indentedBlock useIndent =
-        lookAhead (wsNoNl() >>. newline >>. wsNoNl() >>. getPosition) >>= fun blockStart ->
+        lookAhead (wsInline >>. newline >>. wsInline >>. getPosition) >>= fun blockStart ->
             if blockStart.Column <= useIndent then
                 fail "the block after `in` must be indented more than the line `use` is on"
             else
@@ -680,7 +673,6 @@ let primaryExprNoWs =
         spanned (nameNoWs |>> IdentifierExpr)
     ]
 
-do simpleExpressionRef := primaryExprNoWs
 
 // Member access: parse base expression, then chain .field.field.field... or .0.1.2...
 let memberAccessChain =
@@ -694,7 +686,6 @@ let memberAccessChain =
     // The updates may instead be written in parentheses, laid out as a record's fields are, separated by commas or
     // one per line: `record with (x = 1, y = 2)`. Then the record of updates spans from `(` to `)`.
     let withClause =
-        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         let update =
             (nameNoWs .>> wsInline .>> pstring "=" .>> ws) .>>. expression
             |>> fun (field, value) -> NamedField(field, value)
@@ -729,7 +720,6 @@ let memberAccessChain =
 let primaryExpr = memberAccessChain .>> wsInline  // Consume trailing inline ws for operator parsing
 
 // Boolean operations are the keywords `not`, `and` and `or` (see `binaryOperators` and the operators page of the docs).
-let private keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
 
 // `not` binds tighter than every infix operator, so `not a == b` is `(not a) == b`, as `!` does elsewhere. That
 // makes it part of the operand it applies to, so it is parsed here rather than by the operator precedence parser,
@@ -760,7 +750,6 @@ type private PipeStep =
     | PipeMatch of MatchArm list
 
 let private pipeTarget =
-    let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let matchStep = pstring "match" >>. keywordEnd >>. matchArms |>> PipeMatch
     // Each value in the brackets is an argument of its own, so that a tuple written in brackets of its own is one:
     // `\f(a, b)` passes `a` and `b`, and `\f((a, b))` the tuple. Named fields keep all the fields as one record, and
@@ -873,7 +862,6 @@ let inlinePipeExpr =
         |> withExcept (continuationWs lineIndent)
         |> withAssignment exprWithoutCrossingNewlines
 
-do inlineExpressionRef := inlinePipeExpr
 
 // Expression parser that stops at newlines (for use in blocks)
 do exprWithoutCrossingNewlinesRef :=

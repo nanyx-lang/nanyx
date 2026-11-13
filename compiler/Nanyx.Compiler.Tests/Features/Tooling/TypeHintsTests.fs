@@ -45,13 +45,13 @@ let ``Inlay hints show the types of locals, parameters and pattern variables`` (
           "offset", "int", offsetOf source "offset" 0 0
           "items", "list(α)", offsetOf source "items" 0 0
           "tail", "list(α)", offsetOf source "tail" 0 0 ],
-        typeHints TypeHints.inlayHints source)
+        typeHints localInlayHints source)
 
 [<Fact>]
 let ``A shorthand lambda's argument is not written, so it has no inlay hint`` () =
     let source = "def divisibleBy = { n -> { % n == 0 } }\n"
     Assert.Equal<(string * string * int) list>(
-        [ "n", "int", offsetOf source "n ->" 0 0 ], typeHints TypeHints.inlayHints source)
+        [ "n", "int", offsetOf source "n ->" 0 0 ], typeHints localInlayHints source)
 
 [<Fact>]
 let ``Each hint says what kind of declaration it is for`` () =
@@ -148,7 +148,7 @@ let ``Hints name type variables as their top-level def's type does`` () =
           "b", "β", offsetOf source "b ->" 0 0
           "a", "α", offsetOf source "{ a" 1 2
           "b", "β", offsetOf source "b ->" 1 0 ],
-        typeHints TypeHints.inlayHints source)
+        typeHints localInlayHints source)
     Assert.Equal<(string * string * int) list>(
         [ "pair", "α, β -> (α, β)", 4; "second", "α, β -> β", offsetOf source "second" 0 0 ],
         typeHints TypeHints.typeLenses source)
@@ -192,7 +192,7 @@ let ``A lambda's parameters take their types from the def's signature`` () =
           "y", "int", offsetOf source "y ->" 0 0
           "s", "string", offsetOf source "s, n" 0 0
           "n", "int", offsetOf source "n ->" 0 0 ],
-        typeHints TypeHints.inlayHints source)
+        typeHints localInlayHints source)
 
 [<Fact>]
 let ``A lambda's tag pattern parameter takes its names' types from the def's signature`` () =
@@ -202,7 +202,7 @@ let ``A lambda's tag pattern parameter takes its names' types from the def's sig
     Assert.Equal<(string * string * int) list>(
         [ "x", "string", offsetOf source "x, y)" 0 0
           "y", "string", offsetOf source "y) ->" 0 0 ],
-        typeHints TypeHints.inlayHints source)
+        typeHints localInlayHints source)
 
 [<Fact>]
 let ``Hints keep the names of type aliases`` () =
@@ -224,4 +224,4 @@ let ``Hints keep the names of type aliases`` () =
           "b", "Box(int)", offsetOf source "b ->" 0 0
           "c", "Customer", offsetOf source "c ->" 0 0
           "c", "Customer", offsetOf source "c ->" 1 0 ],
-        typeHints TypeHints.inlayHints source)
+        typeHints localInlayHints source)

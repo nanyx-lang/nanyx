@@ -45,8 +45,6 @@ let stringLiteralNoWs: Parser<Literal, ParseState> =
     attempt doubleQuoted <|> singleQuoted
     <?> "string literal"
 
-let stringLiteral: Parser<Literal, ParseState> = stringLiteralNoWs  // Don't consume ws
-
 /// A `+` or `-` before a number, as text: empty when there is none.
 let private numberSign: Parser<string, ParseState> =
     opt (attempt (anyOf "+-" .>> followedBy digit)) |>> function Some sign -> string sign | None -> ""
@@ -76,8 +74,6 @@ let intLiteralNoWs: Parser<Literal, ParseState> =
     (attempt nonDecimal <|> decimal) .>> notFloat |>> IntLit
     <?> "integer literal"
 
-let intLiteral: Parser<Literal, ParseState> = intLiteralNoWs  // Don't consume ws - let caller decide
-
 // Only decimal floats: digits, an optional fraction and an optional exponent, each of which may be grouped with
 // underscores. FParsec's `pfloat` also reads `NaN`, `Inf`, `Infinity` and hexadecimal floats, which would take names
 // such as `nan` and `inf` as numbers.
@@ -89,14 +85,10 @@ let floatLiteralNoWs: Parser<Literal, ParseState> =
     |>> fun text -> FloatLit (Double.Parse(text, Globalization.CultureInfo.InvariantCulture))
     <?> "float literal"
 
-let floatLiteral: Parser<Literal, ParseState> = floatLiteralNoWs  // Don't consume ws - let caller decide
-
 let boolLiteralNoWs: Parser<Literal, ParseState> =
     let word text value = attempt (stringReturn text value .>> notFollowedBy (satisfy isIdentifierChar))
     (word "true" (BoolLit true) <|> word "false" (BoolLit false))
     <?> "boolean literal"
-
-let boolLiteral: Parser<Literal, ParseState> = boolLiteralNoWs  // Don't consume ws - let caller decide
 
 let literalNoWs: Parser<Literal, ParseState> =
     choice [
@@ -104,15 +96,6 @@ let literalNoWs: Parser<Literal, ParseState> =
         attempt floatLiteralNoWs
         boolLiteralNoWs
         stringLiteralNoWs
-    ]
-    <?> "literal"
-
-let literal: Parser<Literal, ParseState> =
-    choice [
-        attempt intLiteral
-        attempt floatLiteral
-        boolLiteral
-        stringLiteral
     ]
     <?> "literal"
 

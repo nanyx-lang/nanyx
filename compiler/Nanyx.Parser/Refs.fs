@@ -20,8 +20,6 @@ let patternArgument (position: int) = $"<pattern{position}>"
 // Forward references for recursive expression parsing
 let expression, expressionRef = createParserForwardedToRef<Expression, ParseState>()
 let exprWithoutCrossingNewlines, exprWithoutCrossingNewlinesRef = createParserForwardedToRef<Expression, ParseState>()
-let inlineExpression, inlineExpressionRef = createParserForwardedToRef<Expression, ParseState>()
-let simpleExpression, simpleExpressionRef = createParserForwardedToRef<Expression, ParseState>()
 let lambda, lambdaRef = createParserForwardedToRef<Expression, ParseState>()
 let functionCall, functionCallRef = createParserForwardedToRef<Expression, ParseState>()
 let matchExpr, matchExprRef = createParserForwardedToRef<Expression, ParseState>()

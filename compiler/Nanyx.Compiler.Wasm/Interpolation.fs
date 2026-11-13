@@ -145,10 +145,6 @@ let holeWrite (kind: HoleKind) (valueCode: string) =
 let measureAndWrite (lengthCode: string) (writeCode: string) =
     $"i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    local.get $__interp_len\n    call ${Helpers.stringAlloc}\n    local.tee $__interp_base\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_base"
 
-/// The whole string: `evalCode` evaluates its holes into their locals, then `measureAndWrite`.
-let build (evalCode: string) (lengthCode: string) (writeCode: string) =
-    $"{evalCode}\n    {measureAndWrite lengthCode writeCode}"
-
 /// What a debug build writes when it reaches the hole at `span` that has no known type, because of an error deferred to
 /// run time, and the hole did not stop the program itself: the location as a deferred error's, then why.
 let private unknownValueMessage (verb: string) (span: SourceSpan) =

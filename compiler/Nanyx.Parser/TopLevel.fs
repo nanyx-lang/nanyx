@@ -12,10 +12,10 @@ open Parser.Program
 // fills that file's refs before these, in the order they were filled when the parser was one file.
 do
     let statementTail =
-        wsNoNl() >>. opt (attempt (inlineCommentNoNl ())) >>% ()
+        wsInline >>. opt (attempt (inlineCommentNoNl ())) >>% ()
 
     let importStatement =
-        pstring "import" >>. wsNoNl() >>. importItems |>> ImportStatement
+        pstring "import" >>. wsInline >>. importItems |>> ImportStatement
 
     let useStatement =
         (pstring "use" >>. keywordEnd >>. ws >>. useValue .>> notFollowedBy (ws >>. pstring "in" >>. keywordEnd))
@@ -48,12 +48,11 @@ do
     // def whose value is wrapped in a call to the built-in "__rec" (see `RecSyntax`), which makes the name visible in
     // the value, and tells the backend to compile the lambda as a function that may call itself.
     let recStatement =
-        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         getPosition >>= fun lineStart ->
             (pstring "rec" >>. keywordEnd >>. ws >>. getPosition .>>. defNameAndType lineStart.Column typedQualifiedIdentifier)
             >>= fun (start, (name, typeOpt)) ->
                 definableName start name
-                >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsNoNl() >>. defExprParser
+                >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. defExprParser
                 >>= fun expr ->
                     let value = Expression.from expr (FunctionCall(RecSyntax.builtIn, None, [ expr ]))
                     declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
@@ -62,7 +61,6 @@ do
     // spanning the declaration (see `MutSyntax`). It declares one name, so a pattern after `mut` is an error: a value's
     // parts are taken apart with `def` first.
     let mutStatement =
-        let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
         let named =
             followedBy (satisfy (fun c -> Char.IsLetter c || c = '_' || c = '`'))
             <|> (getPosition >>= fun position ->
@@ -71,14 +69,14 @@ do
             (pstring "mut" >>. keywordEnd >>. ws >>. named >>. getPosition .>>. defNameAndType lineStart.Column typedQualifiedIdentifier)
             >>= fun (start, (name, typeOpt)) ->
                 definableName start name
-                >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsNoNl() >>. defExprParser
+                >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. defExprParser
                 >>= fun expr ->
                     let span = spanOf lineStart expr.Span.End
                     let value = Expression.at span (FunctionCall(MutSyntax.builtIn, None, [ expr ]))
                     declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
 
     let exprStatement =
-        wsNoNl()
+        wsInline
         >>. exprWithoutCrossingNewlines
         .>> statementTail
         |>> ExprStatement  // Consume trailing inline comments without consuming newlines
@@ -140,11 +138,11 @@ let attributeItem: Parser<TopLevelItem, ParseState> =
     <?> "attribute"
 
 let private importLine: Parser<TopLevelItem, ParseState> =
-    spannedItem (attempt (pstring "import" >>. wsNoNl() >>. importItems) |>> Import)
+    spannedItem (attempt (pstring "import" >>. wsInline >>. importItems) |>> Import)
 
 // Tried before the definitions, which start with `export` too: `export def f` has no bracket after `def f`.
 let private reExportLine: Parser<TopLevelItem, ParseState> =
-    spannedItem (attempt (pstring "export" >>. keywordEnd >>. wsNoNl() >>. reExportItem) |>> ReExport)
+    spannedItem (attempt (pstring "export" >>. keywordEnd >>. wsInline >>. reExportItem) |>> ReExport)
 
 let private moduleBlockItem: Parser<TopLevelItem, ParseState> =
     choice [
@@ -169,7 +167,7 @@ let moduleBlockDecl: Parser<TopLevelItem, ParseState> =
     // The block's text is noted, since what it does not export can only be named inside it. The block itself ends
     // where its last item does, not at a comment after it.
     withSpan (attempt (
-        (pstring "module" >>. ws >>. identifierNoWs .>> wsNoNl() .>> pstring "=") >>= fun name ->
+        (pstring "module" >>. ws >>. identifierNoWs .>> wsInline .>> pstring "=") >>= fun name ->
             skipMany (skipAnyOf " \t") >>. newline >>.
             many (pchar ' ' <|> pchar '\t') >>= fun indentChars ->
                 let indent = indentChars.Length
