@@ -4,7 +4,7 @@ description: "Numeric utility functions"
 order: 9
 ---
 
-The `math` module provides common numeric and floating-point operations.
+The `math` module provides common numeric and floating-point operations. `import nanyx/math` brings its functions into scope unqualified, as `abs(-3)` and `pow(2, 10)`; this page writes them as `math.abs`, which needs the module imported under that name, `import nanyx/math as math`.
 
 Functions that work on any numeric type are generic over the `Num(a)` [context](../advanced/contexts): `int` and `float` are its built-in instances, so `abs`, `sign` and `pow` accept either without conversion. `min`, `max`, `minMax` and `clamp` only compare, so they require [`Ord(a)`](../advanced/contexts#orda) and take values of any one type that has an order: numbers, and strings too. The arguments must all be of the same type: `math.max(1, 2.5)` is a type error. Functions that only make sense for floating-point values take `float` directly.
 
