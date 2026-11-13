@@ -246,4 +246,22 @@ public sealed class HoverTests : LanguageServerTestBase
         Assert.Equal("```nanyx\nα, α -> α\n```", inferred?.Contents.MarkupContent?.Value);
         Assert.Equal(new Range(1, 27, 1, 28), inferred?.Range);
     }
+
+    [Fact]
+    public async Task Hover_on_a_nominal_types_name_says_its_kind_and_where_it_is_declared()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
+        File.WriteAllText(TempPath("ids.nyx"), "module ids\nexport type UserId = private int\nexport def first: UserId = UserId(1)\n");
+        Open(uri, "module main\nimport ids\ntype Email = protected string\ndef e: Email = Email(\"a\")\ndef u: UserId = first\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var email = await HoverAt(uri, 3, 8);
+        Assert.Equal(
+            "```nanyx\ntype Email = protected string\n```\n\nA protected type, declared in this module.",
+            email?.Contents.MarkupContent?.Value);
+
+        // A private type's shape is its own module's.
+        var userId = await HoverAt(uri, 4, 8);
+        Assert.Equal("```nanyx\ntype UserId\n```\n\nA private type, declared in 'ids.nyx'.", userId?.Contents.MarkupContent?.Value);
+    }
 }

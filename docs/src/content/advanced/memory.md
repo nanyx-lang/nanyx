@@ -4,9 +4,9 @@ description: "Scoped mutation with the memory context"
 order: 5
 ---
 
-Mutation in Nanyx is available but bounded. Mutable values require the `$Memory` context, and `memory { ... }` is the helper that creates and scopes that context. This allows internal mutation while keeping external interfaces pure.
+Mutation in Nanyx is available but bounded. Mutable values require the `Memory` context, and `memory { ... }` is the helper that creates and scopes that context. This allows internal mutation while keeping external interfaces pure.
 
-`$Memory` is a [nominal context](./nominal-and-protected-types) owned by the standard library, so only the standard library can construct an instance of it, and `memory { ... }` is the only way to get one. As with any context, `use` loads an instance you already have; it can't make a new one.
+`Memory` is a [nominal context](./nominal-and-protected-types) owned by the standard library, so only the standard library can construct an instance of it, and `memory { ... }` is the only way to get one. As with any context, `use` loads an instance you already have; it can't make a new one.
 
 This page is about mutating values. For how Nanyx frees memory, and updates immutable values in place when nothing else refers to them, see [Reference counting](../foundations/reference-counting).
 
@@ -32,11 +32,11 @@ A cell is not a value of its own. `def y = x` copies what `x` holds into `y`, wh
 
 # Mutability requires context
 
-A cell can be declared only inside a `memory { ... }` block, where `$Memory` is:
+A cell can be declared only inside a `memory { ... }` block, where `Memory` is:
 
 ```nanyx
 def main = {
-  mut x = 0 -- Error NYX0221: `mut` needs the context '$Memory'
+  mut x = 0 -- Error NYX0221: `mut` needs the context 'Memory'
 }
 
 def main = {
@@ -65,7 +65,7 @@ def tally = { words ->
 }
 ```
 
-A lambda that uses a cell needs `$Memory` too, and its type says so: `note` is `[$Memory] string -> ()`. It can be called inside the block but cannot leave it (see below).
+A lambda that uses a cell needs `Memory` too, and its type says so: `note` is `[Memory] string -> ()`. It can be called inside the block but cannot leave it (see below).
 
 # Passing a cell to a function
 
@@ -84,23 +84,23 @@ def count = memory {
 }
 ```
 
-In the body, a cell parameter behaves as a cell declared there: its name reads it and `:=` changes it. Its type is `mut T`, which an annotation can write: `def inc: [$Memory] mut int -> () = { mut cell -> ... }`. A function can pass a cell it is given on, `other(mut cell)`, and one cell can be passed for two parameters, `swap(mut a, mut a)`, which are then the same cell.
+In the body, a cell parameter behaves as a cell declared there: its name reads it and `:=` changes it. Its type is `mut T`, which an annotation can write: `def inc: [Memory] mut int -> () = { mut cell -> ... }`. A function can pass a cell it is given on, `other(mut cell)`, and one cell can be passed for two parameters, `swap(mut a, mut a)`, which are then the same cell.
 
-A function that takes a cell can only be called where the cell's block is, so a `mut` parameter implies `$Memory`, whether or not the body uses the cell. `inc` above is inferred as `[$Memory] mut int -> ()`, and so is a function that only passes its cell on. A function type that takes a cell and writes no contexts, such as a parameter's `change: mut int -> ()`, requires `$Memory` too. A def that writes contexts must write `$Memory` among them: `def inc: [Console] mut int -> ()` is an error (NYX0211) that says to write `[Console & $Memory]`.
+A function that takes a cell can only be called where the cell's block is, so a `mut` parameter implies `Memory`, whether or not the body uses the cell. `inc` above is inferred as `[Memory] mut int -> ()`, and so is a function that only passes its cell on. A function type that takes a cell and writes no contexts, such as a parameter's `change: mut int -> ()`, requires `Memory` too. A def that writes contexts must write `Memory` among them: `def inc: [Console] mut int -> ()` is an error (NYX0211) that says to write `[Console & Memory]`.
 
 `mut x` passes only a cell, a name declared with `mut` or a `mut` parameter: anything else is an error (NYX0234). A plain value where `mut T` is expected, or `mut x` where a plain `T` is, is a type error. A `mut` parameter takes one name, never a pattern.
 
-A cell can be passed to a function, but nothing else can hold one yet: `mut T` anywhere but a function's parameter, as in `list(mut int)`, is an error (NYX0235). A lambda over a cell parameter needs the `$Memory` of the block the cell is in, so it cannot leave that block, as a lambda over the cell itself cannot.
+A cell can be passed to a function, but nothing else can hold one yet: `mut T` anywhere but a function's parameter, as in `list(mut int)`, is an error (NYX0235). A lambda over a cell parameter needs the `Memory` of the block the cell is in, so it cannot leave that block, as a lambda over the cell itself cannot.
 
 # Values cannot escape memory scope
 
-`$Memory` is a _scoped_ context (`scoped context $Memory = ()`): each `memory` call supplies an instance of its own, and everything that requires it belongs to that call. A cell's `$Memory` is that of the block it is declared in, and so is that of every lambda that uses the cell. What the call gives back must not require it: giving back a lambda that uses one of the block's cells, or a structure that holds one, is an error (NYX0233), which names the cell:
+`Memory` is a _scoped_ context (`scoped context Memory = protected ()`): each `memory` call supplies an instance of its own, and everything that requires it belongs to that call. A cell's `Memory` is that of the block it is declared in, and so is that of every lambda that uses the cell. What the call gives back must not require it: giving back a lambda that uses one of the block's cells, or a structure that holds one, is an error (NYX0233), which names the cell:
 
 ```nanyx
 def bad = {
   memory {
     mut count = 0
-    { count := count + 1 } -- Error NYX0233: the result requires the block's '$Memory' through the cell 'count'
+    { count := count + 1 } -- Error NYX0233: the result requires the block's 'Memory' through the cell 'count'
   }
 }
 ```
@@ -117,7 +117,7 @@ def good = {
 }
 ```
 
-A block inside another may give back a lambda over the outer block's cells, since that requires the outer block's `$Memory`, not its own:
+A block inside another may give back a lambda over the outer block's cells, since that requires the outer block's `Memory`, not its own:
 
 ```nanyx
 def total = memory {
@@ -129,11 +129,11 @@ def total = memory {
 }
 ```
 
-The rule follows `$Memory` through other functions. A function that passes its parameter a block's `$Memory`, such as `{ make -> memory { make() } }`, supplies it in turn, so its result must not require it either. A function whose type says it requires `$Memory` itself can't give its parameter a block's: `def run: [$Memory] ([$Memory] () -> b) -> b = { make -> memory { make() } }` is an error at `make()`, since the block's `$Memory` would reach `make`, which is bound outside the block. Only `$Memory` is restricted this way: a function that supplies any other context, such as one that handles `Log` with a `use`, may give back a lambda that requires it.
+The rule follows `Memory` through other functions. A function that passes its parameter a block's `Memory`, such as `{ make -> memory { make() } }`, supplies it in turn, so its result must not require it either. A function whose type says it requires `Memory` itself can't give its parameter a block's: `def run: [Memory] ([Memory] () -> b) -> b = { make -> memory { make() } }` is an error at `make()`, since the block's `Memory` would reach `make`, which is bound outside the block. Only `Memory` is restricted this way: a function that supplies any other context, such as one that handles `Log` with a `use`, may give back a lambda that requires it.
 
-The block is given its instance of `$Memory`, which it can name: `memory { m -> ... }`. A block that doesn't name it, `memory { ... }`, ignores it. The instance is a value of the type `$Memory`, and it belongs to its block as everything that requires the block's `$Memory` does, so `memory { m -> m }` is an error (NYX0233).
+The block is given its instance of `Memory`, which it can name: `memory { m -> ... }`. A block that doesn't name it, `memory { ... }`, ignores it. The instance is a value of the type `Memory`, and it belongs to its block as everything that requires the block's `Memory` does, so `memory { m -> m }` is an error (NYX0233).
 
-`mut` makes a cell of the innermost `$Memory` in scope. `use m` makes `m` the innermost one, so an inner block can make cells that belong to an outer one, and a lambda over them may leave the inner block:
+`mut` makes a cell of the innermost `Memory` in scope. `use m` makes `m` the innermost one, so an inner block can make cells that belong to an outer one, and a lambda over them may leave the inner block:
 
 ```nanyx
 def total = memory { outer ->
@@ -149,7 +149,7 @@ def total = memory { outer ->
 
 `use m` starts no scope of its own: it only says whose cells a `mut` after it makes.
 
-This is how Nanyx performs escape analysis. Instead of a separate escape-analysis pass, the compiler tracks which values require which `memory` call's `$Memory`. A value that still needs it can only be used inside that call, so it cannot leak into pure code.
+This is how Nanyx performs escape analysis. Instead of a separate escape-analysis pass, the compiler tracks which values require which `memory` call's `Memory`. A value that still needs it can only be used inside that call, so it cannot leak into pure code.
 
 # No global mutable state
 

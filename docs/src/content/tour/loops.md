@@ -95,4 +95,4 @@ memory {
 }
 ```
 
-Because the condition has to change for the loop to end, `while` is almost always used together with [the `$Memory` context](../advanced/memory). It is the one low-level loop in the language, and exists so that locally mutable algorithms can be written inside an otherwise immutable interface.
+Because the condition has to change for the loop to end, `while` is almost always used together with [the `Memory` context](../advanced/memory). It is the one low-level loop in the language, and exists so that locally mutable algorithms can be written inside an otherwise immutable interface.

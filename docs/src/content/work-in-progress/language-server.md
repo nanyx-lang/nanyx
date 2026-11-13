@@ -60,6 +60,13 @@ what the compiler keeps: exact spans, resolved names and types.
   module's own, an imported one or the prelude's, printed from its `TypeDefInfo` with the type printer hover uses.
   A type's parameters keep the names they are written with (`type Box(a) = (item: a)`). On a type's name this
   takes precedence over the type of an expression around it, such as the block a local def's annotation is in.
+  A nominal type's is `type Email = protected string`, followed by a sentence (`HoverInfo.Note`) that says its kind
+  and the module that declares it; outside its module a private type's shape is left out (`type UserId`).
+- **Semantic tokens mark the names of nominal types** ([#1221](https://github.com/nanyx-lang/nanyx/issues/1221)).
+  `SemanticTokensHandler` gives each name of a protected or private type a `type` token with the `nominal` modifier,
+  and a private one `private` too, from `NominalNames.inModule`: the declaration, type names, constructors, patterns
+  and the type's part of an attached definition's name. They supplement the TextMate grammar, which still colours
+  everything else; the extension shows the marked names in italics.
 - **Hover on a `_` in a type shows what it was inferred to be**: `int` on the `_` of `def xs: list(_) = [1, 2]`.
   Inference records each hole's type in `ExprTypes` under the type expression's node, and `Hover.typeAt` looks for
   holes among the type expressions at the position (`Hover.typeExprsAt`).
@@ -307,5 +314,6 @@ _To do._ Candidate items, in rough dependency order; those not linked to an issu
 # Open questions
 
 - Incremental re-checking: is compiling the whole document after each pause in typing fast enough as programs grow?
-- Should semantic tokens replace or supplement the TextMate grammar?
+- Semantic tokens supplement the TextMate grammar today, marking only nominal types. Should they take over more of
+  the highlighting, such as telling a type's name from a constructor's?
 - Editors beyond VS Code: is `nanyx lsp` plus documented client setup enough?

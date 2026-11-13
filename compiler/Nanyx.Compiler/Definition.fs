@@ -10,7 +10,7 @@ let private contains (offset: int) (span: SourceSpan) =
 /// The span of the name a referring expression is written with: a call's or pipe's function name (not its
 /// arguments), an operator (not its operands), a qualified context member's name after the context and its dot, or
 /// all of an identifier or qualified name.
-let private nameSpan (expr: Expression) =
+let internal nameSpan (expr: Expression) =
     match expr.Kind with
     | FunctionCall(_, nameSpan, _)
     | BinaryOp(_, nameSpan, _, _)
@@ -23,9 +23,10 @@ let private nameSpan (expr: Expression) =
 
 /// The span of the name a type expression refers to a type with: all of a type name, or the name before an
 /// applied type's arguments.
-let private typeNameSpan (typeExpr: TypeExpr) =
+let internal typeNameSpan (typeExpr: TypeExpr) =
     match typeExpr.Kind with
-    | TypeName name
+    // All of it: a `$` written before the name is not part of the name (see the parser's `typeNameIdentifier`).
+    | TypeName _ -> Some typeExpr.Span
     | TypeApply(name, _) -> Some { typeExpr.Span with End = min typeExpr.Span.End (typeExpr.Span.Start + name.Length) }
     | _ -> None
 
@@ -68,7 +69,9 @@ let symbolAt (file: string) (result: CompileResult) (offset: int) : Symbol optio
 
 /// What hovering a type's name shows: its definition, as `type Name(params) = <the type it stands for>` (or
 /// `context Name = ...` or `scoped context Name = ...`), with `protected` or `private` before the type a nominal one
-/// stands for, and made-up type variables named by `names`, over the span of the name. The name can be
+/// stands for, and made-up type variables named by `names`, over the span of the name. A nominal type's hover has a
+/// note that says its kind and the module that declares it, and a private type's shape is left out outside that
+/// module. The name can be
 /// in an annotation, a type definition (its own or another's) or a signature's contexts, and the type can be the
 /// module's own or an imported one. `None` when no type's name is at `offset`.
 let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Hover.HoverInfo option =
@@ -86,10 +89,21 @@ let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult
                 | [] -> ""
                 | parameterNames -> "(" + String.concat ", " parameterNames + ")"
             let kind =
-                if info.IsPrivate then "private "
-                elif info.IsNominal then "protected "
+                if info.IsPrivate then "private"
+                elif info.IsNominal then "protected"
                 else ""
-            { Type = $"{keyword} {symbol.Name}{parameters} = {kind}{Unifier.tyToDisplayString names info.Underlying}"; Span = span })
+            let isHome = symbol.Declaration.File = file
+            let declared = if isHome then "this module" else Unifier.moduleText info.Home
+            let shape = Unifier.tyToDisplayString names info.Underlying
+            // A private type's shape is its home module's to know.
+            let definition =
+                if info.IsPrivate && not isHome then $"{keyword} {symbol.Name}{parameters}"
+                elif info.IsNominal then $"{keyword} {symbol.Name}{parameters} = {kind} {shape}"
+                else $"{keyword} {symbol.Name}{parameters} = {shape}"
+            let note =
+                let what = if info.IsContext then keyword else "type"
+                if info.IsNominal then Some $"A {kind} {what}, declared in {declared}." else None
+            { Type = definition; Span = span; Note = note })
     | _ -> None
 
 /// The span of every name in the compiled root module that refers to `symbol`, in the order they are written: a

@@ -80,7 +80,7 @@ A parameter can also be a pattern, which takes the argument apart as it is passe
 ```nanyx fragment
 def sums = pairs \map { (a, b) -> a + b }
 
-def address: $Email -> string = { $Email(s) -> s }
+def address: Email -> string = { Email(s) -> s }
 ```
 
 As with a [destructuring binding](./pattern-matching#destructuring-bindings), a pattern written as a parameter must be _total_: it must match every value the lambda can be given. To handle several cases, use the `| pattern -> ...` form above instead.

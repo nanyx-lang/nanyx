@@ -198,7 +198,7 @@ This is the implicit counterpart of a type argument, as Haskell's `Typeable` is 
 - **It doesn't replace type arguments.** In `[Typed(a)] string -> a`, nothing at the call site fixes `a`, so the ambiguity in [types only in output position](#types-only-in-output-position) remains. `Typed` helps only where a value of type `a` is passed in.
 - **The walker stays explicit.** When `encodeAt` recurses into a record's fields, each field's type is one the checker never learns, so there is no `Typed` instance for it; only `f.type`. A library therefore takes `Typed(a)` in its public function and passes the type explicitly in the code that walks it, as `encode` and `encodeAt` do above.
 
-Synthesis makes the [nominal types question](#open-questions) more pressing. With explicit arguments, a caller has to write `type Email` to hand over a description of `$Email`. With `Typed`, any generic function that asks for `Typed(a)` gets one without the caller writing anything. One answer is to synthesise `Typed` only for structural types, and let a nominal type's home module provide its instance.
+Synthesis makes the [nominal types question](#open-questions) more pressing. With explicit arguments, a caller has to write `type Email` to hand over a description of `Email`. With `Typed`, any generic function that asks for `Typed(a)` gets one without the caller writing anything. One answer is to synthesise `Typed` only for structural types, and let a nominal type's home module provide its instance.
 
 # Alternatives considered
 
@@ -236,7 +236,7 @@ C#'s source generators run user code at compile time that emits more source. The
 
 # Open questions
 
-- **Nominal types.** A [nominal type](../advanced/nominal-and-protected-types) such as `$Email` can only be created by its home module. Its description must not offer `build` elsewhere, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading? Is `Typed` synthesised for it at all?
+- **Nominal types.** A [nominal type](../advanced/nominal-and-protected-types) such as `Email` can only be created by its home module. Its description must not offer `build` elsewhere, or decoding could create values that bypass the type's invariants. Does a nominal type appear as a closed case (for example `#nominal(name)`) whose encoding must come from attached definitions or a context, or does it expose its structure only for reading? Is `Typed` synthesised for it at all?
 - **One name in two namespaces.** In `(string, into: type) -> into`, `into` is a type in the signature, and a field holding a `Type(into)` value at the call site. Is that pun clear enough?
 - **`type` at the call site.** A constraint writes `(elem = string)`, but a call writes `into = type Point`. The keyword is needed because arguments are expressions and `Point` could be a value or a constructor. Can the checker do without it when the parameter is known to be a type member, or is the difference worth keeping?
 - **Bare associated type names.** When can a signature write `elem` rather than `Iter(c).elem`? The [`iter` module](../stdlib/iter) assumes it can whenever only one constraint has an `elem`.

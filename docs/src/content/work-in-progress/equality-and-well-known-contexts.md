@@ -34,7 +34,7 @@ operators call, and `Hash(a)` and `__hash`.
 - **Instances at a call.** A call that requires `Eq(T)` finds: an instance in scope (a `use`, or the enclosing
   signature); then the `==` attached to `T`; then the compiler's own, whose member is the prelude's `__equals`, a
   generic function that compares by structure at the type it is specialised for.
-- **Only nominal and protected types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
+- **Only nominal types attach `==`** (decision 6). `` def Point.`==` `` on a structural type, or on a
   built-in type such as `string`, is `NYX0219`, and so is attaching `!=` to anything. `AttachedOperators.fs` holds
   the rule, with a list of the members it covers: `==`, `compare` and `hash`.
 - **Local functions are checked at each call.** A local function requires no contexts: the backend compiles it again
@@ -69,21 +69,21 @@ operators call, and `Hash(a)` and `__hash`.
 
 - **A list is compared through its elements' `Eq`.** `==` and `!=` on two lists whose elements have an `Eq` other
   than the compiler's own (one in scope, or an attached `==`) call the prelude's `__listEquals` with it
-  (`WellKnownContexts.throughElements`): `[$Email("a")] == [$Email("b")]` uses `` $Email.`==` ``, and so does `==` on a
+  (`WellKnownContexts.throughElements`): `[Email("a")] == [Email("b")]` uses `` Email.`==` ``, and so does `==` on a
   `list(a)` in a function that requires `[Eq(a)]` with the `Eq(a)` it is passed. `Ord` does the same for `<`.
 
 - **Structural derivation that looks up each part** ([#631](https://github.com/nanyx-lang/nanyx/issues/631)). A tag
   with a payload, a tuple, a record or a list of them with a part that has an `==` of its own, one attached to the
   part's type or the `Eq` a function requires of a type variable, is compared by a definition the compiler derives
-  (`Nanyx.Compiler/StructuralInstances.fs`), which compares each part with `==`. So a record that holds an `$Email`
-  compares it with `` $Email.`==` ``, and inside a function that requires `[Eq(a)]`, `==` on a `#some(a)` compares
+  (`Nanyx.Compiler/StructuralInstances.fs`), which compares each part with `==`. So a record that holds an `Email`
+  compares it with `` Email.`==` ``, and inside a function that requires `[Eq(a)]`, `==` on a `#some(a)` compares
   through the instance, also where the operands' type is only known later. A structure with no such part is still
   compared by the compiler's own. `ToString` is derived the same way (see
   [ToString(a)](../advanced/contexts#tostringa)).
 
 - **A union with a rest is compared through the tags it names**
-  ([#830](https://github.com/nanyx-lang/nanyx/issues/830)). `{ o -> o == #some($Email("a")) }` compares at
-  `#some($Email) | r`, where `r` is the function's own. Its `==` is derived as it would be for the closed union, with
+  ([#830](https://github.com/nanyx-lang/nanyx/issues/830)). `{ o -> o == #some(Email("a")) }` compares at
+  `#some(Email) | r`, where `r` is the function's own. Its `==` is derived as it would be for the closed union, with
   the rest kept in the definition's type, and two values of a tag the rest holds, or of different tags, are compared
   by the compiler's own `__equals` (`OpenTagShape` in `StructuralInstances.fs`). The definition requires no `Eq(r)`:
   the rest is checked at each call, as above. Only a comparison derives one. A call that requires `Eq` of an open
@@ -116,20 +116,20 @@ operators call, and `Hash(a)` and `__hash`.
   signature, which also covers a concrete `"a" < "b"`), then the `compare` attached to a type that is not a built-in
   one, then the compiler's own. Any instance but the compiler's own is called: `x < y` calls the prelude's `__less`
   (and `<=`, `>`, `>=` call `__lessOrEqual`, `__greater` and `__greaterOrEqual`), which is passed the instance.
-- **Only nominal and protected types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
+- **Only nominal types attach `compare`** (decision 6): attaching it to a structural type is `NYX0219`,
   as for `==`. A built-in type may attach one, as the prelude does, but it is not read.
 - **Lists.** `list.sort` and `list.sortBy` (now with keys of any ordered type, `[Ord(b)]`), and `list.min` and
   `list.max`, which give `#emptyList` for an empty list, as `list.head` does.
 - **Local functions are checked at each call**, as for `Eq`: a call to a local `def lt = { x, y -> x < y }` with
   records is `NYX0205` at the call, and a def that calls it with one of its own type variables requires `Ord` of it.
-- **A list is ordered through its elements' `Ord`**, as for `Eq`: `[v(1), v(2)] < [v(3)]` on `list($Version)` calls
+- **A list is ordered through its elements' `Ord`**, as for `Eq`: `[v(1), v(2)] < [v(3)]` on `list(Version)` calls
   the prelude's `__listLess` (and `__listLessOrEqual`, `__listGreater`, `__listGreaterOrEqual`) with
-  `$Version.compare`, lexicographically with a prefix first, and so does `<` on a `list(a)` in a function that
+  `Version.compare`, lexicographically with a prefix first, and so does `<` on a `list(a)` in a function that
   requires `[Ord(a)]`.
 
 Not done yet, as for `Eq`:
 
-- **Structural derivation that looks up each part, beyond one list.** A tuple holding a `$Version`, or a list of lists
+- **Structural derivation that looks up each part, beyond one list.** A tuple holding a `Version`, or a list of lists
   of them, is still an error, and `<` on a `list(a)` whose type is only known later orders by structure
   ([#631](https://github.com/nanyx-lang/nanyx/issues/631)).
 
@@ -148,12 +148,12 @@ Not done yet, as for `Eq`:
   `NYX0205` at the call, naming the part.
 - **A type that attaches its own `==` must attach `hash` too.** `WellKnownContext.AgreesWith` says that `hash` must
   agree with `==`, and `WellKnownContexts.disagreeing` finds a type, in the one asked for, that attaches `==` and no
-  `hash`: `Hash($Email)`, or `Hash(list($Email))`, is then `NYX0205`, which says to attach `$Email.hash`.
-- **Only nominal and protected types attach `hash`** (decision 6), as for `==` and `compare`.
+  `hash`: `Hash(Email)`, or `Hash(list(Email))`, is then `NYX0205`, which says to attach `Email.hash`.
+- **Only nominal types attach `hash`** (decision 6), as for `==` and `compare`.
 - **Generic code says it hashes**, as for `Eq`: a def that passes a value of its type variable to a function that
   requires `Hash` needs `[Hash(a)]`, written or inferred.
 - **A structure is hashed through its parts' own `Hash`** ([#641](https://github.com/nanyx-lang/nanyx/issues/641)), as
-  `==` compares through their `Eq`: where a part has a `hash` of its own, attached (`list($Email)`) or the `Hash(a)`
+  `==` compares through their `Eq`: where a part has a `hash` of its own, attached (`list(Email)`) or the `Hash(a)`
   a function is passed, `StructuralInstances` derives a `hash` for the structure, which hashes each part with
   `__hashOf` and folds the hashes with `__hashCombine`, after the tag's name for a tag, and a list's with
   `__listHashBy`. A built-in type's attached `hash` is the compiler's own, so a structure of only those keeps it.
@@ -293,15 +293,15 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
 - **Generic code says it compares.** `==` on a type variable `a` requires `Eq(a)`. A function that writes its type must
   write `[Eq(a)]`; one that does not has it inferred. Generic code is then checked once, where it is written, not at
   each type it is used with. `list.distinct` becomes `[Eq(a)] list(a) -> list(a)`.
-- **A type overrides equality by attaching `==`.** ``def $Email.`==` = { a, b -> lower(a) == lower(b) }`` is found by
-  the existing synthesis step, ahead of structural derivation. Only nominal and protected types may do this. A
+- **A type overrides equality by attaching `==`.** ``def Email.`==` = { a, b -> lower(a) == lower(b) }`` is found by
+  the existing synthesis step, ahead of structural derivation. Only nominal types may do this. A
   structural type built from one uses it: a
-  `list($Email)` compares its elements with `` $Email.`==` ``. This needs [#527](https://github.com/nanyx-lang/nanyx/issues/527).
+  `list(Email)` compares its elements with `` Email.`==` ``. This needs [#527](https://github.com/nanyx-lang/nanyx/issues/527).
 - **A block overrides it with `use`.** Loading `def ignoringCase: Eq(string) = (`` `==` `` = caseInsensitive)` with
   `use ignoringCase` changes what a plain
   `a == b` in that block means, and what generic code called from it sees (`xs \list.contains(name)`).
-- **Nominal and protected types** get the structural equality of their underlying type unless they attach `==`.
-  Comparing two `$UserId`s does not construct one, so it cannot break the type's invariants.
+- **Nominal types** get the structural equality of their underlying type unless they attach `==`.
+  Comparing two `UserId`s does not construct one, so it cannot break the type's invariants.
 
 **Alternatives.**
 
@@ -312,7 +312,7 @@ exist. Numeric operators are discussed [separately below](#numeric-operators).
   generic code ("checked once"). F# hides the same rule behind an inferred `equality` constraint, which is the
   recommendation with the constraint left unwritten.
 - *`==` is a fixed structural intrinsic, and `Eq` is a separate, optional context* for custom equivalences. Simpler to
-  implement, but then `==` and `Eq(a)` can disagree, and a type such as `$Email` has no way to say what equal means.
+  implement, but then `==` and `Eq(a)` can disagree, and a type such as `Email` has no way to say what equal means.
 
 # How instances are found
 
@@ -323,8 +323,8 @@ The lookup at each use of `==`, or call that requires `Eq(T)`, gains a last step
 3. an instance synthesized from definitions attached to `T` by name (`` T.`==` ``);
 4. **for a well-known context only**, an instance derived from `T`'s structure, each part found by this same lookup.
 
-Because step 4 looks up each part afresh, overrides compose: a record containing an `$Email` compares it with
-`` $Email.`==` ``, and after `use ignoringCase` a `list(string)` compares its elements with the loaded instance.
+Because step 4 looks up each part afresh, overrides compose: a record containing an `Email` compares it with
+`` Email.`==` ``, and after `use ignoringCase` a `list(string)` compares its elements with the loaded instance.
 
 In generic code a requirement on a structured type **reduces** to requirements on its variables: `==` on a
 `list(a)` needs `Eq(a)`, and on `(name: string, value: a)` needs `Eq(a)`. So a signature writes `[Eq(a)]`, not
@@ -375,7 +375,7 @@ This closes [#476](https://github.com/nanyx-lang/nanyx/issues/476) and unblocks 
 `[Eq(k) & Hash(k)]`, so records and tags can be keys without an order.
 
 A type that attaches its own `==` gets **no derived `Hash`**: the derived hash would disagree with the custom
-equality. Asking for `Hash($Email)` is then an error that says to attach `$Email.hash` too.
+equality. Asking for `Hash(Email)` is then an error that says to attach `Email.hash` too.
 
 Whether maps are hash-based (needing `Hash`) or ordered trees (needing `Ord`) is a standard library decision; this
 design makes hashing the natural choice, since more types have it.
@@ -407,8 +407,8 @@ Each is reported by the type checker, with a span; none reaches the backend.
 | `<` on a type with no order | `'Point' cannot be ordered with <: records have no order. Attach 'Point.compare', or compare a key with sortBy` |
 | Attached `==` with the wrong type | the existing `MissingContextMembers` message |
 | `!=` attached to a type | `'!=' cannot be defined: it is always 'not (a == b)'. Attach '==' instead` |
-| `==`, `compare` or `hash` attached to a structural type | `'Point.==' cannot be defined: Point is a structural type, so it always compares by its fields. Make it nominal ($Point) to define its own equality` |
-| `Hash(T)` wanted where `T` has its own `==` | `'map.insert' hashes values of type '$Email', which cannot be hashed: '$Email' defines its own ==, so its hash must agree with it: attach '$Email.hash'` (implemented) |
+| `==`, `compare` or `hash` attached to a structural type | `'Point.==' cannot be defined: Point is a structural type, so it always compares by its fields. Make it nominal (Point) to define its own equality` |
+| `Hash(T)` wanted where `T` has its own `==` | `'map.insert' hashes values of type 'Email', which cannot be hashed: 'Email' defines its own ==, so its hash must agree with it: attach 'Email.hash'` (implemented) |
 | Closed types with nothing in common | warning: `'#red' and '#some(int)' have no tag in common, so this is always false` |
 
 The language server's code action for the third adds the requirement to the signature.
@@ -447,7 +447,7 @@ The language server's code action for the third adds the requirement to the sign
 
 5. **The member is named `` `==` ``**, as the docs have it, so this waits on
    [#527](https://github.com/nanyx-lang/nanyx/issues/527). (Rejected: `equals`.)
-6. **Only nominal and protected types may attach `==`, `compare` or `hash`.** A structural type, including an alias
+6. **Only nominal types may attach `==`, `compare` or `hash`.** A structural type, including an alias
    such as `type Point = (x: int, y: int)`, always compares structurally, so `(x = 1, y = 2)` compares the same
    whether or not its alias is known. Attaching one of these to a structural type is an error. (Rejected: any named
    type.)
@@ -455,5 +455,5 @@ The language server's code action for the third adds the requirement to the sign
 
 # Still open
 
-- Should a protected type's module be able to withhold equality from other modules? [Recommended: no, not until
+- Should a private type's module be able to withhold equality from other modules? [Recommended: no, not until
   someone needs it.]

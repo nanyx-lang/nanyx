@@ -28,7 +28,7 @@ a `` `*` ``, so `*` is read through `Num`. `` `++` `` is the one member of `Appe
 
 `++` on a `string` or a `list` is the built-in operator, as `+` on an `int` is. The prelude attaches `` string.`++` ``
 and `` list.`++` ``, which are what a function that requires `Append` is passed, and a type gets an `Append` by
-attaching `` `++` ``, as `` def $Path.`++` = ... `` does.
+attaching `` `++` ``, as `` def Path.`++` = ... `` does.
 
 ```nanyx
 def concat: [Append(a)] a, a -> a = { x, y -> x ++ y }   -- concat("a", "b"), concat([1], [2])

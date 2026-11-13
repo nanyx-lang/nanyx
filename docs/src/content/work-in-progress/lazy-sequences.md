@@ -112,7 +112,7 @@ Seq.map:  ([c] seq(a)), ([d] a -> b) -> [c & d] seq(b)   -- runs f when pulled: 
 Seq.fold: [c & d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
 ```
 
-A sequence whose steps read a `mut` cell requires `$Memory`, so it can't leave its `memory` block
+A sequence whose steps read a `mut` cell requires `Memory`, so it can't leave its `memory` block
 ([Context escape](./context-escape)). The `range` example on the Ranges page, which builds a sequence from a `while`
 loop over a cell, can never return; it becomes a `Seq.unfold`.
 

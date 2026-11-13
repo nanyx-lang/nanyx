@@ -962,6 +962,123 @@ module Semicolons =
                   Fixes = fixes }))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `dollarPrefixedType` rule: a `$` before a type's name, as nominal types were written before
+/// `protected` declared them (see the Protected types page of the docs' work in progress). The parser still reads it,
+/// and drops it: `$Email` is `Email`. The fix removes the `$`, and on a declaration writes `protected` after its `=`.
+/// Only the names the parser read are looked at, so a `$` in a string or a comment is left alone.
+module DollarPrefixedType =
+    let rule =
+        { Id = "dollarPrefixedType"
+          Title = "Type name written with `$`"
+          DefaultSeverity = Severity.Warning
+          Description =
+            "A `$` before a type's name, as in `type $Email = string` or `$Email(s)`. Declare a protected type with `protected` after its `=`, `type Email = protected string`, and write its name without the `$`." }
+
+    /// Each type definition in `module'`, at the top level, in a `module name =` block or in a block.
+    let private typeDefs (module': Module) =
+        let rec ofItem (item: TopLevelItem) =
+            match item.Kind with
+            | Def (TypeDef(name, modifiers, _, body)) -> [ name, modifiers, body ]
+            | ModuleBlock(_, items) -> items |> List.collect ofItem
+            | _ -> []
+        let inBlocks =
+            module'
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect SyntaxTree.blocksWithin
+            |> List.concat
+            |> List.choose (fun statement ->
+                match statement.Kind with
+                | TypeDefStatement(name, modifiers, _, body) -> Some (name, modifiers, body)
+                | _ -> None)
+        (module' |> List.collect ofItem) @ inBlocks
+
+    /// The start and end of each name the parser read where a type's name may be written: a declaration's, a type's,
+    /// a value's or a call's, and a pattern's type.
+    let private nameRegions (model: SemanticModel) =
+        let source = model.Source
+        let upTo (character: char) (span: SourceSpan) =
+            match source.IndexOf(character, span.Start) with
+            | -1 -> span.End
+            | index -> min index span.End
+        let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+        let declarations =
+            model.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Declaration.File = model.File) |> Seq.map _.Declaration |> List.ofSeq
+        let types =
+            (model.Syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
+            |> List.collect TypeExpr.within
+            |> List.choose (fun typeExpr ->
+                match typeExpr.Kind with
+                | TypeName _ -> Some typeExpr.Span
+                | TypeApply _ -> Some { typeExpr.Span with End = upTo '(' typeExpr.Span }
+                | _ -> None)
+        let names =
+            expressions
+            |> List.choose (fun expr ->
+                match expr.Kind with
+                | IdentifierExpr _ -> Some expr.Span
+                | FunctionCall(_, nameSpan, _)
+                | Pipe(_, _, nameSpan, _) -> nameSpan
+                | _ -> None)
+        let patterns =
+            expressions
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Match(_, arms)
+                | Except(_, arms) -> arms |> List.collect (fst >> List.collect Pattern.within)
+                | _ -> [])
+            |> List.choose (fun pattern ->
+                match pattern.Kind with
+                | RecordPattern _ -> Some { pattern.Span with End = upTo '(' pattern.Span }
+                | _ -> None)
+        declarations @ types @ names @ patterns
+        |> List.filter (fun span -> not (SourceSpan.isNone span) && span.End <= source.Length)
+
+    let lint (model: SemanticModel) : Report list =
+        let source = model.Source
+        // The offset of each `$` before a part of a name, with the span it is at.
+        let dollars =
+            nameRegions model
+            |> List.collect (fun span ->
+                [ span.Start .. span.End - 1 ]
+                |> List.filter (fun offset -> source.[offset] = '$' && (offset = span.Start || source.[offset - 1] = '.'))
+                |> List.map (fun offset -> offset, { span with Start = offset; End = offset + 1; StartColumn = span.StartColumn + offset - span.Start }))
+            |> List.distinctBy fst
+        // The declarations a `$` declares protected, by the `$`'s offset: what else the fix writes, `protected` after
+        // the `=` unless the type says `private` or `protected` already.
+        let declared =
+            typeDefs model.Syntax
+            |> List.choose (fun (name, modifiers, body) ->
+                model.Symbols
+                |> Map.values
+                |> Seq.filter (fun symbol ->
+                    symbol.Kind = TypeDefinition && symbol.Name = name && symbol.Declaration.File = model.File
+                    && symbol.Declaration.End <= body.Span.Start)
+                |> Seq.sortByDescending _.Declaration.Start
+                |> Seq.tryHead
+                |> Option.filter (fun symbol -> source.[symbol.Declaration.Start] = '$')
+                |> Option.map (fun symbol ->
+                    let between = source.Substring(symbol.Declaration.End, body.Span.Start - symbol.Declaration.End)
+                    let written = between.Contains "protected" || List.contains Private modifiers
+                    let insert = { Span = { body.Span with End = body.Span.Start }; NewText = "protected " }
+                    symbol.Declaration.Start, (name, if written then [] else [ insert ])))
+            |> Map.ofList
+        dollars
+        |> List.sortBy fst
+        |> List.map (fun (offset, span) ->
+            let removal = { Span = span; NewText = "" }
+            match declared |> Map.tryFind offset with
+            | Some (name, inserts) ->
+                { Rule = rule.Id
+                  Span = span
+                  Message = $"Declare a protected type with `protected` after its `=`, not a `$` before its name: `type {Names.written name} = protected ...`"
+                  Related = []
+                  Fixes = [ { Title = "Declare it with `protected`"; Edits = removal :: inserts } ] }
+            | None ->
+                { Rule = rule.Id
+                  Span = span
+                  Message = "A type's name is written without a `$`"
+                  Related = []
+                  Fixes = [ { Title = "Remove the `$`"; Edits = [ removal ] } ] })
 module Linters =
     /// The official linter, which the docs call `default`. Its rules are added one by one.
     let official =
@@ -969,13 +1086,14 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule; ShadowedPreludeNames.rule; Semicolons.rule ]
+              PlusBetweenContexts.rule; UnannotatedExports.rule; UnusedResults.rule; ShadowedPreludeNames.rule; Semicolons.rule
+              DollarPrefixedType.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ PlusBetweenContexts.lint model @ UnannotatedExports.lint model
-                @ UnusedResults.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model }
+                @ UnusedResults.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model @ DollarPrefixedType.lint model }
 
     /// The linters the compiler has, which a manifest's `[linters]` table or a script's `::linters` directives
     /// can turn on.

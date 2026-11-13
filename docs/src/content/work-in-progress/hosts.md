@@ -95,7 +95,7 @@ A host provides the contexts the program's entry may require, and only those. Th
 | Host | Entry shape | Provides |
 | --- | --- | --- |
 | `ConsoleHost` | `() -> ()` | `Console & Env` at first; `FileSystem`, `Clock` and `Random` as they are added |
-| HTTP host | `Request -> Response` | `Log & Clock & Env` |
+| HTTP host | `Request -> Response` | `Log & Clock & Env & Random & Http` (see [Serving HTTP](#serving-http)) |
 | Browser host | a record of `init`, `update` and `view` | `Dom & Fetch & Clock & Log` |
 | Plugin / sandbox host | host-defined | only what the embedder grants |
 | Test host | test functions | fakes or recorders of the above |
@@ -179,6 +179,65 @@ The host provides contexts for what a page can do (`Dom`, `Fetch`, `Clock`, `Log
 
 Unlike the WASI worlds, this host's imports have no standard on the other side. The host package has to ship the JavaScript that implements them, and `nanyx build` has to write that file out beside the module.
 
+# Serving HTTP
+
+The HTTP host's entry is a request handler, an ordinary function:
+
+```nanyx fragment
+@entry
+def main: [Log & Clock & Env] Request -> Response = { req ->
+  match (req.method, req.path)
+    | (#get, "/") -> Response.text(200, "Welcome")
+    | (#get, #Path('/hello/{name}')(name)) -> Response.text(200, "Hello, {name}!")
+    | _ -> Response.text(404, "Not Found")
+}
+```
+
+**The handler is synchronous, and the host provides concurrency.** A page can't block, which is why the browser host
+is Elm-style. A server can. The host runs many calls of the handler at once, one WebAssembly instance (or worker) per
+request, as `wasmtime serve`, Spin and Fastly run components of the `wasi:http` world. Inside a request, an outbound
+call or a query blocks only that request's instance. So the handler needs no async, and the
+[decision to leave async for later](#decided) holds for servers too.
+
+**What the host provides:** `Log`, `Clock`, `Env`, `Random` and `Http`, an outbound HTTP client, and later perhaps a
+key-value store or a database. It doesn't provide `Console` or `FileSystem`, so a library that writes files is a
+compile error under it. A handler may require fewer contexts than the host provides: a function type with fewer
+contexts fits where one with more is expected, so a pure handler is fine.
+
+**What the first version leaves out:**
+
+- **Set-up and state shared between requests.** With an instance per request there is no memory shared between
+  requests. When a program needs something made once, such as its configuration or a connection pool, the entry gains
+  a second part. It is still one shape, and it mirrors the browser host's `init`:
+
+  ```nanyx fragment
+  @entry
+  def main = (
+    init = { -> loadConfig() }        -- runs once, and may require Env
+    handle = { config, req -> ... }   -- runs for each request
+  )
+  ```
+
+  The first version takes the handler alone. `init` comes when a program needs it.
+- **Streamed bodies.** A body is a `string` at first. Streaming wants a lazy body, which depends on
+  [lazy sequences](./lazy-sequences).
+
+**Failures.** A trap in a handler, including a [deferred error](./deferred-errors), ends only that request. The host
+answers it with a 500 and logs the message, and the server carries on.
+
+**Routing, middleware and templates are libraries.** A router is a function from routes to a handler, so it produces
+a `Request -> Response`. That is the next section's rule.
+
+**What it needs:**
+
+- `Request` and `Response` in a `nanyx/http` module, with the methods as a tag union, headers as a map, and the body
+  as a string.
+- The host itself, on the machinery ConsoleHost builds ([#1245](https://github.com/nanyx-lang/nanyx/issues/1245)).
+- Something to serve with. On WASI, that's the `wasi:http` incoming-handler world. That is the largest piece: the
+  backend emits a WASI preview 1 core module today, and `wasi:http` is a preview 2 component. Before that, the CLI can
+  serve without WASI: `nanyx run` listens on a port (from the manifest's `[host]` table) and calls the handler for
+  each request, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server).
+
 # Hosts are not frameworks
 
 A host owns the *process lifecycle*. A framework is something that needs effects or produces an entry. Keeping these separate stops the ecosystem from fragmenting:
@@ -249,6 +308,8 @@ The composite host runs each part under the right sub-host and coordinates start
 6. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
 7. **The test host**, with [Testing](./testing).
+8. **The HTTP host** ([Serving HTTP](#serving-http)): `nanyx/http`'s `Request` and `Response`, serving from the CLI
+   for local development, then the `wasi:http` world.
 
 # What's built
 

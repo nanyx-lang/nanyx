@@ -1,20 +1,20 @@
--- A module block imported by the rest of its file: only `money` can make a `$Money`, so the file goes through
--- `$Money.new`, as it would if `money` were a file of its own.
+-- A module block imported by the rest of its file: only `money` can make a `Money`, so the file goes through
+-- `Money.new`, as it would if `money` were a file of its own.
 import nanyx/console
 
 module money =
   -- Prices are whole pence, so no rounding ever creeps in.
-  export type $Money = (pence: int)
+  export type Money = protected (pence: int)
 
-  export def $Money.new: int -> $Money = { pence ->
-    $Money(pence = pence)
+  export def Money.new: int -> Money = { pence ->
+    Money(pence = pence)
   }
 
-  export def $Money.add: $Money, $Money -> $Money = { a, b ->
-    $Money(pence = a.pence + b.pence)
+  export def Money.add: Money, Money -> Money = { a, b ->
+    Money(pence = a.pence + b.pence)
   }
 
-  export def $Money.toString: $Money -> string = { m ->
+  export def Money.toString: Money -> string = { m ->
     def pounds = m.pence / 100
     def rest = m.pence % 100
     if rest < 10 then "£{pounds}.0{rest}" else "£{pounds}.{rest}"
@@ -22,9 +22,9 @@ module money =
 
 import money
 
-def tea: $Money = $Money.new(250)
-def cake: $Money = $Money.new(305)
+def tea: Money = Money.new(250)
+def cake: Money = Money.new(305)
 
-def total: $Money = $Money.add(tea, cake)
+def total: Money = Money.add(tea, cake)
 
-println("Tea and cake: " ++ $Money.toString(total))
+println("Tea and cake: " ++ Money.toString(total))

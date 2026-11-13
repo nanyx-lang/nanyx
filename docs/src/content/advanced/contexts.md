@@ -17,12 +17,12 @@ context Console = (
 )
 ```
 
-Contexts are structural by default: any record whose members match the declared shape can be loaded as an instance. Prefixing the name with `$` (for example `$Memory`) makes the context nominal, so that only its home module can create instances; see [Nominal and protected types](./nominal-and-protected-types).
+Contexts are structural by default: any record whose members match the declared shape can be loaded as an instance. Declaring it `protected` after its `=`, as the prelude declares `Memory`, makes the context nominal, so that only its home module can create instances; see [Nominal types](./nominal-and-protected-types).
 
-The full form of a context definition is `scoped export context $Name(params) = ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `$Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
+The full form of a context definition is `scoped export context Name(params) = protected ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
 
 ```nanyx fragment
-scoped export context $Memory = ()
+scoped export context Memory = protected ()
 ```
 
 A scoped context must be nominal, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. Any module may declare one. The compiler doesn't yet check that nothing requiring a scoped context leaves its scope ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)).
@@ -269,16 +269,16 @@ A function that does not write its type has the requirement inferred: `def same 
 A nominal type can attach its own `==`, which `a == b` on it, and a function that requires `Eq`, then use for it:
 
 ```nanyx
-def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
+def Email.`==`: Email, Email -> bool = { a, b -> lower(a) == lower(b) }
 ```
 
-Only a nominal or protected type can: a structural type, such as `type Point = (x: int, y: int)`, and a built-in type always compare by their structure, so attaching `==` to one is an error. `!=` cannot be attached to any type, because it is always `not (a == b)`.
+Only a nominal type, protected or private, can: a structural type, such as `type Point = (x: int, y: int)`, and a built-in type always compare by their structure, so attaching `==` to one is an error. `!=` cannot be attached to any type, because it is always `not (a == b)`.
 
 An `==` passes through the structures around it. A tag with a payload, a tuple, a record and a list are compared part by part, each part with its own `==`:
 
 ```nanyx
-#some($Email("A@x.io")) == #some($Email("a@x.io"))   // true
-[$Email("A@x.io")] == [$Email("a@x.io")]             // true
+#some(Email("A@x.io")) == #some(Email("a@x.io"))   // true
+[Email("A@x.io")] == [Email("a@x.io")]             // true
 
 def bothSome: [Eq(a)] (a, a) -> bool = { x, y -> #some(x) == #some(y) }   // compares x and y with Eq(a)
 ```
@@ -298,14 +298,14 @@ The compiler has an `Ord` for numbers, `bool` (`false` first), strings (by their
 Records and tags have no order: a record's fields and a union's tags have no order of their own in its type, so `<` on them is a type error. Sort a list of them by a key with `list.sortBy`, or make the type nominal and attach a `compare`:
 
 ```nanyx
-type $Version = (major: int, minor: int)
+type Version = protected (major: int, minor: int)
 
-def $Version.compare: $Version, $Version -> #less | #equal | #greater = { a, b ->
+def Version.compare: Version, Version -> #less | #equal | #greater = { a, b ->
   if a.major != b.major then int.compare(a.major, b.major) else int.compare(a.minor, b.minor)
 }
 ```
 
-As with `==`, only a nominal or protected type can attach `compare`. The built-in types have theirs attached as functions, `int.compare` and `float.compare` among them, but their order is always the compiler's own.
+As with `==`, only a nominal type can attach `compare`. The built-in types have theirs attached as functions, `int.compare` and `float.compare` among them, but their order is always the compiler's own.
 
 A function that orders values of one of its type variables requires `Ord` of it, `def largest: [Ord(a)] list(a) -> #some(a) | #emptyList`, and one that does not write its type has it inferred: `def larger = { x, y -> if x > y then x else y }` is `[Ord(a)] a, a -> a`. `Ord` does not require `Eq`; a type that attaches both should keep them consistent.
 
@@ -322,14 +322,14 @@ context Hash(a) = (
 The compiler has a `Hash` for every type it has an `Eq` for, which hashes by structure: a value's hash is made from its parts' hashes. Functions have no hash. A nominal type that attaches its own `==` must attach a `hash` that agrees with it, since the compiler's own would not; without one, asking for `Hash` of it is a type error that says so:
 
 ```nanyx
-type $Email = string
+type Email = protected string
 
-def $Email.`==`: $Email, $Email -> bool = { a, b -> lower(a) == lower(b) }
+def Email.`==`: Email, Email -> bool = { a, b -> lower(a) == lower(b) }
 
-def $Email.hash: $Email -> int = { e -> string.hash(lower(e)) }
+def Email.hash: Email -> int = { e -> string.hash(lower(e)) }
 ```
 
-As with `==`, only a nominal or protected type can attach `hash`. The built-in types have theirs attached as functions, `int.hash` and `string.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `$Email`s, is hashed through it: each part is hashed with its own `Hash` and the hashes are folded together, so two lists that `==` finds equal have the same hash.
+As with `==`, only a nominal type can attach `hash`. The built-in types have theirs attached as functions, `int.hash` and `string.hash` among them, for building a type's own `hash`. A type that holds a part with its own `hash`, such as a list of `Email`s, is hashed through it: each part is hashed with its own `Hash` and the hashes are folded together, so two lists that `==` finds equal have the same hash.
 
 ## Default(a)
 
@@ -479,9 +479,9 @@ A record's fields are written in alphabetical order. A string is written without
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 
-A [protected type](./nominal-and-protected-types) such as `$UserId` can be written only if its module exports a `$UserId.toString`. Outside its module the type has no shape to write, so the module chooses how its values are shown, as it chooses everything else that can be done with them.
+A [private type](./nominal-and-protected-types#private-opaque-types) such as `UserId` can be written only if its module exports a `UserId.toString`. Outside its module the type has no shape to write, so the module chooses how its values are shown, as it chooses everything else that can be done with them.
 
-A value whose type has no `ToString`, such as a function, a protected type without a `toString`, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`. So is a union open to tags a caller chooses, `#x(a) | r` in a function's type, since those tags may be any: name every tag in the type, or match on the tags it names.
+A value whose type has no `ToString`, such as a function, a private type without a `toString`, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`. So is a union open to tags a caller chooses, `#x(a) | r` in a function's type, since those tags may be any: name every tag in the type, or match on the tags it names.
 
 # Context synthesis
 

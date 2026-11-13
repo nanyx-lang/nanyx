@@ -20,7 +20,7 @@ say a pure function does. A requirement can move from a lambda to the place that
 disappears. A lambda doesn't capture the contexts it uses: it requires them where it is called. Koka and Flix work the
 same way. Neither lets a closure capture an effect and drop it from its type.
 
-So there is no distinction between "static" contexts such as `Console` and "instance" ones such as `$Memory` in the
+So there is no distinction between "static" contexts such as `Console` and "instance" ones such as `Memory` in the
 type system. Capturing the one `Console` or being passed it at each call makes no difference to what a program does,
 which leaves it as an optimisation for the backend ([Context calls](./context-calls)).
 
@@ -113,11 +113,11 @@ def tryToFool = {
 }
 ```
 
-Requiring `$Memory` isn't enough, because every `memory` block supplies one. The prelude declares
-`memory: [c] ([$Memory & c] () -> a) -> a`, and nothing stops `a` being `[$Memory] () -> int`:
+Requiring `Memory` isn't enough, because every `memory` block supplies one. The prelude declares
+`memory: [c] ([Memory & c] () -> a) -> a`, and nothing stops `a` being `[Memory] () -> int`:
 
 ```nanyx
-def counter = memory { mut y = 0; { y := y + 1; y } }   -- [$Memory] () -> int
+def counter = memory { mut y = 0; { y := y + 1; y } }   -- [Memory] () -> int
 
 def a = memory { counter() }   -- 1
 def b = memory { counter() }   -- 2: two pure expressions now differ
@@ -128,29 +128,29 @@ def b = memory { counter() }   -- 2: two pure expressions now differ
 A context declared `scoped` belongs to the scope that supplies it, and nothing that requires it can leave that scope:
 
 ```nanyx
-scoped export context $Memory = ()
+scoped export context Memory = protected ()
 ```
 
 - **Where a scope starts.** A function _supplies_ a context to a parameter when the parameter's type requires it and
-  the function's own type doesn't: `memory` supplies `$Memory` to its block. For a scoped context, each call to a
+  the function's own type doesn't: `memory` supplies `Memory` to its block. For a scoped context, each call to a
   function that supplies it starts a fresh, rigid scope. Every requirement of the context inside belongs to that
   scope, and the call's result type must not mention it. This is Haskell's `runST`, Koka's `local<h>` and Flix's
   regions, with the scope variable implied by the marker rather than written, so users never see it.
 - **Only scoped contexts are restricted.** Every other context keeps "require, don't capture", so
   `withConsoleLog { { log("x") } }` above may return a lambda that requires `Log`.
-- **Instances come only from their supplier.** A scoped context must be nominal (`$`), so only its own module can
+- **Instances come only from their supplier.** A scoped context must be nominal (`protected`), so only its own module can
   construct an instance, and its supplying function is where each instance and scope starts. `use` only loads an
   instance it is given. `scoped context Tx = (...)` is an error. Any module may declare a scoped context, such as a
-  `$Transaction` in a database library.
+  `Transaction` in a database library.
 - **A type variable bound outside the scope is safe.** `def run2: (() -> b) -> b = { f -> memory { f() } }` checks:
   `b` can't mention a scope made inside `run2`.
-- **It reaches type variables.** `def run = { mk -> memory { mk() } }` passes `mk` the block's `$Memory`, so
-  `run(mk)` is rejected where its result would require that block's `$Memory`.
-- **It fits discharge at a `use`.** A `use` in a block whose member's lambda changes a cell requires `$Memory` where
+- **It reaches type variables.** `def run = { mk -> memory { mk() } }` passes `mk` the block's `Memory`, so
+  `run(mk)` is rejected where its result would require that block's `Memory`.
+- **It fits discharge at a `use`.** A `use` in a block whose member's lambda changes a cell requires `Memory` where
   the `use` is written, which is inside the block.
 
 A block can be given its instance, `memory { m -> ... }`. Holding it counts as requiring it, so `memory { m -> m }` is
-rejected. `mut` uses the innermost `$Memory` in scope, and `use m1` in an inner block makes `m1` the innermost, so the
+rejected. `mut` uses the innermost `Memory` in scope, and `use m1` in an inner block makes `m1` the innermost, so the
 inner block can make cells that belong to the outer one:
 
 ```nanyx
@@ -163,7 +163,7 @@ memory { m1 ->
 }
 ```
 
-`memory`'s block takes the instance, `memory: [c] ([$Memory & c] $Memory -> a) -> a`, and `memory { ... }` still
+`memory`'s block takes the instance, `memory: [c] ([Memory & c] Memory -> a) -> a`, and `memory { ... }` still
 checks, since a lambda with no parameters ignores one.
 
 ## Options considered
@@ -172,7 +172,7 @@ checks, since a lambda with no parameters ignores one.
   context it supplies, for any context. It needs no marker, but it also rejects a handler function returning a lambda
   that requires the context it handles, which "require, don't capture" allows. It can't tell instances apart either,
   so a value made in an inner block could never reach an outer one.
-- **An explicit scope variable**, `context $Memory(s)` with `forall s` in `memory`'s signature. It's what `scoped`
+- **An explicit scope variable**, `context Memory(s)` with `forall s` in `memory`'s signature. It's what `scoped`
   means, but users would see `s` in hovers and errors, and it needs rank-2 syntax.
 - **Capturing "static" contexts** such as `Console` into a lambda whose type drops them. A pure-looking function could
   then print.
@@ -189,7 +189,7 @@ checks, since a lambda with no parameters ignores one.
   each `{ ... }` whose type takes an input a parameter it ignores. None of the parser's desugarings (`for`, `__with`,
   `__rec`, workflow blocks) makes a lambda without parameters that is checked against a one-parameter type, so they
   accept what they did.
-- **`use` loads a `$Memory`; it can't make one.** `use` loads any context instance you have. `$Memory` is nominal, so
+- **`use` loads a `Memory`; it can't make one.** `use` loads any context instance you have. `Memory` is nominal, so
   only the standard library can construct one, and `memory` is the only way to get one.
 
 # Proposal: contexts are not types
@@ -345,7 +345,7 @@ member's own type variables unit, so it reports a call that has one of them at a
 
 ## Questions
 
-- **`memory { m -> ... }`.** The block is given its `$Memory` instance as a value, and `use m` loads it in an inner
+- **`memory { m -> ... }`.** The block is given its `Memory` instance as a value, and `use m` loads it in an inner
   block ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)). Under the proposal `m` can't be a value. It could
   stay as a name only `use` accepts, as an exception, or the block could be named another way, such as a label.
 - **Whether one context can serve for another.** Today contexts are structural, so a function that requires `Add(a)`
@@ -353,8 +353,8 @@ member's own type variables unit, so it reports a call that has one of them at a
   [Operator contexts](./operator-contexts) rule that an operator reads the smallest context with its member). If
   contexts are their own thing, that needs a rule of its own: a declared relation (`Num` includes `Add`), matching by
   members kept as a rule about contexts, or none, so that `mean` requires `Add` and `Div` separately.
-- **What `$` means on a context.** On a type, `$` makes it nominal: only its home module can construct one. On a
-  context it would mean only its home module can write its constructor in a `use`, which is what `$Memory` and a
+- **What `protected` means on a context.** On a type, `protected` makes it nominal: only its home module can construct one. On a
+  context it would mean only its home module can write its constructor in a `use`, which is what `Memory` and a
   `scoped context` need.
 - **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
   It isn't today: a context member's type variables are fixed once in a function that requires the context, so
@@ -375,18 +375,18 @@ member's own type variables unit, so it reports a call that has one of them at a
 
 1. ~~Let a `use` give a member a lambda that needs more contexts, required where the `use` is written~~
    ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)). Done: see `UseDischarge.fs` above.
-2. ~~Make a lambda that uses a cell require `$Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
-   Done: a read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so
-   `{ word -> count := count + 1 }` is `[$Memory] string -> ()`, and a lambda that calls it requires `$Memory` too.
+2. ~~Make a lambda that uses a cell require `Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
+   Done: a read or change of a cell requires `Memory` of the lambda around it (`MemoryCells.recordUse`), so
+   `{ word -> count := count + 1 }` is `[Memory] string -> ()`, and a lambda that calls it requires `Memory` too.
 3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
    Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
-   `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `$Memory` is declared
+   `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `Memory` is declared
    `scoped`.
 4. ~~Keep what requires a scoped context inside the call that supplies it, replacing NYX0224~~
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)). Done in two steps:
-   - The scope is carried in types: a scoped context in a type is `TyApply("$Memory", [scope])`, the scope wrapped so
+   - The scope is carried in types: a scoped context in a type is `TyApply("Memory", [scope])`, the scope wrapped so
      that `FunctionContexts.ScopedContext` knows it (`FunctionContexts.scoped`). Every scoped context of a name that one
-     signature writes shares a scope (`WrittenContexts.read`), and a def's own `$Memory`, where the def is named or
+     signature writes shares a scope (`WrittenContexts.read`), and a def's own `Memory`, where the def is named or
      called, takes the scope its type has there (`WrittenContexts.plain`). The printer leaves the scope out
      (`FunctionContexts.withoutScope`), and so does the backend (`CoreIrLowerTypes.concreteContexts`).
    - `ScopedCalls.fs` checks it. At each call, `enter` finds what the callee supplies from its type: a scoped context a
@@ -397,14 +397,14 @@ member's own type variables unit, so it reports a call that has one of them at a
      if the call's result mentions it (`tryToFool`, at the use of the cell that brought it in), with the call as a
      related span. The call keeps its type, so nothing around it fails as well. The scope is an ordinary variable
      otherwise: `FunctionContexts.fit` gives a function value's context variable the scoped contexts the block it is
-     called in is given, so `{ mk -> memory { mk() } }` is generalised over the scope and supplies `$Memory` in turn.
-     Contexts are paired with the same scope first, so a block's requirement of an outer block's `$Memory` goes into
+     called in is given, so `{ mk -> memory { mk() } }` is generalised over the scope and supplies `Memory` in turn.
+     Contexts are paired with the same scope first, so a block's requirement of an outer block's `Memory` goes into
      its context variable.
 5. ~~Give a `memory` block its instance, `memory { m -> ... }`~~ ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)).
    Done: a scoped context's name in a type is the nominal type made from its scope, the one the signature's contexts
    of that name have (`TypeResolution.scopedValueType`), so a value of it mentions the scope and NYX0233 keeps it in
    its block; its constructor makes one of a scope of its own (`TypeResolution.constructedType`). A `use` of a
-   `$Memory` instance makes its scope the one a `mut` after it takes (`MemoryCells.afterUse`), and the backend lowers
+   `Memory` instance makes its scope the one a `mut` after it takes (`MemoryCells.afterUse`), and the backend lowers
    it to nothing. Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
-   pairs two of them, so an inner block's requirement of an outer block's `$Memory` goes into its context variable,
+   pairs two of them, so an inner block's requirement of an outer block's `Memory` goes into its context variable,
    and the unifier keeps a call's scope as what a plain variable it meets becomes.

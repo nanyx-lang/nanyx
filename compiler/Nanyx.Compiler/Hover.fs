@@ -5,8 +5,9 @@ module NyxCompiler.Hover
 open Parser.Program
 
 /// What a hover shows, a type or a declaration written with its type (`def name: type`, `type Name = ...`), and the
-/// span of the syntax it describes.
-type HoverInfo = { Type: string; Span: SourceSpan }
+/// span of the syntax it describes. `Note` is a sentence about it to show after it, such as what kind of nominal type
+/// it is and where it is declared.
+type HoverInfo = { Type: string; Span: SourceSpan; Note: string option }
 
 /// Whether `span`, a real one, covers the character at `offset`.
 let internal contains (offset: int) (span: SourceSpan) =
@@ -183,7 +184,7 @@ let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol
 
 /// The hover for what `hoveredAt` found (see `typeAt`).
 let private hoverOf (names: TypeNotation) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
-    { Type = fst (writtenAt names typed symbol ty []); Span = span }
+    { Type = fst (writtenAt names typed symbol ty []); Span = span; Note = None }
 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name or an operator, where it is
