@@ -119,6 +119,7 @@ module DiagnosticCodes =
     let LiteralOutOfRange = code 229 "Literal out of range" Severity.Error
     let OptionLikeFallback = code 230 "Option-like right operand of ??" Severity.Error
     let InvalidRecordSpread = code 231 "Invalid record spread" Severity.Error
+    let ScopedContextNotNominal = code 232 "Scoped context is not nominal" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -138,7 +139,7 @@ module DiagnosticCodes =
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
           CellEscapesMemory; UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
-          LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread
+          LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal
           UnsupportedByBackend ]
 
 module Diagnostics =

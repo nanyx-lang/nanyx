@@ -36,6 +36,11 @@ let isCell (env: TypeEnv) (state: InferState) (name: Identifier) =
     | Some symbol -> state.Cells.Contains symbol
     | None -> false
 
+/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `$Memory`, which the lambda around it
+/// requires (see `LambdaContexts`).
+let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState =
+    if isCell env state name then LambdaContexts.record [ TyApply(context, []) ] state else state
+
 /// Records that the local def `symbol` is a cell.
 let declareCell (symbol: SymbolId option) (state: InferState) =
     match symbol with

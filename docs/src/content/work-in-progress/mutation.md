@@ -12,8 +12,8 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
 - The prelude declares the nominal context `$Memory` and `memory`, which runs a block with it.
 - `mut e` makes a cell in a `memory` block, `:=` changes one, and a cell's name reads it. Cells are not values: nothing
   can hold one.
-- A lambda in the block may use the block's cells. A block whose result is, or holds, a lambda that uses one is an
-  error.
+- A lambda in the block may use the block's cells, and its type then requires `$Memory`: `{ word -> count := count + 1 }`
+  is `[$Memory] string -> ()`. A block whose result is, or holds, a lambda that uses one is an error.
 - A cell no lambda captures is a WebAssembly local; a captured one is a reference-counted box the lambdas share.
 - `while condition -> body` runs its body for as long as its condition, which may read cells, is true
   ([#957](https://github.com/nanyx-lang/nanyx/issues/957)). The parser makes it a call to `__while` (`WhileSyntax`);
@@ -26,8 +26,11 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
   checked with a name in the environment no code can write, which is what `mut` looks for. A def whose value is
   `mut e` is a cell: its symbol is in `InferState.Cells`, and it is not generalised. `:=` checks that its target
   resolves to a cell, and adds an assignability constraint reported at the `:=`, whose mismatches get their own code.
-  A lambda does not yet carry `$Memory` in its type, so escape is checked syntactically: the block's result, if its
-  type holds a function, must not hold a lambda that names a cell from outside itself, or a local function that does.
+  Each read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so a lambda over
+  a cell says so in its type. Requiring `$Memory` doesn't keep it in the block, since every block supplies one, so
+  escape is still checked syntactically: the block's result, if its type holds a function, must not hold a lambda that
+  names a cell from outside itself, or a local function that does. Scoped contexts replace that check
+  ([Context escape](./context-escape#scoped-contexts)).
 - **Backend** (`ExpressionRewrites.writeCells`, then `CoreIrLower.fs`). Once inference has resolved names, each read of
   a cell becomes a call to a `CellSyntax` built-in, and a cell some lambda other than a `for` body captures becomes a
   box: a record of one field, made with `box`, read with `unbox` and written with `setBox`. The core IR has two nodes

@@ -29,6 +29,12 @@ let ``A context's members are laid out the same way`` () =
         format "export context Console = (print: string -> (), println: string -> (), eprint: string -> (), flush: () -> ())")
 
 [<Fact>]
+let ``A scoped context keeps scoped, before export`` () =
+    unchanged "scoped context $Tx = ()\n"
+    unchanged "scoped export context $Memory = ()\n"
+    Assert.Equal("scoped export context $Memory = ()\n", format "scoped   export   context $Memory = ()")
+
+[<Fact>]
 let ``Mutable, defaulted, member and positional fields keep what they say`` () =
     unchanged (lines [ "type Settings = ("; "  int,"; "  mut count: int"; "  label: string"; "  limit: int = 10"; "  type Item = string"; ")" ])
 

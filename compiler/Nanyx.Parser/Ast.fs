@@ -87,6 +87,21 @@ type TypeDefModifier =
     | Export
     | Context
     | Private
+    /// `scoped context`: nothing that requires the context can leave the scope that supplies it. The span is the
+    /// `scoped` keyword's.
+    | Scoped of SourceSpan
+
+module TypeDefModifier =
+    let isScoped (modifier: TypeDefModifier) =
+        match modifier with
+        | Scoped _ -> true
+        | Export
+        | Context
+        | Private -> false
+
+    /// Where `scoped` is written among `modifiers`, if it is.
+    let scopedSpan (modifiers: TypeDefModifier list) =
+        modifiers |> List.tryPick (function Scoped span -> Some span | _ -> None)
 
 type ImportSource =
     | ModuleImport of string

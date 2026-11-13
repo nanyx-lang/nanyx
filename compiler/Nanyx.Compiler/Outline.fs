@@ -16,6 +16,8 @@ type OutlineKind =
     /// A type that stands for another, neither a record nor a union: `type Count = int`.
     | OtherType
     | ContextType
+    /// A context declared `scoped context`.
+    | ScopedContextType
     | RecordField
     /// A member of a context whose type is a function.
     | ContextFunction
@@ -65,7 +67,8 @@ let private typeItem (declared: DeclaredNames) (span: SourceSpan) (modifiers: Ty
                     match typeOpt |> Option.map (fun t -> t.Kind) with
                     | Some (TypeFunc _) -> OutlineKind.ContextFunction
                     | _ -> OutlineKind.ContextValue
-                OutlineKind.ContextType, fieldsOf declared core |> List.map (fun f -> field (memberKind f) f)
+                let contextKind = if modifiers |> List.exists TypeDefModifier.isScoped then OutlineKind.ScopedContextType else OutlineKind.ContextType
+                contextKind, fieldsOf declared core |> List.map (fun f -> field (memberKind f) f)
             else
                 match core.Kind with
                 | TypeRecord _ -> OutlineKind.RecordType, fieldsOf declared core |> List.map (field OutlineKind.RecordField)
