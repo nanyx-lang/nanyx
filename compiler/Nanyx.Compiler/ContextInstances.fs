@@ -529,25 +529,27 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
 let internal resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     resolveInstancesAt false env state call name (state.CalleeTypes |> Map.tryFind call.Id) calleeSpan
 
-/// `resolveInstancesAt` for each argument of `call` that names a function as a value, once the call has settled its
-/// type: `apply(println, 7)` passes `println` with `ToString(int)`, and `fold(xs, 0, math.max)` passes `math.max` with
-/// `Ord(int)`. The backend passes the function as a closure over the instances it finds here.
+/// `resolveInstancesAt` for `value` when it names a function as a value, once something has settled its type. The
+/// backend passes the function as a closure over the instances it finds here.
+let internal resolveValueInstances (env: TypeEnv) (state: InferState) (value: Expression) : Result<InferState, Diagnostic list> =
+    let resolve name = resolveInstancesAt true env state value name (state.ExprTypes |> Map.tryFind value.Id) value.Span
+    match value.Kind with
+    | IdentifierExpr name -> resolve name
+    | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
+        match qualifiedDefinition env qualifier field with
+        | Some (name, _) -> resolve name
+        | None -> Ok state
+    | _ -> Ok state
+
+/// `resolveValueInstances` for each argument of `call`, once the call has settled its type: `apply(println, 7)` passes
+/// `println` with `ToString(int)`, and `fold(xs, 0, math.max)` passes `math.max` with `Ord(int)`.
 let internal resolveReferenceInstances (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
-    let resolve (arg: Expression) name result =
-        result |> Result.bind (fun current -> resolveInstancesAt true env current arg name (current.ExprTypes |> Map.tryFind arg.Id) arg.Span)
     match call.Kind with
     | FunctionCall(_, _, args) ->
         match args with
         | [ Kind (TupleExpr items) ] -> items
         | _ -> args
-        |> List.fold (fun result arg ->
-            match arg.Kind with
-            | IdentifierExpr name -> resolve arg name result
-            | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
-                match qualifiedDefinition env qualifier field with
-                | Some (name, _) -> resolve arg name result
-                | None -> result
-            | _ -> result) (Ok state)
+        |> List.fold (fun result arg -> result |> Result.bind (fun current -> resolveValueInstances env current arg)) (Ok state)
     | _ -> Ok state
 
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the

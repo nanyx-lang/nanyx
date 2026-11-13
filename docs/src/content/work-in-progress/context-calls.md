@@ -53,10 +53,13 @@ where it is named; the wrapper calls the function with its arguments and them al
 where a function named as an argument of a call, by its name or qualified (`math.max`), finds each parameterised
 context, once that call has settled its type (`resolveReferenceInstances` in `ContextInstances.fs`), so `println` at
 `int` is passed `ToString(int)`, `math.max` passed to `fold` over a `list(int)` is passed `Ord(int)`, and at a type
-variable `a` of a function that requires `ToString(a)`, that function's member. A context it requires at a type left
-open where it is named, with no instance in scope for it, cannot be compiled yet
+variable `a` of a function that requires `ToString(a)`, that function's member. So is a function named point-free as
+a def's value, at the type the def writes (`resolveValueInstances`): `def g: [Console] int -> () = println`. Such a
+def is not run in the contexts it writes, as a lambda is: its value is a function that requires them, so they are
+part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, which the backend reads too). A context
+it requires at a type left open where it is named, with no instance in scope for it, cannot be compiled yet
 ([#599](https://github.com/nanyx-lang/nanyx/issues/599)), nor can a function that requires a parameterised context
-named as a value anywhere other than an argument of a call, such as `def f = println`
+named as a value anywhere else whose type is not settled there, such as `def f = println`
 ([#807](https://github.com/nanyx-lang/nanyx/issues/807)).
 
 A function with a context variable, such as `apply: [c] ([c] a -> b), a -> b`, is specialised on the members of the

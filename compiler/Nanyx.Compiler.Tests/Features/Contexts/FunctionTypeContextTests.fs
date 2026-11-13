@@ -21,6 +21,24 @@ def apply: [Console] ([Console] int -> int), int -> int = { f, x -> f(x) }
     Assert.Equal("([Console] int -> int), int -> int", typeOf source "apply")
 
 [<Fact>]
+let ``A def whose value names a function point-free is a function that requires the contexts it writes`` () =
+    let source =
+        """
+import nanyx/console
+
+def g: [Console] int -> () = println
+
+def main: [Console] () -> () = {
+  def h: [Console] string -> () = println
+  g(3)
+  h("four")
+}
+"""
+    Assert.Equal("[Console] int -> ()", typeOf source "g")
+    let diagnostic = Assert.Single((Compiler.compile "import nanyx/console\ndef g: [Console] int -> () = println\ndef f: int -> () = { x -> g(x) }\n").Diagnostics)
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
+
+[<Fact>]
 let ``A result's function type keeps the contexts written on it`` () =
     let source =
         """
