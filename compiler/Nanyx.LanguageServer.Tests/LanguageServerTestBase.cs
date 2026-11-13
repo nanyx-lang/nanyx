@@ -193,7 +193,7 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             })
             .Returning<InfoViewResult?>(_cancellation.Token);
         Assert.NotNull(result);
-        Assert.Equal(["expression", "inScope", "topLevel", "contexts", "call", "flow", "messages"], result.Sections.Select(section => section.Id));
+        Assert.Equal(["cursor", "messages", "inScope", "topLevel", "contexts", "call", "flow"], result.Sections.Select(section => section.Id));
         return result;
     }
 

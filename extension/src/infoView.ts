@@ -31,6 +31,8 @@ interface InfoViewItem {
 interface InfoViewSection {
   id: string;
   title: string;
+  /** What the section is about (`cursor`, `scope` or `contexts`); the view draws a rule between groups. */
+  group: string;
   collapsed?: boolean;
   items: InfoViewItem[];
 }
@@ -287,6 +289,7 @@ function page(webview: vscode.Webview): string {
   button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; padding: 2px 8px; cursor: pointer; }
   button:hover { background: var(--vscode-button-secondaryHoverBackground); }
   details { margin: 8px 0; }
+  hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 12px 0; }
   summary { font-weight: 600; cursor: pointer; }
   summary .count { font-weight: normal; color: var(--vscode-descriptionForeground); }
   ul { list-style: none; margin: 4px 0; padding-left: 12px; }
@@ -325,7 +328,7 @@ function page(webview: vscode.Webview): string {
     return node;
   }
 
-  function item(entry) {
+  function item(entry, expanded) {
     const li = element("li", entry.detail && entry.detail.startsWith("error") ? "error" : "");
     const code = element("code", "", entry.text);
     if (entry.location) {
@@ -349,33 +352,33 @@ function page(webview: vscode.Webview): string {
           vscode.postMessage({ type: "openLink", href: link.getAttribute("href") });
         }
       });
-      li.appendChild(collapsible(doc));
+      li.appendChild(collapsible(doc, expanded));
     } else if (entry.documentation) {
       const doc = element("div", "doc");
       entry.documentation.split(/\\n\\s*\\n/).forEach((paragraph) => doc.appendChild(element("p", "", paragraph)));
-      li.appendChild(collapsible(doc));
+      li.appendChild(collapsible(doc, expanded));
     }
     if (entry.children && entry.children.length > 0) {
       const children = element("ul", "children");
-      entry.children.forEach((child) => children.appendChild(item(child)));
+      entry.children.forEach((child) => children.appendChild(item(child, expanded)));
       li.appendChild(children);
     }
     return li;
   }
 
   // A doc comment of more than one paragraph (or other block) shows its first until it is clicked, which shows all of
-  // it; a second click cuts it back.
-  function collapsible(doc) {
+  // it; a second click cuts it back. An expanded one (that of what is at the cursor) starts showing all of it.
+  function collapsible(doc, expanded) {
     if (doc.children.length < 2) return doc;
     const more = element("span", "more", " …");
     doc.firstElementChild.appendChild(more);
-    doc.classList.add("collapsed");
-    doc.title = "Show all of the doc comment";
-    doc.addEventListener("click", () => {
-      const collapsed = doc.classList.toggle("collapsed");
+    const show = (collapsed) => {
+      doc.classList.toggle("collapsed", collapsed);
       more.hidden = !collapsed;
       doc.title = collapsed ? "Show all of the doc comment" : "Show only its first paragraph";
-    });
+    };
+    show(!expanded);
+    doc.addEventListener("click", () => show(!doc.classList.contains("collapsed")));
     return doc;
   }
 
@@ -390,17 +393,23 @@ function page(webview: vscode.Webview): string {
       details.appendChild(element("p", "empty", "Nothing here."));
     } else {
       const list = element("ul");
-      data.items.forEach((entry) => list.appendChild(item(entry)));
+      data.items.forEach((entry) => list.appendChild(item(entry, data.id === "cursor")));
       details.appendChild(list);
     }
     return details;
+  }
+
+  // The sections, with a rule between one group and the next.
+  function sections(all) {
+    return all.flatMap((data, index) =>
+      index > 0 && data.group !== all[index - 1].group ? [element("hr"), section(data)] : [section(data)]);
   }
 
   window.addEventListener("message", (event) => {
     const shown = event.data;
     where.textContent = (shown.pinned ? "Pinned: " : "") + shown.where;
     pin.textContent = shown.pinned ? "Unpin" : "Pin";
-    main.replaceChildren(...(shown.kind === "info" ? shown.sections.map(section) : [element("p", "message", shown.text)]));
+    main.replaceChildren(...(shown.kind === "info" ? sections(shown.sections) : [element("p", "message", shown.text)]));
   });
 </script>
 </body>

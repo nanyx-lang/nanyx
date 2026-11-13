@@ -85,12 +85,16 @@ editor) opens the secondary side bar if it is closed, shows the view and moves t
 editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to the primary side bar or to the panel,
 and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
 
-It shows:
+It shows three groups of sections, with a rule between them: what is at the cursor, the names in scope, and the
+contexts.
 
-- **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it shows
-  the function's declared signature first (its annotation, or the generic type it was inferred to have), then its type
-  at this use, then what this use fills in each type variable with, such as `a = string, b = #some(int) | #nothing`.
-  Each links to the function's definition. A function that is not generic is shown once.
+- **At the cursor**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it
+  shows the function's declared signature first (its annotation, or the generic type it was inferred to have), then its
+  type at this use, then what this use fills in each type variable with, such as `a = string, b = #some(int) | #nothing`.
+  Each links to the function's definition. A function that is not generic is shown once. On a module's name (in its
+  `module` line, an import, an import's alias, or an alias that qualifies a name), it shows `module name` and the
+  module's doc comment.
+- **Messages**: the errors and warnings on the cursor's line.
 - **In scope**: the locals, parameters and pattern variables in scope, each with its type, nearest first.
 - **Top level**: the top-level definitions and imports in scope, the file's own first. It starts closed.
 - **Contexts**: the contexts in scope, each with where it comes from: a `use` before the cursor, the signature of the
@@ -102,7 +106,6 @@ It shows:
   (`built in`).
 - **Context flow**: in a definition, each context its signature writes or it was inferred to need, and each `use` in
   it, with the calls each one serves under it. A `use` that serves no call is marked `unused`.
-- **Messages**: the errors and warnings on the cursor's line.
 
 While the view is visible and not pinned, it also highlights in the editor how contexts flow: with the cursor on a
 `use`, or on a context in a definition's signature, the calls it serves are highlighted; with the cursor on a call,
@@ -110,7 +113,8 @@ the `use` or signature context it draws on is.
 
 Under each item that has one comes its [doc comment](../getting-started/basics#doc-comments), as hover shows it: a name's own, an
 import's module's, a context's own, or, for a context a `use` gives, that of the definition the `use` names if it has one. A doc comment of
-more than one paragraph shows its first; click it to show the rest, and again to cut it back. Its links go where the
+more than one paragraph shows its first, except at the cursor, where it shows in full; click it to show the rest, and again
+to cut it back. Its links go where the
 names they name are declared.
 
 Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
