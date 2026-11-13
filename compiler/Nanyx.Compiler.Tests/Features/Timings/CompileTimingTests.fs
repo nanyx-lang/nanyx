@@ -85,7 +85,7 @@ let ``A build's timings are a tree of its files' checks, with a module imported 
     Assert.Empty(build.Diagnostics)
     // The files are compiled in order of their paths, and each module is checked once.
     let tree = ModuleCheck.tree Path.GetFileName (ownChecks package.Root timings.Checks)
-    let shape = Text.RegularExpressions.Regex.Replace(tree, @" \(\d+\.\d\ds of \d+\.\d\ds\)", "")
+    let shape = Text.RegularExpressions.Regex.Replace(tree, @" \((\d+\.\d\ds of )?\d+\.\d\ds\)", "")
     let expected =
         """a.nyx
 └── c.nyx
@@ -182,11 +182,26 @@ let ``The timings tree shows each module's own and total time, with what it need
     let expected =
         """src/main.nyx (0.03s of 0.28s)
 ├── src/dependencyA.nyx (0.05s of 0.25s)
-│   └── src/dependencyC.nyx (0.20s of 0.20s)
+│   └── src/dependencyC.nyx (0.20s)
 └── src/dependencyB.nyx (cached)
 nanyx/prelude (0.80s of 1.10s)
-└── nanyx/list (0.30s of 0.30s)"""
+└── nanyx/list (0.30s)"""
     Assert.Equal(expected.ReplaceLineEndings "\n", tree)
+
+[<Fact>]
+let ``The timings tree shows one time when a module's own and total time are the same as written`` () =
+    let tree =
+        ModuleCheck.tree
+            id
+            [ Checked(timing "main" 0.034 0.031, [ Checked(timing "util" 0.0012 0.0012, []) ])
+              Checked(timing "other" 0.5 0.2, [ Checked(timing "leaf" 0.3 0.3, []) ]) ]
+    let expected =
+        """main (0.03s)
+└── util (0.00s)
+other (0.20s of 0.50s)
+└── leaf (0.30s)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", tree)
+
 let private runningCheck name started imports = { Name = name; Started = seconds started; Imports = imports }
 
 [<Fact>]
@@ -220,12 +235,13 @@ let ``The live view draws a finished check, and a cached module, on one line und
     let frame =
         ModuleCheck.live
             id
-            { Finished = [ Checked(timing "a" 2.0 1.0, [ Checked(timing "c" 1.0 1.0, []) ]) ]
+            { Finished = [ Checked(timing "a" 2.0 1.0, [ Checked(timing "c" 1.0 1.0, []) ]); Checked(timing "d" 0.5 0.5, []) ]
               Running = [ runningCheck "main" 0.0 [ Checked(timing "b" 1.0 0.5, [ Reused "c" ]); Reused "a" ] ]
               Now = seconds 3.0 }
             24
     let expected =
         """a (1.00s of 2.00s)
+d (0.50s)
 main (3.0s…)
 ├── b (0.50s of 1.00s)
 └── a (cached)"""

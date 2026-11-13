@@ -81,12 +81,12 @@ is also shown while the compile runs: see [the live view](#the-live-view)):
 
 ```
 src/greetings.nyx (0.05s of 1.28s)
-└── nanyx/prelude (1.23s of 1.23s)
+└── nanyx/prelude (1.23s)
 src/main.nyx (0.20s of 1.06s)
 ├── nanyx/prelude (cached)
-├── nanyx/console (0.04s of 0.04s)
+├── nanyx/console (0.04s)
 │   └── nanyx/prelude (cached)
-├── nanyx/list (0.81s of 0.81s)
+├── nanyx/list (0.81s)
 │   └── nanyx/prelude (cached)
 └── src/greetings.nyx (cached)
 Emitted the program in 0.031s
@@ -95,7 +95,8 @@ Emitted the program in 0.031s
 Each line is a module's check, as `name (self of total)` in seconds. A module's imports are checked inside its own
 check, so they are under it, in the order they were checked: the total is from the start of the check to its end,
 imports included, and self is what is left once the imports' own totals are taken off, the module's own parsing,
-desugaring and type checking (`CompileTimings`, `ModuleCheck.tree`). A package build has a line at the left for each
+desugaring and type checking (`CompileTimings`, `ModuleCheck.tree`). When the two are the same as written, to two
+decimals, the line has one time, `name (0.04s)`, as most modules that import nothing unchecked do. A package build has a line at the left for each
 source file, in the order it compiles them. A module is checked once per build, and a standard-library module once
 per process, so where one is needed again it is `name (cached)`, with nothing under it: the compiler tells the
 listener `ModuleReused` there. Emitting the program to WebAssembly happens per file after checking, not per module, so
@@ -114,7 +115,7 @@ src/logging.nyx (0.1s…)
     └── nanyx/prelude (cached)
 ```
 
-A check under way shows how long it has taken so far, `(0.1s…)`, and takes its final form, `(self of total)`, when it
+A check under way shows how long it has taken so far, `(0.1s…)`, and takes its final form, `(self of total)` or `(total)`, when it
 finishes. A finished check is one line, without what it needed, so the live view is the chain of checks under way,
 each with its finished imports, and stays short however many modules there are. When it is taller than the terminal,
 the lines nearest the check under way are kept and the rest are one line at the top, `… 12 more`. When the compile
