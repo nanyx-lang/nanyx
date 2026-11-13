@@ -32,7 +32,16 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
 
     protected static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
-    protected readonly CancellationTokenSource _cancellation = new(Timeout);
+    /// <summary>
+    /// The standard library checked, as the first compile in the process does. On a slow CI runner that took most of a
+    /// test's timeout, so whichever test compiled first timed out. The process keeps what it checked, so it is done
+    /// once, before any test's timeout starts.
+    /// </summary>
+    private static readonly Lazy<Task> StandardLibraryChecked =
+        new(() => Task.Run(() => NyxCompiler.Compiler.compile("def warmUp = 1")));
+
+    /// <summary>Cancels the test's requests; its timeout starts when the server does (see <see cref="StartAsync"/>).</summary>
+    protected readonly CancellationTokenSource _cancellation = new();
     protected readonly List<PublishDiagnosticsParams> _published = [];
     protected readonly SemaphoreSlim _publishedSignal = new(0);
 
@@ -65,6 +74,9 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
 
     protected async Task StartAsync(ServerSettings settings)
     {
+        await StandardLibraryChecked.Value;
+        _cancellation.CancelAfter(Timeout);
+
         var clientToServer = new Pipe();
         var serverToClient = new Pipe();
 
