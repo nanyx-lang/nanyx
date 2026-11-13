@@ -29,7 +29,7 @@ type CompileResult =
       /// made: how the type of a workflow bind is found, through `ExprTypes`. Empty when `Syntax` is absent.
       Lowered: Map<NodeId, NodeId list> }
 
-/// A type-checkedModule module together with what an importer needs from it.
+/// A type-checked module together with what an importer needs from it.
 type internal CheckedModule =
     { Typed: TypedModule
       /// The errors found checking the module itself. A module with errors is still typed, with what did check,
@@ -49,7 +49,7 @@ type internal CheckedModule =
       Lowered: Map<NodeId, NodeId list>
       /// The substitution unification found, which resolves the types inference recorded by node.
       Subst: Subst
-      /// The types inference recorded by node, unresolved: only the root module's are resolved (see `compileWith`).
+      /// The types inference recorded by node, unresolved: only the root module's are resolved (see `compileChecked`).
       RawExprTypes: Map<NodeId, Ty>
       RawCalleeTypes: Map<NodeId, Ty>
       RawSymbolTypes: Map<SymbolId, Ty>
