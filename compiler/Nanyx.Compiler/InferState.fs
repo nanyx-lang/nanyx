@@ -393,6 +393,10 @@ let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
     TyVar var, { state with NextId = state.NextId + 1 }
 
+/// A fresh variable for each of `items`, in order.
+let internal freshVars (items: 'a list) (state: InferState) =
+    items |> List.mapFold (fun current _ -> freshVar current) state
+
 /// A record with at least `fields`, its others a fresh row variable: what reading a field, or matching a pattern that
 /// names some fields, tells of a value. A closed record would say it has no others.
 let internal openRecordWith (fields: Map<string, Ty>) (state: InferState) =

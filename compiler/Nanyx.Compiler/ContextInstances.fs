@@ -241,7 +241,7 @@ let private contextsOfValue (state: InferState) (valueTy: Ty) : TypeExpr list =
     | TyRecord fields ->
         [ for KeyValue(ctxName, info) in state.TypeDefs do
             if info.IsContext && not info.Parameters.IsEmpty then
-                let paramTys, scratch = info.Parameters |> List.mapFold (fun current _ -> freshVar current) state
+                let paramTys, scratch = freshVars info.Parameters state
                 match contextMemberTypes scratch ctxName paramTys with
                 | Some members when Set.ofList (List.map fst members) = Set.ofSeq fields.Keys ->
                     let scratch = members |> List.fold (fun current (name, memberTy) -> addConstraint memberTy fields.[name] current) scratch

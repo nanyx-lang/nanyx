@@ -204,19 +204,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
         Ok (mkTypedExpr expr ty None None None, next)
     | InterpolatedString parts ->
-        let mutable current = state
-        let mutable errors: Diagnostic list = []
-        for part in parts do
-            match part with
-            | StringText _ -> ()
-            | StringExpr inner ->
-                match inferExpr env current inner with
-                | Ok (_, next) -> current <- next
-                | Error err -> errors <- errors @ err
-        if errors.IsEmpty then
-            Ok (mkTypedExpr expr (TyPrimitive "string") None None None, current)
-        else
-            Error errors
+        parts
+        |> List.choose (function StringExpr inner -> Some inner | StringText _ -> None)
+        |> inferAll env state
+        |> Result.map (fun (_, current) -> mkTypedExpr expr (TyPrimitive "string") None None None, current)
     | UnitExpr ->
         Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, state)
     // The placeholder for code not written yet is an error like any other, so a release build refuses it and a debug
@@ -693,91 +684,29 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | Block statements ->
         inferBlock env state expr statements
     | TupleExpr items ->
-        let mutable current = state
-        let tys =
-            items
-            |> List.map (fun item ->
-                match inferExpr env current item with
-                | Ok (typedExpr, next) ->
-                    current <- next
-                    Ok typedExpr
-                | Error err -> Error err)
-        let errors = tys |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
-        if errors.IsEmpty then
-            let itemExprs = tys |> List.choose (function Ok ty -> Some ty | _ -> None)
-            let itemTys = itemExprs |> List.map (fun typedExpr -> typedExpr.Type)
-            Ok (mkTypedExpr expr (tupleRecordType itemTys) None None None, current)
-        else
-            Error errors
+        inferAll env state items
+        |> Result.map (fun (itemExprs, current) -> mkTypedExpr expr (tupleRecordType (itemExprs |> List.map _.Type)) None None None, current)
     | RecordExpr fields ->
-        let positional, named =
-            fields
-            |> List.fold (fun (pos, named) field ->
-                match field with
-                | PositionalField expr -> (expr :: pos, named)
-                | NamedField(name, expr) -> (pos, (name, expr) :: named)) ([], [])
-        let mutable current = state
-        let positionalResults =
-            positional
-            |> List.rev
-            |> List.map (fun expr ->
-                match inferExpr env current expr with
-                | Ok (typedExpr, next) ->
-                    current <- next
-                    Ok typedExpr
-                | Error err -> Error err)
-        let namedResults =
-            named
-            |> List.rev
-            |> List.map (fun (name, expr) ->
-                match inferExpr env current expr with
-                | Ok (typedExpr, next) ->
-                    current <- next
-                    Ok (name, typedExpr)
-                | Error err -> Error err)
-        let errors =
-            positionalResults
-            |> List.choose (function Error err -> Some err | _ -> None)
-            |> List.concat
-            |> fun errs ->
-                let namedErrors = namedResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
-                errs @ namedErrors
-        if errors.IsEmpty then
-            let positionalExprs = positionalResults |> List.choose (function Ok ty -> Some ty | _ -> None)
-            let positionalFieldsMap =
-                positionalExprs
-                |> List.mapi (fun index typedExpr -> tupleFieldName index, typedExpr.Type)
-            let namedFieldsMap =
-                namedResults
-                |> List.choose (function Ok (name, typedExpr) -> Some (name, typedExpr.Type) | _ -> None)
-            let fieldMap =
-                positionalFieldsMap @ namedFieldsMap
-                |> Map.ofList
-            Ok (mkTypedExpr expr (TyRecord fieldMap) None None None, current)
-        else
-            Error errors
+        // The positional fields are inferred first, then the named ones, each in the order they are written.
+        let positional = fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None)
+        let named = fields |> List.choose (function NamedField(name, value) -> Some (name, value) | PositionalField _ -> None)
+        inferAll env state (positional @ List.map snd named)
+        |> Result.map (fun (typedFields, current) ->
+            let positionalExprs, namedExprs = List.splitAt positional.Length typedFields
+            let positionalFieldsMap = positionalExprs |> List.mapi (fun index typedExpr -> tupleFieldName index, typedExpr.Type)
+            let namedFieldsMap = List.zip (List.map fst named) (namedExprs |> List.map _.Type)
+            mkTypedExpr expr (TyRecord (Map.ofList (positionalFieldsMap @ namedFieldsMap))) None None None, current)
     | ListExpr items ->
-        let mutable current = state
-        let itemResults =
-            items
-            |> List.map (fun item ->
-                match inferExpr env current item with
-                | Ok (typedExpr, next) ->
-                    current <- next
-                    Ok typedExpr
-                | Error err -> Error err)
-        let errors = itemResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
-        if errors.IsEmpty then
-            match itemResults |> List.choose (function Ok ty -> Some ty | _ -> None) with
+        inferAll env state items
+        |> Result.map (fun (typedItems, current) ->
+            match typedItems with
             | [] ->
                 let elementTy, nextState = freshVar current
-                Ok (mkTypedExpr expr (listType elementTy) None None None, nextState)
+                mkTypedExpr expr (listType elementTy) None None None, nextState
             | typedItems ->
                 // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
                 let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)
-                Ok (mkTypedExpr expr (listType elementTy) None None None, constrained)
-        else
-            Error errors
+                mkTypedExpr expr (listType elementTy) None None None, constrained)
     | TagExpr(name, payloadOpt) ->
         match payloadOpt with
         | None -> Ok (mkTypedExpr expr (TyTag(name, None)) None None None, state)
@@ -805,16 +734,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     // Desugaring has made each `except` a `match`; one checked before then is checked as that match.
     | Except(value, arms) -> inferExprKind env state { expr with Kind = Except.asMatch expr value arms }
     | Match(scrutinees, arms) ->
-        let mutable current = state
-        let scrutineeResults =
-            scrutinees
-            |> List.map (fun expr ->
-                match inferExpr env current expr with
-                | Ok (typedExpr, next) ->
-                    current <- next
-                    Ok typedExpr
-                | Error err -> Error err)
-        let scrutineeErrors = scrutineeResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
+        let scrutineesInferred = inferAll env state scrutinees
         // Each arm has a pattern for each value matched (`desugar` has made a lone `else` one per value).
         let wrongPatternCounts =
             let count n noun = if n = 1 then $"1 {noun}" else $"{n} {noun}s"
@@ -834,12 +754,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             DiagnosticCodes.WrongPatternCount
                             span
                             $"This arm has {written}, but the match is on {values}: an arm needs a pattern for each value, or a lone `else` for anything else"))
-        if not scrutineeErrors.IsEmpty then
-            Error scrutineeErrors
-        elif not wrongPatternCounts.IsEmpty then
-            Error wrongPatternCounts
-        else
-            let scrutineeExprs = scrutineeResults |> List.choose (function Ok ty -> Some ty | _ -> None)
+        match scrutineesInferred with
+        | Error scrutineeErrors -> Error scrutineeErrors
+        | Ok _ when not wrongPatternCounts.IsEmpty -> Error wrongPatternCounts
+        | Ok (scrutineeExprs, afterScrutinees) ->
+            let mutable current = afterScrutinees
             let scrutineeTypes = scrutineeExprs |> List.map (fun typedExpr -> typedExpr.Type)
             let mkTypedPattern pattern ty = { Pattern = pattern; Type = ty }
             let rec tryRecordFields ty =
@@ -919,14 +838,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 |> addConstraint startTyped.Type endTyped.Type
                             Ok (env', constrained, mkTypedPattern pattern scrutineeTy)
                 | TuplePattern patterns ->
-                    let mutable currentState = state'
-                    let itemTypes, nextState =
-                        patterns
-                        |> List.map (fun _ ->
-                            let ty, next = freshVar currentState
-                            currentState <- next
-                            ty)
-                        |> fun tys -> tys, currentState
+                    let itemTypes, nextState = freshVars patterns state'
+
                     // A name alone matches the field it names, where the value is already known to be a record with
                     // one; the other elements match fields by position.
                     let knownFields =
@@ -942,21 +855,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             |> TyRecord
                         | None -> tupleRecordType itemTypes
                     let constrained = addConstraint scrutineeTy tupleRecord nextState
-                    let mutable innerEnv = env'
-                    let mutable innerState = constrained
-                    let mutable innerErrors: Diagnostic list = []
-                    let mutable innerPatterns: TypedPattern list = []
-                    for (pat, ty) in List.zip patterns itemTypes do
-                        match inferPattern armBody innerEnv innerState ty pat with
-                        | Ok (nextEnv, nextState, typedPattern) ->
-                            innerEnv <- nextEnv
-                            innerState <- nextState
-                            innerPatterns <- innerPatterns @ [typedPattern]
-                        | Error err -> innerErrors <- innerErrors @ err
-                    if innerErrors.IsEmpty then
-                        Ok (innerEnv, innerState, mkTypedPattern pattern tupleRecord)
-                    else
-                        Error innerErrors
+                    inferPatterns armBody env' constrained (List.zip patterns itemTypes)
+                    |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern tupleRecord)
                 | TagPattern(tagName, payloadOpt) ->
                     match payloadOpt with
                     | None ->
@@ -972,42 +872,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | ListPattern(patterns, splatOpt) ->
                     let elementTy, nextState = freshVar state'
                     let constrained = addConstraint scrutineeTy (listType elementTy) nextState
-                    let mutable innerEnv = env'
-                    let mutable innerState = constrained
-                    let mutable innerErrors: Diagnostic list = []
-                    for pat in patterns do
-                        match inferPattern armBody innerEnv innerState elementTy pat with
-                        | Ok (nextEnv, nextState, _) ->
-                            innerEnv <- nextEnv
-                            innerState <- nextState
-                        | Error err -> innerErrors <- innerErrors @ err
-                    let innerStateWithSplat =
+                    inferPatterns armBody env' constrained (patterns |> List.map (fun pat -> pat, elementTy))
+                    |> Result.map (fun (innerEnv, innerState, _) ->
                         match splatOpt with
                         | Some (Kind (IdentifierPattern name)) ->
                             let symbol, declared = declareSymbol ArmBody armBody.Id name PatternVariable false (Some armBody.Span.End) innerState
-                            innerEnv <- TypeEnv.declare name symbol (TypeEnv.mono (listType elementTy)) innerEnv
-                            recordSymbolType symbol (listType elementTy) declared
-                        | _ -> innerState
-                    if innerErrors.IsEmpty then
-                        Ok (innerEnv, innerStateWithSplat, mkTypedPattern pattern scrutineeTy)
-                    else
-                        Error innerErrors
+                            TypeEnv.declare name symbol (TypeEnv.mono (listType elementTy)) innerEnv,
+                            recordSymbolType symbol (listType elementTy) declared,
+                            mkTypedPattern pattern scrutineeTy
+                        | _ -> innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                 | ListSplatMiddle(prefix, suffix) ->
                     let elementTy, nextState = freshVar state'
                     let constrained = addConstraint scrutineeTy (listType elementTy) nextState
-                    let mutable innerEnv = env'
-                    let mutable innerState = constrained
-                    let mutable innerErrors: Diagnostic list = []
-                    for pat in prefix @ suffix do
-                        match inferPattern armBody innerEnv innerState elementTy pat with
-                        | Ok (nextEnv, nextState, _) ->
-                            innerEnv <- nextEnv
-                            innerState <- nextState
-                        | Error err -> innerErrors <- innerErrors @ err
-                    if innerErrors.IsEmpty then
-                        Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
-                    else
-                        Error innerErrors
+                    inferPatterns armBody env' constrained (prefix @ suffix |> List.map (fun pat -> pat, elementTy))
+                    |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                 // `$Email(raw)` takes a nominal value apart: the payload pattern matches the value's shape. A protected
                 // type's shape is hidden outside its home module, so only that module can look inside one.
                 | RecordPattern(typeName, [ payload ]) when (tryFindTypeDef typeName state' |> Option.exists isNominal) ->
@@ -1023,29 +901,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (nextEnv, nextState, _) -> Ok (nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
                         | Error err -> Error err
                 | RecordPattern(typeName, patterns) ->
-                    let mutable currentState = state'
-                    let itemTypes, nextState =
-                        patterns
-                        |> List.map (fun _ ->
-                            let ty, next = freshVar currentState
-                            currentState <- next
-                            ty)
-                        |> fun tys -> tys, currentState
+                    let itemTypes, nextState = freshVars patterns state'
+
                     let anyRecord, nextState = openRecordWith Map.empty nextState
                     let constrained = addConstraint scrutineeTy anyRecord nextState
-                    let mutable innerEnv = env'
-                    let mutable innerState = constrained
-                    let mutable innerErrors: Diagnostic list = []
-                    for (pat, ty) in List.zip patterns itemTypes do
-                        match inferPattern armBody innerEnv innerState ty pat with
-                        | Ok (nextEnv, nextState, _) ->
-                            innerEnv <- nextEnv
-                            innerState <- nextState
-                        | Error err -> innerErrors <- innerErrors @ err
-                    if innerErrors.IsEmpty then
-                        Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
-                    else
-                        Error innerErrors
+                    inferPatterns armBody env' constrained (List.zip patterns itemTypes)
+                    |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                 | RecordMemberPattern(members, hasRest) ->
                     let mutable innerEnv = env'
                     let mutable innerState = state'
@@ -1080,6 +941,17 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         Ok (innerEnv, addConstraint matched patternRecord next, mkTypedPattern pattern scrutineeTy)
                     else
                         Error innerErrors
+
+            /// `inferPattern` for each pattern against its type in turn, each in the env and state the one before it
+            /// left: what they bind and their typed patterns, or every error any of them reported.
+            and inferPatterns (armBody: Expression) (env': TypeEnv) (state': InferState) (pairs: (Pattern * Ty) list) =
+                let innerEnv, innerState, typed, errors =
+                    pairs
+                    |> List.fold (fun (innerEnv, innerState, typed, errors) (pat, ty) ->
+                        match inferPattern armBody innerEnv innerState ty pat with
+                        | Ok (nextEnv, nextState, typedPattern) -> nextEnv, nextState, typedPattern :: typed, errors
+                        | Error err -> innerEnv, innerState, typed, errors @ err) (env', state', [], [])
+                if errors.IsEmpty then Ok (innerEnv, innerState, List.rev typed) else Error errors
 
             let mutable armExprs: TypedExpr list = []
             let mutable typedArms: TypedMatchArm list = []
@@ -1142,8 +1014,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 |> Set.ofList
             for (armIndex, (patterns, expr)) in List.indexed arms do
                 if errors.IsEmpty then
-                    let mutable env' = env
-                    let mutable state' = current
                     let effectiveScrutineeTypes =
                         scrutineeTypes
                         |> List.mapi (fun idx ty ->
@@ -1152,15 +1022,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                                 (catchAllBindingTy armIndex idx).Value
                             | _ -> scrutineeOverrides |> Map.tryFind idx |> Option.defaultValue ty)
                     let patternPairs = List.zip patterns effectiveScrutineeTypes
-                    let mutable typedPatterns: TypedPattern list = []
-                    for (pattern, scrutineeTy) in patternPairs do
-                        match inferPattern expr env' state' scrutineeTy pattern with
-                        | Ok (nextEnv, nextState, typedPattern) ->
-                            env' <- nextEnv
-                            state' <- nextState
-                            typedPatterns <- typedPatterns @ [typedPattern]
-                        | Error err -> errors <- errors @ err
-                    if errors.IsEmpty then
+                    match inferPatterns expr env current patternPairs with
+                    | Error err -> errors <- errors @ err
+                    | Ok (env', state', typedPatterns) ->
                         match inferExpr env' state' expr with
                         | Ok (typedExpr, next) ->
                             current <- next
@@ -1215,30 +1079,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     // `C(T).member(args)`: the arguments are checked against the member's type in the context's definition, and the
     // call has its result type. A member the context does not have leaves the call's type to what uses it.
     | ContextMemberCall(ctxType, memberName, args) ->
-        let mutable current = recordContextMemberReference expr ctxType memberName state
-        let mutable errors: Diagnostic list = []
-        let mutable argTys: Ty list = []
-        for arg in args do
-            match inferExpr env current arg with
-            | Ok (typedArg, next) ->
-                current <- next
-                argTys <- argTys @ [ typedArg.Type ]
-            | Error err -> errors <- errors @ err
-        if errors.IsEmpty then
+        inferAll env (recordContextMemberReference expr ctxType memberName state) args
+        |> Result.map (fun (typedArgs, current) ->
             match Contexts.memberType current ctxType memberName with
             | Some (memberTy, next) ->
                 match Unifier.unalias memberTy with
                 | TyFunc(input, ret, _) ->
                     let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
-                    Ok (mkTypedExpr expr ret None None None, addAssignableConstraintAt inputSpan (inputTypeFromArgs argTys) input next)
+                    mkTypedExpr expr ret None None None, addAssignableConstraintAt inputSpan (inputTypeFromArgs (typedArgs |> List.map _.Type)) input next
                 | _ ->
                     let ty, next = freshVar next
-                    Ok (mkTypedExpr expr ty None None None, next)
+                    mkTypedExpr expr ty None None None, next
             | None ->
                 let ty, next = freshVar current
-                Ok (mkTypedExpr expr ty None None None, next)
-        else
-            Error errors
+                mkTypedExpr expr ty None None None, next)
 
 /// `expr`, a call of the map `map` with `args`: a lookup, read as the call `map.get(map, args...)` (see `Maps`) and
 /// recorded in `ReadAs` to be written as it. The call keeps the node of `expr`, which is what its types and the
@@ -1279,6 +1133,17 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
                         $"This `{builderName}` block can end here without `return`, and `{builderName}` has no `zero` to be its value then: end the block with `return`, or give `{builderName}` a `zero`"
                 Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow place message ]
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
+
+/// Infers each of `exprs` in turn, each in the state the one before it left: their typed expressions and the state
+/// after the last, or every error any of them reported.
+and private inferAll (env: TypeEnv) (state: InferState) (exprs: Expression list) : Result<TypedExpr list * InferState, Diagnostic list> =
+    let typed, current, errors =
+        exprs
+        |> List.fold (fun (typed, current, errors) expr ->
+            match inferExpr env current expr with
+            | Ok (typedExpr, next) -> typedExpr :: typed, next, errors
+            | Error err -> typed, current, errors @ err) ([], state, [])
+    if errors.IsEmpty then Ok (List.rev typed, current) else Error errors
 
 /// Infers the value named by each `typeof` in `typeExpr`, so that reading the annotation finds their types.
 and internal inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: TypeExpr) : Result<InferState, Diagnostic list> =
