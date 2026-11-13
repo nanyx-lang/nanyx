@@ -16,6 +16,30 @@ export function rehypeShiftHeadings() {
   };
 }
 
+/** The text of a hast node and its descendants. */
+function textOf(node) {
+  if (node.type === "text") return node.value;
+  return (node.children ?? []).map(textOf).join("");
+}
+
+/**
+ * Give a heading that starts with a diagnostic code, such as
+ * `NYX0201: Type mismatch`, the code as its id (`nyx0201`), so that the
+ * error reference's sections have the anchors the language server links to.
+ * Must run before Astro's heading id plugin, which keeps an id it finds.
+ */
+export function rehypeDiagnosticCodeIds() {
+  return (tree) => {
+    visit(tree, "element", (node) => {
+      if (!/^h[1-6]$/.test(node.tagName)) return;
+      const match = /^(NYX\d{4})\b/.exec(textOf(node));
+      if (match) {
+        node.properties = { ...node.properties, id: match[1].toLowerCase() };
+      }
+    });
+  };
+}
+
 const linkIcon = {
   type: "element",
   tagName: "svg",

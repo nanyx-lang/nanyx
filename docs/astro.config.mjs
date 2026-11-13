@@ -5,7 +5,7 @@ import sitemap from "@astrojs/sitemap";
 import { rehypeHeadingIds, unified } from "@astrojs/markdown-remark";
 import nyxGrammar from "../extension/syntaxes/nanyx.tmLanguage.json";
 import { inkNight, paperWhite } from "./site/shiki-themes.mjs";
-import { rehypeHeadingAnchors, rehypeShiftHeadings } from "./site/rehype-plugins.mjs";
+import { rehypeDiagnosticCodeIds, rehypeHeadingAnchors, rehypeShiftHeadings } from "./site/rehype-plugins.mjs";
 import { sectionRedirects } from "./site/sections.mjs";
 
 export default defineConfig({
@@ -25,7 +25,7 @@ export default defineConfig({
   integrations: [react(), sitemap()],
   markdown: {
     processor: unified({
-      rehypePlugins: [rehypeShiftHeadings, rehypeHeadingIds, rehypeHeadingAnchors],
+      rehypePlugins: [rehypeShiftHeadings, rehypeDiagnosticCodeIds, rehypeHeadingIds, rehypeHeadingAnchors],
     }),
     shikiConfig: {
       themes: {

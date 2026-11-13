@@ -21,7 +21,7 @@ says, where it points, and how the CLI and the editor show it.
 - Positions: every error points at the code it is about, in the right file.
 - Suggestions and fixes for the common errors ("did you mean", missing context, missing match case).
 - Rendering in the CLI (`nanyx check`, `nanyx run`) and in the language server.
-- A reference page in the docs for each error code.
+- A reference page in the docs with a section for each error code.
 
 The `Diagnostic` type itself (code, span, related locations, fixes) is designed in
 [Linters: structured diagnostics](./linters#2-structured-diagnostics) and tracked there, because linters
@@ -71,6 +71,28 @@ need it first. This workstream fills it with content.
   as `[C] ` when it writes none. It reads where the type is written from `InferState.WrittenTypes`. A context the
   def could load with `use` instead is only named in the message.
 
+# The error reference
+
+[Compiler errors](../standard-tools/errors) is one hand-written page with a section for every code in `DiagnosticCodes`,
+headed `# NYX0201: Type mismatch`, which says when the error is reported, shows a short program that reports it, and
+says how to fix it. A heading that starts with a code gets the code as its anchor (`#nyx0201`), from
+`rehypeDiagnosticCodeIds` in `docs/site/rehype-plugins.mjs`. Settled in
+[#882](https://github.com/nanyx-lang/nanyx/issues/882), over a generated page per code, whose generated part would say
+little beyond the title.
+
+`ErrorReferenceTests.fs` in `Nanyx.Compiler.Wasm.Tests` keeps the page and the compiler together:
+
+- The page's sections are the codes of `DiagnosticCodes.all`, in that order, each with the compiler's title. A new
+  code fails the test until it has a section, and so does a section for a code that no longer exists.
+- Every ` ```nanyx ` block is compiled as a script, and must report errors of its section's code and no other. The
+  backend compiles it too when the type checker finds nothing, so `NYX03xx` examples work the same way. A block of
+  several files starts each with a line `-- file: <name>`, and the first is the one compiled; a file `app.nyxp`
+  among them makes the others a package. The fences `fragment` and `skip=#<issue>` mean what they do in
+  [the tour](./compilation#tour-examples).
+
+The language server will set each diagnostic's `codeDescription.href` to the code's section on nanyx.dev, so that an
+editor shows the code as a link.
+
 # Goals
 
 - Every compiler error has a stable code and a title, and follows the voice in Principles.
@@ -90,10 +112,12 @@ _To do._ Candidate items, not yet filed:
    ([#880](https://github.com/nanyx-lang/nanyx/issues/880)); see Where the compiler is today.
 4. ~~**Suggestions.** "Did you mean" for unknown names; missing context and missing match cases, with fixes.~~
    Done ([#881](https://github.com/nanyx-lang/nanyx/issues/881)); see Where the compiler is today.
-5. **Error reference.** A docs page per code, generated or checked against the compiler's table.
+5. **Error reference.** One page with a section per code, checked against the compiler's table, its examples compiled as
+   tests, and linked from the language server ([#882](https://github.com/nanyx-lang/nanyx/issues/882)); see
+   [The error reference](#the-error-reference). The page and its test are in; the sections for `NYX02xx` and `NYX03xx`
+   and the language server's link are still to do.
 
 # Open questions
 
 - One flat `NYX0001` sequence, or ranges per phase? (Also open in [Linters](./linters#open-questions).)
-- Should the error reference pages live in the docs site and be linked from the LSP `codeDescription`?
 - Are error message snapshots part of the compiler tests, so wording changes are reviewed deliberately?
