@@ -812,13 +812,7 @@ let private declaredLocals (body: Expr) : (string * string) list =
         | PGuard(var, guard) ->
             found.Add var
             walk guard
-        | PTag(_, Some inner) -> pattern inner
-        | PFields fields -> fields |> List.iter (snd >> pattern)
-        | PAll parts -> parts |> List.iter pattern
-        | PList(elements, rest) ->
-            elements |> List.iter pattern
-            rest |> Option.iter pattern
-        | _ -> ()
+        | _ -> Pattern.parts p |> List.iter pattern
     and walk (expr: Expr) =
         match expr.Kind with
         | Let(var, value, body) ->

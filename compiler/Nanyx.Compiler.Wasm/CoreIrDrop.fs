@@ -88,16 +88,7 @@ let collect (functions: Function list) : Drops =
         | PGuard(v, guard) ->
             variable v
             expr guard
-        | PTag(_, payload) -> payload |> Option.iter pattern
-        | PFields fields -> fields |> List.iter (snd >> pattern)
-        | PAll parts -> parts |> List.iter pattern
-        | PList(elements, rest) ->
-            elements |> List.iter pattern
-            rest |> Option.iter pattern
-        | PWildcard
-        | PInt _
-        | PBool _
-        | PString _ -> ()
+        | _ -> Pattern.parts p |> List.iter pattern
 
     and expr (e: Expr) =
         add e.Type

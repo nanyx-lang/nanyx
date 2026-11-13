@@ -55,20 +55,12 @@ let collect (functions: Function list) : ModuleFacts =
 
     and pattern (p: Pattern) =
         match p with
-        | PTag(name, payload) ->
+        | PTag(name, _) ->
             tags.Add name |> ignore
-            payload |> Option.iter pattern
+            Pattern.parts p |> List.iter pattern
         | PString value -> strings.Add value
-        | PFields fields -> fields |> List.iter (snd >> pattern)
-        | PAll parts -> parts |> List.iter pattern
         | PGuard(_, guard) -> expr guard
-        | PList(elements, rest) ->
-            elements |> List.iter pattern
-            rest |> Option.iter pattern
-        | PWildcard
-        | PInt _
-        | PBool _
-        | PBind _ -> ()
+        | _ -> Pattern.parts p |> List.iter pattern
 
     and expr (e: Expr) =
         match e.Kind with

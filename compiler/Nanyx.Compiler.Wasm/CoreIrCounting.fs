@@ -67,34 +67,6 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | Release _
     | Reuse _ -> []
 
-let rec private patternBinds (pattern: Pattern) : Var list =
-    match pattern with
-    | PBind var -> [ var ]
-    | PTag(_, Some inner) -> patternBinds inner
-    | PFields fields -> fields |> List.collect (snd >> patternBinds)
-    | PAll parts -> parts |> List.collect patternBinds
-    | PList(elements, rest) -> (elements |> List.collect patternBinds) @ (rest |> Option.map patternBinds |> Option.defaultValue [])
-    | PTag(_, None)
-    | PWildcard
-    | PInt _
-    | PBool _
-    | PString _
-    | PGuard _ -> []
-
-let rec private mapGuards (f: Expr -> Expr) (pattern: Pattern) : Pattern =
-    match pattern with
-    | PGuard(var, guard) -> PGuard(var, f guard)
-    | PTag(name, Some inner) -> PTag(name, Some (mapGuards f inner))
-    | PFields fields -> PFields(fields |> List.map (fun (slot, inner) -> slot, mapGuards f inner))
-    | PAll parts -> PAll(parts |> List.map (mapGuards f))
-    | PList(elements, rest) -> PList(elements |> List.map (mapGuards f), rest |> Option.map (mapGuards f))
-    | PTag(_, None)
-    | PBind _
-    | PWildcard
-    | PInt _
-    | PBool _
-    | PString _ -> pattern
-
 /// Every expression in `e` that is a node of its own: `e`, the values and bodies of its lets, branches, arms, guards
 /// and loop bodies, and so on down.
 let rec private nodes (e: Expr) : Expr seq =
@@ -200,7 +172,7 @@ type private Counter(ownership: Ownership, func: Function) =
                 if var.Kind = Temp then temps.[var.Id] <- value
             | Match(_, arms) ->
                 for arm in arms do
-                    for var in arm.Patterns |> List.collect patternBinds do
+                    for var in arm.Patterns |> List.collect Pattern.binds do
                         vars.[var.Id] <- var
             | _ -> ()
 
@@ -244,7 +216,7 @@ type private Counter(ownership: Ownership, func: Function) =
                 | If(cond, ifTrue, ifFalse) -> Set.unionMany [ this.FreeIn cond; this.Free ifTrue; this.Free ifFalse ]
                 | Match(scrutinees, arms) ->
                     let ofArm (arm: Arm) =
-                        let bound = arm.Patterns |> List.collect patternBinds |> List.map _.Id |> Set.ofList
+                        let bound = arm.Patterns |> List.collect Pattern.binds |> List.map _.Id |> Set.ofList
                         let ofGuards =
                             arm.Patterns |> List.collect Pattern.guards |> List.map (fun (var, guard) -> this.Free guard |> Set.remove var.Id)
                         Set.unionMany ((Set.difference (this.Free arm.Body) bound) :: ofGuards)
@@ -325,9 +297,9 @@ type private Counter(ownership: Ownership, func: Function) =
             // An arm takes a reference to each name its patterns bind that it uses: they are fields of the scrutinee,
             // which the arm then drops if it does not use it either.
             let countArm (arm: Arm) =
-                let patterns = arm.Patterns |> List.map (mapGuards (this.Count Set.empty Set.empty))
+                let patterns = arm.Patterns |> List.map (Pattern.mapGuards (this.Count Set.empty Set.empty))
                 let bodyFree = this.Free arm.Body
-                let used = arm.Patterns |> List.collect patternBinds |> List.filter (fun var -> isHeapType var.Type && bodyFree.Contains var.Id)
+                let used = arm.Patterns |> List.collect Pattern.binds |> List.filter (fun var -> isHeapType var.Type && bodyFree.Contains var.Id)
                 let owned = Set.union owned (used |> List.map _.Id |> Set.ofList)
                 let body = this.Count owned after arm.Body
                 { Patterns = patterns
