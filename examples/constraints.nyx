@@ -5,25 +5,24 @@ module constraints
 -- this module, so the only way to obtain a value is through a constructor
 -- that checks the invariant.
 
-export type $Email = private string
+export type Email = private string
 
-export def $Email.parse: string -> #some($Email) | #invalidEmail = { s ->
-  if s \contains("@") and s \contains(".") then #some($Email(s))
-  else #invalidEmail
+export def Email.parse: string -> #some(Email) | #invalidEmail = { s ->
+  if s \contains("@") and s \contains(".") then #some(Email(s)) else #invalidEmail
 }
 
-export type $Nat = private int
+export type Nat = private int
 
-export def $Nat.of: int -> #some($Nat) | #negative = { n ->
-  if n >= 0 then #some($Nat(n)) else #negative
+export def Nat.of: int -> #some(Nat) | #negative = { n ->
+  if n >= 0 then #some(Nat(n)) else #negative
 }
 
-export type $OrderedPair = private (x: int, y: int)
+export type OrderedPair = private (x: int, y: int)
 
-export def $OrderedPair.of: (int, int) -> #some($OrderedPair) | #notOrdered = { x, y ->
-  if x < y then #some($OrderedPair(x = x, y = y)) else #notOrdered
+export def OrderedPair.of: int, int -> #some(OrderedPair) | #notOrdered = { x, y ->
+  if x < y then #some(OrderedPair(x = x, y = y)) else #notOrdered
 }
 
 -- Readers can inspect values but never construct an invalid one
-export def $Email.value: $Email -> string = { $Email(s) -> s }
-export def $Nat.value: $Nat -> int = { $Nat(n) -> n }
+export def Email.value: Email -> string = { Email(s) -> s }
+export def Nat.value: Nat -> int = { Nat(n) -> n }

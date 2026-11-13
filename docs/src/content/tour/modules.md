@@ -130,7 +130,7 @@ def result = m.sqrt(16.0)  -- 4.0
 def pi = m.pi
 ```
 
-An aliased import brings nothing into scope unqualified, types included: a type the module exports is written with the alias too, as `m.Shape` or `m.$Email`, and so are the definitions attached to it, as `m.$Email.parse(...)`.
+An aliased import brings nothing into scope unqualified, types included: a type the module exports is written with the alias too, as `m.Shape` or `m.Email`, and so are the definitions attached to it, as `m.Email.parse(...)`.
 
 ## Selective imports
 
@@ -291,11 +291,11 @@ import nanyx/console
 
 module money =
   -- Prices are whole pence, so no rounding ever creeps in.
-  export type $Money = (pence: int)
+  export type Money = protected (pence: int)
 
-  export def $Money.new: int -> $Money = { pence -> $Money(pence = pence) }
+  export def Money.new: int -> Money = { pence -> Money(pence = pence) }
 
-  export def $Money.toString: $Money -> string = { m ->
+  export def Money.toString: Money -> string = { m ->
     def pounds = m.pence / 100
     def rest = m.pence % 100
     if rest < 10 then "£{pounds}.0{rest}" else "£{pounds}.{rest}"
@@ -303,16 +303,16 @@ module money =
 
 import money
 
-def price: $Money = $Money.new(250)
+def price: Money = Money.new(250)
 
 println(price \toString)
 ```
 
-This gives a single file the encapsulation of a separate module: only `money` can build a `$Money` (see [Nominal and protected types](../advanced/nominal-and-protected-types)), so the rest of the file has to go through `$Money.new`. Moving the block to a file of its own later, `money.nyx` beside this one and starting `module money`, changes nothing that uses it: `import money` then finds the file.
+This gives a single file the encapsulation of a separate module: only `money` can build a `Money` (see [Nominal types](../advanced/nominal-and-protected-types)), so the rest of the file has to go through `Money.new`. Moving the block to a file of its own later, `money.nyx` beside this one and starting `module money`, changes nothing that uses it: `import money` then finds the file.
 
 A block is imported exactly as a file module is:
 
-- `import money` brings its exports in unqualified; `import money as m` brings them in as `m.$Money`, `m.$Money.new` and so on.
+- `import money` brings its exports in unqualified; `import money as m` brings them in as `m.Money`, `m.Money.new` and so on.
 - Only exports can be used, however the block is reached.
 - The import can come before or after the block, since declaration order doesn't matter in a module.
 - The name is the block's short name (`money`), even when the file declares a module of its own and the block's full name is `myModule.money`. A block can import the blocks nested directly inside it the same way.

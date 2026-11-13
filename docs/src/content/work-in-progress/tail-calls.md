@@ -22,7 +22,7 @@ run out of stack.
 
 # Why a guarantee
 
-- **Recursion is how Nanyx loops.** `for` needs a collection that already exists, and `while` needs `$Memory`.
+- **Recursion is how Nanyx loops.** `for` needs a collection that already exists, and `while` needs `Memory`.
   Any other loop is a recursive function, and a loop that may run out of stack depending on its input is not
   usable.
 - **Self-recursion alone is not enough.** Turning only a function's calls to itself into a loop (as Scala's

@@ -119,7 +119,7 @@ A value is printed as you would write it in code, from its type, whatever `toStr
 | `[1, 2]` | `[1, 2]` |
 | `["tea" => 3, "coffee" => 1]`, an empty map | `Map["tea" => 3, "coffee" => 1]`, `Map[]` |
 | `set.fromList([1, 2])`, an empty set | `Set[1, 2]`, `Set[]` |
-| `$Money(250)` | `$Money(250)` |
+| `Money(250)` | `Money(250)` |
 | `()` | `()` |
 | `{ n -> n + 1 }` | `<function int -> int>` |
 

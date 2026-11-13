@@ -116,7 +116,7 @@ A host is mostly ordinary Nanyx. Its core is a function that takes the program's
 module nanyx/console/host
 
 export def run
-  : [$HostRuntime] ([Console & Env] () -> ()) -> ()
+  : [HostRuntime] ([Console & Env] () -> ()) -> ()
   = { entry ->
     use Console(write = runtime.writeStdout, writeError = runtime.writeStderr, ...)
     use Env(args = runtime.args, variable = runtime.variable, exit = runtime.exit)
@@ -125,7 +125,7 @@ export def run
   }
 ```
 
-`$HostRuntime` is a [nominal context](../advanced/nominal-and-protected-types) that exposes the privileged layer: raw IO, sockets, the process and, on the WASM backend, the module's imports. The toolchain provides `$HostRuntime` only to the module named as the host. Libraries can't require it, so they can't bypass the capabilities the host chose to provide. (Once [protected types](./protected-types) land, it is written `HostRuntime`, declared `protected`.)
+`HostRuntime` is a [nominal context](../advanced/nominal-and-protected-types) that exposes the privileged layer: raw IO, sockets, the process and, on the WASM backend, the module's imports. The toolchain provides `HostRuntime` only to the module named as the host. Libraries can't require it, so they can't bypass the capabilities the host chose to provide.
 
 A host takes one entry shape. Arguments and the exit code, which would otherwise call for a second shape, come through a context instead.
 

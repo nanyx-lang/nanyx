@@ -11,7 +11,7 @@ For people coming from C#, Java, TypeScript, or Kotlin, the mental model is:
 - **class fields** → record fields,
 - **instance/static methods** → regular functions or [attached definitions](../advanced/attached-definitions),
 - **inheritance hierarchies** → composition and tagged unions,
-- **private internals** → module boundaries and nominal/protected types.
+- **private internals** → module boundaries and nominal (protected and private) types.
 
 # Data: records instead of class instances
 
@@ -62,9 +62,9 @@ Encapsulation is done with module exports and type boundaries, not class visibil
 
 - Keep construction/validation logic in a module.
 - Expose smart constructors and helper functions.
-- Use nominal/protected types when representation must be controlled.
+- Use protected or private types when representation must be controlled.
 
-See [Nominal and Protected Types](../advanced/nominal-and-protected-types).
+See [Nominal Types](../advanced/nominal-and-protected-types).
 
 # State and mutation
 
@@ -93,6 +93,6 @@ This usually leads to APIs that are easier to read and evolve because behavior i
 | Static method | Namespaced function / attached definition |
 | Constructor | Record literal or validated factory function |
 | Inheritance | Composition + tagged unions |
-| Private fields | Module boundary + nominal/protected type |
+| Private fields | Module boundary + private type |
 
-If you are modeling OOP-style APIs, start with records + attached definitions first; add nominal/protected types when you need stronger boundaries.
+If you are modeling OOP-style APIs, start with records + attached definitions first; add protected or private types when you need stronger boundaries.

@@ -483,7 +483,7 @@ built-in type, such as `int` or `list`; longer lowercase names are reserved for 
 type point = (x: int, y: int)  -- error NYX0116: 'point' cannot be a type's name, which starts with a capital letter: write 'Point'
 ```
 
-To fix it, start the type's name with a capital letter, after the `$` of a nominal type: `Point`, `$Money`.
+To fix it, start the type's name with a capital letter: `Point`, `Money`.
 
 # NYX0201: Type mismatch
 
@@ -637,19 +637,19 @@ To fix it, add the context to the definition's type, as in `[Console] string -> 
 
 # NYX0212: Nominal type constructed outside its module
 
-A nominal type, whose name starts with `$`, is constructed, or a protected one taken apart, outside the module that
-defines it. Only its own module can make its values ([Nominal and protected types](../advanced/nominal-and-protected-types)).
+A nominal type, one declared `protected` or `private`, is constructed, or a private one taken apart, outside the
+module that defines it. Only its own module can make its values ([Nominal types](../advanced/nominal-and-protected-types)).
 
 ```nanyx
 module money =
-  export type $Money = (pence: int)
+  export type Money = protected (pence: int)
 
 import money
 
-def price = $Money(pence = 250)  -- error NYX0212: The nominal type '$Money' can only be constructed in the module that defines it; ...
+def price = Money(pence = 250)  -- error NYX0212: The nominal type 'Money' can only be constructed in the module that defines it; ...
 ```
 
-To fix it, make the value with a function the module exports, such as `$Money.new`.
+To fix it, make the value with a function the module exports, such as `Money.new`.
 
 # NYX0213: Wrong number of patterns
 
@@ -735,7 +735,7 @@ type Point = (x: int, y: int)
 def Point.hash: Point -> int = { p -> p.x }  -- error NYX0219: 'Point.hash' cannot be defined: 'Point' is a structural type, ...
 ```
 
-To fix it, make the type nominal (`$Point`) to give it its own definition, or attach `==` instead of `!=`.
+To fix it, make the type nominal (`Point`) to give it its own definition, or attach `==` instead of `!=`.
 
 # NYX0220: Block without a result
 
@@ -751,12 +751,12 @@ To fix it, end the block with the expression whose value it gives back, or with 
 
 # NYX0221: mut outside a memory block
 
-A cell is declared with `mut` outside a `memory { ... }` block. A cell needs the context `$Memory`, which only a
+A cell is declared with `mut` outside a `memory { ... }` block. A cell needs the context `Memory`, which only a
 memory block provides ([Memory](../advanced/memory)).
 
 ```nanyx
 def count = {
-  mut x = 0  -- error NYX0221: `mut` needs the context '$Memory', which only a `memory { ... }` block provides: ...
+  mut x = 0  -- error NYX0221: `mut` needs the context 'Memory', which only a `memory { ... }` block provides: ...
   x
 }
 ```
@@ -862,22 +862,22 @@ To fix it, annotate the value's type, so that its fields are known.
 
 # NYX0232: Scoped context is not nominal
 
-A `scoped context` has a name that does not start with `$`. A scoped context must be nominal, so that only its own
-module can make its instances.
+A `scoped context` is not declared `protected`. A scoped context must be nominal, so that only its own module can
+make its instances.
 
 ```nanyx
-scoped context Tx = (commit: () -> ())  -- error NYX0232: The scoped context 'Tx' must be nominal, written '$Tx', ...
+scoped context Tx = (commit: () -> ())  -- error NYX0232: The scoped context 'Tx' must be nominal, declared `scoped context Tx = protected (...)`, ...
 ```
 
-To fix it, name the context with `$`, as in `scoped context $Tx`.
+To fix it, declare the context `protected` after its `=`, as in `scoped context Tx = protected (...)`.
 
 # NYX0233: Scoped context escapes the call that supplies it
 
-Something that requires a scoped context, such as `$Memory`, leaves the call that supplies the context: a memory
+Something that requires a scoped context, such as `Memory`, leaves the call that supplies the context: a memory
 block returns its instance, or a function over one of its cells.
 
 ```nanyx
-def leak = memory { m -> m }  -- error NYX0233: The result of this 'memory' call requires its '$Memory' through 'm', so it cannot leave the call: ...
+def leak = memory { m -> m }  -- error NYX0233: The result of this 'memory' call requires its 'Memory' through 'm', so it cannot leave the call: ...
 ```
 
 To fix it, give back what the cells hold, rather than the cells or a function over them.
