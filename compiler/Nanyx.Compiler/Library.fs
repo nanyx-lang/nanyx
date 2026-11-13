@@ -28,7 +28,10 @@ type CompileResult =
       ErrorsDeferred: bool
       /// The root module as parsed, before desugaring: the syntax the user wrote, whose nodes the typed module's
       /// `ExprTypes` and `CalleeTypes` are keyed by. Present when `Typed` is.
-      Syntax: Module option }
+      Syntax: Module option
+      /// The expressions desugaring and `@entry` made up for each node of `Syntax`, by its node, in the order they were
+      /// made: how the type of a workflow bind is found, through `ExprTypes`. Empty when `Syntax` is absent.
+      Lowered: Map<NodeId, NodeId list> }
 
 /// A type-checkedModule module together with what an importer needs from it.
 type internal CheckedModule =
@@ -46,6 +49,8 @@ type internal CheckedModule =
       Name: string option
       /// The module as parsed, before desugaring.
       Syntax: Module
+      /// The expressions made up for each node of `Syntax` (see `CompileResult.Lowered`).
+      Lowered: Map<NodeId, NodeId list>
       /// The substitution unification found, which resolves the types inference recorded by node.
       Subst: Subst
       /// The types inference recorded by node, unresolved: only the root module's are resolved (see `compileWith`).
@@ -299,9 +304,10 @@ module Compiler =
     /// Resolves `@attribute` lines. `@entry` on a definition appends a call to that definition at the end
     /// of the module, so it runs as the program's start function, and imports `nanyx/console` for the module
     /// (the context the runtime supplies to the entry point); any other attribute, or an attribute that does
-    /// not precede a value definition, is an error. `@entry` takes no argument.
-    let applyAttributes (module': Module) : Result<Module, Diagnostic list> =
-        let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entryCalls: TopLevelItem list) (errors: Diagnostic list) =
+    /// not precede a value definition, is an error. `@entry` takes no argument. With the module, the call made up for
+    /// each `@entry`, by the node of the attribute.
+    let applyAttributes (module': Module) : Result<Module * Map<NodeId, NodeId list>, Diagnostic list> =
+        let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entryCalls: (NodeId * TopLevelItem) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entryCalls, List.rev errors
             | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute ->
@@ -309,10 +315,10 @@ module Compiler =
             | Kind (Attribute(name, Some argument)) :: rest ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span $"Attribute '@{name}' takes no argument"
                 loop rest acc entryCalls (error :: errors)
-            | Kind (Attribute _) :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest ->
+            | Kind (Attribute _) as attribute :: (Kind (Def (ValueDef(_, name, _, value))) as def) :: rest ->
                 // The call is made up for the def, and reported there.
                 let call = TopLevelItem.at def.Span (Expr (Expression.from value (FunctionCall(name, None, []))))
-                loop rest (def :: acc) (call :: entryCalls) errors
+                loop rest (def :: acc) ((attribute.Id, call) :: entryCalls) errors
             | Kind (Attribute(name, _)) as attribute :: rest ->
                 loop rest acc entryCalls (Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span $"Attribute '@{name}' must be followed by a definition" :: errors)
             | item :: rest -> loop rest (item :: acc) entryCalls errors
@@ -323,7 +329,8 @@ module Compiler =
                     [ TopLevelItem.synthetic (Import [ { Source = ModuleImport entryContextModule; Alias = None; Span = SourceSpan.none } ]) ]
                 else
                     []
-            Ok (entryImport @ items @ entryCalls)
+            let lowered = entryCalls |> List.map (fun (attribute, call) -> attribute, SyntaxTree.ofItem call |> List.map _.Id) |> Map.ofList
+            Ok (entryImport @ items @ List.map snd entryCalls, lowered)
         | _, _, errors -> Error errors
 
     /// Applies the substitution found by unification to everything inference produced.
@@ -495,16 +502,17 @@ module Compiler =
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             |> Result.bind (fun (ast, (items, declared, moduleBlocks)) ->
                 match WorkflowDesugaring.desugarWithDiagnostics items with
-                | _, (_ :: _ as errors), _ -> Error (Desugared, errors)
-                | desugaredAst, [], zeros ->
+                | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
+                | desugaredAst, [], zeros, lowered ->
                     applyAttributes desugaredAst
-                    |> Result.map (fun desugared ->
+                    |> Result.map (fun (desugared, entryCalls) ->
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
-                        ast, declared, moduleBlocks, desugared, zeros, nameErrors)
+                        let lowered = entryCalls |> Map.fold (fun acc attribute calls -> Map.add attribute calls acc) lowered
+                        ast, declared, moduleBlocks, desugared, zeros, lowered, nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros, nameErrors) ->
+        | Result.Ok (ast, declared, moduleBlocks, desugared, zeros, lowered, nameErrors) ->
             let preludeKey = originKey (StandardLibraryModule StandardLibrary.preludeModuleName)
             // Every module but the prelude imports it first, so that anything it imports or defines itself wins.
             // An import of a `module name =` block of this file is not of another file: inference resolves it.
@@ -862,6 +870,7 @@ module Compiler =
                      Inlined = inlined
                      Name = FileImports.declaredName moduleBlocks desugared
                      Syntax = ast
+                     Lowered = lowered
                      Subst = subst
                      RawExprTypes = state.ExprTypes
                      RawCalleeTypes = state.CalleeTypes
@@ -934,7 +943,8 @@ module Compiler =
               Typed = None
               TypeChecked = false
               ErrorsDeferred = false
-              Syntax = None }
+              Syntax = None
+              Lowered = Map.empty }
         | Result.Ok checkedModule ->
             // Types by node are only read for the root module, so only its are resolved: not those of every
             // imported module (the standard library included) on every compile.
@@ -968,12 +978,13 @@ module Compiler =
             // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax typed)
+                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax checkedModule.Lowered typed)
                   else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
-              Syntax = Some checkedModule.Syntax }
+              Syntax = Some checkedModule.Syntax
+              Lowered = checkedModule.Lowered }
 
     /// The module from `origin`, in no package, checked and compiled (see `compileChecked`).
     let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
@@ -992,7 +1003,8 @@ module Compiler =
               Typed = None
               TypeChecked = false
               ErrorsDeferred = false
-              Syntax = None }
+              Syntax = None
+              Lowered = Map.empty }
         else
             compileFrom options (SourceFile (Path.GetFullPath filePath)) (File.ReadAllText filePath)
 
