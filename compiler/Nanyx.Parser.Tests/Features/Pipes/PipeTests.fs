@@ -55,6 +55,12 @@ let ``A piped value goes in front of named arguments, in the same record`` () =
                      NamedField ("y", Kind (IdentifierExpr "z")) ] ] -> ()
     | other -> failwith $"Expected one record of x, a, the lambda and y, got: {other}"
 
+[<Fact>]
+let ``A tuple in brackets of its own is one argument of a pipe`` () =
+    match callArgumentsOf "def r = x \\f((a, b)) { y -> y }" with
+    | [ IdentifierExpr "x"; TupleExpr [ Kind (IdentifierExpr "a"); Kind (IdentifierExpr "b") ]; Lambda _ ] -> ()
+    | other -> failwith $"Expected x, the tuple and the lambda, got: {other}"
+
 /// The one expression statement of the lambda in `def f = { n -> <body> }`.
 let private lambdaStatementOf (body: string) =
     match parseModule ("def f = { n ->\n" + body + "\n}") with
@@ -157,13 +163,12 @@ let ``Parse pipe with arguments`` () =
             | IdentifierExpr id -> id |> should equal "x"
             | _ -> failwith "Expected identifier"
             funcName |> should equal "f"
-            // With comma operator, \f(x, y) creates a single tuple argument
-            args |> should haveLength 1
-            match args.[0].Kind with
-            | TupleExpr [Kind (IdentifierExpr y); Kind (IdentifierExpr z)] ->
+            // Each value in the brackets is an argument of its own, so that `\f((y, z))` can pass a tuple.
+            match args |> List.map _.Kind with
+            | [ IdentifierExpr y; IdentifierExpr z ] ->
                 y |> should equal "y"
                 z |> should equal "z"
-            | _ -> failwith "Expected tuple of identifiers as arguments"
+            | _ -> failwith "Expected two identifiers as arguments"
         | _ -> failwith "Expected Def with Pipe"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
 

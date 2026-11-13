@@ -39,6 +39,12 @@ def result = 1
   \add(3)
 ```
 
+To pass a tuple as one argument, write it in brackets of its own, as in a call: `x \f((y, z))` is `f(x, (y, z))`.
+
+```nanyx
+def totals = [1, 2, 3] \fold((0, 0)) { (sum, count), x -> (sum + x, count + 1) }
+```
+
 ## Pipes on the lines after
 
 A pipe chain can go on over several lines, one pipe to a line. A line that starts with `\` continues the expression above it when it is indented more than the line that expression starts on. This works anywhere an expression is written, including the last line of a lambda body and the body of a match arm:

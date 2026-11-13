@@ -93,3 +93,17 @@ let ``Run - a top-level function of one tuple parameter is passed as a value and
         "  println(\"{apply(sum)} {[(1, 2)] \\list.map(sum) \\list.sum}\")\n" +
         "}\n"
     runSource source |> assertRan "7 3\n"
+
+[<Fact>]
+let ``Run - a tuple in brackets of its own is one argument of a pipe (#1002)`` () =
+    let source =
+        """
+import nanyx/console
+
+@entry
+def main = {
+  def piped = [1, 2, 3] \list.fold((0, 0)) { (sum, count), x -> (sum + x, count + 1) }
+  println("{piped.0} {piped.1}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "6 3\n"

@@ -680,10 +680,16 @@ let format (options: Options) (parsed: SourceModule) : string =
             let fieldStart = function PositionalField e -> e.Span.Start | NamedField(_, e) -> e.Span.Start
             let written = fields |> List.filter (function PositionalField e -> not (obj.ReferenceEquals(e, lambda)) | NamedField _ -> true)
             withTrailing (written |> List.sortBy fieldStart) lambda
+        // A pipe has each value in its brackets as an argument of its own, so a tuple among them was written in brackets
+        // of its own, as in `x \f((a, b))`. Named fields are one record of them all, before the lambda.
+        | _ when (match call.Kind with Pipe _ -> true | _ -> false) ->
+            let fieldsOf (written: Expression list) =
+                match written with
+                | [ Kind (RecordExpr fields) ] -> fields
+                | _ -> written |> List.map PositionalField
+            if endsCall call (List.last args) then withTrailing (fieldsOf (List.take (args.Length - 1) args)) (List.last args)
+            else fieldsDoc afterName call.Span.End (fieldsOf args)
         | [ argument ] -> parenFields argument afterName call.Span.End
-        // A pipe keeps its brackets' values as one argument, before the lambda: `x \f(a, b) { ... }`.
-        | [ argument; lambda ] when (match call.Kind with Pipe _ -> true | _ -> false) ->
-            cat [ parenFields argument afterName lambda.Span.Start; text " "; expr full lambda ]
         // `f(a, b) { ... }`, whose brackets' values and lambda are the call's arguments. A tuple among them was written
         // in brackets of its own, as in `f((a, b)) { ... }`.
         | _ when endsCall call (List.last args) ->
