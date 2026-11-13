@@ -11,6 +11,7 @@
     <Compile Include="ImportOrder.fs" />
     <Compile Include="Syntax.fs" />
     <Compile Include="SourceText.fs" />
+    <Compile Include="Position.fs" />
     <Compile Include="CommentPlacement.fs" />
     <Compile Include="TypePrinter.fs" />
     <Compile Include="PatternPrinter.fs" />
