@@ -107,6 +107,7 @@ changing 13 captured mutables. `Library.fs` holds only the compiling job now, at
 |---|---|---|
 | `Program.fs` (parser) | 1,431 | The script header (`Directive`, `Directives`) moved out to `Directives.fs`, module `Parser.Program.Header` |
 | `Program.fs` (parser) | 1,358 | Destructuring defs (`destructuringDefWith` and the bindings it desugars to) moved out to `Destructuring.fs` |
+| `Expressions.fs` (parser) | 1,089 | Statements and top-level items moved out to `TopLevel.fs` (216 lines), and the public parse functions to `Api.fs` (70 lines). What was left of `Program.fs` is `Expressions.fs`, module `Parser.Program.Expressions` |
 
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
