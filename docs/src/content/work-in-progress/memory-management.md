@@ -118,7 +118,7 @@ storing them at their own width needs a variant of each storing helper for each 
 is, in a 4-byte box holding the `f32`.
 
 `int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`
-and so on; see [Sized numbers](./sized-numbers)). Each maps to the Wasm
+and so on; see [Sized numbers](../advanced/sized-numbers)). Each maps to the Wasm
 type of its width: `I64` and `int` to `i64`, `F64` and `float` to `f64`, the narrower integers to `i32` in locals and
 to their own width in fields.
 

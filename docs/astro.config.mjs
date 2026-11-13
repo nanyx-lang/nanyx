@@ -20,6 +20,7 @@ export default defineConfig({
     "/docs/advanced/reference-counting": "/docs/foundations/reference-counting",
     "/docs/advanced/associated-types-and-constraints": "/docs/work-in-progress/type-members-and-reflection",
     "/docs/work-in-progress/type-arguments-and-reflection": "/docs/work-in-progress/type-members-and-reflection",
+    "/docs/work-in-progress/sized-numbers": "/docs/advanced/sized-numbers",
   },
   integrations: [react(), sitemap()],
   markdown: {
