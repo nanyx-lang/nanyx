@@ -10,46 +10,10 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-let private tourDirectory =
-    Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "docs", "src", "content", "tour"))
-
-/// What a block's fence says it is.
-type private Kind =
-    /// A whole program, which compiles and runs.
-    | Program
-    /// Part of a program, such as code that uses names defined elsewhere, which is not compiled.
-    | Fragment
-    /// A program the compiler gets wrong, which is skipped until the issue is fixed.
-    | Skip of issue: int
-
-type private Example =
-    { Kind: Kind
-      /// The block's code, with nothing added.
-      Code: string }
-
-let private kindOf (page: string) (line: int) (info: string) =
-    match info.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray with
-    | [ "nanyx" ] -> Program
-    | [ "nanyx"; "fragment" ] -> Fragment
-    | [ "nanyx"; tag ] when tag.StartsWith "skip=#" -> Skip(int (tag.Substring "skip=#".Length))
-    | _ -> failwith $"{page}:{line}: a tour example's fence is ```nanyx, ```nanyx fragment or ```nanyx skip=#<issue>, not ```{info}"
+let private tourDirectory = Path.Combine(docsContentDirectory, "tour")
 
 /// The ```nanyx blocks of `page`, by the line of their opening fence.
-let private examplesOf (page: string) : Map<int, Example> =
-    let lines = File.ReadAllText(Path.Combine(tourDirectory, page)).ReplaceLineEndings("\n").Split('\n')
-    let rec collect (index: int) (found: (int * Example) list) =
-        if index >= lines.Length then
-            List.rev found
-        else
-            let fence = lines.[index].Trim()
-            if fence.StartsWith "```nanyx" then
-                let close = Array.FindIndex(lines, index + 1, fun line -> line.Trim().StartsWith "```")
-                let line = index + 1
-                let example = { Kind = kindOf page line (fence.Substring 3); Code = String.Join("\n", lines.[index + 1 .. close - 1]) + "\n" }
-                collect (close + 1) ((line, example) :: found)
-            else
-                collect (index + 1) found
-    collect 0 [] |> Map.ofList
+let private examplesOf (page: string) = docExamplesOf (Path.Combine(tourDirectory, page))
 
 let tourExamples () : obj array seq =
     Directory.GetFiles(tourDirectory, "*.md")
