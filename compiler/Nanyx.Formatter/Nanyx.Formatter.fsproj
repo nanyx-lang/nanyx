@@ -12,6 +12,7 @@
     <Compile Include="Syntax.fs" />
     <Compile Include="SourceText.fs" />
     <Compile Include="CommentPlacement.fs" />
+    <Compile Include="TypePrinter.fs" />
     <Compile Include="Formatter.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="FormatCommand.fs" />
