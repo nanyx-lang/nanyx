@@ -33,7 +33,18 @@ npm run check    # type-check .astro and .ts files
 
 ## Deploying
 
-Deploy by hand with the Vercel CLI, from the repository root (the Vercel
+Deploy to production by running the [Docs workflow](../.github/workflows/docs.yml),
+from the Actions tab or with:
+
+```sh
+gh workflow run Docs
+```
+
+It calls the Vercel Deploy Hook stored in the `VERCEL_DEPLOY_HOOK` repository
+secret, and Vercel builds and deploys `main`. Nothing deploys unless someone
+runs it.
+
+Or deploy with the Vercel CLI, from the repository root (the Vercel
 project's root directory is `docs/`):
 
 ```sh

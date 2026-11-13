@@ -1,0 +1,24 @@
+name: Docs
+
+on:
+  # Deploys happen only when someone runs this workflow: `gh workflow run Docs`. Vercel's own Git
+  # deployments are off (docs/vercel.json), so pushing deploys nothing.
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    steps:
+      # The hook is a Vercel Deploy Hook for the project. Calling it makes Vercel build and deploy
+      # the branch the hook names (main) to production; the build itself shows in Vercel.
+      - name: Call the deploy hook
+        run: curl --fail-with-body --silent --show-error --request POST "$VERCEL_DEPLOY_HOOK"
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
