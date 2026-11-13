@@ -125,6 +125,8 @@ module DiagnosticCodes =
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
+    /// A broken invariant of the backend: a bug in the compiler, not a feature it does not compile yet.
+    let BackendInternalError = code 302 "Internal error in the WebAssembly backend" Severity.Error
 
     /// Every compiler code, in order.
     let all =
@@ -143,7 +145,7 @@ module DiagnosticCodes =
           UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
           LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal; ScopedContextEscapes
           NotACellArgument; MisplacedCellType
-          UnsupportedByBackend ]
+          UnsupportedByBackend; BackendInternalError ]
 
 module Diagnostics =
     let private create (code: DiagnosticCode) (span: SourceSpan option) (message: string) =

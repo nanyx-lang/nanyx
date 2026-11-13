@@ -74,8 +74,11 @@ The parser, type checker, WebAssembly backend and runtime are libraries; the `na
   passed as a value (`list.map(xs, println)`), is passed their members at each call, as they are where it is called
   (see [Context calls](./context-calls#functions-that-require-contexts-as-values))
 
-A construct the backend cannot lower yet is reported as an `UnsupportedByBackend` error where it is written (see
-[Memory management](./memory-management#core-ir)).
+A construct the backend cannot lower yet is reported as an `UnsupportedByBackend` error (`NYX0301`) where it is
+written (see [Memory management](./memory-management#core-ir)). A broken invariant of the backend, such as a context
+member the type checker found but the backend cannot, is a bug in the compiler, not a missing feature. It is reported
+as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend raises one with
+`CoreIr.internalError`, never a bare `failwith`.
 
 ## Tour examples
 

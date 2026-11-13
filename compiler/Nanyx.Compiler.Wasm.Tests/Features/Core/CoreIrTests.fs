@@ -391,11 +391,15 @@ let ``Every intermediate value in the core IR is named`` () =
     Assert.Equal(expected, printed)
 
 [<Fact>]
-let ``A broken invariant in the emitter says Internal error once`` () =
+let ``A broken invariant in the emitter is an internal error, said once, that asks for a bug report`` () =
     let input = lowerInput (typedModule "def f = { x -> x + 1 }\n")
     // An emitter that finds the core IR broken, as `CoreIrEmit` does when a temporary is never used.
     let lowered = CoreIrLowerModule.lowerModule input (fun _ -> CoreIr.internalError "a temporary in the core IR is never used")
     match lowered.Failures with
-    | [ "f", failure, _ ] ->
-        Assert.Equal("Internal error: a temporary in the core IR is never used", lowerFailureMessage failure)
-    | failures -> failwith $"Expected one failure in f, got %A{failures}"
+    | [ "f", failure, span ] ->
+        let diagnostic = lowerFailureDiagnostic failure span
+        Assert.Equal(DiagnosticCodes.BackendInternalError.Code, diagnostic.Code)
+        Assert.Equal(
+            "Internal error: a temporary in the core IR is never used. This is a bug in the compiler: please report it at https://github.com/nanyx-lang/nanyx/issues",
+            diagnostic.Message)
+    | failures -> Assert.Fail $"Expected one failure in f, got %A{failures}"
