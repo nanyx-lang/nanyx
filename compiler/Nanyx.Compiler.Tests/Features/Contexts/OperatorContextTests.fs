@@ -25,14 +25,6 @@ let private writtenContexts (source: string) (name: string) =
             Some (contexts |> List.map _.Kind)
         | _ -> None)
 
-/// The one diagnostic `source` has: its code, its message and the text it is reported at.
-let private onlyDiagnostic (source: string) =
-    match (Compiler.compile source).Diagnostics with
-    | [ diagnostic ] ->
-        let span = diagnostic.Span.Value
-        diagnostic.Code, diagnostic.Message, source.Substring(span.Start, span.End - span.Start)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
-
 [<Fact>]
 let ``A def that does not write its type requires the prelude's smallest context with the operator it uses on a type variable`` () =
     let cases =

@@ -32,7 +32,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_shows_the_inferred_type_of_the_expression_under_the_pointer()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover.nyx"));
 
         // CRLF line endings: positions are still counted per line, as the editor counts them.
         Open(uri, "def id = { x -> x }\r\ndef total = id(40) + 2\r\n");
@@ -58,7 +58,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_on_a_declarations_name_shows_its_name_and_type()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-declaration.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-declaration.nyx"));
 
         Open(uri, "def id = { x -> x }\ndef total = id(40) + 2\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -78,7 +78,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_shows_what_a_hole_in_a_type_was_inferred_to_be()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-hole.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-hole.nyx"));
 
         Open(uri, "def xs: list(_) = [1, 2]\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -94,7 +94,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_and_completion_show_a_names_doc_comment_with_its_links()
     {
-        var path = Path.Combine(Path.GetTempPath(), "hover-doc.nyx");
+        var path = TempPath("hover-doc.nyx");
         var uri = DocumentUri.FromFileSystemPath(path);
 
         Open(uri, """
@@ -125,7 +125,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_on_a_defs_name_shows_its_declaration_with_its_contexts_then_its_doc_comment()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-def.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-def.nyx"));
 
         Open(uri, """
             --| Takes one order.
@@ -147,7 +147,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_outside_any_expression_returns_nothing()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-nothing.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-nothing.nyx"));
 
         Open(uri, "def answer = 42\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -158,7 +158,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_in_a_document_with_type_errors_reads_its_own_types()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-error.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-error.nyx"));
 
         Open(uri, "def answer = missing + 1\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
@@ -171,7 +171,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_in_a_document_that_has_never_parsed_returns_nothing()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-unparsed.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-unparsed.nyx"));
 
         Open(uri, "def answer = (1 +\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
@@ -199,7 +199,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_reads_the_last_good_compile_except_in_a_def_edited_since()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hover-last-good.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-last-good.nyx"));
 
         Open(uri, "def id = { x -> x }\ndef total = id(40) + 2\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -218,7 +218,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_and_definition_on_an_operator_never_lead_to_what_it_is_desugared_to()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "reserved-operator.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("reserved-operator.nyx"));
 
         Open(uri, "def p = 2.0 ** 3\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -232,7 +232,7 @@ public sealed class HoverTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_on_an_operator_in_a_generic_function_shows_the_context_member_it_calls()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "context-operator.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("context-operator.nyx"));
 
         Open(uri, "def plus: [Add(a)] a, a -> a = { x, y -> x + y }\ndef inferred = { a, b -> a + b }\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);

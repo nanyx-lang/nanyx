@@ -23,7 +23,7 @@ let ``typeof rejects a value of another type`` () =
         "def defaults = (host = \"localhost\", port = 8080)\n" +
         "def override: typeof defaults = (host = \"example.com\", port = \"443\")"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (List.head result.Diagnostics).Code)
 
 [<Fact>]
@@ -32,7 +32,7 @@ let ``typeof can name a value declared later`` () =
         "def bad: typeof limit = \"many\"\n" +
         "def limit = 10"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     let good = Compiler.compile "def other: typeof limit = 20\ndef limit = 10"
     Assert.True(good.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{good.Diagnostics}")
     Assert.Equal(TyPrimitive "int", good.Typed.Value.Types.["other"])

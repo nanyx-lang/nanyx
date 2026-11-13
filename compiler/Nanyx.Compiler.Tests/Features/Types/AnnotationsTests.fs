@@ -10,7 +10,7 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``Typecheck rejects an annotation more general than its body`` () =
     let result = Compiler.compile "def f: a -> b = { x -> x }"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.AnnotationTooGeneral result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("more general than the inferred type", message)
     Assert.Contains("`b` would have to be `a`", message)
@@ -18,14 +18,14 @@ let ``Typecheck rejects an annotation more general than its body`` () =
 [<Fact>]
 let ``Typecheck rejects an annotation variable the body makes concrete`` () =
     let result = Compiler.compile "def g: a -> int = { x -> x + 1 }"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.AnnotationTooGeneral result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("`a` would have to be `int`", message)
 
 [<Fact>]
 let ``Typecheck rejects a non-function annotation more general than its value`` () =
     let result = Compiler.compile "def xs: list(a) = [1, 2]"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.AnnotationTooGeneral result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("`a` would have to be `int`", message)
 

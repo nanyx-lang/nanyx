@@ -61,8 +61,6 @@ let private parseSource (source: string) =
     | Result.Ok module' -> module'
     | Result.Error err -> failwith $"Parse failed: {err}"
 
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 /// The block a `def name =` in `module'` is, and the source text of it and of each of its statements.
 let private defBlockTexts name (source: string) =
     parseSource source

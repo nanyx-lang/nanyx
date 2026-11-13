@@ -32,7 +32,7 @@ public sealed class DefinitionTests : LanguageServerTestBase
     [Fact]
     public async Task Definition_of_locals_parameters_and_later_top_level_values_is_in_the_document()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "definition.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("definition.nyx"));
 
         Open(uri, "def scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset + later\r\n}\r\ndef later = 3\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -48,7 +48,7 @@ public sealed class DefinitionTests : LanguageServerTestBase
     [Fact]
     public async Task Definition_of_a_pattern_variable_is_where_the_pattern_binds_it()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "definition-pattern.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("definition-pattern.nyx"));
 
         Open(uri, "def rest = { items -> match items\n  | [_, ...tail] -> tail\n  | _ -> items }\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -59,7 +59,7 @@ public sealed class DefinitionTests : LanguageServerTestBase
     [Fact]
     public async Task Definition_on_a_declaration_is_the_declaration_itself()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "definition-self.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("definition-self.nyx"));
 
         Open(uri, "def scale = { factor -> factor * 2 }\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -71,7 +71,7 @@ public sealed class DefinitionTests : LanguageServerTestBase
     [Fact]
     public async Task Definition_of_what_is_not_a_name_returns_nothing()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "definition-nothing.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("definition-nothing.nyx"));
 
         Open(uri, "def id = { x -> x }\ndef total = id(40) + 2\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);

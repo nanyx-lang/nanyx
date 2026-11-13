@@ -268,7 +268,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
     [Fact]
     public async Task Info_view_shows_the_doc_comments_of_the_names_and_contexts_in_the_module()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "info-view-docs.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("info-view-docs.nyx"));
 
         Open(uri, """
             --| Writes lines somewhere.

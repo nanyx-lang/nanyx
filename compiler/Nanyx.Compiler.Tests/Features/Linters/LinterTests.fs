@@ -135,15 +135,11 @@ let ``The model is the module as written, with what type checking found`` () =
 
 [<Fact>]
 let ``Only the module being compiled is analyzed, not the modules it imports`` () =
-    let dir = Path.Combine(Path.GetTempPath(), $"nyx-linters-{Guid.NewGuid():N}")
-    Directory.CreateDirectory dir |> ignore
-    try
+    withTempDir (fun dir ->
         File.WriteAllText(Path.Combine(dir, "lib.nyx"), "module lib\nexport def helper = 1\n")
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(mainPath, "import lib\nimport nanyx/console\ndef answer = helper + 1\n")
         let result = Compiler.compileFileWith (options [ everyDef ] []) mainPath
         let diagnostic = Assert.Single(result.Diagnostics)
         Assert.Equal("def answer", diagnostic.Message)
-        Assert.Equal(Path.GetFullPath mainPath, diagnostic.Span.Value.File)
-    finally
-        Directory.Delete(dir, true)
+        Assert.Equal(Path.GetFullPath mainPath, diagnostic.Span.Value.File))

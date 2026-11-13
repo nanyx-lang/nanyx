@@ -13,10 +13,6 @@ export def triple: int -> int = { x -> x * 3 }
 export type Point = (x: int, y: int)
 export def origin: Point = Point(x = 0, y = 0)""" ]
 
-let private onlyDiagnostic (source: string) (result: CompileResult) =
-    let diagnostic = Assert.Single(result.Diagnostics)
-    diagnostic.Code, diagnostic.Message, textAt (source.ReplaceLineEndings "\n") diagnostic.Span.Value
-
 [<Fact>]
 let ``A selection brings in the names it selects`` () =
     let result = compileImportingAll util "module main\nimport util as (double, triple)\ndef value = double(triple(1))"
@@ -26,7 +22,7 @@ let ``A selection brings in the names it selects`` () =
 [<Fact>]
 let ``A selection does not bring in the names it leaves out`` () =
     let source = "module main\nimport util as (double)\ndef value = triple(1)"
-    let code, message, at = onlyDiagnostic source (compileImportingAll util source)
+    let code, message, at = onlyDiagnosticIn source (compileImportingAll util source)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, code)
     Assert.Equal("Unknown function 'triple'", message)
     Assert.Equal("triple", at)
@@ -39,7 +35,7 @@ let ``A selection with an alias brings in the rest under the alias`` () =
 [<Fact>]
 let ``A name the module does not export is an error at the name, with the closest export`` () =
     let source = "module main\nimport util as (double, tripel)\ndef value = double(1)"
-    let code, message, at = onlyDiagnostic source (compileImportingAll util source)
+    let code, message, at = onlyDiagnosticIn source (compileImportingAll util source)
     Assert.Equal(DiagnosticCodes.NotExported.Code, code)
     Assert.Equal("'util' does not export 'tripel': did you mean 'triple'?", message)
     Assert.Equal("tripel", at)
@@ -47,7 +43,7 @@ let ``A name the module does not export is an error at the name, with the closes
 [<Fact>]
 let ``A type the selection leaves out cannot be written`` () =
     let source = "module main\nimport util as (origin)\ndef p: Point = origin"
-    let code, _, at = onlyDiagnostic source (compileImportingAll util source)
+    let code, _, at = onlyDiagnosticIn source (compileImportingAll util source)
     Assert.Equal(DiagnosticCodes.UnknownType.Code, code)
     Assert.Equal("Point", at)
 

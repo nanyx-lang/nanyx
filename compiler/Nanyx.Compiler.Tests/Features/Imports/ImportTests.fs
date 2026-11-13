@@ -39,7 +39,7 @@ let ``Import with alias does not bring unqualified names`` () =
         File.WriteAllText(modulePath, "module mod\nexport def foo = 1")
         File.WriteAllText(mainPath, "module main\nimport mod as m1\ndef value = foo")
         let result = Compiler.compileFile mainPath
-        Assert.False(result.Diagnostics.IsEmpty)
+        assertReports DiagnosticCodes.UnknownIdentifier result
         let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
         Assert.Contains("Unknown identifier", message))
 
@@ -50,13 +50,13 @@ let private csvAndJson =
 [<Fact>]
 let ``A name two imports export is ambiguous where it is used`` () =
     let result = compileImportingAll csvAndJson "module main\nimport csvParser\nimport jsonParser\ndef data = parse(\"x\")"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.AmbiguousName result
     Assert.Contains("'parse' is ambiguous between 'csvParser.parse' and 'jsonParser.parse'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``A name two imports export is ambiguous as a value too`` () =
     let result = compileImportingAll csvAndJson "module main\nimport csvParser\nimport jsonParser\ndef f = parse"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.AmbiguousName result
     Assert.Contains("'parse' is ambiguous", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
@@ -159,24 +159,24 @@ let ``An attached name two imports define is ambiguous where it is used`` () =
         [ "one.nyx", "module one\nexport def string.shout: string -> string = { s -> s }"
           "two.nyx", "module two\nexport def string.shout: string -> string = { s -> s ++ \"!\" }" ]
     let result = compileImportingAll modules "module main\nimport one\nimport two\ndef a = \"x\" \\ shout"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.AmbiguousAttachedFunction result
     Assert.Contains("'string.shout' is defined in 'one' and 'two'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Import does not bring private definitions into scope`` () =
     let result = compileImporting "module mod\nexport def foo = 1\ndef bar = 2" "module main\nimport mod\ndef value = bar"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownIdentifier result
     Assert.Contains("Unknown identifier", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Import with alias does not expose private definitions`` () =
     let result = compileImporting "module mod\nexport def foo = 1\ndef bar = 2" "module main\nimport mod as m1\ndef value = m1.bar"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownIdentifier result
 
 [<Fact>]
 let ``Private definitions of an import cannot be reached by the module's name`` () =
     let result = compileImporting "module mod\nexport def foo = 1\ndef bar = 2" "module main\nimport mod\ndef value = mod.bar"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownIdentifier result
 
 [<Fact>]
 let ``Exported definitions of an import can use its private ones`` () =
@@ -187,18 +187,18 @@ let ``Exported definitions of an import can use its private ones`` () =
 [<Fact>]
 let ``Import does not bring private types into scope`` () =
     let result = compileImporting "module mod\ntype Secret = int\nexport def foo = 1" "module main\nimport mod\ndef value: Secret = 1"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownType result
 
 [<Fact>]
 let ``Private definitions of a nested module are not visible outside it`` () =
     let result = Compiler.compile "module inner =\n  def secret = 1\n  export def open = secret + 1\ndef value = inner.secret"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.NotExported result
     Assert.Contains("'inner.secret' is not exported from module 'inner'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]
 let ``Private functions of a nested module cannot be called outside it`` () =
     let result = Compiler.compile "module inner =\n  def secret = { x -> x + 1 }\n  export def open = { x -> secret(x) }\ndef value = inner.secret(1)"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.NotExported result
     Assert.Contains("is not exported from module 'inner'", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]

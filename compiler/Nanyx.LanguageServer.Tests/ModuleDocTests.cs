@@ -12,7 +12,7 @@ public sealed class ModuleDocTests : LanguageServerTestBase
     [Fact]
     public async Task Hover_on_a_module_line_shows_the_modules_doc_comment()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "module-doc.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("module-doc.nyx"));
 
         Open(uri, """
             --| Plays fizzbuzz.

@@ -159,7 +159,7 @@ let ``Desugar workflow implicit return`` () =
         let desugared = WorkflowDesugaring.desugar ast
         match desugared with
         | [Kind (Def (ValueDef(_, "result", _, Kind (FunctionCall("async", _, [Kind (Lambda([], Kind (Block [Kind (ExprStatement (Kind (LiteralExpr (IntLit64 1L))))]), _))])))))] ->
-            Assert.True(true)
+            ()
         | other -> Assert.True(false, $"Unexpected desugared module: %A{other}")
 
 [<Fact>]
@@ -183,7 +183,7 @@ let ``Typecheck workflow requires return`` () =
         "  return! 1\n" +
         "}"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownMember result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("return", message)
 
@@ -238,7 +238,7 @@ let ``A proc block collects the failures of each try`` () =
         "  | #some(_) -> \"some\"\n" +
         "  | #nil -> \"nil\""
     let partialResult = Compiler.compile partial
-    Assert.False(partialResult.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.NonExhaustiveMatch partialResult
     Assert.Contains("notFound", (List.head partialResult.Diagnostics).Message)
 
 [<Fact>]

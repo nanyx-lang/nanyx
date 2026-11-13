@@ -60,7 +60,7 @@ let ``A function reading fields takes any record that has them`` () =
 [<Fact>]
 let ``A function reading a field rejects a record without it`` () =
     let result = Compiler.compile "def name = { p -> p.name }\ndef a = name((age = 3))\n"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("Record field mismatch: {name} vs {age}", (result.Diagnostics |> List.head).Message)
 
 [<Fact>]

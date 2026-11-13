@@ -33,7 +33,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Code_lenses_show_the_types_of_unannotated_top_level_defs()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "lenses.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("lenses.nyx"));
 
         Open(uri, "def id = { x -> x }\r\ndef answer: int = 42\r\ndef (p, q) = (1, \"s\")\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -55,7 +55,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Inlay_hints_show_the_types_of_unannotated_locals_and_parameters()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "inlay-hints.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("inlay-hints.nyx"));
 
         Open(uri, "def scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset\r\n}\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -75,7 +75,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     public async Task Top_level_inlay_hints_show_top_level_defs_types_as_inlay_hints_instead_of_lenses()
     {
         await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "top-level-hints.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("top-level-hints.nyx"));
 
         Open(uri, "def id = { x -> x }\r\ndef answer: int = 42\r\ndef (p, q) = (1, \"s\")\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -118,7 +118,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     public async Task Top_level_type_hints_off_shows_no_lenses_and_only_the_locals_inlay_hints()
     {
         await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Off });
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "top-level-hints-off.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("top-level-hints-off.nyx"));
 
         Open(uri, "def id = { x -> x }\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -171,7 +171,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Lenses_and_inlay_hints_in_a_document_with_type_errors_read_its_own_types()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hints-error.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hints-error.nyx"));
 
         Open(uri, "def scale = { factor -> factor + missing }\ndef broken = { x -> nope }\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
@@ -188,7 +188,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Lenses_and_inlay_hints_in_a_document_that_has_never_parsed_are_empty()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hints-unparsed.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hints-unparsed.nyx"));
 
         Open(uri, "def scale = { factor -> factor + }\n");
         Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
@@ -203,7 +203,7 @@ public sealed class TypeHintTests : LanguageServerTestBase
     [Fact]
     public async Task Lenses_and_inlay_hints_stay_on_unchanged_defs_while_the_file_does_not_type_check()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "hints-last-good.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hints-last-good.nyx"));
 
         Open(uri, "def id = { x -> x }\r\ndef scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset\r\n}\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
