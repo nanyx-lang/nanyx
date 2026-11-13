@@ -185,7 +185,10 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
                 | Error _ when snd (Unifier.solve next.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok next
                 | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
-                |> Result.bind (fun next -> checkCalledComparisons env next expr name (nameSpan spanOpt expr))
+                |> Result.bind (fun next ->
+                    match next.CalleeTypes |> Map.tryFind expr.Id with
+                    | Some calleeTy -> checkComparisonsAt env next expr name (nameSpan spanOpt expr) calleeTy
+                    | None -> Ok next)
                 |> Result.map (ScopedCalls.leave expr)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
@@ -236,7 +239,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     match contextRequirementsOf env state name with
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
                     | None -> ty, next
-                Ok (mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
+                // A function named as a value is checked as a call to it would be, at the type it is passed as.
+                checkComparisonsAt env next expr name expr.Span ty
+                |> Result.map (fun next -> mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
         | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> inferCall env state expr name spanOpt args

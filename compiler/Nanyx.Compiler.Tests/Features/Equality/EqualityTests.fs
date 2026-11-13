@@ -92,6 +92,26 @@ let ``Calling a local function that compares with functions is an error at the c
         Assert.Equal(expectedAt, at)
 
 [<Fact>]
+let ``Passing a local function that compares as a value is checked at the type it is passed as`` () =
+    let message, at =
+        missingContext """def check = { f -> f({ x -> x + 1 }, { x -> x + 1 }) }
+def b = {
+  def same = { a, b -> a == b }
+  check(same)
+}
+"""
+    Assert.Equal("'same' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
+    Assert.Equal("same", at)
+    compileClean
+        """def check = { f -> f(1, 2) }
+def b = {
+  def same = { a, b -> a == b }
+  check(same)
+}
+"""
+    |> ignore
+
+[<Fact>]
 let ``A def that calls a local function comparing its own type variable requires Eq of it`` () =
     let typed = compileClean "def g = { v ->\n  def same = { x, y -> x == y }\n  same(v, v)\n}\ndef b = g(1)\n"
     match inferredContexts typed with

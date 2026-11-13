@@ -630,13 +630,14 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
         |> OrderingOperators.callHelpers inputOf orderings
         |> ArithmeticInference.callMembers inputOf arithmetic)
 
-/// Checks `call`, a call to `name` that inference has just typed, when `name` needs well-known contexts of variables
-/// of its type that it is passed nothing for: a local function's (see `InferState.LocalComparisons`), and the rests of
-/// the unions a function compares (see `InferState.CheckedRests`). Each needs that context of the type it is at the
-/// call (see `WellKnownContexts.checkLocalCall`).
-let internal checkCalledComparisons (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
-    match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
-    | Some ({ Symbol = Some symbol } as scheme), Some calleeTy when state.LocalComparisons.ContainsKey symbol || state.CheckedRests.ContainsKey symbol ->
+/// Checks `call`, a call to `name` or `name` named as a value, which inference has just typed `calleeTy`, when `name`
+/// needs well-known contexts of variables of its type that it is passed nothing for: a local function's (see
+/// `InferState.LocalComparisons`), and the rests of the unions a function compares (see `InferState.CheckedRests`).
+/// Each needs that context of the type it is at `call` (see `WellKnownContexts.checkLocalCall`). A type not known yet,
+/// as that of a function passed as an argument often is, is checked once the def around it is inferred.
+let internal checkComparisonsAt (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) (calleeTy: Ty) : Result<InferState, Diagnostic list> =
+    match TypeEnv.tryFind name env with
+    | Some ({ Symbol = Some symbol } as scheme) when state.LocalComparisons.ContainsKey symbol || state.CheckedRests.ContainsKey symbol ->
         ContextInference.checkedAtCalls state symbol scheme
         |> Map.toList
         |> List.fold (fun result (ctxName, used) ->

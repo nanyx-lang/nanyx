@@ -48,6 +48,30 @@ def b = {
     Assert.Equal("isNone", at)
 
 [<Fact>]
+let ``A function that compares with a tag, passed as a value, is checked at the type it is passed as`` () =
+    let topLevel =
+        """def isNone = { o -> o == #none }
+def apply = { g, v -> g(v) }
+def f = { n -> n + 1 }
+def b = apply(isNone, #some(f))
+"""
+    let local =
+        """def apply = { g, v -> g(v) }
+def f = { n -> n + 1 }
+def b = {
+  def isNone = { o -> o == #none }
+  apply(isNone, #some(f))
+}
+"""
+    for source in [ topLevel; local ] do
+        let message, at = missingContext (source.ReplaceLineEndings "\n")
+        Assert.Equal(
+            "'isNone' compares values of type '#some(int -> int) | ...', which cannot be compared: the payload of '#some' is a function, and functions have no equality",
+            message
+        )
+        Assert.Equal("isNone", at)
+
+[<Fact>]
 let ``A call to an imported function that compares with a tag is checked too`` () =
     let main =
         """module main
