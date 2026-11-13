@@ -420,3 +420,17 @@ let ``arms after parameters may follow on the arrow's line, after one parameter 
     match (onlyValue "def `>>=` = { m, (f: int -> int) -> | #some(v), f -> f(v) | other, _ -> other }").Kind with
     | Lambda ([ ("m", None); ("f", Some _) ], Kind (Match ([ _; _ ], [ _; _ ])), false) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``a result annotation after the parameters types the body`` () =
+    match (onlyValue "def f = { (x: int): int -> x * 2 }").Kind with
+    | Lambda ([ ("x", Some _) ], Kind (LambdaResultSyntax.Annotated (Kind (TypeName "int"), Kind (BinaryOp ("*", _, _, _)))), false) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    // A function type ends at the arrow, as an unbracketed parameter's does.
+    match (onlyValue "def f = { (): int | string -> 5 }").Kind with
+    | Lambda ([], Kind (LambdaResultSyntax.Annotated (Kind (TypeUnion _), _)), true) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    // Pattern parameters are taken apart first: the annotated body is the match's arm.
+    match (onlyValue "def f = { (a, b): int -> a }").Kind with
+    | Lambda ([ _ ], Kind (Match (_, [ _, Kind (LambdaResultSyntax.Annotated (_, Kind (IdentifierExpr "a"))) ])), false) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"

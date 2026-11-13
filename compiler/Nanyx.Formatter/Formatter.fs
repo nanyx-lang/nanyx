@@ -695,11 +695,16 @@ let format (options: Options) (parsed: SourceModule) : string =
         | None ->
             let parameters, body = writtenLambda e parameters body
             let takesUnit = match e.Kind with Lambda(_, _, takesUnit) -> takesUnit | _ -> false
+            // A result annotation is written after the parameters (see `LambdaResultSyntax`).
+            let resultDoc, body =
+                match body.Kind with
+                | LambdaResultSyntax.Annotated(resultType, inner) when takesUnit || not parameters.IsEmpty -> cat [ text ": "; typeExpr resultType ], inner
+                | _ -> Doc.empty, body
             let head =
                 match parameters with
-                | [] when takesUnit -> text "{ () ->"
+                | [] when takesUnit -> cat [ text "{ ()"; resultDoc; text " ->" ]
                 | [] -> text "{"
-                | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); text " ->" ]
+                | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); resultDoc; text " ->" ]
             // A body on its own line is read as a statement, which can't take a range, so where the layout is ours to
             // choose, a body that would need parentheses there stays on the `->`'s line instead, as does a block of just
             // that body in parentheses.

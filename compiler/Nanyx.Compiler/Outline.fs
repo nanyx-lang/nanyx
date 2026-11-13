@@ -82,6 +82,7 @@ let rec private localItems (declared: DeclaredNames) (value: Expression) : Outli
     let statements =
         match value.Kind with
         | Block statements
+        | Lambda(_, Kind (LambdaResultSyntax.Annotated(_, Kind (Block statements))), _)
         | Lambda(_, Kind (Block statements), _) -> statements
         | _ -> []
     statements

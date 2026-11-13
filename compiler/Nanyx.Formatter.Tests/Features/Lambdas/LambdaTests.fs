@@ -13,6 +13,14 @@ let ``An annotated lambda parameter is bracketed`` () =
     Assert.Equal("def f = { (g: int -> int) -> g(1) }\n", format "def f = { g: (int -> int) -> g(1) }")
 
 [<Fact>]
+let ``A lambda's result annotation is printed after its parameters`` () =
+    unchanged "def f = { (x: int): int -> x * 2 }\n"
+    unchanged "def g = { (): string -> \"u\" }\n"
+    unchanged "def h = { (a, b): int -> a + b }\n"
+    unchanged (lines [ "def k = { (x: int): int ->"; "  def y = x + 1"; "  y * 2"; "}" ])
+    Assert.Equal("def f = { (x: int): int -> x }\n", format "def f = {(x:int):int->x}")
+
+[<Fact>]
 let ``Pattern parameters are printed as written`` () =
     unchanged "def a = { (x, y) -> x + y }\n"
     unchanged "def b: $Email -> string = { $Email(s) -> s }\n"
