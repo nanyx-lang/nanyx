@@ -170,12 +170,12 @@ let private staticClosureOffsets (closures: (string * int) list) (start: int) =
 /// info word of 0, since nothing ever drops it.
 let private staticClosureData (offset: int) (slot: int) =
     let bytes = Array.concat [ BitConverter.GetBytes 0; BitConverter.GetBytes 0; BitConverter.GetBytes slot ]
-    $"  (data (i32.const {offset - 8}) \"{escapeWasmData bytes}\")"
+    $"""  (data (i32.const {offset - 8}) "{escapeWasmData bytes}")"""
 
 /// The data segments that lay out `entries` (see `buildStringLiteralMap`).
 let private renderDataSegments (entries: (string * int * byte array) list) =
     entries
-    |> List.map (fun (_, offset, bytes) -> $"  (data (i32.const {offset}) \"{escapeWasmData bytes}\")")
+    |> List.map (fun (_, offset, bytes) -> $"""  (data (i32.const {offset}) "{escapeWasmData bytes}")""")
     |> String.concat "\n"
 
 /// A module of just the allocator, exporting `alloc`, `free` and the memory, so that tests can drive it directly. With
@@ -187,24 +187,24 @@ let allocatorModuleWat (options: WasmOptions) =
     let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
     [ yield "(module"
       if options.CheckMemory then
-          yield "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))"
-          yield $"  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func ${Helpers.procExit} (param i32)))"
+          yield """  (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))"""
+          yield $"""  (import "wasi_snapshot_preview1" "proc_exit" (func ${Helpers.procExit} (param i32)))"""
       yield "  (memory 1)"
-      yield "  (export \"memory\" (memory 0))"
+      yield """  (export "memory" (memory 0))"""
       yield $"  (global $heap_ptr (mut i32) (i32.const {heapStartOffset heapBase}))"
       yield helpers |> Map.find Helpers.alloc
       yield helpers |> Map.find Helpers.free
-      yield $"  (export \"alloc\" (func ${Helpers.alloc}))"
-      yield $"  (export \"free\" (func ${Helpers.free}))"
+      yield $"""  (export "alloc" (func ${Helpers.alloc}))"""
+      yield $"""  (export "free" (func ${Helpers.free}))"""
       if options.CheckMemory then
           yield renderDataSegments messageData
           yield memoryCheckFunctions heapBase (fun message -> messageOffsets |> Map.find message)
           for name in [ Helpers.retain; Helpers.release; Helpers.stringLength; Helpers.writeStderr ] do
               yield helpers |> Map.find name
-          yield $"  (export \"retain\" (func ${Helpers.retain}))"
-          yield $"  (export \"release\" (func ${Helpers.release}))"
-          yield $"  (export \"{CheckedExports.liveBlocks}\" (global ${MemoryChecks.liveBlocks}))"
-          yield $"  (export \"{CheckedExports.allocations}\" (global ${MemoryChecks.allocations}))"
+          yield $"""  (export "retain" (func ${Helpers.retain}))"""
+          yield $"""  (export "release" (func ${Helpers.release}))"""
+          yield $"""  (export "{CheckedExports.liveBlocks}" (global ${MemoryChecks.liveBlocks}))"""
+          yield $"""  (export "{CheckedExports.allocations}" (global ${MemoryChecks.allocations}))"""
       yield ")" ]
     |> String.concat "\n"
 
@@ -731,7 +731,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
             let directive =
-                if options.CheckMemory then $"  (export \"{CheckedExports.start}\" (func ${CoreIrLowerInput.startFunctionName}))"
+                if options.CheckMemory then $"""  (export "{CheckedExports.start}" (func ${CoreIrLowerInput.startFunctionName}))"""
                 else $"  (start ${CoreIrLowerInput.startFunctionName})"
             emitted.Text, directive
         | None -> "", ""
@@ -798,24 +798,24 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               |> List.map (fun name -> helpers |> Map.find name)
           if checksMemory then
               yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
-              yield $"  (export \"{CheckedExports.liveBlocks}\" (global ${MemoryChecks.liveBlocks}))"
-              yield $"  (export \"{CheckedExports.allocations}\" (global ${MemoryChecks.allocations}))"
+              yield $"""  (export "{CheckedExports.liveBlocks}" (global ${MemoryChecks.liveBlocks}))"""
+              yield $"""  (export "{CheckedExports.allocations}" (global ${MemoryChecks.allocations}))"""
           if options.CheckMemory && moduleUsesHeap then
-              yield $"  (export \"{CheckedExports.heapPointer}\" (global $heap_ptr))" ]
+              yield $"""  (export "{CheckedExports.heapPointer}" (global $heap_ptr))""" ]
         |> String.concat "\n"
 
     let dbgPrelude =
         if moduleUsesIoHelpers then
-            [ "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))"
+            [ """  (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))"""
               if moduleReadsStdin then
-                  "  (import \"wasi_snapshot_preview1\" \"fd_read\" (func $fd_read (param i32 i32 i32 i32) (result i32)))"
+                  """  (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32 i32) (result i32)))"""
               if usedHelperSet.Contains Helpers.procExit then
-                  "  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func $proc_exit (param i32)))"
+                  """  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))"""
               memoryDirective
-              "  (export \"memory\" (memory 0))"
+              """  (export "memory" (memory 0))"""
               if facts.UsesDbgHelpers then
-                  $"  (data (i32.const {dbgDataBaseOffset}) \"dbg: \")"
-                  $"  (data (i32.const {dbgStrNewlineOffset}) \"\\0a\")"
+                  $"""  (data (i32.const {dbgDataBaseOffset}) "dbg: ")"""
+                  $"""  (data (i32.const {dbgStrNewlineOffset}) "\0a")"""
                   yield! dbgFunctions ]
             |> String.concat "\n"
         else
@@ -885,7 +885,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         (not (List.isEmpty stringLiteralData && List.isEmpty facts.StaticClosures) || functionsUseMemory) && not moduleUsesIoHelpers
     let memorySection =
         if needsMemory then
-            memoryDirective + "\n  (export \"memory\" (memory 0))"
+            memoryDirective + "\n" + """  (export "memory" (memory 0))"""
         else
             ""
 
