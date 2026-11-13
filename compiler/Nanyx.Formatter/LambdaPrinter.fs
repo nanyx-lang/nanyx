@@ -68,13 +68,18 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                 | Block [ { Kind = ExprStatement single } ] when
                     bodyOnOwnLine && bracketedAsStatement single && not (sourceText.Valid e.Span && hasCommentsIn e.Span.Start e.Span.End) -> single
                 | _ -> body
-            match body.Kind with
+            match body.Kind, parts.SemicolonLine body with
+            // Statements separated by `;` stay between the braces on one line if they fit there, or on a line of their
+            // own with `bodyOnOwnLine`, and are otherwise one per line.
+            | _, Some line when not (sourceText.Valid e.Span && hasCommentsIn e.Span.Start e.Span.End) ->
+                if bodyOnOwnLine then cat [ head; nest (cat [ hard; Doc.group (line ()) ]); hard; text "}" ]
+                else Doc.group (cat [ head; nest (cat [ Doc.line; line () ]); Doc.line; text "}" ])
             // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
             // its braces go among them.
-            | Block statements when isWrittenBlock body ->
+            | Block statements, _ when isWrittenBlock body ->
                 cat [ head; nest (cat [ hard; parts.StatementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
-            | _ when bodyOnOwnLine && not (bracketedAsStatement body) -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
-            | _ ->
+            | _, _ when bodyOnOwnLine && not (bracketedAsStatement body) -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
+            | _, _ ->
                 let bodyDoc = expr full body
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
                 let head =

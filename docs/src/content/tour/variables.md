@@ -51,6 +51,23 @@ So a block has to end with an expression. One that ends with a `def` has no valu
 
 The defs in a block are only in scope inside it.
 
+# Several statements on one line
+
+A `;` separates statements written on one line: `a; b` means the same as `a` and `b` on lines of their own, at the block's indent.
+
+```nanyx
+def result =
+  def a = 10; def b = 20; a + b
+
+def double = { n -> def twice = n * 2; twice }
+```
+
+It works in every block: a function's body, a lambda's, a match arm's and an `if`'s branches. The `;` belongs to the innermost of them. In `if ready then log(n); n`, both statements are the `then` branch's, as they would be on lines of their own under it, and in `| 0 -> log(n); n` both are the arm's. To run something after the whole `if` or `match`, start a new line.
+
+A `;` only goes between two statements, so one at the end of a line, or two in a row, is an error. Top-level definitions can't be separated by `;`: each goes on a line of its own.
+
+The formatter keeps statements separated by `;` on one line while they fit, with one space after each `;`, and otherwise puts each statement on a line of its own. The official linter's [`semicolons`](../standard-tools/official-linter#statements-separated-by-) rule warns about every `;`; turn it off if you like short sequences on one line.
+
 # `do` blocks
 
 To start a block of your own in the middle of another, write `do` and put the block's statements on the lines after it, indented. The defs in it are gone once the block ends, so a `do` block keeps names that are only needed for a moment out of the code after it. A def in it can also reuse a name from outside, without changing what that name means after the block:

@@ -105,7 +105,12 @@ what the compiler keeps: exact spans, resolved names and types.
   without a colon (`[Log] string -> ()`), rather than after the name, and shows only the parameterised contexts it
   was inferred to need besides (`InferredContextTypes`). Each hint carries its declaration's
   `SymbolKind`, so the server's settings can turn off the hints for local defs, parameters or pattern variables
-  one kind at a time. Like hover, they come from the current text
+  one kind at a time. An inlay hint carries a text edit (`InlayHint.textEdits`) that writes its type as an annotation
+  where it is shown, which VS Code applies on a double-click. The edit's type is written in `TypeNotation.Source`, the
+  ASCII notation with a union's rest always named (`#some(a) | z`, as source can't spread a union), and named together
+  with the def's other types, so the annotated def checks to the same type. A lambda parameter's function type is
+  bracketed, `{ f: ([c] int -> a) -> ... }`, as the arrow would end its parameters. A pattern variable, a name a destructuring
+  def binds and a type with `???` in it get no edit (`TypeHint.Annotation` is absent). Like hover, they come from the current text
   when it parses, with `???` where an error left a type unknown (`α -> ???`), and from the last good compile while
   it does not, so then only the def being edited loses its lens.
 - **Completion of the names in scope** ([#212](https://github.com/nanyx-lang/nanyx/issues/212)), with their

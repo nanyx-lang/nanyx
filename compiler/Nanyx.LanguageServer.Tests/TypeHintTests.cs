@@ -169,6 +169,136 @@ public sealed class TypeHintTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Inlay_hints_insert_their_type_as_an_annotation()
+    {
+        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        var uri = DocumentUri.Parse("untitled:Untitled-12");
+
+        Open(uri, """
+            def pair = { x ->
+              def inner = { y -> (x, y) }
+              inner
+            }
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // The label is in the reader's notation, the edit in source's; each hint says it can be double-clicked.
+        var hints = await InlayHintsIn(uri, new Range(0, 0, 4, 0));
+        Assert.Equal(
+            [
+                (new Position(0, 8), ": α -> β -> (α, β)", ": a -> b -> (a, b)"),
+                (new Position(0, 14), ": α", ": a"),
+                (new Position(1, 11), ": γ -> (α, γ)", ": c -> (a, c)"),
+                (new Position(1, 17), ": γ", ": c")
+            ],
+            hints.Select(hint => (hint.Position, hint.Label.String, Assert.Single(hint.TextEdits!).NewText)));
+        Assert.All(hints, hint => Assert.Equal(new Range(hint.Position, hint.Position), hint.TextEdits!.Single().Range));
+        Assert.All(hints, hint => Assert.NotNull(hint.Tooltip));
+    }
+
+    [Fact]
+    public async Task Inlay_hints_that_source_cannot_write_as_an_annotation_insert_nothing()
+    {
+        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        var uri = DocumentUri.Parse("untitled:Untitled-13");
+
+        // A name a destructuring def binds and a pattern variable can't be annotated, nor can a type that failed to
+        // check be written.
+        Open(uri, """
+            def (p, q) = (1, "s")
+            def rest = { items -> match items
+              | [_, ...tail] -> tail
+              | _ -> items }
+            def broken = { x -> nope }
+            """.ReplaceLineEndings("\n"));
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        Assert.Equal(
+            [
+                (new Position(0, 6), false), (new Position(0, 9), false),
+                (new Position(1, 8), true), (new Position(1, 18), true), (new Position(2, 15), false),
+                (new Position(4, 10), false), (new Position(4, 16), true)
+            ],
+            (await InlayHintsIn(uri, new Range(0, 0, 5, 0))).Select(hint => (hint.Position, hint.TextEdits is not null)));
+    }
+
+    [Theory]
+    [InlineData("""
+        def scale = { factor ->
+          def offset = 1
+          factor * 2 + offset
+        }
+        """)]
+    [InlineData("""
+        def id = { x -> x }
+        def pair = { x ->
+          def inner = { y -> (x, y) }
+          inner
+        }
+        def first = { x, y -> x }
+        """)]
+    [InlineData("""
+        def getName = { r -> r.name }
+        def describe = { r -> "{r.name} is {r.age}" }
+        def nameOf = { r ->
+          def name = r.name
+          name
+        }
+        """)]
+    [InlineData("""
+        def apply = { f, x -> f(x) }
+        def compose = { f, g -> { x -> g(f(x)) } }
+        def twice = { f -> { x -> f(f(x)) } }
+        """)]
+    [InlineData("""
+        context Log = (log: string -> ())
+        def greet: [Log] = { name -> log(name) }
+        def run: [Log] () -> () = {
+          def say = { s -> log(s) }
+          say("hi")
+        }
+        def each = { xs, f -> xs \list.map { x -> f(x) } }
+        """)]
+    [InlineData("""
+        def opt = { x -> if x > 0 then #some(x) else #none }
+        def orZero = { o -> match o
+          | #some(v) -> v
+          | _ -> 0 }
+        """)]
+    public async Task Inserting_every_inlay_hint_gives_a_program_with_the_same_types(string source)
+    {
+        await RestartWithAsync(ServerSettings.Default with { TopLevelTypeHints = TopLevelTypeHints.Inlay });
+        var uri = DocumentUri.Parse("untitled:Untitled-14");
+        source = source.ReplaceLineEndings("\n");
+
+        Open(uri, source);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+        var hints = await InlayHintsIn(uri, new Range(0, 0, source.Split('\n').Length, 0));
+        var written = hints.Where(hint => hint.TextEdits is not null).ToList();
+
+        // Applied from the last, so each edit's position is still where it was.
+        var lines = source.Split('\n');
+        foreach (var hint in written.OrderByDescending(hint => hint.Position))
+        {
+            var edit = hint.TextEdits!.Single();
+            var line = lines[edit.Range.Start.Line];
+            lines[edit.Range.Start.Line] = line.Insert(edit.Range.Start.Character, edit.NewText);
+        }
+        var annotated = string.Join("\n", lines);
+
+        var before = NyxCompiler.Compiler.compile(source);
+        var after = NyxCompiler.Compiler.compile(annotated);
+        Assert.Empty(after.Diagnostics);
+        Assert.Equal(TopLevelTypes(before), TopLevelTypes(after));
+        // What could be written is, so only the pattern variables are left to hint.
+        Assert.Equal(
+            hints.Count - written.Count,
+            NyxCompiler.TypeHints.inlayHintsWithTopLevel(NyxCompiler.TypeNotation.Ascii, "", after).Length);
+        static IEnumerable<(string, string)> TopLevelTypes(NyxCompiler.CompileResult result) =>
+            NyxCompiler.TypeHints.topLevelTypes(NyxCompiler.TypeNotation.Source, "", result).Select(hint => (hint.Name, hint.Type));
+    }
+
+    [Fact]
     public async Task Lenses_and_inlay_hints_in_a_document_with_type_errors_read_its_own_types()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("hints-error.nyx"));
