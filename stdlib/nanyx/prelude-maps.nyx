@@ -163,6 +163,36 @@ export def map.update
     map.insert(m, key, f(map.get(m, key)))
   }
 
+--| The entries of `m`, then those of `other` whose keys `m` does not have. Where both have a key,
+  the value is `other`'s, as a later entry wins in `map.fromList`.
+export def map.union: [Eq(k) & Hash(k)] map(k, v), map(k, v) -> map(k, v) = { m, other ->
+  insertAll(m, __nanyx_map_entries(other))
+}
+
+--| `m` with each of `entries` inserted in turn, where `m` has the key already holding `combine` of
+  its value and the entry's.
+def combineAll: [Eq(k) & Hash(k) & c] map(k, v), list((k, v)), ([c] v, v -> v) -> map(k, v) = {
+  | m, [], _ -> m
+  | m, [(key, value), ...rest], combine ->
+    def combined = map.update(
+      m
+      key
+      {
+        | #some(old) -> combine(old, value)
+        | #notFound -> value
+      }
+    )
+
+    combineAll(combined, rest, combine)
+}
+
+--| As `map.union`, but where both have a key the value is `combine` of `m`'s value and `other`'s.
+export def map.unionWith
+  : [Eq(k) & Hash(k) & c] map(k, v), map(k, v), ([c] v, v -> v) -> map(k, v)
+  = { m, other, combine ->
+    combineAll(m, __nanyx_map_entries(other), combine)
+  }
+
 -- Sets ------------------------------------------------------------------------------------------
 --
 -- A `set(a)` holds each of its elements once. It is made with `set.fromList([1, 2, 2, 3])`, or

@@ -167,6 +167,36 @@ counts \map.update("tea", bump) \map.update("cake", bump)
 
 ---
 
+## union
+
+```nanyx
+map.union: [Eq(k) & Hash(k)] (map(k, v), map(k, v)) -> map(k, v)
+```
+
+The entries of a map, then those of another map whose keys the first does not have. Where both have a key, the value is the second map's, as a later entry wins in `map.fromList`, so `defaults \map.union(overrides)` gives the overrides.
+
+```nanyx
+["width" => 80, "tabs" => 2] \map.union(["tabs" => 4, "wrap" => 1])
+-- ["width" => 80, "tabs" => 4, "wrap" => 1]
+```
+
+---
+
+## unionWith
+
+```nanyx
+map.unionWith: [Eq(k) & Hash(k) & c] (map(k, v), map(k, v), ([c] (v, v) -> v)) -> map(k, v)
+```
+
+As `map.union`, but where both maps have a key, its value is a function of the first map's value and the second's.
+
+```nanyx
+["tea" => 2, "cake" => 1] \map.unionWith(["cake" => 5, "pie" => 4], { a, b -> a + b })
+-- ["tea" => 2, "cake" => 6, "pie" => 4]
+```
+
+---
+
 ## fold
 
 ```nanyx
