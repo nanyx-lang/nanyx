@@ -100,7 +100,8 @@ let ``A build tells its caller each source file as it starts on it, in order`` (
         { new CompileListener with
             member _.FileStarted file = started.Add file
             member _.ModuleStarted _ = ()
-            member _.ModuleFinished(_, _) = () }
+            member _.ModuleFinished(_, _) = ()
+            member _.ModuleReused _ = () }
     let build = Package.buildReporting listener found
     Assert.Empty(build.Diagnostics)
     Assert.Equal<string list>(found.Sources, List.ofSeq started)

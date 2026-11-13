@@ -654,11 +654,13 @@ module Compiler =
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
     /// standard-library module is checked once per process (see `checkedStandardLibrary`), and the modules it imports
-    /// come into this compilation with it.
+    /// come into this compilation with it. A module already checked is reported to the listener as reused.
     and private typecheckImport (checkedModules: CheckedModules) (origin: ModuleOrigin) (readSource: unit -> string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         match checkedModules.TryGetValue key with
-        | true, checkedModule -> checkedModule
+        | true, checkedModule ->
+            checkedModules.Listener.ModuleReused key
+            checkedModule
         | false, _ ->
             let checkedModule =
                 match origin with
@@ -669,7 +671,9 @@ module Compiler =
                             (let own = CheckedModules(None, None, checkedModules.Listener)
                              let checkedModule = typecheckModule own origin source visited
                              checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
-                    let checkedModule, imports = checkedStandardLibrary.GetOrAdd((key, source), check).Value
+                    let checking = checkedStandardLibrary.GetOrAdd((key, source), check)
+                    if checking.IsValueCreated then checkedModules.Listener.ModuleReused key
+                    let checkedModule, imports = checking.Value
                     for importKey, imported in imports do
                         checkedModules.TryAdd(importKey, imported) |> ignore
                     checkedModule

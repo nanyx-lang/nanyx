@@ -1,6 +1,7 @@
 module TranspilerWasmTests.Features.Packages.Commands
 
 open System.IO
+open System.Text.RegularExpressions
 open Xunit
 open TranspilerWasmTestHelpers
 
@@ -72,7 +73,7 @@ let ``Check - a package, however it is named, reports what build does and writes
     Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")))
 
 [<Fact>]
-let ``Build --timings - writes each module's time and the program's to stderr, and nothing else changes`` () =
+let ``Build --timings - writes each module's check and the program's emit to stderr, and nothing else changes`` () =
     use directory = new TempDirectory()
     copyGreeter directory.Path
     let plain = nanyxIn directory.Path [ "build" ]
@@ -81,12 +82,43 @@ let ``Build --timings - writes each module's time and the program's to stderr, a
     Assert.Equal(normalizeOutput plain.StandardOutput, normalizeOutput timed.StandardOutput)
     Assert.Empty(plain.StandardError)
     let lines = (normalizeOutput timed.StandardError).Split('\n') |> List.ofArray
-    Assert.Equal("    total      self  module", List.head lines)
-    // Each of the package's files, once, by the path the user would write.
+    // Each of the package's files checked once, by the path the user would write, with its own and total time.
     for source in [ "main.nyx"; "greetings.nyx" ] do
-        let row = Assert.Single(lines |> List.filter (fun line -> line.EndsWith(Path.Combine("src", source))))
-        Assert.Matches(@"^ +\d+\.\d{3}s +\d+\.\d{3}s  src", row)
+        let checkedLines = lines |> List.filter (fun line -> line.Contains(Path.Combine("src", source) + " ("))
+        Assert.Single(checkedLines |> List.filter (fun line -> not (line.EndsWith "(cached)"))) |> ignore
+        for line in checkedLines do
+            Assert.Matches(@"src.\w+\.nyx \((\d+\.\d\ds of \d+\.\d\ds|cached)\)$", line)
     Assert.True(lines |> List.exists (fun line -> line.StartsWith "Emitted the program in "), timed.StandardError)
+
+[<Fact>]
+let ``Check --timings - writes the modules' checks as a tree, with a module checked before shown as cached`` () =
+    let outcome, _ =
+        nanyxOnPackage
+            [ "main.nyx", "module main\n\nimport a\nimport b\n\n@entry\ndef main = {\n  println(\"{one + two}\")\n}\n"
+              "a.nyx", "module a\n\nimport c\n\nexport def one = zero + 1\n"
+              "b.nyx", "module b\n\nimport c\n\nexport def two = zero + 2\n"
+              "c.nyx", "module c\n\nexport def zero = 0\n" ]
+            [ "check"; "--timings"; "{package}" ]
+    assertSucceeded outcome
+    // The package's own modules, without their times or where the package is; the standard library's lines are left
+    // out, since which of them a check reports depends on what the process checked before.
+    let shape =
+        (normalizeOutput outcome.StandardError).Split('\n')
+        |> Array.filter (fun line -> line.Contains ".nyx")
+        |> Array.map (fun line ->
+            let line = Regex.Replace(line, @"\S*src[\\/](\w+\.nyx)", "src/$1")
+            Regex.Replace(line, @" \(\d+\.\d\ds of \d+\.\d\ds\)", ""))
+        |> String.concat "\n"
+    let expected =
+        """src/a.nyx
+└── src/c.nyx
+src/b.nyx
+└── src/c.nyx (cached)
+src/c.nyx (cached)
+src/main.nyx
+├── src/a.nyx (cached)
+└── src/b.nyx (cached)"""
+    Assert.Equal(expected.ReplaceLineEndings "\n", shape)
 
 [<Fact>]
 let ``Check - a package with an error fails, even one that a debug build would defer`` () =

@@ -6,7 +6,7 @@ using NyxCompiler;
 /// that file's compile is checking, and for how long: <c>Compiling src/main.nyx › nanyx/list… 4.7s</c>, rewritten in
 /// place ten times a second, then replaced by <c>Compiled greeter (12 files) in 4.7s</c> when it finishes. It writes
 /// only when stderr is a terminal: a log or a pipe sees nothing, so output under CI and in tests is unchanged. With
-/// <c>timings</c>, it also records how long each module's check took and writes the table to stderr after the final
+/// <c>timings</c>, it also records how long each module's check took and writes them as a tree to stderr after the final
 /// line, whether or not stderr is a terminal. Stop it with <see cref="Finish"/> before anything else is written, or the
 /// next line lands on top of the stopwatch. Give the compiler <see cref="Listener"/> to hear from it.
 /// </summary>
@@ -94,9 +94,14 @@ internal sealed class CompileProgress : CompileListener, IDisposable
         Redraw();
     }
 
+    /// <summary>A module already checked costs nothing, so the stopwatch has nothing to show for it.</summary>
+    public void ModuleReused(string name)
+    {
+    }
+
     /// <summary>
-    /// Stops the stopwatch and leaves "Compiled {what} in {elapsed}" where it was, then the timings table when timings
-    /// are recorded. A second call does nothing.
+    /// Stops the stopwatch and leaves "Compiled {what} in {elapsed}" where it was, then the tree of module checks when
+    /// timings are recorded. A second call does nothing.
     /// </summary>
     public void Finish()
     {
@@ -133,8 +138,7 @@ internal sealed class CompileProgress : CompileListener, IDisposable
 
             if (_timings is not null)
             {
-                var timings = _timings.Timings.Select(timing => new ModuleTiming(_display(timing.Name), timing.Total, timing.Self));
-                _errors.WriteLine(ModuleTimingModule.table(Microsoft.FSharp.Collections.ListModule.OfSeq(timings)));
+                _errors.WriteLine(ModuleCheckModule.tree(Microsoft.FSharp.Core.FuncConvert.FromFunc(_display), _timings.Checks));
             }
         }
     }
