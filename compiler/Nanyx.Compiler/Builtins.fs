@@ -208,6 +208,10 @@ module StandardLibrary =
         && Path.GetFileName(Path.GetDirectoryName file) = packageName
         && files.Value |> List.exists (fun (name, _) -> name = importPrefix + Path.GetFileName file)
 
+    /// The module the library's file `name` (its resource name, as `nanyx/prelude-lists.nyx`) declares, if it has one.
+    let tryModuleOfFile (name: string) : string option =
+        files.Value |> List.tryFind (fun (file, _) -> file = name) |> Option.map snd
+
     /// The source of a standard-library module, or None when the library has no module of that name.
     let tryLoadSource (moduleName: string) : string option =
         tryLoadFile (resourceName moduleName)

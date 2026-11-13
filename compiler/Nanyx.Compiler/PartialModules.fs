@@ -6,17 +6,31 @@ open Parser.Program
 /// A file as parsed: its items, the names its nodes declare, and its `module name =` blocks.
 type ParsedFile = Module * DeclaredNames * (ModuleName * SourceSpan) list
 
-/// The other files of a module split across files, each as its path and its text, with how messages name a file.
+/// The other files of a module split across files, each as its path and its text, with how messages name a file and
+/// the name its items are put in order by.
 type ModuleFragments =
     { Others: (string * string) list
-      Display: string -> string }
+      Display: string -> string
+      Order: string -> string }
+
+/// A file of the standard library open in the editor, which is checked as the module `Module` it is a file of, in place
+/// of the embedded file: its resource name (`nanyx/prelude-lists.nyx`), and the path its syntax nodes are reported in,
+/// which is the editor's.
+type EditedLibraryFile =
+    { Module: string
+      Resource: string
+      Path: string }
+
+    /// The resource name of the file at `path`: the edited file's if it is that file, or else `path` itself.
+    member edited.ResourceOf(path: string) = if path = edited.Path then edited.Resource else path
 
 /// Modules split across files: each file declares `@partial module name`, and together they are one module, as if
 /// their items were written in one file. The imports of every fragment apply to the whole module.
 module PartialModules =
     /// The other files that declare the module `name` that the file from `origin` declares: in a package, the
-    /// package's other files that declare it (see `PackageModules`); in the standard library, its other files.
-    let otherFragments (package: PackageModules option) (origin: ModuleOrigin) (name: string) : ModuleFragments =
+    /// package's other files that declare it (see `PackageModules`); in the standard library, its other files, or, for
+    /// the file `edited` names, every file of its module but that one.
+    let otherFragments (package: PackageModules option) (edited: EditedLibraryFile option) (origin: ModuleOrigin) (name: string) : ModuleFragments =
         match origin, package with
         | SourceFile path, Some modules when PackageModules.contains modules path ->
             let others =
@@ -24,10 +38,14 @@ module PartialModules =
                 |> Map.tryFind name
                 |> Option.defaultValue []
                 |> List.filter (PackageModules.samePath path >> not)
-            { Others = others |> List.map (fun file -> file, File.ReadAllText file); Display = PackageModules.display modules }
+            { Others = others |> List.map (fun file -> file, File.ReadAllText file); Display = PackageModules.display modules; Order = id }
         | StandardLibraryModule moduleName, _ when moduleName = name ->
-            { Others = StandardLibrary.otherFragments moduleName; Display = id }
-        | _ -> { Others = []; Display = id }
+            match edited with
+            | Some edited when edited.Module = moduleName ->
+                let others = StandardLibrary.moduleSources moduleName |> List.filter (fun (file, _) -> file <> edited.Resource)
+                { Others = others; Display = edited.ResourceOf; Order = edited.ResourceOf }
+            | _ -> { Others = StandardLibrary.otherFragments moduleName; Display = id; Order = id }
+        | _ -> { Others = []; Display = id; Order = id }
 
     /// `syntax` without its module declaration's `@partial`, and whether it had one.
     let private unmarked (syntax: Module) : Module * bool =
@@ -71,7 +89,7 @@ module PartialModules =
                         // In order of path, whichever fragment is being compiled, so each reports the same diagnostics.
                         let items =
                             (span.File, rootSyntax) :: (others |> List.map (fun (path, (items, _), _, blocks) -> path, withoutDeclaration items blocks))
-                            |> List.sortWith (fun (a, _) (b, _) -> System.String.CompareOrdinal(a, b))
+                            |> List.sortWith (fun (a, _) (b, _) -> System.String.CompareOrdinal(fragments.Order a, fragments.Order b))
                             |> List.collect snd
                         Ok
                             (items,
