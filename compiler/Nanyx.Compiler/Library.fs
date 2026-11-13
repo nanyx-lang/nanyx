@@ -139,6 +139,249 @@ module Compiler =
     let private checkedStandardLibrary =
         System.Collections.Concurrent.ConcurrentDictionary<string * string, Lazy<Result<CheckedModule, CompilationPhase * Diagnostic list> * (string * Result<CheckedModule, CompilationPhase * Diagnostic list>) list>>()
 
+    /// What a module's imports have brought in so far, as `typecheckModule` merges them one by one.
+    type private MergedImports =
+        { Env: TypeEnv
+          State: NyxCompiler.Infer.InferState
+          Errors: Diagnostic list
+          Inlined: TopLevelItem list
+          /// Kept apart and inlined last, so that where an explicit import defines the same name, its definition is kept.
+          PreludeInlined: TopLevelItem list
+          PreludeTypeNames: Set<string>
+          InlinedTypes: Map<string, Ty>
+          /// Where the calls in the imported modules' definitions, which are inlined, find their instances.
+          InlinedInstances: Map<NodeId, ContextInstance option list>
+          /// The instances the `use`s in the imported modules' definitions load.
+          InlinedUseContexts: Map<NodeId, TypeExpr>
+          /// The types of the defs the imports bring in, with the contexts they require (see `ImportedContextTypes`).
+          ImportedContextTypes: Map<SymbolId, Ty * Ty list>
+          /// The modules that bring each name in unqualified, by the module's key, with the name of the module.
+          /// The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
+          UnqualifiedSources: Map<string, (string * string) list>
+          ImportedFiles: Map<SymbolId, ImportedFile>
+          /// The module's re-exports as each is merged, with the module it re-exports from.
+          ReExports: ReExported list }
+
+    /// Merges the import `item` of `imported` into `merged`, and gives back the import's symbol, if it has one. A
+    /// made-up import has none; what it brings in is used through `through`, if given, as a re-export's names are
+    /// used through the import of the module that re-exports them. `preludeKey` is the prelude's `originKey`.
+    let private mergeImport (preludeKey: string) (importedOrigin: ModuleOrigin) (item: ImportItem) (through: SymbolId option) (imported: CheckedModule) (merged: MergedImports) : MergedImports * SymbolId option =
+        let state = merged.State
+        let importedKey = originKey importedOrigin
+        let qualifier = ModuleLinking.importQualifier item
+        let exportedValues = ModuleLinking.exportedValueNames imported.Own
+        // An import brings in every export, or only those it selects.
+        let selected = item.Selection |> Option.map (ModuleLinking.selectedExports imported)
+        let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
+        let unqualifiedSources =
+            if qualifier.IsNone && importedKey <> preludeKey then
+                let moduleName =
+                    match imported.Name, item.Source with
+                    | Some name, _ -> name
+                    | None, ModuleImport name -> name
+                    | None, PathImport path -> path
+                exportedValues
+                |> Set.filter isSelected
+                |> Set.fold (fun acc name ->
+                    let sources = acc |> Map.tryFind name |> Option.defaultValue []
+                    if sources |> List.exists (fun (key, _) -> key = importedKey) then acc
+                    else acc |> Map.add name (sources @ [ importedKey, moduleName ])) merged.UnqualifiedSources
+            else
+                merged.UnqualifiedSources
+        let exportedTypes = ModuleLinking.exportedTypeNames imported.Own
+        let exportedValueTypes =
+            imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name)
+        let exportedTypeDefs =
+            imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
+        // The exported definitions, declared in the imported module's file.
+        let exportedSymbols =
+            imported.Exports
+            |> Map.filter (fun name _ -> exportedValues.Contains name)
+            |> Map.values
+            |> Seq.map (fun symbol -> symbol.Id, symbol)
+            |> Map.ofSeq
+        // The exported types and their contexts' members, declared in the imported module's file too.
+        let exportedTypeSymbols =
+            exportedTypeDefs
+            |> Map.values
+            |> Seq.collect (fun info -> Option.toList info.Symbol @ (info.Members |> Map.values |> List.ofSeq))
+            |> Seq.choose (fun id -> imported.Typed.Symbols |> Map.tryFind id)
+            |> Seq.map (fun symbol -> symbol.Id, symbol)
+            |> Map.ofSeq
+        let env = ModuleLinking.extendEnvWithImport merged.Env qualifier (exportedValueTypes |> Map.filter (fun name _ -> isSelected name)) (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
+        // The import is a symbol of its own, unless the compiler made it up (for `@entry`).
+        let importedThroughSymbol (importId: SymbolId) =
+            Seq.append exportedSymbols exportedTypeSymbols
+            |> Seq.fold (fun acc (KeyValue(id, _)) ->
+                acc |> Map.add id ((acc |> Map.tryFind id |> Option.defaultValue []) @ [ importId ])) state.ImportedThrough
+        let importSymbols, importedThrough, importedFiles, state =
+            if SourceSpan.isNone item.Span then
+                Map.empty, (through |> Option.map importedThroughSymbol |> Option.defaultValue state.ImportedThrough), merged.ImportedFiles, state
+            else
+                let name =
+                    match item.Alias, item.Source with
+                    | Some alias, _ -> alias
+                    | None, ModuleImport moduleName -> moduleName
+                    | None, PathImport path -> path
+                let import = { Id = SymbolId.next (); Name = name; Kind = ImportedModule; Declaration = item.Span; IsExported = false }
+                let importedFiles = merged.ImportedFiles |> Map.add import.Id { File = sourceFileName importedOrigin; Name = imported.Name }
+                // Only an alias is written as a name: an import without one has no name to write.
+                let state =
+                    if item.Alias.IsSome then { state with Scopes = state.Scopes |> Map.add import.Id (Scope.wholeModule item.Span.File) }
+                    else state
+                Map.ofList [ import.Id, import ], importedThroughSymbol import.Id, importedFiles, state
+        // A type an explicit import exports replaces the prelude's type of the same name.
+        let preludeTypeNames =
+            if importedKey = preludeKey then Set.ofSeq exportedTypeDefs.Keys else merged.PreludeTypeNames
+        let typeDefs =
+            if importedKey = preludeKey then
+                state.TypeDefs
+            else
+                state.TypeDefs |> Map.filter (fun name _ -> not (preludeTypeNames.Contains name && exportedTypeDefs.ContainsKey name))
+        // An aliased import's types are written with the alias (`m.$Email`). Their own names stay known for
+        // the signatures that name them, but cannot be written unless something else brings them in. An
+        // unaliased import's types can, and replace a type only an aliased import brought in. One that selects
+        // names brings in only the types it selects; the rest are as an aliased import's.
+        let typeDefs, hiddenTypeNames =
+            match qualifier with
+            | Some qualifier ->
+                let qualified =
+                    exportedTypeDefs
+                    |> Map.filter (fun name _ -> isSelected name)
+                    |> Map.fold (fun acc name info -> acc |> Map.add $"{qualifier}.{name}" info) typeDefs
+                let hidden = exportedTypeDefs.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
+                qualified, Set.union state.HiddenTypeNames hidden
+            | None ->
+                let visible, unselected = exportedTypeDefs |> Map.partition (fun name _ -> isSelected name)
+                let hidden = unselected.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
+                typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && visible.ContainsKey name)),
+                Set.union (state.HiddenTypeNames - Set.ofSeq visible.Keys) hidden
+        // A function that requires a context requires it wherever it is called, under the name it is imported as.
+        let contextRequirements =
+            imported.ContextRequirements
+            |> Map.filter (fun name _ -> isSelected name)
+            |> Map.fold (fun acc name contexts ->
+                let importedName =
+                    match qualifier with
+                    | Some qualifier -> $"{qualifier}.{name}"
+                    | None -> name
+                acc |> Map.add importedName contexts) state.ContextRequirements
+        let contextSignatures =
+            imported.ContextSignatures
+            |> Map.filter (fun name _ -> isSelected name)
+            |> Map.fold (fun acc name signature ->
+                let importedName =
+                    match qualifier with
+                    | Some qualifier -> $"{qualifier}.{name}"
+                    | None -> name
+                acc |> Map.add importedName signature) state.ContextSignatures
+        let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
+        // The contexts the imported functions require that this module cannot name are carried in with their
+        // definitions, hidden, so a call to one is checked as a call needing the context is here: an ambient
+        // one, and a parameterised one, whose instance each call finds (an attached `Point.show` for a
+        // `Show(Point)`, say).
+        let carried, carriedParameterised =
+            let rec contextNames (ctx: TypeExpr) =
+                match ctx.Kind with
+                | TypeContext contexts -> contexts |> List.collect contextNames
+                | TypeName name
+                | TypeApply(name, _) -> [ name ]
+                | _ -> []
+            let unnamed =
+                imported.ContextRequirements
+                |> Map.values
+                |> Seq.collect (List.collect contextNames)
+                |> Seq.distinct
+                |> Seq.filter (fun name -> not (typeDefs.ContainsKey name) && not (state.ContextDefs.ContainsKey name))
+                |> List.ofSeq
+            unnamed |> List.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info)),
+            unnamed
+            |> List.choose (fun name ->
+                imported.Typed.TypeDefs
+                |> Map.tryFind name
+                |> Option.filter (fun info -> info.IsContext && not info.Parameters.IsEmpty && not (imported.AmbientContexts.ContainsKey name))
+                |> Option.map (fun info -> name, info))
+        let state =
+            { state with
+                TypeDefs = carried @ carriedParameterised |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
+                HiddenTypeNames = carried @ carriedParameterised |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
+                CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
+                Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
+                ImportedThrough = importedThrough
+                // The prelude's contexts are the ones operators are read through (see `OperatorContexts`),
+                // but for one whose name an import after it gives to a type of its own.
+                PreludeContexts =
+                    if importedKey = preludeKey then
+                        exportedTypeDefs |> Map.filter (fun _ info -> info.IsContext) |> Map.keys |> Set.ofSeq
+                    elif qualifier.IsNone then state.PreludeContexts - (exportedTypeDefs.Keys |> Seq.filter isSelected |> Set.ofSeq)
+                    else state.PreludeContexts
+                // Where each definition is imported, since a `module name =` block's imports are its own.
+                ImportSites =
+                    Seq.append exportedSymbols exportedTypeSymbols
+                    |> Seq.fold (fun acc (KeyValue(id, _)) ->
+                        acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
+                ContextRequirements = contextRequirements
+                ContextSignatures = contextSignatures
+                // A call to an imported function checks what it compares the rests of its unions with as a
+                // call to one of the module's own does.
+                CheckedRests =
+                    imported.CheckedRests
+                    |> Map.filter (fun symbol _ -> exportedSymbols.ContainsKey symbol)
+                    |> Map.fold (fun acc symbol checkedRests -> acc |> Map.add symbol checkedRests) state.CheckedRests }
+        let inlinedItems = ModuleLinking.inlinedItemsForImport item imported
+        { merged with
+            Env = env
+            State = state
+            Inlined = if importedKey = preludeKey then merged.Inlined else merged.Inlined @ inlinedItems
+            PreludeInlined = if importedKey = preludeKey then inlinedItems else merged.PreludeInlined
+            PreludeTypeNames = preludeTypeNames
+            InlinedTypes = ModuleLinking.inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
+            InlinedInstances = imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
+            InlinedUseContexts = imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
+            ImportedContextTypes =
+                RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
+                |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.ImportedContextTypes
+            UnqualifiedSources = unqualifiedSources
+            ImportedFiles = importedFiles },
+        importSymbols |> Map.keys |> Seq.tryHead
+
+    /// Merges the import `item`, then what `imported` re-exports, as made-up imports of the modules it re-exports
+    /// from, under the same alias and limited to what `item` selects. Each is used through the import `item` is,
+    /// which is given back.
+    let rec private mergeWithReExports (preludeKey: string) (importedOrigin: ModuleOrigin) (item: ImportItem) (through: SymbolId option) (imported: CheckedModule) (merged: MergedImports) : MergedImports * SymbolId option =
+        let merged, importSymbol = mergeImport preludeKey importedOrigin item through imported merged
+        let through = importSymbol |> Option.orElse through
+        let merged =
+            imported.ReExports
+            |> List.fold (fun merged reExported ->
+                let names =
+                    reExported.Item.Selection
+                    |> Option.defaultValue []
+                    |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name)))
+                if names.IsEmpty then
+                    merged
+                else
+                    let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = Some names; Span = SourceSpan.none }
+                    mergeWithReExports preludeKey reExported.Origin reImport through reExported.Module merged |> fst) merged
+        merged, through
+
+    /// Merges the import `item` as written. `as m & (a, b)` is an import under `m` and an import of `a` and `b`
+    /// alone. The second is made up, so it is not an import symbol of its own. A name the module does not export is
+    /// an error. A re-export (one of `reExportItems`) is an import that selects the names it exports again, which
+    /// the module's importers are given.
+    let private mergeWritten (preludeKey: string) (reExportItems: ImportItem list) (importedOrigin: ModuleOrigin) (item: ImportItem) (imported: CheckedModule) (merged: MergedImports) : MergedImports =
+        match ModuleLinking.unexportedSelections item imported, item.Alias, item.Selection with
+        | _ :: _ as unexported, _, _ -> { merged with Errors = merged.Errors @ unexported }
+        | [], Some _, Some _ ->
+            let merged, through = mergeWithReExports preludeKey importedOrigin { item with Selection = None } None imported merged
+            mergeWithReExports preludeKey importedOrigin { item with Alias = None; Span = SourceSpan.none } through imported merged |> fst
+        | [], _, _ ->
+            let merged, _ = mergeWithReExports preludeKey importedOrigin item None imported merged
+            if reExportItems |> List.contains item then
+                { merged with ReExports = merged.ReExports @ [ { Origin = importedOrigin; Item = item; Module = imported } ] }
+            else
+                merged
+
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
     /// error says which phase it came from.
     let rec internal typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
@@ -174,294 +417,97 @@ module Compiler =
                 else
                     ImportItem.synthetic (ModuleImport (StandardLibrary.importPrefix + StandardLibrary.preludeModuleName)) None
                     :: fileImports
-            let mutable env =
-                match origin with
-                | StandardLibraryModule _ -> Intrinsics.typeEnv
-                | SourceFile _
-                | InMemory -> TypeEnv.empty
-            let mutable state =
-                { NyxCompiler.Infer.emptyState with
-                    Declared = declared
-                    ModuleBlocks = moduleBlocks
-                    WorkflowMemberPlaces = memberPlaces
-                    Home = origin
-                    StandardLibraryExports = ImportFixes.standardLibraryExportPaths }
-            let mutable errors: Diagnostic list = []
-            let mutable inlined: TopLevelItem list = []
-            // Kept apart and inlined last, so that where an explicit import defines the same name, its definition is kept.
-            let mutable preludeInlined: TopLevelItem list = []
-            let mutable preludeTypeNames: Set<string> = Set.empty
-            let mutable inlinedTypes: Map<string, Ty> = Map.empty
-            // Where the calls in the imported modules' definitions, which are inlined, find their instances.
-            let mutable inlinedInstances: Map<NodeId, ContextInstance option list> = Map.empty
-            // The instances the `use`s in the imported modules' definitions load.
-            let mutable inlinedUseContexts: Map<NodeId, TypeExpr> = Map.empty
-            // The types of the defs the imports bring in, with the contexts they require (see `ImportedContextTypes`).
-            let mutable importedContextTypes: Map<SymbolId, Ty * Ty list> = Map.empty
-            // The modules that bring each name in unqualified, by the module's key, with the name of the module.
-            // The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
-            let mutable unqualifiedSources: Map<string, (string * string) list> = Map.empty
-            let mutable importedFiles: Map<SymbolId, ImportedFile> = Map.empty
-            // The module's re-exports, and each as it is merged, with the module it re-exports from.
-            let reExportItems = ModuleLinking.reExportsOf desugared
-            let mutable reExports: ReExported list = []
-            // Merges the import `item` of `imported`, and gives back the import's symbol, if it has one. A made-up import
-            // has none; what it brings in is used through `through`, if given, as a re-export's names are used through
-            // the import of the module that re-exports them.
-            let mergeImport (importedOrigin: ModuleOrigin) (item: ImportItem) (through: SymbolId option) (imported: CheckedModule) : SymbolId option =
-                let importedKey = originKey importedOrigin
-                let qualifier = ModuleLinking.importQualifier item
-                let exportedValues = ModuleLinking.exportedValueNames imported.Own
-                // An import brings in every export, or only those it selects.
-                let selected = item.Selection |> Option.map (ModuleLinking.selectedExports imported)
-                let isSelected (name: string) = selected |> Option.forall (fun selected -> selected.Contains name)
-                if qualifier.IsNone && importedKey <> preludeKey then
-                    let moduleName =
-                        match imported.Name, item.Source with
-                        | Some name, _ -> name
-                        | None, ModuleImport name -> name
-                        | None, PathImport path -> path
-                    for name in exportedValues |> Set.filter isSelected do
-                        let sources = unqualifiedSources |> Map.tryFind name |> Option.defaultValue []
-                        if not (sources |> List.exists (fun (key, _) -> key = importedKey)) then
-                            unqualifiedSources <- unqualifiedSources |> Map.add name (sources @ [ importedKey, moduleName ])
-                let exportedTypes = ModuleLinking.exportedTypeNames imported.Own
-                let exportedValueTypes =
-                    imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name)
-                let exportedTypeDefs =
-                    imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
-                // The exported definitions, declared in the imported module's file.
-                let exportedSymbols =
-                    imported.Exports
-                    |> Map.filter (fun name _ -> exportedValues.Contains name)
-                    |> Map.values
-                    |> Seq.map (fun symbol -> symbol.Id, symbol)
-                    |> Map.ofSeq
-                // The exported types and their contexts' members, declared in the imported module's file too.
-                let exportedTypeSymbols =
-                    exportedTypeDefs
-                    |> Map.values
-                    |> Seq.collect (fun info -> Option.toList info.Symbol @ (info.Members |> Map.values |> List.ofSeq))
-                    |> Seq.choose (fun id -> imported.Typed.Symbols |> Map.tryFind id)
-                    |> Seq.map (fun symbol -> symbol.Id, symbol)
-                    |> Map.ofSeq
-                env <- ModuleLinking.extendEnvWithImport env qualifier (exportedValueTypes |> Map.filter (fun name _ -> isSelected name)) (imported.Exports |> Map.map (fun _ symbol -> symbol.Id))
-                // The import is a symbol of its own, unless the compiler made it up (for `@entry`).
-                let importedThroughSymbol (importId: SymbolId) =
-                    Seq.append exportedSymbols exportedTypeSymbols
-                    |> Seq.fold (fun acc (KeyValue(id, _)) ->
-                        acc |> Map.add id ((acc |> Map.tryFind id |> Option.defaultValue []) @ [ importId ])) state.ImportedThrough
-                let importSymbols, importedThrough =
-                    if SourceSpan.isNone item.Span then
-                        Map.empty, (through |> Option.map importedThroughSymbol |> Option.defaultValue state.ImportedThrough)
-                    else
-                        let name =
-                            match item.Alias, item.Source with
-                            | Some alias, _ -> alias
-                            | None, ModuleImport moduleName -> moduleName
-                            | None, PathImport path -> path
-                        let import = { Id = SymbolId.next (); Name = name; Kind = ImportedModule; Declaration = item.Span; IsExported = false }
-                        importedFiles <- importedFiles |> Map.add import.Id { File = sourceFileName importedOrigin; Name = imported.Name }
-                        // Only an alias is written as a name: an import without one has no name to write.
-                        if item.Alias.IsSome then
-                            state <- { state with Scopes = state.Scopes |> Map.add import.Id (Scope.wholeModule item.Span.File) }
-                        Map.ofList [ import.Id, import ], importedThroughSymbol import.Id
-                // A type an explicit import exports replaces the prelude's type of the same name.
-                let typeDefs =
-                    if importedKey = preludeKey then
-                        preludeTypeNames <- Set.ofSeq exportedTypeDefs.Keys
-                        state.TypeDefs
-                    else
-                        state.TypeDefs |> Map.filter (fun name _ -> not (preludeTypeNames.Contains name && exportedTypeDefs.ContainsKey name))
-                // An aliased import's types are written with the alias (`m.$Email`). Their own names stay known for
-                // the signatures that name them, but cannot be written unless something else brings them in. An
-                // unaliased import's types can, and replace a type only an aliased import brought in. One that selects
-                // names brings in only the types it selects; the rest are as an aliased import's.
-                let typeDefs, hiddenTypeNames =
-                    match qualifier with
-                    | Some qualifier ->
-                        let qualified =
-                            exportedTypeDefs
-                            |> Map.filter (fun name _ -> isSelected name)
-                            |> Map.fold (fun acc name info -> acc |> Map.add $"{qualifier}.{name}" info) typeDefs
-                        let hidden = exportedTypeDefs.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
-                        qualified, Set.union state.HiddenTypeNames hidden
-                    | None ->
-                        let visible, unselected = exportedTypeDefs |> Map.partition (fun name _ -> isSelected name)
-                        let hidden = unselected.Keys |> Seq.filter (fun name -> not (typeDefs.ContainsKey name)) |> Set.ofSeq
-                        typeDefs |> Map.filter (fun name _ -> not (state.HiddenTypeNames.Contains name && visible.ContainsKey name)),
-                        Set.union (state.HiddenTypeNames - Set.ofSeq visible.Keys) hidden
-                // A function that requires a context requires it wherever it is called, under the name it is imported as.
-                let contextRequirements =
-                    imported.ContextRequirements
-                    |> Map.filter (fun name _ -> isSelected name)
-                    |> Map.fold (fun acc name contexts ->
-                        let importedName =
-                            match qualifier with
-                            | Some qualifier -> $"{qualifier}.{name}"
-                            | None -> name
-                        acc |> Map.add importedName contexts) state.ContextRequirements
-                let contextSignatures =
-                    imported.ContextSignatures
-                    |> Map.filter (fun name _ -> isSelected name)
-                    |> Map.fold (fun acc name signature ->
-                        let importedName =
-                            match qualifier with
-                            | Some qualifier -> $"{qualifier}.{name}"
-                            | None -> name
-                        acc |> Map.add importedName signature) state.ContextSignatures
-                let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
-                // The contexts the imported functions require that this module cannot name are carried in with their
-                // definitions, hidden, so a call to one is checked as a call needing the context is here: an ambient
-                // one, and a parameterised one, whose instance each call finds (an attached `Point.show` for a
-                // `Show(Point)`, say).
-                let carried, carriedParameterised =
-                    let rec contextNames (ctx: TypeExpr) =
-                        match ctx.Kind with
-                        | TypeContext contexts -> contexts |> List.collect contextNames
-                        | TypeName name
-                        | TypeApply(name, _) -> [ name ]
-                        | _ -> []
-                    let unnamed =
-                        imported.ContextRequirements
-                        |> Map.values
-                        |> Seq.collect (List.collect contextNames)
-                        |> Seq.distinct
-                        |> Seq.filter (fun name -> not (typeDefs.ContainsKey name) && not (state.ContextDefs.ContainsKey name))
-                        |> List.ofSeq
-                    unnamed |> List.choose (fun name -> imported.AmbientContexts |> Map.tryFind name |> Option.map (fun info -> name, info)),
-                    unnamed
-                    |> List.choose (fun name ->
-                        imported.Typed.TypeDefs
-                        |> Map.tryFind name
-                        |> Option.filter (fun info -> info.IsContext && not info.Parameters.IsEmpty && not (imported.AmbientContexts.ContainsKey name))
-                        |> Option.map (fun info -> name, info))
-                state <-
-                    { state with
-                        TypeDefs = carried @ carriedParameterised |> List.fold (fun acc (name, info) -> acc |> Map.add name info) typeDefs
-                        HiddenTypeNames = carried @ carriedParameterised |> List.fold (fun acc (name, _) -> acc |> Set.add name) hiddenTypeNames
-                        CarriedAmbientContexts = carried |> List.fold (fun acc (name, _) -> acc |> Set.add name) state.CarriedAmbientContexts
-                        Symbols = Seq.fold (fun acc (KeyValue(id, symbol)) -> acc |> Map.add id symbol) state.Symbols (Seq.concat [ exportedSymbols; exportedTypeSymbols; importSymbols ])
-                        ImportedThrough = importedThrough
-                        // The prelude's contexts are the ones operators are read through (see `OperatorContexts`),
-                        // but for one whose name an import after it gives to a type of its own.
-                        PreludeContexts =
-                            if importedKey = preludeKey then
-                                exportedTypeDefs |> Map.filter (fun _ info -> info.IsContext) |> Map.keys |> Set.ofSeq
-                            elif qualifier.IsNone then state.PreludeContexts - (exportedTypeDefs.Keys |> Seq.filter isSelected |> Set.ofSeq)
-                            else state.PreludeContexts
-                        // Where each definition is imported, since a `module name =` block's imports are its own.
-                        ImportSites =
-                            Seq.append exportedSymbols exportedTypeSymbols
-                            |> Seq.fold (fun acc (KeyValue(id, _)) ->
-                                acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
-                        ContextRequirements = contextRequirements
-                        ContextSignatures = contextSignatures
-                        // A call to an imported function checks what it compares the rests of its unions with as a
-                        // call to one of the module's own does.
-                        CheckedRests =
-                            imported.CheckedRests
-                            |> Map.filter (fun symbol _ -> exportedSymbols.ContainsKey symbol)
-                            |> Map.fold (fun acc symbol checkedRests -> acc |> Map.add symbol checkedRests) state.CheckedRests }
-                if importedKey = preludeKey then
-                    preludeInlined <- ModuleLinking.inlinedItemsForImport item imported
-                else
-                    inlined <- inlined @ ModuleLinking.inlinedItemsForImport item imported
-                inlinedTypes <- ModuleLinking.inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
-                inlinedInstances <- imported.Typed.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
-                inlinedUseContexts <- imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
-                importedContextTypes <-
-                    RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
-                    |> Map.fold (fun acc id found -> acc |> Map.add id found) importedContextTypes
-                importSymbols |> Map.keys |> Seq.tryHead
-            // The import `item`, then what `imported` re-exports, as made-up imports of the modules it re-exports from,
-            // under the same alias and limited to what `item` selects. Each is used through the import `item` is.
-            let rec mergeWithReExports (importedOrigin: ModuleOrigin) (item: ImportItem) (through: SymbolId option) (imported: CheckedModule) =
-                let through = mergeImport importedOrigin item through imported |> Option.orElse through
-                for reExported in imported.ReExports do
-                    let names =
-                        reExported.Item.Selection
-                        |> Option.defaultValue []
-                        |> List.filter (fun (name, _) -> item.Selection |> Option.forall (List.exists (fun (selected, _) -> selected = name)))
-                    if not names.IsEmpty then
-                        let reImport = { Source = reExported.Item.Source; Alias = item.Alias; Selection = Some names; Span = SourceSpan.none }
-                        mergeWithReExports reExported.Origin reImport through reExported.Module |> ignore
-                through
-            // `as m & (a, b)` is an import under `m` and an import of `a` and `b` alone. The second is made up, so it
-            // is not an import symbol of its own. A name the module does not export is an error. A re-export is an
-            // import that selects the names it exports again, which the module's importers are given.
-            let mergeWritten (importedOrigin: ModuleOrigin) (item: ImportItem) (imported: CheckedModule) =
-                match ModuleLinking.unexportedSelections item imported, item.Alias, item.Selection with
-                | _ :: _ as unexported, _, _ -> errors <- errors @ unexported
-                | [], Some _, Some _ ->
-                    let through = mergeWithReExports importedOrigin { item with Selection = None } None imported
-                    mergeWithReExports importedOrigin { item with Alias = None; Span = SourceSpan.none } through imported |> ignore
-                | [], _, _ ->
-                    mergeWithReExports importedOrigin item None imported |> ignore
-                    if reExportItems |> List.contains item then
-                        reExports <- reExports @ [ { Origin = importedOrigin; Item = item; Module = imported } ]
-            for item in imports do
-                // An import of a module that is still being checked, because it imports this one, is a cycle.
-                let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
-                    let importKey = originKey importOrigin
-                    if importKey = key || visited.Contains importKey then
-                        Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"Import cycle detected for {importKey}" ])
-                    else
-                        match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
-                        // A module with errors fails each importer with them.
-                        | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, imported.Errors)
-                        | checkedImport -> checkedImport
-                match StandardLibrary.tryModuleName item with
-                | Some moduleName ->
-                    match StandardLibrary.tryLoadSource moduleName with
-                    | None ->
-                        let available = String.concat ", " (StandardLibrary.moduleNames |> List.map (fun name -> StandardLibrary.importPrefix + name))
-                        errors <- errors @ [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}' (available: {available})" ]
-                    | Some moduleSource ->
-                        match checkImport (StandardLibraryModule moduleName) (fun () -> moduleSource) with
-                        | Error (_, diags) -> errors <- errors @ diags
-                        | Ok imported when imported.Name <> Some moduleName ->
-                            let declared = imported.Name |> Option.defaultValue "(none)"
-                            errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
-                        | Ok imported -> mergeWritten (StandardLibraryModule moduleName) item imported
-                | None ->
+            let initial =
+                { Env =
                     match origin with
-                    | SourceFile fullPath ->
-                        match FileImports.missingAlias item, PackageModules.resolveImport checkedModules.Package fullPath item with
-                        | Some diag, _
-                        | None, Error diag -> errors <- errors @ [ diag ]
-                        | None, Ok importPath ->
-                            match checkImport (SourceFile importPath) (fun () -> File.ReadAllText importPath) with
-                            | Error (_, diags) -> errors <- errors @ diags
-                            | Ok imported ->
-                                match FileImports.importedFile item imported.Name imported.Syntax with
-                                | [] -> mergeWritten (SourceFile importPath) item imported
-                                | diags -> errors <- errors @ diags
-                    | StandardLibraryModule name ->
-                        errors <- errors @ [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{name}' may only import other standard library modules" ]
-                    | InMemory ->
-                        let shown =
-                            match item.Source with
-                            | PathImport path -> path
-                            | ModuleImport name -> name
-                        errors <- errors @ [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {shown} (only standard library modules can be imported here)" ]
+                    | StandardLibraryModule _ -> Intrinsics.typeEnv
+                    | SourceFile _
+                    | InMemory -> TypeEnv.empty
+                  State =
+                    { NyxCompiler.Infer.emptyState with
+                        Declared = declared
+                        ModuleBlocks = moduleBlocks
+                        WorkflowMemberPlaces = memberPlaces
+                        Home = origin
+                        StandardLibraryExports = ImportFixes.standardLibraryExportPaths }
+                  Errors = []
+                  Inlined = []
+                  PreludeInlined = []
+                  PreludeTypeNames = Set.empty
+                  InlinedTypes = Map.empty
+                  InlinedInstances = Map.empty
+                  InlinedUseContexts = Map.empty
+                  ImportedContextTypes = Map.empty
+                  UnqualifiedSources = Map.empty
+                  ImportedFiles = Map.empty
+                  ReExports = [] }
+            let reExportItems = ModuleLinking.reExportsOf desugared
+            let merged =
+                imports
+                |> List.fold (fun (merged: MergedImports) item ->
+                    let fail diagnostics = { merged with Errors = merged.Errors @ diagnostics }
+                    // An import of a module that is still being checked, because it imports this one, is a cycle.
+                    let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
+                        let importKey = originKey importOrigin
+                        if importKey = key || visited.Contains importKey then
+                            Error (Typed, [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"Import cycle detected for {importKey}" ])
+                        else
+                            match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
+                            // A module with errors fails each importer with them.
+                            | Ok imported when not imported.Errors.IsEmpty -> Error (Typed, imported.Errors)
+                            | checkedImport -> checkedImport
+                    match StandardLibrary.tryModuleName item with
+                    | Some moduleName ->
+                        match StandardLibrary.tryLoadSource moduleName with
+                        | None ->
+                            let available = String.concat ", " (StandardLibrary.moduleNames |> List.map (fun name -> StandardLibrary.importPrefix + name))
+                            fail [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}' (available: {available})" ]
+                        | Some moduleSource ->
+                            match checkImport (StandardLibraryModule moduleName) (fun () -> moduleSource) with
+                            | Error (_, diags) -> fail diags
+                            | Ok imported when imported.Name <> Some moduleName ->
+                                let declared = imported.Name |> Option.defaultValue "(none)"
+                                fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
+                            | Ok imported -> mergeWritten preludeKey reExportItems (StandardLibraryModule moduleName) item imported merged
+                    | None ->
+                        match origin with
+                        | SourceFile fullPath ->
+                            match FileImports.missingAlias item, PackageModules.resolveImport checkedModules.Package fullPath item with
+                            | Some diag, _
+                            | None, Error diag -> fail [ diag ]
+                            | None, Ok importPath ->
+                                match checkImport (SourceFile importPath) (fun () -> File.ReadAllText importPath) with
+                                | Error (_, diags) -> fail diags
+                                | Ok imported ->
+                                    match FileImports.importedFile item imported.Name imported.Syntax with
+                                    | [] -> mergeWritten preludeKey reExportItems (SourceFile importPath) item imported merged
+                                    | diags -> fail diags
+                        | StandardLibraryModule name ->
+                            fail [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"Standard library module '{name}' may only import other standard library modules" ]
+                        | InMemory ->
+                            let shown =
+                                match item.Source with
+                                | PathImport path -> path
+                                | ModuleImport name -> name
+                            fail [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"Import not found: {shown} (only standard library modules can be imported here)" ]) initial
+            let env = merged.Env
             // A name two imports bring in is an error only where it is used, and only if nothing nearer binds it.
             let ambiguousImports =
-                unqualifiedSources
+                merged.UnqualifiedSources
                 |> Map.toSeq
                 |> Seq.choose (fun (name, sources) ->
                     match sources, TypeEnv.tryFind name env |> Option.bind (fun scheme -> scheme.Symbol) with
                     | _ :: _ :: _, Some symbol -> Some (name, (symbol, sources |> List.map (fun (_, moduleName) -> $"{moduleName}.{name}")))
                     | _ -> None)
                 |> Map.ofSeq
-            state <-
-                { state with
+            let state =
+                { merged.State with
                     AmbiguousImports = ambiguousImports
-                    PreludeContexts = OperatorContexts.inModule (key = preludeKey) desugared state.PreludeContexts
+                    PreludeContexts = OperatorContexts.inModule (key = preludeKey) desugared merged.State.PreludeContexts
                     NamedAsValues = SyntaxTree.namedAsValues desugared }
-            if not errors.IsEmpty then
+            if not merged.Errors.IsEmpty then
                 // A module imported along several paths fails each importer with the same diagnostics.
-                Error (Typed, List.distinct errors)
+                Error (Typed, List.distinct merged.Errors)
             else
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Unifier.solveDetailed state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames types.Values subst, mismatches
@@ -492,9 +538,9 @@ module Compiler =
                 let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (DeferredErrors.deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = ModuleLinking.exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
-                let instances = inlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
+                let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
-                    inlined @ preludeInlined
+                    merged.Inlined @ merged.PreludeInlined
                     |> List.filter (function
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
@@ -533,7 +579,7 @@ module Compiler =
                 Ok { Typed =
                         { Module = inlined @ own
                           // The types of the imported definitions inlined for the backend, then the module's own.
-                          Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) inlinedTypes
+                          Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
                           TypeDefs = resolvedTypeDefs
                           Items = resolvedItems
                           // Filled in for the root module only, by `compileWith`.
@@ -547,15 +593,15 @@ module Compiler =
                           Scopes = scopes
                           ModuleNames = moduleNames
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
-                          ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) inlinedInstances
+                          ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
                           ContextProviders = state.ContextProviders
-                          UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) inlinedUseContexts
+                          UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
                           // Resolved for the root module only, by `compileWith`.
                           InferredContextTypes = state.InferredContextTypes
                           ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
-                          ImportedContextTypes = importedContextTypes
+                          ImportedContextTypes = merged.ImportedContextTypes
                           AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
-                          ImportedFiles = importedFiles
+                          ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileWith`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty }
@@ -593,7 +639,7 @@ module Compiler =
                         |> Set.union state.CarriedAmbientContexts
                         |> Seq.choose (fun name -> state.TypeDefs |> Map.tryFind name |> Option.map (fun info -> name, info))
                         |> Map.ofSeq
-                     ReExports = reExports }
+                     ReExports = merged.ReExports }
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
     /// standard-library module is checked once per process (see `checkedStandardLibrary`), and the modules it imports
