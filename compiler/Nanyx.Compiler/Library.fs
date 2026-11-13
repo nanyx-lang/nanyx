@@ -171,12 +171,30 @@ module Compiler =
           InlinedUseContexts: Map<NodeId, TypeExpr>
           /// The types of the defs the imports bring in, with the contexts they require (see `ImportedContextTypes`).
           ImportedContextTypes: Map<SymbolId, Ty * Ty list>
+          /// The members of the ambient contexts carried in with imported functions, with the definitions that stand in for them.
+          CarriedAmbientMembers: AmbientMember list
           /// The modules that bring each name in unqualified, by the module's key, with the name of the module.
           /// The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
           UnqualifiedSources: Map<string, (string * string) list>
           ImportedFiles: Map<SymbolId, ImportedFile>
           /// The module's re-exports as each is merged, with the module it re-exports from.
           ReExports: ReExported list }
+
+    /// The members of the module's ambient contexts, each with the imported definition that stands in for it, as the
+    /// type checker found them (see `InferState.AmbientMembers`), then those of the contexts carried in (`carried`).
+    let private ambientMembers (state: NyxCompiler.Infer.InferState) (carried: AmbientMember list) : AmbientMember list =
+        let own =
+            state.AmbientMembers
+            |> Map.values
+            |> Seq.map snd
+            |> Seq.distinct
+            |> Seq.sort
+            |> Seq.collect (fun context ->
+                state.TypeDefs.[context].Members
+                |> Map.keys
+                |> Seq.map (fun memberName -> { Context = context; Member = memberName; Definition = AmbientMember.definitionName context memberName }))
+            |> List.ofSeq
+        own @ carried |> List.distinct
 
     /// Merges the import `item` of `imported` into `merged`, and gives back the import's symbol, if it has one. A
     /// made-up import has none; what it brings in is used through `through`, if given, as a re-export's names are
@@ -347,6 +365,8 @@ module Compiler =
             ImportedContextTypes =
                 RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
                 |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.ImportedContextTypes
+            CarriedAmbientMembers =
+                merged.CarriedAmbientMembers @ ModuleLinking.ambientMembersForImport item imported (carried |> List.map fst |> Set.ofList)
             UnqualifiedSources = unqualifiedSources
             ImportedFiles = importedFiles },
         importSymbols |> Map.keys |> Seq.tryHead
@@ -454,6 +474,7 @@ module Compiler =
                   InlinedInstances = Map.empty
                   InlinedUseContexts = Map.empty
                   ImportedContextTypes = Map.empty
+                  CarriedAmbientMembers = []
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty
                   ReExports = [] }
@@ -616,6 +637,7 @@ module Compiler =
                           ContextTypes = RequiredContexts.ofDefs state subst ownTopLevel
                           ImportedContextTypes = merged.ImportedContextTypes
                           AmbientContexts = state.AmbientMembers |> Map.values |> Seq.map snd |> Seq.distinct |> Seq.sort |> List.ofSeq
+                          AmbientMembers = ambientMembers state merged.CarriedAmbientMembers
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty

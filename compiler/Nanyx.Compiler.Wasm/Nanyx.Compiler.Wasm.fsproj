@@ -10,7 +10,6 @@
     <Compile Include="ContextMemberKey.fs" />
     <Compile Include="Identifiers.fs" />
     <Compile Include="ClosureSyntax.fs" />
-    <Compile Include="AmbientMembers.fs" />
     <Compile Include="LambdaLifting.fs" />
     <Compile Include="FloatText.fs" />
     <Compile Include="SizedIntegerCode.fs" />
