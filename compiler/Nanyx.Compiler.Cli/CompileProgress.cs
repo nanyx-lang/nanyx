@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.FSharp.Core;
 using NyxCompiler;
 
 /// <summary>
@@ -7,8 +10,10 @@ using NyxCompiler;
 /// place ten times a second, then replaced by <c>Compiled greeter (12 files) in 4.7s</c> when it finishes. It writes
 /// only when stderr is a terminal: a log or a pipe sees nothing, so output under CI and in tests is unchanged. With
 /// <c>timings</c>, it also records how long each module's check took and writes them as a tree to stderr after the final
-/// line, whether or not stderr is a terminal. Stop it with <see cref="Finish"/> before anything else is written, or the
-/// next line lands on top of the stopwatch. Give the compiler <see cref="Listener"/> to hear from it.
+/// line, whether or not stderr is a terminal; on a terminal that can be redrawn with ANSI escapes, the stopwatch's line
+/// is then the live view of that tree instead (<see cref="ModuleCheckModule.live"/>), erased when the compile finishes.
+/// Stop it with <see cref="Finish"/> before anything else is written, or the next line lands on top of the stopwatch.
+/// Give the compiler <see cref="Listener"/> to hear from it.
 /// </summary>
 internal sealed class CompileProgress : CompileListener, IDisposable
 {
@@ -19,12 +24,14 @@ internal sealed class CompileProgress : CompileListener, IDisposable
     private readonly Func<string, string> _display;
     private readonly string _what;
     private readonly CompileTimings? _timings;
+    private readonly bool _live;
     private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
     private readonly object _gate = new();
     private readonly List<string> _checking = new();
     private Timer? _timer;
     private string _current;
     private int _written;
+    private int _drawn;
     private bool _finished;
 
     private CompileProgress(TextWriter errors, string what, Func<string, string> display, bool timings)
@@ -35,6 +42,7 @@ internal sealed class CompileProgress : CompileListener, IDisposable
         _what = what;
         _current = what;
         _timings = timings ? new CompileTimings(this) : null;
+        _live = _timings is not null && _terminal is not null && TryEnableEscapes();
         if (_terminal is not null)
         {
             _timer = new Timer(_ => Redraw(), null, Tick, Tick);
@@ -45,7 +53,8 @@ internal sealed class CompileProgress : CompileListener, IDisposable
     /// Starts the stopwatch for a compile of <paramref name="what"/> ("greeter (12 files)", "main.nyx"), shown on
     /// <paramref name="errors"/> when that is a terminal; the stopwatch writes nothing when it is any other writer.
     /// <paramref name="display"/> shortens the paths the compiler names for the user. With <paramref name="timings"/>,
-    /// <see cref="Finish"/> writes each module's time to <paramref name="errors"/>.
+    /// the stopwatch is the live view of the modules' checks, and <see cref="Finish"/> writes each module's time to
+    /// <paramref name="errors"/>.
     /// </summary>
     public static CompileProgress Start(TextWriter errors, string what, Func<string, string> display, bool timings = false) =>
         new(errors, what, display, timings);
@@ -100,8 +109,8 @@ internal sealed class CompileProgress : CompileListener, IDisposable
     }
 
     /// <summary>
-    /// Stops the stopwatch and leaves "Compiled {what} in {elapsed}" where it was, then the tree of module checks when
-    /// timings are recorded. A second call does nothing.
+    /// Stops the stopwatch and leaves "Compiled {what} in {elapsed}" where it was, erasing the live view if there was
+    /// one, then the tree of module checks when timings are recorded. A second call does nothing.
     /// </summary>
     public void Finish()
     {
@@ -131,6 +140,11 @@ internal sealed class CompileProgress : CompileListener, IDisposable
         {
             if (_terminal is not null)
             {
+                if (_live)
+                {
+                    Draw(Array.Empty<string>());
+                }
+
                 Overwrite($"Compiled {_what} in {Elapsed}");
                 _terminal.WriteLine();
                 _written = 0;
@@ -138,7 +152,7 @@ internal sealed class CompileProgress : CompileListener, IDisposable
 
             if (_timings is not null)
             {
-                _errors.WriteLine(ModuleCheckModule.tree(Microsoft.FSharp.Core.FuncConvert.FromFunc(_display), _timings.Checks));
+                _errors.WriteLine(ModuleCheckModule.tree(FuncConvert.FromFunc(_display), _timings.Checks));
             }
         }
     }
@@ -156,6 +170,15 @@ internal sealed class CompileProgress : CompileListener, IDisposable
         {
             if (_timer is null)
             {
+                return;
+            }
+
+            if (_live)
+            {
+                var (width, height) = WindowSize();
+                var frame = ModuleCheckModule.live(FuncConvert.FromFunc(_display), _timings!.SoFar, height - 1).ToList();
+                // Until the first module's check starts there is no tree, so the stopwatch says what is being compiled.
+                Draw(frame.Count > 0 ? frame : [$"Compiling {_current}… {Elapsed}"], width);
                 return;
             }
 
@@ -177,4 +200,67 @@ internal sealed class CompileProgress : CompileListener, IDisposable
 
         _written = text.Length;
     }
+
+    /// <summary>
+    /// Replaces the live view with <paramref name="lines"/>, each cut to the terminal's <paramref name="width"/> so that
+    /// none wraps onto a line the next frame doesn't know of, leaving the cursor at the end of the last. With no lines,
+    /// the view is erased and the cursor left where its first line began. Call under the gate.
+    /// </summary>
+    private void Draw(IReadOnlyList<string> lines, int width = int.MaxValue)
+    {
+        var text = new StringBuilder("\r");
+        if (_drawn > 1)
+        {
+            text.Append($"\u001b[{_drawn - 1}A");
+        }
+
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var line = lines[index];
+            text.Append(index > 0 ? "\n" : "").Append(line.Length < width ? line : line[..Math.Max(0, width - 1)]).Append("\u001b[K");
+        }
+
+        text.Append("\u001b[J");
+        _terminal!.Write(text.ToString());
+        _drawn = lines.Count;
+    }
+
+    /// <summary>The terminal's width and height in characters, or a common size when the console can't say.</summary>
+    private static (int Width, int Height) WindowSize()
+    {
+        try
+        {
+            return (Math.Max(Console.WindowWidth, 20), Math.Max(Console.WindowHeight, 3));
+        }
+        catch (IOException)
+        {
+            return (80, 24);
+        }
+    }
+
+    /// <summary>
+    /// Whether stderr's terminal takes ANSI escapes, turning on virtual terminal processing for a Windows console first.
+    /// </summary>
+    private static bool TryEnableEscapes()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
+        const int StandardError = -12;
+        const uint VirtualTerminalProcessing = 0x0004;
+        var handle = GetStdHandle(StandardError);
+        return GetConsoleMode(handle, out var mode)
+            && ((mode & VirtualTerminalProcessing) != 0 || SetConsoleMode(handle, mode | VirtualTerminalProcessing));
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetStdHandle(int handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetConsoleMode(IntPtr handle, out uint mode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetConsoleMode(IntPtr handle, uint mode);
 }
