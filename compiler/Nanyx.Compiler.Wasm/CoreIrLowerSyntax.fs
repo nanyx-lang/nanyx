@@ -14,9 +14,11 @@ let rec storesBeforeValue (expr: Expression) =
     | ExpressionKind.Match _ -> true
     | IfExpr(cond, _, _) -> storesBeforeValue cond
     | BinaryOp(_, _, left, right) -> storesBeforeValue left || storesBeforeValue right
-    // `dbg` holds its value in a local while it prints it, and a loop stores its elements.
+    // `dbg` holds its value in a local while it prints it, a `for` loop stores its elements, and a `while` loop's
+    // condition and body run again each time round.
     | FunctionCall("dbg", _, _)
-    | FunctionCall("__for", _, _) -> true
+    | FunctionCall("__for", _, _)
+    | WhileSyntax.Call _ -> true
     // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).
     | FunctionCall(name, _, [ _ ]) when name = CellSyntax.read || name = CellSyntax.unbox -> true
     | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue

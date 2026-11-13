@@ -71,6 +71,8 @@ type Unreachable =
     | InLambda
     /// In the body of a `for` loop, which runs once per element.
     | InLoopBody
+    /// In the condition or the body of a `while` loop, which run again each time round.
+    | InWhileLoop
     /// In a part of an expression that may not run: a branch of an `if` or an arm of a `match` that is part of a
     /// larger expression, or the right of `and` or `or`.
     | InConditionalPart
@@ -340,6 +342,7 @@ module Compiler =
                 match place with
                 | InLambda -> "inside a lambda", "move it out of the lambda, or handle the value with a `match` there"
                 | InLoopBody -> "in the body of a `for` loop", "handle the value with a `match` in the loop's body"
+                | InWhileLoop -> "in a `while` loop", "handle the value with a `match` in the loop"
                 | InConditionalPart -> "in a part of an expression that may not run", "make the `if` or `match` it is in a statement of its own"
             diagnostics.Add(
                 Diagnostics.at DiagnosticCodes.InvalidWorkflow expr.Span
@@ -375,7 +378,7 @@ module Compiler =
         // A workflow bind nested in an expression, as in `return R(a = try f())`, becomes a bind of a fresh name
         // just before its statement, and the expression refers to that name. Binds are lifted from the places an
         // expression always evaluates, inner ones before outer ones and left to right; not from lambdas, nested
-        // blocks, the branches of an `if` or a `match`, or the right of `and`/`or`.
+        // blocks, `while` loops, the branches of an `if` or a `match`, or the right of `and`/`or`.
         let rec liftBinds (expr: Expression) : Statement list * Expression =
             let liftAll exprs =
                 let lifted = exprs |> List.map liftBinds
@@ -393,6 +396,8 @@ module Compiler =
             | WorkflowReturnExpr value ->
                 let prefix, value' = liftBinds value
                 prefix, rebuild (WorkflowReturnExpr value')
+            // A `while` loop's condition and body run again each time round.
+            | WhileSyntax.Call _ -> [], expr
             | FunctionCall(name, rangeOpt, args) ->
                 let prefix, args' = liftAll args
                 prefix, rebuild (FunctionCall(name, rangeOpt, args'))
@@ -554,6 +559,8 @@ module Compiler =
             | ForSyntax.Call(iterables, loop, parameters, body) ->
                 let body' = within InLoopBody (fun () -> desugarExpr body)
                 FunctionCall(ForSyntax.builtIn, None, List.map desugarExpr iterables @ [ { loop with Kind = Lambda(parameters, body', false) } ])
+            | WhileSyntax.Call(condition, body) ->
+                FunctionCall(WhileSyntax.builtIn, None, within InWhileLoop (fun () -> [ desugarExpr condition; desugarExpr body ]))
             | FunctionCall(name, rangeOpt, args) ->
                 FunctionCall(name, rangeOpt, args |> List.map desugarExpr)
             | Lambda(args, body, takesUnit) ->

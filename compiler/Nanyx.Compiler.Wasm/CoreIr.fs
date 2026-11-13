@@ -154,6 +154,8 @@ and ExprKind =
     | Panic of string list
     /// A `for` loop: evaluates its body for each element, and is unit.
     | ForEach of ForLoop
+    /// A `while` loop: evaluates its condition, a bool, and while it is true its body, and is unit.
+    | While of WhileLoop
     /// `let x = value in body`. The value is never a `Let` itself: blocks are flattened.
     | Let of Var * Expr * Expr
     /// Evaluates the first expression for its effects, drops its value, then evaluates the second.
@@ -191,6 +193,12 @@ and Released =
 /// when the first of its streams does.
 and ForLoop =
     { Streams: ForStream list
+      Depth: int
+      Body: Expr }
+
+/// A `while` loop, at a depth (how many loops enclose it) that names its labels.
+and WhileLoop =
+    { Condition: Expr
       Depth: int
       Body: Expr }
 
@@ -499,6 +507,9 @@ module Print =
             let elements = loop.Streams |> List.map _.Element.Name |> String.concat ", "
             let sources = loop.Streams |> List.map source |> String.concat ", "
             $"for {elements} in {sources} do\n{inner}{expr inner loop.Body}"
+        | While loop ->
+            let inner = indent + "  "
+            $"while {expr inner loop.Condition} do\n{inner}{expr inner loop.Body}"
         | Let(v, value, body) -> $"let {v.Name}: {IrType.show v.Type} = {expr indent value}\n{indent}{expr indent body}"
         | Do(first, rest) -> $"do {expr indent first}\n{indent}{expr indent rest}"
         | If(cond, ifTrue, ifFalse) ->

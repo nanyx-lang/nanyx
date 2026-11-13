@@ -124,6 +124,9 @@ let collect (functions: Function list) : Drops =
         | ForEach loop ->
             loop.Streams |> List.iter (fun stream -> variable stream.Element)
             expr loop.Body
+        | While loop ->
+            expr loop.Condition
+            expr loop.Body
         | CallRuntime(name, [ first; _ ], _) when name = Helpers.listConcat ->
             match atomType first with
             | IrList element when isHeapType element && not (listConcats.Contains element) -> listConcats.Add element

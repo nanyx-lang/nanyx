@@ -330,6 +330,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
                 Loops.inferFor inferExpr inferLambdaWithExpected env state expr iterables lambdaExpr lambdaArgs lambdaBody
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "for expects an iterable and a loop body" ]
+        elif name = WhileSyntax.builtIn then
+            match expr.Kind with
+            | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
+            | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
         else
         let env = MemoryCells.aroundCall env state name
         let contextCheck =

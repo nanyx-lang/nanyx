@@ -11,6 +11,19 @@ let ``Loops, ranges and with are printed as written`` () =
     unchanged "def h = { r -> r with a = 1, b = 2 }\n"
 
 [<Fact>]
+let ``While loops are printed as written`` () =
+    unchanged """memory {
+  def remaining = mut 3
+
+  while remaining > 0 ->
+    println("{remaining}...")
+    remaining := remaining - 1
+}
+"""
+    unchanged "def f = { while ready() -> step() }\n"
+    Assert.Equal("def f = { while ready() -> step() }\n", format "def f = {   while   ready()->step() }")
+
+[<Fact>]
 let ``Updates written in parentheses after with stay there`` () =
     unchanged """def older = user with (age = 31, name = "Bob")
 """
