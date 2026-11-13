@@ -148,6 +148,39 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "inner hello a\nouter hello b\ninner hello c\n"
+
+[<Fact>]
+let ``Run - a function that requires Ord, named through a module alias, passed to fold`` () =
+    // `math.max` was named as a member access, which found no instance of `Ord(int)`: the backend looked for one in
+    // scope and found none (#1136).
+    let source =
+        """
+import nanyx/console
+import nanyx/math as math
+
+def largest: list(int) -> int = { xs -> xs \fold(0, math.max) }
+
+def largestOf: list(int) -> int = { xs -> list.fold(xs, 0, math.max) }
+
+println(largest([3, 9, 4]))
+println(largestOf([3, 9, 4]))
+println([3, -9, 4] \list.map(math.abs) \fold(0) { a, b -> a + b })
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "9\n9\n16\n"
+
+[<Fact>]
+let ``Run - a function that requires Ord, imported unqualified, passed to fold`` () =
+    let source =
+        """
+import nanyx/console
+import nanyx/math
+
+def largest: list(int) -> int = { xs -> xs \fold(0, max) }
+
+println(largest([3, 9, 4]))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "9\n"
+
 [<Fact>]
 let ``Run - a context-generic function taken as a value passes a continuation that requires no contexts to a body that requires some`` () =
     // The adapter for `each` taken at no contexts gave the body its `next` unadapted, and the body called it with
