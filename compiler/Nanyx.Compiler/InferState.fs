@@ -81,6 +81,16 @@ type SelfDef =
       /// The contexts of the type of each of its calls to itself so far: a variable that stands for the def's own.
       Calls: Ty list }
 
+/// A match whose scrutinee's type was not known when its arms were checked, so that nothing could be said yet about
+/// what they leave out (see `WorkflowRests.noteOpenMatch`).
+type OpenMatch =
+    { Match: NodeId
+      Arms: MatchArm list
+      /// The scrutinees' types as they were then.
+      Scrutinees: Ty list
+      /// Where the match's head is written, which an error about it is reported at.
+      Head: SourceSpan }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -253,6 +263,11 @@ type InferState =
             /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
             /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
             JoinRests: Set<int>;
+            /// The types of the arguments each call to a workflow block's rest has passed it so far, by the rest's name (see
+            /// `WorkflowRests`).
+            RestArguments: Map<string, Ty list>;
+            /// The matches whose scrutinees' types were not known yet when they were checked, the latest first.
+            OpenMatches: OpenMatch list;
             /// The definitions the compiler has written as derived instances (see `StructuralInstances`), by the
             /// context and the type each is an instance for, as an annotation writes it: the definition's name.
             DerivedInstances: Map<Identifier * TypeExpr, Identifier>;
@@ -341,6 +356,8 @@ let emptyState =
             UnknownTypeUses = [];
             WorkflowZeros = Map.empty;
             JoinRests = Set.empty;
+            RestArguments = Map.empty;
+            OpenMatches = [];
             DerivedInstances = Map.empty;
             DerivedDefs = [];
             DerivedCalls = Map.empty;

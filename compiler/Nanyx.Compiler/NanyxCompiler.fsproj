@@ -61,6 +61,7 @@
     <Compile Include="SyntaxTree.fs" />
     <Compile Include="LocalRecursion.fs" />
     <Compile Include="MatchArmFixes.fs" />
+    <Compile Include="MatchExhaustiveness.fs" />
     <Compile Include="DefinitionOrder.fs" />
     <Compile Include="InitialisationCycles.fs" />
     <Compile Include="EscapingLambdas.fs" />
@@ -70,6 +71,7 @@
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="ContextInstances.fs" />
+    <Compile Include="WorkflowRests.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />

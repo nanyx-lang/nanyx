@@ -138,6 +138,27 @@ def g = {
 }
 ```
 
+In a builder block such as `proc { ... }`, the replacement can end the block instead, with `return` (see [Workflows](../advanced/workflows#keywords-in-branches-loops-and-lambdas)):
+
+```nanyx
+def find: int -> #some(int) | #error(#notFound) = { id ->
+  if id > 0 then #some(id * 10) else #error(#notFound)
+}
+
+def lookup = { id -> proc {
+  def #some(result) = find(id) except #error(#notFound) -> return 0
+  return result + 1
+} }
+
+@entry
+def main = {
+  println(lookup(4))
+  println(lookup(-1))
+}
+-- #some(41)
+-- #some(0)
+```
+
 `except` binds more loosely than every operator and pipe, so it applies to the whole expression before it:
 
 ```nanyx fragment
