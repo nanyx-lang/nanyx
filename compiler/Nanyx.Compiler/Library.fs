@@ -126,10 +126,19 @@ module Compiler =
 
     /// The modules one compilation has checked, by `originKey`, so that a module imported along several paths is
     /// checked once and every importer sees the same symbols; with the package whose files' imports are resolved
-    /// through its module table, if the compilation is of a package's file.
-    type internal CheckedModules(package: PackageModules option) =
+    /// through its module table, if the compilation is of a package's file; and with the standard-library file open in
+    /// the editor, if the compilation is of one (see `compileStandardLibraryFile`).
+    type internal CheckedModules(package: PackageModules option, edited: EditedLibraryFile option) =
         inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
+        new(package) = CheckedModules(package, None)
         member _.Package = package
+        member _.Edited = edited
+
+        /// The file the syntax nodes of the module from `origin` are reported in: the editor's, for the file it has open.
+        member _.FileName(origin: ModuleOrigin) =
+            match edited with
+            | Some edited when origin = StandardLibraryModule edited.Module -> edited.Path
+            | _ -> sourceFileName origin
 
     /// The standard-library modules this process has checked, by `originKey` and source, each with the modules it
     /// imports, which a compilation that imports it needs too (`compileFrom` resolves inlined definitions' types by
@@ -377,10 +386,10 @@ module Compiler =
     let rec internal typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         let resolved =
-            parseWithDiagnostics (sourceFileName origin) source
+            parseWithDiagnostics (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
             |> Result.bind (fun parsed ->
-                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package origin) parsed
+                PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.Package checkedModules.Edited origin) parsed
                 |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), assembled))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             |> Result.bind (fun (ast, (items, declared, moduleBlocks)) ->
@@ -558,7 +567,7 @@ module Compiler =
                 let scopes =
                     imported
                     |> List.filter (fun (name, _, _) -> not (name.Contains '.'))
-                    |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (sourceFileName origin))) state.Scopes
+                    |> List.fold (fun acc (_, id, _) -> acc |> Map.add id (Scope.wholeModule (checkedModules.FileName origin))) state.Scopes
                 // A def a `module name =` block does not export can only be named inside the block.
                 let keptToItsBlock (symbol: Symbol) =
                     not symbol.IsExported
@@ -707,7 +716,7 @@ module Compiler =
             // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (sourceFileName origin) source checkedModule.Syntax checkedModule.Lowered typed)
+                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered typed)
                   else ImportFixes.add (normalizeSource source) checkedModule.Syntax checkedModule.Errors |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
@@ -745,6 +754,20 @@ module Compiler =
     /// `compileSource` with the linters and severities `options` gives.
     let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
         compileFrom options (SourceFile (Path.GetFullPath filePath)) source
+
+    /// Compiles `source`, the editor's text of the standard-library file at `filePath` (`stdlib/nanyx/text.nyx` in a
+    /// checkout, or the copy the editor opens a definition in), as the library module it is a file of, as a build of the
+    /// library checks it: with the intrinsics in scope, without importing the prelude if it is the prelude, and with the
+    /// module's other files if it is split across files. Its syntax nodes are reported in `filePath`. None if the file is
+    /// not one of the library's (see `StandardLibrary.isModuleFile`).
+    let compileStandardLibraryFile (options: LinterOptions) (filePath: string) (source: string) : CompileResult option =
+        let resource = StandardLibrary.importPrefix + Path.GetFileName filePath
+        match StandardLibrary.tryModuleOfFile resource with
+        | Some moduleName when StandardLibrary.isModuleFile filePath ->
+            let origin = StandardLibraryModule moduleName
+            let checkedModules = CheckedModules(None, Some { Module = moduleName; Resource = resource; Path = Path.GetFullPath filePath })
+            Some (Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty)))
+        | _ -> None
 
     /// Compiles `source` as if it were the contents of the file at `filePath` (which need not exist, or may hold
     /// older text: an editor's unsaved buffer, say). Imports are resolved exactly as `compileFile` resolves them.

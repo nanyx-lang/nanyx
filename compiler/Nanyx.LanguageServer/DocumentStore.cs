@@ -203,14 +203,17 @@ public sealed class DocumentStore
     {
         _settings.CompileStarted?.Invoke(uri);
         // A file on disk gets its imports resolved through its package's modules if it is a source file of one, or
-        // else relative to itself; anything else (an untitled buffer, say) can still import the standard library.
+        // else relative to itself; anything else (an untitled buffer, say) can still import the standard library. A
+        // file of the standard library is checked as the library module it is, as a build of the library checks it.
         // The compiler names a file by its full path.
         var path = uri.Scheme == "file" ? FileNameOf(uri) : null;
         try
         {
             var directives = Script.read(path ?? string.Empty, text);
             var linters = _settings.LinterOptionsFor(path, directives);
-            var result = path is null ? Compiler.compileWith(linters, text) : PackageModule.compileSourceWith(linters, path, text);
+            var result = path is null
+                ? Compiler.compileWith(linters, text)
+                : Compiler.compileStandardLibraryFile(linters, path, text)?.Value ?? PackageModule.compileSourceWith(linters, path, text);
             return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null);
         }
         catch (Exception ex)
