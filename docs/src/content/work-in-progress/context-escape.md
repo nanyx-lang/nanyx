@@ -215,8 +215,10 @@ The proposal draws the line there, and makes every helper a function that takes 
 
 ## Workflows
 
-A workflow builder is a record value today: `proc` in `prelude-results.nyx` is a `def` of a structural record type,
-and `proc { ... }` desugars to `proc.apply({ use proc in ... })`. Under the proposal a builder is a declared context
+A workflow builder is a record value today: `proc` in `prelude-results.nyx` is a `def` of a structural record type.
+The workflows page documents `proc { ... }` as `proc.apply({ use proc in ... })`, but `WorkflowDesugaring.fs` makes
+neither the `apply` nor the `use` yet: the block runs where it is written, and each keyword reads its member into a
+local and calls it (`def t = proc.try` then `t(x, { v -> ... })`). Under the proposal a builder is a declared context
 and a function that runs the block under it:
 
 ```nanyx fragment
@@ -255,14 +257,53 @@ makes one closure per member: four for `Proc`.
 - **Allocation.** Members that capture nothing, as `Proc`'s do, are lifted to top-level functions, so each is a
   closure over a top-level function. Today that is a small heap allocation per member, per block. With
   [#743](https://github.com/nanyx-lang/nanyx/issues/743) they become static data and cost nothing.
-- **Calls.** Today a block's `use proc` names a top-level definition, so with
+- **Calls.** Today a block's keywords read `proc`, a top-level definition, so with
   [#744](https://github.com/nanyx-lang/nanyx/issues/744) the block could call `try` directly. Under the proposal the
   members come from `proc`'s `use`, outside the block, so they stay closure parameters of the block and its calls stay
   indirect, unless `proc` is inlined where it is called. A function of the form `use ... in f()` is the smallest case
   for an inliner ([#745](https://github.com/nanyx-lang/nanyx/issues/745)); inlined, the block compiles as it does
   today.
 - **The real cost of a workflow is unchanged.** Each `try` makes a continuation closure over the block's live locals
-  and calls a member indirectly, in both forms. An experiment compiling `proc` both ways is to measure this.
+  and calls a member indirectly, in both forms.
+
+### Measured
+
+A `proc` block with three `try`s and a `return`, on `int` payloads, was compiled with `main` at dcda5b3b and run 20
+million times in a loop. There are four variants: (A) `proc { ... }`; (B) what A desugars to, written out (`def t =
+proc.try` then `t(x, { v -> ... })`); (B2) the documented `use proc in` form, with the members renamed `bind` and
+`ret`, since `try` and `return` can't be called by name; (C) the proposal: `context Proc`, a `procH` that runs `f`
+under `use Proc(...) in f()`, and the members called by hand. Debug and `--release` emit the same WAT. Allocations
+and `call_indirect`s are counted from the WAT, along the path where every `try` succeeds. The time is the median of
+five runs, minus a one-iteration run for compiling and start-up, and runs differed by up to 30%.
+
+|                              |      A |      B |     B2 |      C |
+| ---------------------------- | -----: | -----: | -----: | -----: |
+| WAT of the block's functions | 6.2 KB | 6.0 KB | 6.0 KB | 6.5 KB |
+| Allocations per block        |     19 |     19 |      9 |      9 |
+| `call_indirect` per `try`    |      2 |      2 |      2 |      3 |
+| `call_indirect` per block    |      7 |      7 |      7 |     11 |
+| Time per block               | 192 ns | 204 ns | 141 ns | 132 ns |
+
+- **Today's `proc` rebuilds its record at every keyword.** `proc` is generic, so a read of it is a call that makes
+  the whole record: three closures and the record, four allocations, for each of the four keywords. That is 16 of A's
+  19 allocations, and why C, which makes its two member closures once per block, is faster than A today
+  ([#1151](https://github.com/nanyx-lang/nanyx/issues/1151)).
+- **C makes two closures per `try`.** The continuation requires `Proc`, and `bind`'s parameter is `[c] a -> ...`, so
+  the backend wraps it in an adapter closure (`__adapt_...`), and calling it makes a third `call_indirect`. C's other
+  allocations are the block lambda and the two member closures at `procH`'s `use`.
+- **With [#743](https://github.com/nanyx-lang/nanyx/issues/743)**, `bind` and `ret` at `procH`'s `use` capture nothing and become static: C drops to 7 allocations per
+  block (the block lambda, three continuations and three adapters) and keeps 11 `call_indirect`s. [#744](https://github.com/nanyx-lang/nanyx/issues/744) doesn't help
+  C: the members reach the block as closure parameters through `f`.
+- **With [#745](https://github.com/nanyx-lang/nanyx/issues/745) as well**, inlining `procH` into its caller exposes `f` as the block lambda and the members as top-level
+  functions. The block lambda isn't made, `f()`, `bind` and `ret` become direct calls, and a continuation no longer
+  needs an adapter, since the members it reads are known. That leaves three continuations and the three calls of them
+  in `bind`: 3 allocations and 3 `call_indirect`s per block, fewer than A makes today.
+
+C runs today only with workarounds. The checker doesn't give a lambda the contexts its expected type requires, so
+the block can't name `bind` unless the function around it requires `[Proc]`; C's `step` does, `procH` takes
+`[c] () -> ...`, and `main` loads a `Proc` that is never called. And a generic `Proc`, with `bind` over `a` and `b`
+as `proc`'s `try` is, type-checks but traps in the backend (`indirect call type mismatch`,
+[#1152](https://github.com/nanyx-lang/nanyx/issues/1152)), so C's `Proc` is on `int`.
 
 ## What changes
 
@@ -284,7 +325,10 @@ makes one closure per member: four for `Proc`.
 - **Whether `use` still takes a plain record.** `use (log = { m -> println(m) })` works today. Taking only a declared
   context's constructor gives one answer to what `use` loads.
 - **Generic members.** Each `try` in a block has its own `a` and `b`, so `Proc`'s `try` must be polymorphic per call.
-  The cookbook's `context OptionChain` declares such a member, but `proc` and the other builders need to check it.
+  It isn't today: a context member's type variables are fixed once in a function that requires the context, so
+  `bind(name(i), { s -> bind(size(s), ...) })`, on a `string` payload and then an `int` one, is NYX0201 (`int vs
+  string`). Today's `proc` takes the same block, because each keyword reads `proc.try` into a local of its own. The
+  proposal needs a member instantiated afresh at each call.
 
 # Open questions
 
