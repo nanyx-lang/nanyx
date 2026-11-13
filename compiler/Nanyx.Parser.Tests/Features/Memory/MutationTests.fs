@@ -64,3 +64,39 @@ let ``An assignment can be a for loop's body and spans its target and value`` ()
         | other -> failwith $"Unexpected body: %A{other}"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+
+
+[<Fact>]
+let ``mut on a parameter takes a cell: its annotation is mut _, with no source of its own`` () =
+    let source = "def f = { mut cell, mut held: int, n -> n }"
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (Lambda ([ ("cell", cell); ("held", held); ("n", None) ], _, _))))) ] ->
+        match cell, held with
+        | CellPassingSyntax.CellParameter None, CellPassingSyntax.CellParameter (Some { Kind = TypeName "int" }) -> ()
+        | other -> failwith $"Unexpected parameters: %A{other}"
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``mut on a parameter takes one name, so a pattern after it is an error`` () =
+    let message, at = parseErrorOf "def f = { mut (a, b) -> a }\n"
+    Assert.Contains("`mut` on a parameter takes a single name", message)
+    Assert.Equal("(a, b) -> a }", at)
+
+[<Fact>]
+let ``mut x as an argument passes the cell: a call to __mut_arg spanning both`` () =
+    let source = "def f = swap(mut a, mut b)"
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, "f", _, Kind (FunctionCall ("swap", _, [ Kind (TupleExpr [ first; Kind (CellPassingSyntax.Argument (Kind (IdentifierExpr "b"))) ]) ]))))) ] ->
+        match first.Kind with
+        | CellPassingSyntax.Argument (Kind (IdentifierExpr "a")) -> Assert.Equal("mut a", source.Substring(first.Span.Start, first.Span.End - first.Span.Start))
+        | other -> failwith $"Unexpected argument: %A{other}"
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
+let ``mut T is the type of a cell`` () =
+    match parseModule "def inc: [$Memory] mut int -> () = { mut cell -> () }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "inc", Some (Kind (TypeWithContext (_, Kind (TypeFunc (Kind (TypeApply ("mut", [ Kind (TypeName "int") ])), _))))), _))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"

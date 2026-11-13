@@ -187,6 +187,8 @@ module Unifier =
             | None -> $"#{name}"
         // A context with no arguments is written by its name: `Console`, and `$Memory` without its scope.
         | FunctionContexts.PlainContext name -> name
+        // A cell's type is written as it is in an annotation, without its scope: `mut int`.
+        | FunctionContexts.CellType(held, _) -> $"mut {grouped held}"
         | TyApply(name, [ arg ]) -> $"{name}({soleArgument arg})"
         | TyApply(name, args) -> $"{name}({items args})"
         // A union of no tags has no values: the bottom type.
@@ -220,6 +222,7 @@ module Unifier =
             | TyOpenRecord(fields, row) -> collect (TyRecord fields) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
             | FunctionContexts.ScopedContext _ -> []
+            | FunctionContexts.CellType(held, _) -> collect held
             | TyApply(_, args) -> args |> List.collect collect
             | TyUnion items -> items |> List.collect collect
         collect ty

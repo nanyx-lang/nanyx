@@ -891,6 +891,15 @@ do
     // brackets of its own, `{ (g: int -> int) -> g(1) }`. Outside brackets, the arrow after an annotation ends the
     // parameters.
     let bracketedParameter = between (pstring "(" >>. wsInline) (wsInline >>. pstring ")") (parameterOf typeExpr)
+    // `mut cell` takes a cell (see `CellPassingSyntax`), and `mut cell: int` one that holds an int. It is a single
+    // name, so a pattern after `mut` is an error.
+    let cellParameter =
+        attempt (pstring "mut" >>. keywordEnd >>. ws)
+        >>. (followedBy (satisfy (fun c -> Char.IsLetter c || c = '_' || c = '`'))
+             <|> (getPosition >>= fun position ->
+                     reportFocused position "`mut` on a parameter takes a single name, not a pattern: take the cell as `mut cell`, and its value apart in the body"))
+        >>. parameterOf parameterType
+        |>> fun (name, held) -> name, Some (CellPassingSyntax.parameterType held)
     // A parameter may be a pattern, `{ (a, b) -> a + b }`, `{ $Email(s) -> s }`, with the names it binds. A name or
     // `_` alone is an ordinary parameter.
     let patternParameter =
@@ -901,7 +910,7 @@ do
             | _ -> preturn (Choice2Of2(parameter, names))
     let paramList =
         sepBy
-            (attempt (bracketedParameter |>> Choice1Of2) <|> attempt patternParameter <|> (parameter |>> Choice1Of2))
+            ((cellParameter |>> Choice1Of2) <|> attempt (bracketedParameter |>> Choice1Of2) <|> attempt patternParameter <|> (parameter |>> Choice1Of2))
             (pstring "," .>> ws)
     let arrow = wsInline >>. pstring "->" .>> wsInline
     

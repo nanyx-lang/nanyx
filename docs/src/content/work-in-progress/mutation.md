@@ -13,9 +13,12 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
 - `mut x = e` declares a cell in a `memory` block, `:=` changes one, and a cell's name reads it. Cells are not values:
   nothing can hold one. `mut` declares one name and is not an expression ([#1071](https://github.com/nanyx-lang/nanyx/issues/1071)):
   the parser reads `mut x = e` as a def whose value is a call to `__mut` (`MutSyntax`), as `rec` does with `__rec`,
-  and `mut` anywhere else, `def x = mut e` included, is a parse error that says to write `mut x = e`.
+  and `mut` anywhere else but a parameter or an argument (below), `def x = mut e` included, is a parse error that says
+  to write `mut x = e`.
 - A lambda in the block may use the block's cells, and its type then requires `$Memory`: `{ word -> count := count + 1 }`
   is `[$Memory] string -> ()`. A block whose result is, or holds, a lambda that uses one is an error.
+- A cell can be passed to a function ([#1072](https://github.com/nanyx-lang/nanyx/issues/1072)): `{ mut cell -> ... }`
+  takes one, `f(mut x)` passes one, and `mut T` is a cell parameter's type. Nothing else can hold a cell yet.
 - A cell no lambda captures is a WebAssembly local; a captured one is a reference-counted box the lambdas share.
 - `while condition -> body` runs its body for as long as its condition, which may read cells, is true
   ([#957](https://github.com/nanyx-lang/nanyx/issues/957)). The parser makes it a call to `__while` (`WhileSyntax`);
@@ -37,12 +40,20 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
   box: a record of one field, made with `box`, read with `unbox` and written with `setBox`. The core IR has two nodes
   for writes, `Assign` for a local and `SetField` for a box, each dropping the value it replaces. A read copies the
   value into a local of its own, so that a later `:=` cannot change what a read gave.
+- **Cell parameters** (`CellPassingSyntax`). The parser reads `mut cell` as a parameter annotated `mut _` with no source
+  of its own, so the formatter writes it back, and `mut x` before a `,` or `)` as a call to `__mut_arg`. `mut T` is
+  `TyApply("mut", [T; scope])` (`FunctionContexts.cellType`): the scope is the signature's `$Memory`'s where an
+  annotation writes it, and a parameter's own otherwise, so a passed cell's block reaches whatever requires the
+  parameter and NYX0233 still keeps it in its block. `MemoryCells.bindParameter` makes the parameter a cell of that
+  scope, `MemoryCells.inferArgument` types `mut x` (NYX0234 when `x` is not a cell), and
+  `MemoryCells.ensureCellTypesPlaced` reports a `mut T` anywhere but a function's parameter (NYX0235). In the backend a
+  cell that is passed is a box, a cell parameter is the box it is given, and `mut x` passes the box.
 
 # Planned
 
 - **Mutable collections.** `MArray` and `MList`, with attached operators that update them in place, such as `+=` on an
   `MList`.
-- **Cells as values** (`MRef`), which needs [context-qualified types](./context-qualified-types): the type of a value
-  that requires `$Memory` says so, and escape falls out of type checking rather than the syntactic check above.
+- **Cells as values** (`MRef`): a cell held in a record, a list or another cell, or returned from a function. Its type
+  would carry its block's scope, as a cell parameter's does, so that NYX0233 keeps it in its block.
 - **`mut` record fields.** The parser reads `mut` before a field name in a record type; nothing checks or compiles it
   yet.

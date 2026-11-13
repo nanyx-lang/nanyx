@@ -28,7 +28,7 @@ def sum: list(int) -> int = { xs ->
 
 A `mut` declares one name: it takes no pattern, so `mut (a, b) = pair` is an error. To make cells from the parts of a value, take it apart with `def` first, then declare a cell for each part. `mut` is not an expression either, so a cell is never made without a name.
 
-A cell is not a value of its own. `def y = x` copies what `x` holds into `y`, which a later `x := ...` leaves as it is, and passing `x` to a function passes what it holds. Nothing can hold a cell, only what is in it.
+A cell is not a value of its own. `def y = x` copies what `x` holds into `y`, which a later `x := ...` leaves as it is, and passing `x` to a function passes what it holds (`mut x` passes the cell itself; see below). Nothing can hold a cell, only what is in it.
 
 # Mutability requires context
 
@@ -66,6 +66,29 @@ def tally = { words ->
 ```
 
 A lambda that uses a cell needs `$Memory` too, and its type says so: `note` is `[$Memory] string -> ()`. It can be called inside the block but cannot leave it (see below).
+
+# Passing a cell to a function
+
+A function can take a cell and change it, with `mut` at both ends: `mut cell` in its parameters, and `mut count` where it is called.
+
+```nanyx
+def inc = { mut cell ->
+  cell := cell + 1
+}
+
+def count = memory {
+  mut count = 0
+  for 1..10 ->
+    inc(mut count)
+  count -- 10
+}
+```
+
+In the body, a cell parameter behaves as a cell declared there: its name reads it and `:=` changes it. Its type is `mut T`, which an annotation can write: `def inc: [$Memory] mut int -> () = { mut cell -> ... }`. A function can pass a cell it is given on, `other(mut cell)`, and one cell can be passed for two parameters, `swap(mut a, mut a)`, which are then the same cell.
+
+`mut x` passes only a cell, a name declared with `mut` or a `mut` parameter: anything else is an error (NYX0234). A plain value where `mut T` is expected, or `mut x` where a plain `T` is, is a type error. A `mut` parameter takes one name, never a pattern.
+
+A cell can be passed to a function, but nothing else can hold one yet: `mut T` anywhere but a function's parameter, as in `list(mut int)`, is an error (NYX0235). A lambda over a cell parameter needs the `$Memory` of the block the cell is in, so it cannot leave that block, as a lambda over the cell itself cannot.
 
 # Values cannot escape memory scope
 
@@ -132,7 +155,7 @@ Because `memory` is scoped, global mutable state is effectively impossible. Top-
 
 # How cells are compiled
 
-A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures is a box on the heap, shared by the block and every lambda that captures it, and reference counted like any other value, so it is freed when the last of them is done with it.
+A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures, or one passed with `mut`, is a box on the heap, shared by the block, every lambda that captures it and every function it is passed to, and reference counted like any other value, so it is freed when the last of them is done with it.
 
 # Planned
 

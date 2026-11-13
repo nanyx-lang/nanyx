@@ -8,7 +8,7 @@ open Parser.Program
 open NyxCompiler.InferState
 
 /// The context mutation needs, as the prelude declares it.
-let context = "$Memory"
+let context = FunctionContexts.cellContext
 
 /// The function that provides `$Memory` for the block it is given, as the prelude declares it.
 let memoryFunction = "memory"
@@ -89,6 +89,62 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
     | IdentifierExpr name when env.ContainsKey name ->
         Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"'{name}' is not a cell, so `:=` cannot change it: only a name declared with `mut` is one" ]
     | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span "Only a cell can be assigned with `:=`: a name declared with `mut name = value`" ]
+
+/// The type the parameter `symbol` of a lambda binds its name to, `ty` being the parameter's type and `typeOpt` its
+/// annotation, and `state` with it a cell if it is written `mut name` (see `CellPassingSyntax`): its type is then `mut T`,
+/// of the scope of the cell given for it, and its name reads a `T`.
+let bindParameter (symbol: SymbolId option) (typeOpt: TypeExpr option) (ty: Ty) (state: InferState) : Ty * InferState =
+    match symbol, typeOpt with
+    | Some symbol, CellPassingSyntax.CellParameter _ ->
+        let held, next = freshVar state
+        let scope, next = freshVar next
+        let constrained = addConstraint ty (FunctionContexts.cellType held scope) next
+        held, { constrained with Cells = constrained.Cells |> Map.add symbol scope }
+    | _ -> ty, state
+
+/// `mut cell` as an argument, at `expr` (see `CellPassingSyntax`): the cell `cell` names, of the type `mut T`. Passing it
+/// uses it, as reading it does. Only a cell can be passed so.
+let inferArgument (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (cell: Expression) =
+    match cell.Kind with
+    | IdentifierExpr name when isCell env state name ->
+        infer env state cell
+        |> Result.map (fun (typedCell, next) ->
+            let scope = (scopeOf env state name).Value
+            mkTypedExpr expr (FunctionContexts.cellType typedCell.Type scope) None None None, next)
+    | IdentifierExpr name ->
+        Error [ Diagnostics.at DiagnosticCodes.NotACellArgument cell.Span
+                    $"'{name}' is not a cell, so `mut {name}` cannot pass it: only a name declared with `mut`, or a `mut` parameter, is one" ]
+    | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACellArgument cell.Span "Only a cell can be passed with `mut`: a name declared with `mut name = value`" ]
+
+/// The errors for each `mut T` in `typeOpt`, a def's annotation, that is not a function's parameter: a cell can be passed
+/// to a function, but nothing else can hold one yet.
+let ensureCellTypesPlaced (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+    let isCellType (typeExpr: TypeExpr) =
+        match typeExpr.Kind with
+        | TypeApply(name, [ _ ]) -> name = CellPassingSyntax.typeName
+        | _ -> false
+    let rec misplaced (typeExpr: TypeExpr) : TypeExpr list =
+        let inside (items: TypeExpr list) = items |> List.collect (fun item -> if isCellType item then [ item ] else misplaced item)
+        match typeExpr.Kind with
+        // A parameter, or one of several: `mut int -> ()`, `mut int, mut int -> ()`.
+        | TypeFunc(input, output) ->
+            let parameters =
+                match input.Kind with
+                | TypeTuple items -> items
+                | _ -> [ input ]
+            (parameters |> List.collect (fun parameter -> if isCellType parameter then misplaced (List.head (TypeExpr.children parameter)) else misplaced parameter))
+            @ inside [ output ]
+        | TypeWithContext(contexts, inner) -> inside contexts @ misplaced inner
+        | _ -> inside (TypeExpr.children typeExpr)
+    let found = typeOpt |> Option.map (fun typeExpr -> if isCellType typeExpr then [ typeExpr ] else misplaced typeExpr) |> Option.defaultValue []
+    match found with
+    | [] -> Ok ()
+    | _ ->
+        found
+        |> List.map (fun typeExpr ->
+            Diagnostics.at DiagnosticCodes.MisplacedCellType typeExpr.Span
+                "A cell's type, `mut T`, can only be a function's parameter for now: a cell can be passed to a function, but nothing can hold one")
+        |> Error
 
 /// The code of a type mismatch found at `span`: an assignment's own when it is one of the module's `:=`s.
 let mismatchCode (state: InferState) (span: SourceSpan) =

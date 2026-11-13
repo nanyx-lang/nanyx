@@ -320,9 +320,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match args with
             | [ inner ] -> inferExpr env state inner
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "rec expects a single definition" ]
-        elif name = MutSyntax.builtIn || name = AssignSyntax.builtIn then
+        elif name = MutSyntax.builtIn || name = AssignSyntax.builtIn || name = CellPassingSyntax.argument then
             match expr.Kind with
             | MutSyntax.Call value -> MemoryCells.inferMut inferExpr env state expr value
+            | CellPassingSyntax.Argument cell -> MemoryCells.inferArgument inferExpr env state expr cell
             | AssignSyntax.Call(target, value) -> MemoryCells.inferAssign inferExpr env state expr target value
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span $"{name} expects a cell and a value" ]
         elif name = ForSyntax.builtIn then
@@ -1320,8 +1321,9 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
                 ty)
     for ((name, typeOpt), ty) in List.zip args argTys do
         let symbol, next = declareSymbol LambdaParameters lambda.Id name Parameter false (Some lambda.Span.End) current
-        current <- next |> recordSymbolType symbol ty |> recordAnnotated symbol typeOpt.IsSome
-        env' <- TypeEnv.declare name symbol (TypeEnv.mono ty) env'
+        let bound, next = next |> recordSymbolType symbol ty |> recordAnnotated symbol typeOpt.IsSome |> MemoryCells.bindParameter symbol typeOpt ty
+        current <- next
+        env' <- TypeEnv.declare name symbol (TypeEnv.mono bound) env'
     match inferExpr env' (LambdaContexts.enter lambda current) body with
     | Ok (bodyExpr, next) ->
         let used, next = LambdaContexts.leave lambda next
@@ -1356,7 +1358,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         match fst (extractContextFromTypeExpr typeOpt) with
                         | Some contexts -> ensureContextsExist current name (declarationSpan current DefValue expr) contexts
                         | None -> Ok ()
-                    let contextsExist = contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
+                    let contextsExist =
+                        contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.ensureCellTypesPlaced typeOpt)
                     let notSelfReferenced =
                         match LocalRecursion.selfReferences env' name expr with
                         | [] -> Ok ()

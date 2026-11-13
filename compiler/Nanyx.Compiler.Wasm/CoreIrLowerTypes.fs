@@ -209,6 +209,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "?error" -> IrError
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.
     | FunctionContexts.ScopeType _ -> IrUnit
+    // A cell passed to a function is the box it is held in (see `CellSyntax`).
+    | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
     | TyTag _
     | TyUnion _ as tags ->
         let rec members ty =

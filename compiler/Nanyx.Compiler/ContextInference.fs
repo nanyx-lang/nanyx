@@ -18,6 +18,7 @@ module internal ContextInference =
             | TyPrimitive _
             | TyNominal _
             | FunctionContexts.ScopedContext _ -> []
+            | FunctionContexts.CellType(held, _) -> collect held
             | TyAlias(_, args, _)
             | TyApply(_, args)
             | TyUnion args -> args |> List.collect collect
@@ -50,6 +51,7 @@ module internal ContextInference =
             | TyNominal(nominal, _, _) -> Some (TypeName nominal.Name)
             | TyPrimitive name
             | TyAlias(name, [], _) -> Some (TypeName name)
+            | FunctionContexts.CellType(held, _) -> typeExprOf names held |> Option.map (fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))
             | TyAlias(name, args, _)
             | TyApply(name, args) -> all args |> Option.map (fun args -> TypeApply(name, args))
             | TyFunc(arg, ret, contexts) ->

@@ -415,6 +415,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | MapSyntax.Call entries -> mapDoc e.Span entries
         | FunctionCall(n, _, [ Kind (RecordExpr fields) ]) when n = SpreadSyntax.builtIn -> recordFieldsDoc true e.Span.Start e.Span.End fields
         | AssignSyntax.Call(target, value) -> cat [ expr operandPosition target; text " := "; expr { full with Tail = position.Tail } value ]
+        | CellPassingSyntax.Argument cell -> cat [ text "mut "; expr full cell ]
         | FunctionCall(n, nameSpan, args) ->
             let written = Names.written n
             cat [ text written; callArguments e (nameEnd nameSpan (e.Span.Start + written.Length)) args ]
@@ -736,6 +737,9 @@ let format (options: Options) (parsed: SourceModule) : string =
     and parameterDoc ((n, typeOpt), patternOpt) =
         match patternOpt, typeOpt with
         | Some p, _ -> pattern p
+        // A parameter that takes a cell is written as it was: `mut cell`, or `mut cell: int` (see `CellPassingSyntax`).
+        | None, CellPassingSyntax.CellParameter None -> text $"mut {Names.written n}"
+        | None, CellPassingSyntax.CellParameter (Some held) -> cat [ text $"mut {Names.written n}: "; typeExpr held ]
         | None, Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
         | None, None -> text n
 
@@ -1185,6 +1189,11 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeUnit -> text "()"
         | TypeTuple _ -> parenType t
         | TypeRecord fields -> cat [ text "("; commaJoin (List.map recordTypeField fields); text ")" ]
+        // `mut int`, the type of a cell (see `CellPassingSyntax`): what it holds is an atom, so a bigger type is bracketed.
+        | TypeApply(n, [ held ]) when n = CellPassingSyntax.typeName ->
+            match held.Kind with
+            | TypeFunc _ | TypeUnion _ | TypeIntersection _ | TypeWithContext _ | TypeTuple _ -> cat [ text "mut "; parenType held ]
+            | _ -> cat [ text "mut "; typeExpr held ]
         | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
         | TypeTag(n, None) -> text ("#" + n)
         | TypeTag(n, Some (Kind TypeUnit)) -> text $"#{n}()"

@@ -43,6 +43,7 @@ let internal isBuiltInTypeName (name: string) =
     (lookupPrimitive name).IsSome
     || name = "list"
     || name = "seq"
+    || name = CellPassingSyntax.typeName
     || Maps.isTypeName name
     || Sets.isTypeName name
 
@@ -198,7 +199,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             // A scoped context's scope is the one every scoped context of its name in the signature has (see
             // `WrittenContexts.read`).
             | Some info when info.IsScoped && isNominal info ->
-                let scope, next = typeExprToTy (recordTypeReference typeExpr info state) (TypeExpr.synthetic (TypeVar $"@{name}"))
+                let scope, next = typeExprToTy (recordTypeReference typeExpr info state) (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName name)))
                 scopedValueType info scope, next
             | Some info -> namedType name info, recordTypeReference typeExpr info state
             | None -> TyPrimitive name, state
@@ -259,6 +260,14 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Maps.ofTypes argTys.[0] argTys.[1], current
         elif Sets.isTypeName name && argTys.Length = 1 then
             Sets.ofType argTys.[0], current
+        // `mut T`: a cell of the `memory` block whose `$Memory` the signature writes, as `[$Memory] mut int -> ()` says
+        // (see `WrittenContexts.read`). A `mut cell` parameter's own annotation, which has no source, is of a scope of
+        // its own: the cell given for it says which.
+        elif name = CellPassingSyntax.typeName && argTys.Length = 1 then
+            let scope, current =
+                if SourceSpan.isNone typeExpr.Span then freshVar current
+                else typeExprToTy current (TypeExpr.synthetic (TypeVar (FunctionContexts.scopeVariableName FunctionContexts.cellContext)))
+            FunctionContexts.cellType argTys.[0] scope, current
         else
             match tryFindTypeDef name current with
             | Some info when not (isNominal info) ->

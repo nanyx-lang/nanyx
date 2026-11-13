@@ -206,7 +206,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 match fst (extractContextFromTypeExpr typeOpt) with
                 | Some contexts -> ensureContextsExist state name (declarationSpan state DefValue expr) contexts
                 | None -> Ok ()
-            let contextsExist = contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
+            let contextsExist =
+                contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.ensureCellTypesPlaced typeOpt)
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
             let typeOfsInferred =
                 match typeOpt with
