@@ -776,7 +776,7 @@ let memberAccessChain =
             opt withClause |>> function
                 | Some (updates, updatesSpan) ->
                     let updated = Expression.at updatesSpan (RecordExpr updates)
-                    Expression.at (SourceSpan.between accessedText updatesSpan) (FunctionCall("__with", None, [ accessed; updated ]))
+                    Expression.at (SourceSpan.between accessedText updatesSpan) (FunctionCall(WithSyntax.builtIn, None, [ accessed; updated ]))
                 | None -> accessed
 
 let primaryExpr = memberAccessChain .>> wsInline  // Consume trailing inline ws for operator parsing

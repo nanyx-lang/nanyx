@@ -830,8 +830,15 @@ module UnusedResults =
                 | TyPrimitive "unit" -> false
                 | unaliased -> not (Unifier.isBottom unaliased))
 
+    /// What the message calls the discarded `expr`: a call by the name written, and syntax the parser makes a call to a
+    /// built-in by what was written, never by the built-in's name.
     let private whatIsUnused (expr: Expression) =
         match expr.Kind with
+        | WithSyntax.Call _ -> "This `with` update"
+        | SpreadSyntax.Call _ -> "This record"
+        | RangeSyntax.Call _ -> "This range"
+        | MapSyntax.Call _ -> "This map"
+        | FunctionCall(name, _, _) when name.StartsWith "__" -> "This value"
         | FunctionCall(name, _, _)
         | Pipe(_, name, _, _)
         | ContextMemberCall(_, name, _) -> $"The result of `{name}`"

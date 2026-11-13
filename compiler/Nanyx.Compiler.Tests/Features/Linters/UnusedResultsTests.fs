@@ -57,6 +57,31 @@ let ``A pure expression whose value is thrown away is reported`` () =
     | other -> failwith $"Expected one report, got %A{other}"
 
 [<Fact>]
+let ``Syntax the parser makes a built-in call is reported by what was written`` () =
+    // `with` and a record spread are calls to `__with` and `__spread`, which the message named (#1012).
+    let source =
+        """def b: (x: int, y: int) -> int = { p ->
+  p with (x = 3)
+  p.x
+}
+
+def c: int -> int = { n ->
+  def base = (a = n)
+  (...base, b = 1)
+  (1..n)
+  [n => "n"]
+  n
+}
+"""
+    let messages = reported source |> List.map (fun (diagnostic, text) -> text, diagnostic.Message)
+    Assert.Equal<(string * string) list>(
+        [ "p with (x = 3)", "This `with` update, of type '(x: int, y: int)', is never used: bind it to a name, or pass it to `ignore`"
+          "(...base, b = 1)", "This record, of type '(a: int, b: int)', is never used: bind it to a name, or pass it to `ignore`"
+          "1..n", "This range, of type 'seq(int)', is never used: bind it to a name, or pass it to `ignore`"
+          "[n => \"n\"]", "This map, of type 'map(int, string)', is never used: bind it to a name, or pass it to `ignore`" ],
+        messages)
+
+[<Fact>]
 let ``The fix passes the value to ignore`` () =
     let source =
         """def twice: int -> int = { n -> n * 2 }

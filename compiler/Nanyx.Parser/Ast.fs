@@ -382,6 +382,17 @@ type SpreadPart =
     /// `name = value`.
     | SpreadField of Identifier * Expression
 
+/// `record with f = v, ...` (see the records page): a call to the built-in "__with" with the record and a record of the
+/// updated fields.
+module WithSyntax =
+    let builtIn = "__with"
+
+    /// The record an update copies, and the record of its updated fields.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ record; updates ]) when name = builtIn -> Some (record, updates)
+        | _ -> None
+
 /// `(...a, f = v, ...b)` (see the records page): a call to the built-in "__spread" with a record of its parts, in the
 /// order written: each spread record a positional field, each field written out a named one. A later part's field
 /// replaces an earlier one's.
