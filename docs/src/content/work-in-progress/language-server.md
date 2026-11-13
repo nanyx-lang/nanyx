@@ -80,7 +80,11 @@ what the compiler keeps: exact spans, resolved names and types.
   name resolution records ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). A declaration's own name goes
   to itself. A definition in an imported source file opens that file. The standard library is embedded in the
   compiler, so a definition in it opens a read-only copy of its module's source, which the server writes under the
-  user's local application data by compiler version (`StandardLibrarySource`). A type name in a type (an
+  user's local application data by compiler version (`StandardLibrarySource`). A standard-library file open in the
+  editor, that copy or `stdlib/nanyx/<module>.nyx` in a checkout, is checked as the library module it is a file of,
+  as a build of the library checks it (`Compiler.compileStandardLibraryFile`,
+  [#922](https://github.com/nanyx-lang/nanyx/issues/922)): with the intrinsics in scope, without importing the prelude
+  into the prelude's own files, and with the module's other files if it is split across files. A type name in a type (an
   annotation, a type definition, a context) goes to the type's definition: each type definition and context is a
   `TypeDefinition` symbol, declared at its name, and each type expression that names one records a reference by its
   node. A context member goes to where its context declares it: each member is a `ContextMember` symbol, bound in

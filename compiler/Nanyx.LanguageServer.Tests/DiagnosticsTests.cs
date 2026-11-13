@@ -183,6 +183,34 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         Assert.Empty(diagnostics.Diagnostics!);
     }
 
+    [Theory]
+    [InlineData("text.nyx")]
+    [InlineData("prelude.nyx")]
+    [InlineData("prelude-lists.nyx")]
+    public async Task A_standard_library_file_is_checked_as_the_library_module_it_is(string fileName)
+    {
+        // Its calls to the compiler's intrinsics check, and the prelude's files do not clash with the prelude.
+        var uri = DocumentUri.FromFileSystemPath(TempPath("nanyx", fileName));
+
+        Open(uri, NyxCompiler.StandardLibrary.tryLoadFile("nanyx/" + fileName).Value);
+
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+    }
+
+    [Fact]
+    public async Task An_error_in_a_file_of_a_module_split_across_files_is_published_on_that_file()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("nanyx", "prelude-lists.nyx"));
+        var text = NyxCompiler.StandardLibrary.tryLoadFile("nanyx/prelude-lists.nyx").Value.ReplaceLineEndings("\n");
+        var line = text.Split('\n').Length - 1;
+
+        Open(uri, text + "def broken = missingName\n");
+
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("NYX0101", diagnostic.Code?.String);
+        Assert.Equal(new Range(line, 13, line, 24), diagnostic.Range);
+    }
+
     [Fact]
     public async Task Closing_a_document_clears_its_diagnostics()
     {

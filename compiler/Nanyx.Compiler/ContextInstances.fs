@@ -407,6 +407,14 @@ let internal wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (
 /// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`).
 let internal orderingInstance (op: string) (span: SourceSpan) = wellKnownInstance WellKnownContexts.ordering op span
 
+/// The definition `qualifier.field` names, as `math.max` or `int.toString` do, with its scheme: none when it reads a
+/// field of the value `qualifier`. A value named as a built-in type, as `list` in `{ list -> list.length }`, is not
+/// the type.
+let internal qualifiedDefinition (env: TypeEnv) (qualifier: Identifier) (field: Identifier) : (Identifier * TypeScheme) option =
+    let qualifiedName = $"{qualifier}.{field}"
+    if isBuiltInTypeName qualifier && (TypeEnv.tryFind qualifier env).IsSome then None
+    else TypeEnv.tryFind qualifiedName env |> Option.map (fun scheme -> qualifiedName, scheme)
+
 /// Finds where `call`, the node where `name` is called at the type `calleeTy` (or, when `reference`, named as a value
 /// of that type), finds each parameterised context the callee requires (see `TypedModule.ContextInstances`), once its
 /// arguments have settled what the context is for. A context for a type inference has not worked out yet is left to
@@ -522,9 +530,11 @@ let internal resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expr
     resolveInstancesAt false env state call name (state.CalleeTypes |> Map.tryFind call.Id) calleeSpan
 
 /// `resolveInstancesAt` for each argument of `call` that names a function as a value, once the call has settled its
-/// type: `apply(println, 7)` passes `println` with `ToString(int)`. The backend passes the function as a closure over
-/// the instances it finds here.
+/// type: `apply(println, 7)` passes `println` with `ToString(int)`, and `fold(xs, 0, math.max)` passes `math.max` with
+/// `Ord(int)`. The backend passes the function as a closure over the instances it finds here.
 let internal resolveReferenceInstances (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
+    let resolve (arg: Expression) name result =
+        result |> Result.bind (fun current -> resolveInstancesAt true env current arg name (current.ExprTypes |> Map.tryFind arg.Id) arg.Span)
     match call.Kind with
     | FunctionCall(_, _, args) ->
         match args with
@@ -532,8 +542,11 @@ let internal resolveReferenceInstances (env: TypeEnv) (state: InferState) (call:
         | _ -> args
         |> List.fold (fun result arg ->
             match arg.Kind with
-            | IdentifierExpr name ->
-                result |> Result.bind (fun current -> resolveInstancesAt true env current arg name (current.ExprTypes |> Map.tryFind arg.Id) arg.Span)
+            | IdentifierExpr name -> resolve arg name result
+            | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
+                match qualifiedDefinition env qualifier field with
+                | Some (name, _) -> resolve arg name result
+                | None -> result
             | _ -> result) (Ok state)
     | _ -> Ok state
 

@@ -30,6 +30,8 @@ This means:
 
 This keeps signatures and aliases aligned: any type expression from a signature can be extracted into a `type` alias unchanged.
 
+[Contexts as attributes](./context-attributes) proposes writing the contexts as attributes on the type, `@C (int, string)`, in signatures and aliases alike.
+
 # Core semantics
 
 `[C] T` means a value of type `T` with required context `C`.

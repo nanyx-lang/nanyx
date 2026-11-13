@@ -1053,12 +1053,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         let memberSpan = nameSpan spanOpt expr
         match baseExpr.Kind with
         | IdentifierExpr baseName ->
-            let qualifiedName = $"{baseName}.{memberName}"
-            // A value named as a built-in type is, as `list` in `{ list -> list.length }`, not the type.
-            let isValue = isBuiltInTypeName baseName && (TypeEnv.tryFind baseName env).IsSome
-            match if isValue then None else TypeEnv.tryFind qualifiedName env with
-            | Some scheme when not (referenceErrors qualifiedName expr scheme state).IsEmpty -> Error (referenceErrors qualifiedName expr scheme state)
-            | Some scheme ->
+            match qualifiedDefinition env baseName memberName with
+            | Some (qualifiedName, scheme) when not (referenceErrors qualifiedName expr scheme state).IsEmpty -> Error (referenceErrors qualifiedName expr scheme state)
+            | Some (qualifiedName, scheme) ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
                 let ty, next =
                     match contextRequirementsOf env state qualifiedName with
