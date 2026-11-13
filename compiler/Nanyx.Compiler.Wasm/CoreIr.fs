@@ -432,10 +432,6 @@ let closureOver (name: string) (arity: int) (captured: Atom list) (ty: IrType) :
     | [] -> { Kind = Atom(AStaticClosure(name, arity, ty)); Type = ty }
     | _ -> { Kind = MakeClosure(name, arity, captured); Type = ty }
 
-module Expr =
-    /// The expression of `kind`, of type `ty`.
-    let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty }
-
 module ForLoop =
     /// The atoms a loop's streams start from, in the order its code reads them.
     let sourceAtoms (loop: ForLoop) =
@@ -498,6 +494,47 @@ module Pattern =
         match pattern with
         | PBind var -> [ var ]
         | _ -> parts pattern |> List.collect binds
+
+module Expr =
+    /// The expression of `kind`, of type `ty`.
+    let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty }
+
+    /// The expressions directly inside `e`, in the order its code runs them: a let's or a do's value and then what
+    /// follows it, an if's branches, each arm's guards and then its body, a loop's condition and body, and what a
+    /// count instruction wraps. An instruction on atoms has none. A walk over the IR recurses through these, so a new
+    /// case is added here and nowhere else. What follows a link of a chain is the last child, and a function's body is
+    /// a chain as long as the function: a walk must recurse into the last child in tail position (or walk the chain in
+    /// a loop, see `Chain`), or a long function overflows the stack.
+    let children (e: Expr) : Expr list =
+        match e.Kind with
+        | Let(_, value, body)
+        | Do(value, body) -> [ value; body ]
+        | If(_, ifTrue, ifFalse) -> [ ifTrue; ifFalse ]
+        | Match(_, arms) -> arms |> List.collect (fun arm -> (arm.Patterns |> List.collect Pattern.guards |> List.map snd) @ [ arm.Body ])
+        | ForEach loop -> [ loop.Body ]
+        | While loop -> [ loop.Condition; loop.Body ]
+        | Dup(_, body)
+        | Drop(_, body)
+        | DropAfter(body, _)
+        | Release(_, body)
+        | Reuse(_, body) -> [ body ]
+        | Atom _
+        | Prim _
+        | Call _
+        | MakeTag _
+        | MakeRecord _
+        | Field _
+        | UpdateRecord _
+        | Assign _
+        | SetField _
+        | MakeList _
+        | CallRuntime _
+        | MakeClosure _
+        | CallClosure _
+        | Interpolate _
+        | Dbg _
+        | BoxFloat _
+        | Panic _ -> []
 
 /// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s and `Release`s, each followed by the next. A
 /// function's body is a chain as long as the function, so a pass walks one in a loop, and recurses only as deep as an
