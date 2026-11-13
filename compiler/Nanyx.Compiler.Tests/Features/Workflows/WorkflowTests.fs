@@ -110,7 +110,7 @@ let ``Desugar workflow bind and return`` () =
     match parseModule source with
     | Result.Error err -> Assert.True(false, $"Parse error: {err}")
     | Result.Ok ast ->
-        let desugared = Compiler.desugar ast
+        let desugared = WorkflowDesugaring.desugar ast
         // `async { ... }` is its block, each keyword calling the builder's member through a local of its own.
         match desugared with
         | [Kind (Def (ValueDef(_, "result", _, Kind (Block [Kind (ExprStatement expr)]))))] ->
@@ -137,7 +137,7 @@ let ``Desugar workflow implicit return`` () =
     match parseModule source with
     | Result.Error err -> Assert.True(false, $"Parse error: {err}")
     | Result.Ok ast ->
-        let desugared = Compiler.desugar ast
+        let desugared = WorkflowDesugaring.desugar ast
         match desugared with
         | [Kind (Def (ValueDef(_, "result", _, Kind (FunctionCall("async", _, [Kind (Lambda([], Kind (Block [Kind (ExprStatement (Kind (LiteralExpr (IntLit64 1L))))]), _))])))))] ->
             Assert.True(true)
@@ -317,7 +317,7 @@ let ``A try nested in an expression of a proc block is bound before its statemen
                 argument :: boundCalls rest
             | Lambda(_, body, _) -> boundCalls body
             | _ -> []
-        match Compiler.desugar ast |> List.tryPick (function Kind (Def (ValueDef(_, "run", _, body))) -> Some body | _ -> None) with
+        match WorkflowDesugaring.desugar ast |> List.tryPick (function Kind (Def (ValueDef(_, "run", _, body))) -> Some body | _ -> None) with
         | Some body ->
             let arguments = boundCalls body |> List.map (fun argument -> argument.Kind)
             match arguments with

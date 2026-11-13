@@ -188,10 +188,15 @@ How it is produced:
   expression that names one records a reference by its own node. A context's members are `ContextMember` symbols,
   declared at their names in the context's record type (the parser records a record type's field names by its
   node), and carried with the context's `TypeDefInfo` so an imported context's members keep their module's symbols.
-- **Desugaring keeps provenance.** Every node `desugar` and `applyAttributes` synthesize gets the span (and
-  originating `NodeId`) of the syntax it replaced, and `Lowered` records the mapping. Linters walk `Syntax`; the
-  type of a workflow bind is found through `Lowered`. This is much cheaper than teaching inference to check
-  surface syntax directly, and it can be replaced by that later without changing what linters see.
+- **Desugaring keeps provenance** (done in [#99](https://github.com/nanyx-lang/nanyx/issues/99)). Every node
+  `desugar` and `applyAttributes` synthesize gets the span of the syntax it replaced (`Expression.from`), and
+  `Lowered` records which expressions were made for which node as written, in the order they were made
+  (`WorkflowDesugaring.desugarWithDiagnostics`, and the call `applyAttributes` makes for `@entry`, by the attribute's
+  node). One made for a made-up node counts as made for the node that one was. Linters walk `Syntax`; the type of a
+  workflow bind is found through `Lowered`: its first expression is the continuation, which takes the bound value.
+  `CompileResult.Lowered` has the same table. Desugaring an `except` (`Except.asMatch`) records nothing yet. This is
+  much cheaper than teaching inference to check surface syntax directly, and it can be replaced by that later
+  without changing what linters see.
 - **Import inlining stays where it is.** `CheckedModule` already separates the module's own items from the ones
   inlined for the backend; linters read the semantic model of the module's own items, so inlining does not hide
   anything once references to imports are recorded.
@@ -233,7 +238,7 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > with `&` as an annotation does. Its twelfth is `unusedResults`
 > ([#105](https://github.com/nanyx-lang/nanyx/issues/105)), an error by default: a statement of a block, other than
 > its last, whose type in `Types` is known and is neither `()` nor `undefined`. A workflow keyword's statement has no
-> type there yet (desugaring keeps no provenance, #99), and is left alone by its kind. Its thirteenth is
+> type there, and is left alone by its kind; `Lowered` could give it one. Its thirteenth is
 > `shadowedPreludeNames` ([#942](https://github.com/nanyx-lang/nanyx/issues/942)): one of the module's own symbols
 > (the `SemanticModel` carries the module's `File`, which its symbols' declarations name) with the name of an
 > undotted, exported top-level symbol declared in the prelude's file. It leaves alone a module whose file
@@ -248,7 +253,6 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 > - A failing linter is reported under a rule every linter has, `<linter>/linterFailed`, a warning by
 >   default, so it can be configured or turned off like any rule. Throwing, or reporting a rule the linter does
 >   not declare, both count as failing, and the linter's other reports for the module are left out.
-> - The `SemanticModel` has no `Lowered` table yet ([#99](https://github.com/nanyx-lang/nanyx/issues/99)).
 > - The configuration is `LinterOptions` (the linters to run, and severities by code), passed to
 >   `Compiler.compileWith` and its file and source variants. A package's `.nyxp` sets it with an
 >   `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by

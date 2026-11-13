@@ -120,6 +120,7 @@
     <Compile Include="Features\Types\TypeOfTests.fs" />
     <Compile Include="Features\Types\UnknownTypeNameTests.fs" />
     <Compile Include="Features\Types\UnionsTests.fs" />
+    <Compile Include="Features\Workflows\LoweredTests.fs" />
     <Compile Include="Features\Workflows\WorkflowTests.fs" />
   </ItemGroup>
 
