@@ -474,144 +474,455 @@ To fix it, break the cycle: build one of the values without the other, or make o
 
 # NYX0201: Type mismatch
 
-_To be written._
+A value's type is not the type its place needs: an argument is not what the function takes, a definition's value is
+not the type its annotation says, or two branches give back different types. The message names the two types.
+
+```nanyx
+def count: int = "three"  -- error NYX0201: Type mismatch: string vs int.
+```
+
+To fix it, change the value, or the annotation, so that the two types agree. Where the types come from far apart, an
+annotation on a definition in between shows which of them is wrong.
 
 # NYX0202: Annotation too general
 
-_To be written._
+A definition's annotation promises more than its body gives: it says a type variable could be any type, but the body
+needs a particular type, or the same type as another variable.
+
+```nanyx
+def same: a -> b = { x -> x }  -- error NYX0202: Annotation of 'same' is more general than the inferred type: `b` would have to be `a`
+```
+
+To fix it, write the type the body has (here `a -> a`), or leave the annotation out and let the type be inferred.
 
 # NYX0203: Non-exhaustive match
 
-_To be written._
+A `match` has no arm for some of the values it can be given. The message names what is missing, and an editor offers
+to add the missing arms ([Pattern matching](../tour/pattern-matching)).
+
+```nanyx
+def describe: #some(int) | #none -> string = { o ->
+  match o  -- error NYX0203: Non-exhaustive match, missing tags: none
+    | #some(n) -> "some"
+}
+```
+
+To fix it, add an arm for each missing case, or an arm `_` for everything not matched yet.
 
 # NYX0204: Missing catch-all arm
 
-_To be written._
+A `match` is on a tag union with a rest, such as `#some(a) | r`, which stands for tags the function does not know.
+No list of arms can name them all, so the match needs an arm that takes anything.
+
+```nanyx
+def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = { o, f ->
+  match o  -- error NYX0204: Tag union rest parameters require a catch-all match arm
+    | #some(v) -> #some(f(v))
+}
+```
+
+To fix it, add a last arm with a name or `_` as its pattern, such as `| other -> other`.
 
 # NYX0205: Missing context
 
-_To be written._
+An operation needs a context that the type of its value does not have: two values are compared with `<` but their
+type has no order, are compared with `==` but contain functions, or are used as a map's keys but cannot be hashed.
+Where the type is a type variable of the definition, the message says which context to add to its type, and an
+editor offers to add it.
+
+```nanyx
+def less = ["a" => 1] < ["a" => 1]  -- error NYX0205: 'map(string, int)' cannot be ordered with <: maps have no order
+```
+
+To fix it, use values whose type has the context, give a nominal type the definition it needs (such as `==`), or add
+the context to the definition's type, as the message says ([Contexts](../advanced/contexts)).
 
 # NYX0206: Invalid workflow
 
-_To be written._
+A builder block, such as `opt { ... }`, is not one its builder can run: the builder lacks a member the block needs,
+or a workflow is called without the trailing lambda that is its block ([Workflows](../advanced/workflows)).
+
+```nanyx
+def opt = (
+  try = {
+    | #some(value), continue -> continue(value)
+    | failure, _ -> failure
+  }
+  return = { value -> #some(value) }
+)
+def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def show = { n -> opt {
+  def h = try half(n)
+  h + 1  -- error NYX0206: This `opt` block can end here without `return`, and `opt` has no `zero` to be its value then: ...
+} }
+```
+
+To fix it, do what the message says: here, end the block with `return`, or give the builder a `zero`.
 
 # NYX0207: Workflow keyword outside a workflow
 
-_To be written._
+A workflow keyword, such as `try` or `return`, is used outside a builder block. It means something only to the
+builder that runs the block.
+
+```nanyx
+def halve: int -> #some(int) | #none = { n -> if n % 2 == 0 then #some(n / 2) else #none }
+
+def quarter = { n ->
+  def h = try halve(n)  -- error NYX0207: `try` is a workflow keyword, so it can only be used inside a builder block, such as `proc { ... }`
+  halve(h)
+}
+```
+
+To fix it, put the code in a builder block, such as `proc { ... }`, or match on the value instead.
 
 # NYX0208: Invalid built-in call
 
-_To be written._
+A built-in, such as `dbg`, `not`, `with` or a loop, is given the wrong number or kind of arguments.
+
+```nanyx
+def x = dbg()  -- error NYX0208: dbg expects a single argument
+```
+
+To fix it, give the built-in what the message says it expects.
 
 # NYX0209: Invalid record update
 
-_To be written._
+A `with` update cannot be made: the record's fields are not known where it is written, or a field is given by
+position rather than by name ([Records](../tour/records)).
+
+```nanyx
+def point = (x = 1, y = 2)
+def moved = point with (3)  -- error NYX0209: `with` updates fields by name
+```
+
+To fix it, name the fields to update, as in `point with (x = 3)`, and annotate the record's type if it is not known.
 
 # NYX0210: Misplaced typeof
 
-_To be written._
+`typeof` is used in the definition of a type. It can only be used in the type of a value.
+
+```nanyx
+def defaults = (port = 8080)
+type Config = typeof defaults  -- error NYX0210: 'typeof' cannot be used in the definition of the type 'Config', only in the type of a value
+```
+
+To fix it, write the type out in the type definition.
 
 # NYX0211: Undeclared context
 
-_To be written._
+A definition's body needs a context that its type does not declare: it calls a function that requires one, such as
+`println`, which requires `Console`. An editor offers to add the context to the type.
+
+```nanyx
+import nanyx/console
+
+def greet: string -> () = { name -> println("Hello, {name}") }  -- error NYX0211: 'println' requires the context 'Console', which 'greet' does not declare: ...
+```
+
+To fix it, add the context to the definition's type, as in `[Console] string -> ()`, or load an instance with `use`
+([Contexts](../advanced/contexts)).
 
 # NYX0212: Nominal type constructed outside its module
 
-_To be written._
+A nominal type, whose name starts with `$`, is constructed, or a protected one taken apart, outside the module that
+defines it. Only its own module can make its values ([Nominal and protected types](../advanced/nominal-and-protected-types)).
+
+```nanyx
+module money =
+  export type $Money = (pence: int)
+
+import money
+
+def price = $Money(pence = 250)  -- error NYX0212: The nominal type '$Money' can only be constructed in the module that defines it; ...
+```
+
+To fix it, make the value with a function the module exports, such as `$Money.new`.
 
 # NYX0213: Wrong number of patterns
 
-_To be written._
+An arm of a match on several values, such as a lambda's parameters or a loop over several lists, has a different
+number of patterns from the number of values.
+
+```nanyx
+def first = { a, b -> | x -> x }  -- error NYX0213: This arm has 1 pattern, but the match is on 2 values: ...
+```
+
+To fix it, give the arm a pattern for each value, as in `| x, _ -> x`.
 
 # NYX0214: Guard pattern is not a predicate
 
-_To be written._
+A guard pattern, a lambda written as a pattern, does not take exactly one parameter. A guard is a test of the value
+matched.
+
+```nanyx
+def check: int -> int = { n ->
+  match n
+    | { a, b -> a > b } -> 1  -- error NYX0214: A guard pattern is a predicate on the value matched, ...
+    | _ -> 0
+}
+```
+
+To fix it, write a lambda of one parameter, such as `{ x -> x > 0 }` or `{ > 0 }`.
 
 # NYX0215: Name bound twice in a pattern
 
-_To be written._
+Two parts of an and-pattern (`p & q`) bind the same name.
+
+```nanyx
+def pick: (int, int) -> int = { p ->
+  match p
+    | (a, _) & (_, a) -> a  -- error NYX0215: The name 'a' is bound by more than one part of this pattern; ...
+}
+```
+
+To fix it, give each part its own names.
 
 # NYX0216: Misplaced type hole
 
-_To be written._
+`_`, a type hole that asks the compiler to infer that part of a type, is used in the definition of a type. A type
+hole can only be used in the type of a value.
+
+```nanyx
+type Names = list(_)  -- error NYX0216: '_' cannot be used in the definition of the type 'Names', only in the type of a value
+```
+
+To fix it, write the type out.
 
 # NYX0217: Endless for loop
 
-_To be written._
+A `for` loop walks only `gen`s, such as the open range `0..`, which never end, so the loop would never end either
+([Loops](../tour/loops)).
+
+```nanyx
+def count = for 0.. | i -> i  -- error NYX0217: A `for` loop over a `gen` alone may never end: ...
+```
+
+To fix it, walk the `gen` in step with a list or a bounded range, as in `for xs, 0.. | x, i -> ...`.
 
 # NYX0218: Named parameter passed by position
 
-_To be written._
+A function whose parameters are named, as in `(width: int, height: int) -> int`, is called with its arguments by
+position. When each argument fits just one parameter, an editor offers to name them.
+
+```nanyx
+def area: (width: int, height: int) -> int = { width, height -> width * height }
+
+def size = area(3, 4)  -- error NYX0218: 'area' takes 'height' and 'width' by name, not by position: write 'height = ...' and 'width = ...'
+```
+
+To fix it, name the arguments, as in `area(width = 3, height = 4)`.
 
 # NYX0219: Definition cannot be attached
 
-_To be written._
+A definition is attached to a type that cannot have it: `hash`, `compare` or `==` attached to a structural type, whose hash,
+order and equality are always those of its structure, or `!=`, which is always `not (a == b)`.
+
+```nanyx
+type Point = (x: int, y: int)
+def Point.hash: Point -> int = { p -> p.x }  -- error NYX0219: 'Point.hash' cannot be defined: 'Point' is a structural type, ...
+```
+
+To fix it, make the type nominal (`$Point`) to give it its own definition, or attach `==` instead of `!=`.
 
 # NYX0220: Block without a result
 
-_To be written._
+A block ends with a definition, so it has no value to give back.
+
+```nanyx
+def total = {
+  def x = 1  -- error NYX0220: This block ends with the definition of 'x', so it has no value to give back. ...
+}
+```
+
+To fix it, end the block with the expression whose value it gives back, or with `()` if it gives back nothing.
 
 # NYX0221: mut outside a memory block
 
-_To be written._
+A cell is declared with `mut` outside a `memory { ... }` block. A cell needs the context `$Memory`, which only a
+memory block provides ([Memory](../advanced/memory)).
+
+```nanyx
+def count = {
+  mut x = 0  -- error NYX0221: `mut` needs the context '$Memory', which only a `memory { ... }` block provides: ...
+  x
+}
+```
+
+To fix it, write the code inside a `memory { ... }` block.
 
 # NYX0222: Assignment to a non-cell
 
-_To be written._
+`:=` changes a name that is not a cell. Only a name declared with `mut` can be changed.
+
+```nanyx
+def count = memory {
+  def x = 0
+  x := 1  -- error NYX0222: 'x' is not a cell, so `:=` cannot change it: only a name declared with `mut` is one
+  x
+}
+```
+
+To fix it, declare the name with `mut`, or define a new name for the new value.
 
 # NYX0223: Cell assignment type mismatch
 
-_To be written._
+A value of one type is assigned to a cell of another. A cell holds values of one type.
+
+```nanyx
+def count = memory {
+  mut x = 0
+  x := "one"  -- error NYX0223: Type mismatch: string vs int.
+  x
+}
+```
+
+To fix it, assign a value of the cell's type.
 
 # NYX0226: Unbound context variable
 
-_To be written._
+A context variable, which stands for any contexts, as `c` does in `[c] int -> int`, is used in a definition's type
+but is not among the contexts of the definition itself.
+
+```nanyx
+def g: [d] ([c] int -> int) -> int = { f -> 1 }  -- error NYX0226: The context variable 'c' is not bound: add it to the contexts of 'g', as in '[c] ...'
+```
+
+To fix it, add the variable to the definition's own contexts, as in `[c] ([c] int -> int) -> int`.
 
 # NYX0227: Function requires contexts not allowed here
 
-_To be written._
+A function that requires a context is given where a function that requires none is expected: passed to a function
+whose parameter type writes no contexts, or returned from a definition whose result type writes none.
+
+```nanyx
+import nanyx/console
+
+def runPure: (int -> int) -> int = { g -> g(5) }
+
+def pass: ([Console] int -> int) -> int = { f -> runPure(f) }  -- error NYX0227: A function that requires the context 'Console' is given where 'int -> int' is expected, ...
+```
+
+To fix it, write the contexts the function may require on the type expected, as in `([Console] int -> int)`, or a
+context variable for any, as in `[c] (int -> int)`.
 
 # NYX0228: Type alias refers to itself outside a tag
 
-_To be written._
+A type alias names itself other than in the payload of one of its tags, so the type would have no end.
+
+```nanyx
+type Pair = (int, Pair)  -- error NYX0228: The type 'Pair' refers to itself outside a tag: ...
+```
+
+To fix it, put the recursion inside a tag, as in `type List = #empty | #cons(int, List)`.
 
 # NYX0229: Literal out of range
 
-_To be written._
+A number literal does not fit in its type, such as `300` for a `U8` ([Sized numbers](../advanced/sized-numbers)).
+
+```nanyx
+def small: U8 = 300  -- error NYX0229: '300' does not fit in U8 (0 to 255)
+```
+
+To fix it, use a value in the type's range, or a larger type.
 
 # NYX0230: Option-like right operand of ??
 
-_To be written._
+The right operand of `??` is itself option-like. `??` only unwraps: the right operand is the value to use when the
+left is not `#some` ([Option-like types](../advanced/option-like-types)).
+
+```nanyx
+def lookup: string -> #some(int) | #missing = { k -> #missing }
+def x = lookup("a") ?? lookup("b")  -- error NYX0230: `??` only unwraps: ...
+```
+
+To fix it, fall back to another option with `orElseSome`, as in `lookup("a") \orElseSome { lookup("b") }`.
 
 # NYX0231: Invalid record spread
 
-_To be written._
+A spread, `...r`, is written of a value whose fields are not known where it is written.
+
+```nanyx
+def f = { r -> (...r, a = 1) }  -- error NYX0231: a spread (`...`) needs a record whose fields are known here
+```
+
+To fix it, annotate the value's type, so that its fields are known.
 
 # NYX0232: Scoped context is not nominal
 
-_To be written._
+A `scoped context` has a name that does not start with `$`. A scoped context must be nominal, so that only its own
+module can make its instances.
+
+```nanyx
+scoped context Tx = (commit: () -> ())  -- error NYX0232: The scoped context 'Tx' must be nominal, written '$Tx', ...
+```
+
+To fix it, name the context with `$`, as in `scoped context $Tx`.
 
 # NYX0233: Scoped context escapes the call that supplies it
 
-_To be written._
+Something that requires a scoped context, such as `$Memory`, leaves the call that supplies the context: a memory
+block returns its instance, or a function over one of its cells.
+
+```nanyx
+def leak = memory { m -> m }  -- error NYX0233: The result of this 'memory' call requires its '$Memory' through 'm', so it cannot leave the call: ...
+```
+
+To fix it, give back what the cells hold, rather than the cells or a function over them.
 
 # NYX0234: mut argument is not a cell
 
-_To be written._
+An argument is passed with `mut`, as a cell, but it is not one.
+
+```nanyx
+def inc = { mut cell -> cell := cell + 1 }
+def total = memory {
+  def count = 0
+  inc(mut count)  -- error NYX0234: 'count' is not a cell, so `mut count` cannot pass it: ...
+  count
+}
+```
+
+To fix it, declare the name with `mut`.
 
 # NYX0235: Cell type inside another type
 
-_To be written._
+A cell's type, `mut T`, is written inside another type, such as `list(mut int)`. For now a cell's type can only be a
+function's parameter: a cell can be passed to a function, but nothing can hold one.
+
+```nanyx
+def bad: list(mut int) -> () = { xs -> () }  -- error NYX0235: A cell's type, `mut T`, can only be a function's parameter for now: ...
+```
+
+To fix it, pass the cell itself, or the value it holds.
 
 # NYX0236: Context on a type no parameter or result has
 
-_To be written._
+A definition's type requires a context of a type variable, as `ToString(a)` does, but no parameter and no result has
+that type, so no call could say which type it is.
+
+```nanyx
+context Log = (log: string -> ())
+
+def greet: [Log & ToString(a)] string -> () = { name -> log("hello {name}") }  -- error NYX0236: 'a' in 'ToString(a)' is not the type of any parameter of 'greet' or of its result, ...
+```
+
+To fix it, remove the context, or give a parameter the type it is on.
 
 # NYX0301: Not supported by the WebAssembly backend
 
-_To be written._
+The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
+is.
+
+```nanyx
+type Nest(a) = #leaf(a) | #deeper(Nest(list(a)))
+
+def depth: Nest(int) -> int = { t -> 1 }  -- error NYX0301: The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet
+```
+
+To fix it, write the code another way until the backend supports it.
 
 # NYX0302: Internal error in the WebAssembly backend
 
-_To be written._
+The WebAssembly backend found something it should never be given. This is a bug in the compiler, not in the program.
+
+Please [report it](https://github.com/nanyx-lang/nanyx/issues), with the program that causes it.
