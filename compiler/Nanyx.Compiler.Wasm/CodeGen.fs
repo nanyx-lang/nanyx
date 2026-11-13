@@ -463,37 +463,39 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | TyApply(_, args) -> args |> List.collect namedVars
             | TyUnion items -> items |> List.collect namedVars
             | TyAlias(_, args, underlying) -> (args |> List.collect namedVars) @ namedVars underlying
-        // The type variables the annotation writes, each matched to the one in the same place in the definition's
-        // type: inference may have merged a written variable with another and dropped its name.
-        let rec matchAnnotation (annotation: TypeExpr) (ty: Ty) : (string * Ty) list =
-            match annotation.Kind, Unifier.unalias ty with
-            | (TypeName varName | TypeVar varName), TyVar _ -> [ varName, ty ]
-            | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
-            // A function type written with the contexts it requires, `[c] a -> b`.
-            | TypeWithContext(_, inner), _ -> matchAnnotation inner ty
-            | TypeTuple items, TyRecord fields ->
-                items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
-            | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
-                List.map2 matchAnnotation items items' |> List.concat
-            | TypeRecord written, TyRecord fields ->
-                written
-                |> List.collect (function
-                    | TypeField(fieldName, _, _, Some fieldType, _) ->
-                        fields |> Map.tryFind fieldName |> Option.map (matchAnnotation fieldType) |> Option.defaultValue []
-                    | _ -> [])
-            // A tag's payload, and each tag of a union by its name, as the union's tags need not be in the same order.
-            | TypeTag(tag, Some payload), TyTag(tag', Some payload') when tag = tag' -> matchAnnotation payload payload'
-            | TypeUnion written, TyUnion items ->
-                written
-                |> List.collect (fun item ->
-                    match item.Kind with
-                    | TypeTag(tag, Some _) ->
-                        items
-                        |> List.tryFind (function TyTag(tag', Some _) -> tag = tag' | _ -> false)
-                        |> Option.map (matchAnnotation item)
-                        |> Option.defaultValue []
-                    | _ -> [])
-            | _ -> []
+        // Each type the annotation writes, matched to the type in the same place in the definition's type: the type
+        // variables it names, as inference may have merged a written variable with another and dropped its name, and
+        // the types a context's arguments write that are neither variables nor primitives (`Word`, `list(int)`).
+        let rec matchAnnotation (annotation: TypeExpr) (ty: Ty) : (TypeExpr * Ty) list =
+            let within =
+                match annotation.Kind, Unifier.unalias ty with
+                | TypeFunc(input, output), TyFunc(input', output', _) -> matchAnnotation input input' @ matchAnnotation output output'
+                // A function type written with the contexts it requires, `[c] a -> b`.
+                | TypeWithContext(_, inner), _ -> matchAnnotation inner ty
+                | TypeTuple items, TyRecord fields ->
+                    items |> List.mapi (fun index item -> fields |> Map.tryFind (string index) |> Option.map (matchAnnotation item) |> Option.defaultValue []) |> List.concat
+                | TypeApply(applied, items), TyApply(applied', items') when applied = applied' && items.Length = items'.Length ->
+                    List.map2 matchAnnotation items items' |> List.concat
+                | TypeRecord written, TyRecord fields ->
+                    written
+                    |> List.collect (function
+                        | TypeField(fieldName, _, _, Some fieldType, _) ->
+                            fields |> Map.tryFind fieldName |> Option.map (matchAnnotation fieldType) |> Option.defaultValue []
+                        | _ -> [])
+                // A tag's payload, and each tag of a union by its name, as the union's tags need not be in the same order.
+                | TypeTag(tag, Some payload), TyTag(tag', Some payload') when tag = tag' -> matchAnnotation payload payload'
+                | TypeUnion written, TyUnion items ->
+                    written
+                    |> List.collect (fun item ->
+                        match item.Kind with
+                        | TypeTag(tag, Some _) ->
+                            items
+                            |> List.tryFind (function TyTag(tag', Some _) -> tag = tag' | _ -> false)
+                            |> Option.map (matchAnnotation item)
+                            |> Option.defaultValue []
+                        | _ -> [])
+                | _ -> []
+            (annotation, ty) :: within
         let annotated =
             match defs |> List.tryFind (fun (defName, _, _) -> defName = name), definitionTypes |> Map.tryFind name with
             | Some (_, typeOpt, _), Some ty ->
@@ -501,15 +503,27 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | Some annotation -> matchAnnotation annotation ty
                 | None -> []
             | _ -> []
+        let annotatedVars =
+            annotated
+            |> List.choose (fun (written, ty) ->
+                match written.Kind, Unifier.unalias ty with
+                | (TypeName varName | TypeVar varName), TyVar _ -> Some (varName, ty)
+                | _ -> None)
         let vars =
-            (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) @ annotated |> Map.ofList
+            (definitionTypes |> Map.tryFind name |> Option.map namedVars |> Option.defaultValue []) @ annotatedVars |> Map.ofList
+        // Another type is the one the annotation writes it in place of, where it does (`[ToText(Word)] Word -> int`).
+        let writtenTy (argument: TypeExpr) =
+            annotated |> List.tryFind (fun (written, _) -> written = argument) |> Option.map snd
         let argumentTy (argument: TypeExpr) =
             match argument.Kind with
             | TypeName ("int" | "string" | "bool" | "unit" | "float" as primitive) -> Some (TyPrimitive primitive)
             | TypeName varName ->
-                vars |> Map.tryFind varName |> Option.orElse (if SizedNumber.isName varName then Some (TyPrimitive varName) else None)
+                vars
+                |> Map.tryFind varName
+                |> Option.orElse (if SizedNumber.isName varName then Some (TyPrimitive varName) else None)
+                |> Option.orElse (writtenTy argument)
             | TypeVar varName -> vars |> Map.tryFind varName
-            | _ -> None
+            | _ -> writtenTy argument
         let memberTypes =
             functionContextTypes
             |> Map.tryFind name
