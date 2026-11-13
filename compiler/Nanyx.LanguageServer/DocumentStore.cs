@@ -241,7 +241,8 @@ public sealed class DocumentStore
     {
         if (_settings.Timings)
         {
-            _logger.LogInformation("Compiled {Uri} in {Seconds:0.000}s\n{Table}", uri, elapsed.TotalSeconds, ModuleTimingModule.table(timings.Timings));
+            var tree = ModuleCheckModule.tree(Microsoft.FSharp.Core.FuncConvert.FromFunc((string name) => name), timings.Checks);
+            _logger.LogInformation("Compiled {Uri} in {Seconds:0.000}s\n{Tree}", uri, elapsed.TotalSeconds, tree);
         }
         else
         {

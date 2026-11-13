@@ -239,7 +239,7 @@ inlay hints after their names instead of lenses, and `--top-level-type-hints off
 inlay hints for each of the other kinds of declaration.
 
 Each compile of a document is logged to the client as `window/logMessage`, which VS Code shows in the Nanyx output
-channel: `Compiled file:///…/main.nyx in 0.240s`. With `nanyx lsp --timings`, the line goes on with the table of how
+channel: `Compiled file:///…/main.nyx in 0.240s`. With `nanyx lsp --timings`, the line goes on with the tree of how
 long each module's check took, as [`nanyx build --timings`](./command-line#timings) writes it; the VS Code extension
 passes the flag when `nanyx.developmentMode` is on. The server logs its own information and above; the protocol
 library's logs are shown from warnings up.
