@@ -17,6 +17,8 @@
     <Compile Include="PatternPrinter.fs" />
     <Compile Include="ImportPrinter.fs" />
     <Compile Include="CallPrinter.fs" />
+    <Compile Include="ExpressionParts.fs" />
+    <Compile Include="LambdaPrinter.fs" />
     <Compile Include="Formatter.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="FormatCommand.fs" />
