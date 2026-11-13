@@ -127,10 +127,12 @@ How it is built:
   an expression of any type, an `i64` int as well as an `i32` (an immediate or a pointer; a float is boxed), and the
   code after it still validates. Nothing is cut off after a trap.
 - **The deferral pass** is `DeferredErrors.deferErrors` in [DeferredErrors.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/DeferredErrors.fs), run as the typed
-  module's items are lowered for the backend. Each node in `FailedExprs` becomes `__panic("<message>")`. A conflict
-  among the constraints is only known by where it was found, so it replaces the outermost expression at that span.
-  A match in `UnhandledMatches` gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message
-  is the diagnostic as `nanyx` prints it, with `(deferred from compile time)`.
+  module's items are lowered for the backend, from where inference found the errors (`DeferredErrors.Sites`). Each
+  node in `FailedExprs` becomes `__panic("<message>")`. A conflict among the constraints is only known by where it
+  was found, so the conflicts found at a span replace the outermost expression there. A match in `UnhandledMatches`
+  gets a last arm, `_ -> __panic(...)`, so it runs the cases it handles. The message is the diagnostic as `nanyx`
+  prints it, with `(deferred from compile time)`. The pass returns the diagnostics it placed, and an error counts as
+  deferred only if it is one of them, its place included, not another with the same text.
 - **`__panic`** lowers to a write of its message to stderr, then WASI's `proc_exit(1)`, then `unreachable` (which
   `proc_exit`, never returning, never reaches). The runner reports an exit as `RunError.Exited`, and the CLI exits
   with its code and nothing more: the error has already said why the program stopped. A trap is still a runtime
