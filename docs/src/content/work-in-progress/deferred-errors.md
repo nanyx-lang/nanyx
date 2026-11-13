@@ -4,12 +4,11 @@ description: "How a debug build keeps running in the face of name and type error
 order: 22
 ---
 
-> **Status: in progress.** This page decides how a debug build keeps running in the face of name and type errors, as
-> the [principles](../foundations/principles#gradual-feedback-not-blocked-flow) promise.
-> Built: the type checker recovers from errors, they are compiled to traps, and `nanyx run`, `build` and `wasm`
-> are debug builds with `--release` to refuse errors (stages 1 to 3 of the [plan](#plan)). Wider deferral is
-> left for when it is wanted. It is part of the [compilation](./compilation) workstream, and
-> its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
+Deferred errors are built: the type checker recovers from errors, they are compiled to traps, and `nanyx run`,
+`build` and `wasm` are debug builds, with `--release` to refuse errors, as
+[Building and running a package](../tour/packages#building-and-running-a-package) says. This page keeps how it is
+built, and the [wider deferral](#plan) and [questions](#open-questions) still open. It is part of the [compilation](./compilation) workstream, and its issues
+carry the `compilation` label with `type checker` or `wasm backend` as they apply.
 
 # Summary
 
@@ -22,30 +21,6 @@ A release build still refuses to compile a program with any error.
 
 The approach is the one GHC takes with `-fdefer-type-errors`, and a pragmatic cousin of Hazel's marked holes: the
 error becomes a node in the typed program, with a type that fits anywhere, and evaluating it fails.
-
-# Where we are today
-
-Any error stops the build, at three points:
-
-- **Inference stops at an error.** `Infer.inferModuleWithEnv` returns `Ok` with a typed module or `Error` with
-  diagnostics, never both. Inside it, an item or expression with an error is not checked further (the many
-  `if errors.IsEmpty then` in `Infer.fs`).
-- **Unification stops at the first failure.** `Unifier.unify` solves the module's constraints together and returns
-  one `Error (message, span)` ([Library.fs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler/Library.fs), in `typecheckModule`). The editor sees
-  one type error per module, and nothing typed after it.
-- **The CLI stops on errors.** `nanyx run` and `nanyx build` print the diagnostics and exit with 1 if any is an
-  error ([Program.cs](https://github.com/nanyx-lang/nanyx/blob/main/compiler/Nanyx.Compiler.Cli/Program.cs)). There is no debug or release mode.
-
-(This section is how things were when the design was written; the rest of the page says what changed.)
-
-Non-exhaustive matches are a hard error today too, although the principles say a debug build should panic when
-an unhandled case is reached. They fall under this design.
-
-The backend's code is type-directed, which rules out the obvious shortcut: which instructions an operator becomes
-depends on its operand types (`+` on strings calls the concatenation helper). Badly typed code cannot be lowered
-"dynamically" without runtime type checks on every operation. That is a second backend to keep in step with the
-first, for code that is about to be fixed; this design does not do it. (A trap ends in `unreachable`, which stands
-for a value of any type, which [makes traps easy](#errors-become-traps).)
 
 # Design
 
@@ -96,15 +71,13 @@ How it is built:
   an error left a type unknown; only while the text does not parse does it read the last text that was typed
   (`OpenDocument.LastGood`). See [the language server](./language-server).
 
-This stage changes nothing about what runs: the backend still refuses a program with errors. Its value is in the
-editor, which sees every error in a module, and hover types and completions past the first one. It is also where
-almost all of the work is.
+Recovery is also what the editor reads: it sees every error in a module, and hover types and completions past the
+first one.
 
 ## Errors become traps
 
-A pass between the typed AST and code generation (or a step of the core IR, once
-[memory management](./memory-management) introduces one) rewrites each marked expression to `Panic(diagnostic)`. At run
-time `Panic` writes the diagnostic to stderr, as the compiler printed it, and traps:
+A pass between the typed AST and the core IR ([memory management](./memory-management)) rewrites each marked
+expression to `Panic(diagnostic)`. At run time `Panic` writes the diagnostic to stderr, as the compiler printed it, and traps:
 
 ```
 error E001: Type mismatch at src/main.nyx:10:5 (deferred from compile time)
@@ -196,24 +169,8 @@ for red-green iteration. The proposed runner, `nanyx test`, does this; see
 
 # Plan
 
-1. **Type checker recovery.** Add `TyError`; make unknown names and failed constraints recorded diagnostics rather
-   than early returns; let the unifier carry on past a failure; return a typed module with its diagnostics. Tests:
-   a module with several independent errors reports all of them, and one mistake reports one error, not a cascade.
-   The backend still refuses programs with errors.
-   - [x] Carry on past a def that fails to check, and past a conflict among the constraints.
-   - [x] Recover within an expression: the error type, and `FailedExprs` for the nodes that failed.
-   - [x] Return the typed module alongside its diagnostics.
-2. **Deferral pass and `Panic`.** Mark erroneous expressions and definitions in the typed AST, rewrite them to
-   `Panic`, add the runtime helper (write to stderr, then `unreachable`), and cut sequences off after a panic.
-   Make non-exhaustive matches deferred too.
-   - [x] Done, with no cutting off needed (see [Errors become traps](#errors-become-traps)); `nanyx run` on a file
-     runs a program whose errors are all deferred.
-3. **CLI modes.** Make `run` and `build` debug, add `--release`, and print the deferred-error count.
-   - [x] `run` on a file, with the count.
-   - [x] `run` on a package, `build` and `wasm`, each with `--release` where it writes a program.
-   - [x] Report reaching a deferred error without Wasmtime's trap report after it.
-4. **Wider deferral,** if it is wanted: type definitions and imports, then (with parser recovery) a top-level
-   definition that does not parse.
+Wider deferral, if it is wanted: type definitions and imports, then (with parser recovery) a top-level definition
+that does not parse.
 
 # Open questions
 

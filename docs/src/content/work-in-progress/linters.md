@@ -4,22 +4,18 @@ description: "What the compiler provides so that linters can be built on it"
 order: 29
 ---
 
-> **Status: draft.** This is the compiler-side design for linters. The user-facing model is described in
-> [Linters](../advanced/linters) and
-> [Official style linter](../standard-tools/official-linter); this document is about
-> what the compiler has to provide so that model can be built without reworking the front end later.
+The substrate linters stand on is built: a span on every node, structured diagnostics, the semantic model, and the
+internal linter host that runs the official linter. The user-facing model is described in
+[Linters](../advanced/linters), and the official linter's rules in
+[Official style linter](../standard-tools/official-linter). What is still open is the
+[public contract](#5-the-public-contract-later) for linters written in Nanyx, linting [code with errors](#code-with-errors),
+and the [open questions](#open-questions).
 
 # Summary
 
 Linters inspect a checked module and report diagnostics that are not compile errors: unused bindings,
-unreachable branches, style rules. The docs promise that they are written in Nanyx, configured per project, and
-show up in the editor next to compiler errors.
-
-Most of what linters need is not a linter API. It is the substrate under it: exact source spans, a
-structured diagnostic, and a semantic model that relates every name to its declaration. Those are cheap to add
-while the compiler is small and expensive to add later, because every phase and every test touches them. So the
-plan is to build the substrate first, prove it with a handful of linters written in F# inside the compiler, and
-only then design the public contract that Nanyx-authored linters will be written against.
+unreachable branches, style rules. They are configured per project, and show up in the editor next to compiler
+errors. The docs promise that they can be written in Nanyx.
 
 # Goals
 
@@ -29,78 +25,7 @@ only then design the public contract that Nanyx-authored linters will be written
 - A linter can never break compilation: a crashing linter produces a diagnostic, not a failed build.
 - The compiler itself emits only errors (see [No warnings](../foundations/principles)).
 
-# Non-goals (for now)
-
-- The public, versioned API for linters written in Nanyx. It is the last step, not the first.
-- Running linters on code that does not type-check (see [Code with errors](#code-with-errors)).
-
-# Where the compiler is today
-
-- **Every syntax node has a span** ([#96](https://github.com/nanyx-lang/nanyx/issues/96)). Every top-level item,
-  expression, pattern, statement, type expression and import has a `SourceSpan`, and all but imports have a
-  `NodeId`. The names a declaration declares are not nodes, so their spans are kept beside the tree (below).
-- **Diagnostics are structured** ([#97](https://github.com/nanyx-lang/nanyx/issues/97)). `Diagnostic` is the
-  record in [section 2](#2-structured-diagnostics), every compiler error has a code from the table in
-  `Diagnostics.fs`, and each is created with the span of the node it is about, in that node's file, so a
-  diagnostic in an imported module is reported there. Type constraints carry the span of the expression or
-  pattern that made them, which is where unification reports a failure. An attribute's errors are reported at the attribute.
-  A diagnostic about something that has no node of its own (a field name, a declared name) is reported at the
-  nearest node, and one about an annotation still is too, though annotations now have spans of their own.
-  The compiler emits only `Critical` and `Error`.
-- **The type checker sees desugared code.** `desugar` turns workflow binds and `return` into calls to the
-  keyword function and `pure` before inference, and `applyAttributes` replaces `@entry` with a synthesized call.
-  The synthesized nodes have no position and no link back to the syntax they came from.
-- **Name resolution is recorded** ([#98](https://github.com/nanyx-lang/nanyx/issues/98)). Each binding in
-  `TypeEnv` carries the symbol it declares, so inference records which symbol every identifier, call, pipe target
-  and qualified name resolved to (`TypedModule.Symbols`, `References`, and `ImportReferences` for the import a
-  name came through, a type's name in a type expression among them). Values, parameters, pattern variables and imports are symbols; type names and context
-  members are not yet, though type expressions now have nodes to record them against. A declaration is a node (a def, a
-  parameter list, a pattern), but the names it declares are not, so the parser keeps their spans beside the tree
-  (`DeclaredNames`), keyed by the node that declares them.
-- **The typed tree is a placeholder.** `TypedExpr` wraps the untyped `Expression` with a type and some optional
-  children, and is turned back into syntax (`moduleFromTypedItems`) for the backend.
-
 # Design
-
-## 1. Spans on every node
-
-Every syntax node carries a `SourceSpan`:
-
-```fsharp
-type SourceSpan =
-    { File: string       // the path the module was parsed from ("" for in-memory source)
-      Start: int         // character offset, inclusive
-      End: int           // character offset, exclusive; trailing whitespace is not included
-      StartLine: int     // zero-based
-      StartColumn: int } // zero-based
-```
-
-Offsets make slicing and text edits trivial, and they are what FParsec's `Position.Index` gives. The start's line
-and column are kept as well, so code without the source text (inference, diagnostics) can report a position; the
-end's line and column come from the source when needed. Offsets are into the source with line endings normalised
-to `\n`.
-
-The AST moves from "some cases have an optional range" to "every node has a span". The least invasive shape is a
-wrapper record around the existing unions:
-
-```fsharp
-type Expression = { Kind: ExpressionKind; Span: SourceSpan; Id: NodeId }
-and ExpressionKind =
-    | LiteralExpr of Literal
-    | IdentifierExpr of Identifier
-    ...
-```
-
-and the same for `Pattern`, `Statement`, `TypeExpr` and top-level items. This is one mechanical refactor of the
-parser, inference and the WASM backend; it can be done one node family at a time (expressions first, since that
-is where most diagnostics land). The `SourceRange option` fields on individual cases go away.
-
-`NodeId` is an integer, unique within the process, assigned when a node is created. It is what side tables (types, resolved symbols)
-are keyed by, so analysis results do not need a parallel copy of the tree.
-
-A diagnostic is created with the span of the node it is about (done in
-[#97](https://github.com/nanyx-lang/nanyx/issues/97), which removed the positioning of diagnostics after the fact).
-Once every node has a span, the diagnostics that are now reported at the nearest enclosing node move to their own.
 
 ## 2. Structured diagnostics
 
@@ -147,9 +72,6 @@ Rules:
   diagnostic is an `Error`.
 - The language server maps `Span` to the LSP range, `Code` to `code`, `Related` to `relatedInformation` and
   `Fixes` to code actions.
-
-Introducing codes for existing errors can be incremental: give every current error a code when its constructor
-is changed to take a span.
 
 ## 3. The semantic model
 
@@ -206,59 +128,20 @@ the first issue that touches it. Side tables keyed by `NodeId` avoid keeping two
 
 ## 4. The linter host (internal)
 
-> **Built** in [#100](https://github.com/nanyx-lang/nanyx/issues/100) (`Linters.fs`). The official `default`
-> linter's first rule is `unusedBindings` ([#101](https://github.com/nanyx-lang/nanyx/issues/101)), whose fixes are
-> the first any diagnostic offers; the language server shows them as quick fixes. Its second is `nonTailRecursion`
-> ([Tail calls](./tail-calls#checking-tail-position)), and its third `unreachableArms`
-> ([#103](https://github.com/nanyx-lang/nanyx/issues/103)), which asks `PatternSpace` which earlier arms cover an arm:
-> the module the exhaustiveness check in `Infer.fs` uses too. Its fourth is `unusedImports`
-> ([#102](https://github.com/nanyx-lang/nanyx/issues/102)): an `ImportedModule` symbol that no entry of
-> `ImportReferences` names. A type name in a type expression records its import there as a value's name does, so a
-> type used only in an annotation keeps its import. Its fifth is `noTagInCommon`
-> ([#532](https://github.com/nanyx-lang/nanyx/issues/532)): `==` or `!=` on closed tag types that share no tag, which
-> type-checks because the operands are joined. Its sixth is `unusedPrivateDefinitions`
-> ([#496](https://github.com/nanyx-lang/nanyx/issues/496)): a top-level def, type or context the module does not
-> export, or a member of such a context, that no entry of `References` names from outside the definition itself. A
-> call that makes a value of a type (`Point(x = 1)`) records a reference to the type for it. The `SemanticModel`
-> carries `ContextInstances`, so that a def an instance built from attached definitions picks up counts as used; the
-> call to `@entry`'s def that `applyAttributes` adds is a reference like any other. Its seventh is `unreachableCode`
-> ([#498](https://github.com/nanyx-lang/nanyx/issues/498)): the statements of a block after one whose type in `Types`
-> is the [bottom type](./bottom-type), `undefined`. Its eighth is `useInBraces`
-> ([#673](https://github.com/nanyx-lang/nanyx/issues/673)): `use X in { ... }`, whose body is a lambda of no
-> arguments rather than a block; it leaves alone a lambda written `{ () -> ... }`, which the tree marks as taking
-> unit. Its ninth is `strayDocComments`
-> ([#719](https://github.com/nanyx-lang/nanyx/issues/719)): a doc comment (`--|`) that documents nothing. The
-> `SemanticModel` carries the module's doc comments, which it parses for again only when a rule asks and the text has
-> a `--|`. Its tenth is `plusBetweenContexts` ([#645](https://github.com/nanyx-lang/nanyx/issues/645)): a `+` between
-> a function's contexts, which an earlier spec of the language wrote where it now writes `&`. The parser still reads
-> it, and the rule finds it in the module's text between two contexts' spans. Its eleventh is `unannotatedExports`
-> ([#104](https://github.com/nanyx-lang/nanyx/issues/104)): an exported top-level def whose `ValueDef` writes no
-> type. Its fix writes the def's type from `SymbolTypes` after the contexts it requires, which the `SemanticModel`
-> carries as `ContextTypes`, printed by `Signatures`: the printer hover and the type lenses use, which joins contexts
-> with `&` as an annotation does. Its twelfth is `unusedResults`
-> ([#105](https://github.com/nanyx-lang/nanyx/issues/105)), an error by default: a statement of a block, other than
-> its last, whose type in `Types` is known and is neither `()` nor `undefined`. A workflow keyword's statement has no
-> type there, and is left alone by its kind; `Lowered` could give it one. Its thirteenth is
-> `shadowedPreludeNames` ([#942](https://github.com/nanyx-lang/nanyx/issues/942)): one of the module's own symbols
-> (the `SemanticModel` carries the module's `File`, which its symbols' declarations name) with the name of an
-> undotted, exported top-level symbol declared in the prelude's file. It leaves alone a module whose file
-> `StandardLibrary.isModuleFile` says is the library's own. It is the default linter's only rule about hiding a name:
-> a name that hides another of the module's own is not reported. The rules for unused and
-> unreachable code are tracked in
-> [#499](https://github.com/nanyx-lang/nanyx/issues/499). The semantic model
-> carries the module's text, which fixes need (to remove a whole line, say). What the host settled:
->
-> - Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its
->   diagnostics are not repeated in every importer (the language server would show them at the top of each one).
-> - A failing linter is reported under a rule every linter has, `<linter>/linterFailed`, a warning by
->   default, so it can be configured or turned off like any rule. Throwing, or reporting a rule the linter does
->   not declare, both count as failing, and the linter's other reports for the module are left out.
-> - The configuration is `LinterOptions` (the linters to run, and severities by code), passed to
->   `Compiler.compileWith` and its file and source variants. A package's `.nyxp` sets it with an
->   `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
->   `nanyx build`, `nanyx run` and the language server; without the table, the linter does not run. A file
->   outside any package turns linters on with `::linters` directives in the same way, and without them runs
->   none. Linters are opt-in everywhere, including `Compiler.compile` and its variants.
+The host is `Linters.fs` ([#100](https://github.com/nanyx-lang/nanyx/issues/100)). The rules of the official
+`default` linter are described in [Official style linter](../standard-tools/official-linter). What the host settled:
+
+- Only the module being compiled is analyzed. An imported module is analyzed when it is compiled itself, so its
+  diagnostics are not repeated in every importer (the language server would show them at the top of each one).
+- A failing linter is reported under a rule every linter has, `<linter>/linterFailed`, a warning by
+  default, so it can be configured or turned off like any rule. Throwing, or reporting a rule the linter does
+  not declare, both count as failing, and the linter's other reports for the module are left out.
+- The configuration is `LinterOptions` (the linters to run, and severities by code), passed to
+  `Compiler.compileWith` and its file and source variants. A package's `.nyxp` sets it with an
+  `[linters.<name>]` table per linter to run ([#279](https://github.com/nanyx-lang/nanyx/issues/279)), read by
+  `nanyx build`, `nanyx run` and the language server; without the table, the linter does not run. A file
+  outside any package turns linters on with `::linters` directives in the same way, and without them runs
+  none. Linters are opt-in everywhere, including `Compiler.compile` and its variants.
 
 Before any public contract, linters are F# values compiled into the compiler:
 
@@ -292,20 +175,7 @@ The host:
 - returns linter diagnostics in `CompileResult.Diagnostics` alongside compiler ones, so `nanyx check`,
   `nanyx run` and the language server need no special handling.
 
-Configuration is a compiler option (`Map<string, Severity option>` keyed by code) until the package manifest
-exists; then the manifest is parsed into the same value. A rule promoted to `error` fails `nanyx run`/build like a
-compiler error does.
-
-The first linter is the official one from the docs, built rule by rule. The first rules are chosen to exercise
-different parts of the model:
-
-| Rule | Needs |
-|------|-------|
-| Unused local, argument and pattern variable | symbols and references |
-| Unused import | import symbols, qualified references |
-| Unreachable match branch | types and the pattern-space code behind the exhaustiveness check |
-| Exported definition without an annotation | the surface tree (annotations as written), and types printed as Nanyx syntax |
-| Unused return value | types of expression statements |
+A rule promoted to `error` fails `nanyx run` and `build` like a compiler error does.
 
 ## 5. The public contract (later)
 
@@ -321,32 +191,21 @@ evidence rather than guesses. The direction so far:
 
 # Code with errors
 
-Today any error stops compilation before a typed module exists, so linters can only run on modules with no
-errors. That is the right first step and keeps linters simple. Its cost is in the editor: linter diagnostics
-disappear while the file has a type error, and reappear when it is fixed.
-
-Running linters on code with errors needs parser error recovery and an inference that keeps going after an
-error, which the language server wants for its own reasons. It is out of scope here, but the semantic model
-should not assume every node has a type: `Types` is a map, and a missing entry means "unknown".
+Linters only look at a module that type-checked. Since [deferred errors](./deferred-errors), a module with type or
+name errors is typed all the same, with what did check, so linters could run on it. The cost of not doing so is in
+the editor: linter diagnostics disappear while the file has a type error, and reappear when it is fixed. A module
+that does not parse also needs parser error recovery. Linters that run on such code must not assume every node has
+a type: `Types` is a map, and a missing entry means "unknown".
 
 # Plan
 
-1. **Foundations.** Spans on every node; structured diagnostics with codes; diagnostics carry their file.
-2. **Semantic model.** Record name resolution as symbols and references; keep desugaring provenance.
-3. **Host and first rules.** The internal linter host with configuration through compiler options, then the
-   rules in the table above, one at a time.
-4. **Public linters.** Design the contract for Nanyx-authored linters, based on what steps 1 to 3 taught us.
-
-Steps 1 and 2 are useful on their own: the language server needs exact ranges and symbols for hover and
-go-to-definition regardless of linters.
+**Public linters.** Design the contract for Nanyx-authored linters
+([#107](https://github.com/nanyx-lang/nanyx/issues/107)), based on what the internal linters taught us.
 
 # Open questions
 
 - **Suppression in source.** An attribute (`@allow(default/unusedBindings)`) on a definition, a comment form, or
   only the convention that a `_`-prefixed name is intentionally unused? The docs already use `_` patterns.
-- ~~**Compiler error codes.** One flat `NYX0001` sequence, or ranges per phase?~~ Ranges per phase (see
-  [section 2](#2-structured-diagnostics)).
-- **Where linters run in the CLI.** Always, or only for `check` and build, with `run` skipping them for speed?
 - **Linters across modules.** "Exported but never used anywhere in the project" needs every module's semantic
   model at once; per-module analysis is enough for the first rules.
 - **Fix application.** Fixes are text edits; does the CLI get a `--fix`, or are fixes editor-only at first?

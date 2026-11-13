@@ -473,11 +473,13 @@ def passed: [ToString(a)] a -> string = { value -> angled([value]) }
 
 Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in `receipt` above `"{[250]}"` would be `"[£2.50]"`.
 
-A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code.
+A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`.
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 
-A value whose type has no `ToString`, such as a function, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`.
+A [protected type](./nominal-and-protected-types) such as `$UserId` can be written only if its module exports a `$UserId.toString`. Outside its module the type has no shape to write, so the module chooses how its values are shown, as it chooses everything else that can be done with them.
+
+A value whose type has no `ToString`, such as a function, a protected type without a `toString`, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`. So is a union open to tags a caller chooses, `#x(a) | r` in a function's type, since those tags may be any: name every tag in the type, or match on the tags it names.
 
 # Context synthesis
 
@@ -560,7 +562,7 @@ def reverseSum = {
 }
 ```
 
-A `use` of an `Add` reaches generic code called from its block, such as `list.sum`; it does not change a concrete `p + q` there yet ([numeric contexts](../work-in-progress/numeric-contexts#what-is-implemented)).
+A `use` of an `Add` reaches generic code called from its block, such as `list.sum`; it does not change a concrete `p + q` there yet ([numeric contexts](../work-in-progress/numeric-contexts#what-is-still-open)).
 
 # Why contexts matter
 

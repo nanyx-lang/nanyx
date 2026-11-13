@@ -79,7 +79,7 @@ operators call, and `Hash(a)` and `__hash`.
   compares it with `` $Email.`==` ``, and inside a function that requires `[Eq(a)]`, `==` on a `#some(a)` compares
   through the instance, also where the operands' type is only known later. A structure with no such part is still
   compared by the compiler's own. `ToString` is derived the same way (see
-  [printing values](./printing-values#structures)).
+  [ToString(a)](../advanced/contexts#tostringa)).
 
 - **A union with a rest is compared through the tags it names**
   ([#830](https://github.com/nanyx-lang/nanyx/issues/830)). `{ o -> o == #some($Email("a")) }` compares at
@@ -224,11 +224,11 @@ literals and `list.groupBy` exist ([#477](https://github.com/nanyx-lang/nanyx/is
 
 # Printing: designed, partly implemented
 
-[Printing values](./printing-values) proposes a `ToString(a)` context
-behind interpolation holes, synthesized from an attached `toString`, with `dbg` separate and printing anything. The
-attached `toString` on the built-in types exists ([#329](https://github.com/nanyx-lang/nanyx/issues/329)); checking
-holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/issues/330),
-[#331](https://github.com/nanyx-lang/nanyx/issues/331)).
+A printing design proposed a `ToString(a)` context behind interpolation holes, synthesized from an attached
+`toString`, with `dbg` separate and printing anything. The attached `toString` on the built-in types existed
+([#329](https://github.com/nanyx-lang/nanyx/issues/329)); checking holes through the context did not
+([#330](https://github.com/nanyx-lang/nanyx/issues/330), [#331](https://github.com/nanyx-lang/nanyx/issues/331)).
+*Since done:* [ToString(a)](../advanced/contexts#tostringa) describes it.
 
 # Where the docs and the compiler disagree
 
@@ -239,7 +239,7 @@ holes through the context does not ([#330](https://github.com/nanyx-lang/nanyx/i
 | `Eq(a)` is a "common context" with a `` `==` `` member, used as `[Eq(a)]` (contexts.md:106-118). | No `Eq` exists, and `==` never requires one. |
 | `sort: [Ord(a)] list(a) -> list(a)` ([memory.md:14](../advanced/memory)). | No `Ord`, no `sort`. *Since fixed:* both exist. |
 | `list.sortBy: (list(a), (a -> b))` ([collections.md:251](../stdlib/collections)). | `(a -> int)` keys only. *Since fixed:* `[Ord(b)]`, keys of any ordered type. |
-| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent today, but [printing-values.md:45-53](./printing-values) has a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two pages disagree with each other. |
+| `use` only changes the instance generic code sees, "never what `1 + 2` means" (operators.md:53). | Consistent then, but the printing design had a `ToString(int)` loaded with `use` changing a concrete `"{total}"`. The two designs disagreed. *Since settled:* a `use` changes concrete holes, as [ToString(a)](../advanced/contexts#tostringa) shows. |
 
 Two backend bugs turned up while checking this: [#526](https://github.com/nanyx-lang/nanyx/issues/526) (above) and
 [#528](https://github.com/nanyx-lang/nanyx/issues/528), where a lambda inside a generic function cannot call a member
@@ -267,7 +267,7 @@ The proposed set is small and closed:
 | `Eq(a)` | `` `==`: (a, a) -> bool `` | `==`, `!=` | numbers, bool, unit, string, tuples, records, lists, tags and unions |
 | `Ord(a)` | `compare: (a, a) -> #less \| #equal \| #greater` | `<`, `<=`, `>`, `>=` | numbers, bool, string, tuples, lists (see [Q3](#open-questions)) |
 | `Hash(a)` | `hash: a -> int` | none | the same types as `Eq` |
-| `ToString(a)` | `toString: a -> string` | interpolation holes | tags, tuples, records and lists, as [printing values](./printing-values#structures) describes |
+| `ToString(a)` | `toString: a -> string` | interpolation holes | tags, tuples, records and lists, as [ToString(a)](../advanced/contexts#tostringa) describes |
 
 Not every context in the prelude is well-known. `FromString(a, e)`, which an attached `fromString` gives a type as
 `toString` gives it a `ToString`, is an ordinary prelude context: no syntax reads through it and it is never derived
@@ -382,10 +382,10 @@ design makes hashing the natural choice, since more types have it.
 
 # Printing
 
-Unchanged from [printing values](./printing-values): `ToString(a)` is a
+As [ToString(a)](../advanced/contexts#tostringa) describes, `ToString(a)` is a
 well-known context for interpolation holes, synthesized from an attached `toString`, and derived part by part for
 tags with a payload, tuples, records and lists. As with `==`, a `ToString(T)` loaded with `use` changes concrete holes in its
-block, which is what that page already proposes.
+block.
 
 # Numeric operators
 
@@ -429,7 +429,7 @@ The language server's code action for the third adds the requirement to the sign
    backend; the join for open unions. Closes #424 and #526.
 3. `Ord`, `compare` and the four operators; `list.sort`, `min`, `max`, generic `sortBy`. Closes #476.
 4. `Hash` (done, [#533](https://github.com/nanyx-lang/nanyx/issues/533)), then maps and sets keyed by it.
-5. `ToString` per printing values (#330).
+5. `ToString` (#330, done; see [ToString(a)](../advanced/contexts#tostringa)).
 
 # Open questions
 
@@ -439,7 +439,7 @@ The language server's code action for the third adds the requirement to the sign
    written. (Rejected: every non-function type has equality implicitly, checked at instantiation.)
 2. **`use` changes a concrete `a == b` too.** `==` is always a lookup of `Eq(T)`, so an `Eq(string)` loaded with `use` changes plain
    `==` in its block as well as generic code called from it. This reverses operators.md:53, which is updated when
-   the work lands, and agrees with printing-values.md. (Rejected: `use` reaches only generic code.)
+   the work lands, and agrees with how `ToString` works. (Rejected: `use` reaches only generic code.)
 3. **Derived orders** are for numbers, bool, string, tuples and lists only; records and tags attach `compare` or
    use `sortBy`. (Rejected: tags by name, records by field name.)
 4. **First round:** `Eq`, then `Ord`, then `Hash` with maps, each its own piece of work. Numeric operators get

@@ -266,7 +266,8 @@ types of what it captures known. A lambda written in a generic definition is spe
 (`__lambda_0__int`), and the wrapper that lets a top-level function be passed as a value is lowered for each type it
 is passed at. So a lifted function is always lowered at concrete types, and lifting stays on the syntax tree: moving it
 into the IR was considered and set aside in [#425](https://github.com/nanyx-lang/nanyx/issues/425). A lifted lambda
-still captures context members it does not use ([#934](https://github.com/nanyx-lang/nanyx/issues/934)).
+captures only the context members it may call ([#934](https://github.com/nanyx-lang/nanyx/issues/934); see
+[Context calls](./context-calls#function-values-that-require-contexts)).
 
 How a function value is called follows from its type, not from how its lambda names its parameters or how the call
 writes its argument, since `int, int -> int` and `(int, int) -> int` are one type. A function value whose input is a
@@ -305,10 +306,10 @@ besides its functions comes from the IR of exactly the functions it emits (`Core
 helpers `dbg` calls. The heap is set up when some function calls `$alloc`.
 
 **What cannot be compiled.** Every function is compiled from the IR; there is no other way. What the IR cannot lower
-(a local function, `==` on records and lists, and the like) is an error,
-`UnsupportedByBackend`, reported where it is written: `tryTranspileTypedModuleToWat` gives the first one. `==` is built
-in only for numbers, strings and tags; comparing and printing records and lists structurally is
-[#424](https://github.com/nanyx-lang/nanyx/issues/424). A broken invariant of the backend is reported apart from these, as
+is an error, `UnsupportedByBackend`, reported where it is written: `tryTranspileTypedModuleToWat` gives the first
+one. `==` on a record, a tuple, a list or a tag with a payload calls an equality function generated for its type,
+which compares the values by their structure (`CoreIrEquality.fs`,
+[#424](https://github.com/nanyx-lang/nanyx/issues/424)). A broken invariant of the backend is reported apart from these, as
 `BackendInternalError`, which asks for a bug report. Only a type-checked module is compiled.
 `transpileTypedModuleWithReport` also lists the functions it was compiled into, specialisations among them.
 
@@ -412,21 +413,6 @@ On the examples that compile (blocks allocated, and the heap's peak in bytes):
 - **Tail calls.** The language guarantees that a tail call uses no stack ([Tail calls](./tail-calls)), so a
   variable that dies at a tail call is dropped before the call, and an argument the caller owns is passed owned:
   if the callee only borrowed it, the caller would have to outlive the call.
-
-# Plan
-
-1. **Groundwork.**
-   - ~~Keep a tag's payload in full~~ ([#181](https://github.com/nanyx-lang/nanyx/issues/181), done).
-   - ~~Replace the bump allocator with one that can free~~
-     ([#292](https://github.com/nanyx-lang/nanyx/issues/292), done).
-2. ~~**Core IR and monomorphisation.** Introduce the IR, specialising generic functions as it is built, and move code
-   generation onto it~~ ([#293](https://github.com/nanyx-lang/nanyx/issues/293), done).
-3. ~~**Headers and drop functions.** Give every heap object a count, and generate a drop function per type~~
-   ([#291](https://github.com/nanyx-lang/nanyx/issues/291), done).
-4. ~~**Reference counting.** Insert `dup` and `drop` with inferred ownership. Programs now free memory~~
-   ([#294](https://github.com/nanyx-lang/nanyx/issues/294), done).
-5. ~~**Reuse.** Drop specialisation and reuse tokens; measure on the examples~~
-   ([#295](https://github.com/nanyx-lang/nanyx/issues/295), done).
 
 # Open questions
 
