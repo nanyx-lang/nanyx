@@ -1,6 +1,6 @@
-/// What the info view shows at a position in the compiled root module: the type of the expression there, the names in
-/// scope with their types, the contexts in scope with where each comes from, and the contexts the call there requires
-/// with where it finds each. Positions are character offsets into
+/// What the info view shows at a position in the compiled root module: the type of the expression there; each scope
+/// around it, from the innermost lambda out to the module, with the names it declares and the contexts it provides;
+/// and the contexts the call there requires with where it finds each. Positions are character offsets into
 /// the source as the parser saw it, as for `Hover`.
 module NyxCompiler.InfoView
 
@@ -43,19 +43,42 @@ type CallSource =
 /// and documented symbols of what provides it, as `ScopedContext` has them. An instance the compiler builds has no span.
 type CallContext = { Context: string; Source: CallSource; Span: SourceSpan; Documented: Symbol list }
 
+/// What kind of scope around the position a `Scope` is.
+type ScopeKind =
+    /// A lambda that is not a def's value, nor a `memory` block, which is part of the scope it is in.
+    | LambdaScope
+    /// A def, top-level or local, with the lambda that is its value if it is one.
+    | FunctionScope
+    /// The module.
+    | ModuleScope
+
+/// A scope around the position. `Heading` names it: a lambda by its parameters (`{ message -> … }`), a def by its name
+/// (`def greet`), the module by its declared name (`module library.lending`). `Span` is what the heading links to: the
+/// lambda, the def's name, or the module's declaration (none if it has none). `Type` is a lambda's type, with the
+/// contexts it carries, or a def's signature, as hover writes them, and `Declared` says whether the def writes its type;
+/// `Symbol` is the def's, whose doc comment the info view shows. `Names` are the parameters, locals and pattern variables it declares, nearest the position first, and for
+/// the module its top-level defs and imports, its own first, then by name, less intrinsics. `Contexts` are those it
+/// provides: a `use` in it, a def's signature or what a def was inferred to require, or the module's runtime.
+type Scope =
+    { Kind: ScopeKind
+      Heading: string
+      Span: SourceSpan
+      Type: string option
+      Declared: bool
+      Symbol: Symbol option
+      Names: ScopedName list
+      Contexts: ScopedContext list }
+
 /// What the info view shows. `Expression` is what hover shows at the position, and `ExpressionSymbol` the name there
 /// that hover shows the doc comment of; `Instantiation`, on a name that refers to a generic def, the def's own
-/// signature and how this use fills in its type variables. `Locals` are the locals, parameters and pattern variables
-/// in scope, nearest first; `TopLevel` the top-level defs and imports in scope, the module's own first, then by name,
-/// less intrinsics. `Call` holds the contexts the innermost call or pipe around the position that requires any
-/// requires, each with where it finds it.
+/// signature and how this use fills in its type variables. `Scopes` are the scopes around the position, innermost
+/// first and the module last, each with what it declares and the contexts it provides. `Call` holds the contexts the
+/// innermost call or pipe around the position that requires any requires, each with where it finds it.
 type Info =
     { Expression: Hover.HoverInfo option
       ExpressionSymbol: Symbol option
       Instantiation: Hover.Instantiation option
-      Locals: ScopedName list
-      TopLevel: ScopedName list
-      Contexts: ScopedContext list
+      Scopes: Scope list
       Call: CallContext list }
 
 /// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation, the span of its
@@ -124,18 +147,18 @@ let private contextSymbol (typed: TypedModule) (context: Ty) : Symbol option =
         |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
     | _ -> None
 
-/// The contexts in scope at `offset`, nearest first, as types: those the `use`s around it load, each with the def the
-/// `use` names or calls, then those each def around it requires, innermost first, or the runtime's where no def is
-/// around it.
-let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * ContextSource * SourceSpan * Symbol option) list =
+/// The contexts in scope at `offset`, nearest first, as types, each with the span of the scope it belongs to: those the
+/// `use`s around it load, each with the def the `use` names or calls, belonging where the `use` is; then those each def
+/// around it requires, innermost first, belonging to the def's value; then the runtime's, which belong to the module.
+let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty * ContextSource * SourceSpan * Symbol option * SourceSpan) list =
     let defs = defsAround syntax offset |> List.choose (fun def -> defSymbol typed def |> Option.map (fun symbol -> symbol, def))
     let fromUses =
         usesAround syntax offset
         |> List.choose (fun (value, span) ->
-            typed.ExprTypes |> Map.tryFind value.Id |> Option.map (fun ty -> ty, Use, span, referenced typed value))
+            typed.ExprTypes |> Map.tryFind value.Id |> Option.map (fun ty -> ty, Use, span, referenced typed value, span))
     let fromDefs =
         defs
-        |> List.collect (fun (symbol, (_, annotation, _, _)) ->
+        |> List.collect (fun (symbol, (_, annotation, _, value)) ->
             let inferred = typed.InferredContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
             typed.ContextTypes
             |> Map.tryFind symbol.Id
@@ -143,12 +166,36 @@ let private contextsAt (typed: TypedModule) (syntax: Module) (offset: int) : (Ty
             |> Unifier.writtenContexts
             |> List.map (fun context ->
                 match annotation with
-                | Some annotation when not (List.contains context inferred) -> context, Signature, annotation.Span, None
-                | _ -> context, Inferred, symbol.Declaration, None))
+                | Some annotation when not (List.contains context inferred) -> context, Signature, annotation.Span, None, value.Span
+                | _ -> context, Inferred, symbol.Declaration, None, value.Span))
     let fromRuntime =
-        if defs.IsEmpty then typed.AmbientContexts |> List.map (fun name -> TyApply(name, []), Runtime, SourceSpan.none, None)
-        else []
+        typed.AmbientContexts |> List.map (fun name -> TyApply(name, []), Runtime, SourceSpan.none, None, SourceSpan.none)
     fromUses @ fromDefs @ fromRuntime
+
+/// The lambdas around `offset` that are scopes of their own, innermost first: not a def's value, which is the def's
+/// scope, nor a `memory` block, which is part of the scope it is in. A lambda the parser made has no span, and is left
+/// out.
+let private lambdasAround (syntax: Module) (offset: int) : Expression list =
+    let around = Hover.expressionsAt offset syntax
+    let defValues = defsAround syntax offset |> List.map (fun (_, _, _, value) -> value.Id) |> Set.ofList
+    let memoryBlocks =
+        around
+        |> List.choose (fun expr ->
+            match expr.Kind with
+            | FunctionCall(name, _, [ block ]) when name = MemoryCells.memoryFunction -> Some block.Id
+            | _ -> None)
+        |> Set.ofList
+    around
+    |> List.filter (fun expr ->
+        match expr.Kind with
+        | Lambda _ -> not (SourceSpan.isNone expr.Span) && not (defValues.Contains expr.Id) && not (memoryBlocks.Contains expr.Id)
+        | _ -> false)
+
+/// The heading of the scope of `lambda`: its parameters, `{ message -> … }`, or `{ … }` if it has none.
+let private lambdaHeading (lambda: Expression) : string =
+    match lambda.Kind with
+    | Lambda(parameters, _, _) when not parameters.IsEmpty -> $"""{{ {parameters |> List.map fst |> String.concat ", "} -> … }}"""
+    | _ -> "{ … }"
 
 /// The name of the context `context` is.
 let internal contextName (context: Ty) : Identifier option =
@@ -282,10 +329,24 @@ let rec private splitAs (groups: 'a list list) (written: string list) : string l
         let here, after = List.splitAt group.Length written
         here :: splitAs rest after
 
+/// The module's scope, with no names or contexts yet: headed by the name its `module` declaration gives it, if any.
+let private moduleScope (syntax: Module) : Scope =
+    let declared = syntax |> List.tryPick (fun item -> match item.Kind with ModuleDecl name -> Some (name, item.Span) | _ -> None)
+    { Kind = ModuleScope
+      Heading = match declared with Some (name, _) -> $"module {name}" | None -> "this module"
+      Span = declared |> Option.map snd |> Option.defaultValue SourceSpan.none
+      Type = None
+      Declared = false
+      Symbol = None
+      Names = []
+      Contexts = [] }
+
 /// What the info view shows at `offset` in the compiled root module, compiled as `file` (empty for source compiled
-/// directly), with made-up type variables named by `names`. The expression is what hover shows there. The locals' types
-/// and the contexts are named together, so an `α` in a parameter's type is the `α` of a context; a local def that
-/// writes its contexts shows them before its type. Empty when the module did not type-check.
+/// directly), with made-up type variables named by `names`. The expression is what hover shows there. The locals' types,
+/// the lambdas' and the contexts are named together, so an `α` in a parameter's type is the `α` of a context; a local
+/// def that writes its contexts shows them before its type. A name or context belongs to the innermost lambda or def
+/// whose value it is declared or provided in, and to the module if there is none. Empty when the module did not
+/// type-check.
 let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Info =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
@@ -305,21 +366,23 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             |> List.map (fun symbol ->
                 Completion.symbolType typed symbol,
                 typed.ContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue [] |> Unifier.writtenContexts)
+        let lambdas = lambdasAround syntax offset
+        let defs = defsAround syntax offset |> List.choose (fun def -> defSymbol typed def |> Option.map (fun symbol -> symbol, def))
         let contexts = contextsAt typed syntax offset
         let callContexts = callContextsAt typed syntax offset
         let localGroups = localTypes |> List.map (fun (ty, required) -> Option.toList ty @ required)
-        let contextGroups = contexts |> List.map (fun (ty, _, _, _) -> [ ty ])
+        let lambdaGroups = lambdas |> List.map (fun lambda -> typed.ExprTypes |> Map.tryFind lambda.Id |> Option.toList)
+        let contextGroups = contexts |> List.map (fun (ty, _, _, _, _) -> [ ty ])
         let callGroups = callContexts |> List.map (fun (ty, _, _, _) -> [ ty ])
-        let groups = localGroups @ contextGroups @ callGroups
+        let groups = localGroups @ lambdaGroups @ contextGroups @ callGroups
         let written = splitAs groups (Unifier.tysToDisplayStrings names (List.concat groups))
         let localsWritten, written = List.splitAt locals.Length written
+        let lambdasWritten, written = List.splitAt lambdas.Length written
         let contextsWritten, callWritten = List.splitAt contexts.Length written
         let scoped (symbol: Symbol) typeWritten =
             { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration; Symbol = symbol }
-        { Expression = expression
-          ExpressionSymbol = expression |> Option.bind (fun _ -> Definition.symbolAt file result offset)
-          Instantiation = instantiation
-          Locals =
+        let documented (ty: Ty) (instance: Symbol option) = Option.toList instance @ Option.toList (contextSymbol typed ty)
+        let localNames =
             List.map2
                 (fun (symbol, (ty: Ty option, _)) typeWritten ->
                     match ty, typeWritten with
@@ -327,27 +390,59 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                     | _ -> scoped symbol None)
                 (List.zip locals localTypes)
                 localsWritten
-          TopLevel =
+        let scopedContexts =
+            List.map2
+                (fun (ty, source, span, instance, owner) written ->
+                    owner, ({ Context = List.exactlyOne written; Source = source; Span = span; Documented = documented ty instance }: ScopedContext))
+                contexts
+                contextsWritten
+        // The lambdas and defs around the position, innermost first, each with the span its names and contexts are in:
+        // a def's value, since its name is declared in the scope around it.
+        let enclosing =
+            (List.map2
+                (fun (lambda: Expression) typeWritten ->
+                    { Kind = LambdaScope
+                      Heading = lambdaHeading lambda
+                      Span = lambda.Span
+                      Type = List.tryHead typeWritten
+                      Declared = false
+                      Symbol = None
+                      Names = []
+                      Contexts = [] },
+                    lambda.Span)
+                lambdas
+                lambdasWritten)
+            @ (defs
+               |> List.map (fun (symbol, (name, annotation, _, value)) ->
+                   { Kind = FunctionScope
+                     Heading = $"def {name}"
+                     Span = symbol.Declaration
+                     Type = topLevelType names typed symbol
+                     Declared = annotation.IsSome
+                     Symbol = Some symbol
+                     Names = []
+                     Contexts = [] },
+                   value.Span))
+            |> List.sortBy (fun (_, covering) -> covering.End - covering.Start)
+        let ownerOf (span: SourceSpan) = enclosing |> List.tryFindIndex (fun (_, covering) -> SourceSpan.contains covering span)
+        let namesIn index = localNames |> List.filter (fun name -> ownerOf name.Declaration = index)
+        let contextsIn index = scopedContexts |> List.filter (fun (owner, _) -> ownerOf owner = index) |> List.map snd
+        let topLevel =
             inScope
             |> List.filter (fun symbol -> (symbol.Kind = TopLevelValue || symbol.Kind = ImportedModule) && not (ReservedNames.isHidden symbol))
             |> List.sortBy (fun symbol -> symbol.Declaration.File <> file, symbol.Name)
             |> List.map (fun symbol -> scoped symbol (topLevelType names typed symbol))
-          Contexts =
-            List.map2
-                (fun (ty, source, span, instance) contextWritten ->
-                    { Context = List.exactlyOne contextWritten
-                      Source = source
-                      Span = span
-                      Documented = Option.toList instance @ Option.toList (contextSymbol typed ty) })
-                contexts
-                contextsWritten
+        { Expression = expression
+          ExpressionSymbol = expression |> Option.bind (fun _ -> Definition.symbolAt file result offset)
+          Instantiation = instantiation
+          Scopes =
+            (enclosing |> List.mapi (fun index (scope, _) -> { scope with Names = namesIn (Some index); Contexts = contextsIn (Some index) }))
+            @ [ { moduleScope syntax with Names = namesIn None @ topLevel; Contexts = contextsIn None } ]
           Call =
             List.map2
-                (fun (ty, source, span, instance) contextWritten ->
-                    { Context = List.exactlyOne contextWritten
-                      Source = source
-                      Span = span
-                      Documented = Option.toList instance @ Option.toList (contextSymbol typed ty) })
+                (fun (ty, source, span, instance) written ->
+                    ({ Context = List.exactlyOne written; Source = source; Span = span; Documented = documented ty instance }: CallContext))
                 callContexts
                 callWritten }
-    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Locals = []; TopLevel = []; Contexts = []; Call = [] }
+    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Scopes = []; Call = [] }
+

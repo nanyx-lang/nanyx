@@ -193,9 +193,13 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             })
             .Returning<InfoViewResult?>(_cancellation.Token);
         Assert.NotNull(result);
-        Assert.Equal(["cursor", "messages", "inScope", "topLevel", "contexts", "call", "flow"], result.Sections.Select(section => section.Id));
+        Assert.Equal("cursor", result.Scopes[0].Kind);
+        Assert.Equal(["expression", "messages", "call"], result.Scopes[0].Sections.Select(section => section.Id));
+        Assert.Equal("module", result.Scopes[^1].Kind);
         return result;
     }
 
-    protected static InfoViewSection Section(InfoViewResult view, string id) => view.Sections.Single(section => section.Id == id);
+    /// <summary>The items of the section <paramref name="id"/> of the innermost scope of kind <paramref name="kind"/>, none if it leaves the section out.</summary>
+    protected static IReadOnlyList<InfoViewItem> Section(InfoViewResult view, string kind, string id) =>
+        view.Scopes.First(scope => scope.Kind == kind).Sections.SingleOrDefault(section => section.Id == id)?.Items ?? [];
 }
