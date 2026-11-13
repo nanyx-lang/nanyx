@@ -24,8 +24,9 @@ says, where it points, and how the CLI and the editor show it.
 - A reference page in the docs with a section for each error code.
 
 The `Diagnostic` type itself (code, span, related locations, fixes) is designed in
-[Linters: structured diagnostics](./linters#2-structured-diagnostics) and tracked there, because linters
-need it first. This workstream fills it with content.
+[Linters: structured diagnostics](./linters#2-structured-diagnostics), because linters needed it first. That is
+also where codes are settled: one table in `Diagnostics.fs`, numbered in ranges by phase. This workstream fills the
+type with content.
 
 # Where the compiler is today
 
@@ -120,5 +121,4 @@ _To do._ Candidate items, not yet filed:
 
 # Open questions
 
-- One flat `NYX0001` sequence, or ranges per phase? (Also open in [Linters](./linters#open-questions).)
 - Are error message snapshots part of the compiler tests, so wording changes are reviewed deliberately?

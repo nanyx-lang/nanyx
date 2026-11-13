@@ -20,8 +20,11 @@ fold small functions such as `println` into their callers.
 
 # What a call costs
 
-Since printing takes any value with a `ToString` ([Printing values](./printing-values#printing)), `println` is an
-ordinary function, `[Console & ToString(a)] a -> ()`. Before specialising on known members
+Since printing takes any value with a `ToString` ([ToString(a)](../advanced/contexts#tostringa)), `println` is an
+ordinary function, `[Console & ToString(a)] a -> ()` ([#726](https://github.com/nanyx-lang/nanyx/issues/726)), that
+writes `toString(value)` through `Console`'s `write`. The printing functions are not members of `Console` because a
+context member can't be generic with a requirement of its own: a member is passed as a closure, and a closure has no
+`ToString` to take. Before specialising on known members
 ([#744](https://github.com/nanyx-lang/nanyx/issues/744)), hello world compiled to this:
 
 - **The call site passed a closure for every member.** `println("Hello, Nanyx!")` passed six closures, one for each
@@ -45,8 +48,8 @@ and costs what it did. How members are passed is described under Monomorphisatio
 A top-level function that requires contexts can be passed as a value where they are all available, as in
 `[1, 2] \list.map(println)` or `apply(say, "hi")`. Its value's type requires its contexts without parameters, such as
 `Console`, and each call passes their members, as it does to any function value whose type requires contexts
-([#836](https://github.com/nanyx-lang/nanyx/issues/836), see
-[Context-qualified types](./context-qualified-types#what-is-implemented)). It is passed as a closure over its wrapper
+([#836](https://github.com/nanyx-lang/nanyx/issues/836), see [below](#function-values-that-require-contexts)). It is
+passed as a closure over its wrapper
 that takes those members after its other parameters and captures the members of its parameterised contexts, found
 where it is named; the wrapper calls the function with its arguments and them all
 (`Lowering.WrapperCalling` in `CoreIrLower.fs`). The captured members are found as a call finds them: the type checker records
@@ -66,6 +69,34 @@ A function with a context variable, such as `apply: [c] ([c] a -> b), a -> b`, i
 contexts the variable stands for at each call, which it takes after its other parameters and passes to the function
 value it calls. So `apply(say, "hi")` and `apply(double, 2)` call two specialisations of `apply`, one of which takes
 `Console`'s members.
+
+### Function values that require contexts
+
+A function value whose type requires contexts ([Parametric contexts](../tour/lambdas-and-higher-order-functions#parametric-contexts))
+takes their members as parameters after its others, and each call passes the ones in scope there: the IR type
+`IrFunction` lists them, by key, contexts sorted by name and each context's members in its layout's order
+([#836](https://github.com/nanyx-lang/nanyx/issues/836)). So:
+
+- A lifted lambda takes the members of the contexts its type requires as parameters. It still captures the members of
+  the others its scope supplies, those of a parameterised context found where it is made: those of the def around it
+  that it may call, by their parameters, and those each `use` in scope loads that it may call, by the locals lambda
+  lifting evaluates the `use`'s bindings into, which it loads again with a `use` of its own
+  ([#778](https://github.com/nanyx-lang/nanyx/issues/778)). It may call a member it names, by its key or its own name,
+  in its body or a lambda inside it, and every member when it names a function that requires contexts
+  ([#934](https://github.com/nanyx-lang/nanyx/issues/934)).
+- A top-level function named as a value is a closure over a wrapper that takes the members its value's type requires
+  and captures the others, found where it is named.
+- A def with context variables, such as `[c]` in `run: [c] ([c] () -> string) -> string`, is specialised on the
+  members of the contexts they stand for at each call (`CoreIrLower.callee`), and takes those members after the ones
+  it declares.
+- A function value given where one requiring other contexts is expected, as an argument, a context member, a `use`
+  binding, a list element or a def's result, is adapted (`FunctionLowering.Coerce`): a closure over an adapter that
+  holds it, drops the members it doesn't take and captures the ones it needs that the expected type doesn't pass, as
+  they are where it is given. That is how `use (write = { s -> write(...) })` calls the outer `write`, and how a
+  builder's `try`, whose context variable no call binds, takes a continuation that prints.
+
+So a lambda that uses a context may leave the scope that supplies it, and a function may be named as a value where
+its contexts aren't available. A lambda that leaves still requires the context where it is called, as its type says.
 
 # Design
 

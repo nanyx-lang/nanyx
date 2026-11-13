@@ -84,7 +84,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:3
     p = Point(x = 1, y = 2)
 ```
 
-`assert` is built in, like `dbg`, because only the compiler has what that message needs: the source text of the expression, and a printer for the type of each value in it. For a comparison it prints each side that is not a literal, then each name the expression reads. That is why there is no `assertEqual` or `assertContains`: `assert(xs \contains(3))` already prints `xs`. It prints values the way [`dbg`](./printing-values#dbg-prints-any-value) does, ignoring any `ToString` the type has.
+`assert` is built in, like `dbg`, because only the compiler has what that message needs: the source text of the expression, and a printer for the type of each value in it. For a comparison it prints each side that is not a literal, then each name the expression reads. That is why there is no `assertEqual` or `assertContains`: `assert(xs \contains(3))` already prints `xs`. It prints values the way [`dbg`](../stdlib/io#dbg) does, ignoring any `ToString` the type has.
 
 `assert` is not only for tests. It works anywhere, and outside a test it is a panic with a good message, as in Rust and Zig. Panicking is not an effect in Nanyx, so `assert` needs no context: `assert: bool -> ()`.
 
