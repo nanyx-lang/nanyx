@@ -302,12 +302,14 @@ module Package =
     /// Each of `files`, a source file of the package `modules` with its text, compiled as `compileIn` compiles one, but
     /// with each module checked once (#698). A module that checked, for one file or as an import of one, is not checked
     /// again for a later file that imports it, nor for its own file. One that failed to check is checked again where it
-    /// is needed, since an import cycle is reported where the file being compiled enters it.
-    let private compileAll (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
+    /// is needed, since an import cycle is reported where the file being compiled enters it. `progress` is told each
+    /// file's path as its compile starts.
+    let private compileAll (progress: string -> unit) (modules: PackageModules) (options: LinterOptions) (files: (string * string) list) : (string * CompileResult) list =
         let checkedOnce = Collections.Generic.Dictionary<string, CheckedModule>()
         Nanyx.LargeStack.run <| fun () ->
         files
         |> List.map (fun (file, source) ->
+            progress file
             let origin = SourceFile (Path.GetFullPath file)
             let key = Compiler.originKey origin
             let checkedModules = Compiler.CheckedModules (Some modules)
@@ -330,12 +332,14 @@ module Package =
         | Some modules -> compileIn modules options filePath source
         | None -> Compiler.compileSourceWith options filePath source
 
-    /// Checks every source file of `package`, running the linters its manifest turns on over each.
-    let build (package: Package) : PackageBuild =
+    /// Checks every source file of `package`, running the linters its manifest turns on over each. `progress` is told
+    /// each file's full path as its compile starts, in the order the files are compiled, so a caller can show which
+    /// file a slow build is on.
+    let buildWith (progress: string -> unit) (package: Package) : PackageBuild =
         let modules = modules package
         let sources = package.Sources |> List.map (fun file -> file, File.ReadAllText file)
         let results =
-            compileAll modules package.Manifest.Linters sources
+            compileAll progress modules package.Manifest.Linters sources
             |> List.map2 (fun (_, source) (file, result) ->
                 let directives = directiveErrors package.Manifest.Path file source
                 file,
@@ -350,6 +354,9 @@ module Package =
           Results = results
           Diagnostics = results |> List.collect (fun (_, result) -> result.Diagnostics) |> List.distinct
           ErrorsDeferred = results |> List.forall (snd >> deferred) }
+
+    /// `buildWith`, telling nobody which file it is on.
+    let build (package: Package) : PackageBuild = buildWith ignore package
 
     /// The compile of the package's `@entry` file, if it has one.
     let entryResult (build: PackageBuild) : CompileResult option =

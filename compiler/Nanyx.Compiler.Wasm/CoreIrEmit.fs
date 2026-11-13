@@ -106,6 +106,7 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | Let _
     | Do _
     | Match _
+    | While _
     | Interpolate _
     | BoxFloat _
     | Panic _ -> []
@@ -369,6 +370,7 @@ type private FunctionEmitter(context: EmitContext) =
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
             writes @ [ "i32.const 1"; $"call ${helper Helpers.procExit}"; "unreachable" ] |> String.concat "\n    "
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
+        | While loop -> this.WhileLoop loop
         | Call(name, args) ->
             match context.Signature name with
             | Some(parameterTys, resultTy) when parameterTys.Length = args.Length ->
@@ -636,6 +638,20 @@ type private FunctionEmitter(context: EmitContext) =
             |> String.concat "\n        "
         $"{startCode}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        {inLoop}\n      end\n    end\n    i32.const 0"
 
+    /// A `while` loop: each time round, the condition ends the loop when it is false, and the body's value is dropped.
+    /// The loop is unit.
+    member this.WhileLoop (loop: WhileLoop) : string =
+        let depth = loop.Depth
+        let inLoop =
+            [ this.Sequence false loop.Condition
+              "i32.eqz"
+              $"br_if $__while_done_{depth}"
+              this.Sequence false loop.Body
+              dropValue loop.Body.Type
+              $"br $__while_next_{depth}" ]
+            |> String.concat "\n        "
+        $"block $__while_done_{depth}\n      loop $__while_next_{depth}\n        {inLoop}\n      end\n    end\n    i32.const 0"
+
     /// Tests each arm's patterns in turn, as `CodeGen.fs` does: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (resultTy: IrType) (scrutinees: Var list) (arms: Arm list) : string =
         // The payload of the tag `name` of a value of `ty`, with its type.
@@ -827,6 +843,9 @@ let private declaredLocals (body: Expr) : (string * string) list =
         | Interpolate _ -> interpolates.Value <- true
         | ForEach loop ->
             ForLoop.locals loop |> List.iter loops.Add
+            walk loop.Body
+        | While loop ->
+            walk loop.Condition
             walk loop.Body
     walk body
     let declared (var: Var) = localName var, CoreIrLayout.valueType var.Type

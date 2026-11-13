@@ -1,9 +1,10 @@
 /// Nanyx's operators are a closed list (see `binaryOperators`): what the compiler reports for one it does not have, or
-/// for a spare one no type gives a meaning, and the types of a composition.
+/// for a spare one no type gives a meaning, the types of a composition, and how a defined operator's operands are checked.
 module Nanyx.Compiler.Tests.Features.Operators
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 /// The one diagnostic `source` has: its code, its message with FParsec's line breaks taken out, and the text from
 /// where it is reported to the end of its line.
@@ -68,3 +69,18 @@ let ``A long chain of operators is checked without running out of stack`` () =
     let result = Compiler.compile source
     Assert.Empty(result.Diagnostics)
     Assert.True(result.TypeChecked)
+
+[<Fact>]
+let ``An operand of a defined operator widens into the union its parameter is, as a call's argument does`` () =
+    let typed =
+        compileClean
+            """
+def `>>=` = {
+  | #some(v), f -> f(v)
+  | other, _ -> other
+}
+def x = #some(2) >>= { n -> #some(n * 10) }
+def y = #none >>= { n -> #some(n * 10) }
+"""
+    Assert.Equal("#some(int)", Unifier.tyToString (typed.Types |> Map.find "x"))
+    Assert.Equal("#none | #some(int)", Unifier.tyToString (typed.Types |> Map.find "y"))

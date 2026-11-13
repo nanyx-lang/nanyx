@@ -62,6 +62,9 @@ let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -
                 arm.Patterns |> List.iter pattern
                 expr arm.Body
         | ForEach loop -> expr loop.Body
+        | While loop ->
+            expr loop.Condition
+            expr loop.Body
         | Dup(_, body)
         | Drop(_, body)
         | DropAfter(body, _)

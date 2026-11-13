@@ -364,6 +364,17 @@ module ForSyntax =
             | _ -> None
         | _ -> None
 
+/// `while condition -> body` (see the loops page): a call to the built-in "__while" with the condition and the body,
+/// both evaluated again each time round. The loop ends when the condition is false, and is unit.
+module WhileSyntax =
+    let builtIn = "__while"
+
+    /// A `while` loop's condition and body.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ condition; body ]) when name = builtIn -> Some (condition, body)
+        | _ -> None
+
 /// What a record literal with a spread is made of, in the order written.
 type SpreadPart =
     /// `...r`: every field of the record `r`.

@@ -85,7 +85,7 @@ for dict | _, value ->
 
 `for` iterates over a collection that already exists. When the number of iterations depends on state that changes as the loop runs, use `while`, which repeats its body for as long as the condition is `true`:
 
-```nanyx skip=#957
+```nanyx
 memory {
   def remaining = mut 3
 

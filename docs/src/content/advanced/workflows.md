@@ -234,6 +234,7 @@ A keyword whose continuation cannot be the rest of the block is an error:
 
 - **Inside a lambda.** A lambda runs when it is called, not where it is written. This includes a lambda passed to a function, as in `list.map(xs, { x -> try f(x) })`. A builder block of its own inside the lambda, such as `{ x -> proc { ... } }`, is fine.
 - **In the body of a `for` loop.** The body runs once per element. Handle the value with a `match` in the body instead.
+- **In a `while` loop.** Its condition and body run again each time round. Handle the value with a `match` in the loop instead.
 - **In a part of an expression that may not run.** That means a branch of an `if` or an arm of a `match` that is part of a larger expression, as in `1 + (if c then try f() else 0)`, or the right of `and` or `or`. Make the `if` or `match` a statement of its own.
 
 `try` and `return` are keywords of the language, so outside any builder block they are an error too, which says that each is a workflow keyword to use inside a builder block such as `proc { ... }`.

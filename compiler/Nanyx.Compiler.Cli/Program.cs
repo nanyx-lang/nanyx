@@ -1,5 +1,6 @@
 using Consolo;
 using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 using Nanyx.Runtime;
 using NyxCompiler;
 using Transpiler.Wasm;
@@ -49,7 +50,7 @@ internal static class CliCommands
             return 1;
         }
 
-        var build = PackageModule.build(package);
+        var build = BuildPackage(package);
         PrintDiagnostics(build.Diagnostics, Console.Out);
         Console.WriteLine($"Checked {package.Manifest.Name} ({FileCount(package)}).");
         return HasErrors(build.Diagnostics) ? 1 : 0;
@@ -122,7 +123,7 @@ internal static class CliCommands
         }
 
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
-        var build = PackageModule.build(package);
+        var build = BuildPackage(package);
         PrintDiagnostics(WorthStoppingFor(build.Diagnostics), Console.Error);
         var deferred = HasErrors(build.Diagnostics) && build.ErrorsDeferred;
         if (HasErrors(build.Diagnostics) && !deferred)
@@ -162,7 +163,7 @@ internal static class CliCommands
             return 1;
         }
 
-        var build = PackageModule.build(package);
+        var build = BuildPackage(package);
         PrintDiagnostics(build.Diagnostics, Console.Out);
         var deferred = !release && HasErrors(build.Diagnostics) && build.ErrorsDeferred;
         if (HasErrors(build.Diagnostics) && !deferred)
@@ -213,6 +214,30 @@ internal static class CliCommands
     /// <summary>"1 file", "3 files": how many source files the package has.</summary>
     private static string FileCount(Package package) =>
         package.Sources.Length == 1 ? "1 file" : $"{package.Sources.Length} files";
+
+    /// <summary>
+    /// Builds the package, with a stopwatch on stderr naming the file the build is on while stderr is a terminal (see
+    /// <see cref="CompileProgress"/>).
+    /// </summary>
+    private static PackageBuild BuildPackage(Package package)
+    {
+        using var progress = CompileProgress.Start(Console.Error, $"{package.Manifest.Name} ({FileCount(package)})");
+        var build = PackageModule.buildWith(FuncConvert.FromAction<string>(file => progress.Compiling(DisplayPath(file))), package);
+        progress.Finish();
+        return build;
+    }
+
+    /// <summary>
+    /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on <paramref name="errors"/> while
+    /// that is a terminal (see <see cref="CompileProgress"/>).
+    /// </summary>
+    private static CompileResult CompileScript(string inputFile, TextWriter errors)
+    {
+        using var progress = CompileProgress.Start(errors, DisplayPath(Path.GetFullPath(inputFile)));
+        var result = Script.compileFile(inputFile);
+        progress.Finish();
+        return result;
+    }
 
     /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
     private static bool IsPackagePath(string path) =>
@@ -394,7 +419,7 @@ internal static class CliCommands
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
-        var result = Script.compileFile(inputFile);
+        var result = CompileScript(inputFile, Console.Error);
 
         Console.WriteLine($"Phase: {result.Phase}");
         PrintDiagnostics(result.Diagnostics, Console.Out);
@@ -415,7 +440,7 @@ internal static class CliCommands
     internal static int RunScript(string inputFile, bool checkMemory, TextWriter errors, ProgramIo io)
     {
         // Script mode: the file's :: directives say what a package's manifest would.
-        var result = Script.compileFile(inputFile);
+        var result = CompileScript(inputFile, errors);
 
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
         PrintDiagnostics(WorthStoppingFor(result.Diagnostics), errors);

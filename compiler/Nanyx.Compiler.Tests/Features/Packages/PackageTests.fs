@@ -88,6 +88,19 @@ let ``A manifest with the old .nyxpack extension is not a manifest`` () =
     Assert.Contains("Not a directory or a .nyxp manifest", Assert.Single(errorsOf (Package.find (package.Path "demo.nyxpack"))))
 
 [<Fact>]
+let ``A build tells its caller each source file as it starts on it, in order`` () =
+    use package =
+        new TempPackage(
+            [ "demo.nyxp", manifest ""
+              "src/main.nyx", "module main\n\nimport util\n\n@entry\ndef main = {\n  println(\"{one}\")\n}\n"
+              "src/util.nyx", "module util\n\nexport def one = 1\n" ])
+    let found = okOf (Package.find package.Root)
+    let started = Collections.Generic.List<string>()
+    let build = Package.buildWith started.Add found
+    Assert.Empty(build.Diagnostics)
+    Assert.Equal<string list>(found.Sources, List.ofSeq started)
+
+[<Fact>]
 let ``Without a linters table no linter runs`` () =
     use package = new TempPackage([ "demo.nyxp", manifest ""; "main.nyx", entrySource ])
     let build = Package.build (okOf (Package.find package.Root))

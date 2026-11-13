@@ -15,6 +15,10 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
 - A lambda in the block may use the block's cells. A block whose result is, or holds, a lambda that uses one is an
   error.
 - A cell no lambda captures is a WebAssembly local; a captured one is a reference-counted box the lambdas share.
+- `while condition -> body` runs its body for as long as its condition, which may read cells, is true
+  ([#957](https://github.com/nanyx-lang/nanyx/issues/957)). The parser makes it a call to `__while` (`WhileSyntax`);
+  neither part is a lambda, so the checker (`Loops.inferWhile`) types them where the loop is written, and the core IR
+  has a `While` node that evaluates both again each time round, borrowing what they use from outside.
 
 # How it works
 
@@ -38,5 +42,3 @@ The design of mutation is on [Memory](../advanced/memory). Its first step, local
   that requires `$Memory` says so, and escape falls out of type checking rather than the syntactic check above.
 - **`mut` record fields.** The parser reads `mut` before a field name in a record type; nothing checks or compiles it
   yet.
-- **`while`**, which [the loops page](../tour/loops) describes, is not parsed yet. With cells, its condition can now
-  change as it runs.

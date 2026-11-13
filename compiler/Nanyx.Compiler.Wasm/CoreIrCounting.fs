@@ -57,6 +57,7 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     | If(cond, _, _) -> [ cond, Borrowed ]
     | BoxFloat _
     | Panic _
+    | While _
     | Match _
     | Let _
     | Do _
@@ -127,6 +128,9 @@ let rec private nodes (e: Expr) : Expr seq =
                     yield! nodes guard
                 yield! nodes arm.Body
         | ForEach loop -> yield! nodes loop.Body
+        | While loop ->
+            yield! nodes loop.Condition
+            yield! nodes loop.Body
         | Dup(_, body)
         | Drop(_, body)
         | DropAfter(body, _)
@@ -237,6 +241,7 @@ type private Counter(ownership: Ownership, func: Function) =
                     let loopVars = ForLoop.locals loop |> List.map _.Id |> Set.ofList
                     let source = operands ownership e |> List.map (fst >> this.FreeIn) |> Set.unionMany
                     Set.union source (Set.difference (this.Free loop.Body) loopVars)
+                | While loop -> Set.union (this.Free loop.Condition) (this.Free loop.Body)
                 | Dup(dupped, body)
                 | Drop(dupped, body) -> Set.union (dupped |> List.map _.Id |> Set.ofList) (this.Free body)
                 | DropAfter(body, dropped) -> Set.union (dropped |> List.map _.Id |> Set.ofList) (this.Free body)
@@ -310,6 +315,14 @@ type private Counter(ownership: Ownership, func: Function) =
             let dups, drops = this.Operands owned after (operands ownership e @ fromOutside)
             let body = this.Count Set.empty Set.empty loop.Body
             this.Wrap dups drops (mk (ForEach { loop with Body = body }) e.Type)
+        | While loop ->
+            // The condition and the body run again each time round, so they only borrow what they use, which lives on
+            // until the loop is done.
+            let fromOutside = this.Free e |> sortedVars |> List.map (fun var -> AVar var, Borrowed)
+            let dups, drops = this.Operands owned after fromOutside
+            let condition = this.Count Set.empty Set.empty loop.Condition
+            let body = this.Count Set.empty Set.empty loop.Body
+            this.Wrap dups drops (mk (While { loop with Condition = condition; Body = body }) e.Type)
         | Dup _
         | Drop _
         | DropAfter _
