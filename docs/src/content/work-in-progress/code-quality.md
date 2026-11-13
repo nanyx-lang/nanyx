@@ -97,6 +97,16 @@ which was at 1,518 lines:
 | `Library.fs` | 948 | The types a checked module is kept in (`CompileResult`, `CheckedModule`, `ReExported`) moved out to `CheckedModule.fs` |
 | `Library.fs` | 728 | Module linking (what an import brings into scope and inlines: `inlinedItemsForImport`, `reachedItems`, `extendEnvWithImport` and their helpers) moved out to `ModuleLinking.fs` |
 
+`mergeImport` and its helpers then left `typecheckModule`, taking and returning a `MergedImports` record instead of
+changing 13 captured mutables. `Library.fs` holds only the compiling job now, at 761 lines.
+
+**2026-11-13.** `Program.fs` (parser) had grown back past the limit, to 1,509 lines
+([#366](https://github.com/nanyx-lang/nanyx/issues/366)):
+
+| File | Lines | What changed |
+|---|---|---|
+| `Program.fs` (parser) | 1,431 | The script header (`Directive`, `Directives`) moved out to `Directives.fs`, module `Parser.Program.Header` |
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review

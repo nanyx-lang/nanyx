@@ -71,7 +71,7 @@ let withDirectives (path: string) (text: string) (options: Formatter.Options) : 
     let manifest =
         if path = "" then Result.Ok None else manifestIn (Path.GetDirectoryName(Path.GetFullPath path))
     let directives =
-        Parser.Program.Api.Directives.read path text |> List.filter (fun directive -> List.tryHead directive.Key = Some "formatter")
+        Parser.Program.Header.Directives.read path text |> List.filter (fun directive -> List.tryHead directive.Key = Some "formatter")
     (Result.Ok options, directives)
     ||> List.fold (fun options directive ->
         options
