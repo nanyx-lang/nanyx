@@ -33,6 +33,38 @@ let interpolatedStringExprNoWs: Parser<Expression, ParseState> =
             LiteralExpr (StringLit text)
     spanned (between (pstring "\"") (pstring "\"") partsParser |>> toKind)
 
+/// A `;` between two statements on one line, and the space around it: `def x = 1; x + 1` means what the two statements
+/// mean on lines of their own. It only separates, so a `;` with no statement after it, or a second `;` straight after
+/// it, is reported where it is.
+let private statementSeparator : Parser<unit, ParseState> =
+    attempt (wsInline >>. getPosition .>> pchar ';') .>> wsInline .>>. getPosition >>= fun (semicolon, next) ->
+        let reportWhen (what: Parser<unit, ParseState>) (position: Position) message = followedBy what >>. reportFocused position message
+        reportWhen (skipChar ';') next "Two `;` in a row: a `;` separates two statements, so write one between them"
+        <|> reportWhen (skipNewline <|> eof <|> skipString "--" <|> skipAnyOf "})]") semicolon
+                "A `;` must have a statement after it: it separates statements, so leave out the one at the end"
+        <|> preturn ()
+
+/// The statements on one line of a block: what `first` parses, and then any more after a `;` each.
+let private statementsOnLine (first: Parser<Statement list, ParseState>) : Parser<Statement list, ParseState> =
+    pipe2 first (many (statementSeparator >>. statementItems)) (fun first rest -> List.concat (first :: rest))
+
+/// A body written on the line it starts on (a match arm's, a branch's or a lambda's): what `value` parses, or a
+/// statement that defines a name, and then any statements after a `;` each, which make the body a block of them all.
+/// The `;` belongs to the innermost body, so in `| A -> log(x); x` both statements are the arm's.
+let sameLineBody (value: Parser<Expression, ParseState>) : Parser<Expression, ParseState> =
+    let definitionStart = followedBy (choice [ pstring "def"; pstring "rec"; pstring "mut" ] >>. keywordEnd)
+    let leading = attempt (definitionStart >>. statementItems |>> Choice1Of2) <|> (value |>> Choice2Of2)
+    withSpan (leading .>>. many (statementSeparator >>. statementItems)) |>> fun ((leading, rest), span) ->
+        match leading, rest with
+        | Choice2Of2 value, [] -> value
+        | _ ->
+            let first =
+                match leading with
+                | Choice1Of2 statements -> statements
+                | Choice2Of2 value -> [ Statement.at value.Span (ExprStatement value) ]
+            let statements = first @ List.concat rest
+            Expression.at (endingAt (List.last statements).Span span) (Block statements)
+
 // Block parser - parses indented statements after a newline
 let blockExpr() : Parser<Expression, ParseState> =
     skipMany (skipAnyOf " \t") >>. newline >>.
@@ -40,18 +72,18 @@ let blockExpr() : Parser<Expression, ParseState> =
         let indentLevel = indentChars.Length
         if indentLevel > 0 then
             let statementAtIndent =
-                attempt (manyMinMaxSatisfy indentLevel indentLevel (fun c -> c = ' ' || c = '\t') >>. statementItems)
+                attempt (manyMinMaxSatisfy indentLevel indentLevel (fun c -> c = ' ' || c = '\t') >>. statementsOnLine statementItems)
 
             blockSpanned (
                 pipe2
-                    statementItems
+                    (statementsOnLine statementItems)
                     (many (attempt (blockLinesEnd () >>. statementAtIndent)))
                     (fun first rest -> List.concat (first :: rest)))
         else
             pzero
 
 let matchArmBody: Parser<Expression, ParseState> =
-    attempt (blockExpr()) <|> (wsInline >>. exprWithoutCrossingNewlines)
+    attempt (blockExpr()) <|> (wsInline >>. sameLineBody exprWithoutCrossingNewlines)
 
 let typeDefCore: Parser<Definition, ParseState> =
     let typeModifiers =
@@ -462,7 +494,7 @@ let tagExpr =
 // of an enclosing match, and one without an `else` ends at an arm indented less than its first (see
 // `armIndentedFrom`).
 let ifExpr =
-    let branch = attempt (blockExpr()) <|> (ws >>. expression)
+    let branch = attempt (blockExpr()) <|> (ws >>. sameLineBody expression)
     let patternBinding =
         attempt (expression .>> ws .>> pstring "is" .>> keywordEnd .>> ws) .>>. pattern
         |>> fun (value, pat) -> Choice2Of2 (pat, value)
@@ -919,7 +951,7 @@ do
         let statementLine =
             attempt (
                 ws >>.
-                (attempt matchStatement <|> statementItems)
+                statementsOnLine (attempt matchStatement <|> statementItems)
             )
         let multiLine =
             attempt (
@@ -930,7 +962,7 @@ do
 
         let singleLine =
             skipMany (skipAnyOf " \t\r\n") >>.
-            expression .>>
+            sameLineBody expression .>>
             skipMany (skipAnyOf " \t\r\n")
 
         attempt multiLine <|> singleLine

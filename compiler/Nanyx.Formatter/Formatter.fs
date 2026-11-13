@@ -225,6 +225,7 @@ let format (options: Options) (parsed: SourceModule) : string =
           IsWrittenBlock = isWrittenBlock
           Block = block
           StatementsInSequence = statementsInSequence
+          SemicolonLine = semicolonLine
           ArmsInSequence = armsInSequence
           Pattern = pattern
           TypeExpr = typeExpr }
@@ -274,6 +275,19 @@ let format (options: Options) (parsed: SourceModule) : string =
         | _ -> expr full b
 
     and statementsInSequence (blankLines: bool) (start: int) (finish: int) (statements: Statement list) : Doc =
+        statementLines statements
+        |> List.map (function
+            | [ child ] -> child
+            | (first, _, _) :: _ as line ->
+                let _, last, _ = List.last line
+                first, last, fun () -> Doc.group (semicolonJoined line)
+            | [] -> invalidOp "A line of statements has at least one")
+        |> sequence blankLines start finish
+
+    /// The statements of a block as the children of a sequence, each statement or destructuring def given as its start
+    /// and end offsets and a function building it, in the lines they were written on: those written on one line,
+    /// separated by `;`, make one line, and every other statement a line of its own.
+    and statementLines (statements: Statement list) : (int * int * (unit -> Doc)) list list =
         let defOf (s: Statement) =
             match s.Kind with
             | DefStatement(isExport, n, t, value) -> Some(isExport, n, t, value)
@@ -286,7 +300,26 @@ let format (options: Options) (parsed: SourceModule) : string =
                 first.Span.Start, first.Span.End, fun () -> destructuringDef [ for k in index .. index + count - 1 -> (defOf all[k]).Value ] first.Span
             else
                 first.Span.Start, first.Span.End, fun () -> statement first)
-        |> sequence blankLines start finish
+        |> List.fold
+            (fun lines ((start, _, _) as child) ->
+                match lines with
+                | ((_, previousEnd, _) :: _ as line) :: rest when sourceText.SemicolonBetween previousEnd start -> (child :: line) :: rest
+                | _ -> [ child ] :: lines)
+            []
+        |> List.map List.rev
+        |> List.rev
+
+    /// Statements separated by `;` and a space, or put on lines of their own when the group around them is broken.
+    and semicolonJoined (line: (int * int * (unit -> Doc)) list) : Doc =
+        Doc.join (cat [ IfBreak(Doc.empty, text ";"); Doc.line ]) (line |> List.map (fun (_, _, build) -> build ()))
+
+    and semicolonLine (e: Expression) : (unit -> Doc) option =
+        match e.Kind with
+        | Block statements when isWrittenBlock e ->
+            match statementLines statements with
+            | [ _ :: _ :: _ as line ] -> Some(fun () -> semicolonJoined line)
+            | _ -> None
+        | _ -> None
 
     and statement (s: Statement) : Doc =
         match s.Kind with

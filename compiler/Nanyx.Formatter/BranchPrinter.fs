@@ -49,10 +49,13 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                 cat [ text "| "; patterns; armBody (index = count - 1) body ])
         |> sequence false start finish
 
-    /// `-> body`: an indented block on the lines after it, or an expression on the same line.
+    /// `-> body`: an indented block on the lines after it, or an expression on the same line. Statements separated by
+    /// `;` stay on the same line if they fit there, and are otherwise a block.
     and armBody (isLast: bool) (body: Expression) : Doc =
-        if isWrittenBlock body then cat [ text " ->"; nest (cat [ hard; block body ]) ]
-        else cat [ text " -> "; expr { statementPosition with Tail = isLast } body ]
+        match parts.SemicolonLine body with
+        | Some line -> Doc.group (cat [ text " ->"; nest (cat [ Doc.line; line () ]) ])
+        | None when isWrittenBlock body -> cat [ text " ->"; nest (cat [ hard; block body ]) ]
+        | None -> cat [ text " -> "; expr { statementPosition with Tail = isLast } body ]
 
     let matchDoc (e: Expression) (scrutinees: Expression list) (arms: MatchArm list) : Doc =
         let armsDoc = nest (cat [ hard; armsInSequence e.Span.Start e.Span.End arms ])
@@ -122,7 +125,9 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
             cat [ text "if"; nest (cat [ hard; sequence false e.Span.Start e.Span.End (conditionArms @ elseArm) ]) ]
         else
             let isBlock (x: Expression) = match x.Kind with Block _ -> true | _ -> false
-            let anyBlock = isBlock thenBranch || (elseBranch |> Option.exists isBlock)
+            let isSemicolonLine (x: Expression) = (parts.SemicolonLine x).IsSome
+            let branches = thenBranch :: Option.toList elseBranch
+            let anyBlock = branches |> List.exists isBlock
             // Two expressions go on the `if`'s line if they fit, or else `then` and `else` start lines of their own,
             // indented once, which parses the same.
             if not anyBlock then
@@ -132,6 +137,18 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                     | Some elseBranch -> cat [ Doc.line; text "else "; expr full elseBranch ]
                     | None -> Doc.empty
                 Doc.group (cat [ text "if "; ifHead head; nest (cat [ thenPart; elsePart ]) ])
+            // Branches of statements separated by `;` go on the `if`'s line if they fit, with any branch that is an
+            // expression, or else each is a block on the lines after its keyword, and the `else` starts a line.
+            elif branches |> List.exists isSemicolonLine && branches |> List.forall (fun branch -> isSemicolonLine branch || not (isBlock branch)) then
+                let branchDoc (branch: Expression) (isLast: bool) =
+                    match parts.SemicolonLine branch with
+                    | Some line -> nest (cat [ Doc.line; line () ])
+                    | None -> cat [ text " "; expr { full with Tail = isLast } branch ]
+                let elsePart =
+                    match elseBranch with
+                    | Some elseBranch -> cat [ Doc.line; text "else"; branchDoc elseBranch true ]
+                    | None -> Doc.empty
+                Doc.group (cat [ text "if "; ifHead head; text " then"; branchDoc thenBranch elseBranch.IsNone; elsePart ])
             else
                 let thenDoc =
                     if isBlock thenBranch then cat [ text " then"; nest (cat [ hard; block thenBranch ]) ]

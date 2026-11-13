@@ -50,6 +50,11 @@ type SourceText(source: string) =
             i <- i - 1
         if i >= 0 && i < source.Length then source[i] else '\000'
 
+    /// Whether the only text between the offsets `finish`, where a statement ends, and `start`, where the next one
+    /// starts, is a `;` and spaces: whether they were written on one line, separated by `;`.
+    member _.SemicolonBetween (finish: int) (start: int) =
+        0 <= finish && finish < start && start <= source.Length && source.Substring(finish, start - finish).Trim(' ', '\t') = ";"
+
     /// The text of a double-quoted string that starts at `start` in the source, as it is written there, escapes and all:
     /// up to the next `"` or `{` that is not escaped. The parser decodes escapes, so where that is not found, or does
     /// not stand for `decoded`, the text is written with escapes of its own.

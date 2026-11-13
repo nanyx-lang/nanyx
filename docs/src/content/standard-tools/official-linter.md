@@ -185,6 +185,21 @@ The rule (`shadowedPreludeNames`) reports a top-level def, a local def, a lambda
 
 Only the names the prelude brings into scope unqualified count. A definition attached to a type, such as `list.map`, is named through the type, so a `def map` of your own hides nothing; nor does a `def toString` outside a def that requires `ToString`, where the context's member isn't in scope. The standard library's own modules, which define the prelude's names, are not reported.
 
+## Statements separated by `;`
+
+```nanyx
+def total = { n ->
+  def tax = n / 5; n + tax -- Linter warning: Put each statement on a line of its own, rather than separating them with `;`
+}
+```
+
+The rule (`semicolons`) reports every `;` that separates two statements on one line (see [Variables](../tour/variables#several-statements-on-one-line)). One statement per line is the house style, so it is a warning by default. Where the statements are lines of a block, as here, its fix puts the statement after the `;` on a line of its own, at the block's indent. A one-line body, such as a match arm's or a lambda's, `{ x -> log(x); x + 1 }`, has no block lines to split it into, so it gets no fix. Turn the rule off to write short sequences on one line:
+
+```toml
+[linters.default]
+semicolons = "none"
+```
+
 # Learn more
 
 For the full linter model (diagnostic levels, configuration, and custom linters), see [Linters](../advanced/linters).
