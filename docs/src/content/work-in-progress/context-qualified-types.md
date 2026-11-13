@@ -54,11 +54,11 @@ def bad = {
 }
 ```
 
-The example above is rejected because the result still requires `$Memory` and escapes the `memory` scope.
+The example above is rejected because the result still requires `Memory` and escapes the `memory` scope.
 
-In the standard library naming, `$Memory` is the context and `memory { ... }` is the helper that creates that context for a scope.
+In the standard library naming, `Memory` is the context and `memory { ... }` is the helper that creates that context for a scope.
 
-Requiring `$Memory` isn't enough on its own, because every `memory` block supplies one. [Context escape](./context-escape#scoped-contexts) settles the rule that stops such a value leaving its block: `$Memory` is a scoped context, and each `memory` call starts a scope that nothing requiring it can leave.
+Requiring `Memory` isn't enough on its own, because every `memory` block supplies one. [Context escape](./context-escape#scoped-contexts) settles the rule that stops such a value leaving its block: `Memory` is a scoped context, and each `memory` call starts a scope that nothing requiring it can leave.
 
 Converting to a context-free value before returning is valid:
 
@@ -73,7 +73,7 @@ def good = {
 
 # Generality
 
-This mechanism is intentionally generic and applies to any context, not only `$Memory`:
+This mechanism is intentionally generic and applies to any context, not only `Memory`:
 - mutable memory capabilities,
 - IO capabilities,
 - transaction or resource capabilities,

@@ -10,7 +10,7 @@ Nanyx uses camel case for values, functions, modules and tags, and Pascal case f
 |------|------|----------|
 | Values and functions | camelCase | `message`, `sayHello`, `userCount` |
 | Modules | camelCase | `userManagement`, `collections.list` |
-| Types and contexts | PascalCase | `Greeter`, `Console`, `$UserId` |
+| Types and contexts | PascalCase | `Greeter`, `Console`, `UserId` |
 | Tags | camelCase after `#` | `#ok`, `#notFound` |
 | Custom pattern tags | PascalCase after `#` | `#Hsl`, `#Even` |
 

@@ -15,7 +15,7 @@ Immutable collections are persistent data structures, while mutable collections 
 
 def numbers = [1, 2, 3]
 
--- Mutable list (requires $Memory context)
+-- Mutable list (requires Memory context)
 
 def addItems = {
   memory {
