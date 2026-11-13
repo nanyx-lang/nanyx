@@ -157,8 +157,12 @@ type InferState =
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
             InferredContextTypes: Map<SymbolId, Ty list>;
             /// The contexts each local def that writes its type requires, as written, by the def's symbol: what
-            /// `ContextRequirements` holds for it by name, which a def of the same name elsewhere can stand for.
+            /// `ContextRequirements` holds for it by name only until its block ends, and a def of the same name
+            /// elsewhere can stand for.
             LocalContextRequirements: Map<SymbolId, TypeExpr list>;
+            /// The type each local def in `LocalContextRequirements` declares without its contexts, by its symbol, as
+            /// `ContextSignatures` holds it by name until its block ends.
+            LocalContextSignatures: Map<SymbolId, TypeExpr>;
             /// The module being checked: the home of each nominal type it defines (see `NominalId`).
             Home: ModuleOrigin;
             LocalNominals: Set<string>;
@@ -332,6 +336,7 @@ let emptyState =
             CheckedRests = Map.empty;
             InferredContextTypes = Map.empty;
             LocalContextRequirements = Map.empty;
+            LocalContextSignatures = Map.empty;
             Home = InMemory;
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
@@ -388,6 +393,10 @@ let internal freshVar (state: InferState) =
     let var = { Id = state.NextId; Name = None }
     TyVar var, { state with NextId = state.NextId + 1 }
 
+/// A fresh variable for each of `items`, in order.
+let internal freshVars (items: 'a list) (state: InferState) =
+    items |> List.mapFold (fun current _ -> freshVar current) state
+
 /// A record with at least `fields`, its others a fresh row variable: what reading a field, or matching a pattern that
 /// names some fields, tells of a value. A closed record would say it has no others.
 let internal openRecordWith (fields: Map<string, Ty>) (state: InferState) =
@@ -441,8 +450,28 @@ let internal registerContextRequirement (state: InferState) (name: Identifier) (
 let internal registerLocalContextRequirement state (symbol: SymbolId option) name contexts signature =
     let registered = registerContextRequirement state name contexts signature
     match symbol with
-    | Some symbol -> { registered with LocalContextRequirements = registered.LocalContextRequirements |> Map.add symbol contexts }
+    | Some symbol ->
+        { registered with
+            LocalContextRequirements = registered.LocalContextRequirements |> Map.add symbol contexts
+            LocalContextSignatures =
+                match signature with
+                | Some signature -> registered.LocalContextSignatures |> Map.add symbol signature
+                | None -> registered.LocalContextSignatures }
     | None -> registered
+
+/// `state` with what `ContextRequirements` and `ContextSignatures` hold for each of `names`, the local defs of a block
+/// that has ended, back to what they held in `outer`, before the block: a top-level def of the same name requires its
+/// own contexts again.
+let internal leaveLocalContextRequirements (outer: InferState) (names: Identifier list) (state: InferState) =
+    let restore name (inner: Map<Identifier, 'T>) (before: Map<Identifier, 'T>) =
+        match before |> Map.tryFind name with
+        | Some value -> inner |> Map.add name value
+        | None -> inner |> Map.remove name
+    names
+    |> List.fold (fun (current: InferState) name ->
+        { current with
+            ContextRequirements = restore name current.ContextRequirements outer.ContextRequirements
+            ContextSignatures = restore name current.ContextSignatures outer.ContextSignatures }) state
 
 /// Records `written` as the type the def `name` writes, if it writes one (see `WrittenTypes`).
 let internal recordWrittenType (name: Identifier) (written: TypeExpr option) (state: InferState) =

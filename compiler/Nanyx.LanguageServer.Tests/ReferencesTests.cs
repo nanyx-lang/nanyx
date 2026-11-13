@@ -54,7 +54,7 @@ public sealed class ReferencesTests : LanguageServerTestBase
     [Fact]
     public async Task References_hover_and_definition_on_a_user_defined_operator_point_at_the_operator()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "user-operator.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("user-operator.nyx"));
 
         Open(uri, """
             type Point = (x: int, y: int)

@@ -153,7 +153,7 @@ This is one rule for every call and every record construction: a positional fiel
 
 A lambda's parameters and result can be annotated inline when inference needs a nudge or when the types document intent:
 
-```nanyx skip=#442
+```nanyx
 def double = { (x: int): int -> x * 2 }
 ```
 

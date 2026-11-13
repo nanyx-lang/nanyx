@@ -24,6 +24,7 @@
     <Compile Include="Features\ControlFlow\ControlFlowFixtureTests.fs" />
     <Compile Include="Features\ControlFlow\DoBlockTests.fs" />
     <Compile Include="Features\Commands\CheckCommandTests.fs" />
+    <Compile Include="Features\Commands\ExitCodeTests.fs" />
     <Compile Include="Features\Console\RunConsoleTests.fs" />
     <Compile Include="Features\Contexts\RunContextTests.fs" />
     <Compile Include="Features\Contexts\RunContextFunctionValueTests.fs" />
@@ -35,6 +36,7 @@
     <Compile Include="Features\Contexts\RunContextKeyTests.fs" />
     <Compile Include="Features\Contexts\RunContextMemberValueTests.fs" />
     <Compile Include="Features\Contexts\RunUseDischargeTests.fs" />
+    <Compile Include="Features\Contexts\RunLambdaMemberCaptureTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Docs\RunTourExampleTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />

@@ -13,6 +13,14 @@ let ``An annotated lambda parameter is bracketed`` () =
     Assert.Equal("def f = { (g: int -> int) -> g(1) }\n", format "def f = { g: (int -> int) -> g(1) }")
 
 [<Fact>]
+let ``A lambda's result annotation is printed after its parameters`` () =
+    unchanged "def f = { (x: int): int -> x * 2 }\n"
+    unchanged "def g = { (): string -> \"u\" }\n"
+    unchanged "def h = { (a, b): int -> a + b }\n"
+    unchanged (lines [ "def k = { (x: int): int ->"; "  def y = x + 1"; "  y * 2"; "}" ])
+    Assert.Equal("def f = { (x: int): int -> x }\n", format "def f = {(x:int):int->x}")
+
+[<Fact>]
 let ``Pattern parameters are printed as written`` () =
     unchanged "def a = { (x, y) -> x + y }\n"
     unchanged "def b: $Email -> string = { $Email(s) -> s }\n"
@@ -79,8 +87,8 @@ let ``A def without an annotation keeps a short lambda on one line`` () =
     unchanged "def add = { a, b -> a + b }\n"
 
 [<Fact>]
-let ``A body moved to its own line keeps the operators a statement can take bracketed`` () =
-    Assert.Equal(lines [ "def odd: int -> bool = { n ->"; "  (n % 2) == 1"; "}" ], format "def odd: int -> bool = { n -> n % 2 == 1 }")
+let ``A body moved to its own line needs no parentheses for its operators`` () =
+    Assert.Equal(lines [ "def odd: int -> bool = { n ->"; "  n % 2 == 1"; "}" ], format "def odd: int -> bool = { n -> n % 2 == 1 }")
 
 [<Fact>]
 let ``A lambda body that spans lines is indented, with the closing braces on different lines`` () =

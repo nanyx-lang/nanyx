@@ -4,16 +4,12 @@ module Nanyx.Formatter.Tests.OperatorTests
 open Xunit
 open Nanyx.Formatter
 open Parser.Program
+open Nanyx.Formatter.Tests.TestHelpers
 
 let private valueOf (source: string) =
     match parseModuleFile "t.nyx" source with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, value))) ] -> value
     | other -> failwith $"Expected one def of x in {source}, got %A{other}"
-
-let private format (source: string) =
-    match Formatter.formatSource Formatter.Options.defaults "" source with
-    | Result.Ok formatted -> formatted
-    | Result.Error error -> failwith $"Parse failed: {error.Message}"
 
 /// Each pair of operators, grouped either way: `(a op b) op' c` and `a op (b op' c)`.
 let pairs: obj array seq =

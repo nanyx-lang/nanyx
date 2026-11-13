@@ -41,7 +41,7 @@ let ``Typecheck rejects missing context members`` () =
         "context Console = (println: string -> ())\n" +
         "def sayHello = { println(\"hi\") }"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownFunction result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Unknown", message)
 
@@ -81,7 +81,7 @@ let ``Typecheck rejects missing context on call`` () =
         "def g: [Console] () -> () = { println(\"hi\") }\n" +
         "def h = { g() }"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.MissingContextMembers result
     let diagnostic = result.Diagnostics |> List.head
     // The context is named, as a type alias is, not listed by its members.
     Assert.Equal("Missing context", diagnostic.Title)

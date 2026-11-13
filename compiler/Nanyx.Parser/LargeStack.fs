@@ -1,5 +1,5 @@
 /// Running work that recurses once per level of the code it reads: the checker once per operator of a chain, the
-/// formatter's comparison once per node, the backend's lowering once per statement of a block. Generated code can nest
+/// formatter's comparison once per node, the backend's passes over the core IR once per `let` of a function. Generated code can nest
 /// thousands deep, more than the main thread's 1 MB stack holds, and a stack overflow cannot be caught.
 module Nanyx.LargeStack
 

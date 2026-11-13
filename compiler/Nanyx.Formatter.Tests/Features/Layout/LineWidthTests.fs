@@ -2,18 +2,7 @@
 module Nanyx.Formatter.Tests.LineWidthTests
 
 open Xunit
-open Nanyx.Formatter
-
-let private lines (ls: string list) = String.concat "\n" ls + "\n"
-
-let private formatWith width (source: string) =
-    match Formatter.formatSource { Formatter.Options.defaults with LineWidth = width } "" source with
-    | Result.Ok formatted -> formatted
-    | Result.Error error -> failwith $"Parse failed: {error.Message}"
-
-let private format = formatWith 100
-
-let private unchanged (source: string) = Assert.Equal(source, format source)
+open Nanyx.Formatter.Tests.TestHelpers
 
 [<Fact>]
 let ``A list that does not fit has one item per line, and the ] on a line of its own`` () =

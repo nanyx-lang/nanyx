@@ -8,22 +8,29 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 
-/// Something the backend cannot compile, and where it is written: what `tryTranspileTypedModuleToWat` reports as a
-/// diagnostic.
-exception UnsupportedConstruct of message: string * span: SourceSpan
-
-/// Fails with `message`, placed at `span`.
-let private unsupportedAt (span: SourceSpan) (message: string) : 'a = raise (UnsupportedConstruct(message, span))
+/// Why the backend stops: what `tryTranspileTypedModuleToWat` reports.
+exception BackendFailure of Diagnostic
 
 /// What a broken invariant of the backend (see `CoreIr.InternalError`) says to the user: the one place it gets its
-/// prefix.
-let private internalErrorMessage (reason: string) = $"Internal error: {reason}"
+/// prefix, and asks for a bug report.
+let private internalErrorMessage (reason: string) =
+    $"Internal error: {reason}. This is a bug in the compiler: please report it at https://github.com/nanyx-lang/nanyx/issues"
 
-/// What a function the core IR could not lower or finish says to the user.
-let lowerFailureMessage (failure: CoreIrLowerInput.LowerFailure) =
-    match failure with
-    | CoreIrLowerInput.Internal reason -> internalErrorMessage reason
-    | CoreIrLowerInput.NotYet reason -> $"The WebAssembly backend cannot compile {reason} yet"
+/// A broken invariant of the backend, at `span` if it is known.
+let private internalErrorDiagnostic (reason: string) (span: SourceSpan option) =
+    match span with
+    | Some span -> Diagnostics.at DiagnosticCodes.BackendInternalError span (internalErrorMessage reason)
+    | None -> Diagnostics.general DiagnosticCodes.BackendInternalError (internalErrorMessage reason)
+
+/// What a function the core IR could not lower or finish is reported as: a feature the backend does not compile yet,
+/// or a broken invariant, at `span` if it is known.
+let lowerFailureDiagnostic (failure: CoreIrLowerInput.LowerFailure) (span: SourceSpan option) : Diagnostic =
+    match failure, span with
+    | CoreIrLowerInput.Internal reason, _ -> internalErrorDiagnostic reason span
+    | CoreIrLowerInput.NotYet reason, Some span ->
+        Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"The WebAssembly backend cannot compile {reason} yet"
+    | CoreIrLowerInput.NotYet reason, None ->
+        Diagnostics.general DiagnosticCodes.UnsupportedByBackend $"The WebAssembly backend cannot compile {reason} yet"
 
 type private ContextFn = string * int * int
 
@@ -238,7 +245,8 @@ let private contextArguments
             | Some wrapper -> CoreIrLowerInput.ClosureOverWrapper wrapper
             | None ->
                 let available = (List.ofSeq scopeKeys) @ (ambientMembers |> Map.toList |> List.map fst) |> List.map ContextMemberKey.text |> String.concat ", "
-                failwith $"Context function {ContextMemberKey.text requiredKey} not available in current scope. Available: [{available}]"
+                // The type checker found every context a call requires, so one missing here is the backend's bug.
+                CoreIr.internalError $"the context member {ContextMemberKey.text requiredKey} is not in scope; those in scope are [{available}]"
 
     // Where the type checker found each context the callee requires, as each required member's instance, in the order
     // of `required`: none for a call it found nothing for. A function that does not write its type may also require
@@ -357,11 +365,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | Some (InstanceDerived(_, definition, _)) -> Some [ definition ]
             | _ -> None) >> List.concat)
         |> Set.ofSeq
-    // A lambda lifted out of a function that requires contexts captures the function's members, by the names of the
-    // parameters they come in, so that it can call them and pass them on.
+    // A lambda lifted out of a function that requires contexts captures the function's members it may call, by the names
+    // of the parameters they come in, so that it can call them and pass them on.
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
-        contextMemberKeys defs (fst (extractTypeLayouts module')) |> Map.map (fun _ keys -> keys |> List.map contextMemberParameter)
+        contextMemberKeys defs (fst (extractTypeLayouts module'))
+    // A function that is passed context members where it is called: one whose type requires contexts, or context variables.
+    let requiresContexts (name: string) =
+        memberCaptures.ContainsKey name
+        || match typed.Types |> Map.tryFind name |> Option.map Unifier.unalias with
+           | Some (TyFunc(_, _, contexts)) -> not (Unifier.writtenContexts contexts).IsEmpty
+           | _ -> false
     // The members of each context without parameters, as a function value that requires the context takes them.
     let contextLayouts: CoreIrLowerTypes.ContextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
     // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
@@ -372,7 +386,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | CoreIr.IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
             | _ -> Set.empty
         | _ -> Set.empty
-    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures passedMembers typed.UseContexts module'
+    let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts module'
     let defs =
         module'
         |> List.choose (function
@@ -617,11 +631,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
-    | (_, failure, span) :: _ ->
-        let message = lowerFailureMessage failure
-        match span with
-        | Some span -> unsupportedAt span message
-        | None -> failwith message
+    | (_, failure, span) :: _ -> raise (BackendFailure (lowerFailureDiagnostic failure span))
     | [] -> ()
 
     // Each definition that is not generic, followed by the specialisations of it: a generic definition has only those.
@@ -887,10 +897,9 @@ let tryTranspileTypedModuleWith (options: WasmOptions) (typed: TypedModule) : Re
     try
         Ok (transpileTypedModuleWithOptions options typed |> fst)
     with
-    | UnsupportedConstruct(message, span) -> Error (Diagnostics.at DiagnosticCodes.UnsupportedByBackend span message)
-    | CoreIr.InternalError reason -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend (internalErrorMessage reason))
-    | Failure message -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend message)
-    | ex -> Error (Diagnostics.general DiagnosticCodes.UnsupportedByBackend (internalErrorMessage ex.Message))
+    | BackendFailure diagnostic -> Error diagnostic
+    | CoreIr.InternalError reason -> Error (internalErrorDiagnostic reason None)
+    | ex -> Error (internalErrorDiagnostic ex.Message None)
 
 /// `tryTranspileTypedModuleWith` the default options.
 let tryTranspileTypedModuleToWat (typed: TypedModule) : Result<string, Diagnostic> =

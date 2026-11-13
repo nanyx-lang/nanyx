@@ -1,9 +1,10 @@
 /// Lowers the typed AST to the core IR (`CoreIr.fs`), specialising generic functions as it goes.
 ///
 /// Each definition whose type is concrete is lowered as a root. A call to a generic definition asks for its
-/// specialisation at the call's type arguments, which is lowered in turn (and may ask for more). A definition the IR
-/// cannot lower yet is left to `CodeGen.fs`, which compiles it as it always has: see "Core IR" in
-/// `docs/src/content/work-in-progress/memory-management.md` for this fallback.
+/// specialisation at the call's type arguments, which is lowered in turn (and may ask for more). Every function is
+/// compiled from the IR. What it cannot lower yet (`cannot`) is reported by `CodeGen.fs` as `UnsupportedByBackend`
+/// where it is written, and a broken invariant of the backend (`internalError`) as `BackendInternalError`: see "What
+/// cannot be compiled" in `docs/src/content/work-in-progress/memory-management.md`.
 module Transpiler.Wasm.CoreIrLower
 
 open NyxCompiler
@@ -71,20 +72,6 @@ type internal Scope =
       /// type, and the field of the environment that holds its closure at each type arguments it is used at here.
       CapturedLocals: Map<string, Ty * (IrType list * int) list> }
 
-/// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
-/// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
-/// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then.
-let private valuesOf (input: IrType) =
-    match input, IrType.tupleElements input with
-    | IrUnit, _ -> []
-    | _, Some elements -> List.map snd elements
-    | _, None -> [ input ]
-
-let private adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
-    match givenTy, expectedTy with
-    | IrFunction(given, _, _), IrFunction(IrUnit, _, _) -> valuesOf given
-    | _, IrFunction(expected, _, _) -> valuesOf expected
-    | _ -> []
 
 /// Lowers each function, asking for the specialisations its calls need through `request`.
 type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expression>, subst: Map<int, Ty>, self: SpecKey, request: SpecKey -> Map<int, Ty> -> Lowering -> string) =
@@ -1080,14 +1067,24 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> bindTemp value (fun atom -> go (atom :: acc) rest))
         go [] exprs
 
+    /// Lowers a block, its value passed to `k`, a statement at a time (see `CoreIrLowerHoles`).
     member this.Block (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr =
+        CoreIrLowerHoles.lowerBlock (fun scope statements -> this.Statement scope statements k) scope statements
+
+    /// The first of a block's `statements`, lowered around a hole (see `CoreIrLowerHoles.lowerBlock`).
+    member private this.Statement (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr * (Expr * Scope * StatementKind list) option =
+        let hole = CoreIrLowerHoles.hole ()
+        let restScope = ref scope
         match statements with
         | [] -> cannot "an empty block"
-        | [ ExprStatement last ] -> this.Complex scope last k
+        | [ ExprStatement last ] -> this.Complex scope last k, None
+        // A lambda's annotated result is the value it names (see `LambdaResultSyntax`), so a call there stays a tail call.
+        | [ DefStatement(_, defined, _, value); ExprStatement(Kind (IdentifierExpr result)) ] when defined = LambdaResultSyntax.name && result = defined ->
+            this.Complex scope value k, None
         | DefStatement(_, _, _, Kind (Lambda _)) :: _ -> cannot "a local function"
         | DefStatement(_, name, _, (Kind (ClosureSyntax.Closure(target, captured)) as rhs)) :: rest
             when (genericLocalType target rhs).IsSome ->
-            this.GenericLocal scope name rhs target captured (genericLocalType target rhs).Value rest k
+            this.GenericLocal scope name rhs target captured (genericLocalType target rhs).Value rest k, None
         | DefStatement(_, name, _, Kind (MemberAccess(Kind (IdentifierExpr environment), _, _))) :: rest
             when environment = ClosureSyntax.envParameter && scope.CapturedLocals.ContainsKey name ->
             // A captured local function generic in variables of its own, whose closure at each type arguments it is
@@ -1095,7 +1092,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let localTy, fields = scope.CapturedLocals.[name]
             let read (field: int) =
                 this.Complex scope (Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr environment), string field, None)))
-            this.LocalInstancesAround scope name localTy (fields |> List.map (fun (typeArguments, field) -> typeArguments, read field)) None rest k
+            this.LocalInstancesAround scope name localTy (fields |> List.map (fun (typeArguments, field) -> typeArguments, read field)) None rest k, None
         | DefStatement(_, name, _, rhs) :: rest ->
             // A local value generic in variables of its own, such as the builder's member a workflow keyword reads
             // (`def m = proc.try`, then `m(args)`), is lowered once. Where it has one use, it is lowered at that use's
@@ -1112,18 +1109,17 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // The local is named before its value is lowered, so that locals are declared in the order they are
             // written. Its type is its value's, which a local lambda lifting made has as well.
             let localName = uniqueName name
-            this.Complex scope rhs (fun value ->
-                let local = newVar localName Local value.Type
-                let members =
-                    match scope.CapturedMembers |> Map.tryFind name with
-                    | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
-                    | None -> scope.Members
-                let body = this.Block { scope with Vars = scope.Vars |> Map.add name local; Members = members } rest k
-                mk (Let(local, value, body)) body.Type)
-        | ExprStatement first :: rest ->
-            this.Complex scope first (fun value ->
-                let body = this.Block scope rest k
-                mk (Do(value, body)) body.Type)
+            let statement =
+                this.Complex scope rhs (fun value ->
+                    let local = newVar localName Local value.Type
+                    let members =
+                        match scope.CapturedMembers |> Map.tryFind name with
+                        | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
+                        | None -> scope.Members
+                    restScope.Value <- { scope with Vars = scope.Vars |> Map.add name local; Members = members }
+                    mk (Let(local, value, hole)) hole.Type)
+            statement, Some (hole, restScope.Value, rest)
+        | ExprStatement first :: rest -> this.Complex scope first (fun value -> mk (Do(value, hole)) hole.Type), Some (hole, scope, rest)
         | UseStatement(Kind (RecordExpr fields)) :: rest ->
             // Lambda lifting has evaluated each binding into a local; the members are those locals. A function that
             // requires contexts its member's type does not is adapted to the type, with their members as they are here,
@@ -1139,7 +1135,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match remaining with
                 | [] ->
                     let members = bindings |> List.fold (fun (acc: Map<ContextMemberKey, Var>) (key, local) -> acc |> Map.add key vars.[local]) scope.Members
-                    this.Block { scope with Members = members; Vars = vars } rest k
+                    restScope.Value <- { scope with Members = members; Vars = vars }
+                    hole
                 | (key, local) :: others ->
                     match declaredMemberTypes |> Map.tryFind key with
                     | Some memberTy when vars.[local] = scope.Vars.[local] ->
@@ -1150,7 +1147,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                                 let body = adapt others (vars |> Map.add local var)
                                 mk (Let(var, mk (Atom adapted) var.Type, body)) body.Type)
                     | _ -> adapt others vars
-            adapt bindings scope.Vars
+            let statement = adapt bindings scope.Vars
+            statement, Some (hole, restScope.Value, rest)
         // A `use` of a scoped context's instance, `use m` for a `memory` block's `m`, loads no members: it only says
         // whose cells a `mut` after it makes, which the type checker has settled.
         | UseStatement value :: rest when
@@ -1158,7 +1156,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
              | Some (TyNominal(_, FunctionContexts.ScopeType _, _)) -> true
              | _ -> false)
             ->
-            this.Block scope rest k
+            hole, Some (hole, scope, rest)
         | UseStatement _ :: _ -> cannot "this kind of `use`"
         | _ -> cannot "this kind of statement"
 

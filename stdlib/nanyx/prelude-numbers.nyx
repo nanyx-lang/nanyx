@@ -110,7 +110,9 @@ export def int.`/`: int, int -> int = { x, y ->
 }
 
 --| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
-export def int.`%`: int, int -> int = { x, y -> x % y }
+export def int.`%`: int, int -> int = { x, y ->
+  x % y
+}
 
 --| `n` itself.
 export def int.fromInt: int -> int = { n ->
@@ -146,7 +148,9 @@ export def float.`/`: float, float -> float = { x, y ->
 }
 
 --| The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
-export def float.`%`: float, float -> float = { x, y -> x % y }
+export def float.`%`: float, float -> float = { x, y ->
+  x % y
+}
 
 --| `n` as a float, as [`int.toFloat`] gives it.
 export def float.fromInt: int -> float = { n ->
@@ -355,14 +359,6 @@ export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
     else if first == 45
       then mapSome(readFloatMagnitude(s, start), float.negate)
       else readFloatMagnitude(s, start)
-}
-
---| The `F32` nearest the float `s` writes, as `float.fromString` reads it, or `#invalidF32` for
-  anything else. A number too large for an `F32` is infinity.
-export def F32.fromString: string -> #some(F32) | #invalidF32 = { s ->
-  match float.fromString(s)
-    | #some(x) -> #some(float.toF32(x))
-    | #invalidFloat -> #invalidF32
 }
 
 --| The float `s` writes from byte `start` on, after any sign.

@@ -38,6 +38,7 @@
     <Compile Include="Features\Contexts\ContextVariableTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />
+    <Compile Include="Features\Contexts\ShadowedDefContextTests.fs" />
     <Compile Include="Features\Contexts\UnderscoreContextNameTests.fs" />
     <Compile Include="Features\Contexts\ContextTypeParameterTests.fs" />
     <Compile Include="Features\Contexts\UndeclaredContextTests.fs" />
@@ -74,6 +75,7 @@
     <Compile Include="Features\Inference\BranchJoinTests.fs" />
     <Compile Include="Features\Lambdas\ArmsAfterParametersTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
+    <Compile Include="Features\Lambdas\ResultAnnotationTests.fs" />
     <Compile Include="Features\Linters\LinterTests.fs" />
     <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
     <Compile Include="Features\Linters\NonTailRecursionTests.fs" />
@@ -102,6 +104,7 @@
     <Compile Include="Features\Matches\NestedTagPatternTests.fs" />
     <Compile Include="Features\Matches\ScrutineeRestTests.fs" />
     <Compile Include="Features\Matches\UnitPatternTests.fs" />
+    <Compile Include="Features\Matches\PatternErrorTests.fs" />
     <Compile Include="Features\Ordering\OrderingTests.fs" />
     <Compile Include="Features\Packages\PackageTests.fs" />
     <Compile Include="Features\Scripts\ScriptTests.fs" />

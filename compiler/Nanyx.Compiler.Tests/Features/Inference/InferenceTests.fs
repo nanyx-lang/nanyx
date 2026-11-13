@@ -90,7 +90,7 @@ let ``Typecheck uses tuple input for multi-arg functions`` () =
     let typed = result.Typed.Value
     match typed.Types.["f"] with
     | TyFunc(TyRecord fields, TyVar _, _) when fields.ContainsKey("0") && fields.ContainsKey("1") ->
-        Assert.True(true)
+        ()
     | other -> Assert.True(false, $"Unexpected function type: %A{other}")
     Assert.Equal(TyPrimitive "int", typed.Types.["result"])
 
@@ -191,12 +191,12 @@ let ``Typecheck ++ concatenates strings and lists`` () =
 [<Fact>]
 let ``Typecheck rejects ++ between a string and an int`` () =
     let result = Compiler.compile "def bad = \"a\" ++ 1"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Typecheck rejects + on strings`` () =
     let result = Compiler.compile "def bad = \"a\" + \"b\""
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Typecheck allows mutual recursion between annotated top-level defs`` () =

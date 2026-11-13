@@ -4,22 +4,7 @@ module Nanyx.Formatter.Tests.DocCommentTests
 
 open Xunit
 open Nanyx.Formatter
-open Nanyx.Formatter.FormatCommand
-
-/// `source` with `\n` line breaks, whatever the line endings of this file's checkout, and a final line break.
-let private normalized (source: string) = source.Replace("\r\n", "\n") + "\n"
-
-/// Formats `source` as `nanyx format` does, with the check that the result says the same thing with the same comments.
-let private format (source: string) =
-    match formatText Formatter.Options.defaults "" (normalized source) with
-    | Formatted formatted -> formatted
-    | other -> failwith $"Not formatted: %A{other}"
-
-/// Formatting `source` gives `expected`, and formatting that gives it back unchanged.
-let private formatsTo (expected: string) (source: string) =
-    let expected = normalized expected
-    Assert.Equal(expected, format source)
-    Assert.Equal(expected, format expected)
+open Nanyx.Formatter.Tests.TestHelpers
 
 [<Fact>]
 let ``A doc comment's continuation lines are set one indent step past its first line`` () =

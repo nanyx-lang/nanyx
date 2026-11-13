@@ -1,16 +1,10 @@
 module Nanyx.Formatter.Tests.MemoryTests
 
 open Xunit
-open Nanyx.Formatter
+open Nanyx.Formatter.Tests.TestHelpers
 
-/// `source` formatted, with line breaks `\n`. `source` is written from its second line.
-let private format (source: string) =
-    match Formatter.formatSource Formatter.Options.defaults "" (source.ReplaceLineEndings "\n").[1..] with
-    | Result.Ok formatted -> formatted.ReplaceLineEndings "\n"
-    | Result.Error error -> failwith $"Parse failed: {error.Message}"
-
-/// `expected`, written from its second line, as `format` gives it.
-let private text (expected: string) = (expected.ReplaceLineEndings "\n").[1..]
+/// `source`, written from its second line, with line breaks `\n`.
+let private text (source: string) = (source.ReplaceLineEndings "\n").[1..]
 
 [<Fact>]
 let ``A memory block with mut and := keeps its layout`` () =
@@ -23,7 +17,7 @@ def sum: list(int) -> int = { xs ->
   }
 }
 """
-    Assert.Equal(text source, format source)
+    Assert.Equal(text source, format (text source))
 
 [<Fact>]
 let ``Spacing around mut and := is made regular`` () =
@@ -41,7 +35,7 @@ def f = {
   a
 }
 """
-    Assert.Equal(text expected, format source)
+    Assert.Equal(text expected, format (text source))
 
 [<Fact>]
 let ``An assignment or mut before the last argument is bracketed`` () =
@@ -50,7 +44,7 @@ def f = {
   g((a := 1), 2)
 }
 """
-    Assert.Equal(text source, format source)
+    Assert.Equal(text source, format (text source))
 
 
 [<Fact>]
@@ -69,4 +63,4 @@ def f = memory {
   count
 }
 """
-    Assert.Equal(text source, format source)
+    Assert.Equal(text source, format (text source))

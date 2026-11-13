@@ -14,11 +14,14 @@ let private featureRootDir = Path.Combine(testRootDir, "Features")
 let normalizeOutput (value: string) =
     value.Replace("\r\n", "\n").TrimEnd()
 
-let loadFeatureFile featureName fileName =
-    let filePath = Path.Combine(featureRootDir, featureName, fileName)
+/// The text of the test data file `fileName` in `directory`.
+let loadTestFile (directory: string) (fileName: string) =
+    let filePath = Path.Combine(directory, fileName)
     if not (File.Exists(filePath)) then
         failwith $"Test data file not found: {filePath}"
     File.ReadAllText(filePath)
+
+let loadFeatureFile featureName fileName = loadTestFile (Path.Combine(featureRootDir, featureName)) fileName
 
 /// `source`, type-checked and compiled with `options`. Errors the type checker defers to run time are compiled to
 /// traps, as `nanyx run` does.
@@ -51,8 +54,7 @@ let assertFixture featureName baseName =
     let source = loadFeatureFile featureName (baseName + ".nyx")
     let expected = loadFeatureFile featureName (baseName + ".wat") |> normalizeOutput
     let actual = transpileWat source |> normalizeOutput
-    if actual <> expected then
-        failwith $"WAT output mismatch for {featureName}/{baseName}."
+    Assert.Equal(expected, actual)
 
 /// What `nanyx run <file>` produced.
 type RunOutcome =
@@ -96,7 +98,7 @@ let private command (arguments: string list) : Shell -> int =
         fun shell -> CliCommands.CheckIn(shell, path, timings)
     | "run" :: rest ->
         let _, _, timings, path = options (null, false, false, []) rest
-        fun shell -> CliCommands.RunIn(shell, null, false, path, timings)
+        fun shell -> CliCommands.RunIn(shell, false, path, timings)
     | "build" :: rest ->
         let outputPath, release, timings, path = options (null, false, false, []) rest
         fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings)

@@ -85,9 +85,11 @@ A first slice of `.nyxp` exists ([#279](https://github.com/nanyx-lang/nanyx/issu
 
 - `nanyx add acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every
   machine that has the same lockfile.
-- Publishing a package takes one command and needs no approval from a person.
-- A published version never changes and never disappears. It can be yanked, which stops new resolutions picking
-  it, but builds that already lock it keep working.
+- Publishing a version takes one command and needs no approval from a person. Only registering a package's name
+  is reviewed, once.
+- A published version never changes. It can be yanked, which stops new resolutions picking it, but builds that
+  already lock it keep working. At launch the index doesn't mirror artifacts, so a version whose author deletes its
+  release does disappear ([Where packages live](#where-packages-live)).
 - A minor or patch release cannot break a dependant's build. The publish step checks this from the package's
   exported types, as Elm does, rather than trusting the author's version number.
 - A dependency can only do what the contexts it requires allow, and the program's host decides which contexts
@@ -162,28 +164,45 @@ package there is one JSON file listing its versions, each with the artifact URL,
 its minimum compiler version and whether it is yanked. Because the protocol is just files, what serves them can
 change without the client noticing.
 
-**At launch** (decided in [#207](https://github.com/nanyx-lang/nanyx/issues/207)), the index is a GitHub
-repository, `nanyx-lang/packages`, in the style of Julia's General registry, Homebrew and our own Scoop bucket:
+**The index exists** ([#209](https://github.com/nanyx-lang/nanyx/issues/209)). It is the repository
+[`nanyx-lang/packages`](https://github.com/nanyx-lang/packages), served by GitHub Pages at
+`https://nanyx-lang.github.io/packages/`, in the style of Julia's General registry, Homebrew and our own Scoop
+bucket. Its README is the format's specification; in short:
 
-1. `nanyx publish` builds the `.nyxpkg`, runs the checks locally, and opens a pull request against the index
-   repository adding the new version. (It uploads the artifact to a release on the package's own repository, or
-   attaches it to the pull request.)
-2. A GitHub Actions workflow in the index repository verifies the pull request: the author owns the namespace,
-   the version is new, the artifact's hash matches, the package builds with the stated compiler version, and the
-   API comparison agrees with the version number.
-3. If every check passes, the pull request merges automatically. No person reviews ordinary publishes.
-4. On merge, the workflow copies the artifact into storage the project controls, and the index entry points at
-   that copy. An author deleting their repository or release cannot break anyone's build.
-5. The index is published as static files at a stable address (`packages.nanyx.dev`, via GitHub Pages or a CDN
-   in front of object storage). The client never talks to GitHub's API.
+- **`config.json`** gives the format version (1) and the address of the index files. A client reads it first and
+  builds every other address from it, so moving to `packages.nanyx.dev` later is a change there and a redirect,
+  not a client release.
+- **One file per package**, `index/<namespace>/<name>.json`, lists every version with its `url`, `sha256`,
+  `nanyx` (minimum compiler), `dependencies`, `yanked` and `available`.
+- **The index stores no artifacts and mirrors nothing.** A package's versions are the releases of its own GitHub
+  repository: a release tagged `v1.2.0` or `1.2.0` with an asset named `<name>-<version>.nyxpkg`. Until the
+  `.nyxpkg` format lands ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), the asset is a zip of the
+  package's sources, with its manifest at the root.
+- **Registering a package** is a pull request adding `registry/<namespace>/<name>.json`, which holds only the name
+  and the repository. A check refuses, saying why, a malformed name, one that is taken or too like a registered
+  one, and a repository that is missing, private, or not owned by the namespace's owner (`nanyx` belongs to
+  `nanyx-lang`). A maintainer reviews and merges registrations by hand.
+- **A sync workflow** runs every hour, on every push and by hand. It reads each registered repository's releases,
+  downloads each new version's asset, records its SHA-256 and its manifest's fields, commits the index changes
+  with the workflow's own token, and publishes the site. A version's hash is recorded once: a replaced asset is
+  reported and the old hash kept, so clients refuse the new asset. A version whose release disappears is marked
+  `available: false` and reported, never removed.
+- **Yanking** is a pull request that sets `yanked` on a version; the check refuses any other change to an index
+  file.
 
-Artifacts are stored in object storage with free egress (Cloudflare R2, for example) or as release assets on a
-project-owned repository, which costs nothing. The address the client uses is ours either way, so moving between
-them later is a redirect.
+The workflows' scripts and their tests are in the index repository. The owner check compares the namespace with
+the repository owner's current login; recording the owner's account ID, as
+[Package ownership and locking](./package-ownership-and-locking#the-claim-is-kept-by-account-id) proposes, is
+still to do.
 
-**Later**, when pull-request publishing becomes the bottleneck, a small service takes over steps 1 to 4 behind an
-upload API with tokens, and keeps writing the same static index. The client, the lockfile and every existing
-package are unaffected.
+What this gives up: because nothing is mirrored, an author who deletes a release or a repository breaks builds that
+need it. The hash protects integrity, not availability. Mirroring can be added later behind the same `url` field,
+with no client change.
+
+**Next**, `nanyx publish` ([plan item 7](#plan)) will build the asset, create the release on the package's own
+repository, and open the registration pull request for a package's first version. When pull requests become the
+bottleneck, a small service can take over registration and syncing behind an upload API with tokens, and keep
+writing the same static index. The client, the lockfile and every existing package are unaffected.
 
 Alternatives considered:
 
@@ -231,8 +250,9 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 4. **The lockfile and the cache.** `nanyx.lock`, the `.nyxpkg` format, verification and the per-user cache, tested
    against a local directory acting as an index.
 5. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; `nanyx add` and `restore`.
-6. **The index.** Create `nanyx-lang/packages`, the validation workflow, artifact mirroring and the static site;
-   reserve the `nanyx` namespace.
+6. **The index.** Done ([#209](https://github.com/nanyx-lang/nanyx/issues/209)): `nanyx-lang/packages` on GitHub
+   Pages, with the registration check, the release sync and the `nanyx` namespace reserved. Not done: recording
+   owners' account IDs, and mirroring artifacts.
 7. **Publishing.** `nanyx publish` and `yank`; `api.json`; the API comparison and version check.
 8. **Editor support.** Resolve packages in the language server; restore from the extension.
 9. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
@@ -240,9 +260,10 @@ _To do._ Candidate items, not yet filed, roughly in order. Each produces somethi
 
 # Open questions
 
-- **Index address and artifact storage.** The static index on GitHub is decided. Is `packages.nanyx.dev` the
-  address, and who holds the domain? Are artifacts kept in object storage (Cloudflare R2) or as release assets on
-  a project-owned repository?
+- **A custom domain and mirroring.** The index is at `https://nanyx-lang.github.io/packages/` and points at
+  release assets on packages' own repositories ([#209](https://github.com/nanyx-lang/nanyx/issues/209)). When
+  should it move to `packages.nanyx.dev`, and who holds the domain? Should artifacts be mirrored (to object storage
+  or a project-owned repository) so a deleted release can't break builds?
 - **Resolution.** PubGrub (newest compatible) or minimal version selection (Go: oldest that satisfies, no
   solver, no lockfile strictly needed)? This page proposes PubGrub for its error messages.
 - **Major versions.** Is "a new major is a new package name" acceptable, or should a build allow two majors of a

@@ -29,6 +29,18 @@ let ``Run - a function calling itself in tail position recurses a million deep``
     runSource source |> assertRan "1000000\n1000000\n"
 
 [<Fact>]
+let ``Run - a call in a lambda whose result is annotated is in tail position`` () =
+    // The annotated result is a def of the made-up `__result` that the body gives back (see `LambdaResultSyntax`).
+    let source =
+        """import nanyx/console
+
+def countdown = { (n: int), (acc: int): int -> if n == 0 then acc else countdown(n - 1, acc + 1) }
+
+println("{countdown(1000000, 0)}")
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "1000000\n"
+
+[<Fact>]
 let ``Run - a local rec function calling itself in tail position recurses a million deep`` () =
     let source =
         "import nanyx/console\n" +

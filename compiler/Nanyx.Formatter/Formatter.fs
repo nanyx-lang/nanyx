@@ -18,8 +18,7 @@ module Options =
 /// Where an expression is printed, which decides whether it needs parentheses (the parser keeps none).
 type private Position =
     { /// On the spine of a statement, an arm's body or a top-level expression. The parser reads those without crossing
-      /// lines, with an operator table that has no `..`, so a range needs parentheses there; `not` and the operators not in
-      /// `inlineOperators` are given them too.
+      /// lines, with an operator table that has no `..`, so a range needs parentheses there.
       Inline: bool
       /// Nothing follows it in the enclosing construct, so a construct that takes everything after it (a `match`, an
       /// `if`, a `with`) needs no parentheses.
@@ -42,11 +41,6 @@ let private precedence op =
     match binaryOperatorNamed op with
     | Some found -> found.Precedence
     | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
-
-/// The operators the formatter writes in a statement without parentheses (see `Position.Inline`). The parser takes
-/// every operator there but `..`; the rest are bracketed only because this set predates that (#960).
-let private inlineOperators =
-    set [ "**"; "*"; "/"; "^"; "<*>"; "+"; "-"; "<+>"; "++"; "<>"; ">>"; "<<"; "<"; ">"; "<="; ">="; "~"; "=="; "!="; ">>="; "=<<" ]
 
 /// Which way the operator `op` groups, as the parser has it.
 let private associativity op =
@@ -348,9 +342,9 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and needsParentheses (position: Position) (e: Expression) =
         match e.Kind with
-        | BinaryOp(op, _, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
+        | BinaryOp(op, _, _, _) -> precedence op < position.Prec
         | RangeSyntax.Call _ -> rangePrecedence < position.Prec || position.Inline
-        | FunctionCall(name, _, [ _ ]) when name = NotSyntax.builtIn -> position.Prec >= prefixPrecedence || position.Inline
+        | FunctionCall(name, _, [ _ ]) when name = NotSyntax.builtIn -> position.Prec >= prefixPrecedence
         | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> position.Prec >= prefixPrecedence
         // A pipe binds tighter than every binary operator, but not than a prefix one: `-(x \abs)` keeps its brackets, as `-x \abs` is `(-x) \abs`.
         | Pipe _ -> position.Prec >= prefixPrecedence
@@ -490,7 +484,6 @@ let format (options: Options) (parsed: SourceModule) : string =
                 grouping <> NonAssociative
                 && precedence op' = p
                 && associativity op' = grouping
-                && not (position.Inline && not (inlineOperators.Contains op'))
                 && (spreadSegments x).IsNone
             | _ -> false
         let rec flattenLeft (x: Expression) =
@@ -702,14 +695,19 @@ let format (options: Options) (parsed: SourceModule) : string =
         | None ->
             let parameters, body = writtenLambda e parameters body
             let takesUnit = match e.Kind with Lambda(_, _, takesUnit) -> takesUnit | _ -> false
+            // A result annotation is written after the parameters (see `LambdaResultSyntax`).
+            let resultDoc, body =
+                match body.Kind with
+                | LambdaResultSyntax.Annotated(resultType, inner) when takesUnit || not parameters.IsEmpty -> cat [ text ": "; typeExpr resultType ], inner
+                | _ -> Doc.empty, body
             let head =
                 match parameters with
-                | [] when takesUnit -> text "{ () ->"
+                | [] when takesUnit -> cat [ text "{ ()"; resultDoc; text " ->" ]
                 | [] -> text "{"
-                | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); text " ->" ]
-            // A body on its own line is read as a statement, which can't take every operator (`b == 1 or b == 2` is
-            // three statements there), so where the layout is ours to choose, a body that would need parentheses
-            // there stays on the `->`'s line instead, as does a block of just that body in parentheses.
+                | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); resultDoc; text " ->" ]
+            // A body on its own line is read as a statement, which can't take a range, so where the layout is ours to
+            // choose, a body that would need parentheses there stays on the `->`'s line instead, as does a block of just
+            // that body in parentheses.
             let bracketedAsStatement (x: Expression) = needsParentheses statementPosition x && not (needsParentheses full x)
             let body =
                 match body.Kind with

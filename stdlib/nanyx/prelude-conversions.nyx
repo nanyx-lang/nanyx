@@ -435,3 +435,11 @@ export def U64.fromString: string -> #some(U64) | #invalidU64 = { s ->
 
   if __nanyx_string_length(s) <= start then #invalidU64 else parseU64Digits(s, start, 0)
 }
+
+--| The `F32` nearest the float `s` writes, as `float.fromString` reads it, or `#invalidF32` for
+  anything else. A number too large for an `F32` is infinity.
+export def F32.fromString: string -> #some(F32) | #invalidF32 = { s ->
+  match float.fromString(s)
+    | #some(x) -> #some(float.toF32(x))
+    | #invalidFloat -> #invalidF32
+}

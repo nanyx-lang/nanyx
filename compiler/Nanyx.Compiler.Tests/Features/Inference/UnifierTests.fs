@@ -86,10 +86,10 @@ let ``Unifier matches unions by set and width`` () =
     let resultOrder = Unifier.unify [ (unionA, unionB, Equal, SourceSpan.none) ]
     let resultWidth = Unifier.unify [ (unionA, unionWide, Equal, SourceSpan.none) ]
     match resultOrder with
-    | Ok _ -> Assert.True(true)
+    | Ok _ -> ()
     | Error (message, _) -> Assert.True(false, message)
     match resultWidth with
-    | Ok _ -> Assert.True(true)
+    | Ok _ -> ()
     | Error (message, _) -> Assert.True(false, message)
 
 [<Fact>]
@@ -115,6 +115,26 @@ let ``Solving constraints that agree gives what unify gives`` () =
     let subst, failures = Unifier.solve constraints
     Assert.Empty(failures)
     Assert.Equal(Unifier.unify constraints, Ok subst)
+
+/// What unifying `newer` in front of `older` gives once `older` has been solved, and what solving the same constraints
+/// afresh gives: a copy of `older` has not been solved, so nothing is solved on top of it.
+let private solvedOnTopAndAfresh (newer: ConstraintSet) (older: ConstraintSet) =
+    Unifier.unify older |> ignore
+    sprintf "%A" (Unifier.unify (newer @ older)), sprintf "%A" (Unifier.unify (newer @ List.map id older))
+
+[<Fact>]
+let ``Constraints in front of a list whose union was put off give what solving them afresh does`` () =
+    // `#a` given where `v` is expected is put off to the end (see `AssignableLater`).
+    let v = TyVar { Id = 1; Name = None }
+    let older: ConstraintSet = [ (TyTag("a", None), v, Assignable, SourceSpan.none) ]
+    // Constraints that share no variable with it.
+    let onTop, afresh = solvedOnTopAndAfresh [ (TyVar { Id = 5; Name = None }, TyPrimitive "int", Equal, SourceSpan.none) ] older
+    Assert.Equal(afresh, onTop)
+    // Constraints on its variable, solved first when solved afresh: `v` is `#b | r`, and `#a` widens it into `r`.
+    let onTop, afresh =
+        solvedOnTopAndAfresh [ (v, TyUnion [ TyTag("b", None); TyVar { Id = 3; Name = None } ], Equal, SourceSpan.none) ] older
+    Assert.DoesNotContain("Error", afresh)
+    Assert.Equal(afresh, onTop)
 
 [<Fact>]
 let ``A union's member that fits is not blamed for a failure in a later constraint`` () =

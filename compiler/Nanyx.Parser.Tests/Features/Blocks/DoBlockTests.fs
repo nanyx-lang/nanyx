@@ -6,8 +6,6 @@ open ParserTestHelpers
 
 let private parse (source: string) = parseModuleFile "t.nyx" source
 
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
-
 [<Fact>]
 let ``A do block is a block statement in the block around it`` () =
     let source = "def f = { ->\n  do\n    def x = 1\n    x\n  2\n}\n"

@@ -39,9 +39,13 @@ let ``** groups to the right, and its brackets are kept where they say otherwise
     Assert.Equal("def a = (-x) ** 2\n", format "def a = -x ** 2")
 
 [<Fact>]
-let ``Operators a statement cannot take without parentheses keep them`` () =
-    unchanged (lines [ "def f = { x ->"; "  (x % 2)"; "}" ])
-    unchanged (lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> (x and y)"; "    | _ -> x + 1"; "}" ])
+let ``A statement or an arm's body takes every operator but a range without parentheses`` () =
+    unchanged (lines [ "def f = { x ->"; "  x % 2"; "}" ])
+    unchanged (lines [ "def f = { x ->"; "  (1..x)"; "}" ])
+    unchanged (lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> x and y"; "    | 1 -> not x"; "    | _ -> x or y"; "}" ])
+    Assert.Equal(
+        lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> x and y"; "    | _ -> not y"; "}" ],
+        format (lines [ "def g = { x, y ->"; "  match x"; "    | 0 -> (x and y)"; "    | _ -> (not y)"; "}" ]))
 
 [<Fact>]
 let ``Literals are printed from the source`` () =

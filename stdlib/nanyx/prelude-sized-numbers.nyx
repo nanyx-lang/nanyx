@@ -28,7 +28,9 @@ export def I8.`/`: I8, I8 -> I8 = { x, y ->
   x / y
 }
 
-export def I8.`%`: I8, I8 -> I8 = { x, y -> x % y }
+export def I8.`%`: I8, I8 -> I8 = { x, y ->
+  x % y
+}
 
 export def I8.fromInt: int -> I8 = { n ->
   __nanyx_from_int(n)
@@ -68,7 +70,9 @@ export def I16.`/`: I16, I16 -> I16 = { x, y ->
   x / y
 }
 
-export def I16.`%`: I16, I16 -> I16 = { x, y -> x % y }
+export def I16.`%`: I16, I16 -> I16 = { x, y ->
+  x % y
+}
 
 export def I16.fromInt: int -> I16 = { n ->
   __nanyx_from_int(n)
@@ -108,7 +112,9 @@ export def I32.`/`: I32, I32 -> I32 = { x, y ->
   x / y
 }
 
-export def I32.`%`: I32, I32 -> I32 = { x, y -> x % y }
+export def I32.`%`: I32, I32 -> I32 = { x, y ->
+  x % y
+}
 
 export def I32.fromInt: int -> I32 = { n ->
   __nanyx_from_int(n)
@@ -148,7 +154,9 @@ export def U8.`/`: U8, U8 -> U8 = { x, y ->
   x / y
 }
 
-export def U8.`%`: U8, U8 -> U8 = { x, y -> x % y }
+export def U8.`%`: U8, U8 -> U8 = { x, y ->
+  x % y
+}
 
 export def U8.fromInt: int -> U8 = { n ->
   __nanyx_from_int(n)
@@ -188,7 +196,9 @@ export def U16.`/`: U16, U16 -> U16 = { x, y ->
   x / y
 }
 
-export def U16.`%`: U16, U16 -> U16 = { x, y -> x % y }
+export def U16.`%`: U16, U16 -> U16 = { x, y ->
+  x % y
+}
 
 export def U16.fromInt: int -> U16 = { n ->
   __nanyx_from_int(n)
@@ -228,7 +238,9 @@ export def U32.`/`: U32, U32 -> U32 = { x, y ->
   x / y
 }
 
-export def U32.`%`: U32, U32 -> U32 = { x, y -> x % y }
+export def U32.`%`: U32, U32 -> U32 = { x, y ->
+  x % y
+}
 
 export def U32.fromInt: int -> U32 = { n ->
   __nanyx_from_int(n)
@@ -268,7 +280,9 @@ export def U64.`/`: U64, U64 -> U64 = { x, y ->
   x / y
 }
 
-export def U64.`%`: U64, U64 -> U64 = { x, y -> x % y }
+export def U64.`%`: U64, U64 -> U64 = { x, y ->
+  x % y
+}
 
 export def U64.fromInt: int -> U64 = { n ->
   __nanyx_from_int(n)
@@ -311,7 +325,9 @@ export def F32.`/`: F32, F32 -> F32 = { x, y ->
   x / y
 }
 
-export def F32.`%`: F32, F32 -> F32 = { x, y -> x % y }
+export def F32.`%`: F32, F32 -> F32 = { x, y ->
+  x % y
+}
 
 export def F32.fromInt: int -> F32 = { n ->
   __nanyx_from_int(n)

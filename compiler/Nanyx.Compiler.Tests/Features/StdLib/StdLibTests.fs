@@ -129,7 +129,7 @@ let ``nanyx/text exports string functions with their types`` () =
 [<Fact>]
 let ``nanyx/text rejects a wrongly typed argument`` () =
     let result = Compiler.compile "import nanyx/text\n\ndef bad = string.repeat(\"ab\", \"twice\")"
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Standard library private helpers are not imported`` () =
@@ -171,7 +171,7 @@ let ``Standard library import with alias is qualified`` () =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     Assert.Equal(TyPrimitive "string", result.Typed.Value.Types.["shout"])
     let unqualified = Compiler.compile "import nanyx/text as t\n\ndef shout = string.uppercase(\"hi\")"
-    Assert.False(unqualified.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownFunction unqualified
 
 [<Fact>]
 let ``nanyx/text functions are attached to String`` () =
@@ -203,7 +203,7 @@ let ``Entry point module sees nanyx/console without importing it`` () =
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     let withoutEntry = Compiler.compile "module main\n\ndef main = {\n  println(\"Hello, World!\")\n}\n"
-    Assert.False(withoutEntry.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.UnknownFunction withoutEntry
 
 [<Fact>]
 let ``nanyx/math exports int functions with their types`` () =

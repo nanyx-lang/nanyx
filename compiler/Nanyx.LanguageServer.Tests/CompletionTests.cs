@@ -32,7 +32,7 @@ public sealed class CompletionTests : LanguageServerTestBase
     [Fact]
     public async Task Completion_offers_the_names_in_scope_with_their_types_nearest_first()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("completion.nyx"));
 
         Open(uri, "def scale = { factor ->\r\n  def offset = 1\r\n  factor * 2 + offset\r\n}\r\ndef later = 3\r\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -58,7 +58,7 @@ public sealed class CompletionTests : LanguageServerTestBase
     [Fact]
     public async Task Completion_reads_the_text_with_type_errors_and_the_last_typed_one_while_it_does_not_parse()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-last-good.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("completion-last-good.nyx"));
 
         Open(uri, "def scale = { factor ->\n  def offset = 1\n  factor * 2 + offset\n}\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -81,7 +81,7 @@ public sealed class CompletionTests : LanguageServerTestBase
     [Fact]
     public async Task Completion_offers_nothing_in_a_comment_or_a_string_and_only_members_after_a_dot()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-nothing.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("completion-nothing.nyx"));
 
         Open(uri, "def a = 1 -- about a\ndef b = \"text {a} more\"\ndef p = (x = 1, y = 2)\ndef c = p.x\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
@@ -121,7 +121,7 @@ public sealed class CompletionTests : LanguageServerTestBase
     [Fact]
     public async Task Completion_after_a_dot_just_typed_offers_a_records_fields()
     {
-        var uri = DocumentUri.FromFileSystemPath(Path.Combine(Path.GetTempPath(), "completion-fields.nyx"));
+        var uri = DocumentUri.FromFileSystemPath(TempPath("completion-fields.nyx"));
 
         Open(uri, "def p = (x = 1, name = \"a\")\ndef q = p.x\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);

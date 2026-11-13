@@ -6,11 +6,7 @@ open TranspilerWasmTestHelpers
 
 let private e2eRootDir = Path.Combine(__SOURCE_DIRECTORY__)
 
-let private loadE2EFile testName fileName =
-    let filePath = Path.Combine(e2eRootDir, testName, fileName)
-    if not (File.Exists(filePath)) then
-        failwith $"E2E test file not found: {filePath}"
-    File.ReadAllText(filePath)
+let private loadE2EFile testName fileName = loadTestFile (Path.Combine(e2eRootDir, testName)) fileName
 
 let private runE2ETest testName =
     let source = loadE2EFile testName "input.nyx"
