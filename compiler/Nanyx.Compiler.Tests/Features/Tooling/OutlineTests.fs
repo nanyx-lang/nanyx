@@ -52,3 +52,46 @@ let ``The outline lists top-level declarations with what is declared inside them
 let ``A module with a type error has an outline, and one that does not parse has none`` () =
     Assert.Equal(1, (Outline.ofSource "" "def broken: int = \"text\"\n").Value.Length)
     Assert.Equal(None, Outline.ofSource "" "def broken = (\n")
+
+
+[<Fact>]
+let ``A def's local defs in an if branch, a lambda it passes and a memory block are listed under it`` () =
+    let source =
+        """def f = { x ->
+  def y = x + 1
+  y
+}
+def g = { xs ->
+  xs \list.map({ n ->
+    def m = n * 2
+    m
+  })
+}
+def h = { b ->
+  if b then
+    def k = 1
+    k
+  else 2
+}
+def sum: list(int) -> int = { xs ->
+  memory {
+    mut total = 0
+    for xs | x -> total := total + x
+    total
+  }
+}
+def outer = { a ->
+  def inner = { c ->
+    def deep = c
+    deep
+  }
+  inner(a)
+}
+"""
+    let names (items: Outline.OutlineItem list) = items |> List.map (fun item -> item.Name, item.Children |> List.map _.Name)
+    Assert.Equal<(string * string list) list>(
+        [ "f", [ "y" ]; "g", [ "m" ]; "h", [ "k" ]; "sum", [ "total" ]; "outer", [ "inner" ] ],
+        names (Outline.ofSource "" source).Value)
+    // A local def's own defs are its children, not the enclosing def's.
+    let outer = (Outline.ofSource "" source).Value |> List.find (fun item -> item.Name = "outer")
+    Assert.Equal<string list>([ "deep" ], outer.Children.Head.Children |> List.map _.Name)
