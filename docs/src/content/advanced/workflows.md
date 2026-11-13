@@ -139,6 +139,7 @@ def retry = (
 | `try`    | Short-circuit on errors in a workflow that handles results |
 | `return` | Wrap the block's final value and finish the block |
 | `zero`   | The value of a block that produces no value (an `if` without `else`, or falling off the end without `return`) |
+| `for`    | Run a `for` loop whose body uses a keyword (see [Keywords in loops](#keywords-in-loops)) |
 | `defer`  | Run a thunk after the rest of the block has finished |
 
 ## Keyword kinds
@@ -240,10 +241,39 @@ The values the branches end with are joined as any `if`'s or `match`'s are, so t
 def #some(result) = find(id) except #error(#notFound) -> return 0
 ```
 
+## Keywords in loops
+
+A `try` or `return` in the body of a `for` loop means the same as one outside it. A failed `try` ends the whole block with that failure, and a `return` ends it with its value: the items after it, and what follows the loop, don't run. Neither skips to the next item. To skip one, say so in the body with a `match`, or with a pattern on the loop, as in `for results | #some(x) -> ...`.
+
+```nanyx
+def parse: string -> #some(int) | #error(string) = { s ->
+  if s == "" then #error("empty") else #some(s.length)
+}
+
+def total: list(string) -> #some(int) | #error(string) = { items -> proc {
+  for items | item ->
+    def n = try parse(item)
+    if n > 100 then return n
+  return 0
+} }
+```
+
+The builder's `for` member runs such a loop. It takes the list, the body and the rest of the block. The body takes an item and the rest of the loop, which it calls to go on to the next item once it has finished with this one. A `for` loop statement like the one above becomes, roughly:
+
+```nanyx fragment
+proc.for(items, { item, next -> <the body, then next()> }, { <the rest of the block> })
+```
+
+So the builder decides how the iterations combine. `proc`'s `for` goes through the items in order and stops at the first failure or `return`, since a body that ends that way never calls `next`. Another builder could collect every failure, or run the iterations at the same time. A loop whose body uses no keyword runs as a loop, and needs no `for`. One that does, in a builder without a `for`, is a compile error, which says to handle the value with a `match` in the body or give the builder a `for`.
+
+For now the loop must be a statement of its own in the block, and walk one list.
+
+## Where a keyword can't be
+
 A keyword whose continuation cannot be the rest of the block is an error:
 
 - **Inside a lambda.** A lambda runs when it is called, not where it is written. This includes a lambda passed to a function, as in `list.map(xs, { x -> try f(x) })`. A builder block of its own inside the lambda, such as `{ x -> proc { ... } }`, is fine.
-- **In the body of a `for` loop.** The body runs once per element. Handle the value with a `match` in the body instead.
+- **In the body of a `for` loop that isn't a statement of its own, or that walks several collections.** Make the loop a statement of its own over one list, or handle the value with a `match` in the body.
 - **In a `while` loop.** Its condition and body run again each time round. Handle the value with a `match` in the loop instead.
 - **In a part of an expression that may not run.** That means the right of `and` or `or`, as in `ok or (if c then try f() else false)`, or a branch of an `if` or an arm of a `match` that is itself in such a part. Make the `if` or `match` a statement of its own.
 

@@ -148,3 +148,25 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "inner hello a\nouter hello b\ninner hello c\n"
+[<Fact>]
+let ``Run - a context-generic function taken as a value passes a continuation that requires no contexts to a body that requires some`` () =
+    // The adapter for `each` taken at no contexts gave the body its `next` unadapted, and the body called it with
+    // Console's members: an indirect call type mismatch.
+    let source = """import nanyx/console
+
+def each: [c] list(int), ([c] int, ([c] () -> int) -> int), ([c] () -> int) -> int = {
+  | [], _, rest -> rest()
+  | [item, ...others], body, rest -> body(item, { each(others, body, rest) })
+}
+
+@entry
+def main = {
+  def f = each
+  def r = f([1, 2], { item, next ->
+    println("{item}")
+    next()
+  }, { 7 })
+  println("{r}")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "1\n2\n7\n"

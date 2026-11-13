@@ -257,9 +257,9 @@ type InferState =
             /// without another error, since the error that left the value's type unknown has been reported; a debug
             /// build cannot run it, and traps there.
             UnknownTypeUses: NodeId list;
-            /// Where each builder block falls off its end without `return`, by the node of the made-up read of the
-            /// builder's `zero` desugaring put there: where to say so if the builder has no `zero`.
-            WorkflowZeros: Map<NodeId, SourceSpan>;
+            /// Where to say so if a builder lacks a member desugaring reads, by the node of the made-up read: the end of
+            /// a block that falls off without `return`, for `zero`, and a loop whose body uses a keyword, for `for`.
+            WorkflowMemberPlaces: Map<NodeId, SourceSpan>;
             /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
             /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
             JoinRests: Set<int>;
@@ -360,7 +360,7 @@ let emptyState =
             FailedExprs = [];
             UnhandledMatches = [];
             UnknownTypeUses = [];
-            WorkflowZeros = Map.empty;
+            WorkflowMemberPlaces = Map.empty;
             JoinRests = Set.empty;
             RestArguments = Map.empty;
             OpenMatches = [];

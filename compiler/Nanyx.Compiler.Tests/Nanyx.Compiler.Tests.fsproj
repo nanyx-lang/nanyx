@@ -128,6 +128,7 @@
     <Compile Include="Features\Types\UnionsTests.fs" />
     <Compile Include="Features\Workflows\LoweredTests.fs" />
     <Compile Include="Features\Workflows\WorkflowTests.fs" />
+    <Compile Include="Features\Workflows\WorkflowLoopTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
