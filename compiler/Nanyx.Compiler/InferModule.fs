@@ -346,7 +346,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             currentModule <- Some name
             emit (TypedModuleDecl name)
         | ModuleBlock _ -> ()
-        // Attributes are resolved by the compiler front end before inference (see Compiler.applyAttributes).
+        // Attributes are resolved by the compiler front end before inference (see Attributes.applyAttributes).
         | Attribute _ -> ()
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.

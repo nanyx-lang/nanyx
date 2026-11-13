@@ -219,3 +219,12 @@ module SyntaxTree =
 
     /// The names `expr` refers to that nothing within it binds (see `freeReferences`).
     let freeNames (expr: Expression) : string list = freeReferences expr |> List.map fst
+
+    /// The module's imports, a re-export's among them: a re-export imports what it exports again.
+    let internal collectImports (module': Module) =
+        module'
+        |> List.choose (function
+            | Kind (Import items) -> Some items
+            | Kind (ReExport item) -> Some [ item ]
+            | _ -> None)
+        |> List.collect id
