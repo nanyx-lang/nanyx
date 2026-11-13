@@ -138,5 +138,15 @@ module FunctionContexts =
             Ok (arguments @ solveTo origin (List.truncate 1 shared) (givenExtra @ [ fresh () ]) @ solveTo origin givenVars expectedExtra)
         | [] when not givenExtra.IsEmpty -> Error givenExtra
         | [] -> Ok (arguments @ solveTo origin givenVars expectedExtra)
-        // The variable keeps room for more, so that a function given for it elsewhere can require others.
-        | _ -> Ok (arguments @ solveTo origin expectedVars (givenExtra @ givenVars @ [ fresh () ]))
+        | _ ->
+            // A variable of `given` takes the scoped contexts `expected` has besides: a block given to `memory` that
+            // calls a function it is not told the type of, as `{ mk -> memory { mk() } }` does, gives it the block's
+            // `$Memory`. The variable of `expected` takes only what it has besides, so the call that supplies the
+            // context does not require it too.
+            let scoped = expectedExtra |> List.filter (function ScopedContext _ -> true | _ -> false)
+            match givenVars with
+            | _ :: _ when not scoped.IsEmpty ->
+                let rest = fresh ()
+                Ok (arguments @ solveTo origin givenVars (scoped @ [ rest ]) @ solveTo origin expectedVars (givenExtra @ [ rest; fresh () ]))
+            // The variable keeps room for more, so that a function given for it elsewhere can require others.
+            | _ -> Ok (arguments @ solveTo origin expectedVars (givenExtra @ givenVars @ [ fresh () ]))

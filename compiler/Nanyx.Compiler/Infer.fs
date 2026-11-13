@@ -186,7 +186,7 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
                 | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
                 |> Result.bind (fun next -> checkCalledComparisons env next expr name (nameSpan spanOpt expr))
-                |> Result.bind (MemoryCells.checkCall env expr name)
+                |> Result.map (ScopedCalls.leave expr)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
     let recovered =
@@ -335,7 +335,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
         else
-        let env, state = MemoryCells.aroundCall env state name
         let contextCheck =
             match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
             // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
@@ -356,6 +355,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme ->
                 let mutable current = state
                 let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
+                let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+                let env, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
                 current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
 
                 let recordFieldsOpt = recordFieldsOf funcTy

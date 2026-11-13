@@ -112,7 +112,6 @@ module DiagnosticCodes =
     let MutOutsideMemory = code 221 "mut outside a memory block" Severity.Error
     let NotACell = code 222 "Assignment to a non-cell" Severity.Error
     let CellAssignmentMismatch = code 223 "Cell assignment type mismatch" Severity.Error
-    let CellEscapesMemory = code 224 "Cell escapes its memory block" Severity.Error
     let UnboundContextVariable = code 226 "Unbound context variable" Severity.Error
     let ContextsNotAllowed = code 227 "Function requires contexts not allowed here" Severity.Error
     let UnguardedRecursiveAlias = code 228 "Type alias refers to itself outside a tag" Severity.Error
@@ -120,6 +119,7 @@ module DiagnosticCodes =
     let OptionLikeFallback = code 230 "Option-like right operand of ??" Severity.Error
     let InvalidRecordSpread = code 231 "Invalid record spread" Severity.Error
     let ScopedContextNotNominal = code 232 "Scoped context is not nominal" Severity.Error
+    let ScopedContextEscapes = code 233 "Scoped context escapes the call that supplies it" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -138,8 +138,8 @@ module DiagnosticCodes =
           MisplacedTypeof; UndeclaredContext; NominalConstructedOutsideItsModule; WrongPatternCount
           GuardNotAPredicate; NameBoundTwiceInPattern; MisplacedTypeHole; EndlessForLoop; PositionalForNamedArgument
           UnattachableDefinition; BlockWithoutResult; MutOutsideMemory; NotACell; CellAssignmentMismatch
-          CellEscapesMemory; UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
-          LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal
+          UnboundContextVariable; ContextsNotAllowed; UnguardedRecursiveAlias
+          LiteralOutOfRange; OptionLikeFallback; InvalidRecordSpread; ScopedContextNotNominal; ScopedContextEscapes
           UnsupportedByBackend ]
 
 module Diagnostics =

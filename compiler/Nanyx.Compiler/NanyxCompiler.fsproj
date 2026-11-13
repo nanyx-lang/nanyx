@@ -65,8 +65,8 @@
     <Compile Include="MatchExhaustiveness.fs" />
     <Compile Include="DefinitionOrder.fs" />
     <Compile Include="InitialisationCycles.fs" />
-    <Compile Include="EscapingLambdas.fs" />
     <Compile Include="MemoryCells.fs" />
+    <Compile Include="ScopedCalls.fs" />
     <Compile Include="Loops.fs" />
     <Compile Include="RecordSpread.fs" />
     <Compile Include="PipeLookups.fs" />
