@@ -952,7 +952,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             innerEnv <- nextEnv
                             innerState <- nextState
                             innerPatterns <- innerPatterns @ [typedPattern]
-                        | Error err -> innerErrors <- err
+                        | Error err -> innerErrors <- innerErrors @ err
                     if innerErrors.IsEmpty then
                         Ok (innerEnv, innerState, mkTypedPattern pattern tupleRecord)
                     else
@@ -980,7 +980,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (nextEnv, nextState, _) ->
                             innerEnv <- nextEnv
                             innerState <- nextState
-                        | Error err -> innerErrors <- err
+                        | Error err -> innerErrors <- innerErrors @ err
                     let innerStateWithSplat =
                         match splatOpt with
                         | Some (Kind (IdentifierPattern name)) ->
@@ -1003,7 +1003,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (nextEnv, nextState, _) ->
                             innerEnv <- nextEnv
                             innerState <- nextState
-                        | Error err -> innerErrors <- err
+                        | Error err -> innerErrors <- innerErrors @ err
                     if innerErrors.IsEmpty then
                         Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                     else
@@ -1041,7 +1041,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Ok (nextEnv, nextState, _) ->
                             innerEnv <- nextEnv
                             innerState <- nextState
-                        | Error err -> innerErrors <- err
+                        | Error err -> innerErrors <- innerErrors @ err
                     if innerErrors.IsEmpty then
                         Ok (innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
                     else
@@ -1070,7 +1070,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             innerEnv <- nextEnv
                             innerState <- nextState
                             fieldMap <- fieldMap.Add(name, memberTy)
-                        | Error err -> innerErrors <- err
+                        | Error err -> innerErrors <- innerErrors @ err
                     if innerErrors.IsEmpty then
                         // A record type is closed, so the pattern names every field, unless it ends in `...`. Where
                         // the fields are known, they are checked rather than the value's type, which may be nominal.
@@ -1159,7 +1159,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                             env' <- nextEnv
                             state' <- nextState
                             typedPatterns <- typedPatterns @ [typedPattern]
-                        | Error err -> errors <- err
+                        | Error err -> errors <- errors @ err
                     if errors.IsEmpty then
                         match inferExpr env' state' expr with
                         | Ok (typedExpr, next) ->
