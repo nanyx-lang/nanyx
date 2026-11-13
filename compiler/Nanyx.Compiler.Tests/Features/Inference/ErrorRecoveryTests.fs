@@ -223,3 +223,23 @@ def count: () -> int = {
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal("Type mismatch: string vs int.", diagnostic.Message)
     Assert.Equal("\"x\"", textAt source diagnostic.Span.Value)
+
+[<Fact>]
+let ``An error in an earlier def does not stop a later lambda argument taking its parameter's type`` () =
+    // `n` took no type, so `println(n)` found no `ToString` and was reported as NYX0205 too (#833).
+    let source = """
+import nanyx/console
+
+def wrong: () -> int = { "not an int" }
+
+def h: [Console] list(int) -> list(int) = { numbers ->
+  numbers \list.map { n ->
+    println(n)
+    n + 1
+  }
+}
+"""
+    let source = source.ReplaceLineEndings "\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal("Type mismatch: string vs int.", diagnostic.Message)
+    Assert.Equal("\"not an int\"", textAt source diagnostic.Span.Value)
