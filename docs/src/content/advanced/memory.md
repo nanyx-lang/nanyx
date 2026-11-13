@@ -65,17 +65,17 @@ def tally = { words ->
 }
 ```
 
-A lambda that uses a cell needs `$Memory` too, and its type says so: `note` is `[$Memory] string -> ()`. It can be called inside the block but cannot leave it.
+A lambda that uses a cell needs `$Memory` too, and its type says so: `note` is `[$Memory] string -> ()`. It can be called inside the block but cannot leave it (see below).
 
 # Values cannot escape memory scope
 
-Because a cell is not a value, what a `memory` block gives back is always plain data, unless it is a lambda that uses one of the block's cells. Giving one back, or a structure that holds one, is an error (NYX0224):
+`$Memory` is a _scoped_ context (`scoped context $Memory = ()`): each `memory` call supplies an instance of its own, and everything that requires it belongs to that call. A cell's `$Memory` is that of the block it is declared in, and so is that of every lambda that uses the cell. What the call gives back must not require it: giving back a lambda that uses one of the block's cells, or a structure that holds one, is an error (NYX0233), which names the cell:
 
 ```nanyx
 def bad = {
   memory {
     mut count = 0
-    { count := count + 1 } -- Error NYX0224: the lambda uses `count`, so it cannot leave the block
+    { count := count + 1 } -- Error NYX0233: the result requires the block's '$Memory' through the cell 'count'
   }
 }
 ```
@@ -92,7 +92,21 @@ def good = {
 }
 ```
 
-This is how Nanyx performs escape analysis. Instead of a separate escape-analysis pass, the compiler tracks which values require `$Memory`. If a value still needs `$Memory`, it can only be used where `$Memory` is available, so it cannot leak into pure code.
+A block inside another may give back a lambda over the outer block's cells, since that requires the outer block's `$Memory`, not its own:
+
+```nanyx
+def total = memory {
+  mut sum = 0
+  def add = memory { { n -> sum := sum + n } }
+  add(1)
+  add(2)
+  sum -- 3
+}
+```
+
+The rule follows `$Memory` through other functions. A function that passes its parameter a block's `$Memory`, such as `{ make -> memory { make() } }`, supplies it in turn, so its result must not require it either. A function whose type says it requires `$Memory` itself can't give its parameter a block's: `def run: [$Memory] ([$Memory] () -> b) -> b = { make -> memory { make() } }` is an error at `make()`, since the block's `$Memory` would reach `make`, which is bound outside the block. Only `$Memory` is restricted this way: a function that supplies any other context, such as one that handles `Log` with a `use`, may give back a lambda that requires it.
+
+This is how Nanyx performs escape analysis. Instead of a separate escape-analysis pass, the compiler tracks which values require which `memory` call's `$Memory`. A value that still needs it can only be used inside that call, so it cannot leak into pure code.
 
 # No global mutable state
 

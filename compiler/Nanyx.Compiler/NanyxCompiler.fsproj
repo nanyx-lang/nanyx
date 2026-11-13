@@ -65,8 +65,8 @@
     <Compile Include="MatchExhaustiveness.fs" />
     <Compile Include="DefinitionOrder.fs" />
     <Compile Include="InitialisationCycles.fs" />
-    <Compile Include="EscapingLambdas.fs" />
     <Compile Include="MemoryCells.fs" />
+    <Compile Include="ScopedCalls.fs" />
     <Compile Include="Loops.fs" />
     <Compile Include="RecordSpread.fs" />
     <Compile Include="PipeLookups.fs" />
@@ -89,6 +89,8 @@
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />
+    <Compile Include="CheckedModule.fs" />
+    <Compile Include="ModuleLinking.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />

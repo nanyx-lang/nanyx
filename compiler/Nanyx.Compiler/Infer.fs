@@ -186,7 +186,7 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
                 | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
                 |> Result.bind (fun next -> checkCalledComparisons env next expr name (nameSpan spanOpt expr))
-                |> Result.bind (MemoryCells.checkCall env expr name)
+                |> Result.map (ScopedCalls.leave expr)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
     let recovered =
@@ -241,10 +241,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Error err -> Error err
             | Ok state ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
-                let ty =
+                let ty, next =
                     match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
-                    | Some written -> ContextVariables.ofNamedValue written scheme.Type ty
-                    | None -> ty
+                    | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
+                    | None -> ty, next
                 Ok (mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
         | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
@@ -257,7 +257,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | Ok (typedArg, next) -> Ok (mkTypedExpr expr typedArg.Type None None None, next)
                 | Error err -> Error err
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan "dbg expects a single argument" ]
-        elif name = "not" then
+        elif name = NotSyntax.builtIn then
             // The `not` keyword: the parser represents `not x` as a call to "not" with one argument.
             match args with
             | [single] ->
@@ -276,7 +276,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     OperatorCalls.inferNegation (memberOfInstanceInScope env next) (tryResolveAttachedFunction env (resolveSoFar next ty)) env next expr ty (numericOperandType next ty ty)
                     |> Result.map (fun (resultTy, negated) -> mkTypedExpr expr resultTy None None None, negated))
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "- expects a single operand" ]
-        elif name = "__with" then
+        elif name = WithSyntax.builtIn then
             // `record with f = v, ...`: the parser represents a record update as a call to "__with" with the
             // record and a record of the updated fields. The result has the record's type; every updated
             // field must exist on it, at the field's type.
@@ -335,7 +335,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body
             | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "while expects a condition and a loop body" ]
         else
-        let env = MemoryCells.aroundCall env state name
         let contextCheck =
             match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
             // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
@@ -356,6 +355,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme ->
                 let mutable current = state
                 let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
+                let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
+                let env, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
                 current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
 
                 let recordFieldsOpt = recordFieldsOf funcTy
@@ -1194,10 +1195,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some scheme when not (referenceErrors qualifiedName expr scheme state).IsEmpty -> Error (referenceErrors qualifiedName expr scheme state)
             | Some scheme ->
                 let ty, next = instantiate (recordReference expr scheme state) scheme
-                let ty =
+                let ty, next =
                     match state.ContextRequirements |> Map.tryFind (canonicalName env state qualifiedName) with
-                    | Some written -> ContextVariables.ofNamedValue written scheme.Type ty
-                    | None -> ty
+                    | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
+                    | None -> ty, next
                 Ok (mkTypedExpr expr ty None None None, next)
             | None -> readMember env state expr baseExpr (Some baseName) memberName memberSpan
         | _ -> readMember env state expr baseExpr None memberName memberSpan
@@ -1435,7 +1436,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let scheme, generalizedState =
                                 if WorkflowRests.isRest name then TypeEnv.mono declaredTy, current
                                 // A cell holds values of one type: its own, not one for each use.
-                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell symbol (NumericLiterals.settleWithin [ declaredTy ] current)
+                                elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell env' symbol (NumericLiterals.settleWithin [ declaredTy ] current)
                                 else ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
                             current <-
                                 let used =

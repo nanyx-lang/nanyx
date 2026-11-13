@@ -28,7 +28,7 @@ module internal DeferredErrors =
     /// so it writes why it stopped without a code.
     let internal deferErrors (failed: Map<NodeId, Diagnostic list>) (mismatches: Map<SourceSpan, Diagnostic>) (unhandled: Map<NodeId, Diagnostic list>) (unknownTypeUses: Set<NodeId>) (placed: System.Collections.Generic.HashSet<string>) (expr: Expression) =
         let panicWith (node: Expression) (message: string) =
-            FunctionCall("__panic", None, [ Expression.from node (LiteralExpr (StringLit message)) ])
+            FunctionCall(PanicSyntax.builtIn, None, [ Expression.from node (LiteralExpr (StringLit message)) ])
         let panic (node: Expression) (diagnostics: Diagnostic list) =
             let messages = diagnostics |> List.map deferredMessage
             messages |> List.iter (placed.Add >> ignore)

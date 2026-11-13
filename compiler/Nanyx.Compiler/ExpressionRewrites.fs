@@ -175,7 +175,7 @@ module internal ExpressionRewrites =
     /// a `for` loop's body names it and does not declare it.
     let private writeCellsIn (state: InferState.InferState) (expr: Expression) : Expression =
         let within = SyntaxTree.expressionsWithin expr
-        let cellOf (node: Expression) = state.References |> Map.tryFind node.Id |> Option.filter state.Cells.Contains
+        let cellOf (node: Expression) = state.References |> Map.tryFind node.Id |> Option.filter state.Cells.ContainsKey
         let loopBodies = within |> List.choose (fun node -> match node.Kind with ForSyntax.Call(_, loop, _, _) -> Some loop.Id | _ -> None) |> Set.ofList
         let lambdas = within |> List.filter (fun node -> match node.Kind with Lambda _ -> not (loopBodies.Contains node.Id) | _ -> false)
         let captured =

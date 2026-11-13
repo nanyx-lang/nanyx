@@ -142,7 +142,7 @@ module Unifier =
                 match ret with
                 | TyFunc(_, _, _ :: _) -> $"({printTy spread false ret})"
                 | _ -> printTy spread false ret
-            match writtenContexts contexts with
+            match writtenContexts contexts |> List.map FunctionContexts.withoutScope with
             | [] -> $"{argText} -> {retText}"
             | written ->
                 $"""[{written |> List.map (printTy spread false) |> String.concat ", "}] {argText} -> {retText}"""
@@ -185,8 +185,8 @@ module Unifier =
             | Some (TyPrimitive "unit") -> $"#{name}()"
             | Some payload -> $"#{name}({bareTuple payload |> Option.defaultWith (fun () -> printTy spread false payload)})"
             | None -> $"#{name}"
-        // A context with no arguments is written by its name: `Console`.
-        | TyApply(name, []) -> name
+        // A context with no arguments is written by its name: `Console`, and `$Memory` without its scope.
+        | FunctionContexts.PlainContext name -> name
         | TyApply(name, [ arg ]) -> $"{name}({soleArgument arg})"
         | TyApply(name, args) -> $"{name}({items args})"
         // A union of no tags has no values: the bottom type.
@@ -210,7 +210,8 @@ module Unifier =
             | TyPrimitive _
             | TyNominal _ -> []
             | TyAlias(_, args, _) -> args |> List.collect collect
-            | TyFunc(arg, ret, contexts) -> (writtenContexts contexts |> List.collect collect) @ collect arg @ collect ret
+            | TyFunc(arg, ret, contexts) ->
+                (writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
             | TyRecord fields ->
                 match tryTupleLikeRecord fields with
                 | Some tupleItems, namedFields ->
@@ -218,6 +219,7 @@ module Unifier =
                 | None, _ -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> collect (TyRecord fields) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
+            | FunctionContexts.ScopedContext _ -> []
             | TyApply(_, args) -> args |> List.collect collect
             | TyUnion items -> items |> List.collect collect
         collect ty

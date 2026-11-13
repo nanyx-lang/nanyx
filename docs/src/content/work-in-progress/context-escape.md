@@ -85,7 +85,8 @@ members have no declared types to fit: `log` is `[Console] string -> ()`, and a 
 
 # Escape from a memory block
 
-A lambda over a cell must not leave its `memory` block. Today NYX0224 rejects this, and it must stay rejected:
+A lambda over a cell must not leave its `memory` block. NYX0233 rejects this, as NYX0224, a check of the syntax, did
+before scoped contexts:
 
 ```nanyx
 def tryToFool = {
@@ -183,8 +184,6 @@ checks, since a lambda with no parameters ignores one.
   `[Console] (f: string -> ())`, and `Log(log = { m -> println(m) })` would be `[Console] Log`, which `use` would
   require. That is the general design in [Context-qualified types](./context-qualified-types), and it would let an
   instance built as a value discharge a context, as one written at a `use` can.
-- **Diagnostics.** The escape error should name the cell or member that introduced the requirement, and give the
-  supplying `memory` call as a related span, as NYX0224 does today.
 
 # Plan
 
@@ -193,12 +192,27 @@ checks, since a lambda with no parameters ignores one.
 2. ~~Make a lambda that uses a cell require `$Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
    Done: a read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so
    `{ word -> count := count + 1 }` is `[$Memory] string -> ()`, and a lambda that calls it requires `$Memory` too.
-   NYX0224 still keeps such a lambda in its block.
 3. ~~Parse and format `scoped context`, which must be nominal~~ ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
    Done: the parser records `Scoped` (with the keyword's span) among the definition's modifiers,
    `TypeDefInfo.IsScoped` carries it, a scoped context that isn't nominal is NYX0232, and `$Memory` is declared
-   `scoped`. Nothing checks escape by it yet.
-4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
-   ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3).
+   `scoped`.
+4. ~~Keep what requires a scoped context inside the call that supplies it, replacing NYX0224~~
+   ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057)). Done in two steps:
+   - The scope is carried in types: a scoped context in a type is `TyApply("$Memory", [scope])`, the scope wrapped so
+     that `FunctionContexts.ScopedContext` knows it (`FunctionContexts.scoped`). Every scoped context of a name that one
+     signature writes shares a scope (`WrittenContexts.read`), and a def's own `$Memory`, where the def is named or
+     called, takes the scope its type has there (`WrittenContexts.plain`). The printer leaves the scope out
+     (`FunctionContexts.withoutScope`), and so does the backend (`CoreIrLowerTypes.concreteContexts`).
+   - `ScopedCalls.fs` checks it. At each call, `enter` finds what the callee supplies from its type: a scoped context a
+     parameter's type requires, of a scope the callee's type is generalised over, that its own contexts don't name. The
+     scope that is instantiated to is the call's, open while its arguments are checked, and a `memory` block's cells
+     take it (`MemoryCells.aroundCall`). Once they are checked, `leave` reports NYX0233 if the scope became one of the
+     scopes still open around the call or one a signature writes (the annotated `run`, at what would carry it out), or
+     if the call's result mentions it (`tryToFool`, at the use of the cell that brought it in), with the call as a
+     related span. The call keeps its type, so nothing around it fails as well. The scope is an ordinary variable
+     otherwise: `FunctionContexts.fit` gives a function value's context variable the scoped contexts the block it is
+     called in is given, so `{ mk -> memory { mk() } }` is generalised over the scope and supplies `$Memory` in turn.
+     Contexts are paired with the same scope first, so a block's requirement of an outer block's `$Memory` goes into
+     its context variable.
 5. Give a `memory` block its instance, `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058),
    after 4).

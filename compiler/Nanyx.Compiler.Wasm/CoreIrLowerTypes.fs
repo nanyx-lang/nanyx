@@ -44,9 +44,12 @@ let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map go, go underlying)
 
 /// The contexts a function type requires that are contexts rather than context variables: a variable still free
-/// stands for none.
+/// stands for none. A scoped context's scope means nothing at run time, so it is left out.
 let concreteContexts (contexts: Ty list) : Ty list =
-    FunctionContexts.flatten contexts |> List.filter (FunctionContexts.isVariable >> not) |> List.distinct
+    FunctionContexts.flatten contexts
+    |> List.filter (FunctionContexts.isVariable >> not)
+    |> List.map FunctionContexts.withoutScope
+    |> List.distinct
 
 /// The definition and arguments of the recursive alias `ty` refers to, through any aliases of it (see
 /// `RecursiveAliases`).

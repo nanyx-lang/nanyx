@@ -265,7 +265,7 @@ module NonTailRecursion =
             snd (SyntaxTree.childrenOf expr)
             |> List.choose (fun statement ->
                 match statement.Kind with
-                | DefStatement(_, _, _, Kind (FunctionCall("__rec", _, [ Kind (Lambda _) as lambda ]))) -> Some (statement.Span, lambda)
+                | DefStatement(_, _, _, Kind (RecSyntax.Call (Kind (Lambda _) as lambda))) -> Some (statement.Span, lambda)
                 | _ -> None)
         (items |> List.collect topLevel) @ (expressions |> List.collect local)
 
@@ -840,7 +840,7 @@ module UnusedResults =
         | SpreadSyntax.Call _ -> "This record"
         | RangeSyntax.Call _ -> "This range"
         | MapSyntax.Call _ -> "This map"
-        | FunctionCall(name, _, _) when name.StartsWith "__" -> "This value"
+        | FunctionCall(name, _, _) when MadeUpNames.isMadeUp name -> "This value"
         | FunctionCall(name, _, _)
         | Pipe(_, name, _, _)
         | ContextMemberCall(_, name, _) -> $"The result of `{name}`"

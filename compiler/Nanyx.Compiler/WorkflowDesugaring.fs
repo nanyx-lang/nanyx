@@ -137,7 +137,7 @@ module WorkflowDesugaring =
             | Lambda _ -> false
             // A loop's body is a lambda, but a keyword in it is the block's (see `desugarLoop`).
             | ForSyntax.Call(iterables, _, _, body) -> List.exists usesKeyword iterables || usesKeyword body
-            | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (name.StartsWith "__") -> false
+            | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (MadeUpNames.isMadeUp name) -> false
             | FunctionCall(_, _, args)
             | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
             | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
@@ -314,7 +314,7 @@ module WorkflowDesugaring =
             // A block written after a builder's name, `proc { ... }`: when the block uses a workflow keyword, it
             // is the block itself, with its keywords calling the builder's members (see `workflowCall`). The
             // documented `proc.apply({ ... })` around it is not made yet: the block runs where it is written.
-            | FunctionCall(name, rangeOpt, [ Kind (Lambda([], body, takesUnit)) as lambda ]) when not (name.StartsWith "__") ->
+            | FunctionCall(name, rangeOpt, [ Kind (Lambda([], body, takesUnit)) as lambda ]) when not (MadeUpNames.isMadeUp name) ->
                 let outerBuilder, outerUsed, outerUnreachable = builder, builderUsed, unreachable
                 builder <- Some name
                 builderUsed <- false

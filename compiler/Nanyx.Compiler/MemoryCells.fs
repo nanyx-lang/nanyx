@@ -1,7 +1,7 @@
 /// Local mutable cells (see the memory page of the docs): `mut x = e` declares one, `x := e` replaces what it holds, and its
 /// name anywhere else reads it. A cell can only be made in a `memory { ... }` block, the prelude's `memory` with a
-/// block, which is where `$Memory` is. A lambda that uses a cell of the block around it needs `$Memory` too, so it
-/// must not outlive the block.
+/// block, which is where `$Memory` is. A lambda that uses a cell of the block around it needs `$Memory` of the block's
+/// scope too, so it cannot outlive the block (see `ScopedCalls`).
 module internal NyxCompiler.MemoryCells
 
 open Parser.Program
@@ -13,8 +13,9 @@ let context = "$Memory"
 /// The function that provides `$Memory` for the block it is given, as the prelude declares it.
 let memoryFunction = "memory"
 
-/// The name the environment binds while a `memory` block is checked: what tells a `mut` declaration that `$Memory` is there. No code
-/// can write it.
+/// The name the environment binds while a `memory` block is checked, to the block's scope (see
+/// `FunctionContexts.scoped`): what tells a `mut` declaration that `$Memory` is there, and which scope its cell belongs
+/// to. No code can write it.
 let private scopeKey = "@memory"
 
 /// Whether a call to `name` is a call to the prelude's `memory`, rather than to a definition of the same name: one
@@ -26,26 +27,34 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
        | Some file, Some contextFile -> file = contextFile
        | _ -> false
 
-/// The environment the arguments of a call to `name` are checked in: one where `$Memory` is, for the prelude's `memory`.
-let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) : TypeEnv =
-    if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono (TyPrimitive "unit")) env else env
+/// The environment the arguments of a call to `name` are checked in, where the call supplies `$Memory` of `scope`: one
+/// where cells can be made, of that scope, for the prelude's `memory`.
+let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty) : TypeEnv =
+    if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono scope) env else env
+
+/// The scope of the cell `name`, as `env` binds it, if it is one.
+let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty option =
+    TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind state.Cells.TryFind
 
 /// Whether `name`, as `env` binds it, is a cell.
-let isCell (env: TypeEnv) (state: InferState) (name: Identifier) =
-    match TypeEnv.tryFind name env |> Option.bind _.Symbol with
-    | Some symbol -> state.Cells.Contains symbol
-    | None -> false
+let isCell (env: TypeEnv) (state: InferState) (name: Identifier) = (scopeOf env state name).IsSome
 
-/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `$Memory`, which the lambda around it
-/// requires (see `LambdaContexts`).
+/// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `$Memory` of the cell's block, which
+/// the lambda around it requires (see `LambdaContexts`).
 let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState =
-    if isCell env state name then LambdaContexts.record [ TyApply(context, []) ] state else state
-
-/// Records that the local def `symbol` is a cell.
-let declareCell (symbol: SymbolId option) (state: InferState) =
-    match symbol with
-    | Some symbol -> { state with Cells = state.Cells.Add symbol }
+    match scopeOf env state name with
+    | Some scope -> LambdaContexts.record [ FunctionContexts.scoped context scope ] state
     | None -> state
+
+/// Records that the local def `symbol` is a cell, of the scope of the `memory` block `env` is in. One made outside a
+/// block, which is an error, has a scope of its own.
+let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
+    match symbol, TypeEnv.tryFind scopeKey env with
+    | Some symbol, Some scope -> { state with Cells = state.Cells |> Map.add symbol scope.Type }
+    | Some symbol, None ->
+        let scope, next = freshVar state
+        { next with Cells = next.Cells |> Map.add symbol scope }
+    | None, _ -> state
 
 /// The value of a cell's declaration, `mut x = value`, at `expr`: a cell holding `value`, of its type. It needs `$Memory`.
 let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (value: Expression) =
@@ -73,34 +82,3 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
 /// The code of a type mismatch found at `span`: an assignment's own when it is one of the module's `:=`s.
 let mismatchCode (state: InferState) (span: SourceSpan) =
     if state.CellAssignments.Contains span then DiagnosticCodes.CellAssignmentMismatch else DiagnosticCodes.TypeMismatch
-
-/// The error, if any, for the `memory` block at `call`, whose block is `block`: its result must not be, or hold, a
-/// lambda that uses one of its cells, which would let the cell outlive the block. A lambda uses a cell when it names
-/// one from outside itself, or a local function that uses one (see `EscapingLambdas.tryFind`).
-let checkEscape (state: InferState) (call: Expression) (block: Expression) : Diagnostic list =
-    match block.Kind with
-    | Lambda([], body, _) ->
-        let result = EscapingLambdas.resultOf body
-        let declaredWithin (span: SourceSpan) (symbol: SymbolId) =
-            state.Symbols |> Map.tryFind symbol |> Option.exists (fun declared -> SourceSpan.contains span declared.Declaration)
-        let usesCell (lambda: Expression) (node: Expression) =
-            match state.References |> Map.tryFind node.Id with
-            | Some symbol -> state.Cells.Contains symbol && not (declaredWithin lambda.Span symbol)
-            | None -> false
-        match EscapingLambdas.tryFind state usesCell (SyntaxTree.blocksWithin body) result with
-        | Some _ ->
-            let message =
-                $"The result of this `{memoryFunction}` block holds a lambda that uses its cells, which needs '{context}' and so cannot leave the block: return what the cells hold instead"
-            [ Diagnostics.at DiagnosticCodes.CellEscapesMemory result.Span message |> Diagnostics.withRelated call.Span "the block" ]
-        | None -> []
-    | _ -> []
-
-/// `state` once the call `call` to `name` is checked, or the error if it is a `memory` block whose cells escape it
-/// (see `checkEscape`).
-let checkCall (env: TypeEnv) (call: Expression) (name: Identifier) (state: InferState) : Result<InferState, Diagnostic list> =
-    match call.Kind with
-    | FunctionCall(_, _, [ block ]) when isMemoryCall env state name ->
-        match checkEscape state call block with
-        | [] -> Ok state
-        | errors -> Error errors
-    | _ -> Ok state
