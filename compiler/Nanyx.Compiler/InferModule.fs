@@ -423,7 +423,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             match used.Caller with
             | DefScope(caller, false) ->
                 for ctxName in Set.difference required.[used.Callee] used.Available do
-                    errors <- errors @ [ undeclaredContext caller ctxName $"'{used.Callee}' requires" used.Span |> ContextFixes.withAddToType state caller ctxName ]
+                    errors <- errors @ [ undeclaredContext state caller ctxName $"'{used.Callee}' requires" used.Span |> ContextFixes.withAddToType state caller ctxName ]
             | ValueScope caller ->
                 for ctxName in Set.difference required.[used.Callee] used.Available do
                     errors <- errors @ [ contextInValue caller ctxName $"'{used.Callee}' requires" used.Span ]

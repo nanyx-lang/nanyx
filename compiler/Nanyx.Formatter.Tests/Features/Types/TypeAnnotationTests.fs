@@ -19,3 +19,11 @@ let ``A hole in a type is printed as written`` () =
     unchanged (lines [ "def f: int, _ -> _ = { a, b ->"; "  a + b"; "}" ])
     unchanged "def g = { (x: _), y -> x + y }\n"
     Assert.Equal("def m: map(string, _) = m\n", format "def m:map(string,_)=m")
+
+[<Fact>]
+let ``An empty context list is kept, as it says on purpose that a function requires no contexts`` () =
+    unchanged "def write: [] string -> () = { s -> () }\n"
+    unchanged (lines [ "def apply: ([] int -> int), int -> int = { f, x ->"; "  f(x)"; "}" ])
+    unchanged "type Handler = [] string -> ()\n"
+    unchanged "context Logger = (log: [] string -> ())\n"
+    Assert.Equal("def write: [] string -> () = { s -> () }\n", format "def write:[ ] string->()={s->()}")

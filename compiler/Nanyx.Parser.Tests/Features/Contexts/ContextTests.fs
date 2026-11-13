@@ -223,3 +223,17 @@ def main = {
 [<Fact>]
 let ``use of a call is not an instance written out`` () =
     Assert.Empty(instancesUsedIn "def main = {\n  use Console(println = log)\n  use makeAdd(int)(zero)\n  1\n}")
+
+[<Fact>]
+let ``An empty context list says a function requires no contexts, wherever a context list can be written`` () =
+    let parsesWithEmptyContexts (source: string) =
+        match parseModule source with
+        | Result.Ok _ -> ()
+        | Result.Error err -> failwith $"Expected '{source}' to parse: {err}"
+    parsesWithEmptyContexts "def write: [] string -> () = { s -> () }"
+    parsesWithEmptyContexts "def apply: ([] int -> int), int -> int = { f, x -> f(x) }"
+    parsesWithEmptyContexts "type Handler = [] string -> ()"
+    parsesWithEmptyContexts "context Logger = (log: [] string -> ())"
+    match parseModule "def write: [] string -> () = { s -> () }" with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, Some { Kind = TypeWithContext ([], { Kind = TypeFunc _ }) }, _))) ] -> ()
+    | other -> failwith $"Unexpected parse: %A{other}"
