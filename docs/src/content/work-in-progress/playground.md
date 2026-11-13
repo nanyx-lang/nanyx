@@ -95,9 +95,10 @@ The first version has no input: a program that reads it gets an end of input, an
 # Plan
 
 1. **Measure the compiler in the browser.** Publish the CLI's compile path for `browser-wasm`, trimmed, and measure
-   the download, the start-up and the compile time of a few tour examples. This decides "Where the compiler runs".
+   the download, the start-up and the compile time of a few tour examples. This decides "Where the compiler runs"
+   ([#1234](https://github.com/nanyx-lang/nanyx/issues/1234)).
 2. **Write `.wasm`.** The compiler writes the binary format, for `nanyx build` too, with tests that the binary runs as
-   the text does.
+   the text does ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)).
 3. **An entry the page can call.** The module exports its entry, or imports its memory, and `proc_exit` unwinds. A
    runner script, in a worker, provides `fd_write`, `fd_read` and `proc_exit` and runs a module end to end in a
    headless browser test.

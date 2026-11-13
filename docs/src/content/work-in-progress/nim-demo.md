@@ -27,8 +27,7 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
 (`player.other` and `p.show`, which are now `player \other` and `p \show`), it calls `Math.max` (now `math.max` from
 `nanyx/math`), and it uses a `Random` context the standard library doesn't have. Under the
 [contexts-are-not-types proposal](./context-escape#proposal-contexts-are-not-types), its named instances (`perfect`,
-`cheating`) and `bobChooses` would become handler functions too. Nothing compiles `examples/` in the tests, so nothing
-noticed.
+`cheating`) and `bobChooses` would become handler functions too.
 
 # The demo
 
@@ -73,8 +72,9 @@ worth an issue of its own; the demo is one user.
 # Plan
 
 1. **Make `examples/Nim.nyx` compile and run** on the current language, without `Random` at first (Bob chooses from a
-   fixed list), and run the examples in the tests, as the tour's are, so they stay working.
-2. **A `Random` context** in the standard library, supplied by the CLI's host and seedable in tests. Then the coin-flip
+   fixed list) ([#1238](https://github.com/nanyx-lang/nanyx/issues/1238)).
+2. **A `Random` context** in the standard library, supplied by the CLI's host and seedable in tests
+   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)). Then the coin-flip
    scoreboard comes back.
 3. **Nim in the playground**, as one of its examples, once the playground exists.
 4. **The page version**, on the browser host: the menus, human moves, the "Check moves" switch and the scoreboard.
