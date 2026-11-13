@@ -278,8 +278,9 @@ type InferState =
             /// node of the hole or the comparison: the definition's name, and where the call finds each context
             /// that definition requires.
             DerivedCalls: Map<NodeId, Identifier * ContextInstance option list>;
-            /// The local defs that are cells, made with `mut` (see `MemoryCells`).
-            Cells: Set<SymbolId>;
+            /// The local defs that are cells, made with `mut`, each with the scope of the `memory` block it belongs to (see
+            /// `MemoryCells`).
+            Cells: Map<SymbolId, Ty>;
             /// Where each `:=` is written: a type mismatch there is the assignment's (see `MemoryCells.mismatchCode`).
             CellAssignments: Set<SourceSpan>;
             /// The contexts each lambda being inferred uses so far, the innermost first (see `LambdaContexts`).
@@ -367,7 +368,7 @@ let emptyState =
             DerivedInstances = Map.empty;
             DerivedDefs = [];
             DerivedCalls = Map.empty;
-            Cells = Set.empty;
+            Cells = Map.empty;
             CellAssignments = Set.empty;
             LambdaContexts = [];
             BodyLambdas = Set.empty;

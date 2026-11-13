@@ -99,15 +99,15 @@ let boundAt (resolve: Ty -> Ty) (declared: Set<Identifier>) (general: Ty) (insta
 
 /// The type of a def named as a value rather than called, `ty` being its type there and `general` its type as
 /// declared: a function that requires `written`, the def's own contexts, where it is called. A parameterised context is
-/// found where the def is named, as a call finds it, and is not carried.
-let ofNamedValue (written: TypeExpr list) (general: Ty) (ty: Ty) : Ty =
+/// found where the def is named, as a call finds it, and is not carried (see `WrittenContexts.plain`).
+let ofNamedValue (written: TypeExpr list) (general: Ty) (ty: Ty) (state: InferState) : Ty * InferState =
     match Unifier.unalias ty with
     | TyFunc(input, output, own) ->
-        let plain = written |> List.choose (fun ctx -> match ctx.Kind with TypeName name -> Some (TyApply(name, [])) | _ -> None)
+        let plain, next = WrittenContexts.plain state ty written
         match plain @ instantiatedIn (names written) general ty with
-        | [] -> ty
-        | required -> TyFunc(input, output, own @ required |> List.distinct)
-    | _ -> ty
+        | [] -> ty, next
+        | required -> TyFunc(input, output, own @ required |> List.distinct), next
+    | _ -> ty, state
 
 /// What it takes for a call to `callee` at `span` to require `contexts` (see `boundAt`) where it is, in the def or
 /// at the top level `state.ContextScope` says: `requirePlain` checks a context such as `Console`, as if the callee
@@ -127,7 +127,7 @@ let require
         result
         |> Result.bind (fun current ->
             match context, current.ContextScope with
-            | TyApply(name, []), _ -> requirePlain current (TypeExpr.synthetic (TypeName name))
+            | FunctionContexts.PlainContext name, _ -> requirePlain current (TypeExpr.synthetic (TypeName name))
             | TyVar { Name = Some var }, DefScope(defName, false) ->
                 let declared = current.ContextRequirements |> Map.tryFind defName |> Option.map names |> Option.defaultValue Set.empty
                 if declared.Contains var then Ok current

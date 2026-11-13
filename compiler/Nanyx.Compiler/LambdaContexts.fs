@@ -58,7 +58,7 @@ let private suppliedWithin (env: TypeEnv) (state: InferState) (ctx: Ty) : bool =
         | Some (FromUse value) -> state.UseDepths |> Map.tryFind value |> Option.exists (fun loaded -> loaded >= depth)
         | _ -> false
     match ctx with
-    | TyApply(name, []) ->
+    | FunctionContexts.PlainContext name ->
         match state.TypeDefs |> Map.tryFind name with
         | Some info when info.IsContext && not info.Members.IsEmpty -> info.Members |> Map.forall (fun memberName _ -> loadedWithin memberName)
         | _ -> false
@@ -112,10 +112,11 @@ let recordRunHere (lambdaTy: Ty) (state: InferState) : InferState =
     | _ -> state
 
 /// `state` with the plain contexts among `written`, contexts as a def's type writes them, recorded as used (see
-/// `recordUnsupplied`). A parameterised context, or one written by its members, is found where the lambda is made.
+/// `recordUnsupplied`). A parameterised context, or one written by its members, is found where the lambda is made. A
+/// scoped context is of a scope of its own (see `WrittenContexts.plain`).
 let recordWritten (env: TypeEnv) (written: TypeExpr list) (state: InferState) : InferState =
-    let plain = written |> List.choose (fun ctx -> match ctx.Kind with TypeName name -> Some (TyApply(name, [])) | _ -> None)
-    recordUnsupplied env plain state
+    let plain, next = WrittenContexts.plain state (TyPrimitive "unit") written
+    recordUnsupplied env plain next
 
 /// The context whose member `name`, as `env` binds it, is: of the ambient instance, of one a def around declares, or of
 /// one a `use` of a value of the context's type loads (`use Foo(bar = ...)`). `None` for any other name, including a

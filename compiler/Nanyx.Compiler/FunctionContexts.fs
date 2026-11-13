@@ -7,6 +7,34 @@ open Parser.Program
 /// require fewer: a pure function fits where one requiring `Console` is expected. A context variable takes the contexts
 /// the other list has and its own does not, as a union's rest takes the tags it does not name.
 module FunctionContexts =
+    /// What a scoped context's scope is wrapped in (see `scoped`). No name written in source can be it.
+    let private scopeTag = "@scope"
+
+    /// The scoped context `name` (`scoped context $Memory = ()`) of the scope `scope`, a type variable: the call that
+    /// supplies the context starts the scope, and every requirement of it inside belongs to it. A reader never sees the
+    /// scope (see `withoutScope`), and the backend leaves it out.
+    let scoped (name: string) (scope: Ty) : Ty = TyApply(name, [ TyApply(scopeTag, [ scope ]) ])
+
+    /// A scoped context's name and its scope (see `scoped`).
+    let (|ScopedContext|_|) (context: Ty) : (string * Ty) option =
+        match context with
+        | TyApply(name, [ TyApply(tag, [ scope ]) ]) when tag = scopeTag -> Some (name, scope)
+        | _ -> None
+
+    /// The name of a context that takes no arguments a reader writes: `Console`, or a scoped context, whose scope is not
+    /// one.
+    let (|PlainContext|_|) (context: Ty) : string option =
+        match context with
+        | TyApply(name, []) -> Some name
+        | ScopedContext(name, _) -> Some name
+        | _ -> None
+
+    /// `context` as a reader writes it: a scoped context without its scope.
+    let withoutScope (context: Ty) : Ty =
+        match context with
+        | ScopedContext(name, _) -> TyApply(name, [])
+        | _ -> context
+
     /// A context's name and its arguments, or `None` for a context variable.
     let nameOf (context: Ty) : (string * Ty list) option =
         match context with

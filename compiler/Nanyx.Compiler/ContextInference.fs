@@ -16,11 +16,13 @@ module internal ContextInference =
             match ty with
             | TyVar v -> [ v ]
             | TyPrimitive _
-            | TyNominal _ -> []
+            | TyNominal _
+            | FunctionContexts.ScopedContext _ -> []
             | TyAlias(_, args, _)
             | TyApply(_, args)
             | TyUnion args -> args |> List.collect collect
-            | TyFunc(arg, ret, contexts) -> (Unifier.writtenContexts contexts |> List.collect collect) @ collect arg @ collect ret
+            | TyFunc(arg, ret, contexts) ->
+                (Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
             | TyRecord fields -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.collect (snd >> collect)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
@@ -54,7 +56,7 @@ module internal ContextInference =
                 // A context is written by its name alone when it has no arguments: `Console`, not `Console()`.
                 let context ty =
                     match ty with
-                    | TyApply(name, []) -> Some (TypeExpr.synthetic (TypeName name))
+                    | FunctionContexts.PlainContext name -> Some (TypeExpr.synthetic (TypeName name))
                     | _ -> typeExprOf names ty
                 let written = Unifier.writtenContexts contexts |> List.map context
                 match typeExprOf names arg, typeExprOf names ret with
