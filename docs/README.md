@@ -37,12 +37,12 @@ Deploy to production by running the [Docs workflow](../.github/workflows/docs.ym
 from the Actions tab or with:
 
 ```sh
-gh workflow run Docs              # deploys main
-gh workflow run Docs --ref <branch>   # deploys that branch, to production
+gh workflow run Docs
 ```
 
-It needs the repository secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
-`VERCEL_PROJECT_ID`. Nothing deploys unless someone runs it.
+It calls the Vercel Deploy Hook stored in the `VERCEL_DEPLOY_HOOK` repository
+secret, and Vercel builds and deploys `main`. Nothing deploys unless someone
+runs it.
 
 Or deploy with the Vercel CLI, from the repository root (the Vercel
 project's root directory is `docs/`):
