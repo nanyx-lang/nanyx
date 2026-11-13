@@ -127,6 +127,7 @@
     <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
+    <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
     <Compile Include="Features\Types\RecordSpreadTests.fs" />
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />

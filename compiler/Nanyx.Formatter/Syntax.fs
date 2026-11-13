@@ -94,6 +94,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | TypeUnit -> t.Kind
             | TypeTuple items -> TypeTuple(List.map typeExpr items)
             | TypeRecord fields -> TypeRecord(List.map typeField fields)
+            | TypeOpenRecord(fields, row) -> TypeOpenRecord(List.map typeField fields, row)
             | TypeApply(n, args) -> TypeApply(n, List.map typeExpr args)
             | TypeFunc(a, b) -> TypeFunc(typeExpr a, typeExpr b)
             | TypeTag(n, payload) -> TypeTag(n, Option.map typeExpr payload)

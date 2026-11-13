@@ -280,7 +280,8 @@ and private expressionsOfType (typeExpr: TypeExpr) =
     | TypeIntersection types
     | TypeContext types
     | TypeApply (_, types) -> types |> List.collect expressionsOfType
-    | TypeRecord fields ->
+    | TypeRecord fields
+    | TypeOpenRecord (fields, _) ->
         fields |> List.collect (function
             | TypeField (_, _, fieldType, defaultValue) ->
                 (fieldType |> Option.toList |> List.collect expressionsOfType)
@@ -382,7 +383,8 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
         | TypeIntersection types
         | TypeContext types
         | TypeApply (_, types) -> types |> List.collect typesWithin
-        | TypeRecord fields ->
+        | TypeRecord fields
+        | TypeOpenRecord (fields, _) ->
             fields |> List.collect (function
                 | TypeField (_, _, fieldType, _)
                 | TypeMember (_, fieldType) -> fieldType |> Option.toList |> List.collect typesWithin)

@@ -315,5 +315,9 @@ let parameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * 
                 | Some ty, _
                 | None, Some ty -> ty
                 | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
+        // An open record of at least the parameters' fields, `(x: int, y: int, ...)`, or one its row is bound to a record
+        // with more: each parameter takes the field of its name.
+        | TyRecord fields
+        | TyOpenRecord(fields, _) when several |> List.forall fields.ContainsKey -> several |> List.map (fun name -> fields.[name]), result
         | _ -> cannot "a function whose parameters are not a tuple"
     | _ -> cannot "a definition whose type is not a function"

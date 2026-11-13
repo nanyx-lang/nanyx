@@ -29,7 +29,8 @@ let rec private unboundIn (bound: Set<Identifier>) (inFunction: bool) (typeExpr:
     | TypeUnion items
     | TypeIntersection items -> items |> List.collect within
     | TypeApply(_, items) -> items |> List.collect (unboundIn bound false)
-    | TypeRecord fields ->
+    | TypeRecord fields
+    | TypeOpenRecord(fields, _) ->
         fields
         |> List.collect (function
             | TypeField(_, _, Some t, _)

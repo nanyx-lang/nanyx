@@ -258,3 +258,10 @@ def r = s
 let ``A module's own reserved names are offered in it`` () =
     let source = "def __twice = { n -> n * 2 }\ndef four = __twice(2)\n"
     Assert.Equal<string list>([ "__twice" ], reserved (ownNamesAt source (offsetOf source "def four" 0 0) |> List.map fst))
+
+[<Fact>]
+let ``After a value of an open record type come the fields its type lists`` () =
+    let source = "def g: (x: int, name: string, ...) -> int = { p -> p.x }\n"
+    Assert.Equal<(string * Completion.MemberKind * string option) list>(
+        [ "name", Completion.Field, Some "string"; "x", Completion.Field, Some "int" ],
+        membersIn (Compiler.compile source) source "p.x }" [ "p" ])

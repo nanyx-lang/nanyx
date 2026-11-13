@@ -27,3 +27,9 @@ let ``An empty context list is kept, as it says on purpose that a function requi
     unchanged "type Handler = [] string -> ()\n"
     unchanged "context Logger = (log: [] string -> ())\n"
     Assert.Equal("def write: [] string -> () = { s -> () }\n", format "def write:[ ] string->()={s->()}")
+
+[<Fact>]
+let ``An open record type keeps its ... and the name of its other fields`` () =
+    unchanged (lines [ "def g: (x: int, y: int, ...) -> int = { x, y ->"; "  x + y"; "}" ])
+    unchanged (lines [ "def moveRight: (x: int, ...r) -> (x: int, ...r) = { p ->"; "  p with x = p.x + 1"; "}" ])
+    Assert.Equal("def p: (x: int, ...r) = p\n", format "def p:(x:int,...r)=p")

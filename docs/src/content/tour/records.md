@@ -113,19 +113,23 @@ This is what makes named arguments safe. A function's parameters are a record, s
 
 To accept any record that has _at least_ some fields, end the type with `...`. This makes it _open_:
 
-```nanyx skip=#471
+```nanyx
 def g: (x: int, y: int, ...) -> int = { x, y -> x + y }
 
-g(data) -- `z` is one of the other fields
+def data = (x = 1, y = 2, z = 3)
+
+println(g(data)) -- 3: `z` is one of the other fields
 ```
 
 Give the other fields a name, as in `...r`, when a type needs to say that two records have the same ones. Here, whatever else the input has, the output has too:
 
-```nanyx skip=#471
+```nanyx
 def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> p with x = p.x + 1 }
 
 def moved = moveRight((x = 1, y = 2, label = "a"))
 -- moved: (label: string, x: int, y: int)
+
+println("{moved.label} is at {moved.x}") -- a is at 2
 ```
 
 `...` only covers named fields. A record's positional fields are always exactly the ones its type lists, so a function of two positional parameters can't be called with three.

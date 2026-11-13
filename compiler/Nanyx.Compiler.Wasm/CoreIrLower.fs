@@ -522,16 +522,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         k (mk (Call(target, atoms @ List.map snd members)) ty)))
             // The arguments as the callee takes them.
             match SyntaxTree.flattenCallArgs args with
-            | [ Kind (IdentifierExpr record) ] when parameters.Length > 1 && scope.Vars.ContainsKey record ->
-                // A record passed to a function of several parameters: each parameter takes a field.
-                let var = scope.Vars.[record]
-                match var.Type with
-                | IrRecord fields when fields.Length = parameters.Length ->
-                    let rec loadFields (slot: int) (acc: Atom list) =
-                        if slot = fields.Length then call (List.rev acc)
-                        else bindTemp (mk (Field(AVar var, slot)) (snd fields.[slot])) (fun atom -> loadFields (slot + 1) (atom :: acc))
-                    loadFields 0 []
-                | _ -> cannot $"a call to '{name}' with one argument for its {parameters.Length} parameters"
             | [ Kind (RecordExpr fields) ] when parameters.Length > 1 && fields.Length = parameters.Length ->
                 // `f(a, step = 2)`: each parameter takes the field of its name, or else the positional field in its
                 // place.
@@ -545,6 +535,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         | None, Some value -> value
                         | None, None -> cannot $"a call to '{name}' with no argument for {parameter}")
                 this.Atoms scope ordered call
+            | [ record ] when parameters.Length > 1 && (match this.TypeIn scope record with IrRecord _ -> true | _ -> false) ->
+                // A record that is not a name in scope is held in a local of its own, as each field is read from it.
+                let fieldsOf held = CoreIrLowerArguments.fieldsAsArguments newTemp name parameters (this.TypeIn scope record) held call
+                match record.Kind with
+                | IdentifierExpr held when scope.Vars.ContainsKey held -> fieldsOf (AVar scope.Vars.[held])
+                | _ ->
+                    this.Complex scope record (fun value ->
+                        let local = newVar (uniqueName "__arguments") Local value.Type
+                        let body = fieldsOf (AVar local)
+                        mk (Let(local, value, body)) body.Type)
             | several when parameters.Length = 1 && several.Length > 1 ->
                 // `f(a, b)` and `f((a, b))` parse alike; a function of one parameter takes the whole tuple.
                 let tupleTy = IrRecord(several |> List.mapi (fun index value -> string index, tyOf value))

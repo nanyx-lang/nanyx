@@ -66,16 +66,24 @@ let internal fillTypeRefs () =
     let declaringFields (record: Parser<TypeExpr, ParseState>) =
         collectingNames record >>= fun (record, fields) -> declare RecordTypeFields record.Id fields >>% record
 
+    // `...` or `...r` after the named fields: the record has other named fields too (see `TypeOpenRecord`).
+    let otherFields =
+        attempt (recordFieldSeparator >>. pstring "...") >>. opt identifierNoWs
+
     let typeRecord =
         declaringFields (
             spannedType (
                 between
                     (pstring "(")
                     (ws >>. pstring ")")
-                    (pipe2
+                    (pipe3
                         (ws >>. positionalTypeFields)
                         namedTypeFields
-                        (fun positional named -> TypeRecord(positional @ named)))))
+                        (opt otherFields)
+                        (fun positional named others ->
+                            match others with
+                            | Some row -> TypeOpenRecord(positional @ named, row)
+                            | None -> TypeRecord(positional @ named)))))
 
     // Brackets group: `(int, a -> b)` is a function of two parameters, as it is without them, and `()` is unit.
     // A bracketed tuple spans its brackets, as a tuple pattern does; any other type in brackets is just that type.
