@@ -310,8 +310,9 @@ module IrType =
         | _ -> None
 
     /// How many parameters the lifted function `parameterNames` (its environment first) takes as a function value of
-    /// type `ty`: a lone parameter whose type is a tuple takes the tuple's elements (see `tupleElements`), and the
-    /// members of the contexts the function requires follow.
+    /// type `ty`: a lone parameter whose type is a tuple takes the tuple's elements (see `tupleElements`), one whose type
+    /// is unit takes nothing, as a function written without parameters does, and the members of the contexts the
+    /// function requires follow.
     let closureArity (parameterNames: string list) (ty: IrType) =
         let members =
             match ty with
@@ -319,6 +320,7 @@ module IrType =
             | _ -> 0
         let values =
             match parameterNames, ty with
+            | [ _; _ ], IrFunction(IrUnit, _, _) -> 1
             | [ _; _ ], IrFunction(input, _, _) ->
                 match tupleElements input with
                 | Some elements -> 1 + elements.Length
