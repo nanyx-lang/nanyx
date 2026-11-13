@@ -243,3 +243,30 @@ let ``Run - update adds a missing key and changes a present one`` () =
           """println(map.keys(more) \list.fold("", { acc, k -> acc ++ k }))""" ]
     |> runSource
     |> assertRan "3\n1\n2\nteacake\n"
+
+
+[<Fact>]
+let ``Run - union keeps the first map's keys and takes the second's values`` () =
+    program
+        [ """def show = { m -> println(m \map.toList \list.fold("", { acc, entry -> acc ++ entry.0 ++ "{entry.1}" })) }""" ]
+        [ """def defaults = ["a" => 1, "b" => 2]"""
+          """show(defaults \map.union(["c" => 3, "d" => 4]))"""
+          """show(defaults \map.union(["b" => 20, "c" => 3]))"""
+          """show(defaults \map.union(map.empty))"""
+          """show(map.union(map.empty, defaults))"""
+          """show(["b" => 2, "a" => 1] \map.union(["c" => 3, "a" => 10]))""" ]
+    |> runSource
+    |> assertRan "a1b2c3d4\na1b20c3\na1b2\na1b2\nb2a10c3\n"
+
+[<Fact>]
+let ``Run - unionWith combines the values of a key both maps have`` () =
+    program
+        [ """def show = { m -> println(m \map.toList \list.fold("", { acc, entry -> acc ++ entry.0 ++ "{entry.1}" })) }""" ]
+        [ """def counts = ["tea" => 2, "cake" => 1]"""
+          """show(counts \map.unionWith(["pie" => 4], { a, b -> a + b }))"""
+          """show(counts \map.unionWith(["cake" => 5, "pie" => 4], { a, b -> a + b }))"""
+          """show(counts \map.unionWith(["tea" => 7], { a, b -> a - b }))"""
+          """show(counts \map.unionWith(map.empty, { a, b -> a + b }))"""
+          """show(map.unionWith(map.empty, counts, { a, b -> a + b }))""" ]
+    |> runSource
+    |> assertRan "tea2cake1pie4\ntea2cake6pie4\ntea-5cake1\ntea2cake1\ntea2cake1\n"
