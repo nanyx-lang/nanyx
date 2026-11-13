@@ -59,7 +59,7 @@ module internal ArithmeticOperators =
     let private notANumber (op: string) (ty: Ty) =
         let advice =
             match op, Unifier.unalias ty with
-            | "+", (TyPrimitive "string" | TyApply("list", _)) -> ". Use ++ to join them"
+            | "+", (TyPrimitive "string" | Lists.ListType _) -> ". Use ++ to join them"
             | _ -> ""
         $"'{Unifier.tyToDisplayString Ascii ty}' cannot be used with {written op}: it is not a number{advice}"
 

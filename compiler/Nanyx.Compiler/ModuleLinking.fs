@@ -76,21 +76,17 @@ module internal ModuleLinking =
             |> List.choose (function
                 | Kind (Def (ValueDef(_, name, _, value))) -> Some (name, value)
                 | _ -> None)
-        let contextMembers =
+        // The members of the contexts whose type parameters `included` accepts.
+        let membersOfContexts (included: (Identifier * TypeExpr option) list -> bool) =
             inlined @ own
             |> List.collect (function
-                | Kind (Def (TypeDef(_, modifiers, _, Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
+                | Kind (Def (TypeDef(_, modifiers, parameters, Kind (TypeRecord fields)))) when modifiers |> List.contains Context && included parameters ->
                     fields |> List.map (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> fieldName)
                 | _ -> [])
             |> Set.ofList
+        let contextMembers = membersOfContexts (fun _ -> true)
         // The members of the contexts without parameters, which an import under an alias defines under it (`c.write`).
-        let plainContextMembers =
-            inlined @ own
-            |> List.collect (function
-                | Kind (Def (TypeDef(_, modifiers, [], Kind (TypeRecord fields)))) when modifiers |> List.contains Context ->
-                    fields |> List.map (function TypeField(fieldName, _, _, _) | TypeMember(fieldName, _) -> fieldName)
-                | _ -> [])
-            |> Set.ofList
+        let plainContextMembers = membersOfContexts List.isEmpty
         let rootNames =
             own
             |> List.collect (function

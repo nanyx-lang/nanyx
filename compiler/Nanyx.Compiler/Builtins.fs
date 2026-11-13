@@ -26,7 +26,7 @@ module Intrinsics =
 
     let private elementVar = { Id = -1; Name = Some "a" }
     let private element = TyVar elementVar
-    let private listOf (ty: Ty) = TyApply("list", [ ty ])
+    let private listOf = Lists.ofType
 
     /// Writes a string to standard output, with nothing added.
     let writeStdout = prefix + "write_stdout"

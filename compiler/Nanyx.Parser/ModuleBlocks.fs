@@ -9,35 +9,14 @@ let private qualifyModuleName (prefix: string) (name: string) =
 
 /// `typeExpr` with the types `typeMap` qualifies renamed, and the value of each `typeof` rewritten by `rewriteValue`.
 let private rewriteTypeExprInModule (typeMap: Map<string, string>) (rewriteValue: Expression -> Expression) (typeExpr: TypeExpr) : TypeExpr =
-    let rec rewrite (t: TypeExpr) = { t with Kind = rewriteKind t.Kind }
-    and rewriteKind kind =
-        match kind with
-        | TypeName name ->
-            match typeMap |> Map.tryFind name with
-            | Some qualified -> TypeName qualified
-            | None -> TypeName name
-        | TypeVar _
-        | TypeHole
-        | TypeUnit -> kind
-        | TypeTuple items -> TypeTuple (items |> List.map rewrite)
-        | TypeRecord fields ->
-            TypeRecord (
-                fields
-                |> List.map (function
-                    | TypeField(name, isMutable, typeOpt, defaultOpt) -> TypeField(name, isMutable, typeOpt |> Option.map rewrite, defaultOpt)
-                    | TypeMember(name, typeOpt) -> TypeMember(name, typeOpt |> Option.map rewrite)))
-        | TypeApply(name, args) ->
-            let mappedName = typeMap |> Map.tryFind name |> Option.defaultValue name
-            TypeApply(mappedName, args |> List.map rewrite)
-        | TypeFunc(inputTy, outputTy) -> TypeFunc(rewrite inputTy, rewrite outputTy)
-        | TypeTag(name, payload) -> TypeTag(name, payload |> Option.map rewrite)
-        | TypeUnion items -> TypeUnion (items |> List.map rewrite)
-        | TypeIntersection items -> TypeIntersection (items |> List.map rewrite)
-        | TypeContext items -> TypeContext (items |> List.map rewrite)
-        | TypeWithContext(items, inner) -> TypeWithContext(items |> List.map rewrite, rewrite inner)
-        | TypeConstraint(name, baseTy, predicate) -> TypeConstraint(name, rewrite baseTy, predicate)
-        | TypeWhere(baseTy, predicate) -> TypeWhere(rewrite baseTy, predicate)
-        | TypeOf value -> TypeOf (rewriteValue value)
+    let qualify (name: string) = typeMap |> Map.tryFind name |> Option.defaultValue name
+    let rec rewrite (t: TypeExpr) =
+        let t = TypeExpr.mapChildren rewrite t
+        match t.Kind with
+        | TypeName name -> { t with Kind = TypeName(qualify name) }
+        | TypeApply(name, args) -> { t with Kind = TypeApply(qualify name, args) }
+        | TypeOf value -> { t with Kind = TypeOf(rewriteValue value) }
+        | _ -> t
     rewrite typeExpr
 
 let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: Map<string, string>) (expr: Expression) : Expression =

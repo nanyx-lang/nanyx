@@ -19,7 +19,9 @@ let inferFor
         inferExpr env current iterable
         |> Result.map (fun (typedIterable, afterIterable) ->
             match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
-            | TyApply(("seq" | "list" | "gen") as sequence, [ elementTy ]) -> (elementTy, sequence = "gen"), afterIterable
+            | Lists.ListType elementTy
+            | Seqs.SeqType elementTy -> (elementTy, false), afterIterable
+            | TyApply("gen", [ elementTy ]) -> (elementTy, true), afterIterable
             // A map's elements are its entries, each a key and its value, in the order of `map.toList`.
             | Maps.MapType(key, value) -> (tupleRecordType [ key; value ], false), afterIterable
             | Sets.SetType element -> (element, false), afterIterable

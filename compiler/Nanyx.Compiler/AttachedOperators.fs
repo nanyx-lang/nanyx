@@ -32,7 +32,8 @@ module internal AttachedOperators =
         | Some _ -> Some Structural
         | None ->
             match typeName with
-            | "int" | "float" | "bool" | "string" | "unit" | "list" -> Some (BuiltIn typeName)
+            | "int" | "float" | "bool" | "string" | "unit" -> Some (BuiltIn typeName)
+            | _ when Lists.isTypeName typeName -> Some (BuiltIn typeName)
             | _ when SizedNumber.isName typeName -> Some (BuiltIn typeName)
             | _ -> None
 
