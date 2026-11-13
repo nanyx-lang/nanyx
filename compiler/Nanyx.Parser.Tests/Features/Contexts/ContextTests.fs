@@ -30,15 +30,15 @@ let ``a name that starts with use or in is not the use keyword`` () =
     | other -> failwith $"Unexpected statements: %A{other}"
 
 [<Fact>]
-let ``use C(T) = expr does not parse, and the error says to write use <expr> where the context is named`` () =
+let ``use C(T) = expr does not parse, and the error says to write the call form where the context is named`` () =
     for line, head in [ "  use Show(int) = (show = { n -> \"n\" })", "Show(int)"; "  use Console = (println = log)", "Console" ] do
         let source = $"def main = {{\n{line}\n  1\n}}"
         match parseModuleFileWithNames "t.nyx" source with
         | Result.Error err ->
             // FParsec wraps a long message onto several lines.
             let message = err.Message.Replace("\r\n", " ").Replace("\n", " ")
-            Assert.Contains($"`use {head} = ...` is not a way to load an instance: write `use <expr>`.", message)
-            Assert.Contains($"Define the instance with `def name: {head} = (...)`, then load it with `use name`.", message)
+            Assert.Contains($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`,", message)
+            Assert.Contains($"or define the instance with `def name: {head} = (...)` and load it with `use name`.", message)
             Assert.Equal(source.IndexOf head, err.Span.Start)
         | Result.Ok _ -> failwith $"Expected '{line.Trim()}' not to parse"
 
@@ -163,3 +163,48 @@ let ``A block after in must be indented more than the line use is on`` () =
     match parseModuleFile "t.nyx" (source.ReplaceLineEndings "\n") with
     | Result.Error _ -> ()
     | Result.Ok parsed -> failwith $"Expected a parse error, got %A{parsed}"
+
+/// The context and the member names of each instance `use C(T)(members)` writes out in `main`'s statements.
+let private instancesUsedIn (source: string) =
+    let instance (value: Expression) =
+        match value.Kind with
+        | UseInstanceSyntax.Instance (context, Kind (RecordExpr fields)) ->
+            Some (context.Kind, fields |> List.map (function NamedField (name, _) -> name | PositionalField _ -> "_"))
+        | _ -> None
+    match parseModule (source.ReplaceLineEndings "\n") with
+    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block statements), _))))) ] ->
+        statements
+        |> List.choose (fun statement ->
+            match statement.Kind with
+            | UseStatement value -> instance value
+            | ExprStatement (Kind (UseIn (value, _))) -> instance value
+            | _ -> None)
+    | other -> failwith $"Unexpected parse: %A{other}"
+
+[<Fact>]
+let ``use C(T)(members) writes out an instance of a parameterised context`` () =
+    let source = """
+def main = {
+  use Add(Point)(
+    zero = origin
+    `+` = plus
+  )
+  1
+}"""
+    Assert.Equal<(TypeExprKind * string list) list>(
+        [ TypeApply ("Add", [ TypeExpr.synthetic (TypeName "Point") ]), [ "zero"; "+" ] ],
+        instancesUsedIn source)
+
+[<Fact>]
+let ``use C(T)(members) in body writes out an instance for the body`` () =
+    let source = """
+def main = {
+  use ToString(Point)(toString = show) in describe(p)
+}"""
+    Assert.Equal<(TypeExprKind * string list) list>(
+        [ TypeApply ("ToString", [ TypeExpr.synthetic (TypeName "Point") ]), [ "toString" ] ],
+        instancesUsedIn source)
+
+[<Fact>]
+let ``use of a call is not an instance written out`` () =
+    Assert.Empty(instancesUsedIn "def main = {\n  use Console(println = log)\n  use makeAdd(int)(zero)\n  1\n}")
