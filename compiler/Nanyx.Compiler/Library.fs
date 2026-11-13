@@ -126,10 +126,12 @@ module Compiler =
 
     /// The modules one compilation has checked, by `originKey`, so that a module imported along several paths is
     /// checked once and every importer sees the same symbols; with the package whose files' imports are resolved
-    /// through its module table, if the compilation is of a package's file.
-    type internal CheckedModules(package: PackageModules option) =
+    /// through its module table, if the compilation is of a package's file, and the listener each module's check is
+    /// reported to.
+    type internal CheckedModules(package: PackageModules option, listener: CompileListener) =
         inherit System.Collections.Generic.Dictionary<string, Result<CheckedModule, CompilationPhase * Diagnostic list>>()
         member _.Package = package
+        member _.Listener = listener
 
     /// The standard-library modules this process has checked, by `originKey` and source, each with the modules it
     /// imports, which a compilation that imports it needs too (`compileFrom` resolves inlined definitions' types by
@@ -373,8 +375,18 @@ module Compiler =
                 merged
 
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
-    /// error says which phase it came from.
+    /// error says which phase it came from. The check is reported to the listener of `checkedModules` as it starts
+    /// and ends, by the module's `originKey`, with the imports' checks inside it.
     let rec internal typecheckModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
+        let key = originKey origin
+        checkedModules.Listener.ModuleStarted key
+        let stopwatch = System.Diagnostics.Stopwatch.StartNew()
+        let checkedModule = checkModule checkedModules origin source visited
+        checkedModules.Listener.ModuleFinished(key, stopwatch.Elapsed)
+        checkedModule
+
+    /// `typecheckModule`, unreported.
+    and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
         let resolved =
             parseWithDiagnostics (sourceFileName origin) source
@@ -642,7 +654,7 @@ module Compiler =
                     let source = readSource ()
                     let check _ =
                         lazy
-                            (let own = CheckedModules None
+                            (let own = CheckedModules(None, checkedModules.Listener)
                              let checkedModule = typecheckModule own origin source visited
                              checkedModule, [ for KeyValue(importKey, imported) in own -> importKey, imported ])
                     let checkedModule, imports = checkedStandardLibrary.GetOrAdd((key, source), check).Value
@@ -715,14 +727,25 @@ module Compiler =
               Syntax = Some checkedModule.Syntax
               Lowered = checkedModule.Lowered }
 
-    /// The module from `origin`, in no package, checked and compiled (see `compileChecked`).
-    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
-        let checkedModules = CheckedModules None in Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
-
-    /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules.
-    let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules (Some package)
+    /// The module from `origin`, in no package, checked and compiled (see `compileChecked`), with each module's check
+    /// reported to `listener`.
+    let compileFromReporting (listener: CompileListener) (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        let checkedModules = CheckedModules(None, listener)
         Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
+
+    /// `compileFromReporting`, telling nobody.
+    let compileFrom (options: LinterOptions) (origin: ModuleOrigin) (source: string) : CompileResult =
+        compileFromReporting CompileListener.none options origin source
+
+    /// `compileSourceWith` for a source file of the package `package`, whose imports name its modules, with each
+    /// module's check reported to `listener`.
+    let compileSourceInReporting (listener: CompileListener) (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        let origin, checkedModules = SourceFile (Path.GetFullPath filePath), CheckedModules(Some package, listener)
+        Nanyx.LargeStack.run (fun () -> compileChecked checkedModules options origin source (typecheckModule checkedModules origin source Set.empty))
+
+    /// `compileSourceInReporting`, telling nobody.
+    let compileSourceIn (package: PackageModules) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileSourceInReporting CompileListener.none package options filePath source
 
     /// `compileFile` with the linters and severities `options` gives.
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
@@ -750,6 +773,10 @@ module Compiler =
     /// older text: an editor's unsaved buffer, say). Imports are resolved exactly as `compileFile` resolves them.
     let compileSource (filePath: string) (source: string) : CompileResult =
         compileSourceWith Linters.none filePath source
+
+    /// `compileWith`, with each module's check reported to `listener`.
+    let compileReporting (listener: CompileListener) (options: LinterOptions) (source: string) : CompileResult =
+        compileFromReporting listener options InMemory source
 
     /// `compile` with the linters and severities `options` gives.
     let compileWith (options: LinterOptions) (source: string) : CompileResult =

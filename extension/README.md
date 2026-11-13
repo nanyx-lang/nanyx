@@ -103,7 +103,8 @@ copies the folder `nanyx.path` is in to its storage and runs the server from the
 watches that folder, and once a build has finished writing to it (the folder has been quiet for a
 moment) it makes a fresh copy and restarts the server with it, so a `dotnet build` is all it takes
 to try a compiler change in the editor. The **Nanyx** output channel logs each restart. Old copies
-are deleted once nothing runs from them.
+are deleted once nothing runs from them. In development mode the server is also started with
+`--timings`, so the output channel shows how long each module took to check in each compile.
 
 ## Developing the extension
 

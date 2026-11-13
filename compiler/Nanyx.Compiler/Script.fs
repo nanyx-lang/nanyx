@@ -112,12 +112,20 @@ module Script =
             ErrorsDeferred = result.ErrorsDeferred && not (directives.Diagnostics |> List.exists Diagnostics.isError) }
 
     /// Compiles `source` as the script at `filePath`, with the linters its directives turn on (none if they turn none
-    /// on), as `nanyx run` does. A source file of a package is compiled as one (see `Package.compileSourceWith`).
-    let compileSource (filePath: string) (source: string) : CompileResult =
+    /// on), as `nanyx run` does. A source file of a package is compiled as one (see `Package.compileSourceWith`). Each
+    /// module's check is reported to `listener`.
+    let compileSourceReporting (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
         let directives = read filePath source
-        Package.compileSourceWith (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        Package.compileSourceReporting listener (directives.Linters |> Option.defaultValue Linters.none) filePath source
         |> withDirectives directives
 
-    /// `compileSource` for the file at `filePath` as it is on disk.
-    let compileFile (filePath: string) : CompileResult =
-        if File.Exists filePath then compileSource filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
+    /// `compileSourceReporting`, telling nobody.
+    let compileSource (filePath: string) (source: string) : CompileResult =
+        compileSourceReporting CompileListener.none filePath source
+
+    /// `compileSourceReporting` for the file at `filePath` as it is on disk.
+    let compileFileReporting (listener: CompileListener) (filePath: string) : CompileResult =
+        if File.Exists filePath then compileSourceReporting listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
+
+    /// `compileFileReporting`, telling nobody.
+    let compileFile (filePath: string) : CompileResult = compileFileReporting CompileListener.none filePath

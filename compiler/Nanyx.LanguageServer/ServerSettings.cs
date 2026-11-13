@@ -24,6 +24,10 @@ namespace Nanyx.LanguageServer;
 /// <see cref="DefaultCompileDelay"/> when <c>null</c>.
 /// </param>
 /// <param name="CompileStarted">Called as each compile of a document starts. For tests, which count them.</param>
+/// <param name="Timings">
+/// Whether each compile's log line, which says how long it took, also lists how long each module's check took,
+/// slowest first (<c>nanyx lsp --timings</c>; the VS Code extension passes it in development mode).
+/// </param>
 public sealed record ServerSettings(
     TypeNotation TypeNotation,
     TopLevelTypeHints TopLevelTypeHints = TopLevelTypeHints.Lens,
@@ -33,7 +37,8 @@ public sealed record ServerSettings(
     bool ParameterTypeHints = true,
     bool PatternVariableTypeHints = true,
     TimeSpan? CompileDelay = null,
-    Action<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri>? CompileStarted = null)
+    Action<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri>? CompileStarted = null,
+    bool Timings = false)
 {
     public static ServerSettings Default { get; } = new(TypeNotation.Unicode);
 

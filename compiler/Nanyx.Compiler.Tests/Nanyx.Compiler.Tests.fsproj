@@ -105,6 +105,7 @@
     <Compile Include="Features\Ordering\OrderingTests.fs" />
     <Compile Include="Features\Packages\PackageTests.fs" />
     <Compile Include="Features\Scripts\ScriptTests.fs" />
+    <Compile Include="Features\Timings\CompileTimingTests.fs" />
     <Compile Include="Features\StdLib\PreludeTests.fs" />
     <Compile Include="Features\StdLib\BindTests.fs" />
     <Compile Include="Features\StdLib\StdLibTests.fs" />

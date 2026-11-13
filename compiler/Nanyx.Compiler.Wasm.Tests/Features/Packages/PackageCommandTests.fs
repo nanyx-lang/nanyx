@@ -72,6 +72,23 @@ let ``Check - a package, however it is named, reports what build does and writes
     Assert.False(Directory.Exists(Path.Combine(directory.Path, "out")))
 
 [<Fact>]
+let ``Build --timings - writes each module's time and the program's to stderr, and nothing else changes`` () =
+    use directory = new TempDirectory()
+    copyGreeter directory.Path
+    let plain = nanyxIn directory.Path [ "build" ]
+    let timed = nanyxIn directory.Path [ "build"; "--timings" ]
+    assertSucceeded timed
+    Assert.Equal(normalizeOutput plain.StandardOutput, normalizeOutput timed.StandardOutput)
+    Assert.Empty(plain.StandardError)
+    let lines = (normalizeOutput timed.StandardError).Split('\n') |> List.ofArray
+    Assert.Equal("    total      self  module", List.head lines)
+    // Each of the package's files, once, by the path the user would write.
+    for source in [ "main.nyx"; "greetings.nyx" ] do
+        let row = Assert.Single(lines |> List.filter (fun line -> line.EndsWith(Path.Combine("src", source))))
+        Assert.Matches(@"^ +\d+\.\d{3}s +\d+\.\d{3}s  src", row)
+    Assert.True(lines |> List.exists (fun line -> line.StartsWith "Emitted the program in "), timed.StandardError)
+
+[<Fact>]
 let ``Check - a package with an error fails, even one that a debug build would defer`` () =
     let outcome, wrote = nanyxOnPackage [ "main.nyx", "module main\n\n@entry\ndef main = { missing() }\n" ] [ "check"; "{package}" ]
     Assert.Equal(1, outcome.ExitCode)
