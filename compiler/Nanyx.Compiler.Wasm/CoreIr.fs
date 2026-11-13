@@ -434,6 +434,49 @@ module ForLoop =
     let locals (loop: ForLoop) =
         loop.Streams |> List.collect (fun stream -> [ stream.Cursor; stream.End; stream.Element ])
 
+/// The statements of a block: a chain of `Let`s, `Do`s, `Dup`s, `Drop`s and `Release`s, each followed by the next. A
+/// function's body is a chain as long as the function, so a pass walks one in a loop, and recurses only as deep as an
+/// expression nests.
+module Chain =
+    /// The expression that follows `e` in a chain, if `e` is a link of one.
+    let next (e: Expr) : Expr option =
+        match e.Kind with
+        | Let(_, _, next)
+        | Do(_, next)
+        | Dup(_, next)
+        | Drop(_, next)
+        | Release(_, next) -> Some next
+        | _ -> None
+
+    /// The links of the chain `e` starts, outermost first, and the expression the chain ends in (`e` itself when it
+    /// starts none).
+    let split (e: Expr) : Expr list * Expr =
+        let links = ResizeArray<Expr>()
+        let mutable current = e
+        let mutable following = next e
+        while following.IsSome do
+            links.Add current
+            current <- following.Value
+            following <- next current
+        List.ofSeq links, current
+
+    /// `link` with `following` in place of the expression that follows it.
+    let relink (link: Expr) (following: Expr) : Expr =
+        let kind =
+            match link.Kind with
+            | Let(var, value, _) -> Let(var, value, following)
+            | Do(value, _) -> Do(value, following)
+            | Dup(vars, _) -> Dup(vars, following)
+            | Drop(vars, _) -> Drop(vars, following)
+            | Release(released, _) -> Release(released, following)
+            | _ -> internalError "only a link of a chain is relinked"
+        { link with Kind = kind }
+
+    /// The chain of `links` (outermost first) rebuilt around `last`, each link given by `rebuild` the expression that
+    /// now follows it.
+    let rebuild (rebuild: 'Link -> Expr -> Expr) (links: 'Link list) (last: Expr) : Expr =
+        List.foldBack rebuild links last
+
 /// The IR as text, for reading and for tests.
 module Print =
     let private atom (a: Atom) =
