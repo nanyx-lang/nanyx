@@ -28,6 +28,7 @@ public sealed record OpenDocument(
     private EditedRegion? _editsSinceLastGood;
     private Lazy<Outline.OutlineItem[]?>? _outline;
     private Lazy<Parser.Program.DocCommentParsing.FileDocComments>? _docComments;
+    private Lazy<IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic>>? _published;
 
     /// <summary>Converts positions in <see cref="Text"/>, built once per change rather than on every request.</summary>
     public SourcePositions Positions { get; } = new(Text);
@@ -45,6 +46,15 @@ public sealed record OpenDocument(
     /// </summary>
     public Parser.Program.DocCommentParsing.FileDocComments DocComments =>
         (_docComments ??= new Lazy<Parser.Program.DocCommentParsing.FileDocComments>(() => Documentation.ofSource(FileName, Text))).Value;
+
+    /// <summary>
+    /// The LSP diagnostics of this text's compile, as published on <paramref name="uri"/>, the document's own (see
+    /// <see cref="DiagnosticsPublisher.Convert"/>). Converted once, when first asked for, so that the info view and code
+    /// actions, asked on every move of the cursor, neither convert them again nor read other files from disk.
+    /// </summary>
+    public IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic> PublishedDiagnostics(DocumentUri uri) =>
+        (_published ??= new Lazy<IReadOnlyList<OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic>>(
+            () => DiagnosticsPublisher.Convert(uri, this))).Value;
 
     /// <summary>
     /// Reads the doc comments of the names in <see cref="Compiled"/>, for a request at <paramref name="offset"/>,

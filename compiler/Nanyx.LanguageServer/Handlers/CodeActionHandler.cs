@@ -40,7 +40,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         var end = document.Positions.ToOffset(request.Range.End);
 
         // Published diagnostics are the compiler's, one for one and in the same order.
-        var published = DiagnosticsPublisher.Compute(uri, document);
+        var published = document.PublishedDiagnostics(uri);
         var actions = compiled.Diagnostics
             .Zip(published)
             .Where(pair => FSharpOption<Parser.Program.SourceSpan>.get_IsSome(pair.First.Span))

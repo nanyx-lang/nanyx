@@ -21,6 +21,10 @@ type Flow = { Def: string; Entries: FlowEntry list }
 /// What the editor highlights at a position: the spans of the providers, and those of the calls they serve.
 type Highlights = { Providers: SourceSpan list; Calls: SourceSpan list }
 
+/// What the info view shows of contexts at a position: the flow through the def around it, if any, and what the editor
+/// highlights there.
+type View = { Flow: Flow option; Highlights: Highlights }
+
 /// The name `call` calls, and its span, the name's where it has one.
 let private served (call: Expression) : ServedCall =
     match call.Kind with
@@ -62,20 +66,20 @@ let private defContexts (typed: TypedModule) (symbol: Symbol) (annotation: TypeE
     @ (inferredHere |> List.map (fun context -> context, InfoView.Inferred, symbol.Declaration))
 
 /// The innermost def around `offset` with a symbol, its name and the span of its statement, and each call in it with
-/// the contexts it requires that a signature, a `use` or inference provides, by the span that links the provider.
+/// the contexts it requires that a signature, a `use` or inference provides, by the span that links the provider. Only
+/// the def's own value is searched for them.
 let private callsAround (typed: TypedModule) (syntax: Module) (offset: int) =
     InfoView.defsAround syntax offset
     |> List.tryPick (fun def -> InfoView.defSymbol typed def |> Option.map (fun symbol -> symbol, def))
-    |> Option.map (fun (symbol, (name, annotation, statement)) ->
-        let byId = InfoView.expressionsById syntax
-        let within = Hover.allExpressions syntax |> List.filter (fun expr -> SourceSpan.contains statement expr.Span)
+    |> Option.map (fun (symbol, (name, annotation, statement, value)) ->
+        let within = Hover.expressionsWithin value |> List.filter (fun expr -> SourceSpan.contains statement expr.Span)
         let calls =
             within
             |> List.filter InfoView.isCall
             |> List.sortBy _.Span.Start
             |> List.map (fun call ->
                 let providers =
-                    InfoView.callContextsOf typed syntax byId.TryFind call
+                    InfoView.callContextsOf typed syntax (InfoView.expressionById syntax) call
                     |> List.choose (fun (context, source, span, _) ->
                         match source with
                         | InfoView.Provided (InfoView.Signature | InfoView.Use | InfoView.Inferred as source) when not (SourceSpan.isNone span) ->
@@ -108,44 +112,44 @@ let private entriesAt (typed: TypedModule) (syntax: Module) (offset: int) =
                 entry, trigger, servedCalls)
         name, entries, calls)
 
-/// The flow of contexts through the innermost def around `offset` in the compiled root module, with made-up type
-/// variables named by `names`. `None` outside any def, or when the module did not type-check.
-let at (names: TypeNotation) (result: CompileResult) (offset: int) : Flow option =
-    match result.Syntax, result.Typed with
-    | Some syntax, Some typed ->
-        entriesAt typed syntax offset
-        |> Option.map (fun (name, entries, _) ->
-            let written = Unifier.tysToDisplayStrings names (entries |> List.map (fun ((context, _, _), _, _) -> context))
-            { Def = name
-              Entries =
-                List.map2
-                    (fun ((_, source, span), _, calls) contextWritten ->
-                        { Context = contextWritten; Source = source; Span = span; Calls = calls |> List.map served })
-                    entries
-                    written })
-    | _ -> None
 
-/// What the editor highlights at `offset` in the compiled root module: on a `use` or a context of the signature of the
-/// def around it, that provider and the calls it serves; else, on the innermost call around it that one of the def's
+/// The flow of contexts through the def `entriesAt` found, with made-up type variables named by `names`.
+let private flowOf (names: TypeNotation) (name: string, entries, _) : Flow =
+    let written = Unifier.tysToDisplayStrings names (entries |> List.map (fun ((context, _, _), _, _) -> context))
+    { Def = name
+      Entries =
+        List.map2
+            (fun ((_, source, span), _, calls) contextWritten ->
+                { Context = contextWritten; Source = source; Span = span; Calls = calls |> List.map served })
+            entries
+            written }
+
+/// What the editor highlights at `offset` in the def `entriesAt` found there: on a `use` or a context of the def's
+/// signature, that provider and the calls it serves; else, on the innermost call around it that one of the def's
 /// providers serves, the call and those providers. Empty elsewhere.
-let highlightsAt (result: CompileResult) (offset: int) : Highlights =
-    let none = { Providers = []; Calls = [] }
+let private highlightsOf (syntax: Module) (offset: int) (_, entries, calls) : Highlights =
+    match entries |> List.tryFind (fun (_, trigger, _) -> Hover.contains offset trigger) with
+    | Some ((_, _, span), _, served') -> { Providers = [ span ]; Calls = served' |> List.map (fun call -> (served call).Span) }
+    | None ->
+        let atCall =
+            Hover.expressionsAt offset syntax
+            |> List.filter InfoView.isCall
+            |> List.tryPick (fun call ->
+                calls
+                |> List.tryFind (fun (found: Expression, providers: _ list) -> found.Id = call.Id && not providers.IsEmpty))
+        match atCall with
+        | Some (call, providers) ->
+            { Providers = providers |> List.map (fun (_, _, span) -> span) |> List.distinct; Calls = [ (served call).Span ] }
+        | None -> { Providers = []; Calls = [] }
+
+/// The flow of contexts through the innermost def around `offset` in the compiled root module, with made-up type
+/// variables named by `names`, and what the editor highlights at `offset`, from one search of the def. No flow and
+/// nothing highlighted outside any def, or when the module did not type-check.
+let at (names: TypeNotation) (result: CompileResult) (offset: int) : View =
+    let none = { Flow = None; Highlights = { Providers = []; Calls = [] } }
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         match entriesAt typed syntax offset with
-        | Some (_, entries, calls) ->
-            match entries |> List.tryFind (fun (_, trigger, _) -> Hover.contains offset trigger) with
-            | Some ((_, _, span), _, served') -> { Providers = [ span ]; Calls = served' |> List.map (fun call -> (served call).Span) }
-            | None ->
-                let atCall =
-                    Hover.expressionsAt offset syntax
-                    |> List.filter InfoView.isCall
-                    |> List.tryPick (fun call ->
-                        calls
-                        |> List.tryFind (fun (found, providers) -> found.Id = call.Id && not providers.IsEmpty))
-                match atCall with
-                | Some (call, providers) ->
-                    { Providers = providers |> List.map (fun (_, _, span) -> span) |> List.distinct; Calls = [ (served call).Span ] }
-                | None -> none
+        | Some found -> { Flow = Some (flowOf names found); Highlights = highlightsOf syntax offset found }
         | None -> none
     | _ -> none

@@ -29,7 +29,7 @@ public sealed record InfoViewResult
 /// <summary>
 /// A range of the document for the editor to highlight: a <c>provider</c> of contexts (a <c>use</c>, or a context of
 /// a signature) or a <c>call</c> it serves. On a provider, the calls it serves are highlighted; on a call, what
-/// provides its contexts (see <see cref="NyxCompiler.ContextFlow.highlightsAt"/>).
+/// provides its contexts (see <see cref="NyxCompiler.ContextFlow.at"/>).
 /// </summary>
 public sealed record InfoViewHighlight
 {
@@ -120,8 +120,9 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         if (document.LastGood is { Compiled: { } compiled } lastGood && document.NearestInLastGood(offset) is { } nearest)
         {
             info = InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest);
-            flow = NyxCompiler.ContextFlow.at(_settings.TypeNotation, compiled, nearest)?.Value;
-            highlights = NyxCompiler.ContextFlow.highlightsAt(compiled, nearest);
+            var contexts = NyxCompiler.ContextFlow.at(_settings.TypeNotation, compiled, nearest);
+            flow = contexts.Flow?.Value;
+            highlights = contexts.Highlights;
             docs = lastGood.DocReader(uri, nearest, _standardLibrary);
         }
 
@@ -138,7 +139,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                     ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value is { } symbol ? DocOf(symbol) : null)
                     : [];
         var line = request.Position.Line;
-        var messages = DiagnosticsPublisher.Compute(uri, document)
+        var messages = document.PublishedDiagnostics(uri)
             .Where(diagnostic => diagnostic.Range.Start.Line <= line && line <= diagnostic.Range.End.Line)
             .Select(diagnostic => new InfoViewItem
             {
