@@ -1330,6 +1330,27 @@ let helperDependencies =
       Helpers.intMul, []
       Helpers.intToIndex, [] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
+
+/// The helpers that read and write no linear memory themselves: they compute on their operands, or leave that to the
+/// helpers they call (see `helperDependencies`). Every other helper touches it, so a module that uses one (see
+/// `closeHelpers`) declares a memory.
+let private helpersWithoutMemory =
+    set [ yield Helpers.stringSlice
+          yield Helpers.stringConcat
+          yield Helpers.exit
+          yield FloatText.bigMulPow10
+          yield Helpers.intToFloat
+          yield Helpers.floatRem
+          yield Helpers.escapeByte
+          yield Helpers.intAdd
+          yield Helpers.intSub
+          yield Helpers.intMul
+          yield Helpers.intToIndex
+          yield! SizedIntegerCode.helpers |> List.map fst ]
+
+/// Whether the helper `name` reads or writes linear memory itself.
+let touchesMemory (name: string) = not (helpersWithoutMemory.Contains name)
+
 let rec closeHelpers (acc: Set<string>) (pending: string list) =
     match pending with
     | [] -> acc

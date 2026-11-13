@@ -710,12 +710,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
           Signature = fun name -> signatures |> Map.tryFind name }
 
-    /// The text of a function from the core IR, noting the helpers it calls and the record layouts it allocates.
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
+
+    // Whether a function emitted below reads or writes linear memory in its own code.
+    let mutable functionsTouchMemory = false
+
+    /// The text of a function from the core IR, noting the helpers it calls and whether it touches memory.
     let fromCoreIr (func: CoreIr.Function) =
         let emitted = emitFromCoreIr context specialisations func
         for helper in emitted.Helpers do
             usedHelpers.Add helper |> ignore
+        functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
         emitted.Text
 
     let renderedFunctions = definitionFunctions |> List.map fromCoreIr |> String.concat "\n\n"
@@ -726,6 +731,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             let emitted = CoreIrEmit.emitStart context func
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
+            functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
             let directive =
                 if options.CheckMemory then $"  (export \"{CheckedExports.start}\" (func ${CoreIrLowerInput.startFunctionName}))"
                 else $"  (start ${CoreIrLowerInput.startFunctionName})"
@@ -862,11 +868,21 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.filter (fun segment -> segment <> "")
         |> String.concat "\n"
 
-    // Add memory if we have string literals or any emitted function touches memory, but no dbg helpers (dbgPrelude
-    // already includes memory). Reading the rendered text keeps this true of whatever the helpers and functions do.
+    // Add memory if we have static data or anything emitted touches memory, but no dbg helpers (dbgPrelude already
+    // includes memory): a function's own code, a helper it calls, a drop function, or an equality, ordering or hash
+    // function of a type other than a number, a bool or unit, which reads what it compares (a tag's code among it).
+    let computedOnValue (ty: CoreIr.IrType) =
+        match ty with
+        | CoreIr.IrInt
+        | CoreIr.IrSized _
+        | CoreIr.IrBool
+        | CoreIr.IrUnit -> true
+        | _ -> false
     let functionsUseMemory =
-        [ renderedHelpers; renderedFunctions; renderedDrops; renderedEqualities; renderedOrderings; renderedHashes; renderedStartFunction ]
-        |> List.exists Wat.usesMemory
+        functionsTouchMemory
+        || usedHelperSet |> Set.exists touchesMemory
+        || renderedDrops <> ""
+        || equalityTypes @ orderingTypes @ hashingTypes |> List.exists (computedOnValue >> not)
     let needsMemory =
         (not (List.isEmpty stringLiteralData && List.isEmpty facts.StaticClosures) || functionsUseMemory) && not moduleUsesIoHelpers
     let memorySection =

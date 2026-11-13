@@ -36,10 +36,12 @@ type EmitContext =
       /// call's, or the other way round.
       Signature: string -> (IrType list * IrType) option }
 
-/// A function as WebAssembly text, and the runtime helpers (see `WasmRuntime.Helpers`) it calls.
+/// A function as WebAssembly text, the runtime helpers (see `WasmRuntime.Helpers`) it calls, and whether its own code
+/// reads or writes linear memory.
 type Emitted =
     { Text: string
-      Helpers: Set<string> }
+      Helpers: Set<string>
+      UsesMemory: bool }
 
 let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
@@ -132,9 +134,21 @@ type private FunctionEmitter(context: EmitContext) =
     let extraLocals = ResizeArray<string * string>()
     let droppedTemps = Dictionary<int, string>()
 
+    // Whether the code reads or writes linear memory itself, besides what the helpers it calls do.
+    let mutable usesMemory = false
+
     let helper (name: string) =
         helpers.Add name |> ignore
         name
+
+    /// `code`, which reads or writes linear memory.
+    let touching (code: string) =
+        usesMemory <- true
+        code
+
+    let load (ty: IrType) (offset: int) = touching (CoreIrLayout.load ty offset)
+
+    let store (ty: IrType) (offset: int) = touching (CoreIrLayout.store ty offset)
 
     let freshLocal (prefix: string) (valueType: string) =
         let name = $"{prefix}_{extraLocals.Count}"
@@ -147,6 +161,8 @@ type private FunctionEmitter(context: EmitContext) =
         | _ -> localName var
 
     member _.Helpers = Set.ofSeq helpers
+
+    member _.UsesMemory = usesMemory
 
     member _.ExtraLocals = List.ofSeq extraLocals
 
@@ -166,7 +182,8 @@ type private FunctionEmitter(context: EmitContext) =
         let unique =
             [ for offset, bound, fieldTy in released.Fields do
                   if bound.IsNone && CoreIrDrop.isHeapType fieldTy then
-                      $"local.get ${object}\n      i32.load offset={offset}\n      call ${CoreIrDrop.dropName fieldTy}"
+                      let field = touching $"i32.load offset={offset}"
+                      $"local.get ${object}\n      {field}\n      call ${CoreIrDrop.dropName fieldTy}"
               match released.Token with
               | Some token -> $"{block}\n      local.set ${localName token}"
               | None -> $"{block}\n      call ${helper Helpers.free}" ]
@@ -177,7 +194,7 @@ type private FunctionEmitter(context: EmitContext) =
               | Some token -> $"i32.const 0\n      local.set ${localName token}"
               | None -> "" ]
         let lines (code: string list) = code |> List.filter ((<>) "") |> String.concat "\n      "
-        let count = $"local.get ${object}\n    i32.const {released.CountOffset}\n    i32.sub\n    i32.load"
+        let count = $"local.get ${object}\n    i32.const {released.CountOffset}\n    i32.sub\n    " + touching "i32.load"
         $"{count}\n    i32.const 1\n    i32.eq\n    if\n      {lines unique}\n    else\n      {lines shared}\n    end"
 
     /// How a hole of type `holeType` is measured and written (see `Interpolation`).
@@ -224,7 +241,7 @@ type private FunctionEmitter(context: EmitContext) =
                 | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) (holeValue var holeType))
             |> String.concat "\n    "
         helper Helpers.stringAlloc |> ignore
-        Interpolation.measureAndWrite lengthCode writeCode
+        touching (Interpolation.measureAndWrite lengthCode writeCode)
 
     /// The code of a sequence: lets and `do`s ending in a value. `tail` says whether that value is what the
     /// function returns, so that a call there is a tail call.
@@ -350,7 +367,7 @@ type private FunctionEmitter(context: EmitContext) =
             // Each operand is unboxed; an arithmetic result is boxed, and a comparison's is the i32 it leaves. An `F32` is
             // an `f32`, whose remainder is taken as a float's, which is exact, and narrowed back.
             let isF32 = atomType left = IrF32
-            let load = if isF32 then "f32.load" else "f64.load"
+            let load = touching (if isF32 then "f32.load" else "f64.load")
             let widen = if isF32 && op = "%" then "f64.promote_f32" else ""
             let instruction =
                 if op = "%" then Some (join "\n    " [ $"call ${helper Helpers.floatRem}"; (if isF32 then "f32.demote_f64" else "") ])
@@ -402,7 +419,7 @@ type private FunctionEmitter(context: EmitContext) =
             // The field's value, with a reference of its own.
             let fields = recordFields (atomType record)
             let dup = if CoreIrDrop.isHeapType expr.Type then $"call ${CoreIrDrop.dupName expr.Type}" else ""
-            join "\n    " [ atoms [ record ]; CoreIrLayout.load expr.Type (CoreIrLayout.fieldOffset fields slot); dup ]
+            join "\n    " [ atoms [ record ]; load expr.Type (CoreIrLayout.fieldOffset fields slot); dup ]
         | UpdateRecord(record, updates) ->
             // A copy of the record, layout and all, with the updated fields overwritten in place. The copy takes a
             // reference to each field on the heap it keeps.
@@ -419,7 +436,7 @@ type private FunctionEmitter(context: EmitContext) =
                     let dups =
                         kept
                         |> List.map (fun (slot, (_, fieldTy)) ->
-                            $"local.get ${copy}\n    {CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot)}\n    call ${CoreIrDrop.dupName fieldTy}\n    drop")
+                            $"local.get ${copy}\n    {load fieldTy (CoreIrLayout.fieldOffset fields slot)}\n    call ${CoreIrDrop.dupName fieldTy}\n    drop")
                     String.concat "\n    " (($"local.tee ${copy}") :: dups)
             join "\n    " [
                 atoms [ record ]
@@ -435,12 +452,12 @@ type private FunctionEmitter(context: EmitContext) =
             let offset = CoreIrLayout.fieldOffset (recordFields record.Type) slot
             let held = freshLocal "__set" (CoreIrLayout.valueType fieldTy)
             let dropOld =
-                if CoreIrDrop.isHeapType fieldTy then $"local.get ${localName record}\n    {CoreIrLayout.load fieldTy offset}\n    {dropValue fieldTy}" else ""
+                if CoreIrDrop.isHeapType fieldTy then $"local.get ${localName record}\n    {load fieldTy offset}\n    {dropValue fieldTy}" else ""
             join "\n    " [
                 atoms [ value ]
                 $"local.set ${held}"
                 dropOld
-                $"local.get ${localName record}\n    local.get ${held}\n    {CoreIrLayout.store fieldTy offset}"
+                $"local.get ${localName record}\n    local.get ${held}\n    {store fieldTy offset}"
                 "i32.const 0" ]
         | MakeList items ->
             // The elements left to right, then the empty list, then a cons for each from the back.
@@ -487,8 +504,8 @@ type private FunctionEmitter(context: EmitContext) =
             let into, box = if expr.Type = IrF32 then "f32", Helpers.f32Box else "f64", Helpers.floatBox
             let converted =
                 match atomType arg with
-                | IrFloat -> [ "f64.load"; (if into = "f32" then "f32.demote_f64" else "") ]
-                | IrF32 -> [ "f32.load"; (if into = "f64" then "f64.promote_f32" else "") ]
+                | IrFloat -> [ touching "f64.load"; (if into = "f32" then "f32.demote_f64" else "") ]
+                | IrF32 -> [ touching "f32.load"; (if into = "f64" then "f64.promote_f32" else "") ]
                 | integer -> [ SizedIntegerCode.toFloat (integerType integer) into ]
             join "\n    " [ atoms [ arg ]; yield! converted; $"call ${helper box}" ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.fromInt ->
@@ -535,7 +552,7 @@ type private FunctionEmitter(context: EmitContext) =
             let result = CoreIrLayout.valueType expr.Type
             context.IndirectCall(parameters, result)
             let call = if tail then "return_call" else "call"
-            join "\n    " [ read; atomsAfter true args; read; "i32.load"; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
+            join "\n    " [ read; atomsAfter true args; read; touching "i32.load"; $"{call}_indirect (type ${indirectTypeName parameters result})" ]
         | Interpolate parts -> this.Interpolation parts
         | Dbg text -> join "\n    " [ atoms [ text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->
@@ -623,7 +640,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverRangeFrom _ -> []
             | OverList _ ->
                 let cursor = localName stream.Cursor
-                [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; CoreIrLayout.load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
+                [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
         let advance (stream: ForStream) =
             match stream.Source with
             | OverRange _
@@ -632,7 +649,7 @@ type private FunctionEmitter(context: EmitContext) =
                 [ $"local.get ${element}"; "i64.const 1"; $"call ${helper Helpers.intAdd}"; $"local.set ${element}" ]
             | OverList _ ->
                 let cursor = localName stream.Cursor
-                [ $"local.get ${cursor}"; $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
+                [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type
         // The starting atoms are read in the order `tempsUsedBy` gives them.
@@ -665,12 +682,12 @@ type private FunctionEmitter(context: EmitContext) =
                 | IrTags tags -> tags |> List.tryPick (fun (tag, payload) -> if tag = name then payload else None)
                 | _ -> None
             match payloadTy with
-            | Some payloadTy -> $"{valueCode}\n      {CoreIrLayout.load payloadTy CoreIrLayout.payloadOffset}", payloadTy
+            | Some payloadTy -> $"{valueCode}\n      {load payloadTy CoreIrLayout.payloadOffset}", payloadTy
             | None -> internalError $"a pattern on the payload of #{name}, which {IrType.show ty} does not give one"
         // The field in `slot` of a record of `ty`, with its type.
         let fieldCode (ty: IrType) valueCode slot =
             match ty with
-            | IrRecord fields -> $"{valueCode}\n      {CoreIrLayout.load (snd fields.[slot]) (CoreIrLayout.fieldOffset fields slot)}", snd fields.[slot]
+            | IrRecord fields -> $"{valueCode}\n      {load (snd fields.[slot]) (CoreIrLayout.fieldOffset fields slot)}", snd fields.[slot]
             | other -> internalError $"a pattern on the fields of {IrType.show other}, which is not a record"
         let elementOf (ty: IrType) =
             match IrType.unfold ty with
@@ -678,9 +695,12 @@ type private FunctionEmitter(context: EmitContext) =
             | other -> internalError $"a list pattern on {IrType.show other}"
         // The list after `count` cells, and the head of the list after `index` cells, of a list of `ty`.
         let listTailCode (ty: IrType) valueCode count =
-            valueCode + String.replicate count $"\n      i32.load offset={CoreIrLayout.tailOffset (elementOf ty)}"
+            if count = 0 then valueCode
+            else
+                let tail = touching $"i32.load offset={CoreIrLayout.tailOffset (elementOf ty)}"
+                valueCode + String.replicate count $"\n      {tail}"
         let listElementCode (ty: IrType) valueCode index =
-            $"{listTailCode ty valueCode index}\n      {CoreIrLayout.load (elementOf ty) 0}"
+            $"{listTailCode ty valueCode index}\n      {load (elementOf ty) 0}"
         let guarded first second =
             $"{first}\n      (if (result i32)\n        (then\n          {second})\n        (else i32.const 0))"
         // 1 when every one of `conditions` is.
@@ -882,7 +902,7 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         match exportName with
         | Some exported -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )\n  (export \"{exported}\" (func ${func.Name}))"
         | None -> $"  (func ${func.Name} {header}\n    {bodyCode}\n  )"
-    { Text = text; Helpers = emitter.Helpers }
+    { Text = text; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
 
 /// The start function, `func` (see `CoreIrLower.StartFunction`): each top-level expression in turn, its value
 /// dropped. It takes nothing and returns nothing.
@@ -901,4 +921,4 @@ let emitStart (context: EmitContext) (func: Function) : Emitted =
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
         | "" -> ""
         | locals -> " " + locals
-    { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers }
+    { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
