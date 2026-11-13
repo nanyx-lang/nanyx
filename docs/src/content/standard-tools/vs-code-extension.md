@@ -166,11 +166,11 @@ To try a change to the compiler in the editor, set `nanyx.path` to your build, s
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
-| `nanyx.developmentMode` | off | Runs the server from a copy of the build `nanyx.path` points at, so `dotnet build` can overwrite the build while the server runs, and restarts the server with a fresh copy whenever the build changes. Needs `nanyx.path`. |
+| `nanyx.developmentMode` | off | Runs the server from a copy of the build `nanyx.path` points at, so `dotnet build` can overwrite the build while the server runs, and restarts the server with a fresh copy whenever the build changes. Also starts the server with `--timings`, so the output channel shows how long each module took to check in each compile, not only how long the compile took. Needs `nanyx.path`. |
 
 # Troubleshooting
 
-The **Nanyx** output channel logs how the extension found or downloaded the compiler, the server's start-up and any errors.
+The **Nanyx** output channel logs how the extension found or downloaded the compiler, the server's start-up, how long each compile of a file took, and any errors.
 
 - **"nanyx.path is set to ..., but no file exists there"**: fix the path, or clear the setting to go back to `PATH` and the downloaded compiler.
 - **"Could not reach github.com to download the Nanyx compiler"**: you are offline, or a proxy is in the way. Connect and run **Nanyx: Download the compiler**, or install the compiler yourself.

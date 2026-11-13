@@ -296,6 +296,10 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
   if (!config.get<boolean>("inlayHints.patternVariables", true)) {
     args.push("--no-pattern-variable-type-hints");
   }
+  // Working on the compiler, the output channel shows what each compile cost, module by module.
+  if (config.get<boolean>("developmentMode", false)) {
+    args.push("--timings");
+  }
 
   // No `transport`: stdio is the default, and naming it makes the client append `--stdio` to the args.
   const serverOptions: ServerOptions = {

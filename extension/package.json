@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -117,7 +117,7 @@
         "nanyx.developmentMode": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "For working on the compiler: runs the language server from a copy of the `#nanyx.path#` build, so the build is never locked and `dotnet build` can overwrite it, and restarts the server with a fresh copy whenever the build changes. Needs `#nanyx.path#` to be set."
+          "markdownDescription": "For working on the compiler: runs the language server from a copy of the `#nanyx.path#` build, so the build is never locked and `dotnet build` can overwrite it, and restarts the server with a fresh copy whenever the build changes. The Nanyx output channel then also shows how long each module took to check in each compile. Needs `#nanyx.path#` to be set."
         },
         "nanyx.compilerVersion": {
           "type": "string",
