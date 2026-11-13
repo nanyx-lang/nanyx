@@ -73,6 +73,21 @@ string.split("a,b,c", on = ",")
 
 ---
 
+# splitOnce
+
+```nanyx
+string.splitOnce: (string, on: string) -> #some(string, string) | #notFound
+```
+
+The part of the string before the first `on`, and the part after it, which may contain `on` again. `#notFound` when the string does not contain `on`; an empty `on` is found at the start.
+
+```nanyx
+string.splitOnce("key=a=b", on = "=")
+-- #some("key", "a=b")
+```
+
+---
+
 # contains
 
 ```nanyx

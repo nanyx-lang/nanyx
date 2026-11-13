@@ -261,6 +261,20 @@ export def string.split: (string, on: string) -> list(string) = { s, on ->
   if string.length(on) == 0 then [s] else list.reverse(splitFrom(s, on, 0, []))
 }
 
+--| The part of `s` before the first `on`, and the part after it, or `#notFound` when `s` does not
+  contain `on`. An empty `on` is found at the start, so it gives `("", s)`.
+export def string.splitOnce: (string, on: string) -> #some(string, string) | #notFound = { s, on ->
+  def index = indexFrom(s, on, 0)
+  def after = index + string.length(on)
+
+  if index < 0
+    then #notFound
+    else #some(
+      string.substring(s, start = 0, length = index)
+      string.substring(s, start = after, length = string.length(s) - after)
+    )
+}
+
 def joinRest: list(string), string, string -> string = { pieces, separator, acc ->
   match pieces
     | [] -> acc
