@@ -58,7 +58,7 @@ let ``Typecheck requires catch-all for tag union rest`` () =
         "  | #some(v) -> #some(f(v))\n" +
         "}\n"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.MissingCatchAllArm result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("catch-all", message)
 
@@ -80,7 +80,7 @@ let ``Typecheck tag union width and rest regression`` () =
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     match typed.Types.["l2"] with
-    | TyUnion [ TyTag("some", Some (TyPrimitive "int")); TyTag("nil", None) ] -> Assert.True(true)
+    | TyUnion [ TyTag("some", Some (TyPrimitive "int")); TyTag("nil", None) ] -> ()
     | other -> Assert.True(false, $"Unexpected l2 type: %A{other}")
 
 [<Fact>]
@@ -217,7 +217,7 @@ let ``Typecheck matches a call's result whose union rest is already solved`` () 
         "    | #some(n) -> n\n" +
         "}\n"
     let result = Compiler.compile missing
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.NonExhaustiveMatch result
     Assert.Contains("missing tags: notFound", (List.head result.Diagnostics).Message)
 
 [<Fact>]
@@ -232,7 +232,7 @@ let ``Typecheck rejects a tag union with a rest where a string is expected`` () 
         "def x: #some(int) | #notFound = #notFound\n" +
         "def y = takesString(x \\mapSome { n -> \"{n}\" })"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
 
 [<Fact>]
@@ -295,20 +295,20 @@ let ``Typecheck joins the tags inside tuple branches field by field`` () =
 let ``Typecheck still rejects tuple branches whose fields disagree`` () =
     let source = "def f = { c -> if c then (1, #a) else (\"one\", #b) }"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
 
 [<Fact>]
 let ``Typecheck still rejects same-named tags with different payloads across branches`` () =
     let source = "def f = { c -> if c then #some(1) else #some(\"one\") }"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("mismatch", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck still rejects branches of different non-tag types`` () =
     let source = "def f = { c -> if c then 1 else \"one\" }"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     Assert.Contains("Type mismatch", (List.head result.Diagnostics).Message)
 
 [<Fact>]

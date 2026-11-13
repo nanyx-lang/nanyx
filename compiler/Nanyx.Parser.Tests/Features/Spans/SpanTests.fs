@@ -4,6 +4,7 @@ open System.IO
 open Xunit
 open FsUnit.Xunit
 open Parser.Program
+open ParserTestHelpers
 
 let private parse (source: string) =
     match parseModuleFile "t.nyx" source with
@@ -17,9 +18,6 @@ let private valueOf name (module': Module) =
         | Kind (Def (ValueDef (_, n, _, value))) when n = name -> Some value
         | _ -> None)
     |> Option.defaultWith (fun () -> failwith $"No def {name} in %A{module'}")
-
-/// The source text a span covers.
-let private textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
 let private someSpan (span: SourceSpan option) =
     match span with

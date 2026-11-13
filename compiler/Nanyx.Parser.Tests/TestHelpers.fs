@@ -10,6 +10,9 @@ let (|IntLit64|_|) (literal: Literal) =
     | IntLit value when value >= bigint System.Int64.MinValue && value <= bigint System.Int64.MaxValue -> Some (int64 value)
     | _ -> None
 
+/// The text `span` covers in `source`.
+let textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
+
 // Helper to check if Result is Ok
 let isOk result =
     match result with

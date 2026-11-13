@@ -15,28 +15,26 @@ module internal LambdaArguments =
     /// variable is known to be a number, as `list.map([1, 2], { 0 })` has it.
     let expectedInput (state: InferState) (paramTy: Ty option) (lambda: Expression) (lambdaArgs: (Identifier * TypeExpr option) list) : Ty option =
         let unannotated = lambdaArgs |> List.forall (fun (_, typeOpt: TypeExpr option) -> typeOpt.IsNone)
+        // A conflict elsewhere in the module does not stop the rest of the constraints saying what the input is.
+        let resolved = resolveSoFar state
         match paramTy |> Option.map Unifier.unalias with
         | Some (TyFunc(lambdaInput, _, _)) when (match lambda.Kind with Lambda([], _, false) -> true | _ -> false) ->
-            match Unifier.unify state.Constraints |> Result.map (fun subst -> Unifier.apply subst lambdaInput) with
-            | Ok resolved when (match Unifier.unalias resolved with TyVar _ -> true | _ -> false) && not (NumericLiterals.isOpen state resolved) -> None
-            | Ok resolved -> Some resolved
-            | Error _ -> None
+            match resolved lambdaInput with
+            | input when (match Unifier.unalias input with TyVar _ -> true | _ -> false) && not (NumericLiterals.isOpen state input) -> None
+            | input -> Some input
         | Some (TyFunc(lambdaInput, _, _)) when unannotated && not (List.isEmpty lambdaArgs) ->
-            match Unifier.unify state.Constraints with
-            | Ok subst ->
-                match Unifier.apply subst lambdaInput with
-                // A rest that widening made up is only room for tags no argument has given yet,
-                // not tags the lambda must handle: the lambda takes its input from its own
-                // patterns, as it does when the arguments come as one tuple (#452).
-                | resolved when
-                    (match Unifier.unalias resolved with
-                     | TyUnion items -> items |> List.exists (function TyVar v -> Unifier.isMadeUpRest v | _ -> false)
-                     | _ -> false) -> None
-                // A lambda of several parameters needs the input's fields to split between them.
-                | resolved when (match Unifier.unalias resolved with TyRecord _ -> true | _ -> false) -> Some resolved
-                | resolved when lambdaArgs.Length = 1 -> Some resolved
-                | _ -> None
-            | Error _ -> None
+            match resolved lambdaInput with
+            // A rest that widening made up is only room for tags no argument has given yet,
+            // not tags the lambda must handle: the lambda takes its input from its own
+            // patterns, as it does when the arguments come as one tuple (#452).
+            | input when
+                (match Unifier.unalias input with
+                 | TyUnion items -> items |> List.exists (function TyVar v -> Unifier.isMadeUpRest v | _ -> false)
+                 | _ -> false) -> None
+            // A lambda of several parameters needs the input's fields to split between them.
+            | input when (match Unifier.unalias input with TyRecord _ -> true | _ -> false) -> Some input
+            | input when lambdaArgs.Length = 1 -> Some input
+            | _ -> None
         | _ -> None
 
     /// Infers `items`, the arguments of a call written as one tuple, whose callee takes them as `paramTys`. Each is

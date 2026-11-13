@@ -33,6 +33,18 @@ let spanOf (diagnostic: Diagnostic) =
     Assert.True(diagnostic.Span.IsSome, $"Expected a span on %A{diagnostic}")
     diagnostic.Span.Value
 
+/// The one diagnostic compiling `source` gives.
+let diagnosticOf (source: string) = single (Compiler.compile source)
+
+/// The one diagnostic `result`, compiled from `source`, has: its code, its message, and the text its span covers.
+/// Spans are offsets in the source with its line endings made `\n`, whatever the test file's are.
+let onlyDiagnosticIn (source: string) (result: CompileResult) =
+    let diagnostic = single result
+    diagnostic.Code, diagnostic.Message, textAt (source.ReplaceLineEndings "\n") (spanOf diagnostic)
+
+/// The one diagnostic compiling `source` gives: its code, its message, and the text it is reported at.
+let onlyDiagnostic (source: string) = onlyDiagnosticIn source (Compiler.compile source)
+
 /// Compiles `source` with every linter the compiler has turned on, at its defaults, but for `unusedPrivateDefinitions`:
 /// these tests write top-level defs nothing uses, and that rule has tests of its own.
 let compileWithOfficial (source: string) =
@@ -110,6 +122,12 @@ let hoverType (source: string) (text: string) =
 /// without the top-level defs' own.
 let localInlayHints (names: TypeNotation) (file: string) (result: CompileResult) =
     TypeHints.inlayHintsWithTopLevel names file result |> List.filter (fun hint -> hint.Kind <> TopLevelValue)
+
+/// Asserts that `result` reports a diagnostic of `code`, and shows what it reported when it does not.
+let assertReports (code: DiagnosticCode) (result: CompileResult) =
+    Assert.True(
+        result.Diagnostics |> List.exists (fun diagnostic -> diagnostic.Code = code.Code),
+        $"Expected {code.Code} ({code.Title}), got %A{result.Diagnostics}")
 
 /// The code of the one diagnostic `source` compiles to, and the text it is reported at.
 let singleError (source: string) =

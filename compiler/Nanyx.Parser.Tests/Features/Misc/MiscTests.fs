@@ -117,23 +117,19 @@ let ``Parse only whitespace`` () =
         module' |> should be Empty
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
 
-// Error Tests
+// Error Tests: each is reported where the parser stops, the text from there to the end of the line.
 [<Fact>]
 let ``Error on missing equals`` () =
-    let result = parseModule "def x 42"
-    result |> isError |> should equal true
+    Assert.Equal("42", snd (parseErrorOf "def x 42"))
 
 [<Fact>]
 let ``Error on missing value`` () =
-    let result = parseModule "def x ="
-    result |> isError |> should equal true
+    Assert.Equal("", snd (parseErrorOf "def x ="))
 
 [<Fact>]
 let ``Error on missing identifier`` () =
-    let result = parseModule "def = 42"
-    result |> isError |> should equal true
+    Assert.Equal("= 42", snd (parseErrorOf "def = 42"))
 
 [<Fact>]
 let ``Error on unterminated string`` () =
-    let result = parseModule "def x = \"unterminated"
-    result |> isError |> should equal true
+    Assert.Equal("\"unterminated", snd (parseErrorOf "def x = \"unterminated"))

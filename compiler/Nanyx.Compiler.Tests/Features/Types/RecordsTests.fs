@@ -60,7 +60,7 @@ let ``Typecheck reports mismatch for missing tuple args`` () =
         "def f = { x, y -> \"\" }\n" +
         "def result = f(4)"
     let result = Compiler.compile source
-    Assert.False(result.Diagnostics.IsEmpty)
+    assertReports DiagnosticCodes.TypeMismatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
     Assert.Contains("Type mismatch", message)
     Assert.Contains("(", message)

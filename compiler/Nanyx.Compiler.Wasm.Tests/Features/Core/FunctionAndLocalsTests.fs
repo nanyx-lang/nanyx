@@ -181,22 +181,17 @@ let ``Transpile magic dbg for payload tag literal`` () =
 
 [<Fact>]
 let ``Transpile interpolated dbg string from file`` () =
-    let dir = Path.Combine(Path.GetTempPath(), "nanyx-wasm-interp-" + Guid.NewGuid().ToString("N"))
-    Directory.CreateDirectory(dir) |> ignore
-    try
-        let childPath = Path.Combine(dir, "child.nyx")
-        let mainPath = Path.Combine(dir, "main.nyx")
-        File.WriteAllText(childPath, "export def double = { x -> x * 2 }")
-        File.WriteAllText(mainPath, "import \"child.nyx\" as child\n\ndef main = {\n  def result = child.double(21)\n  dbg(\"Result: {result}\")\n}")
+    use dir = new TempDirectory()
+    let childPath = Path.Combine(dir.Path, "child.nyx")
+    let mainPath = Path.Combine(dir.Path, "main.nyx")
+    File.WriteAllText(childPath, "export def double = { x -> x * 2 }")
+    File.WriteAllText(mainPath, "import \"child.nyx\" as child\n\ndef main = {\n  def result = child.double(21)\n  dbg(\"Result: {result}\")\n}")
 
-        let wat = transpileWatFile mainPath
+    let wat = transpileWatFile mainPath
 
-        Assert.Contains("call $dbg_str", wat)
-        Assert.Contains("__interp_cursor", wat)
-        Assert.Contains("i32.const 82", wat)
-    finally
-        if Directory.Exists(dir) then
-            Directory.Delete(dir, true)
+    Assert.Contains("call $dbg_str", wat)
+    Assert.Contains("__interp_cursor", wat)
+    Assert.Contains("i32.const 82", wat)
 
 [<Fact>]
 let ``Run - a local generic function frees what it is given, at each type it is used at`` () =
