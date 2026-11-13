@@ -6,8 +6,7 @@ open Nanyx.Formatter.SourceText
 open Nanyx.Formatter.CommentPlacement
 
 /// Prints bracketed items, with the comments among them put back by `placement`. The expressions in them are printed
-/// by `expression`, told whether the expression is the last thing in the brackets (see `Position.Tail` in
-/// `Formatter`).
+/// by `expression`, told whether the expression is the last thing in the brackets (see `Position.Tail`).
 type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlacement, expression: bool -> Expression -> Doc) =
     let text = Doc.text
     let cat = Doc.concat

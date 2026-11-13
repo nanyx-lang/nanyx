@@ -38,11 +38,15 @@ module internal ContextInference =
         |> Map.ofList
 
     /// `ty` as an annotation writes it, with its variables named by `names`. `None` for a type an annotation cannot
-    /// write: an open record, a type that failed to check, or a variable `names` does not name.
+    /// write: a type that failed to check, or a variable `names` does not name.
     let rec typeExprOf (names: Map<int, string>) (ty: Ty) : TypeExpr option =
         let all (tys: Ty list) =
             let written = tys |> List.map (typeExprOf names)
             if written |> List.forall Option.isSome then Some (written |> List.map Option.get) else None
+        let writtenFields (fields: Map<string, Ty>) =
+            let fieldNames, fieldTys = fields |> Map.toList |> List.unzip
+            all fieldTys
+            |> Option.map (List.map2 (fun name fieldTy -> TypeField(name, false, Some fieldTy, None)) fieldNames)
         let kind =
             match ty with
             | TyVar v -> names |> Map.tryFind v.Id |> Option.map TypeVar
@@ -70,12 +74,12 @@ module internal ContextInference =
             // A tuple, such as a function's several parameters, is a record of the fields `0`, `1`, ...
             | TyRecord fields when not fields.IsEmpty && Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string) ->
                 all (List.init fields.Count (fun index -> fields.[string index])) |> Option.map TypeTuple
-            | TyRecord fields ->
-                let fieldNames, fieldTys = fields |> Map.toList |> List.unzip
-                all fieldTys
-                |> Option.map (fun written ->
-                    List.map2 (fun name fieldTy -> TypeField(name, false, Some fieldTy, None)) fieldNames written |> TypeRecord)
-            | TyOpenRecord _ -> None
+            | TyRecord fields -> writtenFields fields |> Option.map TypeRecord
+            // `(price: b, ...a)`, its other fields the row variable `a`.
+            | TyOpenRecord(fields, row) ->
+                match writtenFields fields, names |> Map.tryFind row.Id with
+                | Some written, Some row -> Some (TypeOpenRecord(written, Some row))
+                | _ -> None
             | TyTag(name, None) -> Some (TypeTag(name, None))
             | TyTag(name, Some payload) -> typeExprOf names payload |> Option.map (fun payload -> TypeTag(name, Some payload))
             | TyUnion [] -> None

@@ -334,14 +334,12 @@ let ``A context needed at a type the call leaves open is found once the rest of 
     | other -> failwith $"Unexpected instances: %A{other}"
 
 [<Fact>]
-let ``A context needed at a type that is not one of the def's own is still missing`` () =
-    // `v.x` is a variable of the def's type, but of an open record, which no annotation can write.
-    let result = Compiler.compile (showContext + "def bad = { v -> describe(v.x) }\n")
-    match result.Diagnostics with
-    | [ diagnostic ] ->
-        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        Assert.Equal("'describe' requires the context 'Show', which is not available here", diagnostic.Message)
-    | other -> failwith $"Expected one diagnostic, got %A{other}"
+let ``A context needed at a field of an open record the def takes is required by the def`` () =
+    // #958: `v.x` is a variable of the def's type `(x: a, ...b) -> string`, which an annotation can write.
+    let typed = compileClean (showContext + "def shown = { v -> describe(v.x) }\n")
+    match typed.InferredContextTypes |> Map.values |> List.ofSeq with
+    | [ [ TyApply("Show", [ TyVar _ ]) ] ] -> ()
+    | other -> failwith $"Unexpected inferred contexts: %A{other}"
 
 [<Fact>]
 let ``Hover and the type lens show the parameterised contexts a def was inferred to require`` () =

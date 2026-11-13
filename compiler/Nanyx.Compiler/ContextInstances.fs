@@ -529,25 +529,27 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
 let internal resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     resolveInstancesAt false env state call name (state.CalleeTypes |> Map.tryFind call.Id) calleeSpan
 
-/// `resolveInstancesAt` for each argument of `call` that names a function as a value, once the call has settled its
-/// type: `apply(println, 7)` passes `println` with `ToString(int)`, and `fold(xs, 0, math.max)` passes `math.max` with
-/// `Ord(int)`. The backend passes the function as a closure over the instances it finds here.
+/// `resolveInstancesAt` for `value` when it names a function as a value, once something has settled its type. The
+/// backend passes the function as a closure over the instances it finds here.
+let internal resolveValueInstances (env: TypeEnv) (state: InferState) (value: Expression) : Result<InferState, Diagnostic list> =
+    let resolve name = resolveInstancesAt true env state value name (state.ExprTypes |> Map.tryFind value.Id) value.Span
+    match value.Kind with
+    | IdentifierExpr name -> resolve name
+    | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
+        match qualifiedDefinition env qualifier field with
+        | Some (name, _) -> resolve name
+        | None -> Ok state
+    | _ -> Ok state
+
+/// `resolveValueInstances` for each argument of `call`, once the call has settled its type: `apply(println, 7)` passes
+/// `println` with `ToString(int)`, and `fold(xs, 0, math.max)` passes `math.max` with `Ord(int)`.
 let internal resolveReferenceInstances (env: TypeEnv) (state: InferState) (call: Expression) : Result<InferState, Diagnostic list> =
-    let resolve (arg: Expression) name result =
-        result |> Result.bind (fun current -> resolveInstancesAt true env current arg name (current.ExprTypes |> Map.tryFind arg.Id) arg.Span)
     match call.Kind with
     | FunctionCall(_, _, args) ->
         match args with
         | [ Kind (TupleExpr items) ] -> items
         | _ -> args
-        |> List.fold (fun result arg ->
-            match arg.Kind with
-            | IdentifierExpr name -> resolve arg name result
-            | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
-                match qualifiedDefinition env qualifier field with
-                | Some (name, _) -> resolve arg name result
-                | None -> result
-            | _ -> result) (Ok state)
+        |> List.fold (fun result arg -> result |> Result.bind (fun current -> resolveValueInstances env current arg)) (Ok state)
     | _ -> Ok state
 
 /// `ContextInference.resolvePending` for the def `name`, building an instance from the definitions attached to the
@@ -630,13 +632,14 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
         |> OrderingOperators.callHelpers inputOf orderings
         |> ArithmeticInference.callMembers inputOf arithmetic)
 
-/// Checks `call`, a call to `name` that inference has just typed, when `name` needs well-known contexts of variables
-/// of its type that it is passed nothing for: a local function's (see `InferState.LocalComparisons`), and the rests of
-/// the unions a function compares (see `InferState.CheckedRests`). Each needs that context of the type it is at the
-/// call (see `WellKnownContexts.checkLocalCall`).
-let internal checkCalledComparisons (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
-    match TypeEnv.tryFind name env, state.CalleeTypes |> Map.tryFind call.Id with
-    | Some ({ Symbol = Some symbol } as scheme), Some calleeTy when state.LocalComparisons.ContainsKey symbol || state.CheckedRests.ContainsKey symbol ->
+/// Checks `call`, a call to `name` or `name` named as a value, which inference has just typed `calleeTy`, when `name`
+/// needs well-known contexts of variables of its type that it is passed nothing for: a local function's (see
+/// `InferState.LocalComparisons`), and the rests of the unions a function compares (see `InferState.CheckedRests`).
+/// Each needs that context of the type it is at `call` (see `WellKnownContexts.checkLocalCall`). A type not known yet,
+/// as that of a function passed as an argument often is, is checked once the def around it is inferred.
+let internal checkComparisonsAt (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) (calleeTy: Ty) : Result<InferState, Diagnostic list> =
+    match TypeEnv.tryFind name env with
+    | Some ({ Symbol = Some symbol } as scheme) when state.LocalComparisons.ContainsKey symbol || state.CheckedRests.ContainsKey symbol ->
         ContextInference.checkedAtCalls state symbol scheme
         |> Map.toList
         |> List.fold (fun result (ctxName, used) ->

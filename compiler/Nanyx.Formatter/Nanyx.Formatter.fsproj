@@ -11,11 +11,15 @@
     <Compile Include="ImportOrder.fs" />
     <Compile Include="Syntax.fs" />
     <Compile Include="SourceText.fs" />
+    <Compile Include="Position.fs" />
     <Compile Include="CommentPlacement.fs" />
     <Compile Include="TypePrinter.fs" />
     <Compile Include="PatternPrinter.fs" />
     <Compile Include="ImportPrinter.fs" />
     <Compile Include="CallPrinter.fs" />
+    <Compile Include="ExpressionParts.fs" />
+    <Compile Include="LambdaPrinter.fs" />
+    <Compile Include="BranchPrinter.fs" />
     <Compile Include="Formatter.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="FormatCommand.fs" />

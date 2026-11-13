@@ -67,7 +67,7 @@ let internal read
     |> Result.bind (fun () -> extraCheck)
     |> Result.bind (fun () -> typeOfsInferred)
     |> Result.map (fun checkedState ->
-        let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
+        let contextOpt, declaredTypeExprOpt = extractDefContexts typeOpt expr
         let envWithCtx, state =
             match contextOpt with
             | Some contexts -> extendEnvWithContexts env checkedState contexts ||> fun env state -> bindInstances env state contexts

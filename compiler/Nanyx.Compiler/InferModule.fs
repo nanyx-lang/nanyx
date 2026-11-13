@@ -127,7 +127,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             match typeOpt, value.Kind, symbol with
             | None, Lambda _, Some symbol -> state <- { state with UnannotatedDefs = state.UnannotatedDefs |> Map.add name symbol }
             | _ -> ()
-            let _, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
+            let _, declaredTypeExprOpt = extractDefContexts typeOpt value
             match declaredTypeExprOpt with
             // An annotation with a `typeof` can only be read once the values it names are in scope, so the def is
             // pre-bound as an unannotated one is, and its annotation is unified with that once it has been read. So is
@@ -238,7 +238,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         match declaredTypeExprOpt with
                         | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr
                         | None -> Ok ()
-                    match rigidResult |> Result.bind (fun () -> synthesizeSettledInstances env state name) with
+                    // A function named point-free finds its instances at the type the def writes.
+                    let valueResolved =
+                        if expectedDeclaredOpt.IsSome then resolveValueInstances envWithRec state expr else Ok state
+                    match rigidResult |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
                     | Error err -> abandon isExport name expr err
                     | Ok synthesizedState ->
                         state <- synthesizedState

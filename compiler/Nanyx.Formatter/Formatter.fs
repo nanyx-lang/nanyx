@@ -6,11 +6,15 @@ open System.Globalization
 open System.Text.RegularExpressions
 open Parser.Program
 open Nanyx.Formatter.SourceText
+open Nanyx.Formatter.Position
 open Nanyx.Formatter.CommentPlacement
 open Nanyx.Formatter.TypePrinter
 open Nanyx.Formatter.PatternPrinter
 open Nanyx.Formatter.ImportPrinter
 open Nanyx.Formatter.CallPrinter
+open Nanyx.Formatter.ExpressionParts
+open Nanyx.Formatter.LambdaPrinter
+open Nanyx.Formatter.BranchPrinter
 
 type Options =
     { /// The width lines are laid out to fit.
@@ -20,44 +24,6 @@ type Options =
 
 module Options =
     let defaults = { LineWidth = 100; IndentSize = 2 }
-
-/// Where an expression is printed, which decides whether it needs parentheses (the parser keeps none).
-type private Position =
-    { /// On the spine of a statement, an arm's body or a top-level expression. The parser reads those without crossing
-      /// lines, with an operator table that has no `..`, so a range needs parentheses there.
-      Inline: bool
-      /// Nothing follows it in the enclosing construct, so a construct that takes everything after it (a `match`, an
-      /// `if`, a `with`) needs no parentheses.
-      Tail: bool
-      /// The loosest operator it may be without parentheses: 0 takes a pipe, `prefixPrecedence`
-      /// only an operand of `.` or `not`.
-      Prec: int }
-
-/// Inside brackets, where anything goes.
-let private full = { Inline = false; Tail = true; Prec = 0 }
-
-/// A statement, an arm's body or a top-level expression.
-let private statementPosition = { Inline = true; Tail = true; Prec = 0 }
-
-/// An operand of `.` or `not`: a primary expression.
-let private operandPosition = { Inline = false; Tail = false; Prec = prefixPrecedence }
-
-/// How tightly the operator the parser reads as `op` binds, as the parser has it (see `binaryOperators`).
-let private precedence op =
-    match binaryOperatorNamed op with
-    | Some found -> found.Precedence
-    | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
-
-/// Which way the operator `op` groups, as the parser has it.
-let private associativity op =
-    match binaryOperatorNamed op with
-    | Some found -> found.Associativity
-    | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
-
-/// What an `if` arm tests: a condition, or a value against a pattern (`if x is #some(y) then ...`).
-type private IfHead =
-    | Condition of Expression
-    | Binding of Expression * Pattern
 
 type private Def = bool * Identifier * TypeExpr option * Expression
 
@@ -141,25 +107,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         match bindings |> List.map (fun (_, n, _, value) -> path value [], n) |> List.filter (fun (p, _) -> not p.IsEmpty) with
         | [] -> "()"
         | entries -> render entries
-
-    /// A lambda's parameters as written, each with the pattern it was written as, if any, and its body as written. A
-    /// pattern parameter (`{ (a, b) -> a + b }`) is taken apart by a one-arm match the parser puts at the top of the
-    /// body, over the parameter that stands in its place (`patternArgument`).
-    let writtenLambda (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) =
-        let plain () = parameters |> List.map (fun parameter -> parameter, None), body
-        match body.Kind with
-        | Match(scrutinees, [ patterns, inner ]) when sourceText.Valid e.Span && body.Span = e.Span && scrutinees.Length = patterns.Length ->
-            let taken =
-                List.zip scrutinees patterns
-                |> List.choose (fun (scrutinee, p) ->
-                    match scrutinee.Kind with
-                    | IdentifierExpr n -> Some(n, p)
-                    | _ -> None)
-                |> Map.ofList
-            let written =
-                parameters |> List.mapi (fun index (n, t) -> (n, t), (if n = patternArgument (index + 1) then Map.tryFind n taken else None))
-            if taken.Count = scrutinees.Length && (List.choose snd written).Length = taken.Count then written, inner else plain ()
-        | _ -> plain ()
 
     let rec expr (position: Position) (e: Expression) : Doc =
         if needsParentheses position e then parens (exprBare full e) else exprBare position e
@@ -245,9 +192,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Block _ -> cat [ text "do"; nest (cat [ hard; block e ]) ]
         | Match([ scrutinee ], arms) when sourceText.IsPipedMatch e scrutinee -> pipeChain position e
         | Match(scrutinees, arms) ->
-            match ifArm e with
+            match (branches ()).IfArm e with
             | Some _ -> ifDoc e
-            | None -> matchDoc e scrutinees arms
+            | None -> (branches ()).MatchDoc e scrutinees arms
         | Except(value, arms) -> exceptDoc position e value arms
         | IfExpr _ -> ifDoc e
         | TupleExpr items -> fieldsDoc e.Span.Start e.Span.End (List.map PositionalField items)
@@ -395,119 +342,31 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and pipeArguments (call: Expression) (afterName: int) (args: Expression list) : Doc = (calls ()).PipeArguments call afterName args
 
+    /// What the printers taken out of this one call back into it for.
+    and parts () : ExpressionParts =
+        { Expression = expr
+          NeedsParentheses = needsParentheses
+          IsWrittenBlock = isWrittenBlock
+          Block = block
+          StatementsInSequence = statementsInSequence
+          ArmsInSequence = armsInSequence
+          Pattern = pattern
+          TypeExpr = typeExpr }
+
+    /// Lambdas in the module, with their parts printed as the rest of the module's are.
+    and lambdas () = LambdaPrinter(options.IndentSize, sourceText, placement, parts ())
+
     /// A lambda. With `bodyOnOwnLine`, a body that is an expression goes on a line of its own after the `->`, as the
     /// one statement of a block (see `defDoc`).
     and lambdaDoc (e: Expression) (parameters: (Identifier * TypeExpr option) list) (body: Expression) (bodyOnOwnLine: bool) : Doc =
-        match shorthand e parameters body with
-        | Some doc -> doc
-        | None ->
-            let parameters, body = writtenLambda e parameters body
-            let takesUnit = match e.Kind with Lambda(_, _, takesUnit) -> takesUnit | _ -> false
-            // A result annotation is written after the parameters (see `LambdaResultSyntax`).
-            let resultDoc, body =
-                match body.Kind with
-                | LambdaResultSyntax.Annotated(resultType, inner) when takesUnit || not parameters.IsEmpty -> cat [ text ": "; typeExpr resultType ], inner
-                | _ -> Doc.empty, body
-            let head =
-                match parameters with
-                | [] when takesUnit -> cat [ text "{ ()"; resultDoc; text " ->" ]
-                | [] -> text "{"
-                | _ -> cat [ text "{ "; commaJoin (List.map parameterDoc parameters); resultDoc; text " ->" ]
-            // A body on its own line is read as a statement, which can't take a range, so where the layout is ours to
-            // choose, a body that would need parentheses there stays on the `->`'s line instead, as does a block of just
-            // that body in parentheses.
-            let bracketedAsStatement (x: Expression) = needsParentheses statementPosition x && not (needsParentheses full x)
-            let body =
-                match body.Kind with
-                | Block [ { Kind = ExprStatement single } ] when
-                    bodyOnOwnLine && bracketedAsStatement single && not (sourceText.Valid e.Span && hasCommentsIn e.Span.Start e.Span.End) -> single
-                | _ -> body
-            match body.Kind with
-            // The statements of a lambda are read regardless of lines and indentation, so the comments anywhere between
-            // its braces go among them.
-            | Block statements when isWrittenBlock body ->
-                cat [ head; nest (cat [ hard; statementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
-            | _ when bodyOnOwnLine && not (bracketedAsStatement body) -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
-            | _ ->
-                let bodyDoc = expr full body
-                // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
-                let head =
-                    let first = (Doc.render Int32.MaxValue bodyDoc).TrimStart()
-                    if List.isEmpty parameters && not takesUnit && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
-                // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
-                // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
-                Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
+        (lambdas ()).LambdaDoc e parameters body bodyOnOwnLine
 
-    /// A lambda's parameter, with the pattern it was written as, if any (see `writtenLambda`). An annotated parameter is
-    /// bracketed, so an arrow after its annotation is not read as part of it.
-    and parameterDoc ((n, typeOpt), patternOpt) =
-        match patternOpt, typeOpt with
-        | Some p, _ -> pattern p
-        // A parameter that takes a cell is written as it was: `mut cell`, or `mut cell: int` (see `CellPassingSyntax`).
-        | None, CellPassingSyntax.CellParameter None -> text $"mut {Names.written n}"
-        | None, CellPassingSyntax.CellParameter (Some held) -> cat [ text $"mut {Names.written n}: "; typeExpr held ]
-        | None, Some t -> cat [ text "("; text n; text ": "; typeExpr t; text ")" ]
-        | None, None -> text n
+    /// Branching constructs in the module, with their parts printed as the rest of the module's are.
+    and branches () : BranchPrinter = BranchPrinter(options.IndentSize, sourceText, placement, parts ())
 
-    /// The shorthand lambdas the parser expands: `{ }`, `{ * }`, a body that leaves out its first operand (`{ * 2 }`,
-    /// `{ .name }`, which the implicit argument is printed as nothing in), `{ | pattern -> ... }` and
-    /// `{ m -> | pattern -> ... }`.
-    and shorthand (e: Expression) parameters (body: Expression) : Doc option =
-        let made (x: Expression) = sourceText.Valid e.Span && x.Span = e.Span
-        match parameters, body.Kind with
-        | [], UnitExpr when made body -> Some(text "{ }")
-        | [ (first, None); (second, None) ], BinaryOp(op, _, l, r) when
-            first = implicitArgument && second = implicitSecondArgument && l.Kind = IdentifierExpr first && r.Kind = IdentifierExpr second ->
-            Some(text $"{{ {op} }}")
-        | [ (only, None) ], _ when only = implicitArgument ->
-            Some(Doc.group (cat [ text "{ "; nest (expr full body); Doc.line; text "}" ]))
-        // `{ | ... }` makes up its parameters and their scrutinees at the lambda; `{ m, f -> | ... }` makes up the
-        // scrutinees of the parameters it names at its arms.
-        | _, Match(scrutinees, arms) when
-            made body
-            && not parameters.IsEmpty
-            && scrutinees.Length = parameters.Length
-            && List.forall2 (fun (s: Expression) (n, _) -> s.Kind = IdentifierExpr n) scrutinees parameters
-            && (if List.forall made scrutinees then parameters = List.init parameters.Length (fun i -> $"arg{i + 1}", None)
-                else parameters |> List.indexed |> List.forall (fun (i, (n, _)) -> n <> patternArgument (i + 1)))
-            ->
-            let head =
-                if List.forall made scrutinees then text "{"
-                else cat [ text "{ "; commaJoin (parameters |> List.map (fun parameter -> parameterDoc (parameter, None))); text " ->" ]
-            let armsDoc = armsInSequence e.Span.Start e.Span.End arms
-            let single = (List.distinctBy (fun (_, b: Expression) -> b.Id) arms).Length = 1
-            if single && not (Doc.hasHardLine armsDoc) then Some(cat [ head; text " "; armsDoc; text " }" ])
-            else Some(cat [ head; nest (cat [ hard; armsDoc ]); hard; text "}" ])
-        | _ -> None
+    and armsInSequence (start: int) (finish: int) (arms: MatchArm list) : Doc = (branches ()).ArmsInSequence start finish arms
 
-    /// Match arms one per line. Arms that share one body are the alternatives of an or-pattern, `| a | b -> body`.
-    and armsInSequence (start: int) (finish: int) (arms: MatchArm list) : Doc =
-        let groups =
-            arms
-            |> List.fold
-                (fun groups (patterns, body: Expression) ->
-                    match groups with
-                    | (alternatives, shared: Expression) :: rest when obj.ReferenceEquals(shared, body) -> (alternatives @ [ patterns ], shared) :: rest
-                    | _ -> ([ patterns ], body) :: groups)
-                []
-            |> List.rev
-        let count = groups.Length
-        groups
-        |> List.mapi (fun index (alternatives, body) ->
-            let armStart =
-                match alternatives with
-                | (first :: _) :: _ when sourceText.Valid first.Span -> first.Span.Start
-                | _ -> body.Span.Start
-            armStart, body.Span.End, fun () ->
-                let patterns = alternatives |> List.map (fun ps -> commaJoin (List.map pattern ps)) |> Doc.join (text " | ")
-                cat [ text "| "; patterns; armBody (index = count - 1) body ])
-        |> sequence false start finish
-
-    /// `-> body`: an indented block on the lines after it, or an expression on the same line.
-    and armBody (isLast: bool) (body: Expression) : Doc =
-        if isWrittenBlock body then cat [ text " ->"; nest (cat [ hard; block body ]) ]
-        else cat [ text " -> "; expr { statementPosition with Tail = isLast } body ]
-
+    and armBody (isLast: bool) (body: Expression) : Doc = (branches ()).ArmBody isLast body
     /// Whether `e` is a block of statements as written, not one the parser made up for a call on a call's result (see
     /// `CallResultSyntax`), which is written as that call.
     and isWrittenBlock (e: Expression) =
@@ -515,14 +374,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         | CallResultSyntax.Call _ -> false
         | Block _ -> true
         | _ -> false
-
-    and matchDoc (e: Expression) (scrutinees: Expression list) (arms: MatchArm list) : Doc =
-        let armsDoc = nest (cat [ hard; armsInSequence e.Span.Start e.Span.End arms ])
-        match scrutinees with
-        // A block scrutinee is indented more than the arms, which are indented more than the `match`.
-        | [ scrutinee ] when (match scrutinee.Kind with Block _ -> true | _ -> false) ->
-            cat [ text "match"; Doc.nest (2 * options.IndentSize) (cat [ hard; block scrutinee ]); armsDoc ]
-        | _ -> cat [ text "match "; commaJoin (List.map (expr { full with Tail = false }) scrutinees); armsDoc ]
 
     /// A pipe chain, `value \f \g(x)`, perhaps with `\match` steps. It stays on one line when it was written on one and
     /// fits; otherwise each step goes on a line of its own, indented once from the line the chain starts on, as the
@@ -580,103 +431,12 @@ let format (options: Options) (parsed: SourceModule) : string =
             let step doc afterMatch = if afterMatch then nest (cat [ hard; doc ]) else cat [ text " "; doc ]
             cat (rootDoc :: List.map2 step stepDocs afterMatch)
 
-    /// `value except pattern -> replacement` when there is one arm (perhaps with alternatives), and otherwise `value
-    /// except` with the arms on the lines after it, as a match has them.
     and exceptDoc (position: Position) (e: Expression) (value: Expression) (arms: MatchArm list) : Doc =
-        let valueDoc = expr { position with Tail = false; Prec = 0 } value
-        match singleArm arms with
-        | Some(patterns, body) -> cat [ valueDoc; text " except "; patterns; armBody true body ]
-        | None -> cat [ valueDoc; text " except"; nest (cat [ hard; armsInSequence value.Span.End e.Span.End arms ]) ]
+        (branches ()).ExceptDoc position e value arms
 
-    /// The patterns of arms that all share one body, joined as alternatives `a | b`, and that body.
-    and singleArm (arms: MatchArm list) : (Doc * Expression) option =
-        match List.distinctBy (fun (_, body: Expression) -> body.Id) arms with
-        | [ _, body ] -> Some(arms |> List.map (fun (ps, _) -> commaJoin (List.map pattern ps)) |> Doc.join (text " | "), body)
-        | _ -> None
+    and ifDoc (e: Expression) : Doc = (branches ()).IfDoc e
 
-    /// An `if` as its head, its `then` branch and its `else` branch if it has one (a left-out `else` is `()` made up at
-    /// the `then` branch). `if x is pattern then a else b` is parsed as a match of `x` against the pattern and `_`.
-    and ifArm (e: Expression) : (IfHead * Expression * Expression option) option =
-        let elseOf (thenBranch: Expression) (elseBranch: Expression) =
-            if elseBranch.Kind = UnitExpr && elseBranch.Span = thenBranch.Span then None else Some elseBranch
-        match e.Kind with
-        | IfExpr(condition, thenBranch, elseBranch) -> Some(Condition condition, thenBranch, elseOf thenBranch elseBranch)
-        | Match([ value ], [ [ p ], thenBranch; [ wildcard ], elseBranch ]) when
-            wildcard.Kind = WildcardPattern
-            && wildcard.Span = elseBranch.Span
-            && (sourceText.StartsWith e.Span "if" || sourceText.StartsWith e.Span "|")
-            && not (obj.ReferenceEquals(thenBranch, elseBranch))
-            ->
-            Some(Binding(value, p), thenBranch, elseOf thenBranch elseBranch)
-        | _ -> None
-
-    and ifHead (head: IfHead) : Doc =
-        match head with
-        | Condition condition -> expr { full with Tail = false } condition
-        | Binding(value, p) -> cat [ expr { full with Tail = false } value; text " is "; pattern p ]
-
-    and ifDoc (e: Expression) : Doc =
-        let head, thenBranch, elseBranch = (ifArm e).Value
-        // `if | a -> x | b -> y | else -> z` is parsed as nested ifs, each after the first spanning from its `|`.
-        if sourceText.StartsWith e.Span "if" && sourceText.NextChar (e.Span.Start + 2) = '|' then
-            let rec chain arms (head, body, rest: Expression option) =
-                match rest with
-                | Some r when sourceText.StartsWith r.Span "|" && (ifArm r).IsSome -> chain ((head, body) :: arms) (ifArm r).Value
-                | _ -> List.rev ((head, body) :: arms), rest
-            let arms, elseBranch = chain [] (head, thenBranch, elseBranch)
-            let headStart head =
-                match head with
-                | Condition condition -> condition.Span.Start
-                | Binding(value, _) -> value.Span.Start
-            let conditionArms =
-                arms
-                |> List.mapi (fun index (head, body: Expression) ->
-                    let isLast = index = arms.Length - 1 && elseBranch.IsNone
-                    headStart head, body.Span.End, fun () -> cat [ text "| "; ifHead head; armBody isLast body ])
-            let elseArm =
-                match elseBranch with
-                | Some body -> [ body.Span.Start, body.Span.End, fun () -> cat [ text "| else"; armBody true body ] ]
-                | None -> []
-            cat [ text "if"; nest (cat [ hard; sequence false e.Span.Start e.Span.End (conditionArms @ elseArm) ]) ]
-        else
-            let isBlock (x: Expression) = match x.Kind with Block _ -> true | _ -> false
-            let anyBlock = isBlock thenBranch || (elseBranch |> Option.exists isBlock)
-            // Two expressions go on the `if`'s line if they fit, or else `then` and `else` start lines of their own,
-            // indented once, which parses the same.
-            if not anyBlock then
-                let thenPart = cat [ Doc.line; text "then "; expr { full with Tail = elseBranch.IsNone } thenBranch ]
-                let elsePart =
-                    match elseBranch with
-                    | Some elseBranch -> cat [ Doc.line; text "else "; expr full elseBranch ]
-                    | None -> Doc.empty
-                Doc.group (cat [ text "if "; ifHead head; nest (cat [ thenPart; elsePart ]) ])
-            else
-                let thenDoc =
-                    if isBlock thenBranch then cat [ text " then"; nest (cat [ hard; block thenBranch ]) ]
-                    else cat [ text " then "; expr { full with Tail = elseBranch.IsNone } thenBranch ]
-                let elseDoc =
-                    match elseBranch with
-                    | None -> Doc.empty
-                    | Some elseBranch ->
-                        let keyword = if isBlock thenBranch then cat [ hard; text "else" ] else text " else"
-                        if isBlock elseBranch then cat [ keyword; nest (cat [ hard; block elseBranch ]) ]
-                        else cat [ keyword; text " "; expr full elseBranch ]
-                cat [ text "if "; ifHead head; thenDoc; elseDoc ]
-
-    /// `for xs, ys | arms` and `for xs -> body`, parsed as a call to `__for` with a lambda of the elements. One arm
-    /// (perhaps with alternatives) stays on the head's line, `for xs | x -> body`; several go on the lines after it.
-    and forDoc (iterables: Expression list) (loop: Expression) : Doc =
-        let head = cat [ text "for "; commaJoin (iterables |> List.map (expr { full with Tail = false })) ]
-        match loop.Kind with
-        | Lambda(parameters, body, _) ->
-            match body.Kind with
-            | Match(elements, arms) when elements |> List.map _.Kind = (parameters |> List.map (fst >> IdentifierExpr)) && body.Span = loop.Span ->
-                match singleArm arms with
-                | Some(patterns, armBodyExpr) -> cat [ head; text " | "; patterns; armBody true armBodyExpr ]
-                | None -> cat [ head; nest (cat [ hard; armsInSequence loop.Span.Start loop.Span.End arms ]) ]
-            | _ -> cat [ head; armBody true body ]
-        | _ -> head
-
+    and forDoc (iterables: Expression list) (loop: Expression) : Doc = (branches ()).ForDoc iterables loop
     /// A context and its type arguments, as in `C(T).field`.
     and contextHead (context: TypeExpr) : Doc =
         match context.Kind with
@@ -754,7 +514,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | _ -> false
         match value.Kind with
         | Block _ when isWrittenBlock value -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
-        | Lambda(parameters, body, _) when typeOpt.IsSome && not (isTrivial (snd (writtenLambda value parameters body))) ->
+        | Lambda(parameters, body, _) when typeOpt.IsSome && not (isTrivial (snd ((lambdas ()).WrittenLambda value parameters body))) ->
             cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
         | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]
 
