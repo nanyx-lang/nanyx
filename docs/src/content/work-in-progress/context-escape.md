@@ -148,7 +148,7 @@ memory { m1 ->
 }
 ```
 
-`memory`'s block then takes the instance, `memory: [c] ([$Memory & c] $Memory -> a) -> a`, and `memory { ... }` still
+`memory`'s block takes the instance, `memory: [c] ([$Memory & c] $Memory -> a) -> a`, and `memory { ... }` still
 checks, since a lambda with no parameters ignores one.
 
 ## Options considered
@@ -214,5 +214,11 @@ checks, since a lambda with no parameters ignores one.
      called in is given, so `{ mk -> memory { mk() } }` is generalised over the scope and supplies `$Memory` in turn.
      Contexts are paired with the same scope first, so a block's requirement of an outer block's `$Memory` goes into
      its context variable.
-5. Give a `memory` block its instance, `memory { m -> ... }` ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058),
-   after 4).
+5. ~~Give a `memory` block its instance, `memory { m -> ... }`~~ ([#1058](https://github.com/nanyx-lang/nanyx/issues/1058)).
+   Done: a scoped context's name in a type is the nominal type made from its scope, the one the signature's contexts
+   of that name have (`TypeResolution.scopedValueType`), so a value of it mentions the scope and NYX0233 keeps it in
+   its block; its constructor makes one of a scope of its own (`TypeResolution.constructedType`). A `use` of a
+   `$Memory` instance makes its scope the one a `mut` after it takes (`MemoryCells.afterUse`), and the backend lowers
+   it to nothing. Each call's own scope is a variable named `@call` (`FunctionContexts.isCallScope`): `pairUp` never
+   pairs two of them, so an inner block's requirement of an outer block's `$Memory` goes into its context variable,
+   and the unifier keeps a call's scope as what a plain variable it meets becomes.

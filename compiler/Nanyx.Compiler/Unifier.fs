@@ -714,6 +714,10 @@ module Unifier =
                     | Some restVar when exact && restVar.Name.IsNone -> [ (TyVar restVar, TyUnion [], Equal, origin) ]
                     | _ -> []
                 match l, r with
+                // A variable a call's scope meets becomes the scope, which stays the call's (see
+                // `FunctionContexts.isCallScope`).
+                | TyVar _, TyVar v when FunctionContexts.isCallScope l && not (FunctionContexts.isCallScope r) ->
+                    loop (subst |> Map.add v.Id l) rest
                 | TyVar v, ty
                 | ty, TyVar v ->
                     if occurs v.Id ty then

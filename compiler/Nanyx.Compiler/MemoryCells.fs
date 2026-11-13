@@ -32,6 +32,17 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
 let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty) : TypeEnv =
     if isMemoryCall env state name then TypeEnv.extend scopeKey (TypeEnv.mono scope) env else env
 
+/// The environment after a `use` of a value of the type `ty`, `env` being the one the `use` makes: an instance of
+/// `$Memory` it loads is the innermost one, so a `mut` after it makes a cell of that instance's scope, which may be an
+/// outer block's. The `use` starts no scope of its own.
+let afterUse (state: InferState) (env: TypeEnv) (ty: Ty) : TypeEnv =
+    match resolveSoFar state ty with
+    | TyNominal(nominal, FunctionContexts.ScopeType scope, _) when
+        state.TypeDefs.TryFind context |> Option.exists (fun info -> TypeDefInfo.nominalId info = nominal)
+        ->
+        TypeEnv.extend scopeKey (TypeEnv.mono scope) env
+    | _ -> env
+
 /// The scope of the cell `name`, as `env` binds it, if it is one.
 let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty option =
     TypeEnv.tryFind name env |> Option.bind _.Symbol |> Option.bind state.Cells.TryFind

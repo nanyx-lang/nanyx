@@ -1,7 +1,7 @@
 /// Keeping what requires a scoped context inside the call that supplies it (see the Context escape page). A function
 /// _supplies_ a scoped context to a parameter when the parameter's type requires it and the function's own contexts
 /// don't: `memory: [c] ([$Memory & c] () -> a) -> a` supplies `$Memory` to its block. Each call to such a function
-/// starts a scope of its own, the variable the scope in the callee's type is instantiated to, and every requirement of
+/// starts a scope of its own, a variable that stands where the callee's type has its scope, and every requirement of
 /// the context its arguments make belongs to it. Once the arguments are checked, the scope must not be one of the
 /// scopes around the call, or one a signature writes, and the call's result must not mention it. The scope is an
 /// ordinary variable otherwise, so a function whose parameter is given it, `{ mk -> memory { mk() } }`, is generalised
@@ -30,10 +30,11 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
 let private scopedIn (state: InferState) (written: TypeExpr list) : TypeExpr list =
     written |> List.filter (fun ctx -> match ctx.Kind with TypeName name -> WrittenContexts.isScoped state name | _ -> false)
 
-/// The environment the arguments of the call `call` to `callee` are checked in, and `state` as they start to be.
-/// `scheme` is the callee as `env` binds it, `calleeTy` its type at the call, and `written` the contexts its type
-/// declares. A scoped context the callee requires itself is used where the call runs, of the scope its type has at the
-/// call. Each one it supplies opens the scope it is instantiated to, and a `memory` block can make cells of it.
+/// The environment the arguments of the call `call` to `callee` are checked in, the callee's type there, and `state` as
+/// they start to be. `scheme` is the callee as `env` binds it, `calleeTy` its type at the call, and `written` the
+/// contexts its type declares. A scoped context the callee requires itself is used where the call runs, of the scope
+/// its type has at the call. Each one it supplies opens a scope of the call's own (see
+/// `FunctionContexts.isCallScope`) where its type is instantiated to one, and a `memory` block can make cells of it.
 let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identifier) (scheme: TypeScheme) (calleeTy: Ty) (written: TypeExpr list) =
     let required, state = WrittenContexts.plain state calleeTy (scopedIn state written)
     let state = LambdaContexts.recordUnsupplied env required state
@@ -51,8 +52,17 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
             |> List.distinctBy fst
         | _ -> []
     match supplied with
-    | [] -> env, state
+    | [] -> env, calleeTy, state
     | _ ->
+        let ownScopes, state =
+            supplied
+            |> List.choose (fun (_, scope) -> match scope with TyVar v -> Some v.Id | _ -> None)
+            |> List.mapFold (fun (current: InferState) id ->
+                (id, TyVar { Id = current.NextId; Name = Some FunctionContexts.callScopeName }),
+                { current with NextId = current.NextId + 1 }) state
+        let ownScopes = Map.ofList ownScopes
+        let calleeTy = Unifier.apply ownScopes calleeTy
+        let supplied = supplied |> List.map (fun (name, scope) -> name, Unifier.apply ownScopes scope)
         let env =
             match supplied |> List.tryFind (fst >> (=) MemoryCells.context) with
             | Some (_, scope) -> MemoryCells.aroundCall env state callee scope
@@ -60,6 +70,7 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
         // The scopes signatures write so far: a scope bound outside the call.
         let written = state.TypeVars |> Map.toList |> List.filter (fun (name, _) -> name.StartsWith "@") |> List.map (snd >> TyVar)
         env,
+        calleeTy,
         { state with
             SupplyingCalls = state.SupplyingCalls |> Map.add call.Id (supplied, written)
             OpenScopes = List.map snd supplied @ state.OpenScopes }
@@ -116,7 +127,7 @@ let leave (call: Expression) (state: InferState) : InferState =
     | Some (supplied, written) ->
         let opened = List.map snd supplied
         let state = { state with OpenScopes = state.OpenScopes |> List.filter (fun scope -> not (List.contains scope opened)) }
-        let resolve = Unifier.apply (fst (Unifier.solve state.Constraints))
+        let resolve = Unifier.applySolved (fst (Unifier.solve state.Constraints))
         let callee = match call.Kind with FunctionCall(name, _, _) -> name | _ -> "the function"
         let result =
             match state.CalleeTypes |> Map.tryFind call.Id |> Option.map Unifier.unalias with

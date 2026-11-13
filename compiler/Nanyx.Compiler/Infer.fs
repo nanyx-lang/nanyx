@@ -356,7 +356,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 let mutable current = state
                 let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
                 let written = state.ContextRequirements |> Map.tryFind (canonicalName env state name) |> Option.defaultValue []
-                let env, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
+                let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
                 current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
 
                 let recordFieldsOpt = recordFieldsOf funcTy
@@ -539,8 +539,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
                         let inputTy, fitted = UseDischarge.fit current expr info.Underlying args (inputTypeFromArgs argTys)
-                        let constrained = addAssignableConstraint inputTy info.Underlying fitted
-                        Ok (mkTypedExpr expr (namedType name info) None None None, constrained)
+                        let made, constrained = constructedType (addAssignableConstraint inputTy info.Underlying fitted) name info
+                        Ok (mkTypedExpr expr made None None None, constrained)
                     else
                         Error errors
                 | None ->
@@ -1467,7 +1467,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                     | Ok (typedExpr, next) ->
                         let withUse, next = useInstance (extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type) next value typedExpr.Type
                         current <- next
-                        env' <- withUse
+                        env' <- MemoryCells.afterUse next withUse typedExpr.Type
                         typedStatements <- typedStatements @ [ TypedUseStatement typedExpr ]
                     | Error err -> errors <- err
             | ExprStatement expr ->

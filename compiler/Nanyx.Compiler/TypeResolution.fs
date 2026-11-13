@@ -141,6 +141,19 @@ let internal isNominal (info: TypeDefInfo) =
 let internal namedType (name: string) (info: TypeDefInfo) : Ty =
     if isNominal info then TyNominal(TypeDefInfo.nominalId info, info.Underlying, info.IsPrivate) else aliasType name info
 
+/// The type of a value of the scoped context `info` (a nominal type) of the scope `scope`: the nominal type, made from
+/// the scope rather than from what it is declared to be, so that a value of it requires the context at its scope and
+/// cannot leave the call that supplies it (see `ScopedCalls`). A reader sees only its name.
+let internal scopedValueType (info: TypeDefInfo) (scope: Ty) : Ty =
+    TyNominal(TypeDefInfo.nominalId info, FunctionContexts.scopeType scope, info.IsPrivate)
+
+/// The type of the value the constructor of `info`, the type `name`, makes: a scoped context's of a scope of its own.
+let internal constructedType (state: InferState) (name: string) (info: TypeDefInfo) : Ty * InferState =
+    if info.IsScoped then
+        let scope, next = freshVar state
+        scopedValueType info scope, next
+    else namedType name info, state
+
 /// The type definition a type name written in the module means: none for a name only an aliased import brings in,
 /// which has to be written with the alias.
 let internal tryFindTypeDef (name: string) (state: InferState) : TypeDefInfo option =
@@ -182,6 +195,11 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | Some prim -> prim, state
         | None ->
             match tryFindTypeDef name state with
+            // A scoped context's scope is the one every scoped context of its name in the signature has (see
+            // `WrittenContexts.read`).
+            | Some info when info.IsScoped && isNominal info ->
+                let scope, next = typeExprToTy (recordTypeReference typeExpr info state) (TypeExpr.synthetic (TypeVar $"@{name}"))
+                scopedValueType info scope, next
             | Some info -> namedType name info, recordTypeReference typeExpr info state
             | None -> TyPrimitive name, state
     | TypeVar name ->
