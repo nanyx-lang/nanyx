@@ -10,7 +10,9 @@ let private normalized (source: string) = source.Replace("\r\n", "\n")
 /// or `nothing`.
 let private documented (source: string) =
     let source = normalized source
-    (DocComments.parse "t.nyx" source).Comments
+    match parseModuleFileWithDocs "t.nyx" source with
+    | Result.Ok (_, docs) -> docs.Value.Comments
+    | Result.Error error -> failwith $"Parse failed: {error.Message}"
     |> List.map (fun comment ->
         let target =
             match comment.Target with
@@ -138,7 +140,6 @@ let ``A doc comment before what it cannot document documents nothing`` () =
 let ``A --| after code on its line, or inside a block comment, is an ordinary comment`` () =
     let source =
         """def a = 1 --| not a doc comment
-  + 1
 ---
 --| commented out
 ---
@@ -151,6 +152,6 @@ let ``A doc comment is kept as one comment for the formatter`` () =
     match parseModuleWithTrivia "" (normalized "--| One\n  two\n\ndef a = 1\n") with
     | Result.Ok parsed ->
         match parsed.Trivia with
-        | [ LineComment(text, false, _); BlankLines(1, _) ] -> Assert.Equal("--| One\n  two", text)
+        | [ DocLineComment(text, _); BlankLines(1, _) ] -> Assert.Equal("--| One\n  two", text)
         | other -> failwith $"Unexpected trivia: %A{other}"
     | Result.Error error -> failwith error.Message

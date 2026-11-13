@@ -14,9 +14,8 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
     let comments =
         parsed.Trivia
         |> List.choose (function
-            | LineComment(commentText, _, span) when commentText.StartsWith "--|" ->
-                Some(DocComments.relaidOut indentSize commentText, span)
-            | LineComment(commentText, _, span) -> Some(commentText.TrimEnd(), span)
+            | DocLineComment(commentText, span) -> Some(DocCommentLines(DocComments.relaidOutLines indentSize commentText), span)
+            | LineComment(commentText, _, span) -> Some(WrittenComment(commentText.TrimEnd()), span)
             | BlankLines _ -> None)
         |> Array.ofList
 
@@ -26,7 +25,8 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
         parsed.Trivia
         |> List.choose (function
             | BlankLines(_, span) -> Some span
-            | LineComment _ -> None)
+            | LineComment _
+            | DocLineComment _ -> None)
 
     let unplacedIn (start: int) (finish: int) =
         [ for i in 0 .. comments.Length - 1 do
@@ -74,7 +74,7 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
             match trailing with
             | Some i when after.IsEmpty ->
                 placed[i] <- true
-                entries.Add(StackItem(cat [ doc; Doc.lineSuffix (fst comments[i]) ], isImport))
+                entries.Add(StackItem(cat [ doc; Doc.trailingComment (fst comments[i]) ], isImport))
             | _ ->
                 entries.Add(StackItem(doc, isImport))
                 for i in after do

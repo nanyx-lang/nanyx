@@ -56,23 +56,23 @@ module DocComments =
         let first, rest = lines written
         String.concat "\n" (first :: rest) |> fun text -> text.Trim('\n')
 
-    /// The doc comment as written, laid out with each continuation line `indent` spaces past the `--|` line: the
-    /// text and its line breaks are kept, and the continuation lines keep their indents relative to each other.
-    let relaidOut (indent: int) (written: string) : string =
+    /// The lines of the doc comment as written, laid out with each continuation line `indent` spaces past the `--|`
+    /// line: the text and its line breaks are kept, and the continuation lines keep their indents relative to each other.
+    let relaidOutLines (indent: int) (written: string) : string list =
         let first, rest = lines written
         let firstLine = if first.Length = 0 then "--|" else "--| " + first
-        String.concat "\n" (firstLine :: (rest |> List.map (fun line -> if line.Length = 0 then line else String(' ', indent) + line)))
+        firstLine :: (rest |> List.map (fun line -> if line.Length = 0 then line else String(' ', indent) + line))
+
+    /// The doc comment as written, laid out as `relaidOutLines` lays it out.
+    let relaidOut (indent: int) (written: string) : string = String.concat "\n" (relaidOutLines indent written)
 
     /// The words that may come before what a doc comment documents on its line: `export def name`, `| #tag`.
     let private leadingWords = set [ "scoped"; "export"; "private"; "def"; "rec"; "mut"; "type"; "context"; "|"; "(" ]
 
-    /// The doc comments among `comments` (start and end offsets in `source`, as the parser notes them), each attached
-    /// to what it documents in `items`, the module as parsed, whose declarations are `declared`.
-    let attach (filePath: string) (source: string) (items: TopLevelItem list) (declared: DeclaredNames) (comments: (int * int) list) : FileDocComments =
+    /// The doc comments among `comments` (as the parser notes them in `source`), each attached to what it documents in
+    /// `items`, the module as parsed, whose declarations are `declared`.
+    let attach (filePath: string) (source: string) (items: TopLevelItem list) (declared: DeclaredNames) (comments: NotedComment list) : FileDocComments =
         let lines = LineTable source
-        let onOwnLine start =
-            let lineStart = lines.Start(lines.LineOf start)
-            String.IsNullOrWhiteSpace(source.Substring(lineStart, start - lineStart))
 
         let declarations =
             declared
@@ -134,8 +134,9 @@ module DocComments =
 
         let docs =
             comments
+            |> List.filter _.IsDoc
+            |> List.map (fun comment -> comment.Start, comment.End)
             |> List.distinct
-            |> List.filter (fun (start, _) -> String.CompareOrdinal(source, start, "--|", 0, 3) = 0 && onOwnLine start)
             |> List.sortBy fst
             |> List.map (fun (start, finish) ->
                 { Text = markdown (source.Substring(start, finish - start))
@@ -149,10 +150,5 @@ module DocComments =
             | _ -> []
         { Comments = docs; TopLevel = items |> List.collect topLevel }
 
-    /// The doc comments of the source of the file at `filePath`, attached to what they document. A file that does not
-    /// parse has none.
-    let parse (filePath: string) (input: string) : FileDocComments =
-        let normalized = normalizeSource input
-        match runModuleParser filePath normalized with
-        | Result.Ok (items, state) -> attach filePath normalized items state.Declared state.Comments
-        | Result.Error _ -> { Comments = []; TopLevel = [] }
+    /// The doc comments of a file that does not parse: none.
+    let none: FileDocComments = { Comments = []; TopLevel = [] }

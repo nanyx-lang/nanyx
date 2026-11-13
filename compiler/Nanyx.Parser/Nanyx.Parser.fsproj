@@ -25,8 +25,8 @@
     <Compile Include="Directives.fs" />
     <Compile Include="Expressions.fs" />
     <Compile Include="TopLevel.fs" />
-    <Compile Include="Api.fs" />
     <Compile Include="DocComments.fs" />
+    <Compile Include="Api.fs" />
   </ItemGroup>
 
   <ItemGroup>

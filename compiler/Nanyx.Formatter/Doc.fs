@@ -49,9 +49,16 @@ and StackEntry =
     | StackItem of Doc * isImport: bool
     /// A comment on a line of its own. A `leading` one belongs to the item after it. It is written as `Doc.comment`
     /// writes it.
-    | StackComment of string * leading: bool
+    | StackComment of Comment * leading: bool
     /// A blank line the author wrote.
     | StackBlank
+
+/// A comment, as the formatter writes it.
+and Comment =
+    /// A `--` comment, or a block comment, written as it is, a block comment's line breaks included.
+    | WrittenComment of string
+    /// A doc comment's lines, as `DocComments.relaidOutLines` lays them out.
+    | DocCommentLines of string list
 
 type private Mode =
     | Flat
@@ -119,9 +126,17 @@ module Doc =
     /// A comment on a line of its own. A block comment is written as it is, its line breaks included. A doc comment's
     /// lines are each written at the current indent, so that its continuation lines, which the formatter has set one
     /// indent step past its first line, stay past it wherever the comment ends up.
-    let comment (s: string) =
-        if s.StartsWith "--|" && s.Contains '\n' then join HardLine (s.Split '\n' |> Array.map Text |> List.ofArray)
-        else textOrVerbatim s
+    let comment (comment: Comment) =
+        match comment with
+        | WrittenComment s -> textOrVerbatim s
+        | DocCommentLines lines -> join HardLine (lines |> List.map Text)
+
+    /// A comment at the end of a line, after the code on it (see `lineSuffix`). A doc comment is always on a line of
+    /// its own, so it is never one.
+    let trailingComment (trailing: Comment) =
+        match trailing with
+        | WrittenComment s -> lineSuffix s
+        | DocCommentLines _ -> comment trailing
 
     /// The stack's entries as documents with the line breaks and blank lines between them, given whether each item
     /// takes more than one line.
@@ -151,12 +166,12 @@ module Doc =
         for k in 0 .. entries.Length - 1 do
             match entries[k] with
             | StackBlank -> if blankLines && emitted then blank <- true
-            | StackComment(text, leading) ->
+            | StackComment(written, leading) ->
                 if leading && not separatedNext then
                     let next = seq { k + 1 .. entries.Length - 1 } |> Seq.tryFind isItem
                     if blankLines && emitted && separated previousItem next then blank <- true
                     separatedNext <- true
-                emit (comment text)
+                emit (comment written)
             | StackItem(doc, _) ->
                 if not separatedNext && blankLines && emitted && separated previousItem (Some k) then blank <- true
                 emit doc
@@ -241,7 +256,8 @@ module Doc =
                         | Stack(_, entries), _ ->
                             match entries with
                             | StackItem(doc, _) :: more -> fits remaining [] (Print(indent, Break, doc) :: (if more.IsEmpty then rest else Print(indent, Break, HardLine) :: rest))
-                            | StackComment(text, _) :: _ -> remaining - fst (firstLine text) >= 0
+                            | StackComment(WrittenComment text, _) :: _ -> remaining - fst (firstLine text) >= 0
+                            | StackComment(DocCommentLines lines, _) :: _ -> remaining - (lines |> List.tryHead |> Option.map String.length |> Option.defaultValue 0) >= 0
                             | StackBlank :: more -> fits remaining [] (Print(indent, mode, Stack(false, more)) :: rest)
                             | [] -> fits remaining [] rest
 

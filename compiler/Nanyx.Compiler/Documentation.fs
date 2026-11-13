@@ -9,8 +9,11 @@ open System.Text.RegularExpressions
 open Parser.Program
 
 /// The doc comments of the source of the file at `file`, attached to what they document. A file that does not parse
-/// has none.
-let ofSource (file: string) (source: string) : FileDocComments = DocComments.parse file source
+/// has none. A compile has those of the file it compiles (see `CompileResult.DocComments`).
+let ofSource (file: string) (source: string) : FileDocComments =
+    match parseModuleFileWithDocs file source with
+    | Result.Ok (_, docs) -> docs.Value
+    | Result.Error _ -> DocComments.none
 
 /// The doc comments of each file other than the document, by its name, with the time it was last written: a file on
 /// disk is parsed again when it has changed, and a standard-library module, whose time is `DateTime.MinValue`, never is.
