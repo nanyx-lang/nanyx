@@ -26,12 +26,12 @@ let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : ((int * Var optio
     | IrList element, PList([ head ], Some rest) ->
         match leaf head, leaf rest with
         | Some headVar, Some restVar ->
-            Some([ 0, headVar, element; CoreIrLayout.tailOffset element, restVar, ty ], 4 + CoreIrLayout.listCellSize element)
+            Some([ 0, headVar, element; CoreIrLayout.tailOffset element, restVar, ty ], CoreIrLayout.headerSize ty + CoreIrLayout.listCellSize element)
         | _ -> None
     | IrTags tags, PTag(name, Some inner) ->
         match tags |> List.tryFind (fst >> (=) name), leaf inner with
         | Some(_, Some payloadTy), Some payloadVar ->
-            Some([ CoreIrLayout.payloadOffset, payloadVar, payloadTy ], 4 + CoreIrLayout.tagCellSize payloadTy)
+            Some([ CoreIrLayout.payloadOffset, payloadVar, payloadTy ], CoreIrLayout.headerSize ty + CoreIrLayout.tagCellSize payloadTy)
         | _ -> None
     | IrRecord fields, PFields matched ->
         let leaves = matched |> List.map (fun (slot, inner) -> slot, leaf inner)
@@ -41,16 +41,16 @@ let private fieldsTakenApart (ty: IrType) (pattern: Pattern) : ((int * Var optio
                 |> List.mapi (fun slot (_, fieldTy) ->
                     let bound = leaves |> List.tryFind (fst >> (=) slot) |> Option.bind snd |> Option.flatten
                     CoreIrLayout.fieldOffset fields slot, bound, fieldTy)
-            Some(taken, 8 + CoreIrLayout.recordSize fields)
+            Some(taken, CoreIrLayout.headerSize ty + CoreIrLayout.recordSize fields)
         else None
     | _ -> None
 
 /// The size of the block `value` allocates, if it is an allocation that can write into a reused block.
 let private allocationSize (value: Expr) =
     match value.Kind with
-    | CallRuntime(name, [ head; _ ], _) when name = Helpers.listCons -> Some(4 + CoreIrLayout.listCellSize (atomType head))
-    | MakeTag(_, payload) -> Some(4 + CoreIrLayout.tagCellSize (atomType payload))
-    | MakeRecord fields -> Some(8 + CoreIrLayout.totalSize (fields |> List.map (snd >> atomType)))
+    | CallRuntime(name, [ head; _ ], _) when Helpers.reusingVariant name = Some Helpers.listConsAt -> Some(Header.countOnly + CoreIrLayout.listCellSize (atomType head))
+    | MakeTag(_, payload) -> Some(Header.countOnly + CoreIrLayout.tagCellSize (atomType payload))
+    | MakeRecord fields -> Some(Header.withInfo + CoreIrLayout.totalSize (fields |> List.map (snd >> atomType)))
     | _ -> None
 
 /// `e` with the first allocation of a block of `size` that it always makes (not one in a branch, a loop or a guard)
@@ -144,7 +144,7 @@ type private Rewriter() =
                         |> List.map (fun (scrutinee, (fields, _)) ->
                             { Object = scrutinee
                               Fields = fields |> List.map (fun (offset, bound, fieldTy) -> offset, ownedField bound, fieldTy)
-                              CountOffset = countOffset scrutinee.Type
+                              CountOffset = CoreIrLayout.headerSize scrutinee.Type
                               Token = None })
                     let takenOver =
                         releases |> List.collect (fun released -> released.Fields |> List.choose (fun (_, bound, _) -> bound)) |> List.map _.Id |> Set.ofList
