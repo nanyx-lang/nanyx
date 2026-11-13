@@ -25,9 +25,9 @@ def main = { println(depth(#leaf(1))) }
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    // `path/to/file.nyx:6:31: error NYX0301: ...`, at the function.
+    // `path/to/file.nyx:6:31: error NYX0301: ...`, at the function, then the line with the function underlined.
     Assert.Matches(
-        ":6:31: error NYX0301: The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet\\r?\\n$",
+        ":6:31: error NYX0301: The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet\\r?\\n  \\|\\r?\\n6 \\| def depth: Nest\\(int\\) -> int = \\{ t ->\\r?\\n  \\| {31}\\^+\\r?\\n$",
         outcome.StandardError)
 
 [<Fact>]

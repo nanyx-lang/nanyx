@@ -148,6 +148,13 @@ let nanyxOnPackage (files: (string * string) list) (arguments: string list) : Ru
     let outcome = nanyxWithInput "" (arguments |> List.map (fun argument -> argument.Replace("{package}", root)))
     outcome, File.Exists(Path.Combine(root, "out", "app.wat"))
 
+/// What `nanyx check` printed for a script holding `source`, saved as `main.nyx` in a directory of its own.
+let checkScript (source: string) =
+    use directory = new TempDirectory()
+    let path = Path.Combine(directory.Path, "main.nyx")
+    File.WriteAllText(path, source)
+    nanyxWithInput "" [ "check"; path ]
+
 let runE2E testName =
     runFile (Path.Combine(__SOURCE_DIRECTORY__, "E2E", testName, "input.nyx"))
 
