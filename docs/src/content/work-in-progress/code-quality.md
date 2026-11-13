@@ -95,6 +95,7 @@ which was at 1,518 lines:
 | `Library.fs` | 1,063 | `@attribute` resolution (`applyAttributes`, `entryAttribute`, `entryContextModule`) moved out to `Attributes.fs`, and `collectImports` to `SyntaxTree.fs` |
 | `Library.fs` | 1,021 | Compiling errors to traps (`deferErrors`, `deferredMessage`) moved out to `DeferredErrors.fs` |
 | `Library.fs` | 948 | The types a checked module is kept in (`CompileResult`, `CheckedModule`, `ReExported`) moved out to `CheckedModule.fs` |
+| `Library.fs` | 728 | Module linking (what an import brings into scope and inlines: `inlinedItemsForImport`, `reachedItems`, `extendEnvWithImport` and their helpers) moved out to `ModuleLinking.fs` |
 
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
