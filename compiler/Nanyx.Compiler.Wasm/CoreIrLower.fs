@@ -1229,7 +1229,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         | None -> cannot $"a record pattern on the field '{name}', which the value does not have"))
                 // `$Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
                 // local even at the top of an arm.
-                | RecordPattern(typeName, [ inner ]) when (typeName.Split('.') |> Array.last).StartsWith "$" ->
+                | RecordPattern(typeName, [ inner ]) when Names.isNominalTypeName typeName ->
                     lowerPattern false scrutinee valueTy inner
                 // Every part matches the value matched here, so a name at the top of the arm is still the scrutinee.
                 | AndPattern parts -> PAll(parts |> List.map (lowerPattern isTop scrutinee valueTy))

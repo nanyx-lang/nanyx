@@ -34,6 +34,10 @@ module Names =
     /// reserved for associated types (see the types page).
     let isTypeVariable (name: string) = name.Length = 1 && System.Char.IsLower name[0]
 
+    /// Whether `name` is a nominal type's, qualified by its module block or not (`$Money`, `main.money.$Money`): its
+    /// own part, after the last dot, starts with `$`.
+    let isNominalTypeName (name: string) = name.Substring(name.LastIndexOf '.' + 1).StartsWith "$"
+
     /// `name` as it is written where a name goes: an identifier or a nominal type's name (`$Email`) as it is, and
     /// anything else, such as an operator or a sentence, in backticks. A keyword is an identifier here: it is a name
     /// where a name is expected, as a workflow builder's `try` and `return` fields are. Each part of a qualified name

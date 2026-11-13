@@ -33,7 +33,7 @@ module Compiler =
     /// `FromString(int, #invalidInt)` does to the `e` of `[FromString(a, e)] string -> #some(a) | e`.
     let private resolveTypes (subst: Subst) (types: Map<string, Ty>) (contexts: Map<string, TypeExpr list>) (typeDefs: Map<string, TypeDefInfo>) (items: TypedTopLevelItem list) =
         let closeOutputRests name ty =
-            let contextVars = contexts |> Map.tryFind name |> Option.defaultValue [] |> List.collect NyxCompiler.InferModule.annotationVarNames |> Set.ofList
+            let contextVars = contexts |> Map.tryFind name |> Option.defaultValue [] |> List.collect NyxCompiler.TypeResolution.annotationVarNames |> Set.ofList
             let closed =
                 Unifier.outputOnlyRestVars ty
                 |> List.filter (fun v -> not (v.Name |> Option.exists contextVars.Contains))

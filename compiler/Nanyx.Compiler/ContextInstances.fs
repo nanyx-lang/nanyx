@@ -386,9 +386,9 @@ let private derivedInstance
         let missingContext message = Diagnostics.at DiagnosticCodes.MissingContextMembers span message
         match failure with
         | StructuralInstances.NoInstanceOf missing when InterpolationHoles.isHole calleeName ->
-            [ missingContext (InterpolationHoles.undeclared (TyVar missing) annotatedDef) |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
+            [ missingContext (InterpolationHoles.undeclared state (TyVar missing) annotatedDef) |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
         | StructuralInstances.NoInstanceOf missing ->
-            [ missingContext (InterpolationHoles.undeclaredPart calleeName argTys.Head (TyVar missing) annotatedDef)
+            [ missingContext (InterpolationHoles.undeclaredPart state calleeName argTys.Head (TyVar missing) annotatedDef)
               |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
         | StructuralInstances.HoldsFunction held -> [ missingContext (InterpolationHoles.holdsFunction calleeName argTys held) ]
         | StructuralInstances.OpenToCaller -> [ missingContext (InterpolationHoles.openToCaller calleeName argTys.Head annotatedDef) ]))
@@ -487,7 +487,7 @@ let private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 ContextInference.varsInOrder argTys.Head
                                 |> List.truncate 1
                                 |> List.map (fun var ->
-                                    Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart name argTys.Head (TyVar var) annotatedDef)
+                                    Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart current name argTys.Head (TyVar var) annotatedDef)
                                     |> InterpolationHoles.addToStringFix current (TyVar var) annotatedDef)
                             let pending =
                                 { Def = def; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
