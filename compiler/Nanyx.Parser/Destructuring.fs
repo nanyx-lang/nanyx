@@ -46,9 +46,10 @@ let private matchingBindings (position: Position) (pattern: Pattern) (names: Ide
         | several -> several |> List.mapi (fun index name -> name, made (MemberAccess(made (IdentifierExpr temp), string index, None)))
     body, (temp, matched) :: bindings
 
-/// `[export] def pattern = value`, as the export flag and the bindings it stands for. A bare name is not a
-/// pattern here: that is an ordinary def.
-let destructuringDefWith (lineStartCol: int64) (exprParser: Parser<Expression, ParseState>) : Parser<bool * (Identifier * Expression) list, ParseState> =
+/// `[export] def pattern = value`, written from `lineStart`, as the export flag and the bindings it stands for. A bare
+/// name is not a pattern here: that is an ordinary def.
+let destructuringDefWith (lineStart: Position) (exprParser: Parser<Expression, ParseState>) : Parser<bool * (Identifier * Expression) list, ParseState> =
+    let lineStartCol = lineStart.Column
     // `def x, y = value` is `def (x, y) = value`: patterns separated by commas are the elements of a tuple.
     let patterns =
         withSpan (sepBy1 pattern (pstring "," .>> ws))
@@ -63,10 +64,12 @@ let destructuringDefWith (lineStartCol: int64) (exprParser: Parser<Expression, P
         (fun exportOpt (position, pattern) value -> exportOpt.IsSome, position, pattern, value)
     >>= fun (isExport, position, (pattern, names), value) ->
         // Each name is declared by the value of the def it becomes.
+        // A doc comment before it documents the first name it binds.
         let declareBindings (bindings: (Identifier * Expression) list) =
             bindings
             |> List.map (fun (name, bound) -> declare DefValue bound.Id (names |> List.filter (fun (declared, _) -> declared = name)))
             |> List.fold (>>.) (preturn ())
+            >>. (match names with (_, first) :: _ -> noteDocumentable lineStart first.Start | [] -> preturn ())
         match pattern.Kind with
         | IdentifierPattern _ -> fail "a destructuring def needs a pattern, not a name"
         | _ ->

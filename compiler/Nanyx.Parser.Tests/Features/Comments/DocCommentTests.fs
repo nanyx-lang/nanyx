@@ -116,6 +116,46 @@ context Counter = (
     )
 
 [<Fact>]
+let ``A doc comment documents what a def, a cell, a destructuring def or a field written after a keyword declares`` () =
+    let source =
+        """--| A pair.
+export def (first, second) = (1, 2)
+
+--| A scope.
+scoped export context $Memory = ()
+
+--| A record.
+type Counter = (
+  --| How many.
+  mut count: int
+)
+
+--| On one line.
+type Point =
+  --| Across.
+  (x: int, y: int)
+
+def f = {
+  --| A cell.
+  mut total = 0
+  --| Recursive.
+  rec loop = { n -> loop(n) }
+  total
+}
+"""
+    Assert.Equal<_ list>(
+        [ "A pair.", "first"
+          "A scope.", "$Memory"
+          "A record.", "Counter"
+          "How many.", "count"
+          "On one line.", "Point"
+          "Across.", "x"
+          "A cell.", "total"
+          "Recursive.", "loop" ],
+        documented source
+    )
+
+[<Fact>]
 let ``A doc comment at the top of the file before module or an import documents the module`` () =
     Assert.Equal<_ list>([ "Shapes.", "module" ], documented "--| Shapes.\nmodule shapes\n\ndef a = 1\n")
     Assert.Equal<_ list>([ "Text.", "module" ], documented "--| Text.\nimport nanyx/text\n\ndef a = 1\n")

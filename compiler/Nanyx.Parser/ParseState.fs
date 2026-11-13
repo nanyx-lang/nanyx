@@ -43,6 +43,9 @@ type ParseState =
       /// The comments skipped so far, most recent first. For the formatter, which puts them back (see
       /// `parseModuleWithTrivia`), and for doc comments (see `DocComments`).
       Comments: NotedComment list
+      /// Where each construct a doc comment can document starts, from its first keyword (`export def name`, `| #tag`),
+      /// with where the name or tag it declares starts (see `noteDocumentable`).
+      DocumentableStarts: Map<int, int>
       /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
       /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
       StringTexts: (int * int) list }
@@ -58,6 +61,7 @@ module ParseState =
           FailureInBrackets = ref None
           MisspacedOperator = ref None
           Comments = []
+          DocumentableStarts = Map.empty
           StringTexts = [] }
 
 /// Runs `p`, noting what it gave and the offsets of the text it consumed with `note`.
@@ -268,6 +272,12 @@ let internal declare (declarer: Declarer) (holder: NodeId) (names: (Identifier *
             let key = holder, declarer
             let existing = state.Declared |> Map.tryFind key |> Option.defaultValue []
             { state with Declared = state.Declared |> Map.add key (existing @ names |> List.distinctBy fst) })
+
+/// Notes that a construct a doc comment can document starts at `start` and declares the name or tag that starts at
+/// the offset `target`: a doc comment just before `start` documents that (see `DocComments.attach`). A construct that
+/// starts at what it declares, as a record field does, needs no note.
+let internal noteDocumentable (start: Position) (target: int) : Parser<unit, ParseState> =
+    updateUserState (fun state -> { state with DocumentableStarts = state.DocumentableStarts |> Map.add (int start.Index) target })
 
 /// Runs `p` and makes what it built an expression spanning the text it consumed.
 let spanned (p: Parser<ExpressionKind, ParseState>) : Parser<Expression, ParseState> =

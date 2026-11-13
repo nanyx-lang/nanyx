@@ -47,7 +47,7 @@ let parseModuleFileWithDocs (filePath: string) (input: string) : Result<(Module 
     runModuleParser filePath normalized
     |> Result.map (fun (items, state) ->
         (expandMidFileModules items, state.Declared, state.ModuleBlocks),
-        lazy (DocComments.attach filePath normalized items state.Declared state.Comments))
+        lazy (DocComments.attach filePath normalized items state.Declared state.DocumentableStarts state.Comments))
 
 /// Parses the source of the file at `filePath`, as `parseModuleFile` does, together with the names its nodes
 /// declare and the text of each `module name =` block in it.
