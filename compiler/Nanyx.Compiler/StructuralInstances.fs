@@ -41,6 +41,10 @@ open NyxCompiler.InferState
 ///         | #none, #none -> true
 ///         | _, _ -> false
 ///     }
+///
+/// A comparison of a union with a rest the function around chooses, `#some($Email) | r`, is derived the same way, with
+/// the rest kept in its type: two values of a tag the rest holds, or of different tags, are compared with the
+/// compiler's own `__equals`, and the definition requires no `Eq(r)` (see `WellKnownContexts.comparedRests`).
 module internal StructuralInstances =
     /// Whether a call that requires the context `ctxName` of a structure with no instance of its own finds a derived
     /// one: `ToString`. `Eq` has the compiler's own, and a derived one only as `comparesParts` says.
@@ -54,6 +58,9 @@ module internal StructuralInstances =
     type private Shape =
         /// A union of tags, or one tag: each tag's name with its payload's type.
         | TagShape of (string * Ty option) list
+        /// A union of the tags named here and a rest the caller of the function around chooses. Only `Eq` is derived
+        /// for one: two values of a tag it does not name are compared with the compiler's own.
+        | OpenTagShape of (string * Ty option) list
         | TupleShape of Ty list
         /// A record's named fields, in the order they are written out in: by name.
         | RecordShape of (string * Ty) list
@@ -67,9 +74,11 @@ module internal StructuralInstances =
     let private tupleItems (fields: Map<string, Ty>) = List.init fields.Count (fun index -> fields.[string index])
 
     /// `ty` without the variables that leave its tag unions open to more tags, at any depth: by the time an instance
-    /// is derived, such a union holds only the tags it names. `None` if one of them is in `rigid`, the variables of
-    /// the function around that stand for a type its caller chooses, which may hold any tag.
-    let rec private closed (rigid: Set<int>) (ty: Ty) : Ty option =
+    /// is derived, such a union holds only the tags it names. One of them in `rigid`, the variables of the function
+    /// around that stand for a type its caller chooses, which may hold any tag, is kept with `keepRigid`, as a derived
+    /// `==` compares the tags it does not name with the compiler's own; without it, the type is `None`.
+    let rec private closedKeeping (keepRigid: bool) (rigid: Set<int>) (ty: Ty) : Ty option =
+        let closed = closedKeeping keepRigid
         let all (tys: Ty list) =
             let closedTys = tys |> List.map (closed rigid)
             if closedTys |> List.forall Option.isSome then Some (closedTys |> List.map Option.get) else None
@@ -94,8 +103,15 @@ module internal StructuralInstances =
             | None -> Some ty
         | TyUnion items ->
             let rests, named = items |> List.partition (function TyVar _ -> true | _ -> false)
-            if rests |> List.exists (function TyVar v -> rigid.Contains v.Id | _ -> false) then None
-            else all named |> Option.map TyUnion
+            let rigidRests = rests |> List.filter (function TyVar v -> rigid.Contains v.Id | _ -> false)
+            if not rigidRests.IsEmpty && not keepRigid then None
+            else all named |> Option.map (fun named -> TyUnion (named @ rigidRests))
+
+    /// `ty` closed as an instance of `ToString` is derived for it (see `closedKeeping`).
+    let private closed = closedKeeping false
+
+    /// `ty` closed as an instance of the context `ctxName` is derived for it: a rest in `rigid` is kept for `Eq`.
+    let private closedFor (ctxName: Identifier) = closedKeeping (ctxName = EqualityOperators.context)
 
     /// The tags of the items of a union, if tags are all it holds, each once.
     let rec private tagsOf (items: Ty list) : (string * Ty option) list option =
@@ -122,10 +138,13 @@ module internal StructuralInstances =
 
     /// What `ty` is built from, as far as comparing two values of it goes: a map and a set are structures too, which
     /// the compiler's own comparison cannot compare, as it would compare the order their entries were added in.
+    /// A union with a rest left in it, as `closedFor` leaves one for `Eq`, is one too.
     let private comparedShapeOf (ty: Ty) : Shape option =
         match Unifier.unalias ty with
         | Maps.MapType(key, value) -> Some (MapShape(key, value))
         | Sets.SetType element -> Some (SetShape element)
+        | TyUnion items when items |> List.exists (function TyVar _ -> true | _ -> false) ->
+            items |> List.filter (function TyVar _ -> false | _ -> true) |> tagsOf |> Option.map OpenTagShape
         | _ -> shapeOf ty
 
     /// The shape an instance of `ctxName` is derived from.
@@ -133,7 +152,8 @@ module internal StructuralInstances =
 
     let private partsOf (shape: Shape) : Ty list =
         match shape with
-        | TagShape tags -> tags |> List.choose snd
+        | TagShape tags
+        | OpenTagShape tags -> tags |> List.choose snd
         | TupleShape items -> items
         | RecordShape fields -> fields |> List.map snd
         | ListShape element
@@ -168,23 +188,27 @@ module internal StructuralInstances =
 
     /// Whether comparing two values of the structure `ty` compares a part, at any depth, that `hasOwn` says has an
     /// `==` the compiler's own comparison would not read, or that is a map or a set, or is one itself. `rigid` is as
-    /// `closed` has it.
+    /// `closedKeeping` has it: a union with a rest in it compares the parts of the tags it names.
     let comparesParts (rigid: Set<int>) (hasOwn: Ty -> bool) (ty: Ty) : bool =
         let needsDerived (part: Ty) = hasOwn part || isCollection part
         let inParts (ty: Ty) =
             isCollection ty
             || comparedShapeOf ty |> Option.exists (partsOf >> List.exists (tryPickPart comparedShapeOf (fun part -> if needsDerived part then Some () else None) >> Option.isSome))
-        closed rigid ty |> Option.exists inParts
+        closedFor EqualityOperators.context rigid ty |> Option.exists inParts
 
     /// The type an instance of `ctxName` is derived for and the variables it requires the context of, for a value of
-    /// the type `ty`: `ty` closed (see `closed`), if it is a structure, with its variables in the order they appear.
-    /// `None` for a type with a variable an annotation could not name, one inside a nominal type.
+    /// the type `ty`: `ty` closed (see `closedFor`), if it is a structure, with its variables in the order they appear,
+    /// but for the rests of its unions, whose `Eq` is checked at each call to the function around, not passed (see
+    /// `WellKnownContexts.comparedRests`). `None` for a type with a variable an annotation could not name, one inside
+    /// a nominal type.
     let private derivable (rigid: Set<int>) (ctxName: Identifier) (ty: Ty) : (Ty * Shape * TyVar list) option =
-        closed rigid ty
+        closedFor ctxName rigid ty
         |> Option.bind (fun ty ->
             let vars = ContextInference.varsInOrder ty
+            let rests = ContextInference.unionRests ty |> List.map _.Id |> Set.ofList
             match shapeFor ctxName ty with
-            | Some shape when TypeEnv.freeTyVars ty = (vars |> List.map _.Id |> Set.ofList) -> Some (ty, shape, vars)
+            | Some shape when TypeEnv.freeTyVars ty = (vars |> List.map _.Id |> Set.ofList) ->
+                Some (ty, shape, vars |> List.filter (fun var -> not (rests.Contains var.Id)))
             | _ -> None)
 
     /// The variables an instance of `ToString` derived for the type `ty` requires the context of, if one can be
@@ -238,8 +262,9 @@ module internal StructuralInstances =
             let element = partName 0
             let write = expr (Lambda([ element, None ], text [ StringExpr (expr (FunctionCall(InterpolationHoles.holeFunction, None, [ name element ]))) ], false))
             expr (FunctionCall(InterpolationHoles.listFunction, None, [ value; write ]))
+        | OpenTagShape _
         | MapShape _
-        | SetShape _ -> invalidOp "ToString is never derived for a map or a set (see shapeFor)"
+        | SetShape _ -> invalidOp "ToString is never derived for a map, a set or an open union (see shapeFor)"
 
     let private otherName = "__w"
 
@@ -260,20 +285,24 @@ module internal StructuralInstances =
             | first :: rest -> rest |> List.fold (fun both next -> expr (BinaryOp("and", None, both, next))) first
         let positions (partName: int -> Identifier) (count: int) = pattern (TuplePattern (List.init count (partName >> IdentifierPattern >> pattern)))
         let value, other = name valueName, name otherName
+        let arm (tagName: string, payload: Ty option) : MatchArm =
+            let tag (payloadPattern: PatternKind option) = pattern (TagPattern(tagName, payloadPattern |> Option.map pattern))
+            match payload with
+            | None -> [ tag None; tag None ], answer true
+            | Some (TyPrimitive "unit") -> [ tag (Some UnitPattern); tag (Some UnitPattern) ], answer true
+            | Some _ ->
+                [ tag (Some (IdentifierPattern (partName 0))); tag (Some (IdentifierPattern (otherPartName 0))) ],
+                same (name (partName 0)) (name (otherPartName 0))
+        let otherwise (answer: Expression) : MatchArm = [ pattern WildcardPattern; pattern WildcardPattern ], answer
         match shape with
         | TagShape tags ->
-            let arm (tagName: string, payload: Ty option) : MatchArm =
-                let tag (payloadPattern: PatternKind option) = pattern (TagPattern(tagName, payloadPattern |> Option.map pattern))
-                match payload with
-                | None -> [ tag None; tag None ], answer true
-                | Some (TyPrimitive "unit") -> [ tag (Some UnitPattern); tag (Some UnitPattern) ], answer true
-                | Some _ ->
-                    [ tag (Some (IdentifierPattern (partName 0))); tag (Some (IdentifierPattern (otherPartName 0))) ],
-                    same (name (partName 0)) (name (otherPartName 0))
             // Two values of different tags are not equal.
-            let different: MatchArm list =
-                if tags.Length > 1 then [ [ pattern WildcardPattern; pattern WildcardPattern ], answer false ] else []
+            let different = if tags.Length > 1 then [ otherwise (answer false) ] else []
             expr (Match([ value; other ], (tags |> List.map arm) @ different))
+        // Two values of a tag of the rest, or of different tags, are as the compiler's own comparison finds them.
+        | OpenTagShape tags ->
+            let builtIn = expr (FunctionCall(EqualityOperators.builtInFunction, None, [ value; other ]))
+            expr (Match([ value; other ], (tags |> List.map arm) @ [ otherwise builtIn ]))
         | TupleShape items ->
             let parts = List.init items.Length (fun index -> same (name (partName index)) (name (otherPartName index)))
             expr (Match([ value; other ], [ [ positions partName items.Length; positions otherPartName items.Length ], all parts ]))
@@ -401,6 +430,7 @@ module internal StructuralInstances =
         : Result<ContextInstance * InferState, Failure> option =
         match functionPart ty with
         | Some held -> Some (Error (HoldsFunction held))
+        // A union open to the caller's tags has an `==` derived only where it is compared (see `comparison`).
         | None when (closed rigid ty).IsNone && (closed Set.empty ty |> Option.bind (shapeFor ctxName)).IsSome -> Some (Error OpenToCaller)
         | None ->
             let ty, abstracted, state = abstractParts partInstance ty state
