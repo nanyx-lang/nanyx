@@ -13,22 +13,24 @@ type SemanticVersion = (
   buildMetadata: #some(string) | #none
 )
 
--- Split a string at the first occurrence of a separator, if there is one
-def splitOnce: string, string -> (string, (#some(string) | #none)) = { s, separator ->
-  match s \indexOf(separator)
-    | #some(i) -> (s \take(i), #some(s \drop(i + separator.length)))
+-- The part of a string before the first occurrence of a separator, and the part after it, if there is one
+def cut: string, string -> (string, (#some(string) | #none)) = { s, separator ->
+  match s \splitOnce(on = separator)
+    | #some(before, after) -> (before, #some(after))
     | #notFound -> (s, #none)
 }
 
 def parseNumber: string -> #some(int) | #error(#invalidVersionNumber) = { s ->
-  int.fromString(s) \Result.mapError { _ -> #invalidVersionNumber }
+  match int.fromString(s)
+    | #some(n) -> #some(n)
+    | #invalidInt -> #error(#invalidVersionNumber)
 }
 
 -- "1.2.3-beta+build42" has core "1.2.3-beta" and build metadata "build42";
 -- the core has numbers "1.2.3" and tag "beta"
 export def parse: string -> #some(SemanticVersion) | #error(#invalidVersionNumber) = { value ->
-  def (core, buildMetadata) = splitOnce(value, "+")
-  def (numbers, tag) = splitOnce(core, "-")
+  def (core, buildMetadata) = cut(value, "+")
+  def (numbers, tag) = cut(core, "-")
 
   match numbers \split(on = ".")
     | [major, minor, patch] -> proc {

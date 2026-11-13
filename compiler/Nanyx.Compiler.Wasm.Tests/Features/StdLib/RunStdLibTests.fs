@@ -171,6 +171,29 @@ let ``Run - text split, join and concat`` () =
     runSource source |> assertRan "a | b |  | c\nno separators\na/b\n[]\nHello, World\nx\n"
 
 [<Fact>]
+let ``Run - text splitOnce cuts a string at the first separator only`` () =
+    let source =
+        """
+import nanyx/console
+import nanyx/text
+
+def show: string, string -> string = { s, on ->
+  match s \splitOnce(on = on)
+    | #some((before, after)) -> "[{before}|{after}]"
+    | #notFound -> "not found"
+}
+
+println(show("a=b=c", "="))
+println(show("=ab", "="))
+println(show("ab=", "="))
+println(show("1.0.0+build.5", "+build."))
+println(show("abc", "="))
+println(show("", "="))
+println(show("abc", ""))
+"""
+    runSource source |> assertRan "[a|b=c]\n[|ab]\n[ab|]\n[1.0.0|5]\nnot found\nnot found\n[|abc]\n"
+
+[<Fact>]
 let ``Run - text split, substring, padStart, padEnd and replace take their named arguments when piped`` () =
     let source =
         "import nanyx/console\n" +
