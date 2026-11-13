@@ -460,12 +460,14 @@ def receipt = {
 
 The holes in the instance itself are checked before it is loaded, so they write their ints as usual.
 
-A tag with a payload, a tuple, a record and a list have a `ToString` when their parts do. The compiler derives it, writing each part with the `ToString` of its type:
+A tag with a payload, a tuple, a record, a list, a map and a set have a `ToString` when their parts do. The compiler derives it, writing each part with the `ToString` of its type:
 
 ```nanyx
 "{#some(Point(x = 1, y = 2))}"   // "#some((1, 2))"
 "{[1, 2, 3]}"                    // "[1, 2, 3]"
 "{(name = "Ada", age = 36)}"     // "(age = 36, name = Ada)"
+"{["tea" => 3, "cake" => 1]}"    // "[tea => 3, cake => 1]"
+"{set.fromList([3, 1, 3])}"      // "[3, 1]"
 
 def wrapped: [ToString(a)] a -> string = { value -> "{#some(value)}" }
 def passed: [ToString(a)] a -> string = { value -> angled([value]) }
@@ -473,7 +475,7 @@ def passed: [ToString(a)] a -> string = { value -> angled([value]) }
 
 Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in `receipt` above `"{[250]}"` would be `"[£2.50]"`.
 
-A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`.
+A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/io#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order they were first added, and the empty map writes `[=>]`.
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 

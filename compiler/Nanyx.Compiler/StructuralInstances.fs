@@ -6,7 +6,7 @@ open NyxCompiler.InferState
 /// Instances of `ToString`, `Eq` and `Hash` the compiler derives from a type's structure, part by part (see "Printing values"
 /// and "Equality and well-known contexts" in the docs' work in progress).
 ///
-/// A tag union, a tuple, a record or a list has no `toString` attached, so a hole of such a
+/// A tag union, a tuple, a record, a list, a map or a set has no `toString` attached, so a hole of such a
 /// type, or a call that requires `ToString` of it, finds an instance written from its parts: `#some(a)` is written
 /// `#some(` then its payload then `)`, and the payload is written through its own `ToString`, whichever that is.
 ///
@@ -71,7 +71,7 @@ module internal StructuralInstances =
         /// A record's named fields, in the order they are written out in: by name.
         | RecordShape of (string * Ty) list
         | ListShape of Ty
-        /// A map's key and value types. Only `Eq` is derived for a map, or a set.
+        /// A map's key and value types. `Eq` and `ToString` are derived for a map, or a set; `Hash` is not.
         | MapShape of Ty * Ty
         | SetShape of Ty
 
@@ -153,8 +153,19 @@ module internal StructuralInstances =
             items |> List.filter (function TyVar _ -> false | _ -> true) |> tagsOf |> Option.map OpenTagShape
         | _ -> shapeOf ty
 
+    /// What `ty` is built from, as far as writing it as text goes: a map is written entry by entry, and a set element
+    /// by element.
+    let private writtenShapeOf (ty: Ty) : Shape option =
+        match Unifier.unalias ty with
+        | Maps.MapType(key, value) -> Some (MapShape(key, value))
+        | Sets.SetType element -> Some (SetShape element)
+        | _ -> shapeOf ty
+
     /// The shape an instance of `ctxName` is derived from.
-    let private shapeFor (ctxName: Identifier) = if ctxName = EqualityOperators.context then comparedShapeOf else shapeOf
+    let private shapeFor (ctxName: Identifier) =
+        if ctxName = EqualityOperators.context then comparedShapeOf
+        elif ctxName = InterpolationHoles.context then writtenShapeOf
+        else shapeOf
 
     let private partsOf (shape: Shape) : Ty list =
         match shape with
@@ -180,7 +191,7 @@ module internal StructuralInstances =
 
     /// The part of the structure `ty`, at any depth, that is a function, if one is.
     let private functionPart (ty: Ty) : Ty option =
-        ty |> tryPickPart shapeOf (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
+        ty |> tryPickPart writtenShapeOf (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
 
     /// Whether `ty` is a map or a set, which only a derived `==` compares.
     let private isCollection (ty: Ty) =
@@ -264,13 +275,20 @@ module internal StructuralInstances =
             expr (Match([ value ], tags |> List.map arm))
         | TupleShape items -> expr (Match([ value ], [ [ pattern (TuplePattern (positions items.Length)) ], bracketed "(" (positional items) ]))
         | RecordShape fields -> bracketed "(" (named value fields)
-        | ListShape _ ->
-            let element = partName 0
-            let write = expr (Lambda([ element, None ], text [ StringExpr (expr (FunctionCall(InterpolationHoles.holeFunction, None, [ name element ]))) ], false))
-            expr (FunctionCall(InterpolationHoles.listFunction, None, [ value; write ]))
-        | OpenTagShape _
-        | MapShape _
-        | SetShape _ -> invalidOp "ToString is never derived for a map, a set or an open union (see shapeFor)"
+        // A collection is written by a prelude function, passed what writes each part.
+        | ListShape _
+        | SetShape _
+        | MapShape _ ->
+            let write (index: int) =
+                let element = partName index
+                expr (Lambda([ element, None ], text [ StringExpr (expr (FunctionCall(InterpolationHoles.holeFunction, None, [ name element ]))) ], false))
+            let helper, writers =
+                match shape with
+                | MapShape _ -> InterpolationHoles.mapFunction, [ write 0; write 1 ]
+                | SetShape _ -> InterpolationHoles.setFunction, [ write 0 ]
+                | _ -> InterpolationHoles.listFunction, [ write 0 ]
+            expr (FunctionCall(helper, None, value :: writers))
+        | OpenTagShape _ -> invalidOp "ToString is never derived for an open union (see shapeFor)"
 
     let private otherName = "__w"
 
@@ -441,6 +459,13 @@ module internal StructuralInstances =
             | Lists.ListType element ->
                 let element, acc = part acc element
                 Lists.ofType element, acc
+            | Sets.SetType element ->
+                let element, acc = part acc element
+                Sets.ofType element, acc
+            | Maps.MapType(key, value) ->
+                let key, acc = part acc key
+                let value, acc = part acc value
+                Maps.ofTypes key value, acc
             | _ -> ty, acc
         let abstracted, (found, next) = inside (Map.empty, state) ty
         if found.IsEmpty then ty, Map.empty, state

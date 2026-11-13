@@ -155,6 +155,20 @@ export def __mapEqualsBy
       )
   }
 
+--| What the derived `toString` of a map calls: `m` as its literal is written, its entries in
+  square brackets in the order of [`map.toList`], each key and value written by `showKey` and
+  `showValue` with ` => ` between them: `[tea => 3, cake => 1]`. The empty map is `[=>]`.
+export def __mapToString
+  : [c] map(k, v), ([c] k -> string), ([c] v -> string) -> string
+  = { m, showKey, showValue ->
+    match __nanyx_map_entries(m)
+      | [] -> "[=>]"
+      | entries -> __listToString(
+        entries
+        { entry -> "{showKey(entry.0)} => {showValue(entry.1)}" }
+      )
+  }
+
 --| `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
   does not have is added at the end.
 export def map.update
@@ -270,6 +284,12 @@ export def __setEqualsBy: [c] set(a), set(a), ([c] a, a -> bool) -> bool = { s, 
   if list.length(__nanyx_set_elements(s)) != list.length(theirs)
     then false
     else list.all(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> same(x, y) }) })
+}
+
+--| What the derived `toString` of a set calls: the elements of `s` as a list of them is written,
+  each written by `show`: `[1, 2]`.
+export def __setToString: [c] set(a), ([c] a -> string) -> string = { s, show ->
+  __listToString(__nanyx_set_elements(s), show)
 }
 
 --| The elements of `s`, then those of `t` that `s` does not hold.
