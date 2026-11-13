@@ -6,13 +6,6 @@ open Parser.Program
 open NyxCompiler
 open NyxCompiler.InferState
 
-/// The `module name =` block innermost around `span`, with its name, if `span` is in one.
-let blockAround (moduleBlocks: (ModuleName * SourceSpan) list) (span: SourceSpan) : (ModuleName * SourceSpan) option =
-    moduleBlocks
-    |> List.filter (fun (_, block) -> SourceSpan.contains block span)
-    |> List.sortBy (fun (_, block) -> block.End - block.Start)
-    |> List.tryHead
-
 /// The imports in `module'` that name a `module name =` block of the same file, by its short name, rather than
 /// another file. At the top level of the file, that is a block written at the top level; in a block, a block nested
 /// directly in it, or else one written beside it.
