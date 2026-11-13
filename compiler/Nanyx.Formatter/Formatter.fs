@@ -6,6 +6,7 @@ open System.Globalization
 open System.Text.RegularExpressions
 open Parser.Program
 open Nanyx.Formatter.SourceText
+open Nanyx.Formatter.Position
 open Nanyx.Formatter.CommentPlacement
 open Nanyx.Formatter.TypePrinter
 open Nanyx.Formatter.PatternPrinter
@@ -20,39 +21,6 @@ type Options =
 
 module Options =
     let defaults = { LineWidth = 100; IndentSize = 2 }
-
-/// Where an expression is printed, which decides whether it needs parentheses (the parser keeps none).
-type private Position =
-    { /// On the spine of a statement, an arm's body or a top-level expression. The parser reads those without crossing
-      /// lines, with an operator table that has no `..`, so a range needs parentheses there.
-      Inline: bool
-      /// Nothing follows it in the enclosing construct, so a construct that takes everything after it (a `match`, an
-      /// `if`, a `with`) needs no parentheses.
-      Tail: bool
-      /// The loosest operator it may be without parentheses: 0 takes a pipe, `prefixPrecedence`
-      /// only an operand of `.` or `not`.
-      Prec: int }
-
-/// Inside brackets, where anything goes.
-let private full = { Inline = false; Tail = true; Prec = 0 }
-
-/// A statement, an arm's body or a top-level expression.
-let private statementPosition = { Inline = true; Tail = true; Prec = 0 }
-
-/// An operand of `.` or `not`: a primary expression.
-let private operandPosition = { Inline = false; Tail = false; Prec = prefixPrecedence }
-
-/// How tightly the operator the parser reads as `op` binds, as the parser has it (see `binaryOperators`).
-let private precedence op =
-    match binaryOperatorNamed op with
-    | Some found -> found.Precedence
-    | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
-
-/// Which way the operator `op` groups, as the parser has it.
-let private associativity op =
-    match binaryOperatorNamed op with
-    | Some found -> found.Associativity
-    | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
 
 /// What an `if` arm tests: a condition, or a value against a pattern (`if x is #some(y) then ...`).
 type private IfHead =
