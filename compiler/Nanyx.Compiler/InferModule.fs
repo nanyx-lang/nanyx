@@ -341,6 +341,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 emit (TypedExprItem typedExpr)
             | Error err -> errors <- errors @ err
         | Import itemsList -> emit (TypedImport itemsList)
+        | ReExport item -> emit (TypedImport [ item ])
         | ModuleDecl name ->
             currentModule <- Some name
             emit (TypedModuleDecl name)

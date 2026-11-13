@@ -299,6 +299,7 @@ let rec private expressionsOfItem (item: TopLevelItem) =
     match item.Kind with
     | ModuleDecl _
     | Import _
+    | ReExport _
     | Attribute _ -> []
     | ModuleBlock (_, items) -> items |> List.collect expressionsOfItem
     | Def (ValueDef (_, _, typeOpt, value)) -> (typeOpt |> Option.toList |> List.collect expressionsOfType) @ expressions value
@@ -365,6 +366,7 @@ let rec private typesOfItem (item: TopLevelItem) =
     | ModuleBlock (_, items) -> items |> List.collect typesOfItem
     | ModuleDecl _
     | Import _
+    | ReExport _
     | Expr _
     | Attribute _ -> []
 

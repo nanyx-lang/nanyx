@@ -122,6 +122,7 @@ let rec private topLevelItems (source: string) (declared: DeclaredNames) (items:
         | ModuleBlock _
         | ModuleDecl _
         | Import _
+        | ReExport _
         | Expr _
         | Attribute _ -> None)
 

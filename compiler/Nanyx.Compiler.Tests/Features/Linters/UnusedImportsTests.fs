@@ -46,6 +46,16 @@ let ``An import that selects names nothing uses is reported`` () =
     Assert.Equal<(string * string) list>([ "`nanyx/math` is imported but never used", "nanyx/math as (abs)" ], reported "import nanyx/math as (abs)\ndef x = 3\n")
 
 [<Fact>]
+let ``An import used only through a name the module re-exports is not reported`` () =
+    withTempDir (fun dir ->
+        File.WriteAllText(Path.Combine(dir, "util.nyx"), "module util\nexport def double: int -> int = { x -> x * 2 }")
+        File.WriteAllText(Path.Combine(dir, "c.nyx"), "module c\nexport util (double)")
+        let source = "module main\nimport c\ndef x = double(3)\n"
+        let mainPath = Path.Combine(dir, "main.nyx")
+        File.WriteAllText(mainPath, source)
+        Assert.Empty(unusedImportsIn (Compiler.compileFileWith Linters.everyLinter mainPath) source))
+
+[<Fact>]
 let ``An import used only in a type is not reported`` () =
     Assert.Empty(reported "import nanyx/console as c\ndef e: c.IoError = #endOfInput\n")
     Assert.Empty(reported "import nanyx/console\ndef e: IoError = #endOfInput\n")

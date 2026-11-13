@@ -138,6 +138,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | Def(ValueDef(isExport, n, t, value)) -> Def(ValueDef(isExport, name n, Option.map typeExpr t, expr value))
             | Def(TypeDef(n, modifiers, parameters, body)) -> Def(TypeDef(typeDef (n, modifiers, parameters, body)))
             | Import items -> Import(List.map importItem items)
+            | ReExport item -> ReExport(importItem item)
             | Expr value -> Expr(expr value)
         { i with Kind = kind }
 

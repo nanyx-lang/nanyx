@@ -151,6 +151,12 @@ let importItem: Parser<ImportItem, ParseState> =
         let alias, selection = written |> Option.defaultValue (None, None)
         { Source = source; Alias = alias; Selection = selection; Span = span }
 
+/// What follows `export` in a re-export, `export collections.list (map, filter)`: the module, then on the same line the
+/// names it exports that are exported again.
+let reExportItem: Parser<ImportItem, ParseState> =
+    withSpan (importSource .>>. (wsInline >>. importSelection))
+    |>> fun ((source, selection), span) -> { Source = source; Alias = None; Selection = Some selection; Span = span }
+
 let importItems: Parser<ImportItem list, ParseState> =
     let importParenItems =
         between

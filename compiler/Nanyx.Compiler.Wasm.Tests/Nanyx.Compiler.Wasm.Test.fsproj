@@ -75,6 +75,7 @@
     <Compile Include="Features\Packages\PackageCommandTests.fs" />
     <Compile Include="Features\Packages\PartialModuleTests.fs" />
     <Compile Include="Features\Packages\SelectiveImportTests.fs" />
+    <Compile Include="Features\Packages\ReExportTests.fs" />
     <Compile Include="Features\Records\RunRecordTests.fs" />
     <Compile Include="Features\Records\RunRecordSpreadTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />

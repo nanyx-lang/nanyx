@@ -48,3 +48,6 @@ let ``A selection is printed after as, and after & with an alias`` () =
 [<Fact>]
 let ``A selection written one name per line is printed on one`` () =
     Assert.Equal(lines [ "import util as (double, triple)" ], format (lines [ "import util as ("; "  double"; "  triple"; ")" ]))
+[<Fact>]
+let ``A re-export is printed as written`` () =
+    unchanged (lines [ "module c"; ""; "export util (double, triple)" ])

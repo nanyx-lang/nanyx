@@ -157,6 +157,7 @@ module internal BuiltinTypeNames =
             | ModuleBlock(name, items) -> { topLevel with Kind = ModuleBlock(name, items |> List.map item) }
             | ModuleDecl _
             | Import _
+            | ReExport _
             | Attribute _ -> topLevel
 
         let replaced = module' |> List.map item

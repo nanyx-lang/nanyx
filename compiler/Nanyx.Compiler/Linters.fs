@@ -453,6 +453,7 @@ module UnusedPrivateDefinitions =
             | ModuleBlock(_, items) -> definitionsOf items
             | ModuleDecl _
             | Import _
+            | ReExport _
             | Attribute _
             | Expr _ -> [])
 
@@ -762,6 +763,7 @@ module UnannotatedExports =
             | Def (TypeDef _)
             | ModuleDecl _
             | Import _
+            | ReExport _
             | Attribute _
             | Expr _ -> [])
 

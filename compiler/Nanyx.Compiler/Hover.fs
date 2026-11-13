@@ -56,6 +56,7 @@ let rec private topLevelExpressions (item: TopLevelItem) : Expression list =
     | Def (TypeDef _)
     | ModuleDecl _
     | Import _
+    | ReExport _
     | Attribute _ -> []
 
 /// The expressions whose spans contain `offset`, innermost first. Only expressions that contain the offset are
