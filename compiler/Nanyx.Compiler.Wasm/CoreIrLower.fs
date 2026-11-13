@@ -1066,17 +1066,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> bindTemp value (fun atom -> go (atom :: acc) rest))
         go [] exprs
 
-    /// Lowers a block, its value passed to `k`: each statement in turn, around a hole for the rest of the block (see
-    /// `CoreIrLowerHoles`), and then each statement's rest put in its hole, from the last.
+    /// Lowers a block, its value passed to `k`, a statement at a time (see `CoreIrLowerHoles`).
     member this.Block (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr =
-        let rec lower (scope: Scope) (statements: StatementKind list) (lowered: (Expr * Expr) list) =
-            match this.Statement scope statements k with
-            | value, None -> lowered |> List.fold (fun rest (statement, hole) -> CoreIrLowerHoles.plug hole rest statement) value
-            | statement, Some (hole, scope, rest) -> lower scope rest ((statement, hole) :: lowered)
-        lower scope statements []
+        CoreIrLowerHoles.lowerBlock (fun scope statements -> this.Statement scope statements k) scope statements
 
-    /// The first of a block's `statements` lowered around a hole, with the scope the rest of the block is lowered in
-    /// and that rest; or, for the last statement or one whose lowering takes the rest of the block, all of it.
+    /// The first of a block's `statements`, lowered around a hole (see `CoreIrLowerHoles.lowerBlock`).
     member private this.Statement (scope: Scope) (statements: StatementKind list) (k: Expr -> Expr) : Expr * (Expr * Scope * StatementKind list) option =
         let hole = CoreIrLowerHoles.hole ()
         let restScope = ref scope

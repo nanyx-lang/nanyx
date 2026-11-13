@@ -140,7 +140,8 @@ let private lowerModuleOnThisThread (input: LowerInput) (finish: Function -> 'T)
             | Error (reason, span) -> Some (name, reason, span |> Option.orElse (definitions |> Map.tryFind name |> Option.map _.Span))
             | Ok _ -> None)
         |> List.ofSeq }
-/// The lowering recurses once per statement of a block (each statement's lowering continues into the next), so it runs
-/// on a large stack.
+
+/// The lowering itself recurses only as deep as an expression nests, but the passes `finish` runs over each function
+/// (reference counting, reuse, emitting) recurse once per `let` of a function's body, so it runs on a large stack.
 let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     Nanyx.LargeStack.run (fun () -> lowerModuleOnThisThread input finish)
