@@ -65,10 +65,25 @@ let rec private withoutContexts (ty: Ty) : Ty =
     | TyUnion items -> TyUnion(items |> List.map withoutContexts)
     | _ -> ty
 
+/// The names of the tags `ty` holds, through unions and aliases.
+let rec private tagNames (ty: Ty) : string list =
+    match Unifier.unalias ty with
+    | TyTag(name, _) -> [ name ]
+    | TyUnion items -> items |> List.collect tagNames
+    | _ -> []
+
 /// Binds the type variables of `scheme` so that it is `instance`, adding to `bindings`. A context variable of a
 /// function type in `scheme` is bound to the contexts the same function type in `instance` requires that `scheme`'s
 /// does not name, as a union; the first variable takes them all.
+///
+/// An open union's rest is bound last, from the tags of the instance its union does not name, unless something else
+/// binds it: the rest may hold tags the union names too, as `z` in `#some(a) | z` does when it is `#some(int)` (#1027).
 let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<int, Ty> =
+    bindSchemeWith true (bindSchemeWith false bindings scheme instance) scheme instance
+
+/// `bindScheme`, binding open unions' rests only when `rests` is true.
+and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<int, Ty> =
+    let bindScheme = bindSchemeWith rests
     // A tag alone is a union of one: a union's rest left with one tag is bound as `TyUnion [ tag ]`, and a lambda that
     // takes its input from its pattern has the tag itself (#457).
     let oneTagAsTag ty =
@@ -84,7 +99,7 @@ let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<in
     match Unifier.unalias scheme, Unifier.unalias instance with
     | TyVar v, _ ->
         match bindings |> Map.tryFind v.Id with
-        | Some bound when oneTagAsTag bound <> oneTagAsTag instance -> cannot "a type variable stands for two types in one call"
+        | Some bound when oneTagAsTag bound <> oneTagAsTag instance -> cannot "a type variable that stands for two types in one call"
         | _ -> bindings |> Map.add v.Id instance
     | TyPrimitive a, TyPrimitive b when a = b -> bindings
     | TyFunc(input, output, contexts), TyFunc(input', output', contexts') ->
@@ -129,7 +144,15 @@ let rec bindScheme (bindings: Map<int, Ty>) (scheme: Ty) (instance: Ty) : Map<in
         match items |> List.filter (fun item -> (tagName item).IsNone) with
         | [] when rest.IsEmpty -> bound
         | [] -> cannot "a union used at a type with more tags than it has"
-        | [ restVar ] -> bindScheme bound restVar (TyUnion rest)
+        | [ _ ] when not rests -> bound
+        | [ restVar ] ->
+            let holdsRest =
+                match Unifier.unalias restVar with
+                | TyVar v when bound |> Map.containsKey v.Id ->
+                    let held = tagNames bound.[v.Id] |> Set.ofList
+                    rest |> List.forall (fun item -> tagName item |> Option.exists held.Contains)
+                | _ -> false
+            if holdsRest then bound else bindScheme bound restVar (TyUnion rest)
         | _ -> cannot "a union with more than one rest"
     | TyApply(name, args), TyApply(name', args') when name = name' && args.Length = args'.Length ->
         List.fold2 bindScheme bindings args args'

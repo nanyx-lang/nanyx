@@ -170,3 +170,22 @@ println(describe(1))
 println(describe(2))
 """
     runSource source |> assertRan "red green red \nnot found\nsome 1\ndenied\n"
+[<Fact>]
+let ``Run - a union's rest bound to a type with a tag the union names`` () =
+    // `bind` is `#some(a) | z, (a -> z) -> z`: at `x`, `z` is `#some(int)`, which the input's `#some(a)` names too, so
+    // the input alone leaves `z` no tags (#1027).
+    let source =
+        """
+import nanyx/console
+
+def bind = {
+  | #some(v), f -> f(v)
+  | other, _ -> other
+}
+
+def x = bind(#some(2), { n -> #some(n * 10) })
+def y = bind(#none, { n -> #some(n * 10) })
+println("{x}")
+println("{y}")
+"""
+    runSource source |> assertRan "#some(20)\n#none\n"
