@@ -83,6 +83,12 @@ type LowerInput =
       /// names one means.
       NamedTypes: Map<string, Ty> }
 
+/// The top-level function `wrapper`, a wrapper lambda lifting made, wraps.
+let wrappedOf (input: LowerInput) (wrapper: string) =
+    match input.Lifted |> Map.tryFind wrapper with
+    | Some (FunctionWrapper wrapped) -> wrapped
+    | _ -> internalError $"'{wrapper}' is not a function's wrapper"
+
 /// The name of the start function, which evaluates the module's top-level expressions.
 let startFunctionName = "__nanyx_start"
 
@@ -97,7 +103,9 @@ type LowerFailure =
 type Lowered<'T> =
     { /// The definitions lowered as they are, by name.
       Roots: Map<string, Function * 'T>
-      /// The specialisations of each generic definition, by the definition's name, in the order they were asked for.
+      /// The specialisations of each definition, by the definition's name, in the order they were asked for: of a
+      /// generic definition at type arguments, and of a definition that requires contexts on known members (see
+      /// `CoreIrLowerKnown`).
       Specialisations: Map<string, (Function * 'T) list>
       /// What could not be lowered, in the order it was met: the function (by its definition's name), why, and where.
       Failures: (string * LowerFailure * SourceSpan option) list }

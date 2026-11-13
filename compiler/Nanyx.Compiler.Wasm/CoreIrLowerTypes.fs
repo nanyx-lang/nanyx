@@ -252,6 +252,13 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
 
+/// The members of the contexts without parameters among `contexts`, each with its key and IR type, in the order a
+/// function value that requires them takes them (see `IrFunction`).
+let contextMembersOf (layouts: ContextLayouts) (contexts: Ty list) : (ContextMemberKey * IrType) list =
+    match toIrTypeIn layouts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
+    | IrFunction(_, _, members) -> members
+    | _ -> []
+
 /// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
 /// `FunctionLowering.Coerce`): the elements of a tuple, none for unit, or else the one value. An expected input of unit
 /// may be a type variable nothing constrained where the type was found (see `toIrType`), so the given input decides then.
@@ -266,3 +273,47 @@ let adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
     | IrFunction(given, _, _), IrFunction(IrUnit, _, _) -> valuesOf given
     | _, IrFunction(expected, _, _) -> valuesOf expected
     | _ -> []
+
+/// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in the
+/// instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
+let unconstrainedAsUnit (ty: Ty) =
+    substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
+
+/// The type each context without parameters in `contextLayouts` declares for its member of each key, where only one
+/// declares a member of that key.
+let declaredMemberTypes (contextLayouts: Map<string, (ContextMemberKey * Ty) list>) =
+    contextLayouts
+    |> Map.values
+    |> Seq.concat
+    |> Seq.groupBy fst
+    |> Seq.choose (fun (key, declared) ->
+        match declared |> Seq.map snd |> Seq.distinct |> List.ofSeq with
+        | [ memberTy ] -> Some (key, memberTy)
+        | _ -> None)
+    |> Map.ofSeq
+
+/// The contexts a function of type `fnTy` requires where it is called.
+let requiredContexts (fnTy: Ty) =
+    match Unifier.unalias fnTy with
+    | TyFunc(_, _, contexts) -> contexts
+    | _ -> []
+
+/// The types of the parameters `names` of a function of type `fnTy`, and of its result. Several parameters are the
+/// fields of the input, each named by its position or by its own name when the type names it
+/// (`(int, step: int) -> int`).
+let parameterTypes (names: string list) (fnTy: Ty) (isLambda: bool) : Ty list * Ty =
+    match names, Unifier.unalias fnTy with
+    | [], TyFunc(_, result, _) when isLambda -> [], result
+    | [], _ -> [], fnTy
+    | [ _ ], TyFunc(input, result, _) -> [ input ], result
+    | several, TyFunc(input, result, _) ->
+        match Unifier.unalias input with
+        | TyRecord fields when fields.Count = several.Length ->
+            several
+            |> List.mapi (fun index parameterName ->
+                match fields |> Map.tryFind (string index), fields |> Map.tryFind parameterName with
+                | Some ty, _
+                | None, Some ty -> ty
+                | None, None -> cannot $"a function whose parameter {parameterName} is not among its input's fields"), result
+        | _ -> cannot "a function whose parameters are not a tuple"
+    | _ -> cannot "a definition whose type is not a function"

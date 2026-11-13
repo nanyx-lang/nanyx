@@ -393,10 +393,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
     let passedMembers (lambda: Expression) =
         match checkedTypes |> Map.tryFind lambda.Id with
-        | Some (TyFunc(_, _, contexts)) ->
-            match CoreIrLowerTypes.toIrTypeIn contextLayouts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
-            | CoreIr.IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
-            | _ -> Set.empty
+        | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
         | _ -> Set.empty
     let module', liftedOrigins, functionWrappers, useKeys = LambdaLifting.lift synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts module'
     let defs =
@@ -592,9 +589,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                   CoreIrLowerInput.ContextParameter.Type = memberTypes |> Map.tryFind key |> Option.flatten })
         parameters, contextMemberAliases name |> Map.ofList
 
-    // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported.
-    let emitFromCoreIr (context: CoreIrEmit.EmitContext) (func: CoreIr.Function) =
-        let exportName = if func.TypeArguments.IsEmpty then Some func.Source else None
+    // A specialisation is only called by the functions compiled with it; a definition that is not generic is exported,
+    // unless the function is one of its specialisations on known context members (see `CoreIrLowerKnown`).
+    let emitFromCoreIr (context: CoreIrEmit.EmitContext) (specialisations: Set<string>) (func: CoreIr.Function) =
+        let exportName = if func.TypeArguments.IsEmpty && not (specialisations.Contains func.Name) then Some func.Source else None
         CoreIrEmit.emitFunction context func exportName
 
     // Every definition that is not generic, the start function, and the specialisations and lifted functions they
@@ -640,7 +638,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 typed.TypeDefs
                 |> Map.filter (fun _ info -> not info.IsContext)
                 |> Map.map (fun _ info -> TyNominal(TypeDefInfo.nominalId info, info.Underlying, info.IsPrivate)) }
-        CoreIrLowerModule.lowerModule input (emitFromCoreIr probeContext >> ignore)
+        CoreIrLowerModule.lowerModule input (emitFromCoreIr probeContext Set.empty >> ignore)
 
     // The first thing that cannot be compiled is reported where it is written.
     match lowered.Failures with
@@ -712,12 +710,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           IndirectCall = functionTable.IndirectSignatures.Add >> ignore
           Signature = fun name -> signatures |> Map.tryFind name }
 
+    let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
+
     // Whether a function emitted below reads or writes linear memory in its own code.
     let mutable functionsTouchMemory = false
 
     /// The text of a function from the core IR, noting the helpers it calls and whether it touches memory.
     let fromCoreIr (func: CoreIr.Function) =
-        let emitted = emitFromCoreIr context func
+        let emitted = emitFromCoreIr context specialisations func
         for helper in emitted.Helpers do
             usedHelpers.Add helper |> ignore
         functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory

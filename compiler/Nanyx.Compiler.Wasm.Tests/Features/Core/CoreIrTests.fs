@@ -242,11 +242,15 @@ let ``Functions that require contexts, and their callers, go through the core IR
         "  twice()\n" +
         "}\n"
     let wat, report = compileWithReport source
-    // `plain` is specialised for `Point`, with the instance built from `Point.show` passed as its member.
-    for name in [ "twice"; "plain__rec_x_int_y_int"; "main"; "__fn_Point_show" ] do
+    // `plain` is specialised for `Point`, and on the instance built from `Point.show`, which it calls directly.
+    for name in [ "twice"; "plain__rec_x_int_y_int__known"; "main" ] do
         Assert.Contains(name, report.Functions)
-    // Each member arrives in a parameter of its own, after the function's own parameters.
-    Assert.Contains("(func $twice (param $__ctx_ask i32) (result i64)", wat)
+    Assert.DoesNotContain("__fn_Point_show", report.Functions)
+    Assert.Contains("""(func $plain__rec_x_int_y_int__known (param $value i32) (result i32)""", wat)
+    Assert.Contains("""return_call $Point_show""", wat)
+    // A member that is not known, such as a `use` of a lambda, arrives in a parameter of its own, after the function's
+    // own parameters.
+    Assert.Contains("""(func $twice (param $__ctx_ask i32) (result i64)""", wat)
 
 [<Fact>]
 let ``Floats, pipes, guards and for loops go through the core IR`` () =
