@@ -10,7 +10,7 @@ open Parser.Program
 // the compiler only ever sees plain defs. This form takes only names, `_` and nested tuples, which cannot fail to
 // match; any other pattern is bound through a match instead (see `matchingBindings`).
 let private destructuringBindings (position: Position) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
-    let temp = $"__tuple_{position.Line}_{position.Column}"
+    let temp = DestructuringSyntax.temp position.Line position.Column
     let rec bind (pattern: Pattern) (source: Expression) =
         match pattern.Kind with
         | IdentifierPattern name -> Some [ name, source ]
@@ -32,7 +32,7 @@ let private destructuringBindings (position: Position) (pattern: Pattern) (value
 // `def` per name takes its element. Whether the pattern is total is for the type checker to say, as it does
 // for any other match.
 let private matchingBindings (position: Position) (pattern: Pattern) (names: Identifier list) (value: Expression) : Expression * (Identifier * Expression) list =
-    let temp = $"__tuple_{position.Line}_{position.Column}"
+    let temp = DestructuringSyntax.temp position.Line position.Column
     let made kind = Expression.from value kind
     let body =
         match names with

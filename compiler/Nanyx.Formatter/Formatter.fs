@@ -54,9 +54,6 @@ let private associativity op =
     | Some found -> found.Associativity
     | None -> failwith $"The formatter met the operator {op}, which the parser does not read"
 
-/// The name a destructuring def binds its whole value to (see `Syntax`).
-let private tupleTemp = Regex(@"^__tuple_\d+_\d+$")
-
 /// What an `if` arm tests: a condition, or a value against a pattern (`if x is #some(y) then ...`).
 type private IfHead =
     | Condition of Expression
@@ -267,7 +264,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let mutable i = 0
         while i < items.Length do
             match items[i] with
-            | span, Some(_, temp, None, _) when tupleTemp.IsMatch temp ->
+            | span, Some(_, temp, None, _) when DestructuringSyntax.isTemp temp ->
                 let mutable j = i + 1
                 let belongs k =
                     match items[k] with
@@ -353,12 +350,12 @@ let format (options: Options) (parsed: SourceModule) : string =
         match e.Kind with
         | BinaryOp(op, _, _, _) -> precedence op < position.Prec || (position.Inline && not (inlineOperators.Contains op))
         | RangeSyntax.Call _ -> rangePrecedence < position.Prec || position.Inline
-        | FunctionCall("not", _, [ _ ]) -> position.Prec >= prefixPrecedence || position.Inline
+        | FunctionCall(name, _, [ _ ]) when name = NotSyntax.builtIn -> position.Prec >= prefixPrecedence || position.Inline
         | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> position.Prec >= prefixPrecedence
         // A pipe binds tighter than every binary operator, but not than a prefix one: `-(x \abs)` keeps its brackets, as `-x \abs` is `(-x) \abs`.
         | Pipe _ -> position.Prec >= prefixPrecedence
         // `(r with (x = 1)).x`: nothing follows a `with` but an operator, though its updates are bracketed.
-        | FunctionCall("__with", _, [ _; updates ]) when startsWith updates.Span "(" -> position.Prec >= prefixPrecedence
+        | WithSyntax.Call(_, updates) when startsWith updates.Span "(" -> position.Prec >= prefixPrecedence
         | _ when isOpenEnded e -> not position.Tail || position.Prec >= prefixPrecedence
         | _ -> false
 
@@ -371,7 +368,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | UseIn _
         | WorkflowBindExpr _
         | WorkflowReturnExpr _ -> true
-        | FunctionCall("__with", _, [ _; _ ]) -> true
+        | WithSyntax.Call _ -> true
         | ForSyntax.Call _
         | WhileSyntax.Call _
         | AssignSyntax.Call _ -> true
@@ -388,7 +385,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             match spreadSegments e with
             | Some segments -> listDoc e.Span segments
             | None -> binary position op l r
-        | FunctionCall("not", _, [ operand ]) -> cat [ text "not "; expr operandPosition operand ]
+        | FunctionCall(name, _, [ operand ]) when name = NotSyntax.builtIn -> cat [ text "not "; expr operandPosition operand ]
         // `-` is written against its operand. A number or another negation after it is parenthesized, since `-5` is a
         // literal and `--` starts a comment.
         | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
@@ -402,9 +399,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".."; expr { position with Prec = rangePrecedence + 1 } b ]
         | RangeSyntax.Call(a, None) -> cat [ expr { position with Tail = false; Prec = rangePrecedence + 1 } a; text ".." ]
         // Updates written in parentheses, `record with (x = 1, y = 2)`, stay there, laid out as a record's fields are.
-        | FunctionCall("__with", _, [ record; updates ]) when startsWith updates.Span "(" ->
+        | WithSyntax.Call(record, updates) when startsWith updates.Span "(" ->
             cat [ expr operandPosition record; text " with "; exprBare full updates ]
-        | FunctionCall("__with", _, [ record; updates ]) when (match updates.Kind with RecordExpr fields -> fields |> List.forall (function NamedField _ -> true | _ -> false) | _ -> false) ->
+        | WithSyntax.Call(record, updates) when (match updates.Kind with RecordExpr fields -> fields |> List.forall (function NamedField _ -> true | _ -> false) | _ -> false) ->
             let fields = match updates.Kind with RecordExpr fields -> fields | _ -> []
             let count = fields.Length
             let update index field =
@@ -1000,10 +997,7 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     and statement (s: Statement) : Doc =
         match s.Kind with
-        | DefStatement(false, n, t, value) when (match value.Kind with FunctionCall("__rec", _, [ _ ]) -> true | _ -> false) ->
-            match value.Kind with
-            | FunctionCall(_, _, [ inner ]) -> defDoc false "rec" n t inner
-            | _ -> defDoc false "def" n t value
+        | DefStatement(false, n, t, Kind (RecSyntax.Call inner)) -> defDoc false "rec" n t inner
         | DefStatement(false, n, t, Kind (MutSyntax.Call inner)) -> defDoc false "mut" n t inner
         | DefStatement(isExport, n, t, value) -> defDoc isExport "def" n t value
         | TypeDefStatement(n, modifiers, parameters, body) -> typeDefDoc n modifiers parameters body

@@ -349,7 +349,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | other -> cannot $"the operator {op} on a value of type {IrType.show other}"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (mk (Prim(Binary op, atoms)) ty))
-        | FunctionCall("not", _, [ operand ]) when not (scope.Vars.ContainsKey "not") && not (definitions.ContainsKey "not") ->
+        | FunctionCall(name, _, [ operand ]) when name = NotSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             this.Atoms scope [ operand ] (fun atoms -> k (mk (Prim(Not, atoms)) IrBool))
         | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
             // `-x` on a built-in number (on any other type it calls a `negate`). An integer is `0 - x`, and a float
@@ -388,11 +388,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope [ value ] (fun atoms -> k (mk (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
             this.Atoms scope [ value ] (fun atoms -> k (mk (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
-        | FunctionCall("__panic", _, [ Kind (LiteralExpr(StringLit message)) ]) ->
+        | PanicSyntax.Call message ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
             k (mk (Panic [ message ]) ty)
-        | FunctionCall("dbg", _, args) when not (scope.Vars.ContainsKey "dbg") && not (definitions.ContainsKey "dbg") ->
+        | FunctionCall(name, _, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             // Prints the value's text, which the printer of its type writes, and leaves the value.
             // The one argument, which may be a tuple, as the type checker has it.
             let value =
@@ -407,7 +407,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let rest = k (mk (Atom(AVar held)) held.Type)
                 let printed = mk (Let(text, mk (Call(printer, [ AVar held ])) IrString, mk (Dbg(AVar text)) IrUnit)) IrUnit
                 mk (Let(held, lowered, mk (Do(printed, rest)) rest.Type)) rest.Type)
-        | FunctionCall("__with", _, [ record; Kind (RecordExpr updates) ]) ->
+        | WithSyntax.Call(record, Kind (RecordExpr updates)) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.
             let ty = tyOf expr
             let fields =
