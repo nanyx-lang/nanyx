@@ -1,8 +1,17 @@
 name: Docs
 
 on:
-  # Deploys happen only when someone runs this workflow: `gh workflow run Docs`. Vercel's own Git
-  # deployments are off (docs/vercel.json), so pushing deploys nothing.
+  # A merge to main deploys when it changes something the site is built from: the docs, the
+  # examples it publishes, or the grammar it highlights code with. Vercel's own Git deployments are
+  # off (docs/vercel.json), so this workflow is the only thing that deploys.
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "!docs/README.md"
+      - "examples/**"
+      - "extension/syntaxes/**"
+  # To deploy at any other time: `gh workflow run Docs`.
   workflow_dispatch:
 
 permissions: {}
