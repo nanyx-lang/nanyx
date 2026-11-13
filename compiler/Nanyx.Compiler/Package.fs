@@ -145,7 +145,7 @@ module Manifest =
                 match package.TryGetValue key with
                 | true, (:? string as value) when pattern.IsMatch value -> value
                 | true, (:? string as value) ->
-                    errors.Add $"{path}: [package] {key} \"{value}\" must be {rule}"
+                    errors.Add $"""{path}: [package] {key} "{value}" must be {rule}"""
                     ""
                 | true, value ->
                     errors.Add $"{path}: [package] {key} must be a string, not {describe value}"
