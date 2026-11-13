@@ -111,6 +111,41 @@ println("{show(plusHalf(4))} {show(plusHalf(0))} {show(plusHalf(3))}")
     runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(9) #some(0)\nsome(3) some(100) odd\n"
 
 [<Fact>]
+let ``Run - the branches' values that go on to the rest of the block are joined, as an except's are (#348)`` () =
+    // `except #error(#notFound) -> return 0` passes `#some(n)` on and returns from the `#error`: the value the rest of
+    // the block gets is the union of what each branch gives, not the first branch's type.
+    let source = """
+import nanyx/console
+
+def f: int -> #some(int) | #error(#notFound) = { n -> if n > 0 then #some(n) else #error(#notFound) }
+
+def destructured = { n -> proc {
+  def #some(result) = f(n) except #error(#notFound) -> return 0
+  return result
+} }
+
+def matched = { n -> proc {
+  def r = f(n) except #error(#notFound) -> return 0
+  match r
+    | #some(m) -> return m
+} }
+
+def sized = { n -> proc {
+  def size = match n
+    | 0 -> return "none"
+    | 1 -> #one
+    | _ -> #many(n)
+  match size
+    | #one -> return "one"
+    | #many(k) -> return "{k}"
+} }
+
+println("{destructured(5)} {destructured(-1)} {matched(7)} {matched(-1)}")
+println("{sized(0)} {sized(1)} {sized(3)}")
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(5) #some(0) #some(7) #some(0)\n#some(none) #some(one) #some(3)\n"
+
+[<Fact>]
 let ``Run - a proc block continues past each #some and stops at the first #error`` () =
     // `run(7)` fails at its first `try`, so nothing after it runs; `run(3)` fails at its second. `sum` binds two
     // `try`s nested in its `return`.

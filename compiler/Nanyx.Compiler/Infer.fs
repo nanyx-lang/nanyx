@@ -7,10 +7,6 @@ open NyxCompiler
 type TypedExpr = NyxCompiler.TypedExpr
 type TypedStatement = NyxCompiler.TypedStatement
 
-/// What the names of the locals the workflow rewrite binds the rest of a block to start with, after an `if` or `match`
-/// with workflow keywords in its branches: each branch goes on to it. No name written in the source can start with it.
-let workflowRestPrefix = "__rest_"
-
 open NyxCompiler.InferState
 
 type InferState = NyxCompiler.InferState.InferState
@@ -451,6 +447,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         | Some diagnostic -> Error [ diagnostic ]
                         | None ->
                         let argTys = typedArgs |> List.map (fun typedExpr -> typedExpr.Type)
+                        let current = WorkflowRests.noteCall name argTys current
                         // A function value requires the contexts its type says where it is called. One whose type is
                         // not known yet, such as a parameter of a def that does not write its type, requires a context
                         // variable of its own (see `ContextVariables`).
@@ -1111,21 +1108,6 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | None -> ()
             // What is wrong with the match as a whole is reported at its head (`match a`), not over its arms.
             let headSpan = MatchHead.span expr scrutinees arms
-            // A value no arm matches (`PatternSpace.missingCase`) is described as the one value that makes it so, or
-            // as the combination of values.
-            let exhaustivenessDiagnostics () =
-                match missingWitnesses with
-                | None -> []
-                | Some witnesses ->
-                    let diagnostic =
-                        match witnesses |> List.indexed |> List.filter (fun (_, witness) -> witness <> PatternSpace.Anything) with
-                        | [ index, witness ] ->
-                            let suffix = if scrutineeTypes.Length > 1 then $" (scrutinee {index + 1})" else ""
-                            Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match{suffix}, {PatternSpace.whatIsMissing witness}"
-                        | _ ->
-                            let missing = witnesses |> List.map PatternSpace.show |> String.concat ", "
-                            Diagnostics.at DiagnosticCodes.NonExhaustiveMatch headSpan $"Non-exhaustive match, missing case: {missing}"
-                    [ { diagnostic with Fixes = MatchArmFixes.unplaced arms (PatternSpace.missingArms (arms |> List.map fst) (resolvedScrutineeTypes |> List.map Some)) } ]
             // A tag that an earlier arm handles in full (its payload and every other position are catch-alls)
             // cannot reach a later arm, so a name bound by a catch-all in a later arm has the scrutinee's union
             // without those tags; with only the rest left, it has the rest's type. That is what lets
@@ -1189,14 +1171,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     if restError.IsSome then
                         []
                     else
-                        exhaustivenessDiagnostics ()
+                        MatchExhaustiveness.ofWitnesses arms resolvedScrutineeTypes headSpan missingWitnesses
                 let armTypes = armExprs |> List.rev |> List.map (fun typedExpr -> typedExpr.Type)
                 let resultTy, constrained = joinBranchTypes rowVars current armTypes
                 // A match that does not handle every case is reported, and typed as if it did: a debug build gives it
                 // an arm that traps on the cases it leaves out.
                 let unhandled = Option.toList restError @ exhaustivenessErrors
                 let constrained =
-                    if unhandled.IsEmpty then constrained
+                    if unhandled.IsEmpty then WorkflowRests.noteOpenMatch expr.Id arms resolvedScrutineeTypes headSpan constrained
                     else { constrained with UnhandledMatches = (expr.Id, unhandled) :: constrained.UnhandledMatches }
                 Ok (mkTypedExpr expr resultTy None None (Some typedArms), constrained)
             else
@@ -1446,7 +1428,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             // to use at different types: generalised, its failures would be closed to those of the
                             // rest alone, and a `try` in a branch could not add its own.
                             let scheme, generalizedState =
-                                if name.StartsWith workflowRestPrefix then TypeEnv.mono declaredTy, current
+                                if WorkflowRests.isRest name then TypeEnv.mono declaredTy, current
                                 // A cell holds values of one type: its own, not one for each use.
                                 elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell symbol (NumericLiterals.settleWithin [ declaredTy ] current)
                                 else ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
@@ -1492,6 +1474,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                     | Error err -> errors <- err
         if errors.IsEmpty then errors <- BlockResult.check statements
         if errors.IsEmpty then
+            current <- WorkflowRests.joinArguments env' statements current
             let blockExpr = mkTypedExpr block lastExpr.Type (Some lastExpr) (Some typedStatements) None
             Ok (blockExpr, current)
         else

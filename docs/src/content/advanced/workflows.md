@@ -230,7 +230,14 @@ def check: int -> #some(int) | #negative | #odd = { n -> proc {
 
 Each branch goes on to the rest of the block when it finishes, so a `def` of an `if` or `match` binds the value its branch ends with. The `if` or `match` need not be a statement of its own: one in a part of a statement that always runs, such as the value a destructuring `def` takes apart or an operand of `+`, is worked out first, just before its statement:
 
-```nanyx fragment (a, b) = if n < 0 then return 0 else (n, n * 2)
+```nanyx fragment
+def (a, b) = if n < 0 then return 0 else (n, n * 2)
+```
+
+The values the branches end with are joined as any `if`'s or `match`'s are, so they need not be the same type. An `except` that returns from one case passes the others on, and what it gives the rest of the block is what is left:
+
+```nanyx fragment
+def #some(result) = find(id) except #error(#notFound) -> return 0
 ```
 
 A keyword whose continuation cannot be the rest of the block is an error:

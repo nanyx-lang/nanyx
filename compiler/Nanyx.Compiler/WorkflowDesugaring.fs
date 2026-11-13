@@ -409,7 +409,7 @@ module WorkflowDesugaring =
         // block as its continuation, and so on. A block that falls off its end without `return` has the builder's
         // `zero` as its value there (`#some()` for `proc`), its last value only run; outside a builder's block, `()`.
         and desugarWorkflowChain (statements: Statement list) =
-            let ending =
+            let ending () =
                 match builder with
                 | Some builderName ->
                     let zero = Expression.synthetic (MemberAccess(Expression.synthetic (IdentifierExpr builderName), "zero", None))
@@ -418,7 +418,9 @@ module WorkflowDesugaring =
                     builderUsed <- true
                     zero
                 | None -> Expression.synthetic UnitExpr
+            // The chain may end in several places (see `desugarBranching`), each with an ending of its own.
             desugarChain statements (fun last ->
+                let ending = ending ()
                 match last with
                 | Some value -> madeFor value (Block [ Statement.from value (ExprStatement value); Statement.synthetic (ExprStatement ending) ])
                 | None -> ending)
@@ -467,11 +469,15 @@ module WorkflowDesugaring =
         //
         //   def __rest_1 = { name -> <rest of the block> }
         //   if cond then <then branch, then __rest_1(its value)> else <else branch, then __rest_1(its value)>
+        //
+        // The last statement of a chain has no rest: each branch goes on to `next` with its value, as the statement
+        // would if it had no keywords. So a `match` that ends a branch of another gives that branch its value.
         and desugarBranching (expr: Expression) (name: Identifier option) (rest: Statement list) (next: Expression option -> Expression) : Expression =
             freshNames <- freshNames + 1
-            let restName = $"{NyxCompiler.Infer.workflowRestPrefix}{freshNames}"
+            let restName = $"{WorkflowRests.prefix}{freshNames}"
             let parameter = name |> Option.defaultValue "_"
-            let restFunction = madeFor expr (Lambda([ parameter, None ], desugarChain rest next, false))
+            let isLast = rest.IsEmpty && name.IsNone
+            let restFunction = if isLast then None else Some (madeFor expr (Lambda([ parameter, None ], desugarChain rest next, false)))
             // A branch goes on to the rest with its value when a `def` binds it, and with `()` otherwise, so that
             // branches of different types can still be a statement.
             let goOn (last: Expression option) =
@@ -488,7 +494,7 @@ module WorkflowDesugaring =
                     match body.Kind with
                     | Block statements -> statements
                     | _ -> [ Statement.from body (ExprStatement body) ]
-                desugarChain (statements |> List.collect liftStatementBinds) goOn
+                desugarChain (statements |> List.collect liftStatementBinds) (if isLast then next else goOn)
             let branched =
                 let kind =
                     match expr.Kind with
@@ -501,11 +507,14 @@ module WorkflowDesugaring =
                         PatternSpace.ofArm values.Length patterns |> List.map (Pattern.mapExpressions desugarExpr), branch body
                     Match(values |> List.map desugarExpr, arms |> List.map desugarArm)
                 | other -> other
-            madeFor expr (
-                Block [
-                    Statement.from expr (DefStatement(false, restName, None, restFunction))
-                    Statement.from expr (ExprStatement { expr with Kind = branched })
-                ])
+            match restFunction with
+            | None -> { expr with Kind = branched }
+            | Some restFunction ->
+                madeFor expr (
+                    Block [
+                        Statement.from expr (DefStatement(false, restName, None, restFunction))
+                        Statement.from expr (ExprStatement { expr with Kind = branched })
+                    ])
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =

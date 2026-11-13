@@ -33,6 +33,25 @@ let ``A workflow keyword in a branch of an if or match statement has the rest of
     Assert.Equal("int -> #some(int) | #negative | #odd", Unifier.tyToString result.Typed.Value.Types.["check"])
 
 [<Fact>]
+let ``The values the branches give the rest of the block are joined, and a match there must cover them all`` () =
+    let source (arms: string) =
+        $"""def sized = {{ n -> proc {{
+  def size = match n
+    | 0 -> return "none"
+    | 1 -> #one
+    | _ -> #many(n)
+  match size
+{arms}
+}} }}
+"""
+    let result = Compiler.compile ((source "    | #one -> return \"one\"\n    | #many(k) -> return \"{k}\"").ReplaceLineEndings "\n")
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Assert.Equal("int -> #some(string)", Unifier.tyToString result.Typed.Value.Types.["sized"])
+    let code, text = singleError ((source "    | #one -> return \"one\"").ReplaceLineEndings "\n")
+    Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
+    Assert.StartsWith("match size", text)
+
+[<Fact>]
 let ``A workflow keyword the rest of its block cannot follow is reported where it is written`` () =
     // It used to become a call to the builder's member with no continuation, and fail as a type mismatch (#347).
     let reported (body: string) =
