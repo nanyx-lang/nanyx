@@ -345,3 +345,93 @@ export def F32.tryToInt
   = { x, mode ->
     float.tryToInt(F32.toFloat(x), mode)
   }
+
+-- Reading sized numbers -------------------------------------------------------------------------
+--
+-- Each sized integer type reads itself from text as `int.fromString` reads an `int`, with its own tag
+-- for text it cannot read, and so has a `FromString`. `F32.fromString` is beside `float.fromString`.
+
+--| The integer `s` writes, as `int.fromString` reads it, when it is from `low` to `high`, or
+  `#invalid`. When `low` is 0 the type is unsigned, and a leading `-` is `#invalid` too.
+def readIntIn: string, int, int -> #some(int) | #invalid = { s, low, high ->
+  if low == 0 and __nanyx_string_byte_at(s, 0) == 45
+    then #invalid
+    else match int.fromString(s)
+      | #some(n) -> (if n >= low and n <= high then #some(n) else #invalid)
+      | #invalidInt -> #invalid
+}
+
+--| The `I8` `s` writes in decimal, or `#invalidI8` for anything else, a number past the range of
+  `I8` included.
+export def I8.fromString: string -> #some(I8) | #invalidI8 = { s ->
+  match readIntIn(s, -128, 127)
+    | #some(n) -> #some(__nanyx_int_cast(n))
+    | #invalid -> #invalidI8
+}
+
+--| The `I16` `s` writes in decimal, or `#invalidI16` for anything else, a number past the range of
+  `I16` included.
+export def I16.fromString: string -> #some(I16) | #invalidI16 = { s ->
+  match readIntIn(s, -32_768, 32_767)
+    | #some(n) -> #some(__nanyx_int_cast(n))
+    | #invalid -> #invalidI16
+}
+
+--| The `I32` `s` writes in decimal, or `#invalidI32` for anything else, a number past the range of
+  `I32` included.
+export def I32.fromString: string -> #some(I32) | #invalidI32 = { s ->
+  match readIntIn(s, -2_147_483_648, 2_147_483_647)
+    | #some(n) -> #some(__nanyx_int_cast(n))
+    | #invalid -> #invalidI32
+}
+
+--| The `U8` `s` writes in decimal, or `#invalidU8` for anything else, a leading `-` or a number
+  past the range of `U8` included.
+export def U8.fromString: string -> #some(U8) | #invalidU8 = { s ->
+  match readIntIn(s, 0, 255)
+    | #some(n) -> #some(__nanyx_int_cast(n))
+    | #invalid -> #invalidU8
+}
+
+--| The `U16` `s` writes in decimal, or `#invalidU16` for anything else, a leading `-` or a number
+  past the range of `U16` included.
+export def U16.fromString: string -> #some(U16) | #invalidU16 = { s ->
+  match readIntIn(s, 0, 65_535)
+    | #some(n) -> #some(__nanyx_int_cast(n))
+    | #invalid -> #invalidU16
+}
+
+--| The `U32` `s` writes in decimal, or `#invalidU32` for anything else, a leading `-` or a number
+  past the range of `U32` included.
+export def U32.fromString: string -> #some(U32) | #invalidU32 = { s ->
+  match readIntIn(s, 0, 4_294_967_295)
+    | #some(n) -> #some(__nanyx_int_cast(n))
+    | #invalid -> #invalidU32
+}
+
+--| The number the decimal digits of `s` from byte `i` on write after the digits whose value is
+  `acc`, or `#invalidU64` at the first byte that is not a digit, or once the number is past the
+  range of `U64`. Each step is checked before it is taken.
+def parseU64Digits: string, int, U64 -> #some(U64) | #invalidU64 = { s, i, acc ->
+  if i >= __nanyx_string_length(s)
+    then #some(acc)
+    else if digitValue(__nanyx_string_byte_at(s, i)) < 0
+      then #invalidU64
+      else if acc > 1_844_674_407_370_955_161 or
+        acc == 1_844_674_407_370_955_161 and digitValue(__nanyx_string_byte_at(s, i)) > 5
+        then #invalidU64
+        else parseU64Digits(
+          s
+          i + 1
+          acc * 10 + U64.fromInt(digitValue(__nanyx_string_byte_at(s, i)))
+        )
+}
+
+--| The `U64` `s` writes in decimal, with an optional leading `+`, or `#invalidU64` for anything
+  else, a leading `-` or a number past 18446744073709551615 included. It reads its digits itself,
+  as the largest `U64`s are past the range of `int`.
+export def U64.fromString: string -> #some(U64) | #invalidU64 = { s ->
+  def start = if __nanyx_string_byte_at(s, 0) == 43 then 1 else 0
+
+  if __nanyx_string_length(s) <= start then #invalidU64 else parseU64Digits(s, start, 0)
+}
