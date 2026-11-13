@@ -7,6 +7,28 @@ open NyxCompiler
 open NyxCompiler.InferState
 open NyxCompiler.Visibility
 
+/// The names of the type variables written in an annotation, in order of first appearance.
+let rec internal annotationVarNames (typeExpr: TypeExpr) : string list =
+    let ofList items = items |> List.collect annotationVarNames
+    let names =
+        match typeExpr.Kind with
+        | TypeVar name -> [ name ]
+        | TypeName _ | TypeHole | TypeUnit | TypeContext _ -> []
+        | TypeTuple items | TypeUnion items | TypeIntersection items -> ofList items
+        | TypeRecord fields ->
+            fields
+            |> List.collect (function
+                | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> annotationVarNames t
+                | _ -> [])
+        | TypeApply(_, args) -> ofList args
+        | TypeFunc(arg, ret) -> annotationVarNames arg @ annotationVarNames ret
+        | TypeTag(_, payload) -> payload |> Option.map annotationVarNames |> Option.defaultValue []
+        | TypeWithContext(_, inner) | TypeConstraint(_, inner, _) | TypeWhere(inner, _) ->
+            annotationVarNames inner
+        // The type of a value is not a variable the annotation introduces.
+        | TypeOf _ -> []
+    names |> List.distinct
+
 let internal primitiveType name =
     TyPrimitive name
 

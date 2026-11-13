@@ -51,7 +51,10 @@ let internal read
         | Some contexts -> ensureContextsExist state name span contexts
         | None -> Ok ()
     let contextsExist =
-        contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.checkCellTypes state name typeOpt)
+        contextsExist
+        |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt)
+        |> Result.bind (fun () -> ensureContextTypesDetermined name typeOpt)
+        |> Result.bind (fun () -> MemoryCells.checkCellTypes state name typeOpt)
     let typeOfsInferred =
         match typeOpt with
         | Some typeExpr -> inferTypeOfValues typeOfEnv state typeExpr

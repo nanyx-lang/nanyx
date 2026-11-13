@@ -173,6 +173,32 @@ let internal ensureContextsExist (state: InferState) (name: Identifier) (span: S
         |> List.map (fun ctxName -> Diagnostics.at DiagnosticCodes.UnknownContext span $"Unknown context '{ctxName}' in the signature of '{name}'")
         |> Error
 
+/// Whether each type variable a context in `typeOpt`, the annotation of `name`, is applied to is written in its type
+/// too, as `a` in `[ToString(a)] a -> ()`. No call can say what a variable written only in the contexts stands for, so
+/// none could find the context's instance. An annotation of only contexts is not checked: its type is inferred.
+let internal ensureContextTypesDetermined (name: Identifier) (typeOpt: TypeExpr option) : Result<unit, Diagnostic list> =
+    match typeOpt with
+    | Some (Kind (TypeWithContext(contexts, inner))) ->
+        let written = annotationVarNames inner |> Set.ofList
+        let contextText ctxName (args: TypeExpr list) =
+            let simple = args |> List.choose (fun arg -> match arg.Kind with TypeVar n | TypeName n -> Some n | _ -> None)
+            if simple.Length = args.Length then $"""{ctxName}({String.concat ", " simple})""" else ctxName
+        let errors =
+            contexts
+            |> List.collect (fun ctx ->
+                match ctx.Kind with
+                | TypeApply(ctxName, args) ->
+                    args
+                    |> List.collect annotationVarNames
+                    |> List.distinct
+                    |> List.filter (written.Contains >> not)
+                    |> List.map (fun var ->
+                        Diagnostics.at DiagnosticCodes.UndeterminedContextType ctx.Span
+                            $"'{var}' in '{contextText ctxName args}' is not the type of any parameter of '{name}' or of its result, so no call can supply '{contextText ctxName args}'")
+                | _ -> [])
+        if errors.IsEmpty then Ok () else Error errors
+    | _ -> Ok ()
+
 /// Whether `name` is bound in `env` to the ambient instance's member, not to something nearer that shadows it: a
 /// member of a context the def declares, or of an instance a `use` loads.
 let private isAmbientMember (env: TypeEnv) (state: InferState) (name: Identifier) =

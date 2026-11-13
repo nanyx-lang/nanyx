@@ -208,6 +208,8 @@ export def combineAll: [Combine(a)] list(a) -> a
 
 Inside `combineAll`, `empty` and `combine` are the members of the instance it is given, so it combines whatever type it is called with, as long as that type has a `Combine`.
 
+A call finds the instance from the types of its arguments and its result, so a type variable a context is applied to must also be the type of a parameter or of the result. `[ToString(a)] string -> ()` is an error (`NYX0236`): nothing a call passes says what `a` is.
+
 The operators read through contexts of the prelude in the same way: `x + y` on values of a type variable calls the `` `+` `` of [`Add`](#adda), `x ++ y` the `` `++` `` of [`Append`](#appenda), and `x == y` the `` `==` `` of [`Eq`](#eqa). On an `int`, a `float`, a `string` or a `bool`, an operator is always the built-in one, as `++` is on a list, so a counter's `n + 1` in a generic function still adds ints.
 
 ## Operators find their context
