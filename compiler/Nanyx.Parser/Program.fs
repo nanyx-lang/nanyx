@@ -819,12 +819,15 @@ let private pipeTarget =
     let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let matchStep = pstring "match" >>. keywordEnd >>. matchArms |>> PipeMatch
     // Each value in the brackets is an argument of its own, so that a tuple written in brackets of its own is one:
-    // `\f(a, b)` passes `a` and `b`, and `\f((a, b))` the tuple. Named fields keep all the fields as one record.
+    // `\f(a, b)` passes `a` and `b`, and `\f((a, b))` the tuple. Named fields keep all the fields as one record, and
+    // so does a record written first in brackets of its own, which would otherwise be read as that record of named
+    // fields (see `pipeCallArguments`): `\f((y = 1))` passes the record.
     let writtenArguments (fields, span) =
-        if fields |> List.forall (function PositionalField _ -> true | NamedField _ -> false) then
+        match fields with
+        | PositionalField (Kind (RecordExpr _)) :: _ -> [ Expression.at span (RecordExpr fields) ]
+        | _ when fields |> List.forall (function PositionalField _ -> true | NamedField _ -> false) ->
             fields |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)
-        else
-            [ Expression.at span (RecordExpr fields) ]
+        | _ -> [ Expression.at span (RecordExpr fields) ]
     let callStep =
         pipe3
             qualifiedIdentifierWithSpan

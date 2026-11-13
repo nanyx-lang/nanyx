@@ -44,3 +44,9 @@ let ``A tuple a pipe passes as one argument keeps its brackets`` () =
     unchanged "def r = xs \\f((0, 0), y)\n"
     unchanged "def r = xs \\f(a, b) { y -> y }\n"
     unchanged "def r = xs \\f(a, y = z) { w -> w }\n"
+
+[<Fact>]
+let ``A record a pipe passes as one argument keeps its brackets`` () =
+    unchanged "def r = x \\f((y = 1))\n"
+    unchanged "def r = x \\f((y = 1), b) { w -> w }\n"
+    unchanged "def r = x \\f(y = 1)\n"
