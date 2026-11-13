@@ -114,6 +114,51 @@ module WorkflowDesugaring =
                             $"`{keyword}` is a workflow keyword, so it can only be used inside a builder block, such as `proc {{ ... }}`")
                 madeFor source (FunctionCall(keyword, None, args))
 
+        // Whether `expr` uses a workflow keyword of the block it is in: one not inside a lambda, or inside a builder
+        // block of its own.
+        let rec usesKeyword (expr: Expression) : bool =
+            let inValue (statement: Statement) =
+                match statement.Kind with
+                | DefStatement(_, _, _, value)
+                | ExprStatement value
+                | UseStatement value -> usesKeyword value
+                | ImportStatement _
+                | TypeDefStatement _ -> false
+            match expr.Kind with
+            | WorkflowBindExpr _
+            | WorkflowReturnExpr _ -> true
+            | Lambda _ -> false
+            | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (name.StartsWith "__") -> false
+            | FunctionCall(_, _, args)
+            | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
+            | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
+            | BinaryOp(_, _, left, right) -> usesKeyword left || usesKeyword right
+            | IfExpr(cond, thenExpr, elseExpr) -> usesKeyword cond || usesKeyword thenExpr || usesKeyword elseExpr
+            | Match(values, arms) -> List.exists usesKeyword values || arms |> List.exists (snd >> usesKeyword)
+            | Except(value, arms) -> usesKeyword value || arms |> List.exists (snd >> usesKeyword)
+            | Block statements -> List.exists inValue statements
+            | TupleExpr items
+            | ListExpr items -> List.exists usesKeyword items
+            | RecordExpr fields -> fields |> List.exists (function NamedField(_, value) | PositionalField value -> usesKeyword value)
+            | TagExpr(_, Some payload) -> usesKeyword payload
+            | MemberAccess(baseExpr, _, _) -> usesKeyword baseExpr
+            | UseIn(_, body) -> usesKeyword body
+            | InterpolatedString parts -> parts |> List.exists (function StringExpr value -> usesKeyword value | StringText _ -> false)
+            | TagExpr(_, None)
+            | ContextMemberAccess _
+            | UnitExpr
+            | LiteralExpr _
+            | IdentifierExpr _ -> false
+
+        // Whether `expr` is an `if` or a `match` with a workflow keyword in a branch: as a statement of its own, each
+        // branch goes on to the rest of the block (see `desugarBranching`).
+        let branchesUseKeywords (expr: Expression) =
+            match expr.Kind with
+            | IfExpr(_, thenExpr, elseExpr) -> usesKeyword thenExpr || usesKeyword elseExpr
+            | Match(_, arms)
+            | Except(_, arms) -> arms |> List.exists (snd >> usesKeyword)
+            | _ -> false
+
         // A workflow bind nested in an expression, as in `return R(a = try f())`, becomes a bind of a fresh name
         // just before its statement, and the expression refers to that name. Binds are lifted from the places an
         // expression always evaluates, inner ones before outer ones and left to right; not from lambdas, nested
@@ -177,15 +222,18 @@ module WorkflowDesugaring =
             | MemberAccess(baseExpr, field, rangeOpt) ->
                 let prefix, baseExpr' = liftBinds baseExpr
                 prefix, rebuild (MemberAccess(baseExpr', field, rangeOpt))
-            | IfExpr(cond, thenExpr, elseExpr) ->
-                let prefix, cond' = liftBinds cond
-                prefix, rebuild (IfExpr(cond', thenExpr, elseExpr))
-            | Match(values, arms) ->
-                let prefix, values' = liftAll values
-                prefix, rebuild (Match(values', arms))
-            | Except(value, arms) ->
-                let prefix, value' = liftBinds value
-                prefix, rebuild (Except(value', arms))
+            // One with a keyword in a branch, which is not a statement of its own here (as the value a destructuring
+            // def matches on is not), becomes a def of a fresh name just before the statement, which the branching
+            // rewrite handles (see `desugarBranching`).
+            | IfExpr _
+            | Match _
+            | Except _ ->
+                let prefix, expr' = liftScrutinee expr
+                if branchesUseKeywords expr' then
+                    let name = freshName "branch"
+                    prefix @ [ Statement.from expr (DefStatement(false, name, None, expr')) ], madeFor expr (IdentifierExpr name)
+                else
+                    prefix, expr'
             | InterpolatedString parts ->
                 let lifted =
                     parts
@@ -204,14 +252,34 @@ module WorkflowDesugaring =
             | LiteralExpr _
             | IdentifierExpr _ -> [], expr
 
+        // An `if` or a `match` with the binds in the parts of it that always run lifted out: its condition, or the
+        // values it matches. Its branches only run when chosen.
+        and liftScrutinee (expr: Expression) : Statement list * Expression =
+            let rebuild kind = { expr with Kind = kind }
+            match expr.Kind with
+            | IfExpr(cond, thenExpr, elseExpr) ->
+                let prefix, cond' = liftBinds cond
+                prefix, rebuild (IfExpr(cond', thenExpr, elseExpr))
+            | Match(values, arms) ->
+                let lifted = values |> List.map liftBinds
+                List.collect fst lifted, rebuild (Match(List.map snd lifted, arms))
+            | Except(value, arms) ->
+                let prefix, value' = liftBinds value
+                prefix, rebuild (Except(value', arms))
+            | _ -> [], expr
+
         // The statement with the binds nested in it lifted out before it. A bind that is a whole statement
-        // (`def a = try f()`, or `try f()` on its own) stays where it is; only binds inside its value are lifted.
+        // (`def a = try f()`, or `try f()` on its own) stays where it is, and so does an `if` or a `match`: only binds
+        // inside its value are lifted.
         let liftStatementBinds (statement: Statement) : Statement list =
             let liftValue (value: Expression) =
                 match value.Kind with
                 | WorkflowBindExpr(keyword, bound) when not (isReturnKeyword keyword) ->
                     let prefix, bound' = liftBinds bound
                     prefix, { value with Kind = WorkflowBindExpr(keyword, bound') }
+                | IfExpr _
+                | Match _
+                | Except _ -> liftScrutinee value
                 | _ -> liftBinds value
             match statement.Kind with
             | DefStatement(isExport, name, typeOpt, value) ->
@@ -223,51 +291,6 @@ module WorkflowDesugaring =
             | UseStatement _
             | ImportStatement _
             | TypeDefStatement _ -> [ statement ]
-
-        // Whether `expr` uses a workflow keyword of the block it is in: one not inside a lambda, or inside a builder
-        // block of its own.
-        let rec usesKeyword (expr: Expression) : bool =
-            let inValue (statement: Statement) =
-                match statement.Kind with
-                | DefStatement(_, _, _, value)
-                | ExprStatement value
-                | UseStatement value -> usesKeyword value
-                | ImportStatement _
-                | TypeDefStatement _ -> false
-            match expr.Kind with
-            | WorkflowBindExpr _
-            | WorkflowReturnExpr _ -> true
-            | Lambda _ -> false
-            | FunctionCall(name, _, [ Kind (Lambda([], _, _)) ]) when not (name.StartsWith "__") -> false
-            | FunctionCall(_, _, args)
-            | ContextMemberCall(_, _, args) -> List.exists usesKeyword args
-            | Pipe(value, _, _, args) -> List.exists usesKeyword (value :: args)
-            | BinaryOp(_, _, left, right) -> usesKeyword left || usesKeyword right
-            | IfExpr(cond, thenExpr, elseExpr) -> usesKeyword cond || usesKeyword thenExpr || usesKeyword elseExpr
-            | Match(values, arms) -> List.exists usesKeyword values || arms |> List.exists (snd >> usesKeyword)
-            | Except(value, arms) -> usesKeyword value || arms |> List.exists (snd >> usesKeyword)
-            | Block statements -> List.exists inValue statements
-            | TupleExpr items
-            | ListExpr items -> List.exists usesKeyword items
-            | RecordExpr fields -> fields |> List.exists (function NamedField(_, value) | PositionalField value -> usesKeyword value)
-            | TagExpr(_, Some payload) -> usesKeyword payload
-            | MemberAccess(baseExpr, _, _) -> usesKeyword baseExpr
-            | UseIn(_, body) -> usesKeyword body
-            | InterpolatedString parts -> parts |> List.exists (function StringExpr value -> usesKeyword value | StringText _ -> false)
-            | TagExpr(_, None)
-            | ContextMemberAccess _
-            | UnitExpr
-            | LiteralExpr _
-            | IdentifierExpr _ -> false
-
-        // Whether `expr` is an `if` or a `match` with a workflow keyword in a branch: as a statement of its own, each
-        // branch goes on to the rest of the block (see `desugarBranching`).
-        let branchesUseKeywords (expr: Expression) =
-            match expr.Kind with
-            | IfExpr(_, thenExpr, elseExpr) -> usesKeyword thenExpr || usesKeyword elseExpr
-            | Match(_, arms)
-            | Except(_, arms) -> arms |> List.exists (snd >> usesKeyword)
-            | _ -> false
 
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
         // written (a bind's call is the whole rest of the workflow), so that call is a node of its own, with a new id.

@@ -54,7 +54,7 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
         reported "  def halves = list.map(xs, { x -> try halve(x) })")
     Assert.Equal(
         "`try` is in a part of an expression that may not run, so the rest of the `proc` block cannot follow it: make the `if` or `match` it is in a statement of its own",
-        reported "  def m = 1 + (if true then try halve(2) else 0)")
+        reported "  def m = false or (if true then try halve(2) == 1 else false)")
     // A builder block of its own inside a lambda has its own continuation.
     let nested =
         "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +

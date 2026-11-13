@@ -217,7 +217,7 @@ def main = {
 
 # Keywords in branches, loops and lambdas
 
-A keyword means the same wherever it is in the block. A `try` or `return` in a branch of an `if`, or in an arm of a `match`, that is a statement of its own has the rest of the block as its continuation, just as one outside the branch does. A failed `try` and a `return` end the whole block, not just the branch:
+A keyword means the same wherever it is in the block. A `try` or `return` in a branch of an `if`, or in an arm of a `match`, has the rest of the block as its continuation, just as one outside the branch does. A failed `try` and a `return` end the whole block, not just the branch:
 
 ```nanyx
 def check: int -> #some(int) | #negative | #odd = { n -> proc {
@@ -228,14 +228,17 @@ def check: int -> #some(int) | #negative | #odd = { n -> proc {
 } }
 ```
 
-Each branch goes on to the rest of the block when it finishes, so a `def` of an `if` or `match` binds the value its branch ends with.
+Each branch goes on to the rest of the block when it finishes, so a `def` of an `if` or `match` binds the value its branch ends with. The `if` or `match` need not be a statement of its own: one in a part of a statement that always runs, such as the value a destructuring `def` takes apart or an operand of `+`, is worked out first, just before its statement:
+
+```nanyx fragment (a, b) = if n < 0 then return 0 else (n, n * 2)
+```
 
 A keyword whose continuation cannot be the rest of the block is an error:
 
 - **Inside a lambda.** A lambda runs when it is called, not where it is written. This includes a lambda passed to a function, as in `list.map(xs, { x -> try f(x) })`. A builder block of its own inside the lambda, such as `{ x -> proc { ... } }`, is fine.
 - **In the body of a `for` loop.** The body runs once per element. Handle the value with a `match` in the body instead.
 - **In a `while` loop.** Its condition and body run again each time round. Handle the value with a `match` in the loop instead.
-- **In a part of an expression that may not run.** That means a branch of an `if` or an arm of a `match` that is part of a larger expression, as in `1 + (if c then try f() else 0)`, or the right of `and` or `or`. Make the `if` or `match` a statement of its own.
+- **In a part of an expression that may not run.** That means the right of `and` or `or`, as in `ok or (if c then try f() else false)`, or a branch of an `if` or an arm of a `match` that is itself in such a part. Make the `if` or `match` a statement of its own.
 
 `try` and `return` are keywords of the language, so outside any builder block they are an error too, which says that each is a workflow keyword to use inside a builder block such as `proc { ... }`.
 
