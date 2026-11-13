@@ -11,7 +11,7 @@ it is going. Anyone who changes something one of them describes updates the page
 Work on the compiler and its tools is split into workstreams. Each has a page here and a label on its issues.
 There are no tracking issues. The
 [Nanyx workstreams project](https://github.com/orgs/nanyx-lang/projects/1) holds every open issue on one board.
-Its Stream field places an issue in the workstream it mostly serves. Its Priority field (Next, Soon, Later) orders
+Its Stream field places an issue in the workstream it mostly serves. Its Priority field (Next, Soon, Any time), set on each issue, orders
 the backlog: work is taken from Next first.
 
 | Workstream | Design | Label |
