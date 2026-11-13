@@ -303,7 +303,7 @@ type private FunctionEmitter(context: EmitContext) =
             |> join "\n    "
         let atoms = atomsAfter false
         // The helper of `Helpers.storingValues` `name` for a value of `ty`.
-        let storing (name: string) (ty: IrType) = helper (Helpers.forValueType name (CoreIrLayout.valueType ty))
+        let storing (name: string) (ty: IrType) = helper (Helpers.forStorage name (CoreIrLayout.storage ty))
         // Each value, then its store at its offset in the record whose pointer is on the stack.
         let stores (offsetsAndValues: (int * Atom) list) =
             offsetsAndValues

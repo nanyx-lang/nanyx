@@ -2,6 +2,54 @@
 /// where things live in linear memory.
 module internal Transpiler.Wasm.WasmRuntime
 
+/// How a value of the program's is written in memory: the WebAssembly value type it is held in, and how many bytes of
+/// it are written (see `CoreIrLayout.storage`).
+type Storage =
+    /// An `i32` in 4 bytes: a pointer, a code, a bool, a boxed float, an `I32` or a `U32`.
+    | Word
+    /// An `i64` in 8 bytes: an int or a `U64`.
+    | Wide
+    /// The low byte of an `i32`: an `I8` or a `U8`.
+    | Byte
+    /// The low 2 bytes of an `i32`: an `I16` or a `U16`.
+    | Half
+
+    /// The WebAssembly value type the value is held in, in locals and on the stack.
+    member this.ValueType =
+        match this with
+        | Wide -> "i64"
+        | Word
+        | Byte
+        | Half -> "i32"
+
+    /// How many bytes the value takes in memory.
+    member this.Bytes =
+        match this with
+        | Byte -> 1
+        | Half -> 2
+        | Word -> 4
+        | Wide -> 8
+
+    /// The instruction that writes the value at the address under it on the stack.
+    member this.Store =
+        match this with
+        | Byte -> "i32.store8"
+        | Half -> "i32.store16"
+        | Word -> "i32.store"
+        | Wide -> "i64.store"
+
+    /// An instruction that reads the value's bits back, zero-extended: enough to copy it, not to compute with it, which
+    /// `CoreIrLayout.load` is for.
+    member this.CopyLoad =
+        match this with
+        | Byte -> "i32.load8_u"
+        | Half -> "i32.load16_u"
+        | Word -> "i32.load"
+        | Wide -> "i64.load"
+
+    /// Every way a value is stored, each with its own variant of the storing helpers.
+    static member All = [ Word; Wide; Byte; Half ]
+
 /// The names of the WebAssembly helper functions the backend emits on demand (see `runtimeHelpers`).
 module Helpers =
     let alloc = "__nanyx_alloc"
@@ -66,12 +114,17 @@ module Helpers =
     /// end of every string.
     let intToIndex = "__nanyx_int_to_index"
 
-    /// The helpers that hold a value of the program's in memory, which have a variant for each WebAssembly type a value
-    /// can be held in (see `CoreIrLayout.valueType`).
+    /// The helpers that hold a value of the program's in memory, which have a variant for each way a value is stored
+    /// (see `Storage`).
     let storingValues = [ listCons; listConsAt; tagBox; tagBoxAt; recordSet; listConcat ]
 
-    /// The helper `name`, one of `storingValues`, for a value held in `valueType`: the helper itself for an `i32`.
-    let forValueType (name: string) (valueType: string) = if valueType = "i32" then name else $"{name}_{valueType}"
+    /// The helper `name`, one of `storingValues`, for a value stored as `storage`: the helper itself for a `Word`.
+    let forStorage (name: string) (storage: Storage) =
+        match storage with
+        | Word -> name
+        | Wide -> $"{name}_i64"
+        | Byte -> $"{name}_i8"
+        | Half -> $"{name}_i16"
 
 /// The lowest address the table of free-list heads starts at. A module whose string literals end past it puts the table
 /// after them instead (see `heapBaseAfter`).
@@ -117,9 +170,6 @@ module MemoryChecks =
     let freedMark = 1
 
 let private lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
-
-/// How many bytes a value held in the WebAssembly type `valueType` takes in memory.
-let private valueBytes (valueType: string) = if valueType = "i64" then 8 else 4
 
 // Leaves on the stack the address of the head of the free list for a block of `$size` bytes, in the table at
 // `heapBase`.
@@ -389,10 +439,10 @@ let memoryCheckFunctions (heapBase: int) (messageOffset: string -> int) =
 /// A function `name` for `a ++ b` on lists: it copies the cells of `a`, in order, in front of `b`, which it takes
 /// over and shares (lists being immutable). `copyHead` runs on each head before it goes into its copy, to take a
 /// reference to it when the elements are on the heap. It walks `a` in a loop, writing each new cell's tail once the
-/// next cell exists, so a long `a` does not run out of stack. The elements are held in `valueType`, so each cell's tail is
+/// next cell exists, so a long `a` does not run out of stack. The elements are stored as `storage`, so each cell's tail is
 /// after a head of its size.
-let listConcatFunction (name: string) (copyHead: string list) (valueType: string) =
-    let tail = valueBytes valueType
+let listConcatFunction (name: string) (copyHead: string list) (storage: Storage) =
+    let tail = storage.Bytes
     lines
         [ yield $"(func ${name} (param $a i32) (param $b i32) (result i32)"
           yield "  (local $result i32)"
@@ -406,10 +456,10 @@ let listConcatFunction (name: string) (copyHead: string list) (valueType: string
           yield "      i32.eqz"
           yield "      br_if $done"
           yield "      local.get $a"
-          yield $"      {valueType}.load"
+          yield $"      {storage.CopyLoad}"
           yield! copyHead |> List.map (fun line -> "      " + line)
           yield "      i32.const 0"
-          yield $"      call ${Helpers.forValueType Helpers.listCons valueType}"
+          yield $"      call ${Helpers.forStorage Helpers.listCons storage}"
           yield "      local.set $cell"
           yield "      local.get $last"
           yield "      if"
@@ -437,10 +487,11 @@ let listConcatFunction (name: string) (copyHead: string list) (valueType: string
           yield "  local.get $result"
           yield ")" ]
 
-/// The helpers of `Helpers.storingValues` for values held in `valueType`, keyed by name.
-let private storingHelpers (valueType: string) =
-    let bytes = valueBytes valueType
-    let name helper = Helpers.forValueType helper valueType
+/// The helpers of `Helpers.storingValues` for values stored as `storage`, keyed by name.
+let private storingHelpers (storage: Storage) =
+    let bytes = storage.Bytes
+    let valueType = storage.ValueType
+    let name helper = Helpers.forStorage helper storage
     [ // A list with `$head` in front of `$tail`: `head tail -> cell`.
       name Helpers.listCons,
       lines
@@ -450,7 +501,7 @@ let private storingHelpers (valueType: string) =
             $"  call ${Helpers.newCell}"
             "  local.tee $cell"
             "  local.get $head"
-            $"  {valueType}.store"
+            $"  {storage.Store}"
             "  local.get $cell"
             "  local.get $tail"
             $"  i32.store offset={bytes}"
@@ -474,7 +525,7 @@ let private storingHelpers (valueType: string) =
             "  i32.add"
             "  local.tee $cell"
             "  local.get $head"
-            $"  {valueType}.store"
+            $"  {storage.Store}"
             "  local.get $cell"
             "  local.get $tail"
             $"  i32.store offset={bytes}"
@@ -492,7 +543,7 @@ let private storingHelpers (valueType: string) =
             "  i32.store"
             "  local.get $cell"
             "  local.get $payload"
-            $"  {valueType}.store offset=4"
+            $"  {storage.Store} offset=4"
             "  local.get $cell"
             ")" ]
       // `tagBox` into the block of a reuse token, when it is not 0: `block code payload -> cell`.
@@ -516,7 +567,7 @@ let private storingHelpers (valueType: string) =
             "  i32.store"
             "  local.get $cell"
             "  local.get $payload"
-            $"  {valueType}.store offset=4"
+            $"  {storage.Store} offset=4"
             "  local.get $cell"
             ")" ]
       // Stores one field of a freshly allocated record and hands the record pointer back, so a record
@@ -529,10 +580,10 @@ let private storingHelpers (valueType: string) =
             "  local.get $offset"
             "  i32.add"
             "  local.get $value"
-            $"  {valueType}.store"
+            $"  {storage.Store}"
             "  local.get $base"
             ")" ]
-      name Helpers.listConcat, listConcatFunction (name Helpers.listConcat) [] valueType ]
+      name Helpers.listConcat, listConcatFunction (name Helpers.listConcat) [] storage ]
 
 /// `+`, `-` or `*` (`instruction`, such as `i64.add`) on two ints, which stops the program when the result does not fit
 /// an int: it divides the smallest int by -1, which traps with "integer overflow", as WebAssembly's own overflow does.
@@ -641,8 +692,8 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.const 8"
             "  i32.add"
             ")" ]
-      yield! storingHelpers "i32"
-      yield! storingHelpers "i64"
+      for storage in Storage.All do
+          yield! storingHelpers storage
       yield! SizedIntegerCode.helpers
       Helpers.retain, retainHelper checks
       Helpers.copyBytes,
@@ -1219,6 +1270,10 @@ let private floatTextDependencies =
       FloatText.bigSub
       FloatText.bigCompare ]
 
+// The variants of the storing helper `name`, one for each `Storage`, each with what it calls.
+let private storingDependencies (name: string) (calls: Storage -> string list) =
+    Storage.All |> List.map (fun storage -> Helpers.forStorage name storage, calls storage)
+
 // The runtime helpers the lowered code asked for, closed over what they call themselves.
 let helperDependencies =
     [ Helpers.alloc, []
@@ -1239,13 +1294,10 @@ let helperDependencies =
       Helpers.writeStderr, [ Helpers.stringLength ]
       Helpers.readStdinByte, []
       Helpers.exit, [ Helpers.procExit ]
-      Helpers.listCons, [ Helpers.newCell ]
-      Helpers.forValueType Helpers.listCons "i64", [ Helpers.newCell ]
-      Helpers.recordSet, []
-      Helpers.forValueType Helpers.recordSet "i64", []
+      yield! storingDependencies Helpers.listCons (fun _ -> [ Helpers.newCell ])
+      yield! storingDependencies Helpers.recordSet (fun _ -> [])
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
-      Helpers.tagBox, [ Helpers.newCell ]
-      Helpers.forValueType Helpers.tagBox "i64", [ Helpers.newCell ]
+      yield! storingDependencies Helpers.tagBox (fun _ -> [ Helpers.newCell ])
       Helpers.tagCode, []
       Helpers.floatBox, [ Helpers.newCell ]
       Helpers.floatToString, floatTextDependencies
@@ -1257,13 +1309,10 @@ let helperDependencies =
       FloatText.bigAdd, []
       FloatText.bigSub, []
       FloatText.bigCompare, []
-      Helpers.listConcat, [ Helpers.listCons ]
-      Helpers.forValueType Helpers.listConcat "i64", [ Helpers.forValueType Helpers.listCons "i64" ]
+      yield! storingDependencies Helpers.listConcat (fun storage -> [ Helpers.forStorage Helpers.listCons storage ])
       Helpers.reuseObject, [ Helpers.newObject ]
-      Helpers.listConsAt, [ Helpers.listCons ]
-      Helpers.forValueType Helpers.listConsAt "i64", [ Helpers.forValueType Helpers.listCons "i64" ]
-      Helpers.tagBoxAt, [ Helpers.tagBox ]
-      Helpers.forValueType Helpers.tagBoxAt "i64", [ Helpers.forValueType Helpers.tagBox "i64" ]
+      yield! storingDependencies Helpers.listConsAt (fun storage -> [ Helpers.forStorage Helpers.listCons storage ])
+      yield! storingDependencies Helpers.tagBoxAt (fun storage -> [ Helpers.forStorage Helpers.tagBox storage ])
       Helpers.floatSqrt, [ Helpers.floatBox ]
       Helpers.floatFloor, [ Helpers.floatBox ]
       Helpers.floatCeil, [ Helpers.floatBox ]

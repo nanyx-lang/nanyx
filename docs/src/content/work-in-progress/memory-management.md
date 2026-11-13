@@ -107,15 +107,20 @@ their own width, in locals, fields and payloads alike, and a record's fields get
 being boxed.
 
 **Implemented for `int`:** an `int` is an `i64` in locals, parameters and results, and takes 8 bytes in a field, a list
-cell's head, a tag's payload and a closure's captures, with every other value in 4 (`CoreIrLayout.fs`). A local of an
+cell's head, a tag's payload and a closure's captures, with the narrower sized integers in their own width and every
+other value in 4 (`CoreIrLayout.fs`). A local of an
 `int` is named with `_i64` after the variable's name, since variables of the same kind and name share a local. The
 runtime helpers that store a value (`listCons`, `tagBox`, `recordSet` and the rest) have an `_i64` variant, and a call
 through a closure uses a function type of the values it passes (`Wat.indirectTypeName`). Floats are still boxed.
 
 **Implemented for the sized integers:** a `U64` is held as an `int` is. `I8`, `I16`, `I32`, `U8`, `U16` and `U32` are
-`i32`s, sign-extended or zero-extended from their width as they are signed or not, and still take 4 bytes in a field:
-storing them at their own width needs a variant of each storing helper for each width ([#981](https://github.com/nanyx-lang/nanyx/issues/981)). An `F32` is boxed as a float
-is, in a 4-byte box holding the `f32`.
+`i32`s in locals, sign-extended or zero-extended from their width as they are signed or not. In a field, a list
+cell's head, a tag's payload and a closure's captures each takes its own width: an `I8` or a `U8` 1 byte, written
+with `i32.store8` and read with `i32.load8_s` or `i32.load8_u`, an `I16` or a `U16` 2, with `i32.store16` and
+`i32.load16_s` or `i32.load16_u`, and an `I32` or a `U32` 4 (`CoreIrLayout.storage`). Fields are laid one after
+another with no padding, so an `int` after a `U8` is read unaligned, which WebAssembly allows. Each storing helper has
+a variant for each width, `_i8`, `_i16` and `_i64` after its name (`WasmRuntime.Storage`). An `F32` is boxed as a
+float is, in a 4-byte box holding the `f32`.
 
 `int` is a 64-bit integer on every target, and the language adds numbers of other fixed widths (`I32`, `U8`, `F32`
 and so on; see [Sized numbers](../advanced/sized-numbers)). Each maps to the Wasm

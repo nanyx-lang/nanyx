@@ -294,7 +294,7 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                   ")" ] ])
     let listConcats =
         drops.ListConcats
-        |> List.map (fun element -> listConcatFunction (listConcatName element) [ $"call ${dupName element}" ] (CoreIrLayout.valueType element))
+        |> List.map (fun element -> listConcatFunction (listConcatName element) [ $"call ${dupName element}" ] (CoreIrLayout.storage element))
     let environmentDrops =
         drops.Environments
         |> List.distinctBy environmentDropName
