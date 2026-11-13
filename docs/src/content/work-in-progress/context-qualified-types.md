@@ -56,7 +56,7 @@ The example above is rejected because the result still requires `$Memory` and es
 
 In the standard library naming, `$Memory` is the context and `memory { ... }` is the helper that creates that context for a scope.
 
-Requiring `$Memory` isn't enough on its own, because every `memory` block supplies one. [Context escape](./context-escape) works out the rule that stops such a value leaving its block.
+Requiring `$Memory` isn't enough on its own, because every `memory` block supplies one. [Context escape](./context-escape#scoped-contexts) settles the rule that stops such a value leaving its block: `$Memory` is a scoped context, and each `memory` call starts a scope that nothing requiring it can leave.
 
 Converting to a context-free value before returning is valid:
 
@@ -112,7 +112,7 @@ A lambda's type carries the contexts it uses ([#799](https://github.com/nanyx-la
 
 An unannotated top-level def infers its context variables ([#800](https://github.com/nanyx-lang/nanyx/issues/800)): calling a function parameter, or passing one to a higher-order function, gives it a context variable, which the def names as an annotation would (`ContextInference.nameContextVariables`). `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. An imported def keeps the names of its context variables, which a call binds them by.
 
-A context's member is a function type like any other, so one that uses another context says so: `context Log = (log: [Console] string -> ())`. A `use` checks the members it is given against those types, and calling `log` requires `Console` as well as `Log`. Giving `log: string -> ()` a lambda that prints is `NYX0227`, whose message says to write the contexts on the member.
+A context's member is a function type like any other, so one that uses another context says so: `context Log = (log: [Console] string -> ())`. A `use` checks the members it is given against those types, and calling `log` requires `Console` as well as `Log`. Giving `log: string -> ()` a lambda that prints is `NYX0227`, whose message says to write the contexts on the member. [Context escape](./context-escape#discharging-one-context-into-another) settles that a `use` may do it, with `Console` required where the `use` is written ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)).
 
 The prelude's higher-order functions take a context variable ([#801](https://github.com/nanyx-lang/nanyx/issues/801)): `list.map: [c] list(a), ([c] a -> b) -> list(b)`, `memory: [c] ([$Memory & c] () -> a) -> a`, and the builder `proc`'s `try`. A function type that is not a parameter or result of another, such as a record field's, binds its own context variables.
 
@@ -120,7 +120,7 @@ How it differs from the design above, for now:
 
 - **A lambda's body is checked against the contexts where it is written,** so `withConnection { insert(...) }` in a def that doesn't declare `Connection` is an error at `insert`.
 - **A parameterised context is never carried,** even at a type variable: it is found where the lambda is made, as before.
-- **A cell doesn't make a lambda require `$Memory`,** so `NYX0224` still keeps a lambda over a cell in its block (see [Context escape](./context-escape)).
+- **A cell doesn't make a lambda require `$Memory`,** so `NYX0224` still keeps a lambda over a cell in its block (see [Context escape](./context-escape), [#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
 - **A lambda written inside a `use` of a record written out doesn't require a context:** `use (bar = ...) in { bar("x") }` is a `() -> string`, since the record names no context, and the lambda keeps the member it captured where it was made. A `use` of a value whose type names the context, `use Foo(bar = ...) in { bar("x") }`, gives the lambda `[Foo] () -> string` ([#844](https://github.com/nanyx-lang/nanyx/issues/844)): the `use` binds each member with the symbol `Foo` declared it with, as a def that declares `[Foo]` does.
 - **A call reads what a context variable stands for from the types solved so far,** and lambda parameters take their types from the constraints only while they all agree, so an earlier type error can leave a context unbound or a parameter's type unknown.
 
