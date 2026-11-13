@@ -7,8 +7,7 @@ order: 1
 This page settles two related questions, now that function types carry contexts
 ([#768](https://github.com/nanyx-lang/nanyx/issues/768)): how a `use` can implement one context in terms of another,
 and what replaces NYX0224, the escape check for `memory` blocks. The design was decided in
-[#1035](https://github.com/nanyx-lang/nanyx/issues/1035). None of it is implemented yet; the plan at the end lists the
-issues.
+[#1035](https://github.com/nanyx-lang/nanyx/issues/1035). The plan at the end lists the issues and which are done.
 
 NYX0225, the escape check for other contexts, is gone: since [#836](https://github.com/nanyx-lang/nanyx/issues/836)
 each call passes a function value the instances in scope where it is called, so a lambda that requires a context may
@@ -186,7 +185,10 @@ checks, since a lambda with no parameters ignores one.
 
 1. Let a `use` give a member a lambda that needs more contexts, required where the `use` is written
    ([#1054](https://github.com/nanyx-lang/nanyx/issues/1054)).
-2. Make a lambda that uses a cell require `$Memory` ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
+2. ~~Make a lambda that uses a cell require `$Memory`~~ ([#1055](https://github.com/nanyx-lang/nanyx/issues/1055)).
+   Done: a read or change of a cell requires `$Memory` of the lambda around it (`MemoryCells.recordUse`), so
+   `{ word -> count := count + 1 }` is `[$Memory] string -> ()`, and a lambda that calls it requires `$Memory` too.
+   NYX0224 still keeps such a lambda in its block.
 3. Parse and format `scoped context`, which must be nominal ([#1056](https://github.com/nanyx-lang/nanyx/issues/1056)).
 4. Keep what requires a scoped context inside the call that supplies it, replacing NYX0224
    ([#1057](https://github.com/nanyx-lang/nanyx/issues/1057), after 2 and 3).

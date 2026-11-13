@@ -71,6 +71,57 @@ def counted = memory {
 """
     Assert.Equal("int", Unifier.tyToString types.["counted"])
 
+let private hoverOn (source: string) (text: string) (occurrence: int) =
+    let source = source.ReplaceLineEndings "\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
+    Hover.typeAt Unicode result (offsetOf source text occurrence 0) |> Option.map _.Type
+
+[<Fact>]
+let ``A lambda that reads or changes a cell requires $Memory`` () =
+    let source = """
+def tally = { words: list(string) ->
+  memory {
+    def count = mut 0
+    def note = { word: string -> count := count + 1 }
+    def current = { count }
+    for words | word -> note(word)
+    current()
+  }
+}
+"""
+    Assert.Equal(Some "note: [$Memory] string -> ()", hoverOn source "note" 0)
+    Assert.Equal(Some "current: [$Memory] () -> int", hoverOn source "current" 0)
+    Assert.Equal(Some "def tally: list(string) -> int", hoverOn source "tally" 0)
+
+[<Fact>]
+let ``A lambda that calls a local function over a cell requires $Memory too`` () =
+    let source = """
+def f = memory {
+  def n = mut 0
+  def bump = { n := n + 1 }
+  def twice = {
+    bump()
+    bump()
+  }
+  twice()
+  n
+}
+"""
+    Assert.Equal(Some "twice: [$Memory] () -> ()", hoverOn source "twice" 0)
+
+[<Fact>]
+let ``A lambda that only uses what a cell holds requires nothing`` () =
+    let source = """
+def f = memory {
+  def n = mut 1
+  def held = n
+  def add = { m: int -> m + held }
+  add(n)
+}
+"""
+    Assert.Equal(Some "add: int -> int", hoverOn source "add" 0)
+
 [<Fact>]
 let ``mut outside a memory block is an error that names the context`` () =
     let source = """
