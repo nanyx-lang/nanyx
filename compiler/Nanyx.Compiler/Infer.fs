@@ -1285,6 +1285,14 @@ and internal inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: Typ
     typeOfValues typeExpr
     |> List.fold (fun result value -> result |> Result.bind (fun current -> inferExpr env current value |> Result.map snd)) (Ok state)
 
+/// Infers `expr`, the value of a def whose written type was read as `annotation`: a lambda against the input and
+/// result the type expects of it.
+and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression) (annotation: DefAnnotations.ReadAnnotation) : Result<TypedExpr * InferState, Diagnostic list> =
+    match expr.Kind with
+    | Lambda(args, body, _) when annotation.ExpectedInput.IsSome || annotation.ExpectedReturn.IsSome ->
+        inferLambdaWithExpected env state expr args body annotation.ExpectedInput annotation.ExpectedReturn
+    | _ -> inferExpr env state expr
+
 and inferLambdaWithExpected (env: TypeEnv) (state: InferState) (lambda: Expression) (args: (Identifier * TypeExpr option) list) (body: Expression) (expectedInputOpt: Ty option) (expectedReturnOpt: Ty option) : Result<TypedExpr * InferState, Diagnostic list> =
     // The parameters' annotations are read only when nothing else gives their types, but each must name types.
     let annotated =
@@ -1353,44 +1361,16 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             match statement.Kind with
             | DefStatement(isExport, name, typeOpt, expr) ->
                 if errors.IsEmpty then
-                    let typeOpt, inlineContextsRead = readInlineContexts current typeOpt
-                    let contextsExist =
-                        match fst (extractContextFromTypeExpr typeOpt) with
-                        | Some contexts -> ensureContextsExist current name (declarationSpan current DefValue expr) contexts
-                        | None -> Ok ()
-                    let contextsExist =
-                        contextsExist |> Result.bind (fun () -> ContextVariables.ensureBound name typeOpt) |> Result.bind (fun () -> MemoryCells.checkCellTypes current name typeOpt)
                     let notSelfReferenced =
                         match LocalRecursion.selfReferences env' name expr with
                         | [] -> Ok ()
                         | selfReferences -> Error selfReferences
-                    let typeOfsInferred =
-                        match typeOpt with
-                        | Some typeExpr -> inferTypeOfValues env' current typeExpr
-                        | None -> Ok current
-                    match ensureAttachedTypeExists current None name (declarationSpan current DefValue expr) |> Result.bind (fun () -> AttachedOperators.check current name (declarationSpan current DefValue expr)) |> Result.bind (fun () -> ensureTypesExist current (Option.toList typeOpt)) |> Result.bind (fun () -> inlineContextsRead) |> Result.bind (fun () -> contextsExist) |> Result.bind (fun () -> notSelfReferenced) |> Result.bind (fun () -> typeOfsInferred) with
+                    match DefAnnotations.read inferTypeOfValues None notSelfReferenced env' env' current name typeOpt expr with
                     | Error err -> errors <- err
-                    | Ok inferredState ->
-                        current <- inferredState
-                        let contextOpt, declaredTypeExprOpt = extractContextFromTypeExpr typeOpt
-                        let envWithCtx, nextState =
-                            match contextOpt with
-                            | Some contexts -> extendEnvWithContexts env' current contexts ||> fun env state -> bindInstances env state contexts
-                            | None -> env', current
-                        let expectedInputOpt, expectedReturnOpt, expectedDeclaredOpt, nextState2 =
-                            match declaredTypeExprOpt with
-                            | Some declaredExpr ->
-                                let ty, st = typeExprToTy nextState declaredExpr
-                                match Unifier.unalias ty with
-                                | TyFunc(inputTy, returnTy, _) -> TypeHoles.expectedLambdaInput declaredExpr (Some inputTy), Some returnTy, Some ty, st
-                                | _ -> None, None, Some ty, st
-                            | None -> None, None, None, nextState
-                        let effectiveExpectedInputOpt =
-                            match expectedInputOpt with
-                            | Some _ -> expectedInputOpt
-                            | None when expectedDeclaredOpt.IsNone -> tryInferAttachedLambdaInput nextState2 name expr
-                            | None -> None
-                        let symbol, declaredState = declareSymbol DefValue expr.Id name LocalValue false (Some block.Span.End) nextState2
+                    | Ok (annotation, nextState) ->
+                        let typeOpt, contextOpt, declaredTypeExprOpt, expectedDeclaredOpt, envWithCtx =
+                            annotation.TypeOpt, annotation.Contexts, annotation.DeclaredTypeExpr, annotation.Declared, annotation.Env
+                        let symbol, declaredState = declareSymbol DefValue expr.Id name LocalValue false (Some block.Span.End) nextState
                         // Only a `rec` def's value can name the def (see `LocalRecursion`).
                         let selfVisible ty = if LocalRecursion.isRec expr then TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx else envWithCtx
                         let preboundTy, preboundState, envWithRec, preboundFresh =
@@ -1413,10 +1393,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             | _ -> nextStateWithReq
                         let bodyState = if preboundFresh then LambdaContexts.enterSelf preboundTy bodyState else bodyState
                         let inferResult =
-                            match expr.Kind with
-                            | Lambda(args, body, _) when effectiveExpectedInputOpt.IsSome || expectedReturnOpt.IsSome ->
-                                inferLambdaWithExpected envWithRec bodyState expr args body effectiveExpectedInputOpt expectedReturnOpt
-                            | _ -> inferExpr envWithRec bodyState expr
+                            inferDefValue envWithRec bodyState expr annotation
                             |> Result.map (fun (typedExpr, next) -> typedExpr, { LambdaContexts.leaveSelf preboundTy typedExpr.Type next with ContextScope = outerScope })
                         match inferResult with
                         | Ok (typedExpr, next) ->
@@ -1458,11 +1435,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             | ImportStatement items ->
                 typedStatements <- typedStatements @ [ TypedImportStatement items ]
             | TypeDefStatement(name, modifiers, parameters, body) ->
-                if errors.IsEmpty then errors <- typeOfInTypeDef name body parameters @ TypeHoles.inTypeDef name body parameters
                 current <- registerTypeDef current name modifiers parameters body
-                // Checked once the type is registered, so it can name itself.
-                if errors.IsEmpty then
-                    errors <- unnominalScopedContext name modifiers @ unknownTypesInTypeDef current body parameters @ unguardedSelfReferences name modifiers body
+                if errors.IsEmpty then errors <- DefAnnotations.typeDefErrors current name modifiers parameters body
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement value ->
                 if errors.IsEmpty then

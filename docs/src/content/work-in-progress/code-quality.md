@@ -109,6 +109,19 @@ changing 13 captured mutables. `Library.fs` holds only the compiling job now, at
 | `Program.fs` (parser) | 1,358 | Destructuring defs (`destructuringDefWith` and the bindings it desugars to) moved out to `Destructuring.fs` |
 | `Expressions.fs` (parser) | 1,089 | Statements and top-level items moved out to `TopLevel.fs` (216 lines), and the public parse functions to `Api.fs` (70 lines). What was left of `Program.fs` is `Expressions.fs`, module `Parser.Program.Expressions` |
 
+**2026-11-13.** A local def and a top-level def were checked by two near-copies, in `inferBlock` and in
+`InferModule.fs` ([#373](https://github.com/nanyx-lang/nanyx/issues/373)). Reading a def's written type (the checks
+on it, its contexts, and the input and result it expects of a lambda) is now `DefAnnotations.read`, inferring the
+value against it `inferDefValue`, and a type definition's checks `DefAnnotations.typeDefErrors`, each used by both:
+
+| File | Lines | What changed |
+|---|---|---|
+| `Infer.fs` | 1,466 | The local def's annotation reading moved out to `DefAnnotations.fs` (101 lines) |
+| `InferModule.fs` | 424 | The top-level def's copy of it removed |
+
+What a def does once its value is inferred (generalising, and what an unannotated top-level def requires) still
+differs between the two, as the two kinds of def do.
+
 The [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) label lists the open problems.
 
 # The daily review
