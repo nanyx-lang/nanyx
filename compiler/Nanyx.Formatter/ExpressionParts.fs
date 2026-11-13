@@ -1,4 +1,4 @@
-/// What the printers of lambdas and other constructs that hold statements print those parts with.
+/// What the printers of lambdas, branches and other constructs that hold expressions print those parts with.
 module internal Nanyx.Formatter.ExpressionParts
 
 open Parser.Program
@@ -13,6 +13,8 @@ type ExpressionParts =
       NeedsParentheses: Position -> Expression -> bool
       /// Whether an expression is a block of statements as written.
       IsWrittenBlock: Expression -> bool
+      /// An indented block: its statements, or an expression that is not one.
+      Block: Expression -> Doc
       /// Statements one per line, with blank lines kept if the first argument says so, and the comments between the
       /// offsets put back among them.
       StatementsInSequence: bool -> int -> int -> Statement list -> Doc

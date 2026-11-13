@@ -100,6 +100,10 @@ public sealed class DiagnosticsPublisher
         {
             Severity = ToLsp(diagnostic.Severity),
             Code = diagnostic.Code,
+            // A compiler code links to its section of the error reference; a linter's has none.
+            CodeDescription = NyxCompiler.DiagnosticCodes.referenceUrl(diagnostic.Code)?.Value is { } url
+                ? new CodeDescription { Href = new Uri(url) }
+                : null,
             Source = Source,
             Message = message,
             // A diagnostic about the whole compilation, or about another file, is shown at the start of this one.

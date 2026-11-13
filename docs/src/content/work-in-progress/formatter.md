@@ -265,7 +265,7 @@ import (
 
 The order: standard library modules (`nanyx/...`) first, then other packages' modules, then imports by path, each
 group alphabetical by its source as written, ignoring case, with ties broken by case. The alias (`as m`) doesn't affect
-the order. The order is `compiler/Nanyx.Formatter/ImportOrder.fs`; `importDoc` in `Formatter.fs` applies it.
+the order. The order is `compiler/Nanyx.Formatter/ImportOrder.fs`; `ImportPrinter.fs` applies it.
 
 The safety check sorts each side's imports before comparing the trees (`Syntax.normalize`), so a sort that dropped or
 duplicated an import is still caught. It compares the comments at the end of import lines as a sorted list, since they

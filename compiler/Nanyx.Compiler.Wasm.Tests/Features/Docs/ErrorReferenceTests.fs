@@ -34,6 +34,24 @@ let ``Every code has a section, in order, with the compiler's title`` () =
     let actual = sections () |> List.map (fun (_, code, title) -> $"{code}: {title}")
     Assert.Equal<string list>(expected, actual)
 
+[<Fact>]
+let ``A code's reference link is its section of this page`` () =
+    let relative = Path.GetRelativePath(docsContentDirectory, pagePath).Replace('\\', '/').Replace(".md", "")
+    Assert.Equal(Some $"https://nanyx.dev/docs/{relative}#nyx0201", DiagnosticCodes.referenceUrl DiagnosticCodes.TypeMismatch.Code)
+    Assert.Equal(None, DiagnosticCodes.referenceUrl "default/unusedBindings")
+
+/// The codes whose sections have no example, because no program reports them: the file given to `nanyx` is missing, a
+/// standard library module is broken, or the backend has a bug.
+let private withoutExamples =
+    [ DiagnosticCodes.FileNotFound; DiagnosticCodes.InvalidStandardLibraryModule; DiagnosticCodes.BackendInternalError ]
+    |> List.map _.Code
+
+[<Fact>]
+let ``Every section has an example, unless no program reports its code`` () =
+    let withExamples = docExamplesOf pagePath |> Map.keys |> Seq.map sectionAt |> Set.ofSeq
+    let expected = DiagnosticCodes.all |> List.map _.Code |> List.filter (fun code -> not (List.contains code withoutExamples))
+    Assert.Equal<string list>(expected, sections () |> List.map (fun (_, code, _) -> code) |> List.filter withExamples.Contains)
+
 let errorExamples () : obj array seq =
     docExamplesOf pagePath |> Map.keys |> Seq.map (fun line -> [| box line |])
 

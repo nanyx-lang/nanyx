@@ -9,26 +9,16 @@ open NyxCompiler.Visibility
 
 /// The names of the type variables written in an annotation, in order of first appearance.
 let rec internal annotationVarNames (typeExpr: TypeExpr) : string list =
-    let ofList items = items |> List.collect annotationVarNames
+    let ofChildren () = TypeExpr.children typeExpr |> List.collect annotationVarNames
     let names =
         match typeExpr.Kind with
         | TypeVar name -> [ name ]
-        | TypeName _ | TypeHole | TypeUnit | TypeContext _ -> []
-        | TypeTuple items | TypeUnion items | TypeIntersection items -> ofList items
-        | TypeRecord fields ->
-            fields
-            |> List.collect (function
-                | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> annotationVarNames t
-                | _ -> [])
+        // Only the type a context set is written on is read, not the contexts.
+        | TypeContext _ -> []
+        | TypeWithContext(_, inner) -> annotationVarNames inner
         // The name of an open record's other fields is a type variable like any other.
-        | TypeOpenRecord(fields, row) -> annotationVarNames { typeExpr with Kind = TypeRecord fields } @ Option.toList row
-        | TypeApply(_, args) -> ofList args
-        | TypeFunc(arg, ret) -> annotationVarNames arg @ annotationVarNames ret
-        | TypeTag(_, payload) -> payload |> Option.map annotationVarNames |> Option.defaultValue []
-        | TypeWithContext(_, inner) | TypeConstraint(_, inner, _) | TypeWhere(inner, _) ->
-            annotationVarNames inner
-        // The type of a value is not a variable the annotation introduces.
-        | TypeOf _ -> []
+        | TypeOpenRecord(_, row) -> ofChildren () @ Option.toList row
+        | _ -> ofChildren ()
     names |> List.distinct
 
 let internal primitiveType name =
@@ -376,22 +366,9 @@ and private recordFieldTypes (state: InferState) (fields: TypeRecordField list) 
 
 /// The values named by each `typeof` in `typeExpr`, in the order they are written.
 let rec internal typeOfValues (typeExpr: TypeExpr) : Expression list =
-    let ofList items = items |> List.collect typeOfValues
     match typeExpr.Kind with
     | TypeOf value -> [ value ]
-    | TypeName _ | TypeVar _ | TypeHole | TypeUnit -> []
-    | TypeTuple items | TypeUnion items | TypeIntersection items | TypeContext items -> ofList items
-    | TypeRecord fields
-    | TypeOpenRecord(fields, _) ->
-        fields
-        |> List.collect (function
-            | TypeField(_, _, Some t, _) | TypeMember(_, Some t) -> typeOfValues t
-            | _ -> [])
-    | TypeApply(_, args) -> ofList args
-    | TypeFunc(arg, ret) -> typeOfValues arg @ typeOfValues ret
-    | TypeTag(_, payload) -> payload |> Option.map typeOfValues |> Option.defaultValue []
-    | TypeWithContext(contexts, inner) -> ofList contexts @ typeOfValues inner
-    | TypeConstraint(_, inner, _) | TypeWhere(inner, _) -> typeOfValues inner
+    | _ -> TypeExpr.children typeExpr |> List.collect typeOfValues
 
 /// The error for each `typeof` in the type definition `name`: a type definition is not in the scope of any value.
 let internal typeOfInTypeDef (name: Identifier) (body: TypeExpr) (parameters: (Identifier * TypeExpr option) list) : Diagnostic list =
@@ -433,7 +410,13 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
         named
         |> List.filter (fun (name, _) -> (tryFindTypeDef name state).IsNone)
         |> List.distinctBy fst
-        |> List.map (fun (typeName, span) -> Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
+        |> List.map (fun (typeName, span) ->
+            let own = typeName.Substring(typeName.LastIndexOf '.' + 1)
+            if own.Length > 1 && System.Char.IsLower own[0] then
+                Diagnostics.at DiagnosticCodes.InvalidTypeName span
+                    $"'{typeName}' is not a type: a type's name starts with a capital letter, and a lowercase name longer than one letter is reserved for associated types"
+            else
+                Diagnostics.at DiagnosticCodes.UnknownType span $"Unknown type '{typeName}'")
     let outside =
         named
         |> List.choose (fun (name, span) -> tryFindTypeDef name state |> Option.map (fun info -> name, info, span))

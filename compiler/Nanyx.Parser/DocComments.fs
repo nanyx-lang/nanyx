@@ -66,12 +66,18 @@ module DocComments =
     /// The doc comment as written, laid out as `relaidOutLines` lays it out.
     let relaidOut (indent: int) (written: string) : string = String.concat "\n" (relaidOutLines indent written)
 
-    /// The words that may come before what a doc comment documents on its line: `export def name`, `| #tag`.
-    let private leadingWords = set [ "scoped"; "export"; "private"; "def"; "rec"; "mut"; "type"; "context"; "|"; "(" ]
-
     /// The doc comments among `comments` (as the parser notes them in `source`), each attached to what it documents in
-    /// `items`, the module as parsed, whose declarations are `declared`.
-    let attach (filePath: string) (source: string) (items: TopLevelItem list) (declared: DeclaredNames) (comments: NotedComment list) : FileDocComments =
+    /// `items`, the module as parsed, whose declarations are `declared`. A doc comment documents the name or tag
+    /// declared by the construct that starts where the code after it starts, as `documentableStarts` notes them (see
+    /// `noteDocumentable`), or the one that starts there itself.
+    let attach
+        (filePath: string)
+        (source: string)
+        (items: TopLevelItem list)
+        (declared: DeclaredNames)
+        (documentableStarts: Map<int, int>)
+        (comments: NotedComment list)
+        : FileDocComments =
         let lines = LineTable source
 
         let declarations =
@@ -119,16 +125,9 @@ module DocComments =
             | Some code, Some first when code = first.Span.Start && (match first.Kind with ModuleDecl _ | Import _ -> true | _ -> false) ->
                 DocumentsModule
             | Some code, _ ->
-                let line = lines.LineOf code
-                let lineStart = lines.Start line
-                // The first target on the line, if only the words that introduce it come before it.
+                let declaredAt = documentableStarts |> Map.tryFind code |> Option.defaultValue code
                 targets
-                |> List.filter (fun (_, start) -> start >= code && lines.LineOf start = line)
-                |> List.sortBy snd
-                |> List.tryHead
-                |> Option.filter (fun (_, start) ->
-                    source.Substring(lineStart, start - lineStart).Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.forall leadingWords.Contains)
+                |> List.tryFind (fun (_, start) -> start = declaredAt)
                 |> Option.map fst
                 |> Option.defaultValue DocumentsNothing
 

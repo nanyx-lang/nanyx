@@ -186,8 +186,10 @@ trees rather than strings. That is a later step; see [Open questions](#open-ques
 Settled in [#719](https://github.com/nanyx-lang/nanyx/issues/719) and done: a doc comment starts with `--|` and goes
 on for the lines indented further than its first (see [Basics](../getting-started/basics#doc-comments)). The lexer
 takes the continuation lines as part of the comment, and `DocComments.attach` (in `Nanyx.Parser/DocComments.fs`)
-attaches each doc comment, by position, to the declaration whose name starts the next line with code: a def, a type
-or context, a field or context member (by the span `DeclaredNames` has for it), a tag, or the module. The language
+attaches each doc comment, by position, to the declaration that starts the next line with code: a def, a type or
+context, a field or context member (by the span `DeclaredNames` has for it), a tag, or the module. The parser notes
+where each such construct starts, from its first keyword (`export def`, `| #tag`), and what it declares
+(`noteDocumentable`), so no list of keywords is kept for this. The language
 server shows a symbol's doc comment on hover and in completion items, read with `Documentation.Reader.ForSymbol`, which
 parses the file the symbol is declared in (the document, a file beside it, or a standard-library module) for its doc
 comments and keeps them by file. It turns each `` [`name`] `` into a link to the name's definition, looked up among

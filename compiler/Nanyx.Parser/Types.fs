@@ -40,12 +40,17 @@ let internal fillTypeRefs () =
 
     // A named field's name is noted, for the record type it is in to declare.
     let typeField =
-        pipe4
-            (opt (attempt (pstring "mut" >>. keywordEnd >>. ws)))
-            (getPosition .>>. nameNoWs >>= fun (start, name) -> noteName start name >>. noOptionalField name >>% name)
+        let mutAndName =
+            getPosition .>>. opt (attempt (pstring "mut" >>. keywordEnd >>. ws)) .>>. (getPosition .>>. nameNoWs)
+            >>= fun ((fieldStart, mutOpt), (start, name)) ->
+                noteName start name >>. noOptionalField name
+                >>. (if mutOpt.IsSome then noteDocumentable fieldStart (int start.Index) else preturn ())
+                >>% (mutOpt.IsSome, name)
+        pipe3
+            mutAndName
             (wsInline >>. (pstring ":" <|> pstring "::") >>. ws >>. typeExpr)
             (opt (attempt (ws >>. pstring "=" >>. ws >>. expression)))
-            (fun mutOpt name typeValue defaultOpt -> TypeField(name, mutOpt.IsSome, Some typeValue, defaultOpt))
+            (fun (isMut, name) typeValue defaultOpt -> TypeField(name, isMut, Some typeValue, defaultOpt))
 
     let recordFieldSeparator =
         attempt (pstring "," >>. ws >>% ()) <|> (skipMany1 (skipAnyOf " \t\r\n") >>. ws)
@@ -70,11 +75,13 @@ let internal fillTypeRefs () =
     let otherFields =
         attempt (recordFieldSeparator >>. pstring "...") >>. opt identifierNoWs
 
+    // A doc comment before `(x: int, ...` documents the field written first.
     let typeRecord =
+        let openBracket = getPosition .>> pstring "(" .>> ws .>>. getPosition >>= fun (start, after) -> noteDocumentable start (int after.Index)
         declaringFields (
             spannedType (
                 between
-                    (pstring "(")
+                    openBracket
                     (ws >>. pstring ")")
                     (pipe3
                         (ws >>. positionalTypeFields)
@@ -212,8 +219,10 @@ let internal fillTypeRefs () =
     let typeIntersection =
         singleOrCombined TypeIntersection (sepBy1 typePostfix (attempt (ws >>. pstring "&" >>. ws)))
 
+    // A `|` starts what comes after it, so a doc comment before `| #tag` documents the tag.
+    let bar = getPosition .>> pstring "|" .>> ws .>>. getPosition >>= fun (barStart, after) -> noteDocumentable barStart (int after.Index)
     let typeUnion =
-        opt (pstring "|" >>. ws) >>. singleOrCombined TypeUnion (sepBy1 typeIntersection (attempt (ws >>. pstring "|" >>. ws)))
+        opt bar >>. singleOrCombined TypeUnion (sepBy1 typeIntersection (attempt (ws >>. bar)))
 
     let typeArrow =
         withSpan (typeUnion .>>. opt (attempt (ws >>. pstring "->" >>. ws >>. typeExpr))) |>> fun ((left, rightOpt), span) ->
@@ -298,13 +307,17 @@ let definableName (start: Position) (name: Identifier) : Parser<unit, ParseState
     else
         preturn ()
 
-/// `def name = value`. The def's name is declared by its value.
-let parseDefWith (lineStartCol: int64) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
-    (pstring "def" >>. ws >>. getPosition .>>. defNameAndType lineStartCol identParser)
+/// `def name = value`, written from `lineStart` (where an `export` before it starts). The def's name is declared by its
+/// value.
+let parseDefWith (lineStart: Position) (identParser: Parser<Identifier * TypeExpr option, ParseState>) (exprParser: Parser<Expression, ParseState>) =
+    (pstring "def" >>. ws >>. getPosition .>>. defNameAndType lineStart.Column identParser)
     >>= fun (start, (name, typeOpt)) ->
         definableName start name
-        >>. defEqualsContinuation lineStartCol >>. pstring "=" >>. wsInline >>. exprParser
-        >>= fun expr -> declare DefValue expr.Id [ name, nameSpan start name ] >>% (name, typeOpt, expr)
+        >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. exprParser
+        >>= fun expr ->
+            declare DefValue expr.Id [ name, nameSpan start name ]
+            >>. noteDocumentable lineStart (int start.Index)
+            >>% (name, typeOpt, expr)
 
 /// A type's or a context's parameter, with an optional bound: `a`, `a :: Shape`. It is a type variable in the
 /// definition's body, so it is a single lowercase letter, as any type variable is.

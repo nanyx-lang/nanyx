@@ -132,6 +132,7 @@
     <Compile Include="Features\Types\RecordSpreadTests.fs" />
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />
     <Compile Include="Features\Types\TypeHoleTests.fs" />
+    <Compile Include="Features\Types\TypeNameTests.fs" />
     <Compile Include="Features\Types\TypeOfTests.fs" />
     <Compile Include="Features\Types\UnknownTypeNameTests.fs" />
     <Compile Include="Features\Types\UnionsTests.fs" />
