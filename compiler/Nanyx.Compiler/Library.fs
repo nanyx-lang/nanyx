@@ -384,48 +384,6 @@ module Compiler =
                 | FunctionCall(_, _, [ Kind (Lambda([], body, _)) ]) when blocks.Contains current.Id -> body.Kind
                 | other -> other)
 
-    /// Where `span` is, as `nanyx` prints a diagnostic's place: `file:line:column: `.
-    let private deferredLocation (span: SourceSpan) =
-        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
-        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-
-    /// What a deferred error writes when it is reached: the diagnostic as `nanyx` prints it, marked as deferred.
-    let private deferredMessage (diagnostic: Diagnostic) =
-        let location = diagnostic.Span |> Option.map deferredLocation |> Option.defaultValue ""
-        $"{location}error {diagnostic.Code}: {diagnostic.Message} (deferred from compile time)\n"
-
-    /// `expr` with each expression that failed to check replaced by a call to `__panic`, which writes the errors
-    /// and traps when it is reached, so a debug build runs the code around it. An expression in `failed` is found
-    /// by its node. A conflict among the constraints is only known by where it was found, the expression whose
-    /// constraints conflicted, so one in `mismatches` replaces the outermost expression written there. Each
-    /// diagnostic placed is added to `placed`, by `deferredMessage`. A match in `unhandled`, which does not handle
-    /// every case, is given a last arm that catches the rest and traps.
-    ///
-    /// An expression in `unknownTypeUses` needs the type of a value that has none, because of an error (piping it,
-    /// or reading a member of it): the backend could not compile it, so it traps too. It is not an error of its own,
-    /// so it writes why it stopped without a code.
-    let private deferErrors (failed: Map<NodeId, Diagnostic list>) (mismatches: Map<SourceSpan, Diagnostic>) (unhandled: Map<NodeId, Diagnostic list>) (unknownTypeUses: Set<NodeId>) (placed: System.Collections.Generic.HashSet<string>) (expr: Expression) =
-        let panicWith (node: Expression) (message: string) =
-            FunctionCall("__panic", None, [ Expression.from node (LiteralExpr (StringLit message)) ])
-        let panic (node: Expression) (diagnostics: Diagnostic list) =
-            let messages = diagnostics |> List.map deferredMessage
-            messages |> List.iter (placed.Add >> ignore)
-            panicWith node (String.concat "" messages)
-        expr
-        |> mapExpressionKinds (fun node kind ->
-            let diagnostics =
-                match failed |> Map.tryFind node.Id with
-                | Some diagnostics -> diagnostics
-                | None -> mismatches |> Map.tryFind node.Span |> Option.toList
-            match diagnostics, kind, unhandled |> Map.tryFind node.Id with
-            | _ :: _, _, _ -> panic node diagnostics
-            | [], Match(values, arms), Some missing ->
-                let catchAll = values |> List.map (fun _ -> Pattern.at node.Span WildcardPattern)
-                Match(values, arms @ [ catchAll, Expression.from node (panic node missing) ])
-            | [], _, _ when unknownTypeUses.Contains node.Id ->
-                panicWith node $"{deferredLocation node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
-            | _ -> kind)
-
     /// The module as the backend will see it: the typed items turned back into syntax, with each pipe to an
     /// attached function, and each hole that calls a derived definition, written with the name it resolved to (`pipeTargets`), each operator that calls a definition as
     /// that call (`operatorCalls`, through the instance `operatorInstances` gives where it has one), each expression inference read as another as that one (`readAs`),
@@ -821,10 +779,10 @@ module Compiler =
                         let failed = state.FailedExprs |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
                         let bySpan = mismatchErrors |> List.choose (fun diagnostic -> diagnostic.Span |> Option.map (fun span -> span, diagnostic)) |> Map.ofList
                         let unhandled = state.UnhandledMatches |> List.fold (fun acc (id, diagnostics) -> acc |> Map.add id diagnostics) Map.empty
-                        deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
+                        DeferredErrors.deferErrors failed bySpan unhandled (Set.ofList state.UnknownTypeUses) placed
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems |> writeBlockAliases state |> writeCells state |> nameIgnoredParameters state.ExprTypes subst
-                let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (deferredMessage diagnostic)))
+                let undeferred = moduleErrors |> List.filter (fun diagnostic -> not (placed.Contains (DeferredErrors.deferredMessage diagnostic)))
                 // The module's own definitions win over imported ones of the same name.
                 let ownNames = exportedValueNames own |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                 let instances = inlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
