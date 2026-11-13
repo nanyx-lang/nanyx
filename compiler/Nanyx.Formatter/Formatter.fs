@@ -6,6 +6,7 @@ open System.Globalization
 open System.Text.RegularExpressions
 open Parser.Program
 open Nanyx.Formatter.SourceText
+open Nanyx.Formatter.CommentPlacement
 
 type Options =
     { /// The width lines are laid out to fit.
@@ -72,35 +73,15 @@ let format (options: Options) (parsed: SourceModule) : string =
 
     let sourceText = SourceText(source)
 
-
-    // Comments are placed once each; whatever no construct places goes before the line it was in. A doc comment's
-    // continuation lines are set one indent step past its first line.
-    let comments =
-        parsed.Trivia
-        |> List.choose (function
-            | LineComment(commentText, _, span) when commentText.StartsWith "--|" ->
-                Some(DocComments.relaidOut options.IndentSize commentText, span)
-            | LineComment(commentText, _, span) -> Some(commentText.TrimEnd(), span)
-            | BlankLines _ -> None)
-        |> Array.ofList
-
     // The `#!` line and directives at the top are kept as they are, with the comments among them.
     let headerEnd = Directives.headerEnd source
 
-    let placed = comments |> Array.map (fun (_, span) -> span.Start < headerEnd)
-
-    let blankRuns =
-        parsed.Trivia
-        |> List.choose (function
-            | BlankLines(_, span) -> Some span
-            | LineComment _ -> None)
-
-    let unplacedIn (start: int) (finish: int) =
-        [ for i in 0 .. comments.Length - 1 do
-              let span = snd comments[i]
-              if not placed[i] && start <= span.Start && span.Start < finish then yield i ]
-
-    let hasCommentsIn start finish = not (List.isEmpty (unplacedIn start finish))
+    let placement = CommentPlacement(parsed, options.IndentSize, sourceText, headerEnd)
+    let blankRuns = placement.BlankRuns
+    let unplacedIn start finish = placement.UnplacedIn(start, finish)
+    let hasCommentsIn start finish = placement.HasCommentsIn(start, finish)
+    let sequence = placement.Sequence
+    let sequenceOf = placement.SequenceOf
 
     /// A new id for a `NamedGroup`.
     let nextGroupId =
@@ -108,73 +89,6 @@ let format (options: Options) (parsed: SourceModule) : string =
         fun () ->
             last.Value <- last.Value + 1
             last.Value
-
-    /// Children laid out one per line between the offsets `start` and `finish`, each given as its start and end offsets
-    /// and a function building its document. The comments among them are put back: a comment after a child on its
-    /// last line stays at the end of that line, and any other on a line of its own. A comment inside a child that the
-    /// child does not place itself goes on a line of its own before it, or after it when the child placed comments
-    /// that come before it, so that comments stay in order.
-    ///
-    /// With `blankLines`, for where the parser allows blank lines between children (the top level, a module block and
-    /// a block of statements, but not a list of imports): a child that spans more than one line gets a blank line
-    /// before it (and its leading comments) and after it, except at the start and end and between two imports;
-    /// between children that each fit on one line, a blank line (however many there were) is kept, and none is added.
-    /// Which children span lines is decided when the document is laid out (see `Doc.Stack`), so a child that breaks
-    /// because it is long counts too.
-    let rec sequence (blankLines: bool) (start: int) (finish: int) (children: (int * int * (unit -> Doc)) list) : Doc =
-        sequenceOf blankLines start finish (children |> List.map (fun (childStart, childEnd, build) -> childStart, childEnd, false, build))
-
-    /// `sequence`, with each child saying whether it is an import.
-    and sequenceOf (blankLines: bool) (start: int) (finish: int) (children: (int * int * bool * (unit -> Doc)) list) : Doc =
-        let entries = ResizeArray<StackEntry>()
-
-        let placeComment leading i =
-            placed[i] <- true
-            entries.Add(StackComment(fst comments[i], leading))
-
-        // The comments, and the author's blank lines, between the offsets `a` and `b`, in order.
-        let between a b =
-            let blanks =
-                if blankLines then
-                    blankRuns |> List.filter (fun span -> a <= span.Start && span.Start < b) |> List.map (fun span -> span.Start, None)
-                else
-                    []
-            let inBetween = unplacedIn a b |> List.map (fun i -> (snd comments[i]).Start, Some i)
-            for _, entry in List.sortBy fst (blanks @ inBetween) do
-                match entry with
-                | Some i -> placeComment true i
-                | None -> entries.Add StackBlank
-
-        let mutable previous = start
-        for childStart, childEnd, isImport, build in children do
-            let childStart = max childStart previous
-            let childEnd = max childEnd childStart
-            between previous childStart
-            let placedBefore = Array.copy placed
-            let doc = build ()
-            let firstPlacedByChild =
-                seq { for i in 0 .. comments.Length - 1 do if placed[i] && not placedBefore[i] then yield (snd comments[i]).Start }
-                |> Seq.fold min Int32.MaxValue
-            let orphans = unplacedIn childStart childEnd
-            let before, after = orphans |> List.partition (fun i -> (snd comments[i]).Start < firstPlacedByChild)
-            for i in before do
-                placeComment true i
-            let trailing =
-                match unplacedIn childEnd (sourceText.LineEnd (max childStart (childEnd - 1)) + 1) with
-                | i :: _ when childEnd > childStart -> Some i
-                | _ -> None
-            match trailing with
-            | Some i when after.IsEmpty ->
-                placed[i] <- true
-                entries.Add(StackItem(cat [ doc; Doc.lineSuffix (fst comments[i]) ], isImport))
-            | _ ->
-                entries.Add(StackItem(doc, isImport))
-                for i in after do
-                    placeComment false i
-                trailing |> Option.iter (placeComment false)
-            previous <- childEnd
-        between previous finish
-        Stack(blankLines, List.ofSeq entries)
 
     /// The runs of top-level items or statements that make up one def each: a destructuring `def (a, b) = value` is
     /// parsed as a def of a temporary and one def per name, all with the same span. Each run is its first index, its
@@ -765,8 +679,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                 Doc.empty
             else
                 cat [ for i in unplacedIn value.Span.End at ->
-                          placed[i] <- true
-                          let commentText, span = comments[i]
+                          let commentText, span = placement.Place i
                           if sourceText.LineOf span.Start = sourceText.LineOf (max 0 (value.Span.End - 1)) then Doc.lineSuffix commentText
                           else cat [ hard; Doc.comment commentText ] ]
         if position.Tail && writtenOnLines then
@@ -1265,8 +1178,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let entries = ResizeArray<StackEntry>()
             let placeBetween a b =
                 for i in unplacedIn a b do
-                    placed[i] <- true
-                    entries.Add(StackComment(fst comments[i], true))
+                    entries.Add(StackComment(fst (placement.Place i), true))
             let mutable previous = start
             for run in runs do
                 placeBetween previous items[List.head run].Span.Start
@@ -1274,8 +1186,7 @@ let format (options: Options) (parsed: SourceModule) : string =
                     placeBetween items[k].Span.Start items[k].Span.End
                     match unplacedIn items[k].Span.End (lineFinish k) with
                     | i :: _ ->
-                        placed[i] <- true
-                        entries.Add(StackItem(cat [ item items[k]; Doc.lineSuffix (fst comments[i]) ], false))
+                        entries.Add(StackItem(cat [ item items[k]; Doc.lineSuffix (fst (placement.Place i)) ], false))
                     | [] -> entries.Add(StackItem(item items[k], false))
                 previous <- lineFinish (List.last run)
             placeBetween previous finish
