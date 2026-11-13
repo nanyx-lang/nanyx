@@ -1,11 +1,8 @@
 name: Docs
 
 on:
-  # Deploy main to production once an hour, 08:00 to 22:00 London time. Cron runs in UTC, so this
-  # fires 07:00 to 22:00 UTC, which covers those hours in both GMT and BST, and the first step
-  # skips the runs that fall outside them.
-  schedule:
-    - cron: "0 7-22 * * *"
+  # Deploys happen only when someone runs this workflow: `gh workflow run Docs`. Vercel's own Git
+  # deployments are off (docs/vercel.json), so pushing deploys nothing.
   workflow_dispatch:
 
 permissions:
@@ -19,32 +16,18 @@ jobs:
   deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - name: Check the London time
-        id: hours
-        run: |
-          hour=$(TZ=Europe/London date +%-H)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || { [ "$hour" -ge 8 ] && [ "$hour" -le 22 ]; }; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "It is $hour:00 in London; deploys run from 08:00 to 22:00."
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.hours.outputs.deploy == 'true'
 
       - uses: actions/setup-node@v4
-        if: steps.hours.outputs.deploy == 'true'
         with:
           node-version: 22
 
       # The same deploy as `vercel --prod` by hand: Vercel builds the site from the uploaded
       # repository, using the project's root directory (docs/).
       - name: Deploy to production
-        if: steps.hours.outputs.deploy == 'true'
         run: npx --yes vercel@65.15.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
