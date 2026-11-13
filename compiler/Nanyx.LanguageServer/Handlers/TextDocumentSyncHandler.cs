@@ -58,7 +58,7 @@ public sealed class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     {
         _compiles.Closed(request.TextDocument.Uri);
         _documents.Remove(request.TextDocument.Uri);
-        _diagnostics.Clear(request.TextDocument.Uri);
+        _diagnostics.Closed(request.TextDocument.Uri);
         return Unit.Task;
     }
 

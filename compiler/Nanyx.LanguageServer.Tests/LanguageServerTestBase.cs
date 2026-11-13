@@ -199,12 +199,14 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             ContentChanges = new Container<TextDocumentContentChangeEvent>(new TextDocumentContentChangeEvent { Text = text })
         });
 
+    /// <summary>
+    /// The next diagnostics published on <paramref name="uri"/>, waiting for them if they have not arrived. Those
+    /// published on other documents meanwhile are kept for their own call.
+    /// </summary>
     protected async Task<PublishDiagnosticsParams> NextPublished(DocumentUri uri)
     {
         while (true)
         {
-            await _publishedSignal.WaitAsync(_cancellation.Token);
-
             lock (_published)
             {
                 var index = _published.FindIndex(p => p.Uri == uri);
@@ -215,6 +217,8 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
                     return found;
                 }
             }
+
+            await _publishedSignal.WaitAsync(_cancellation.Token);
         }
     }
 
