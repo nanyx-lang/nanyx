@@ -7,15 +7,7 @@ open Parser.Program
 
 /// Queries on `source`, the text of the module being formatted.
 type SourceText(source: string) =
-    let lineStarts =
-        [| yield 0
-           for i in 0 .. source.Length - 1 do
-               if source[i] = '\n' then yield i + 1 |]
-
-    let lineOf offset =
-        match Array.BinarySearch(lineStarts, offset) with
-        | found when found >= 0 -> found
-        | notFound -> ~~~notFound - 1
+    let lines = LineTable(source)
 
     let valid (span: SourceSpan) =
         not (SourceSpan.isNone span) && span.Start <= span.End && span.End <= source.Length
@@ -33,12 +25,10 @@ type SourceText(source: string) =
             if i + 6 <= source.Length && String.CompareOrdinal(source, i, "\\match", 0, 6) = 0 then Some i else None
 
     /// The line `offset` is on, counted from 0.
-    member _.LineOf offset = lineOf offset
+    member _.LineOf offset = lines.LineOf offset
 
     /// The offset of the end of the line `offset` is on.
-    member _.LineEnd offset =
-        let line = lineOf offset
-        if line + 1 < lineStarts.Length then lineStarts[line + 1] - 1 else source.Length
+    member _.LineEnd offset = lines.End(lines.LineOf offset)
 
     /// Whether `span` is a span of the source.
     member _.Valid (span: SourceSpan) = valid span
