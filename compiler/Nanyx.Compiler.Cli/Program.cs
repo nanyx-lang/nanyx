@@ -13,6 +13,32 @@ enum Target
     Run
 }
 
+/// <summary>
+/// Where a command runs: the directory it reads relative paths from and shows paths relative to, the writers it reports
+/// to, and the standard streams of a program it runs. The CLI's is the process's own (see <see cref="Process"/>); the
+/// Wasm tests give their own, to run commands in their process.
+/// </summary>
+internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error, ProgramIo Io)
+{
+    /// <summary>The process's current directory and its standard streams.</summary>
+    public static Shell Process => new(System.IO.Directory.GetCurrentDirectory(), Console.Out, Console.Error, ProgramIo.Inherited);
+
+    /// <summary>A path the user gave, made full from <see cref="Directory"/>.</summary>
+    public string FullPath(string path) => Path.GetFullPath(path, Directory);
+
+    /// <summary>A diagnostic's file, relative to <see cref="Directory"/> when it is under it.</summary>
+    public string DisplayPath(string file)
+    {
+        if (string.IsNullOrEmpty(file) || !Path.IsPathRooted(file))
+        {
+            return file;
+        }
+
+        var relative = Path.GetRelativePath(Directory, file);
+        return relative.StartsWith("..", StringComparison.Ordinal) ? file : relative;
+    }
+}
+
 internal static class CliCommands
 {
     /// <summary>
@@ -25,7 +51,7 @@ internal static class CliCommands
         string inputFile,
         [Consolo("out", Alias = "o")] string? outputPath = null)
     {
-        return Execute(inputFile, Target.Parse, outputPath);
+        return Execute(Shell.Process, inputFile, Target.Parse, outputPath);
     }
 
     /// <summary>
@@ -33,26 +59,29 @@ internal static class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     [Consolo("check")]
-    public static int Check(params string[] path)
+    public static int Check(params string[] path) => CheckIn(Shell.Process, path);
+
+    /// <summary>What <c>nanyx check</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int CheckIn(Shell shell, string[] path)
     {
-        if (!TrySinglePath(path, out var single))
+        if (!TrySinglePath(shell, path, out var single))
         {
             return 2;
         }
 
-        if (single is not null && !IsPackagePath(single))
+        if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(single, Target.Check, outputPath: null);
+            return Execute(shell, single, Target.Check, outputPath: null);
         }
 
-        if (!TryFindPackage(single, out var package))
+        if (!TryFindPackage(shell, single, out var package))
         {
             return 1;
         }
 
-        var build = BuildPackage(package);
-        PrintDiagnostics(build.Diagnostics, Console.Out);
-        Console.WriteLine($"Checked {package.Manifest.Name} ({FileCount(package)}).");
+        var build = BuildPackage(shell, package);
+        PrintDiagnostics(shell, build.Diagnostics, shell.Out);
+        shell.Out.WriteLine($"Checked {package.Manifest.Name} ({FileCount(package)}).");
         return HasErrors(build.Diagnostics) ? 1 : 0;
     }
 
@@ -62,21 +91,24 @@ internal static class CliCommands
     /// <param name="name">The package's name: lower case, with words separated by dots, as in acme.web.</param>
     /// <param name="directory">Where to make it, which must be new or empty; the default is the name's last segment.</param>
     [Consolo("new")]
-    public static int New(string name, params string[] directory)
+    public static int New(string name, params string[] directory) => NewIn(Shell.Process, name, directory);
+
+    /// <summary>What <c>nanyx new</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int NewIn(Shell shell, string name, string[] directory)
     {
-        if (!TrySinglePath(directory, out var single))
+        if (!TrySinglePath(shell, directory, out var single))
         {
             return 2;
         }
 
-        var created = NewPackage.create(name, single ?? NewPackage.defaultDirectory(name));
+        var created = NewPackage.create(name, shell.FullPath(single ?? NewPackage.defaultDirectory(name)));
         if (created.IsError)
         {
-            Console.Error.WriteLine(created.ErrorValue);
+            shell.Error.WriteLine(created.ErrorValue);
             return 1;
         }
 
-        Console.WriteLine($"Created {name}: {DisplayPath(created.ResultValue)}");
+        shell.Out.WriteLine($"Created {name}: {shell.DisplayPath(created.ResultValue)}");
         return 0;
     }
 
@@ -92,8 +124,12 @@ internal static class CliCommands
         [Consolo("out", Alias = "o")] string? outputPath = null,
         [Consolo("release")] bool release = false)
     {
-        return Execute(inputFile, Target.Wasm, outputPath, release);
+        return WasmIn(Shell.Process, inputFile, outputPath, release);
     }
+
+    /// <summary>What <c>nanyx wasm</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int WasmIn(Shell shell, string inputFile, string? outputPath, bool release) =>
+        Execute(shell, inputFile, Target.Wasm, outputPath, release);
 
     /// <summary>
     /// Run a Nanyx program: a .nyx file, or the @entry of a package.
@@ -107,24 +143,30 @@ internal static class CliCommands
         [Consolo("check-memory")] bool checkMemory = false,
         params string[] path)
     {
-        if (!TrySinglePath(path, out var single))
+        return RunIn(Shell.Process, outputPath, checkMemory, path);
+    }
+
+    /// <summary>What <c>nanyx run</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int RunIn(Shell shell, string? outputPath, bool checkMemory, string[] path)
+    {
+        if (!TrySinglePath(shell, path, out var single))
         {
             return 2;
         }
 
-        if (single is not null && !IsPackagePath(single))
+        if (single is not null && !IsPackagePath(shell, single))
         {
-            return Execute(single, Target.Run, outputPath, checkMemory: checkMemory);
+            return Execute(shell, single, Target.Run, outputPath, checkMemory: checkMemory);
         }
 
-        if (!TryFindPackage(single, out var package))
+        if (!TryFindPackage(shell, single, out var package))
         {
             return 1;
         }
 
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr.
-        var build = BuildPackage(package);
-        PrintDiagnostics(WorthStoppingFor(build.Diagnostics), Console.Error);
+        var build = BuildPackage(shell, package);
+        PrintDiagnostics(shell, WorthStoppingFor(build.Diagnostics), shell.Error);
         var deferred = HasErrors(build.Diagnostics) && build.ErrorsDeferred;
         if (HasErrors(build.Diagnostics) && !deferred)
         {
@@ -134,16 +176,16 @@ internal static class CliCommands
         var entry = PackageModule.entryResult(build);
         if (entry is null)
         {
-            Console.Error.WriteLine($"The package {package.Manifest.Name} has no @entry, so there is nothing to run.");
+            shell.Error.WriteLine($"The package {package.Manifest.Name} has no @entry, so there is nothing to run.");
             return 1;
         }
 
         if (deferred)
         {
-            Console.Error.WriteLine($"Running with {DeferredErrors(build.Diagnostics)}");
+            shell.Error.WriteLine($"Running with {DeferredErrors(build.Diagnostics)}");
         }
 
-        return RunProgram(entry.Value, Console.Error, ProgramIo.Inherited, deferred, checkMemory);
+        return RunProgram(shell, entry.Value, deferred, checkMemory);
     }
 
     /// <summary>
@@ -158,13 +200,19 @@ internal static class CliCommands
         [Consolo("release")] bool release = false,
         params string[] path)
     {
-        if (!TrySinglePath(path, out var single) || !TryFindPackage(single, out var package))
+        return BuildIn(Shell.Process, outputPath, release, path);
+    }
+
+    /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path)
+    {
+        if (!TrySinglePath(shell, path, out var single) || !TryFindPackage(shell, single, out var package))
         {
             return 1;
         }
 
-        var build = BuildPackage(package);
-        PrintDiagnostics(build.Diagnostics, Console.Out);
+        var build = BuildPackage(shell, package);
+        PrintDiagnostics(shell, build.Diagnostics, shell.Out);
         var deferred = !release && HasErrors(build.Diagnostics) && build.ErrorsDeferred;
         if (HasErrors(build.Diagnostics) && !deferred)
         {
@@ -176,22 +224,22 @@ internal static class CliCommands
         if (entry is null)
         {
             // With no program to write, the build is only a check, and errors fail it.
-            Console.WriteLine($"Checked {package.Manifest.Name} ({files}); it has no @entry, so no program was written.");
+            shell.Out.WriteLine($"Checked {package.Manifest.Name} ({files}); it has no @entry, so no program was written.");
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(entry.Value, Console.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
         {
             return 1;
         }
 
-        var finalOutputPath = string.IsNullOrWhiteSpace(outputPath)
+        var finalOutputPath = shell.FullPath(string.IsNullOrWhiteSpace(outputPath)
             ? Path.Combine(package.Manifest.Root, "out", package.Manifest.Name + ".wat")
-            : outputPath!;
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(finalOutputPath))!);
+            : outputPath!);
+        Directory.CreateDirectory(Path.GetDirectoryName(finalOutputPath)!);
         File.WriteAllText(finalOutputPath, wat);
         var withDeferred = deferred ? $" with {DeferredErrors(build.Diagnostics)}" : "";
-        Console.WriteLine($"Built {package.Manifest.Name} ({files}){withDeferred}: {DisplayPath(Path.GetFullPath(finalOutputPath))}");
+        shell.Out.WriteLine($"Built {package.Manifest.Name} ({files}){withDeferred}: {shell.DisplayPath(finalOutputPath)}");
         return 0;
     }
 
@@ -199,12 +247,12 @@ internal static class CliCommands
     /// The one path a command was given, or <c>null</c> for none. Paths are taken as a <c>params</c> array only so that
     /// the path can be left out and still be positional.
     /// </summary>
-    private static bool TrySinglePath(string[] paths, out string? path)
+    private static bool TrySinglePath(Shell shell, string[] paths, out string? path)
     {
         path = paths.FirstOrDefault();
         if (paths.Length > 1)
         {
-            Console.Error.WriteLine($"Give one file, directory or manifest, not {paths.Length}.");
+            shell.Error.WriteLine($"Give one file, directory or manifest, not {paths.Length}.");
             return false;
         }
 
@@ -219,39 +267,39 @@ internal static class CliCommands
     /// Builds the package, with a stopwatch on stderr naming the file the build is on while stderr is a terminal (see
     /// <see cref="CompileProgress"/>).
     /// </summary>
-    private static PackageBuild BuildPackage(Package package)
+    private static PackageBuild BuildPackage(Shell shell, Package package)
     {
-        using var progress = CompileProgress.Start(Console.Error, $"{package.Manifest.Name} ({FileCount(package)})");
-        var build = PackageModule.buildWith(FuncConvert.FromAction<string>(file => progress.Compiling(DisplayPath(file))), package);
+        using var progress = CompileProgress.Start(shell.Error, $"{package.Manifest.Name} ({FileCount(package)})");
+        var build = PackageModule.buildWith(FuncConvert.FromAction<string>(file => progress.Compiling(shell.DisplayPath(file))), package);
         progress.Finish();
         return build;
     }
 
     /// <summary>
-    /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on <paramref name="errors"/> while
-    /// that is a terminal (see <see cref="CompileProgress"/>).
+    /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on the shell's stderr while that is
+    /// a terminal (see <see cref="CompileProgress"/>).
     /// </summary>
-    private static CompileResult CompileScript(string inputFile, TextWriter errors)
+    private static CompileResult CompileScript(Shell shell, string inputFile)
     {
-        using var progress = CompileProgress.Start(errors, DisplayPath(Path.GetFullPath(inputFile)));
-        var result = Script.compileFile(inputFile);
+        using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)));
+        var result = Script.compileFile(shell.FullPath(inputFile));
         progress.Finish();
         return result;
     }
 
     /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
-    private static bool IsPackagePath(string path) =>
-        Directory.Exists(path) || path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase);
+    private static bool IsPackagePath(Shell shell, string path) =>
+        Directory.Exists(shell.FullPath(path)) || path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The package a path names, or the one the current directory is in; otherwise reports why there is none.</summary>
-    private static bool TryFindPackage(string? path, out Package package)
+    /// <summary>The package a path names, or the one the shell's directory is in; otherwise reports why there is none.</summary>
+    private static bool TryFindPackage(Shell shell, string? path, out Package package)
     {
-        var found = PackageModule.find(path ?? Directory.GetCurrentDirectory());
+        var found = PackageModule.find(path is null ? shell.Directory : shell.FullPath(path));
         if (found.IsError)
         {
             foreach (var error in found.ErrorValue)
             {
-                Console.Error.WriteLine(error);
+                shell.Error.WriteLine(error);
             }
 
             package = null!;
@@ -268,9 +316,10 @@ internal static class CliCommands
     [Consolo("hello")]
     public static int Hello()
     {
+        var shell = Shell.Process;
         var result = Compiler.compile(HelloWorldSource);
-        PrintDiagnostics(result.Diagnostics, Console.Error);
-        return RunProgram(result, Console.Error, ProgramIo.Inherited);
+        PrintDiagnostics(shell, result.Diagnostics, shell.Error);
+        return RunProgram(shell, result);
     }
 
     /// <summary>
@@ -288,7 +337,8 @@ internal static class CliCommands
             return 2;
         }
 
-        var found = Nanyx.Formatter.FormatCommand.findFiles(Directory.GetCurrentDirectory(), ListModule.OfSeq(paths));
+        var shell = Shell.Process;
+        var found = Nanyx.Formatter.FormatCommand.findFiles(shell.Directory, ListModule.OfSeq(paths));
         if (found.IsError)
         {
             Console.Error.WriteLine(found.ErrorValue);
@@ -304,21 +354,21 @@ internal static class CliCommands
         {
             if (result.IsChanged && check)
             {
-                Console.WriteLine(DisplayPath(file));
+                Console.WriteLine(shell.DisplayPath(file));
             }
             else if (result is Nanyx.Formatter.FormatCommand.FileResult.Failed failed)
             {
                 switch (failed.Item)
                 {
                     case Nanyx.Formatter.FormatCommand.Formatting.NotParsed notParsed:
-                        PrintDiagnostics(ListModule.OfSeq([Compiler.syntaxError(notParsed.Item)]), Console.Error);
+                        PrintDiagnostics(shell, ListModule.OfSeq([Compiler.syntaxError(notParsed.Item)]), Console.Error);
                         break;
                     case Nanyx.Formatter.FormatCommand.Formatting.NotSafe notSafe:
-                        Console.Error.WriteLine($"{DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
+                        Console.Error.WriteLine($"{shell.DisplayPath(file)}: internal error: {notSafe.Item}; the file was left as it is.");
                         break;
                     // A directive's error is the file's own, and starts with where in it the directive is.
                     case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings when badSettings.Item.StartsWith(file + ":", StringComparison.Ordinal):
-                        Console.Error.WriteLine($"{DisplayPath(file)}{badSettings.Item[file.Length..]}; the file was left as it is.");
+                        Console.Error.WriteLine($"{shell.DisplayPath(file)}{badSettings.Item[file.Length..]}; the file was left as it is.");
                         break;
                     case Nanyx.Formatter.FormatCommand.Formatting.BadSettings badSettings:
                         if (settingsErrors.Add(badSettings.Item))
@@ -394,81 +444,81 @@ internal static class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, bool checkMemory = false)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
-            Console.Error.WriteLine("Input file is required.");
+            shell.Error.WriteLine("Input file is required.");
             return 2;
         }
 
-        if (!File.Exists(inputFile))
+        if (!File.Exists(shell.FullPath(inputFile)))
         {
-            Console.Error.WriteLine($"File not found: {inputFile}");
+            shell.Error.WriteLine($"File not found: {inputFile}");
             return 2;
         }
 
         if (target == Target.Parse)
         {
-            return RunParse(inputFile);
+            return RunParse(shell, inputFile);
         }
 
         if (target == Target.Run)
         {
-            return RunScript(inputFile, checkMemory, Console.Error, ProgramIo.Inherited);
+            return RunScript(shell, inputFile, checkMemory);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
-        var result = CompileScript(inputFile, Console.Error);
+        var result = CompileScript(shell, inputFile);
 
-        Console.WriteLine($"Phase: {result.Phase}");
-        PrintDiagnostics(result.Diagnostics, Console.Out);
+        shell.Out.WriteLine($"Phase: {result.Phase}");
+        PrintDiagnostics(shell, result.Diagnostics, shell.Out);
 
         return target switch
         {
-            Target.Check => RunCheck(result, inputFile),
-            Target.Wasm => RunWasm(result, inputFile, outputPath, release),
-            _ => UnsupportedTarget(target.ToString())
+            Target.Check => RunCheck(shell, result, inputFile),
+            Target.Wasm => RunWasm(shell, result, inputFile, outputPath, release),
+            _ => UnsupportedTarget(shell, target.ToString())
         };
     }
 
     /// <summary>
-    /// What <c>nanyx run</c> does with the script <paramref name="inputFile"/>, which exists: compiles and runs it, with
-    /// its standard streams <paramref name="io"/>, and gives the exit code. The compiler's diagnostics and the run's
-    /// own errors go to <paramref name="errors"/>. The Wasm tests call this to run programs in their own process.
+    /// What <c>nanyx run</c> does with the script <paramref name="inputFile"/>, which exists: compiles and runs it in
+    /// <paramref name="shell"/>, and gives the exit code. The compiler's diagnostics and the run's own errors go to the
+    /// shell's stderr. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(string inputFile, bool checkMemory, TextWriter errors, ProgramIo io)
+    internal static int RunScript(Shell shell, string inputFile, bool checkMemory)
     {
         // Script mode: the file's :: directives say what a package's manifest would.
-        var result = CompileScript(inputFile, errors);
+        var result = CompileScript(shell, inputFile);
 
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it.
-        PrintDiagnostics(WorthStoppingFor(result.Diagnostics), errors);
+        PrintDiagnostics(shell, WorthStoppingFor(result.Diagnostics), shell.Error);
         // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         if (deferred)
         {
-            errors.WriteLine($"Running with {DeferredErrors(result.Diagnostics)}");
+            shell.Error.WriteLine($"Running with {DeferredErrors(result.Diagnostics)}");
         }
 
-        return RunProgram(result, errors, io, deferred, checkMemory);
+        return RunProgram(shell, result, deferred, checkMemory);
     }
 
-    private static int RunParse(string inputFile)
+    private static int RunParse(Shell shell, string inputFile)
     {
-        var parsed = Parser.Program.Api.parseModuleFile(Path.GetFullPath(inputFile), File.ReadAllText(inputFile));
+        var parsed = Parser.Program.Api.parseModuleFile(shell.FullPath(inputFile), File.ReadAllText(shell.FullPath(inputFile)));
 
         if (parsed.IsError)
         {
-            Console.WriteLine($"Parse error: {parsed.ErrorValue}");
+            shell.Out.WriteLine($"Parse error: {parsed.ErrorValue}");
             return 1;
         }
 
-        Console.WriteLine("Parsed successfully:");
+        shell.Out.WriteLine("Parsed successfully:");
         foreach (var item in parsed.ResultValue)
         {
-            Console.WriteLine($"  {item}");
+            shell.Out.WriteLine($"  {item}");
         }
 
         return 0;
@@ -481,11 +531,15 @@ internal static class CliCommands
     private static FSharpList<Diagnostic> WorthStoppingFor(FSharpList<Diagnostic> diagnostics) =>
         ListModule.OfSeq(diagnostics.Where(diagnostic => !diagnostic.Severity.IsInfo && !diagnostic.Severity.IsHint));
 
-    private static void PrintDiagnostics(FSharpList<Diagnostic> diagnostics, TextWriter writer)
+    /// <summary>
+    /// Writes <paramref name="diagnostics"/> to <paramref name="writer"/>, one of <paramref name="shell"/>'s, with their
+    /// files shown as <see cref="Shell.DisplayPath"/> shows them. None is said in so many words only on stdout.
+    /// </summary>
+    private static void PrintDiagnostics(Shell shell, FSharpList<Diagnostic> diagnostics, TextWriter writer)
     {
         if (diagnostics.IsEmpty)
         {
-            if (writer == Console.Out)
+            if (writer == shell.Out)
             {
                 writer.WriteLine("No diagnostics.");
             }
@@ -503,7 +557,7 @@ internal static class CliCommands
             if (diagnostic.Span is not null)
             {
                 var span = diagnostic.Span.Value;
-                location = $"{DisplayPath(span.File)}:{span.StartLine + 1}:{span.StartColumn + 1}: ";
+                location = $"{shell.DisplayPath(span.File)}:{span.StartLine + 1}:{span.StartColumn + 1}: ";
             }
 
             writer.WriteLine($"{location}{severity} {diagnostic.Code}: {diagnostic.Message}");
@@ -511,92 +565,80 @@ internal static class CliCommands
             foreach (var related in diagnostic.Related)
             {
                 var span = related.Item1;
-                writer.WriteLine($"  {DisplayPath(span.File)}:{span.StartLine + 1}:{span.StartColumn + 1}: {related.Item2}");
+                writer.WriteLine($"  {shell.DisplayPath(span.File)}:{span.StartLine + 1}:{span.StartColumn + 1}: {related.Item2}");
             }
         }
-    }
-
-    /// <summary>A diagnostic's file, relative to the current directory when it is under it.</summary>
-    private static string DisplayPath(string file)
-    {
-        if (string.IsNullOrEmpty(file) || !Path.IsPathRooted(file))
-        {
-            return file;
-        }
-
-        var relative = Path.GetRelativePath(Directory.GetCurrentDirectory(), file);
-        return relative.StartsWith("..", StringComparison.Ordinal) ? file : relative;
     }
 
     /// <summary>
     /// The type of each top-level def <paramref name="inputFile"/> declares, not the prelude's or an import's, in source
     /// order, written as hover writes it, with type variables <c>a</c>, <c>b</c>, ... since this is a terminal.
     /// </summary>
-    private static void PrintTypes(string inputFile, CompileResult result)
+    private static void PrintTypes(Shell shell, string inputFile, CompileResult result)
     {
-        var types = TypeHints.topLevelTypes(TypeNotation.Ascii, Path.GetFullPath(inputFile), result);
+        var types = TypeHints.topLevelTypes(TypeNotation.Ascii, shell.FullPath(inputFile), result);
         if (types.IsEmpty)
         {
-            Console.WriteLine("(no definitions)");
+            shell.Out.WriteLine("(no definitions)");
             return;
         }
 
         foreach (var type in types)
         {
-            Console.WriteLine($"{type.Name} : {type.Type}");
+            shell.Out.WriteLine($"{type.Name} : {type.Type}");
         }
     }
 
-    private static int RunCheck(CompileResult result, string inputFile)
+    private static int RunCheck(Shell shell, CompileResult result, string inputFile)
     {
         if (result.Typed is null || !result.TypeChecked)
         {
             return 1;
         }
 
-        Console.WriteLine("Types:");
-        PrintTypes(inputFile, result);
+        shell.Out.WriteLine("Types:");
+        PrintTypes(shell, inputFile, result);
 
         // The module type-checked, but a linter rule configured as an error fails the check all the same.
         return HasErrors(result.Diagnostics) ? 1 : 0;
     }
 
-    private static int RunWasm(CompileResult result, string inputFile, string? outputPath, bool release)
+    private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(result, Console.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
+        if (!TryEmitWat(shell, result, shell.Out, out var wat, CodeGen.WasmOptions.Default, deferred))
         {
             return 1;
         }
 
         var finalOutputPath = string.IsNullOrWhiteSpace(outputPath) ? DefaultWasmOutputPath(inputFile) : outputPath!;
-        File.WriteAllText(finalOutputPath, wat);
+        File.WriteAllText(shell.FullPath(finalOutputPath), wat);
         var withDeferred = deferred ? $" with {DeferredErrors(result.Diagnostics)}" : "";
-        Console.WriteLine($"WASM (WAT) emitted{withDeferred}: {finalOutputPath}");
+        shell.Out.WriteLine($"WASM (WAT) emitted{withDeferred}: {finalOutputPath}");
         return 0;
     }
 
     /// <summary>
-    /// Runs a compiled program with its standard streams <paramref name="io"/>, reporting what stops it to
-    /// <paramref name="errors"/>, and gives the exit code.
+    /// Runs a compiled program with the shell's standard streams, reporting what stops it to the shell's stderr, and
+    /// gives the exit code.
     /// </summary>
-    private static int RunProgram(
-        CompileResult result, TextWriter errors, ProgramIo io, bool errorsDeferred = false, bool checkMemory = false)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, bool checkMemory = false)
     {
+        var errors = shell.Error;
         var options = new CodeGen.WasmOptions(checkMemory);
-        if (!TryEmitWat(result, errors, out var wat, options, errorsDeferred))
+        if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred))
         {
             return 1;
         }
 
         if (!checkMemory)
         {
-            var outcome = WasmRunner.run(io, wat);
+            var outcome = WasmRunner.run(shell.Io, wat);
             return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
         var counted = WasmRunner.runReading(
-            io,
+            shell.Io,
             CodeGen.CheckedExports.start,
             new[] { CodeGen.CheckedExports.liveBlocks, CodeGen.CheckedExports.allocations },
             wat);
@@ -641,7 +683,7 @@ internal static class CliCommands
     /// traps is lowered too.
     /// </summary>
     private static bool TryEmitWat(
-        CompileResult result, TextWriter errors, out string wat, CodeGen.WasmOptions options, bool errorsDeferred = false)
+        Shell shell, CompileResult result, TextWriter errors, out string wat, CodeGen.WasmOptions options, bool errorsDeferred = false)
     {
         wat = string.Empty;
 
@@ -654,7 +696,7 @@ internal static class CliCommands
         var emitted = CodeGen.tryTranspileTypedModuleWith(options, result.Typed.Value);
         if (emitted.IsError)
         {
-            PrintDiagnostics(ListModule.OfSeq(new[] { emitted.ErrorValue }), errors);
+            PrintDiagnostics(shell, ListModule.OfSeq(new[] { emitted.ErrorValue }), errors);
             return false;
         }
 
@@ -674,9 +716,9 @@ internal static class CliCommands
         return Path.Combine(directory, stem + ".wat");
     }
 
-    private static int UnsupportedTarget(string target)
+    private static int UnsupportedTarget(Shell shell, string target)
     {
-        Console.Error.WriteLine($"Unsupported target: {target}");
+        shell.Error.WriteLine($"Unsupported target: {target}");
         return 2;
     }
 }

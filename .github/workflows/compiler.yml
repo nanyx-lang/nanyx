@@ -57,7 +57,7 @@ jobs:
       - name: Test
         run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true
 
-  # The Wasm tests take the longest by far (most of them start the CLI in a child process), so they get a
+  # The Wasm tests take the longest by far (most of them compile and run a program), so they get a
   # runner to themselves rather than share its cores with the other test projects.
   wasm-test:
     name: Wasm tests (${{ matrix.os }})
