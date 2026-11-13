@@ -219,16 +219,39 @@ type private Counter(ownership: Ownership, func: Function) =
 
     let sortedVars (ids: Set<int>) = ids |> Set.toList |> List.map (fun id -> vars.[id])
 
-    /// The variables `e` uses that it does not bind itself, with each temporary standing for its value.
+    /// The variables `e` uses that it does not bind itself, with each temporary standing for its value. A chain is
+    /// walked from its end.
     member this.Free (e: Expr) : Set<int> =
+        match free.TryGetValue e with
+        | true, found -> found
+        | _ ->
+            let links, last = Chain.split e
+            List.foldBack
+                (fun (link: Expr) (following: Set<int>) ->
+                    match free.TryGetValue link with
+                    | true, found -> found
+                    | _ ->
+                        let found =
+                            match link.Kind with
+                            | Let(var, _, _) when var.Kind = Temp -> following
+                            | Let(var, value, _) -> Set.union (this.Free value) (following |> Set.remove var.Id)
+                            | Do(value, _) -> Set.union (this.Free value) following
+                            | Dup(vars, _)
+                            | Drop(vars, _) -> Set.union (vars |> List.map _.Id |> Set.ofList) following
+                            | Release(released, _) -> following |> Set.add released.Object.Id
+                            | _ -> internalError "a chain holds only its links"
+                        free.[link] <- found
+                        found)
+                links
+                (this.FreeOfLast last)
+
+    /// The variables an expression that is not a link of a chain uses (see `Free`).
+    member private this.FreeOfLast (e: Expr) : Set<int> =
         match free.TryGetValue e with
         | true, found -> found
         | _ ->
             let found =
                 match e.Kind with
-                | Let(var, _, body) when var.Kind = Temp -> this.Free body
-                | Let(var, value, body) -> Set.union (this.Free value) (this.Free body |> Set.remove var.Id)
-                | Do(value, rest) -> Set.union (this.Free value) (this.Free rest)
                 | If(cond, ifTrue, ifFalse) -> Set.unionMany [ this.FreeIn cond; this.Free ifTrue; this.Free ifFalse ]
                 | Match(scrutinees, arms) ->
                     let ofArm (arm: Arm) =
@@ -242,10 +265,7 @@ type private Counter(ownership: Ownership, func: Function) =
                     let source = operands ownership e |> List.map (fst >> this.FreeIn) |> Set.unionMany
                     Set.union source (Set.difference (this.Free loop.Body) loopVars)
                 | While loop -> Set.union (this.Free loop.Condition) (this.Free loop.Body)
-                | Dup(dupped, body)
-                | Drop(dupped, body) -> Set.union (dupped |> List.map _.Id |> Set.ofList) (this.Free body)
                 | DropAfter(body, dropped) -> Set.union (dropped |> List.map _.Id |> Set.ofList) (this.Free body)
-                | Release(released, body) -> this.Free body |> Set.add released.Object.Id
                 | Reuse(_, body) -> this.Free body
                 | _ -> operands ownership e |> List.map (fst >> this.FreeIn) |> Set.unionMany
             free.[e] <- found
@@ -266,31 +286,46 @@ type private Counter(ownership: Ownership, func: Function) =
     /// once `e` is done. Each owned variable not used after is taken over or dropped by `e`; one `e` does not use is
     /// dropped before it.
     member this.Count (owned: Set<int>) (after: Set<int>) (e: Expr) : Expr =
-        let dead = Set.difference (Set.difference owned (this.Free e)) after
-        let body = this.Core (Set.difference owned dead) after e
-        if dead.IsEmpty then body else mk (Drop(sortedVars dead, body)) body.Type
+        // A chain is counted a link at a time, each with what is owned once those before it are done, and rebuilt from
+        // its end.
+        let mutable owned = owned
+        let mutable current = e
+        let mutable last = None
+        let rebuilds = ResizeArray<Expr -> Expr>()
+        while last.IsNone do
+            let dead = Set.difference (Set.difference owned (this.Free current)) after
+            let ownedHere = Set.difference owned dead
+            let dropDead (body: Expr) = if dead.IsEmpty then body else mk (Drop(sortedVars dead, body)) body.Type
+            let ty = current.Type
+            match current.Kind with
+            | Let(var, value, body) when var.Kind = Temp ->
+                // The value is counted where the temporary is used, somewhere in the body.
+                rebuilds.Add(fun body ->
+                    let value =
+                        match counted.TryGetValue var.Id with
+                        | true, value -> value
+                        | _ -> internalError "a temporary in the core IR is never used"
+                    dropDead (mk (Let(var, value, body)) ty))
+                owned <- ownedHere
+                current <- body
+            | Let(var, value, body) ->
+                let afterValue = Set.union (this.Free body) after
+                let value = this.Count ownedHere afterValue value
+                rebuilds.Add(fun body -> dropDead (mk (Let(var, value, body)) ty))
+                let kept = Set.intersect ownedHere afterValue
+                owned <- if isHeapType var.Type then kept.Add var.Id else kept
+                current <- body
+            | Do(value, rest) ->
+                let afterValue = Set.union (this.Free rest) after
+                let value = this.Count ownedHere afterValue value
+                rebuilds.Add(fun rest -> dropDead (mk (Do(value, rest)) ty))
+                owned <- Set.intersect ownedHere afterValue
+                current <- rest
+            | _ -> last <- Some (dropDead (this.Core ownedHere after current))
+        Chain.rebuild (fun rebuild body -> rebuild body) (List.ofSeq rebuilds) last.Value
 
     member private this.Core (owned: Set<int>) (after: Set<int>) (e: Expr) : Expr =
-        let ownedAfter (var: Var) (afterValue: Set<int>) =
-            let kept = Set.intersect owned afterValue
-            if isHeapType var.Type then kept.Add var.Id else kept
         match e.Kind with
-        | Let(var, value, body) when var.Kind = Temp ->
-            // The value is counted where the temporary is used, somewhere in the body.
-            let body = this.Count owned after body
-            let value =
-                match counted.TryGetValue var.Id with
-                | true, value -> value
-                | _ -> internalError "a temporary in the core IR is never used"
-            mk (Let(var, value, body)) e.Type
-        | Let(var, value, body) ->
-            let afterValue = Set.union (this.Free body) after
-            let value = this.Count owned afterValue value
-            mk (Let(var, value, this.Count (ownedAfter var afterValue) after body)) e.Type
-        | Do(value, rest) ->
-            let afterValue = Set.union (this.Free rest) after
-            let value = this.Count owned afterValue value
-            mk (Do(value, this.Count (Set.intersect owned afterValue) after rest)) e.Type
         | If(cond, ifTrue, ifFalse) ->
             let afterCond = Set.unionMany [ this.Free ifTrue; this.Free ifFalse; after ]
             this.Operands owned afterCond [ cond, Borrowed ] |> ignore

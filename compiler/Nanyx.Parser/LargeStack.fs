@@ -1,5 +1,5 @@
 /// Running work that recurses once per level of the code it reads: the checker once per operator of a chain, the
-/// formatter's comparison once per node, the backend's passes over the core IR once per `let` of a function. Generated code can nest
+/// formatter's comparison once per node. Generated code can nest
 /// thousands deep, more than the main thread's 1 MB stack holds, and a stack overflow cannot be caught.
 module Nanyx.LargeStack
 
@@ -7,8 +7,9 @@ module Nanyx.LargeStack
 /// each operator of a chain in a Debug build (much less in Release), so this holds a chain of 10,000 with room over.
 let private size = 1024 * 1024 * 1024
 
-/// Runs `action` on a thread with a large stack, waiting for it, and gives its result or raises what it raised.
-let run (action: unit -> 'T) : 'T =
+/// Runs `action` on a thread with a stack of `stackSize` bytes, waiting for it, and gives its result or raises what it
+/// raised.
+let runWithStack (stackSize: int) (action: unit -> 'T) : 'T =
     let mutable result = Unchecked.defaultof<'T>
     let mutable error: exn option = None
     let thread =
@@ -16,9 +17,12 @@ let run (action: unit -> 'T) : 'T =
             (fun () ->
                 try result <- action ()
                 with ex -> error <- Some ex),
-            size)
+            stackSize)
     thread.Start()
     thread.Join()
     match error with
     | Some ex -> raise ex
     | None -> result
+
+/// Runs `action` on a thread with a large stack, waiting for it, and gives its result or raises what it raised.
+let run (action: unit -> 'T) : 'T = runWithStack size action

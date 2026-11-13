@@ -391,6 +391,24 @@ let ``Every intermediate value in the core IR is named`` () =
     Assert.Equal(expected, printed)
 
 [<Fact>]
+let ``A function of 2,000 statements compiles on a 1 MB stack`` () =
+    let statements =
+        [ for i in 1 .. 1000 do
+              $"  def v{i} = v{i - 1} + 1"
+              $"  dbg(\"{{v{i}}}\")" ]
+    let source = String.concat "\n" ([ "def main = {"; "  def v0 = 0" ] @ statements @ [ "  v1000"; "}"; "" ])
+    let typed = typedModule source
+    let _, report = Nanyx.LargeStack.runWithStack (1024 * 1024) (fun () -> transpileTypedModuleWithReport typed)
+    Assert.Contains("main", report.Functions)
+
+[<Fact>]
+let ``A script of 2,000 top-level statements compiles on a 1 MB stack`` () =
+    let source = String.concat "\n" [ for i in 1 .. 2000 do $"dbg(\"line{i}\")"; "" ]
+    let typed = typedModule source
+    let wat = Nanyx.LargeStack.runWithStack (1024 * 1024) (fun () -> transpileTypedModuleToWat typed)
+    Assert.Contains("line2000", wat)
+
+[<Fact>]
 let ``A broken invariant in the emitter is an internal error, said once, that asks for a bug report`` () =
     let input = lowerInput (typedModule "def f = { x -> x + 1 }\n")
     // An emitter that finds the core IR broken, as `CoreIrEmit` does when a temporary is never used.
