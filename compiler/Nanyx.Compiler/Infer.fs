@@ -249,7 +249,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     match state.ContextRequirements |> Map.tryFind (canonicalName env state name) with
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty
                     | None -> ty
-                Ok (mkTypedExpr expr ty None None None, next)
+                Ok (mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name)
         | None -> Error [ NameSuggestions.unknown DiagnosticCodes.UnknownIdentifier expr.Span $"Unknown identifier '{name}'" env.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) ->

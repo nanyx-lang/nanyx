@@ -63,7 +63,7 @@ def tally = { words ->
 }
 ```
 
-A lambda that uses a cell needs `$Memory` too, so it can be called inside the block but cannot leave it.
+A lambda that uses a cell needs `$Memory` too, and its type says so: `note` is `[$Memory] string -> ()`. It can be called inside the block but cannot leave it.
 
 # Values cannot escape memory scope
 
