@@ -37,3 +37,10 @@ let ``A pipe chain that spans lines keeps a multi-line lambda and the comments b
 let ``A pipe chain that does not fit puts each step on a line of its own`` () =
     let long = "def total = someLongValueName \\list.map { x -> x + someOtherLongName } \\list.filter { y -> y > 100 } \\list.sum"
     Assert.Equal(lines [ "def total = someLongValueName"; "  \\list.map { x -> x + someOtherLongName }"; "  \\list.filter { y -> y > 100 }"; "  \\list.sum" ], format long)
+
+[<Fact>]
+let ``A tuple a pipe passes as one argument keeps its brackets`` () =
+    unchanged "def r = xs \\fold((0, 0)) { (sum, count), x -> (sum + x, count + 1) }\n"
+    unchanged "def r = xs \\f((0, 0), y)\n"
+    unchanged "def r = xs \\f(a, b) { y -> y }\n"
+    unchanged "def r = xs \\f(a, y = z) { w -> w }\n"

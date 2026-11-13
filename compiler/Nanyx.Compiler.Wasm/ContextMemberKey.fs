@@ -2,7 +2,8 @@
 namespace Transpiler.Wasm
 
 /// A type as an instance of a parameterised context is written with it: its name and its type arguments
-/// (`ToString(int)`, `list(a)`). A type written some other way is `unknown`.
+/// (`ToString(int)`, `list(a)`). A structural type is keyed by a name no type can have, with its parts: `(,)` for a
+/// tuple, `#x` for a tag, `|` for a union (see `Identifiers.typeKeyOf`).
 type TypeKey = TypeKey of name: string * arguments: TypeKey list
 
 /// The key a context member is known by in the backend, in scope and among the members a function takes.

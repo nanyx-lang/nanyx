@@ -423,9 +423,12 @@ let private withTrailingLambda (fields, span) (lambda: Expression) =
     | [] -> (positional |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)) @ [ lambda ]
     | _ -> [ Expression.at span (RecordExpr(positional @ [ PositionalField lambda ] @ named)) ]
 
-// Arguments in parentheses after a name, as in a call, a tag payload or a pipe target: `(a, b)`, `(x = 1)`.
-let private parenArguments =
-    noteFailureInside (between (pstring "(") (pstring ")") (ws >>. withSpan recordFields |>> fieldsToExpr .>> ws))
+// The fields in parentheses after a name, as in a call, a tag payload or a pipe target: `(a, b)`, `(x = 1)`.
+let private parenFields =
+    noteFailureInside (between (pstring "(") (pstring ")") (ws >>. withSpan recordFields .>> ws))
+
+// Arguments in parentheses after a name, as one expression (see `fieldsToExpr`).
+let private parenArguments = parenFields |>> fieldsToExpr
 
 /// `???`, the placeholder for code not written yet. It is read as a name no other code can write, so every pass that
 /// handles names handles it; the type checker reports it as not implemented.
@@ -815,13 +818,20 @@ type private PipeStep =
 let private pipeTarget =
     let keywordEnd = notFollowedBy (satisfy (fun c -> Char.IsLetterOrDigit c || c = '_'))
     let matchStep = pstring "match" >>. keywordEnd >>. matchArms |>> PipeMatch
+    // Each value in the brackets is an argument of its own, so that a tuple written in brackets of its own is one:
+    // `\f(a, b)` passes `a` and `b`, and `\f((a, b))` the tuple. Named fields keep all the fields as one record.
+    let writtenArguments (fields, span) =
+        if fields |> List.forall (function PositionalField _ -> true | NamedField _ -> false) then
+            fields |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)
+        else
+            [ Expression.at span (RecordExpr fields) ]
     let callStep =
         pipe3
             qualifiedIdentifierWithSpan
-            (opt parenArguments)
+            (opt parenFields)
             (opt (attempt (wsInline >>. lambda)))
-            (fun (funcName, funcRange) argOpt trailingLambdaOpt ->
-                let baseArgs = match argOpt with Some arg -> [arg] | None -> []
+            (fun (funcName, funcRange) fieldsOpt trailingLambdaOpt ->
+                let baseArgs = match fieldsOpt with Some fields -> writtenArguments fields | None -> []
                 let args =
                     match trailingLambdaOpt with
                     | Some lambdaExpr -> baseArgs @ [lambdaExpr]

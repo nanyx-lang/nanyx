@@ -28,6 +28,7 @@
     <Compile Include="Features\Contexts\RunContextTests.fs" />
     <Compile Include="Features\Contexts\RunContextFunctionValueTests.fs" />
     <Compile Include="Features\Contexts\RunCallSiteContextTests.fs" />
+    <Compile Include="Features\Contexts\RunContextArgumentTypeTests.fs" />
     <Compile Include="Features\Contexts\RunOperatorContextTests.fs" />
     <Compile Include="Features\Contexts\RunStructuralInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunContextKeyTests.fs" />
