@@ -274,6 +274,9 @@ type InferState =
             /// The instances a `use` loads that are written at it, by the node of each: their members' lambdas may
             /// need more contexts than the members' types declare (see `UseDischarge`).
             UseInstances: Set<NodeId>;
+            /// How many lambdas were being inferred around each `use`, by the node of the value it loads (see
+            /// `LambdaContexts.enterUse`).
+            UseDepths: Map<NodeId, int>;
             /// The unannotated local defs whose values are being inferred, by the id of the variable each is bound at
             /// meanwhile (see `LambdaContexts.enterSelf`).
             SelfTypes: Map<int, SelfDef>;
@@ -352,6 +355,7 @@ let emptyState =
             LambdaContexts = [];
             BodyLambdas = Set.empty;
             UseInstances = Set.empty;
+            UseDepths = Map.empty;
             SelfTypes = Map.empty;
             InferredContextVars = Map.empty }
 

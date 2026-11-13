@@ -115,3 +115,36 @@ def main = {
 }
 """
     runSource source |> assertRan "Hello, Nanyx\n"
+
+[<Fact>]
+let ``Run - a lambda calls the instance a use inside it loads, and the one in scope where it is called before that`` () =
+    let source =
+        """
+import nanyx/console
+
+context Log = (log: string -> ())
+
+def greet: [Log] string -> () = { name -> log("hello {name}") }
+
+def nested = {
+  { use Log(log = { m -> println("inner " ++ m) }) in greet("a") }
+}
+
+def before: [Log & Console] () -> ([Log & Console] () -> ()) = {
+  {
+    greet("b")
+    use Log(log = { m -> println("inner " ++ m) })
+    greet("c")
+  }
+}
+
+@entry
+def main = {
+  def run = nested()
+  run()
+  use Log(log = { m -> println("outer " ++ m) })
+  def later = before()
+  later()
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "inner hello a\nouter hello b\ninner hello c\n"
