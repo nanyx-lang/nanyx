@@ -28,21 +28,22 @@ npm run check    # type-check .astro and .ts files
 - `src/components/` — layout pieces. `SearchDialog.tsx` is the only React
   island; everything else is static HTML with small inline scripts.
 - `src/styles/global.css` — Tailwind setup and site styles.
-- `vercel.json` — Vercel settings. Vercel's Git deployments are off, so
-  pushing deploys nothing.
+- `vercel.json` — Vercel settings. Vercel's Git deployments are off; the
+  Docs workflow deploys instead.
 
 ## Deploying
 
-Deploy to production by running the [Docs workflow](../.github/workflows/docs.yml),
-from the Actions tab or with:
+The [Docs workflow](../.github/workflows/docs.yml) deploys `main` to
+production whenever a merge changes `docs/` (other than this README),
+`examples/` or `extension/syntaxes/`. To deploy at any other time, run it from
+the Actions tab or with:
 
 ```sh
 gh workflow run Docs
 ```
 
 It calls the Vercel Deploy Hook stored in the `VERCEL_DEPLOY_HOOK` repository
-secret, and Vercel builds and deploys `main`. Nothing deploys unless someone
-runs it.
+secret, and Vercel builds and deploys `main`.
 
 Or deploy with the Vercel CLI, from the repository root (the Vercel
 project's root directory is `docs/`):
@@ -52,8 +53,8 @@ vercel --prod    # production, nanyx.dev
 vercel           # a preview deployment
 ```
 
-The site is built from `docs/`, `extension/syntaxes/` and `examples/`, so
-deploy after a change to any of them.
+The site is built from `docs/`, `extension/syntaxes/` and `examples/`. A new
+input outside those directories needs adding to the workflow's `paths`.
 
 ## Machine-readable output
 
