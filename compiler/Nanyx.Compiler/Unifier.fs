@@ -51,10 +51,13 @@ module Unifier =
     /// Whether `ty` is `bottomType`.
     let isBottom (ty: Ty) = unalias ty = bottomType
 
+    /// The number of the first rest variable `unify` makes up, far past where inference numbers its own.
+    let private firstMadeUpRest = 1_000_000_000
+
     /// Whether `var` is a rest variable `unify` made up when widening a union, or to keep room for more contexts in a
     /// context variable (see `FunctionContexts`). Its number depends on the constraints it was given, so a later
     /// `unify` of more constraints may give the same rest another, and a constraint naming it may name nothing then.
-    let isMadeUpRest (var: TyVar) = var.Id >= 1_000_000_000
+    let isMadeUpRest (var: TyVar) = var.Id >= firstMadeUpRest
 
     /// The contexts of a function type that are written: not a made-up variable, which only keeps room for more
     /// contexts (see `FunctionContexts.fit`).
@@ -346,32 +349,30 @@ module Unifier =
 
     let empty : Subst = Map.empty
 
-    let rec apply (subst: Subst) (ty: Ty) : Ty =
+    /// `ty` with each variable replaced by what `resolve` gives for it: a substitution applied (see `apply`).
+    let rec private applyResolving (resolve: TyVar -> Ty) (ty: Ty) : Ty =
+        let apply = applyResolving resolve
         match ty with
-        | TyVar v ->
-            match subst |> Map.tryFind v.Id with
-            | Some replacement when replacement = ty -> ty
-            | Some replacement -> apply subst replacement
-            | None -> ty
-        | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, apply subst underlying, isPrivate)
-        | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map (apply subst), apply subst underlying)
+        | TyVar v -> resolve v
+        | TyNominal(nominal, underlying, isPrivate) -> TyNominal(nominal, apply underlying, isPrivate)
+        | TyAlias(name, args, underlying) -> TyAlias(name, args |> List.map apply, apply underlying)
         | TyFunc(arg, ret, contexts) ->
-            TyFunc(apply subst arg, apply subst ret, contexts |> List.map (apply subst) |> FunctionContexts.flatten)
+            TyFunc(apply arg, apply ret, contexts |> List.map apply |> FunctionContexts.flatten)
         | TyRecord fields ->
-            fields |> Map.map (fun _ v -> apply subst v) |> TyRecord
+            fields |> Map.map (fun _ v -> apply v) |> TyRecord
         // A solved row adds its fields: to a record when it was solved to one, still open when to an open one.
         | TyOpenRecord(fields, row) ->
-            let applied = fields |> Map.map (fun _ v -> apply subst v)
+            let applied = fields |> Map.map (fun _ v -> apply v)
             let withFields more = more |> Map.fold (fun acc key fieldTy -> acc |> Map.add key fieldTy) applied
-            match unalias (apply subst (TyVar row)) with
+            match unalias (apply (TyVar row)) with
             | TyVar solved -> TyOpenRecord(applied, solved)
             | TyRecord more -> TyRecord (withFields more)
             | TyOpenRecord(more, rest) -> TyOpenRecord(withFields more, rest)
             // Renamed for a reader (see `displayRenaming`): the row takes the name.
             | TyPrimitive name -> TyOpenRecord(applied, { row with Name = Some name })
             | _ -> TyOpenRecord(applied, row)
-        | TyTag(name, payload) -> TyTag(name, payload |> Option.map (apply subst))
-        | TyApply(name, args) -> TyApply(name, args |> List.map (apply subst))
+        | TyTag(name, payload) -> TyTag(name, payload |> Option.map apply)
+        | TyApply(name, args) -> TyApply(name, args |> List.map apply)
         // A rest variable solved to a union (`r` := `#notFound`) is spliced into the union it is the rest of. One
         // solved to the empty union leaves the others; when that is just one, the union is that one. A member that
         // is an alias of a tag or union is spliced in as what it stands for, as a union's members are tags. A tag
@@ -381,7 +382,7 @@ module Unifier =
             let spliced =
                 items
                 |> List.collect (fun item ->
-                    let applied = apply subst item
+                    let applied = apply item
                     match unalias applied with
                     | TyUnion inner -> inner
                     | TyTag _ as tag -> [ tag ]
@@ -394,6 +395,37 @@ module Unifier =
             | [ single ] when items.Length > 1 -> single
             | _ -> TyUnion spliced
         | TyPrimitive _ -> ty
+
+    /// `ty` with `subst` applied: each variable it solves replaced by what it was solved to, itself with `subst`
+    /// applied.
+    let rec apply (subst: Subst) (ty: Ty) : Ty =
+        applyResolving (fun v ->
+            match subst |> Map.tryFind v.Id with
+            | Some replacement when replacement = TyVar v -> replacement
+            | Some replacement -> apply subst replacement
+            | None -> TyVar v) ty
+
+    /// What each solved variable resolves to under a substitution `applySolved` was given, by the variable's number.
+    let private resolvedVars = System.Runtime.CompilerServices.ConditionalWeakTable<Subst, Dictionary<int, Ty>>()
+
+    /// `ty` with `subst` applied, as `apply` gives it. What a variable resolves to is kept with `subst`, so that a
+    /// variable solved to another, solved to another in turn, is followed to its end once, not on each lookup: the type
+    /// checker looks up many types against each solution of its constraints so far.
+    let applySolved (subst: Subst) (ty: Ty) : Ty =
+        let resolved = resolvedVars.GetValue(subst, fun _ -> Dictionary<int, Ty>())
+        let rec resolve (v: TyVar) =
+            match subst |> Map.tryFind v.Id with
+            | Some replacement when replacement = TyVar v -> replacement
+            | Some replacement ->
+                lock resolved (fun () ->
+                    match resolved.TryGetValue v.Id with
+                    | true, known -> known
+                    | false, _ ->
+                        let known = applyResolving resolve replacement
+                        resolved[v.Id] <- known
+                        known)
+            | None -> TyVar v
+        applyResolving resolve ty
 
     /// `ty`, written with the type variables `parameters` (a type definition's or a context's), with each parameter
     /// replaced by the type at the same position in `argTys`, all at once. `apply` would follow a replacement that is
@@ -606,26 +638,35 @@ module Unifier =
         | TyUnion items -> items |> List.exists (occurs varId)
         | TyPrimitive _ -> false
 
-    /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`).
-    let private unifyAfresh (constraints: ConstraintSet) : Result<Subst, Mismatch> =
+    /// The highest number of a variable in `constraints`, or 0 when they have none.
+    let private highestVarId (constraints: ConstraintSet) =
+        let rec maxId ty =
+            match ty with
+            | TyVar v -> v.Id
+            | TyPrimitive _ -> 0
+            | TyNominal(_, underlying, _) -> maxId underlying
+            | TyAlias(_, args, underlying) -> List.fold (fun acc arg -> max acc (maxId arg)) (maxId underlying) args
+            | TyFunc(arg, ret, contexts) -> List.fold (fun acc context -> max acc (maxId context)) (max (maxId arg) (maxId ret)) contexts
+            | TyRecord fields -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) 0
+            | TyOpenRecord(fields, row) -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) row.Id
+            | TyTag(_, payload) -> payload |> Option.map maxId |> Option.defaultValue 0
+            | TyApply(_, args)
+            | TyUnion args -> List.fold (fun acc arg -> max acc (maxId arg)) 0 args
+        constraints |> List.fold (fun acc (left, right, _, _) -> max acc (max (maxId left) (maxId right))) 0
+
+    /// Solves `constraints` on top of `start`, a substitution that solved constraints given earlier, or gives the
+    /// first that cannot be satisfied (see `Mismatch`). Rest variables are made up from `restFrom` on, or past the
+    /// constraints' own variables. Also gives where the next made-up rest variable would be numbered, and whether the
+    /// order the constraints were solved in could show (see `orderShowed`).
+    let private unifyFrom (start: Subst) (restFrom: int) (constraints: ConstraintSet) : Result<Subst * int * bool, Mismatch> =
+        // A union, a record or a set of contexts grows through the rest variable made up for it, taking tags, fields
+        // or contexts in the order constraints come. So the order shows when one made up before these constraints,
+        // for `start`, takes more, or when a constraint is put off to the end (see `AssignableLater`).
+        let mutable orderShowed = false
+        let madeUpBefore (var: TyVar) = isMadeUpRest var && var.Id < restFrom
         // Widening a union (below) makes up rest variables. They are numbered past every variable in the
         // constraints, and far past where inference numbers its own, so that they are new to both.
-        let mutable nextRestId =
-            let rec maxId ty =
-                match ty with
-                | TyVar v -> v.Id
-                | TyPrimitive _ -> 0
-                | TyNominal(_, underlying, _) -> maxId underlying
-                | TyAlias(_, args, underlying) -> List.fold (fun acc arg -> max acc (maxId arg)) (maxId underlying) args
-                | TyFunc(arg, ret, contexts) -> List.fold (fun acc context -> max acc (maxId context)) (max (maxId arg) (maxId ret)) contexts
-                | TyRecord fields -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) 0
-                | TyOpenRecord(fields, row) -> fields |> Map.fold (fun acc _ fieldTy -> max acc (maxId fieldTy)) row.Id
-                | TyTag(_, payload) -> payload |> Option.map maxId |> Option.defaultValue 0
-                | TyApply(_, args)
-                | TyUnion args -> List.fold (fun acc arg -> max acc (maxId arg)) 0 args
-            constraints
-            |> List.fold (fun acc (left, right, _, _) -> max acc (max (maxId left) (maxId right))) 0
-            |> fun highest -> max 1_000_000_000 (highest + 1)
+        let mutable nextRestId = max restFrom (max firstMadeUpRest (highestVarId constraints + 1))
         let freshRest () =
             let var = TyVar { Id = nextRestId; Name = None }
             nextRestId <- nextRestId + 1
@@ -682,6 +723,7 @@ module Unifier =
                     if occurs v.Id ty then
                         Error ($"Occurs check failed: {tyToString ty} contains {tyToString (TyVar v)}.", origin, TypesDiffer)
                     else
+                        if madeUpBefore v then orderShowed <- true
                         let newSubst = subst |> Map.add v.Id ty
                         loop newSubst rest
                 // Two references to one recursive alias are the same type when their arguments are: unfolded, each
@@ -867,6 +909,7 @@ module Unifier =
                         // widens it with another failure (#354). Constraints are otherwise solved newest first, so
                         // this changes their order.
                         | _ when kind = Assignable && isPendingUnion l r ->
+                            orderShowed <- true
                             loop subst (rest @ [ (left, right, AssignableLater, origin) ])
                         | TyVar _, _
                         | _, TyVar _ ->
@@ -954,21 +997,63 @@ module Unifier =
                             unifyEqual false origin l r rest
                     | Equal ->
                         unifyEqual true origin l r rest
-        loop empty constraints
+        loop start constraints |> Result.map (fun subst -> subst, nextRestId, orderShowed)
 
-    /// The constraints this thread solved last and what solving them gave (see `unifyDetailed`).
-    let private lastSolved = new System.Threading.ThreadLocal<(ConstraintSet * Result<Subst, Mismatch>) option>(fun () -> None)
+    /// A list of constraints this thread solved, what solving them gave, where its made-up rest variables ended, and
+    /// whether constraints given after it can be solved on top of it: not when the order its own were solved in
+    /// showed, as solving them all afresh would solve the later ones first.
+    type private Solved = { Result: Result<Subst, Mismatch>; NextRestId: int; Extendable: bool }
 
-    /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`). Solving is a function of the
-    /// constraints alone, and checking a def solves the same pool again and again with nothing added in between, so
-    /// what the same list solved to last time on this thread is given again rather than solved again.
+    /// How many solved lists `solvedLists` keeps before it starts again.
+    let private solvedListsKept = 64
+
+    /// The lists of constraints this thread solved lately, by reference (see `unifyDetailed`).
+    let private solvedLists =
+        new System.Threading.ThreadLocal<Dictionary<ConstraintSet, Solved>>(fun () ->
+            Dictionary<ConstraintSet, Solved>(HashIdentity.Reference))
+
+    /// The constraints at the front of `constraints` that come before a list solved lately, and what that list solved
+    /// to, if it agreed and can be solved on top of.
+    let private solvedTail (solved: Dictionary<ConstraintSet, Solved>) (constraints: ConstraintSet) =
+        let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
+            match solved.TryGetValue remaining with
+            | true, { Result = Ok subst; NextRestId = restFrom; Extendable = true } -> Some (List.rev newer, subst, restFrom)
+            | true, _ -> None
+            | false, _ ->
+                match remaining with
+                | [] -> None
+                | constraint :: rest -> walk (constraint :: newer) rest
+        walk [] constraints
+
+    /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`). The type checker adds
+    /// constraints only at the front of the list it holds, and looks types up against it again and again as it goes.
+    /// So when the list ends in one solved lately that agreed, only the constraints in front of it are solved, on top
+    /// of what it solved to. When they don't agree with it, or the order they are solved in shows, the whole list is
+    /// solved again, newest first, so that the failure reported, and the order in which a union's tags are added, are
+    /// those solving it afresh gives.
     let unifyDetailed (constraints: ConstraintSet) : Result<Subst, Mismatch> =
-        match lastSolved.Value with
-        | Some (solved, result) when obj.ReferenceEquals(solved, constraints) -> result
-        | _ ->
-            let result = unifyAfresh constraints
-            lastSolved.Value <- Some (constraints, result)
-            result
+        let solved = solvedLists.Value
+        match solved.TryGetValue constraints with
+        | true, known -> known.Result
+        | false, _ ->
+            let fromStart () = unifyFrom empty 0 constraints
+            // A made-up rest variable a constraint names, taken from what an earlier solve gave, names nothing when
+            // the whole list is solved (see `isMadeUpRest`), but would name what it was solved to on top of that solve.
+            let namesMadeUpRest newer = highestVarId newer >= firstMadeUpRest
+            let result =
+                match solvedTail solved constraints with
+                | Some (newer, subst, restFrom) when not (namesMadeUpRest newer) ->
+                    match unifyFrom subst restFrom newer with
+                    | Ok (_, _, false) as result -> result
+                    | _ -> fromStart ()
+                | _ -> fromStart ()
+            if solved.Count >= solvedListsKept then solved.Clear()
+            let known =
+                match result with
+                | Ok (subst, nextRestId, orderShowed) -> { Result = Ok subst; NextRestId = nextRestId; Extendable = not orderShowed }
+                | Error mismatch -> { Result = Error mismatch; NextRestId = 0; Extendable = false }
+            solved[constraints] <- known
+            known.Result
 
     /// Solves `constraints`, or gives the first that cannot be satisfied, with what was wrong and where.
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =

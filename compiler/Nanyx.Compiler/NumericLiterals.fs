@@ -49,10 +49,11 @@ module internal NumericLiterals =
             |> List.filter (fun literal -> isOpen literal || isNamedVariable literal)
             |> List.fold (fun current literal -> addConstraint literal.Type (defaultType literal.Value) current) { state with UnsettledLiterals = unsettled }
 
-    /// The literals not yet settled whose type is still a variable of their own, each with that variable.
+    /// The literals not yet settled whose type is still a variable of their own, each with that variable, newest first.
+    /// Each is resolved only as it is read, so a search for one stops at it: a long chain of `+` has many literals.
     let private openLiterals (state: InferState) =
         state.UnsettledLiterals
-        |> List.choose (fun literal ->
+        |> Seq.choose (fun literal ->
             match resolveSoFar state literal.Type with
             | TyVar ({ Name = None } as v) -> Some (literal, v)
             | _ -> None)
@@ -60,13 +61,13 @@ module internal NumericLiterals =
     /// Whether `ty` is, so far, a literal's own variable: a number, but of a type the code around it has not settled.
     let isOpen (state: InferState) (ty: Ty) =
         match resolveSoFar state ty with
-        | TyVar v -> openLiterals state |> List.exists (fun (_, other) -> other.Id = v.Id)
+        | TyVar v -> openLiterals state |> Seq.exists (fun (_, other) -> other.Id = v.Id)
         | _ -> false
 
     /// The literals of a variable of its own, as `state` resolves it, that is in `tys`.
     let openIn (tys: Ty list) (state: InferState) : NumericLiteral list =
         let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany
-        openLiterals state |> List.filter (fun (_, v) -> inTys.Contains v.Id) |> List.map fst
+        openLiterals state |> Seq.filter (fun (_, v) -> inTys.Contains v.Id) |> Seq.map fst |> List.ofSeq
 
     /// `state` with each of `literals` made its default type.
     let settleLiterals (literals: NumericLiteral list) (state: InferState) : InferState =
@@ -84,7 +85,7 @@ module internal NumericLiterals =
     let canBe (state: InferState) (ty: Ty) (target: Ty) =
         match resolveSoFar state ty with
         | TyVar v ->
-            match openLiterals state |> List.tryFind (fun (_, other) -> other.Id = v.Id), Unifier.unalias target with
+            match openLiterals state |> Seq.tryFind (fun (_, other) -> other.Id = v.Id), Unifier.unalias target with
             | Some ({ Value = IntLit _ }, _), (TyPrimitive "int" | SizedIntegerType _)
             | Some ({ Value = FloatLit _ }, _), TyPrimitive ("float" | "F32") -> true
             | Some _, _ -> false
