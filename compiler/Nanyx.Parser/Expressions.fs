@@ -70,10 +70,10 @@ let typeDefCore: Parser<Definition, ParseState> =
             | Some predicate -> TypeExpr.at (endingAt predicate.Span span) (TypeWhere(baseType, predicate))
             | None -> baseType
 
-    // The body declares the type's name, written at `start`.
-    let declaringTypeName ((start, name), def) =
+    // The body declares the type's name, written at `start`, in the definition written from `defStart`.
+    let declaringTypeName (defStart: Position) ((start: Position, name), def) =
         match def with
-        | TypeDef(_, _, _, body) -> declare TypeDefBody body.Id [ name, nameSpan start name ] >>% def
+        | TypeDef(_, _, _, body) -> declare TypeDefBody body.Id [ name, nameSpan start name ] >>. noteDocumentable defStart (int start.Index) >>% def
         | ValueDef _ -> preturn def
 
     let applyPrivate modifiers privateOpt =
@@ -94,7 +94,7 @@ let typeDefCore: Parser<Definition, ParseState> =
         |>> fun (scopedOpt, exportOpt) ->
             (scopedOpt |> Option.map (snd >> Scoped) |> Option.toList) @ (if exportOpt.IsSome then [Export] else [])
 
-    let contextDef =
+    let contextDef defStart =
         pipe5
             contextModifiers
             (pstring "context" >>. ws >>. (getPosition .>>. contextName))
@@ -105,9 +105,9 @@ let typeDefCore: Parser<Definition, ParseState> =
                 let typeParams = defaultArg paramsOpt []
                 let modifiers = applyPrivate (Context :: baseMods) privateOpt
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
-        >>= declaringTypeName
+        >>= declaringTypeName defStart
 
-    let typeDefWithModifiers =
+    let typeDefWithModifiers defStart =
         pipe5
             typeModifiers
             (pstring "type" >>. ws >>. (getPosition .>>. typeNameIdentifier))
@@ -118,16 +118,16 @@ let typeDefCore: Parser<Definition, ParseState> =
                 let typeParams = defaultArg paramsOpt []
                 let modifiers = applyPrivate modifiers privateOpt
                 (start, name), TypeDef(name, modifiers, typeParams, typeValue))
-        >>= declaringTypeName
+        >>= declaringTypeName defStart
 
-    attempt contextDef <|> typeDefWithModifiers
+    (getPosition >>= fun defStart -> attempt (contextDef defStart) <|> typeDefWithModifiers defStart)
     <?> "type definition"
 
 let valueDefCore: Parser<Definition, ParseState> =
     getPosition >>= fun lineStart ->
         pipe2
             (opt (attempt (pstring "export" >>. ws)))
-            (parseDefWith lineStart.Column typedDefIdentifier (wsInline >>. singleOrTuple (sepBy1 expression (pstring "," .>> ws))))
+            (parseDefWith lineStart typedDefIdentifier (wsInline >>. singleOrTuple (sepBy1 expression (pstring "," .>> ws))))
             (fun exportOpt (name, typeOpt, expr) -> ValueDef(exportOpt.IsSome, name, typeOpt, expr))
     <?> "value definition"
 

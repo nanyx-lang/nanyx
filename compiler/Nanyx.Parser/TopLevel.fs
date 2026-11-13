@@ -34,13 +34,13 @@ do
         getPosition >>= fun lineStart ->
             pipe2
                 (opt (attempt (pstring "export" >>. ws)))
-                (parseDefWith lineStart.Column typedQualifiedIdentifier defExprParser)
+                (parseDefWith lineStart typedQualifiedIdentifier defExprParser)
                 (fun exportOpt (name, typeOpt, expr) -> DefStatement(exportOpt.IsSome, name, typeOpt, expr))
 
     // Each def a destructuring def stands for spans the whole `def (...) = value`.
     let destructuringDefStatement =
         getPosition >>= fun lineStart ->
-            withSpan (destructuringDefWith lineStart.Column defExprParser)
+            withSpan (destructuringDefWith lineStart defExprParser)
             |>> fun ((isExport, bindings), span) ->
                 let span = match List.tryHead bindings with Some (_, value) -> endingAt value.Span span | None -> span
                 bindings |> List.mapi (fun index (name, value) -> Statement.at span (DefStatement(isExport && index > 0, name, None, value)))
@@ -55,7 +55,9 @@ do
                 >>. defEqualsContinuation lineStart.Column >>. pstring "=" >>. wsInline >>. defExprParser
                 >>= fun expr ->
                     let value = Expression.from expr (FunctionCall(RecSyntax.builtIn, None, [ expr ]))
-                    declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
+                    declare DefValue value.Id [ name, nameSpan start name ]
+                    >>. noteDocumentable lineStart (int start.Index)
+                    >>% DefStatement(false, name, typeOpt, value)
 
     // `mut name = value` declares a cell (see the memory page): a def whose value is a call to the built-in "__mut",
     // spanning the declaration (see `MutSyntax`). It declares one name, so a pattern after `mut` is an error: a value's
@@ -73,7 +75,9 @@ do
                 >>= fun expr ->
                     let span = spanOf lineStart expr.Span.End
                     let value = Expression.at span (FunctionCall(MutSyntax.builtIn, None, [ expr ]))
-                    declare DefValue value.Id [ name, nameSpan start name ] >>% DefStatement(false, name, typeOpt, value)
+                    declare DefValue value.Id [ name, nameSpan start name ]
+                    >>. noteDocumentable lineStart (int start.Index)
+                    >>% DefStatement(false, name, typeOpt, value)
 
     let exprStatement =
         wsInline
@@ -105,7 +109,7 @@ let valueDef: Parser<TopLevelItem, ParseState> =
         spannedItem (
             pipe2
                 (opt (attempt (pstring "export" >>. ws)))
-                (parseDefWith lineStart.Column typedQualifiedIdentifier valueDefExprParser)
+                (parseDefWith lineStart typedQualifiedIdentifier valueDefExprParser)
                 (fun exportOpt (name, typeOpt, expr) -> Def(ValueDef(exportOpt.IsSome, name, typeOpt, expr))))
     <?> "value definition"
 
@@ -113,7 +117,7 @@ let valueDef: Parser<TopLevelItem, ParseState> =
 // `def (...) = value`.
 let valueDestructuringDef: Parser<TopLevelItem list, ParseState> =
     getPosition >>= fun lineStart ->
-        withSpan (destructuringDefWith lineStart.Column valueDefExprParser)
+        withSpan (destructuringDefWith lineStart valueDefExprParser)
         |>> fun ((isExport, bindings), span) ->
             let span = match List.tryHead bindings with Some (_, value) -> endingAt value.Span span | None -> span
             bindings |> List.mapi (fun index (name, value) -> TopLevelItem.at span (Def(ValueDef(isExport && index > 0, name, None, value))))
