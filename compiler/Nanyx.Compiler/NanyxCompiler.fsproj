@@ -86,6 +86,7 @@
     <Compile Include="PackageModules.fs" />
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
+    <Compile Include="DeferredErrors.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Package.fs" />
     <Compile Include="NewPackage.fs" />
