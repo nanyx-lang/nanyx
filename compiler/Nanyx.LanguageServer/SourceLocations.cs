@@ -23,7 +23,16 @@ internal static class SourceLocations
             return new Location { Uri = uri, Range = document.Positions.ToRange(span.Start, span.End) };
         }
 
-        // Another source file. A standard-library module is named by its import path instead ("nanyx/text.nyx").
+        return InFile(span, standardLibrary);
+    }
+
+    /// <summary>
+    /// The location of <paramref name="span"/>, a name in a source file on disk, or in the standard library, opened
+    /// from the copy of its source on disk. Null when the span is in no file the editor can open.
+    /// </summary>
+    public static Location? InFile(Parser.Program.SourceSpan span, StandardLibrarySource standardLibrary)
+    {
+        // A standard-library module is named by its import path instead ("nanyx/text.nyx").
         var path = Path.IsPathRooted(span.File) ? span.File : standardLibrary.TryGetPath(span.File);
         if (path is null)
         {
@@ -48,7 +57,12 @@ internal static class SourceLocations
         OpenDocument document,
         Parser.Program.SourceSpan span,
         StandardLibrarySource standardLibrary) =>
-        Of(uri, document, span, standardLibrary) is { } location
-            ? $"{location.Uri}#L{location.Range.Start.Line + 1},{location.Range.Start.Character + 1}"
-            : null;
+        Link(Of(uri, document, span, standardLibrary));
+
+    /// <summary><see cref="LinkTo(DocumentUri, OpenDocument, Parser.Program.SourceSpan, StandardLibrarySource)"/> for a name in a file that is not a document's: see <see cref="InFile"/>.</summary>
+    public static string? LinkTo(Parser.Program.SourceSpan span, StandardLibrarySource standardLibrary) =>
+        Link(InFile(span, standardLibrary));
+
+    private static string? Link(Location? location) =>
+        location is not null ? $"{location.Uri}#L{location.Range.Start.Line + 1},{location.Range.Start.Character + 1}" : null;
 }
