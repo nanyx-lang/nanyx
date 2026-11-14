@@ -138,3 +138,19 @@ def main = {
 """
         |> _.ReplaceLineEndings("\n")
     runSource source |> assertRan "2 point (x = 1, y = 2)\n"
+
+[<Fact>]
+let ``Run - an int hole writes every number of digits, either sign, and the ints at the ends`` () =
+    // The text between holes is copied from its string literal, and each int written by one helper (#1268).
+    let source =
+        normalized """import nanyx/console
+
+@entry
+def main = {
+  def smallest = -9_223_372_036_854_775_807 - 1
+  println("{0},{9},{10},{99},{100},{-1},{-10},{1234567890}")
+  println("min {smallest} max {9_223_372_036_854_775_807}!")
+  println("tag {#count(-305)} and {#count(0)}")
+}
+"""
+    runSource source |> assertRan "0,9,10,99,100,-1,-10,1234567890\nmin -9223372036854775808 max 9223372036854775807!\ntag #count(-305) and #count(0)\n"

@@ -209,7 +209,9 @@ def main = {
 
     Assert.Contains("call $dbg_str", wat)
     Assert.Contains("__interp_cursor", wat)
-    Assert.Contains("i32.const 82", wat)
+    // The text is copied from its string literal, and the int is written by a helper (#1268).
+    Assert.Contains("Result: ", wat)
+    Assert.Contains("call $__nanyx_int_text_write", wat)
 
 [<Fact>]
 let ``Run - a local generic function frees what it is given, at each type it is used at`` () =

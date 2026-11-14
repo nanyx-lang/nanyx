@@ -204,11 +204,16 @@ type private FunctionEmitter(context: EmitContext) =
 
     /// How a hole of type `holeType` is measured and written (see `Interpolation`).
     member _.HoleKind (holeType: HoleType) : Interpolation.HoleKind =
+        // An int is measured and written by helpers (see `Interpolation.intLength`).
+        let intHole kind =
+            helper Helpers.intTextLength |> ignore
+            helper Helpers.intTextWrite |> ignore
+            kind
         match holeType with
         | HoleString -> Interpolation.StringHole
-        | HoleInt -> Interpolation.IntHole
-        | HoleSized SizedInteger.U64 -> Interpolation.UnsignedHole
-        | HoleSized _ -> Interpolation.IntHole
+        | HoleInt -> intHole Interpolation.IntHole
+        | HoleSized SizedInteger.U64 -> intHole Interpolation.UnsignedHole
+        | HoleSized _ -> intHole Interpolation.IntHole
         | HoleBool -> Interpolation.BoolHole
         | HoleFloat -> Interpolation.FloatHole
         | HoleTag cases ->
@@ -219,7 +224,7 @@ type private FunctionEmitter(context: EmitContext) =
                     payload
                     |> Option.map (function
                         | IrString -> Interpolation.StringPayload
-                        | IrInt -> Interpolation.IntPayload
+                        | IrInt -> intHole Interpolation.IntPayload
                         | _ -> Interpolation.BoolPayload)
                 name, tagCode (context.TagId name), payloadKind)
             |> Interpolation.TagHole
@@ -242,7 +247,7 @@ type private FunctionEmitter(context: EmitContext) =
         let writeCode =
             parts
             |> List.map (function
-                | Text text -> Interpolation.textWrite text
+                | Text text -> Interpolation.textWrite context.StringOffset text
                 | Hole(var, holeType) -> Interpolation.holeWrite (this.HoleKind holeType) (holeValue var holeType))
             |> String.concat "\n    "
         helper Helpers.stringAlloc |> ignore
@@ -883,7 +888,6 @@ let private declaredLocals (body: Expr) : (string * string) list =
     let interpolationLocals =
         if interpolates.Value then
             (Interpolation.scratchLocals |> List.map (fun name -> name, "i32"))
-            @ [ Interpolation.intLocal, "i64" ]
             @ (holes |> Seq.sortBy (fun (depth, index, var) -> depth, index, localName var) |> Seq.map (fun (_, _, var) -> declared var) |> List.ofSeq)
         else []
     [ yield! ofKind Local

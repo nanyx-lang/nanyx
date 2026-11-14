@@ -558,11 +558,98 @@
     i32.store8
     local.get $out
   )
+  (func $__nanyx_int_text_length (param $n i64) (param $signed i32) (result i32)
+    (local $len i32)
+    i32.const 1
+    local.set $len
+    local.get $signed
+    if
+      local.get $n
+      i64.const 0
+      i64.lt_s
+      if
+        i32.const 2
+        local.set $len
+        i64.const 0
+        local.get $n
+        i64.sub
+        local.set $n
+      end
+    end
+    block $counted
+      loop $count
+        local.get $n
+        i64.const 10
+        i64.lt_u
+        br_if $counted
+        local.get $len
+        i32.const 1
+        i32.add
+        local.set $len
+        local.get $n
+        i64.const 10
+        i64.div_u
+        local.set $n
+        br $count
+      end
+    end
+    local.get $len
+  )
+  (func $__nanyx_int_text_write (param $at i32) (param $n i64) (param $signed i32) (result i32)
+    (local $end i32)
+    local.get $signed
+    if
+      local.get $n
+      i64.const 0
+      i64.lt_s
+      if
+        local.get $at
+        i32.const 45
+        i32.store8
+        local.get $at
+        i32.const 1
+        i32.add
+        local.set $at
+        i64.const 0
+        local.get $n
+        i64.sub
+        local.set $n
+      end
+    end
+    local.get $at
+    local.get $n
+    i32.const 0
+    call $__nanyx_int_text_length
+    i32.add
+    local.tee $end
+    local.set $at
+    loop $digit
+      local.get $at
+      i32.const 1
+      i32.sub
+      local.tee $at
+      local.get $n
+      i64.const 10
+      i64.rem_u
+      i32.wrap_i64
+      i32.const 48
+      i32.add
+      i32.store8
+      local.get $n
+      i64.const 10
+      i64.div_u
+      local.tee $n
+      i64.const 0
+      i64.ne
+      br_if $digit
+    end
+    local.get $end
+  )
 
   (data (i32.const 256) "\00\00\00\00\05\00\00\00Alice\00\00\00")
   (data (i32.const 272) "\00\00\00\00\03\00\00\00Bob\00")
 
-  (func $printPerson (param $p i32) (result i32) (local $__dbg_value_1_i64 i64) (local $__dbg_value_2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
+  (func $printPerson (param $p i32) (result i32) (local $__dbg_value_1_i64 i64) (local $__dbg_value_2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32)
     local.get $p
     i32.load offset=8
     call $__nanyx_dup_string
@@ -582,134 +669,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_2
     call $dbg_str
@@ -723,134 +696,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_2_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_2_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_3
     call $dbg_str
@@ -862,7 +721,7 @@
   )
   (export "printPerson" (func $printPerson))
 
-  (func $main (result i32) (local $p i32) (local $__dbg_value_1__in1_i64 i64) (local $__dbg_value_2__in1_i64 i64) (local $p2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__dbg_value_2__in2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32) (local $__owned_6 i32) (local $__owned_7 i32)
+  (func $main (result i32) (local $p i32) (local $__dbg_value_1__in1_i64 i64) (local $__dbg_value_2__in1_i64 i64) (local $p2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__dbg_value_2__in2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32) (local $__owned_6 i32) (local $__owned_7 i32)
     i32.const 20
     i32.const 1
     call $__nanyx_new_object
@@ -895,134 +754,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_1__in1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_1__in1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_2
     call $dbg_str
@@ -1038,134 +783,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_2__in1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_2__in1_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_3
     call $dbg_str
@@ -1205,134 +836,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_1__in2_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_1__in2_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_6
     call $dbg_str
@@ -1348,134 +865,20 @@
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_2__in2_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_2__in2_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
     local.tee $__owned_7
     call $dbg_str
@@ -1487,138 +890,24 @@
   )
   (export "main" (func $main))
 
-  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__interp_start i32) (local $__interp_lo i32) (local $__interp_hi i32) (local $__interp_swap i32) (local $__interp_int i64)
+  (func $__dbg_show_int (param $__dbg_value_i64 i64) (result i32) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32)
     i32.const 0
     local.set $__interp_len
     local.get $__dbg_value_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_len
-      i32.const 1
-      i32.add
-      local.set $__interp_len
-    else
-      loop $interp_int_len
-        local.get $__interp_len
-        i32.const 1
-        i32.add
-        local.set $__interp_len
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_int_len
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_length
+    local.get $__interp_len
+    i32.add
+    local.set $__interp_len
     local.get $__interp_len
     call $__nanyx_string_alloc
     local.tee $__interp_base
     local.set $__interp_cursor
+    local.get $__interp_cursor
     local.get $__dbg_value_i64
-    local.set $__interp_int
-    local.get $__interp_int
-    i64.const 0
-    i64.lt_s
-    if
-      local.get $__interp_cursor
-      i32.const 45
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-      i64.const 0
-      local.get $__interp_int
-      i64.sub
-      local.set $__interp_int
-    end
-    local.get $__interp_int
-    i64.eqz
-    if
-      local.get $__interp_cursor
-      i32.const 48
-      i32.store8
-      local.get $__interp_cursor
-      i32.const 1
-      i32.add
-      local.set $__interp_cursor
-    else
-      local.get $__interp_cursor
-      local.set $__interp_start
-      loop $interp_digits
-        local.get $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.rem_u
-        i32.wrap_i64
-        i32.const 48
-        i32.add
-        i32.store8
-        local.get $__interp_cursor
-        i32.const 1
-        i32.add
-        local.set $__interp_cursor
-        local.get $__interp_int
-        i64.const 10
-        i64.div_u
-        local.set $__interp_int
-        local.get $__interp_int
-        i64.const 0
-        i64.ne
-        br_if $interp_digits
-      end
-      local.get $__interp_start
-      local.set $__interp_lo
-      local.get $__interp_cursor
-      i32.const 1
-      i32.sub
-      local.set $__interp_hi
-      block $interp_rev_done
-        loop $interp_rev
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.ge_u
-          br_if $interp_rev_done
-          local.get $__interp_lo
-          i32.load8_u
-          local.set $__interp_swap
-          local.get $__interp_lo
-          local.get $__interp_hi
-          i32.load8_u
-          i32.store8
-          local.get $__interp_hi
-          local.get $__interp_swap
-          i32.store8
-          local.get $__interp_lo
-          i32.const 1
-          i32.add
-          local.set $__interp_lo
-          local.get $__interp_hi
-          i32.const 1
-          i32.sub
-          local.set $__interp_hi
-          br $interp_rev
-        end
-      end
-    end
+    i32.const 1
+    call $__nanyx_int_text_write
+    local.set $__interp_cursor
     local.get $__interp_base
   )
 
